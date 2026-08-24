@@ -1370,9 +1370,10 @@ Detailed implementation milestones belong in `SPEC.md`, but they must always con
 - Release versions use `v<major>.<minor>.<patch>-dev.<number>` tags.
 - [`VERSION`](VERSION) identifies the current release version for tooling, tags, manifests, and GitHub Releases.
 - README must **not** embed the current release number, current tag, or a version query parameter.
-- After a release candidate passes the release gate, Release Manager copies the verified static build into `LatestRelease/` before the final main-targeting release PR is completed.
+- After a release candidate passes the required integration, final-review, and release gates, the AI_MANAGER release workflow copies the verified static build into `LatestRelease/` before the final main-targeting release step is completed.
 - `LatestRelease/release-manifest.json` records the published version and source commit without requiring a README edit.
 - Broken intermediate states must not be copied into `LatestRelease/`.
+- GitHub Issues, pull requests, releases, and project records are coordination and mirror/public-ledger surfaces; they do not replace AI_MANAGER's local Runtime State / Index as workflow authority.
 - `README.md` remains protected; ordinary version increments never require modifying it.
 
 ### Latest tested development release
@@ -1403,13 +1404,15 @@ README defines the intended product.
 
 `SPEC.md`, `AGENTS.md`, `TODO.md`, task specifications, implementation, and tests must conform to README.
 
-The synchronization direction is:
+The canonical AI_MANAGER authority and execution chain is:
 
 <div align="center">
 
-### README → SPEC → AGENTS / instructions → TODO / tasks → implementation → tests
+### README → AI_MANAGER/MAINRULES → ROADMAP → TODO → Subtask Contract → Runtime State / Index → implementation → tests / records
 
 </div>
+
+`SPEC.md`, `AGENTS.md`, task specifications, architecture notes, and other supporting documentation remain subordinate to this README. They may provide implementation detail, but they must conform to the current README and must not override the canonical AI_MANAGER workflow authority chain above.
 
 When README and any subordinate document differ:
 
