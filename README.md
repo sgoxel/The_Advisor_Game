@@ -20,7 +20,7 @@
 
 ### 🎮 [Play the Latest Tested Development Release](https://sgoxel.github.io/The-Advisor-Game/)
 
-[🏷️ Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest) · [📘 Implementation specification](SPEC.md) · [🌐 GitHub Pages](https://sgoxel.github.io/The-Advisor-Game/)
+[🏷️ Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest) [🌐 GitHub Pages](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
 
