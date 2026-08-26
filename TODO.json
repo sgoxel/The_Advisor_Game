@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "product": "The Advisor Game",
+  "authority": "README.md",
+  "active_phase_id": "P01",
+  "phase_title": "Campaign State and Versioned Saves",
+  "status": "active",
+  "tasks": [
+    {"id":"P01-T01","order":1,"title":"Define versioned campaign state schema","status":"open","acceptance":["Explicit campaign schema/version","Serializable authoritative world and character state","No provider credentials or raw model traffic in saves"]},
+    {"id":"P01-T02","order":2,"title":"Implement campaign export serialization","status":"open","depends_on":["P01-T01"],"acceptance":["Valid versioned JSON export","SEED and compatible generation version preserved"]},
+    {"id":"P01-T03","order":3,"title":"Implement campaign import validation","status":"open","depends_on":["P01-T01","P01-T02"],"acceptance":["Malformed/unsupported JSON rejected safely","Valid export/import round-trip","Import cannot bypass simulation validation"]},
+    {"id":"P01-T04","order":4,"title":"Add deterministic save round-trip tests","status":"open","depends_on":["P01-T02","P01-T03"],"acceptance":["Deterministic round-trip tests pass","Credentials excluded by tests","Compatible regression passes"]},
+    {"id":"P01-T05","order":5,"title":"Phase 1 release gate","status":"open","depends_on":["P01-T04"],"acceptance":["All P01 issues independently tested","Relevant regression passes","Tested release produced before P02 activates"]}
+  ]
+}
