@@ -408,29 +408,25 @@ Opening `index.html` through `file://` is best-effort because browsers restrict 
 - GitHub is the task and review history.
 - Google Drive may hold and update project files.
 
-## Architect Worker
-
-- Read README.
-- Create and maintain `ROADMAP.json`.
-- Cover the full project from start to completion.
-- Split work into as many small testable phases as practical.
-- Every phase must end with a testable release.
-- If Admin changes README, update ROADMAP with the smallest required change.
-- Mark affected phases, tasks and issues for reconciliation by their owning Workers.
-- Do not change README.
-
 ## Planner Worker
 
-- Read `ROADMAP.json`.
+- Read README.
+- Create and maintain `ROADMAP.json` for the full project.
+- Split the project into as many small testable phases as practical.
+- Every phase must end with a testable release.
+- If Admin changes README, update ROADMAP with the smallest required change.
+- Reconcile affected TODO tasks and GitHub issues.
 - Select the oldest unfinished phase.
-- Maintain `TODO.json` for that phase.
+- Maintain `TODO.json` only for the active phase.
 - Keep only one active Phase issue on GitHub.
+- Keep the Phase issue as the parent tracker for its implementation and fix issues.
 - Do not activate the next phase until the current Phase issue is complete.
-- All open issues affecting the active or earlier phases must be resolved first.
-- Issues for future phases stay deferred until their phase becomes active.
-- Close conflicting issues with a clear reason when they contradict README or the active roadmap.
-- Review roadmap-change issues and update ROADMAP only when they remain compatible with README.
-- Keep the active Phase issue as the parent tracker for its implementation and fix issues.
+- Resolve all open issues affecting the active or earlier phases first.
+- Defer future-phase issues until their phase becomes active.
+- Review roadmap-change issues.
+- Update ROADMAP only when compatible with README.
+- Close conflicting issues with a clear reason.
+- Do not change README.
 
 ## Coder Worker
 
