@@ -419,7 +419,7 @@ Opening `index.html` through `file://` is best-effort because browsers restrict 
 - Mark affected phases, tasks and issues for reconciliation by their owning Workers.
 - Do not change README.
 
-## AI Planner Worker
+## Planner Worker
 
 - Read `ROADMAP.json`.
 - Select the oldest unfinished phase.
