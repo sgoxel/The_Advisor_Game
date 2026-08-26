@@ -6,10 +6,95 @@
   "phase_title": "Campaign State and Versioned Saves",
   "status": "active",
   "tasks": [
-    {"id":"P01-T01","order":1,"title":"Define versioned campaign state schema","status":"closed","acceptance":["Explicit campaign schema/version","Serializable authoritative world and character state","No provider credentials or raw model traffic in saves"]},
-    {"id":"P01-T02","order":2,"title":"Implement campaign export serialization","status":"open","depends_on":["P01-T01"],"acceptance":["Valid versioned JSON export","SEED and compatible generation version preserved"]},
-    {"id":"P01-T03","order":3,"title":"Implement campaign import validation","status":"open","depends_on":["P01-T01","P01-T02"],"acceptance":["Malformed/unsupported JSON rejected safely","Valid export/import round-trip","Import cannot bypass simulation validation"]},
-    {"id":"P01-T04","order":4,"title":"Add deterministic save round-trip tests","status":"open","depends_on":["P01-T02","P01-T03"],"acceptance":["Deterministic round-trip tests pass","Credentials excluded by tests","Compatible regression passes"]},
-    {"id":"P01-T05","order":5,"title":"Phase 1 release gate","status":"open","depends_on":["P01-T04"],"acceptance":["All P01 issues independently tested","Relevant regression passes","Tested release produced before P02 activates"]}
+    {
+      "id": "P01-T01",
+      "order": 1,
+      "title": "Define versioned campaign state schema",
+      "status": "closed",
+      "acceptance": [
+        "Explicit campaign schema/version",
+        "Serializable authoritative world and character state",
+        "No provider credentials or raw model traffic in saves"
+      ]
+    },
+    {
+      "id": "P01-T02",
+      "order": 2,
+      "title": "Implement campaign export serialization",
+      "status": "open",
+      "depends_on": [
+        "P01-T01"
+      ],
+      "acceptance": [
+        "Valid versioned JSON export",
+        "SEED and compatible generation version preserved"
+      ]
+    },
+    {
+      "id": "P01-T03",
+      "order": 3,
+      "title": "Implement campaign import validation",
+      "status": "open",
+      "depends_on": [
+        "P01-T01",
+        "P01-T02"
+      ],
+      "acceptance": [
+        "Malformed/unsupported JSON rejected safely",
+        "Valid export/import round-trip",
+        "Import cannot bypass simulation validation"
+      ]
+    },
+    {
+      "id": "P01-T04",
+      "order": 4,
+      "title": "Add deterministic save round-trip tests",
+      "status": "open",
+      "depends_on": [
+        "P01-T02",
+        "P01-T03"
+      ],
+      "acceptance": [
+        "Deterministic round-trip tests pass",
+        "Credentials excluded by tests",
+        "Compatible regression passes"
+      ]
+    },
+    {
+      "id": "P01-T05",
+      "order": 5,
+      "title": "Expose Phase 1 save workflow in the public UI",
+      "status": "open",
+      "depends_on": [
+        "P01-T04"
+      ],
+      "github_issue": 13,
+      "acceptance": [
+        "Public UI can export current campaign state as versioned JSON",
+        "Public UI can import a compatible save and visibly restore relevant state",
+        "Invalid/unsupported saves show a clear error without corrupting authoritative state",
+        "UI cannot bypass deterministic simulation validation or expose provider credentials/raw model traffic",
+        "Workflow remains usable on the existing responsive desktop/mobile interface",
+        "Relevant automated tests and regression pass"
+      ]
+    },
+    {
+      "id": "P01-T06",
+      "order": 6,
+      "title": "Phase 1 release gate",
+      "status": "open",
+      "depends_on": [
+        "P01-T05"
+      ],
+      "github_issue": 12,
+      "acceptance": [
+        "All P01 implementation issues independently tested",
+        "Relevant full regression passes",
+        "Cumulative Phase 1 candidate manually usable through the existing public application interface",
+        "Save export/import exercised end-to-end from the UI",
+        "Verified build published at https://sgoxel.github.io/The-Advisor-Game/ and matches tested release state",
+        "P02 remains inactive until Phase 1 release verification succeeds"
+      ]
+    }
   ]
 }
