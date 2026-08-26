@@ -18,7 +18,7 @@
   <img src="_githubpage/img/Concept Map Generation.png" width="720" alt="Procedurally generated isometric world map from The Advisor Game">
 </p>
 
-[📘 Implementation specification](SPEC.md) · [🌐 GitHub Release Page location](https://sgoxel.github.io/The-Advisor-Game/)
+[🌐 GitHub Release Page location](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
 
@@ -456,11 +456,10 @@ The synchronization direction is:
 
 <div align="center">
 
-### README → SPEC → AGENTS / instructions → TODO / tasks → implementation → tests
 
 </div>
 
-When README conflicts with `SPEC.md`, `AGENTS.md`, `TODO.md`, task specifications, implementation, tests, or previous assumptions, **README wins**. Implementation artifacts and tests are subordinate to README and remain valid only while compatible with it.
+When README conflicts with task specifications, implementation, tests, or previous assumptions, **README wins**. Implementation artifacts and tests are subordinate to README and remain valid only while compatible with it.
 
 Every gameplay implementation must preserve the rules already defined above, especially:
 
