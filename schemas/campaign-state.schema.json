@@ -1,0 +1,482 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sgoxel.github.io/The-Advisor-Game/schemas/campaign-state.schema.json",
+  "title": "The Advisor Game Campaign State",
+  "description": "Versioned, serializable authoritative campaign state. Provider credentials and raw model traffic are intentionally outside this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "campaignId",
+    "world",
+    "character",
+    "chronicle"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "campaignId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "world": {
+      "$ref": "#/$defs/worldState"
+    },
+    "character": {
+      "$ref": "#/$defs/characterState"
+    },
+    "chronicle": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chronicleFact"
+      }
+    }
+  },
+  "$defs": {
+    "finiteNumber": {
+      "type": "number"
+    },
+    "worldState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seed",
+        "generationVersion",
+        "turn",
+        "stateDifferences"
+      ],
+      "properties": {
+        "seed": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "generationVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stateDifferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/stateDifference"
+          }
+        }
+      }
+    },
+    "stateDifference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regionKey",
+        "entityId",
+        "kind"
+      ],
+      "properties": {
+        "regionKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "entityId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "destroyed",
+            "upgraded",
+            "ownershipChanged",
+            "discovered",
+            "valueChanged"
+          ]
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*(?:credential|api[_-]?key|token|secret|raw[_-]?(?:request|response)|model[_-]?(?:request|response))).*$"
+        },
+        "numberValue": {
+          "$ref": "#/$defs/finiteNumber"
+        },
+        "stringValue": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "booleanValue": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "valueChanged"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "key"
+            ],
+            "oneOf": [
+              {
+                "required": [
+                  "numberValue"
+                ]
+              },
+              {
+                "required": [
+                  "stringValue"
+                ]
+              },
+              {
+                "required": [
+                  "booleanValue"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "characterState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "rank",
+        "location",
+        "personality",
+        "goals",
+        "memories",
+        "relationships",
+        "advisorTrust",
+        "advisorInstructions",
+        "resources",
+        "decisionState"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "rank": {
+          "type": "string",
+          "enum": [
+            "Peasant",
+            "Villager",
+            "Squire",
+            "Knight",
+            "Baron",
+            "Duke",
+            "Lord",
+            "Prince",
+            "King",
+            "Emperor"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "personality": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/personalityTrait"
+          }
+        },
+        "goals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/goal"
+          }
+        },
+        "memories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memory"
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relationship"
+          }
+        },
+        "advisorTrust": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "advisorInstructions": {
+          "type": "string",
+          "maxLength": 32768
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resourceAmount"
+          }
+        },
+        "decisionState": {
+          "$ref": "#/$defs/decisionState"
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regionKey",
+        "x",
+        "y"
+      ],
+      "properties": {
+        "regionKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "x": {
+          "$ref": "#/$defs/finiteNumber"
+        },
+        "y": {
+          "$ref": "#/$defs/finiteNumber"
+        }
+      }
+    },
+    "personalityTrait": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "value": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text",
+        "priority",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "abandoned"
+          ]
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "summary",
+        "importance",
+        "turn"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "importance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "characterId",
+        "trust",
+        "friendship",
+        "affection",
+        "fear",
+        "rivalry",
+        "loyalty",
+        "resentment",
+        "respect",
+        "suspicion",
+        "obligation"
+      ],
+      "properties": {
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "trust": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "friendship": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "affection": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "fear": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "rivalry": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "loyalty": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "resentment": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "respect": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "suspicion": {
+          "$ref": "#/$defs/relationshipScore"
+        },
+        "obligation": {
+          "$ref": "#/$defs/relationshipScore"
+        }
+      }
+    },
+    "relationshipScore": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1
+    },
+    "resourceAmount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "amount"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^(?!.*(?:credential|api[_-]?key|token|secret)).*$"
+        },
+        "amount": {
+          "$ref": "#/$defs/finiteNumber"
+        }
+      }
+    },
+    "decisionState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lastDecisionId",
+        "pendingIntent"
+      ],
+      "properties": {
+        "lastDecisionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "pendingIntent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4096
+        }
+      }
+    },
+    "chronicleFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "turn",
+        "fact"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fact": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      }
+    }
+  }
+}
