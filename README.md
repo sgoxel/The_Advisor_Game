@@ -18,7 +18,7 @@
   <img src="_githubpage/img/Concept Map Generation.png" width="720" alt="Procedurally generated isometric world map from The Advisor Game">
 </p>
 
-[📘 Implementation specification](SPEC.md) · [🌐 Planned GitHub Pages location](https://sgoxel.github.io/The-Advisor-Game/)
+[📘 Implementation specification](SPEC.md) · [🌐 GitHub Release Page location](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
 
