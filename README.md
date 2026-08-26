@@ -7,7 +7,7 @@
 **A fully client-side medieval fantasy roleplaying and strategy game where the human player advises an autonomous AI-controlled main character as they rise from Peasant to Emperor.**
 
 <p>
-  <img alt="Development Status" src="https://img.shields.io/badge/status-early%20development-orange">
+  <img alt="Development Status" src="https://img.shields.io/badge/status-planning%20%2F%20from%20scratch-orange">
   <img alt="Platform" src="https://img.shields.io/badge/platform-HTML5%20%2B%20WebGL2-blue">
   <img alt="AI" src="https://img.shields.io/badge/AI-LLM%20%2B%20Local%20BOT-purple">
   <img alt="Hosting" src="https://img.shields.io/badge/hosting-GitHub%20Pages-black">
@@ -18,9 +18,7 @@
   <img src="_githubpage/img/Concept Map Generation.png" width="720" alt="Procedurally generated isometric world map from The Advisor Game">
 </p>
 
-### 🎮 [Play the Latest Tested Development Release](https://sgoxel.github.io/The-Advisor-Game/)
-
-[🏷️ Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest) · [📘 Implementation specification](SPEC.md) · [🌐 GitHub Pages](https://sgoxel.github.io/The-Advisor-Game/)
+[📘 Implementation specification](SPEC.md) · [🌐 Planned GitHub Pages location](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
 
@@ -30,7 +28,7 @@
 > **Player advises → AI Character decides → Simulation validates → World reacts.**
 
 > [!NOTE]
-> **Development status:** early prototype. The procedural WebGL map, movement, minimap, map import/export, settings, and English/Turkish UI foundation exist. The autonomous Character AI, LLM/BOT system, Advisor interaction and Instruction Flow, campaign, economy, diplomacy, military, relationships, and settlement systems below are product direction unless explicitly listed as implemented.
+> **Development status:** starting from scratch. This README defines the intended product, architecture, constraints, and development direction. Unless explicitly stated otherwise in a future release record, nothing described here should be interpreted as already implemented or playable.
 
 ---
 
@@ -349,44 +347,26 @@ Opening `index.html` through `file://` is best-effort because browsers restrict 
 
 ---
 
-# 🧪 Current Prototype
+# 🧪 Starting State
 
-Implemented today:
+Development begins from a clean starting point. This README describes the **target product and required behavior**, not completed functionality. Implementation status must be tracked outside this protected product-definition README, such as in the ROADMAP, TODO/task state, tests, and release records.
 
-- ✅ Seeded 12×12 to 80×80 procedural worlds
-- ✅ WebGL2 isometric renderer with Canvas2D overlays
-- ✅ Terrain, settlements, connected roads, minimap, camera, and path movement
-- ✅ Map data/image import and export tools
-- ✅ English and Turkish localization foundation
-- ✅ Responsive desktop/mobile panels
-- ✅ Static deployment at `https://sgoxel.github.io/The-Advisor-Game/`
-- ✅ Vitest, Playwright, ESLint, JSDoc type checking, and performance checks
-
-> [!WARNING]
-> Current Gold, Health, Stamina, Mana, Character, and Dialogue displays are prototype UI. They are not evidence that the final autonomous Character AI loop, progression, Advisor Instruction Flow, or long-term campaign systems are already implemented. Existing prototype behavior is not automatically a product requirement.
+No feature, module, test, deployment, release, or UI shown or named in this document should be treated as already completed solely because it appears here.
 
 ---
 
-# 🎮 Play, Deploy, or Run Locally
+# 🧰 Development and Deployment Target
 
-<div align="center">
+The target production game is a static browser application deployable through GitHub Pages or another compatible HTTPS static host, with no mandatory application backend. Players should not require Node.js or a local server.
 
-## ▶️ [PLAY LATEST TESTED DEVELOPMENT RELEASE](https://sgoxel.github.io/The-Advisor-Game/)
-
-[View latest GitHub release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
-
-</div>
-
-Players need neither Node.js nor a local server. To deploy another copy, publish the repository root through GitHub Pages or another compatible HTTPS static host and keep the directory structure intact.
-
-Node.js 18+ is required only for local development tools and automated tests:
+For development, the project should provide local tooling and automated checks equivalent to:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Useful checks:
+Target verification commands include:
 
 ```bash
 npm run lint
@@ -396,9 +376,11 @@ npm run test:playwright
 npm run perf
 ```
 
+These commands are **development requirements**, not a statement that the corresponding tooling already exists.
+
 ---
 
-# 🗂️ Project Map
+# 🗂️ Target Project Map
 
 | Path | Responsibility |
 | --- | --- |
@@ -419,11 +401,11 @@ npm run perf
 | `js/app.js` | Startup and orchestration |
 | `locales/` | English and Turkish strings |
 | `tests/` | Unit, browser, visual, and gameplay checks |
-| `LatestRelease/` | Last verified static release snapshot deployed by GitHub Pages |
+| `LatestRelease/` | Verified static release snapshot location once releases begin |
 | `VERSION` | Concrete release version used by tooling, tags, manifests, and GitHub Releases |
 | `SPEC.md` | Detailed mechanics, architecture, roadmap, and acceptance criteria subordinate to this README |
 
-Modules listed as product direction need not exist in the current prototype yet.
+Paths and modules in this table define the intended project organization and need not exist before their implementation task begins.
 
 ---
 
@@ -448,19 +430,21 @@ Detailed implementation milestones may live in `SPEC.md`, but they must always c
 
 ---
 
-# 🚀 Development Releases
+# 🚀 Development Release Policy
 
-- `main` contains accepted source history; the deployable tested snapshot is stored in `LatestRelease/`.
+Once development releases begin:
+
+- `main` contains accepted source history; verified deployable snapshots are stored in `LatestRelease/`.
 - GitHub Pages publishes `LatestRelease/` at `https://sgoxel.github.io/The-Advisor-Game/`.
-- Latest GitHub Release remains `https://github.com/sgoxel/The-Advisor-Game/releases/latest`.
+- GitHub Releases use `https://github.com/sgoxel/The-Advisor-Game/releases/`.
 - Versions use `v<major>.<minor>.<patch>-dev.<number>` tags; [`VERSION`](VERSION) is the concrete version authority for tooling, tags, manifests, and releases.
 - README must **not** embed the current release number, current tag, or a version query parameter.
-- After a release candidate passes the release gate, Release Manager copies the verified static build into `LatestRelease/` before the final main-targeting release PR is completed.
+- A release candidate must pass its release gate before Release Manager copies the verified static build into `LatestRelease/` and completes the final main-targeting release PR.
 - `LatestRelease/release-manifest.json` records the published version and source commit without requiring README edits.
 - Broken intermediate states must never be copied into `LatestRelease/`.
 - Ordinary version increments must not modify this protected README.
 
-[🎮 Launch the latest tested build](https://sgoxel.github.io/The-Advisor-Game/) · [🏷️ Open the latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
+Before the first verified release, the public play URL and GitHub Release page must not be treated as evidence of implemented functionality.
 
 ---
 
@@ -476,7 +460,7 @@ The synchronization direction is:
 
 </div>
 
-When README conflicts with `SPEC.md`, `AGENTS.md`, `TODO.md`, task specifications, implementation, tests, or previous assumptions, **README wins**. Existing code is implementation history, not product authority; existing tests are requirements only while compatible with README.
+When README conflicts with `SPEC.md`, `AGENTS.md`, `TODO.md`, task specifications, implementation, tests, or previous assumptions, **README wins**. Implementation artifacts and tests are subordinate to README and remain valid only while compatible with it.
 
 Every gameplay implementation must preserve the rules already defined above, especially:
 
@@ -520,6 +504,5 @@ See [LICENSE](LICENSE).
 
 **Advise wisely. The character may listen. The world will remember.**
 
-🎮 [Play Latest Release](https://sgoxel.github.io/The-Advisor-Game/) · 🏷️ [Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
 
 </div>

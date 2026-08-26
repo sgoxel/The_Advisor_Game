@@ -1,0 +1,146 @@
+# =============================================================================
+# The_Advisor_Game - generated/local files
+# Keep source code and project specifications in Git.
+# Ignore temporary, backup, log, cache, and generated test-output artifacts.
+# =============================================================================
+
+# --- Temporary files / folders ---
+**/tmp/
+**/temp/
+**/.tmp/
+**/.temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+~$*
+.~*
+
+# --- Logs / diagnostics ---
+**/log/
+**/logs/
+**/.logs/
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Backups / local copies ---
+**/backup/
+**/backups/
+**/.backup/
+**/.backups/
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.copy
+
+# --- Test outputs (do NOT ignore source tests/ directories) ---
+**/test-results/
+**/test_results/
+**/test-output/
+**/test_output/
+**/reports/tests/
+**/coverage/
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# --- Python generated files ---
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.venv/
+venv/
+env/
+
+# --- Node / JavaScript generated files ---
+node_modules/
+.npm/
+.yarn/cache/
+.pnpm-store/
+.eslintcache
+
+# --- Generic caches / runtime state ---
+**/.cache/
+**/cache/
+**/runtime/
+**/runtime_state/
+**/sessions/
+**/.sessions/
+*.pid
+*.pid.lock
+
+# --- Build/package scratch output ---
+**/.build/
+**/.dist/
+**/.out/
+*.zip.tmp
+*.part
+
+# --- Editor / IDE local state ---
+.vscode/
+.idea/
+*.code-workspace
+
+# --- OS metadata ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Google Drive / Office shortcut & transient files ---
+*.gdoc
+*.gsheet
+*.gslides
+*.gdraw
+*.gform
+*.glink
+~$*.doc
+~$*.docx
+~$*.xls
+~$*.xlsx
+~$*.ppt
+~$*.pptx
+
+# --- AI_MANAGER generated local artifacts ---
+AI_MANAGER/log/
+AI_MANAGER/logs/
+AI_MANAGER/tmp/
+AI_MANAGER/temp/
+AI_MANAGER/backup/
+AI_MANAGER/backups/
+AI_MANAGER/test-results/
+AI_MANAGER/test_results/
+AI_MANAGER/cache/
+AI_MANAGER/.cache/
+AI_MANAGER/runtime/
+AI_MANAGER/runtime_state/
+
+# --- Google Drive temporary upload/download artifacts ---
+# Ignore any directory whose name starts with .tmp
+.tmp*/
+**/.tmp*/
+
+# Explicit Google Drive transient directories
+.tmp.driveupload
+**/.tmp.driveupload
+**/.tmp.driveupload/
+.tmp.drivedownload
+**/.tmp.drivedownload
+**/.tmp.drivedownload/
+
+# --- Windows folder metadata ---
+Desktop.ini
+**/Desktop.ini
