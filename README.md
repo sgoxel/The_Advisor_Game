@@ -7,14 +7,20 @@
 **A fully client-side medieval fantasy roleplaying and strategy game where the human player advises an autonomous AI-controlled main character as they rise from Peasant to Emperor.**
 
 <p>
-  <img alt="Development Status" src="https://img.shields.io/badge/status-planning%20%2F%20from%20scratch-orange">
+  <img alt="Development Status" src="https://img.shields.io/badge/status-early%20development-orange">
   <img alt="Platform" src="https://img.shields.io/badge/platform-HTML5%20%2B%20WebGL2-blue">
   <img alt="AI" src="https://img.shields.io/badge/AI-LLM%20%2B%20Local%20BOT-purple">
   <img alt="Hosting" src="https://img.shields.io/badge/hosting-GitHub%20Pages-black">
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-green">
 </p>
 
-[🌐 GitHub Release Page location](https://sgoxel.github.io/The-Advisor-Game/)
+<p align="center">
+  <img src="_githubpage/img/Concept Map Generation.png" width="720" alt="Procedurally generated isometric world map from The Advisor Game">
+</p>
+
+### 🎮 [Play the Latest Tested Development Release](https://sgoxel.github.io/The-Advisor-Game/)
+
+[🏷️ Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest) [🌐 GitHub Pages](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
 
@@ -24,7 +30,7 @@
 > **Player advises → AI Character decides → Simulation validates → World reacts.**
 
 > [!NOTE]
-> **Development status:** starting from scratch. This README defines the intended product, architecture, constraints, and development direction. Unless explicitly stated otherwise in a future release record, nothing described here should be interpreted as already implemented or playable.
+> **Development status:** early prototype. The procedural WebGL map, movement, minimap, map import/export, settings, and English/Turkish UI foundation exist. The autonomous Character AI, LLM/BOT system, Advisor interaction and Instruction Flow, campaign, economy, diplomacy, military, relationships, and settlement systems below are product direction unless explicitly listed as implemented.
 
 ---
 
@@ -341,83 +347,128 @@ Structured model output must be parsed and validated against supported schemas a
 
 Opening `index.html` through `file://` is best-effort because browsers restrict some asset/network operations. GitHub Pages or another ordinary HTTPS static host is sufficient.
 
----
-
-# 🧪 Starting State
-
-Development begins from a clean starting point. This README describes the **target product and required behavior**, not completed functionality. Implementation status must be tracked outside this protected product-definition README, such as in the ROADMAP, TODO/task state, tests, and release records.
-
-No feature, module, test, deployment, release, or UI shown or named in this document should be treated as already completed solely because it appears here.
+> [!WARNING]
+> Current Gold, Health, Stamina, Mana, Character, and Dialogue displays are prototype UI. They are not evidence that the final autonomous Character AI loop, progression, Advisor Instruction Flow, or long-term campaign systems are already implemented. Existing prototype behavior is not automatically a product requirement.
 
 ---
 
-# 🧰 Development and Deployment Target
-
-The target production game is a static browser application deployable through GitHub Pages or another compatible HTTPS static host, with no mandatory application backend. Players should not require Node.js or a local server.
-
-For development, the project should provide local tooling and automated checks equivalent to:
-
-```bash
-npm install
-npm run dev
-```
-
-Target verification commands include:
-
-```bash
-npm run lint
-npm run typecheck
-npm run test
-npm run test:playwright
-npm run perf
-```
-
-These commands are **development requirements**, not a statement that the corresponding tooling already exists.
-
----
-
-# 🚀 Development Release Policy
-
-Once development releases begin:
-
-- `main` contains accepted source history; verified deployable snapshots are stored in `LatestRelease/`.
-- GitHub Pages publishes `LatestRelease/` at `https://sgoxel.github.io/The-Advisor-Game/`.
-- GitHub Releases use `https://github.com/sgoxel/The-Advisor-Game/releases/`.
-- Versions use `v<major>.<minor>.<patch>-dev.<number>` tags; [`VERSION`](VERSION) is the concrete version authority for tooling, tags, manifests, and releases.
-- README must **not** embed the current release number, current tag, or a version query parameter.
-- A release candidate must pass its release gate before Release Manager copies the verified static build into `LatestRelease/` and completes the final main-targeting release PR.
-- `LatestRelease/release-manifest.json` records the published version and source commit without requiring README edits.
-- Broken intermediate states must never be copied into `LatestRelease/`.
-- Ordinary version increments must not modify this protected README.
-
-Before the first verified release, the public play URL and GitHub Release page must not be treated as evidence of implemented functionality.
-
----
-
-# 🛠️ Authority for Planning and Coding Agents
-
-Before planning or implementing gameplay, agents **MUST read this README**. It defines product intent and authority.
-
-The synchronization direction is:
+# 🎮 Play, Deploy, or Run Locally
 
 <div align="center">
 
+## ▶️ [PLAY LATEST TESTED DEVELOPMENT RELEASE](https://sgoxel.github.io/The-Advisor-Game/)
+
+[View latest GitHub release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
 
 </div>
 
-When README conflicts with task specifications, implementation, tests, or previous assumptions, **README wins**. Implementation artifacts and tests are subordinate to README and remain valid only while compatible with it.
+---
 
-Every gameplay implementation must preserve the rules already defined above, especially:
+# 🚀 Development Releases
 
-- **Player advises; AI Character decides and acts.** Never replace an unfinished AI feature by temporarily letting the player make the protagonist's binding decisions.
-- Human players never gain unrestricted direct control over autonomous world characters.
-- LLMs may handle dialogue, roleplay, interpretation, personality, memories, advice evaluation, supported instruction updates, and selection among legal actions; deterministic systems own validation, legal actions, costs, seeded checks, progression, resources, movement legality, combat, state transitions, and consequences.
-- The Advisor Instruction Flow may look like a flowchart, decision tree, algorithm editor, node graph, or rule system, but its system-boundary output remains plain-text advisory instructions that may be edited by the player or updated by Character AI when allowed and may never bypass simulation rules.
+- `main` contains accepted source history.
+- `LatestRelease/` contains only the last verified phase release.
+- GitHub Pages publishes it at `https://sgoxel.github.io/The-Advisor-Game/`.
+- Latest GitHub Release is `https://github.com/sgoxel/The-Advisor-Game/releases/latest`.
+- Every completed phase must produce a tested release available from both latest-release URLs.
+- Versions use `v<major>.<minor>.<patch>-dev.<number>` tags. [`VERSION`](VERSION) is version authority.
+- README must not contain the current version, tag, or version query parameter.
+- Tester Worker updates `LatestRelease/` only after the active phase and its issues pass testing.
+- `LatestRelease/release-manifest.json` records version and source commit.
+- Never publish broken or intermediate builds to `LatestRelease/`.
 
-## 🔒 README Protection
+[🎮 Launch the latest tested build](https://sgoxel.github.io/The-Advisor-Game/) · [🏷️ Open the latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
+
+---
+
+# 🛠️ AI Development Workflow
+
+## Authority
+
+- README is product authority.
+- Before project work, use README as the source of truth.
+- Order: `README → ROADMAP.json → TODO.json → GitHub Issues → code → tests → release`.
+- If anything conflicts with README, README wins.
+- Existing code and tests are not product authority.
+- Preserve: **Player advises → AI Character decides → simulation validates → world reacts.**
+
+## Project Language
+
+- Development language is English.
+- User instructions may use any language.
+- AI replies, GitHub content, records, documentation, code text and development artifacts use English.
+- Product localization follows the localization rules defined elsewhere in this README.
+
+## Worker Model
+
+- Development is performed by AI Workers.
+- Each Worker has its own named chat and recurring task.
+- Each Worker performs only its assigned role.
+- Workers use connected GitHub and Google Drive directly when needed.
+- GitHub is the task and review history.
+- Google Drive may hold and update project files.
+
+## Architect Worker
+
+- Read README.
+- Create and maintain `ROADMAP.json`.
+- Cover the full project from start to completion.
+- Split work into as many small testable phases as practical.
+- Every phase must end with a testable release.
+- If Admin changes README, update ROADMAP with the smallest required change.
+- Mark affected phases, tasks and issues for reconciliation by their owning Workers.
+- Do not change README.
+
+## AI Planner Worker
+
+- Read `ROADMAP.json`.
+- Select the oldest unfinished phase.
+- Maintain `TODO.json` for that phase.
+- Keep only one active Phase issue on GitHub.
+- Do not activate the next phase until the current Phase issue is complete.
+- All open issues affecting the active or earlier phases must be resolved first.
+- Issues for future phases stay deferred until their phase becomes active.
+- Close conflicting issues with a clear reason when they contradict README or the active roadmap.
+- Review roadmap-change issues and update ROADMAP only when they remain compatible with README.
+- Keep the active Phase issue as the parent tracker for its implementation and fix issues.
+
+## Coder Worker
+
+- Work only on issues for the active phase or required earlier fixes.
+- Prefer small changes with visible, testable results.
+- Implement and test each change.
+- Fix failures before continuing.
+- If an issue is too large, split it into ordered steps.
+- Complete one step at a time and verify each step.
+- Update issue progress on GitHub.
+- Run regression tests after all issue steps pass.
+- Close an issue only after implementation and regression pass.
+- Continue with the next eligible open issue on the next run.
+
+## Tester Worker
+
+- Find the latest closed issue not independently tested.
+- Test its requirements in the produced application.
+- If it fails, add findings and reopen the issue for Coder Worker.
+- If it passes, record the test result.
+- When all issues of the active phase pass, verify the full phase.
+- Close the Phase issue with a test summary.
+- Publish the verified build to `LatestRelease/`.
+- Update the GitHub Release.
+- Verify `https://sgoxel.github.io/The-Advisor-Game/` works with the new release.
+
+## Reviewer Worker
+
+- Review the complete workflow continuously.
+- Check README, ROADMAP, TODO, issues, implementation, tests and release consistency.
+- Detect missing work, regressions, contradictions and process stalls.
+- Open GitHub issues for the responsible Worker when action is required.
+- Do not bypass Worker ownership by silently fixing unrelated work.
+
+## README Protection
 
 > [!CAUTION]
-> `README.md` is protected. AI agents **MUST NOT** edit, rewrite, reformat, synchronize, or otherwise modify it unless the Admin explicitly authorizes that specific README modification. If implementation suggests a README change, agents must propose it to the Admin rather than silently changing README to match code, tests, SPEC, TODO, or assumptions.
+> `README.md` is protected. AI must never edit, rewrite, reformat or request changes to it unless Admin explicitly asks for that specific README change. If other project data conflicts with README, change the other data.
 
 ---
 
@@ -449,5 +500,6 @@ See [LICENSE](LICENSE).
 
 **Advise wisely. The character may listen. The world will remember.**
 
+🎮 [Play Latest Release](https://sgoxel.github.io/The-Advisor-Game/) · 🏷️ [Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
 
 </div>
