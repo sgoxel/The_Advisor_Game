@@ -21,7 +21,7 @@
       "id": "P01-T02",
       "order": 2,
       "title": "Implement campaign export serialization",
-      "status": "open",
+      "status": "closed",
       "depends_on": [
         "P01-T01"
       ],
