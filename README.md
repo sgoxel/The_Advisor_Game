@@ -20,7 +20,7 @@
 
 ### 🎮 [Play the Latest Tested Development Release](https://sgoxel.github.io/The-Advisor-Game/)
 
-[🏷️ Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest) · [📘 Implementation specification](SPEC.md) · [🌐 GitHub Pages](https://sgoxel.github.io/The-Advisor-Game/)
+[🏷️ Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest) · [🌐 GitHub Pages](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
 
@@ -28,9 +28,6 @@
 > **Core rule:** The human player advises. The autonomous AI character decides and acts.
 >
 > **Player advises → AI Character decides → Simulation validates → World reacts.**
-
-> [!NOTE]
-> **Development status:** early prototype. The procedural WebGL map, movement, minimap, map import/export, settings, and English/Turkish UI foundation exist. The autonomous Character AI, LLM/BOT system, Advisor interaction and Instruction Flow, campaign, economy, diplomacy, military, relationships, and settlement systems below are product direction unless explicitly listed as implemented.
 
 ---
 
@@ -317,14 +314,14 @@ Only visible/nearby regions need full detail. Distant/inactive regions may be si
 12. **Readable causality.** The player should understand their advice, the character's decision, and the resulting consequence.
 13. **Respect the player's time.** Progress comes from decisions, relationships, discoveries, and stories rather than daily-login systems or grind.
 14. **Accessible by default.** Keyboard, mouse, and touch are supported; required information never relies on color alone.
+15. **Testable from the beginning.** The earliest development priority is to establish a usable environment, platform, and interface through which anyone can try the evolving application at the stable public URL. README does not prescribe how Workers technically achieve this.
+16. **Grow one working product step by step.** The capabilities and experiences defined in this README are introduced gradually in small, independently verifiable increments. Each accepted increment builds on the previously verified product so the application continuously becomes broader, better, and more complete rather than being rebuilt as disconnected feature branches or throwaway prototypes.
 
 ---
 
 # 🌐 Runtime Architecture, Trust Boundary, Saves, and Privacy
 
-The production game is static HTML, CSS, JavaScript, localization, images, and audio hosted by GitHub Pages. GitHub Pages deploys the verified `LatestRelease/` snapshot as the public site root, preserving a stable player URL.
-
-No mandatory custom server, serverless function, database, account, or server-side simulation is required. Locally executed systems include world generation, deterministic Character BOT, game-state/action validation, progression, economy/world simulation, seeded checks, saves, and Advisor Instruction Flow storage/validation.
+The game must remain a client-side web experience that can be published through GitHub Pages at the stable public URL. A mandatory custom application backend, account system, or server-side simulation must not be required for core gameplay. Exact repository layout, file layout, module boundaries, build organization, and deployment implementation are Worker decisions.
 
 An optional player-configured **OpenAI-compatible HTTPS endpoint** may be called directly from the browser only when it supports the required CORS configuration. No API key is bundled with the game. Player-entered credentials remain outside campaign saves and exported campaign data.
 
@@ -343,131 +340,27 @@ Structured model output must be parsed and validated against supported schemas a
 - Only minimum bounded game context should be sent to a configured external model.
 - The game remains playable through the local BOT without personal information or external accounts.
 - Campaigns can be exported/imported as versioned JSON.
-- Runtime assets use repository-relative URLs so the game works under `https://sgoxel.github.io/The-Advisor-Game/` and compatible static hosts.
-
-Opening `index.html` through `file://` is best-effort because browsers restrict some asset/network operations. GitHub Pages or another ordinary HTTPS static host is sufficient.
+- The verified game must remain deployable at `https://sgoxel.github.io/The-Advisor-Game/` and compatible static hosting environments.
 
 ---
 
-# 🧪 Current Prototype
+# 🚀 Development and Release Principles
 
-Implemented today:
+Development must remain **continuously and manually testable**.
 
-- ✅ Seeded 12×12 to 80×80 procedural worlds
-- ✅ WebGL2 isometric renderer with Canvas2D overlays
-- ✅ Terrain, settlements, connected roads, minimap, camera, and path movement
-- ✅ Map data/image import and export tools
-- ✅ English and Turkish localization foundation
-- ✅ Responsive desktop/mobile panels
-- ✅ Static deployment at `https://sgoxel.github.io/The-Advisor-Game/`
-- ✅ Vitest, Playwright, ESLint, JSDoc type checking, and performance checks
+The earliest development priority is not a predefined feature phase. It is establishing a usable public environment, platform, and interface so anyone can try the evolving application at `https://sgoxel.github.io/The-Advisor-Game/`. This is a permanent development principle, not a fixed roadmap item or prescribed technical design.
 
-> [!WARNING]
-> Current Gold, Health, Stamina, Mana, Character, and Dialogue displays are prototype UI. They are not evidence that the final autonomous Character AI loop, progression, Advisor Instruction Flow, or long-term campaign systems are already implemented. Existing prototype behavior is not automatically a product requirement. Roadmap execution still begins by establishing the fresh Phase 1 deployable UI/release baseline; compatible prototype code may be reused only after verification and must not be used to skip that phase.
+Every capability, system, interaction, and experience described or required by this README must be introduced **gradually and step by step**. Development should behave like a rolling snowball: each independently verified improvement builds on the last known-good product, preserves previously accepted functionality, and makes the same application progressively broader, better, and more complete.
 
----
+- README does **not** define phases, task order, project structure, file structure, module names, implementation sequence, or technical decomposition. Those remain Worker decisions made from the current project state while obeying these principles.
+- New work should be divided into small, meaningful, testable increments whenever practical.
+- Each independently verified increment must extend, improve, or safely refine the same working product rather than create a disconnected throwaway build.
+- The latest verified public build must preserve previously accepted work while incorporating newly accepted work.
+- Failed, incomplete, or unverified work must never replace the last known-good public build.
+- Phase boundaries, when Planner chooses to use them, are planning constructs rather than README-defined product structure. Every completed phase still requires appropriate independent verification and a manually testable public release.
+- Users must be able to manually test the latest verified product at `https://sgoxel.github.io/The-Advisor-Game/` throughout development.
 
-# 🎮 Play, Deploy, or Run Locally
-
-<div align="center">
-
-## ▶️ [PLAY LATEST TESTED DEVELOPMENT RELEASE](https://sgoxel.github.io/The-Advisor-Game/)
-
-[View latest GitHub release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
-
-</div>
-
-Players need neither Node.js nor a local server. To deploy another copy, publish the repository root through GitHub Pages or another compatible HTTPS static host and keep the directory structure intact.
-
-Node.js 18+ is required only for local development tools and automated tests:
-
-```bash
-npm install
-npm run dev
-```
-
-Useful checks:
-
-```bash
-npm run lint
-npm run typecheck
-npm run test
-npm run test:playwright
-npm run perf
-```
-
----
-
-# 🗂️ Project Map
-
-| Path | Responsibility |
-| --- | --- |
-| `index.html` | Application shell and script order |
-| `js/config.js` | Constants and adjustable limits |
-| `js/state.js` | Shared runtime and campaign state |
-| `js/simulation.js` | Deterministic validation, world simulation, progression, and consequences |
-| `js/character-ai.js` | Shared Character AI contract, LLM adapter, BOT fallback, and output validation |
-| `js/advisor.js` | Player conversation, advisory context, and Advisor-facing interaction systems |
-| `js/advisor-flow.js` | Advisor Instruction Flow model, plain-text generation, validation, and updates |
-| `js/memory.js` | Structured character memory and conversation summarization |
-| `js/rng.js` | Seeded random helpers |
-| `js/topology.js` | Map topology helpers |
-| `js/terrain.js` | Procedural terrain, settlements, and roads |
-| `js/renderer.js` | WebGL/Canvas rendering |
-| `js/input.js` | Camera, pointer, touch, and movement input |
-| `js/ui.js` | DOM presentation, panels, logs, and import/export |
-| `js/app.js` | Startup and orchestration |
-| `locales/` | English and Turkish strings |
-| `tests/` | Unit, browser, visual, and gameplay checks |
-| `LatestRelease/` | Last verified static release snapshot deployed by GitHub Pages |
-| `VERSION` | Concrete release version used by tooling, tags, manifests, and GitHub Releases |
-| `SPEC.md` | Detailed mechanics, architecture, roadmap, and acceptance criteria subordinate to this README |
-
-Modules listed as product direction need not exist in the current prototype yet.
-
----
-
-# 🛣️ Roadmap
-
-Development proceeds as a **rolling, manually testable product**. The public build must exist from the first phase and grow continuously as verified work is completed. Existing prototype code may be reused only when it is README-compatible and independently verified; it must not be used to skip the initial UI/release foundation.
-
-| Stage | Goal |
-| --- | --- |
-| **1. Deployable UI and Release Foundation** | Create a fresh minimal responsive game UI and deployment baseline that works at `https://sgoxel.github.io/The-Advisor-Game/`. It may initially contain only the smallest useful shell, navigation, status/presentation areas, and testable interaction needed to prove the release pipeline. |
-| **2. Deterministic Simulation Foundation** | Campaign/world/character state, saves, seeded checks, legal-action validation, connected to the existing public UI |
-| **3. Autonomous Local BOT Character** | One complete autonomous character, goals, legal actions, memories, basic Advisor influence, no external LLM dependency |
-| **4. Conversation System** | Dialogue, bounded character context, structured memories, trust, personality, conversation consequences |
-| **5. Advisor Instruction Flow** | Interactive editing, plain-text output, persistence, validation, BOT interpretation |
-| **6. Optional LLM Character Driver** | Standard Character Instructions, roleplay, structured legal actions, conversation/instruction interpretation and safe BOT fallback |
-| **7. Peasant-to-Knight Vertical Progression** | Local economy, employment, relationships, quests, village events, reputation, military entry, early mini-games |
-| **8. Nobility and Political Progression** | Land, settlements, factions, diplomacy, trade, political relationships, court intrigue |
-| **9. Kingdom and Military Systems** | Strategic armies, commanders, wars, treaties, realm economy, succession, major crises |
-| **10. King-to-Emperor Progression** | Multiple kingdoms, imperial politics, large-scale diplomacy, rebellion, legitimacy, administration, end-game crises |
-| **11. Campaign Polish** | Advanced mini-games, 2.5D characters, emotion, audio, regional backgrounds, accessibility, balancing, replayability |
-
-The Planner must expand these stages into many small testable phases and tasks in `ROADMAP.json` and `TODO.json`. Every task must leave the project in a working state. Every independently verified completed task adds its accepted feature to the same cumulative public build. Every phase ends with a full regression, a manually testable public build, and a tested GitHub Release. Development must behave like a rolling snowball: later work extends the verified product instead of replacing it with disconnected intermediate builds.
-
----
-
-# 🚀 Development Releases
-
-The project is **release-first and continuously testable**. Manual testing at `https://sgoxel.github.io/The-Advisor-Game/` is a required development constraint, not a final-stage activity.
-
-- Phase 1 must establish the first working UI and deployable `LatestRelease/` baseline.
-- `main` contains accepted source history; `LatestRelease/` contains only the latest independently verified cumulative public build.
-- GitHub Pages publishes `LatestRelease/` at `https://sgoxel.github.io/The-Advisor-Game/`.
-- Every completed task must be independently tested before its accepted result may be promoted into `LatestRelease/`.
-- After each independently verified task, `LatestRelease/` must roll forward so users can manually test the newly added feature together with all previously verified features.
-- Every phase must finish with full phase regression and a manually testable public build.
-- Every completed phase must create or update the formal tested GitHub Release at `https://github.com/sgoxel/The-Advisor-Game/releases/latest`.
-- A task or phase that fails testing must not replace the last known-good `LatestRelease/`.
-- Releases are cumulative: accepted later work extends the previous verified release rather than starting from an unrelated build.
-- Versions use `v<major>.<minor>.<patch>-dev.<number>` tags; [`VERSION`](VERSION) is the concrete version authority for tooling, tags, manifests, and releases.
-- README must **not** embed the current release number, current tag, or a version query parameter.
-- `LatestRelease/release-manifest.json` records the published version and source commit without requiring README edits.
-- Ordinary version increments must not modify this protected README.
-
-[🎮 Launch the latest tested build](https://sgoxel.github.io/The-Advisor-Game/) · [🏷️ Open the latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
+The exact technical means used to provide, organize, build, deploy, version, and promote the application are subordinate Worker decisions unless another fundamental rule in this README explicitly constrains them.
 
 ---
 
@@ -479,84 +372,107 @@ The authority order is:
 
 <div align="center">
 
-### README → ROADMAP.json → TODO.json → GitHub Issues → code → tests → LatestRelease / GitHub Release
+### README → Planner-owned planning → active tasks/issues → implementation → tests → verified release
 
 </div>
 
-README wins every conflict. Existing code and tests are implementation history, not product authority, unless compatible with README. Subordinate planning, issues, code, tests, and release data must be corrected when they conflict with README.
+README wins every conflict. Existing planning, issues, code, tests, release artifacts, and prior assumptions are subordinate and must be corrected when incompatible with README.
+
+## Planning Freedom
+
+README intentionally does **not** prescribe a roadmap, phase list, project map, file layout, module layout, task breakdown, implementation order, or detailed technical architecture unless a rule is explicitly stated as a product constraint elsewhere in this README.
+
+Planner decides these details from the current project state and may revise subordinate planning as development evolves. Coder may choose implementation details inside approved task scope. Tester verifies outcomes against README and current approved planning rather than enforcing an obsolete structure merely because it existed earlier.
 
 ## Worker Model
 
-Development uses three primary Workers: **Planner Worker**, **Coder Worker**, and **Tester Worker**. Each Worker has its own named chat and recurring task, uses the minimum required context, records meaningful work on GitHub, and stays inside its assigned role except for the explicit fallback modes below.
+Development uses three primary Workers: **Planner Worker**, **Coder Worker**, and **Tester Worker**. Each Worker uses the minimum required context, records meaningful work on GitHub, and stays inside its assigned role except for the explicit fallback modes below.
 
-JSON planning files must parse and contain required fields before use. Invalid JSON blocks dependent progress until the responsible Worker repairs or regenerates it.
+Planner-owned JSON planning data must parse and contain the required fields before dependent work continues. Invalid planning JSON must be repaired or regenerated first.
 
 ### Planner Worker
 
-- Maintains `ROADMAP.json` for the full project and `TODO.json` only for the active phase.
-- Expands the README roadmap into many small, ordered, visible, testable phases and tasks.
-- Ensures Phase 1 creates the deployable UI/release baseline before deeper systems.
-- Keeps only one active Phase issue as the parent tracker.
-- Does not activate the next phase until the current phase closes.
-- Blocks phase progress while open issues affect the current or earlier phases; future-phase issues are deferred.
-- If README changes, performs the minimum required compatible planning reconciliation.
-- Reviews `PLANNER REVISION REQUEST` from Coder and replies `ACCEPTED` or `REJECTED` on GitHub. Rejections require a clear reason. Accepted requests change planning only as much as required.
+Planner:
+
+- derives and maintains the project roadmap from README and current verified project state;
+- chooses phases, task order, dependencies, acceptance criteria, project organization, and implementation sequence;
+- keeps only one active phase at a time unless README explicitly requires otherwise;
+- prioritizes unresolved work affecting the current or earlier phase before activating later work;
+- reconciles subordinate planning when README changes;
+- reviews `PLANNER REVISION REQUEST` from Coder and replies `ACCEPTED` or `REJECTED` on GitHub;
+- applies only README-compatible planning changes;
+- records decisions, reasons, and resulting planning changes on GitHub.
+
+A rejection requires a clear reason.
 
 #### Planner Fallback Coder Mode
 
-Planner work always has priority. Only when no Planner work, README reconciliation, or unresolved `PLANNER REVISION REQUEST` exists, Planner may work on one eligible active-phase or required earlier-fix issue as a Coder. GitHub commits, comments, progress, and status records must identify this work as **`Coder Worker (Planner)`**.
+Planner work always has priority. Only when no Planner work, README reconciliation, or unresolved `PLANNER REVISION REQUEST` exists may Planner temporarily work as Coder on one eligible current-phase or required earlier-fix issue.
 
-While in fallback mode, Planner follows all Coder rules but must not modify `ROADMAP.json`, `TODO.json`, phase scope, dependencies, or acceptance criteria. If coding reveals that planning must change, fallback coding stops and the Worker returns to Planner role. A Worker may never create and approve its own revision request.
+Fallback coding activity must be identified on GitHub as **`Coder Worker (Planner)`**.
+
+While in fallback mode Planner follows Coder rules but must not silently change planning scope, dependencies, or acceptance criteria. If coding reveals that planning must change, fallback coding stops and the Worker returns to Planner role. A Worker may never create and approve its own revision request.
 
 ### Coder Worker
 
-- Works only active-phase issues or required earlier fixes.
-- Prefers small visible testable changes that extend the existing cumulative public product.
-- Splits large issues into ordered steps and completes, tests, and verifies one step at a time.
-- Fixes failures before continuing.
-- Updates GitHub progress and records relevant test evidence.
-- Reviews `TESTER REVISION REQUEST` and replies `ACCEPTED` or `REJECTED` on the same issue. Rejections require technical reason and evidence.
-- If planning must change, creates `PLANNER REVISION REQUEST` with requested change, reason, evidence, and impact instead of modifying planning directly.
-- Runs regression after all issue steps pass and closes the issue only after implementation and regression pass.
+Coder:
+
+- works only eligible current-phase issues or required earlier fixes;
+- prefers small visible testable changes;
+- splits large implementation work into ordered verifiable steps when useful;
+- tests and verifies each step before continuing;
+- fixes failures before proceeding;
+- records meaningful progress and evidence on GitHub;
+- reviews `TESTER REVISION REQUEST` and replies `ACCEPTED` or `REJECTED` on the same GitHub issue;
+- implements and tests accepted Tester revisions;
+- provides a technical reason and evidence when rejecting a Tester revision;
+- creates `PLANNER REVISION REQUEST` when approved planning must change instead of modifying planning directly;
+- runs appropriate regression before considering implementation work complete.
 
 ### Tester Worker
 
-Tester work always has priority. Tester independently verifies the latest closed untested issue against README, ROADMAP, TODO, issue requirements, regressions, and the cumulative public-build requirement.
+Tester work always has priority. Tester independently verifies completed work against README, current approved planning, issue requirements, relevant regressions, and the continuously testable release rule.
 
-- Defective issue work is reopened with a `TESTER REVISION REQUEST` containing evidence, expected result, and required correction.
-- Coder may `ACCEPT` or `REJECT`; Tester independently rechecks after the response.
-- An issue cannot pass while a valid revision request remains unresolved.
-- Separate required work gets a separate issue; Tester does not silently fix unrelated work while Tester work exists.
-- After a task passes independent verification, Tester may promote that accepted cumulative state into `LatestRelease/` so users can manually test it at the stable public URL.
-- When all active-phase issues pass, Tester runs full phase regression, verifies the public build, closes the Phase issue, and updates the formal GitHub Release.
-- Broken or intermediate builds must never replace the last known-good public release.
+If issue work is defective, Tester reopens it and creates a `TESTER REVISION REQUEST` on the same issue containing evidence, expected result, and required correction.
+
+Coder may `ACCEPT` or `REJECT`. Tester independently rechecks after the response. Work cannot pass while a valid revision request remains unresolved.
+
+When the active phase is complete, Tester performs the required independent phase verification and release gate. Broken or intermediate work must not replace the last known-good public release.
 
 #### Tester Fallback Coder Mode
 
-Only when no Tester work, unresolved Tester revision request, or release gate exists, Tester may work on one eligible active-phase or required earlier-fix issue as a Coder. GitHub commits, comments, progress, and status records must identify this work as **`Coder Worker (Tester)`**.
+Only when no Tester work, unresolved Tester revision request, or release gate exists may Tester temporarily work as Coder on one eligible current-phase or required earlier-fix issue.
 
-Tester follows all Coder rules in fallback mode and may create `PLANNER REVISION REQUEST` when needed, but must not modify planning directly. Tester must not independently approve, test-pass, or release-gate its own fallback coding work. That work requires independent verification by another eligible Worker before promotion or release. Tester returns to Tester role as soon as Tester work appears.
+Fallback coding activity must be identified on GitHub as **`Coder Worker (Tester)`**.
 
-## Revision and Independence Rules
+Tester follows Coder rules in fallback mode and may create `PLANNER REVISION REQUEST` when planning must change, but must not modify planning directly. Tester must not independently approve, test-pass, or release-gate its own fallback coding work. That work requires independent verification by another eligible Worker before it can count as tested or enter a verified release.
+
+## Revision Flow
 
 - Tester → Coder through `TESTER REVISION REQUEST`.
 - Coder → Planner through `PLANNER REVISION REQUEST`.
-- The target Worker replies `ACCEPTED` or `REJECTED`; every rejection requires reason, and technical rejections require evidence when applicable.
-- All requests, responses, evidence, decisions, changes, and outcomes remain recorded on GitHub.
+- The target Worker replies `ACCEPTED` or `REJECTED` on GitHub.
+- Every rejection requires a reason; technical rejection requires evidence when applicable.
+- Requests, responses, evidence, decisions, changes, and outcomes remain recorded on GitHub.
 - No Worker may approve its own revision request.
-- No Worker may independently approve its own coding work.
-- Fallback coding requires independent verification by another eligible Worker before it may count as tested or enter `LatestRelease/`.
+
+## Independence
+
+- A Worker must not independently approve its own coding work.
+- Fallback coding requires independent verification by another eligible Worker.
 - Release approval requires independent Tester verification.
 
 ## GitHub Worker Identity
 
-The connected GitHub account may remain the actual account identity. Worker identity must still be recorded in commits, comments, progress, and status records:
+The connected GitHub account may remain the actual account identity. Logical Worker identity must be recorded in commits, comments, progress, and status records:
 
 - Normal coding: `Coder Worker`
 - Tester fallback coding: `Coder Worker (Tester)`
 - Planner fallback coding: `Coder Worker (Planner)`
 
-Every gameplay implementation must preserve the rules already defined above, especially **Player advises → AI Character decides → Simulation validates → World reacts**.
+Every implementation must preserve the core product rule:
+
+**Player advises → AI Character decides → Simulation validates → World reacts.**
 
 ## 🔒 README Protection
 
