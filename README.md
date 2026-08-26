@@ -376,56 +376,6 @@ These commands are **development requirements**, not a statement that the corres
 
 ---
 
-# 🗂️ Target Project Map
-
-| Path | Responsibility |
-| --- | --- |
-| `index.html` | Application shell and script order |
-| `js/config.js` | Constants and adjustable limits |
-| `js/state.js` | Shared runtime and campaign state |
-| `js/simulation.js` | Deterministic validation, world simulation, progression, and consequences |
-| `js/character-ai.js` | Shared Character AI contract, LLM adapter, BOT fallback, and output validation |
-| `js/advisor.js` | Player conversation, advisory context, and Advisor-facing interaction systems |
-| `js/advisor-flow.js` | Advisor Instruction Flow model, plain-text generation, validation, and updates |
-| `js/memory.js` | Structured character memory and conversation summarization |
-| `js/rng.js` | Seeded random helpers |
-| `js/topology.js` | Map topology helpers |
-| `js/terrain.js` | Procedural terrain, settlements, and roads |
-| `js/renderer.js` | WebGL/Canvas rendering |
-| `js/input.js` | Camera, pointer, touch, and movement input |
-| `js/ui.js` | DOM presentation, panels, logs, and import/export |
-| `js/app.js` | Startup and orchestration |
-| `locales/` | English and Turkish strings |
-| `tests/` | Unit, browser, visual, and gameplay checks |
-| `LatestRelease/` | Verified static release snapshot location once releases begin |
-| `VERSION` | Concrete release version used by tooling, tags, manifests, and GitHub Releases |
-| `SPEC.md` | Detailed mechanics, architecture, roadmap, and acceptance criteria subordinate to this README |
-
-Paths and modules in this table define the intended project organization and need not exist before their implementation task begins.
-
----
-
-# 🛣️ Roadmap
-
-Development proceeds through **playable vertical slices** that preserve the autonomous-character concept:
-
-| Stage | Goal |
-| --- | --- |
-| **1. Deterministic Simulation Foundation** | Campaign/world/character state, saves, seeded checks, legal-action validation |
-| **2. Autonomous Local BOT Character** | One complete autonomous character, goals, legal actions, memories, basic Advisor influence, no external LLM dependency |
-| **3. Conversation System** | Dialogue, bounded character context, structured memories, trust, personality, conversation consequences |
-| **4. Advisor Instruction Flow** | Interactive editing, plain-text output, persistence, validation, BOT interpretation |
-| **5. Optional LLM Character Driver** | Standard Character Instructions, roleplay, structured legal actions, conversation/instruction interpretation and safe BOT fallback |
-| **6. Peasant-to-Knight Vertical Progression** | Local economy, employment, relationships, quests, village events, reputation, military entry, early mini-games |
-| **7. Nobility and Political Progression** | Land, settlements, factions, diplomacy, trade, political relationships, court intrigue |
-| **8. Kingdom and Military Systems** | Strategic armies, commanders, wars, treaties, realm economy, succession, major crises |
-| **9. King-to-Emperor Progression** | Multiple kingdoms, imperial politics, large-scale diplomacy, rebellion, legitimacy, administration, end-game crises |
-| **10. Campaign Polish** | Advanced mini-games, 2.5D characters, emotion, audio, regional backgrounds, accessibility, balancing, replayability |
-
-Detailed implementation milestones may live in `SPEC.md`, but they must always conform to this README.
-
----
-
 # 🚀 Development Release Policy
 
 Once development releases begin:
