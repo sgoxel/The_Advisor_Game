@@ -14,10 +14,6 @@
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-green">
 </p>
 
-<p align="center">
-  <img src="_githubpage/img/Concept Map Generation.png" width="720" alt="Procedurally generated isometric world map from The Advisor Game">
-</p>
-
 [🌐 GitHub Release Page location](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
