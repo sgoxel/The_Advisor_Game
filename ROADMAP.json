@@ -5,180 +5,30 @@
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "active_phase_id": "P01",
   "phases": [
-    {
-      "id": "P01",
-      "stage": 1,
-      "title": "Campaign State and Versioned Saves",
-      "status": "active",
-      "release_gate": "All P01 tasks independently tested; cumulative Phase 1 save workflow manually usable through the existing public application; verified public build required before P02."
-    },
-    {
-      "id": "P02",
-      "stage": 1,
-      "title": "Seeded Checks and RNG Contract",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P03",
-      "stage": 1,
-      "title": "Legal Action Validation",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P04",
-      "stage": 2,
-      "title": "Autonomous Local BOT Core",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P05",
-      "stage": 2,
-      "title": "BOT Memory and Advisor Influence",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P06",
-      "stage": 3,
-      "title": "Conversation Foundation",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P07",
-      "stage": 3,
-      "title": "Trust Personality and Conversation Memory",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P08",
-      "stage": 4,
-      "title": "Advisor Instruction Plain-Text Model",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P09",
-      "stage": 4,
-      "title": "Advisor Instruction Flow Editor",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P10",
-      "stage": 4,
-      "title": "BOT Instruction Interpretation",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P11",
-      "stage": 5,
-      "title": "Optional LLM Adapter and Trust Boundary",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P12",
-      "stage": 5,
-      "title": "LLM Repair and BOT Fallback",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P13",
-      "stage": 6,
-      "title": "Peasant Survival and Local Economy",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P14",
-      "stage": 6,
-      "title": "Local Relationships Reputation and Events",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P15",
-      "stage": 6,
-      "title": "Squire and Knight Progression",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P16",
-      "stage": 7,
-      "title": "Land Settlements and Stewardship",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P17",
-      "stage": 7,
-      "title": "Factions Trade and Diplomacy",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P18",
-      "stage": 7,
-      "title": "Court Intrigue and Noble Progression",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P19",
-      "stage": 8,
-      "title": "Strategic Military Simulation",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P20",
-      "stage": 8,
-      "title": "Realm Economy Treaties and Succession",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P21",
-      "stage": 9,
-      "title": "King and Multi-Kingdom Systems",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P22",
-      "stage": 9,
-      "title": "Emperor Administration and Endgame",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P23",
-      "stage": 10,
-      "title": "Advanced Advisor Mini-Games",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P24",
-      "stage": 10,
-      "title": "2.5D Presentation Audio and Emotion",
-      "status": "planned",
-      "release_gate": "Tested release required."
-    },
-    {
-      "id": "P25",
-      "stage": 10,
-      "title": "Accessibility Balance and Campaign Release",
-      "status": "planned",
-      "release_gate": "Full project regression and public release verification required."
-    }
+    {"id":"P01","stage":1,"title":"Campaign State and Versioned Saves","status":"active","release_gate":"All P01 tasks independently tested; cumulative Phase 1 save workflow manually usable through the existing public application; verified public build required before P02."},
+    {"id":"P02","stage":1,"title":"Seeded Checks and RNG Contract","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P03."},
+    {"id":"P03","stage":1,"title":"Legal Action Validation","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P04."},
+    {"id":"P04","stage":2,"title":"Autonomous Local BOT Core","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P05."},
+    {"id":"P05","stage":2,"title":"BOT Memory and Advisor Influence","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P06."},
+    {"id":"P06","stage":3,"title":"Conversation Foundation","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P07."},
+    {"id":"P07","stage":3,"title":"Trust Personality and Conversation Memory","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P08."},
+    {"id":"P08","stage":4,"title":"Advisor Instruction Plain-Text Model","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P09."},
+    {"id":"P09","stage":4,"title":"Advisor Instruction Flow Editor","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P10."},
+    {"id":"P10","stage":4,"title":"BOT Instruction Interpretation","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P11."},
+    {"id":"P11","stage":5,"title":"Optional LLM Adapter and Trust Boundary","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P12."},
+    {"id":"P12","stage":5,"title":"LLM Repair and BOT Fallback","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P13."},
+    {"id":"P13","stage":6,"title":"Peasant Survival and Local Economy","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P14."},
+    {"id":"P14","stage":6,"title":"Local Relationships Reputation and Events","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P15."},
+    {"id":"P15","stage":6,"title":"Squire and Knight Progression","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P16."},
+    {"id":"P16","stage":7,"title":"Land Settlements and Stewardship","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P17."},
+    {"id":"P17","stage":7,"title":"Factions Trade and Diplomacy","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P18."},
+    {"id":"P18","stage":7,"title":"Court Intrigue and Noble Progression","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P19."},
+    {"id":"P19","stage":8,"title":"Strategic Military Simulation","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P20."},
+    {"id":"P20","stage":8,"title":"Realm Economy Treaties and Succession","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P21."},
+    {"id":"P21","stage":9,"title":"King and Multi-Kingdom Systems","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P22."},
+    {"id":"P22","stage":9,"title":"Emperor Administration and Endgame","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P23."},
+    {"id":"P23","stage":10,"title":"Advanced Advisor Mini-Games","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P24."},
+    {"id":"P24","stage":10,"title":"2.5D Presentation Audio and Emotion","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P25."},
+    {"id":"P25","stage":10,"title":"Accessibility Balance and Campaign Release","status":"planned","release_gate":"Full project independent testing and regression pass; cumulative application manually usable through the public interface; verified final public release required."}
   ]
 }
