@@ -56,7 +56,7 @@
       "id": "P01-T05",
       "order": 5,
       "title": "Establish minimal public application shell",
-      "status": "open",
+      "status": "closed",
       "depends_on": ["P01-T04"],
       "github_issue": 14,
       "acceptance": [
@@ -72,7 +72,7 @@
       "id": "P01-T06",
       "order": 6,
       "title": "Expose Phase 1 save workflow in the public UI",
-      "status": "open",
+      "status": "closed",
       "depends_on": ["P01-T05"],
       "github_issue": 13,
       "acceptance": [
