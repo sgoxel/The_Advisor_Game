@@ -250,7 +250,7 @@ Other characters may use deterministic AI, authored behavior, utility systems, s
 
 # 🗺️ Procedural World and Presentation
 
-The game is a lightweight **isometric / near-isometric 2.5D experience rendered through WebGL**, with HTML/CSS/SVG/Canvas interfaces for conversation, reports, investigation, mini-games, Advisor tools, and Instruction Flow. Readability, atmosphere, character emotion, and clear interaction take priority over unrestricted free-camera 3D complexity.
+The game is a **WebGL-based mixed 2D/3D experience** with an isometric / near-isometric 2.5D presentation. The visual world may combine real-time 3D scenes and objects with 2D portraits, illustrations, sprites, textures, overlays, interface elements, and effects. 2D and 3D content must work together as one coherent presentation rather than as separate visual prototypes. Readability, atmosphere, character emotion, clear interaction, responsive performance, and compatibility with the public web build take priority over unnecessary 3D complexity.
 
 ## 🌱 Seeded, Reproducible, Extensible World
 
@@ -270,19 +270,21 @@ Location remains mechanically meaningful for meetings, information access, trave
 
 ## 🎨 Visual Direction and Asset Fallback
 
-Visual direction includes isometric 2.5D terrain and movement, high-quality 2D portraits, visible emotional states where appropriate, layered/illustrated backgrounds for important scenes, seed-compatible building/object families, unique landmarks, and lightweight atmosphere such as lighting, shadows, weather, particles, water, smoke, fire, fog, and vegetation motion when performance permits. Visual effects must never reduce readability of map information, evidence, reports, character state, or Advisor choices.
+Visual direction combines **2D and 3D assets inside the WebGL presentation**. This may include isometric terrain and movement, 3D environments and props, buildings and landmarks, low-poly or otherwise performance-appropriate models, 2D portraits and character art, layered/illustrated backgrounds, sprites, textures, materials, icons, UI graphics, and lightweight atmosphere such as lighting, shadows, weather, particles, water, smoke, fire, fog, and vegetation motion when performance permits. Visual effects must never reduce readability of map information, evidence, reports, character state, or Advisor choices.
 
-**Required gameplay visuals always need repository-shipped fallbacks.** If a required reusable visual is missing during development, an AI development agent should create a **true vector asset** and save it into the appropriate versioned asset directory. Such assets must:
+**Required gameplay visuals always need repository-shipped fallbacks.** The Graphic Designer Worker owns the creation and maintenance of missing reusable presentation assets and visual prototypes. A missing visual must not remain a final-facing debug box, generic icon, primitive placeholder, or disconnected mockup when the project requires a usable asset.
 
-- use genuine vector geometry/styling, never a raster PNG/JPEG merely embedded in SVG;
-- meet the established modern high-quality 2.5D visual language with purposeful silhouette, depth, material cues, shading/highlights, and readable detail;
-- respect isometric direction, scale, proportions, footprint logic, climate/terrain identity, and family consistency in palette, lighting, outline, perspective, and detail;
-- remain readable on supported phones/tablets and credible when enlarged on higher-resolution displays;
-- avoid final-facing debug boxes, simple primitives, generic icons, single-color silhouettes, or similarly minimal placeholders;
-- use stable filenames and predictable family-based directories for deterministic data references and reuse;
-- be optimized so vector complexity does not impose excessive DOM/SVG/memory/GPU cost.
+Visual assets must:
 
-This policy fills missing **presentation assets**; it never changes seed-generated simulation content. Accepted generated assets become normal repository assets and are not regenerated during normal gameplay.
+- support the established isometric / near-isometric visual language and remain consistent in scale, perspective, silhouette, lighting, materials, palette, detail, and world identity;
+- remain readable on supported phones/tablets and credible on larger displays;
+- be suitable for the WebGL public build and optimized for practical browser, memory, DOM/SVG, CPU, and GPU limits;
+- use genuine vector geometry when delivered as vector art rather than embedding raster images inside a nominal SVG;
+- use real 3D geometry/material data when an asset is intended to function as a 3D object rather than disguising a raster image as a model;
+- preserve deterministic simulation rules: presentation assets may visualize generated content but never become simulation authority;
+- become normal versioned repository assets once accepted and remain reusable rather than being regenerated during normal gameplay.
+
+The exact graphics tools, asset formats, model formats, scene libraries, export settings, folder layout, naming system, and production pipeline are **not fixed by this README**. They are Worker decisions chosen for compatibility, quality, maintainability, performance, and the current project state.
 
 ## 📱 Responsive, Touch, Pointer, and Keyboard Requirements
 
@@ -317,12 +319,13 @@ Only visible/nearby regions need full detail. Distant/inactive regions may be si
 12. **Readable causality.** The player should understand their advice, the character's decision, and the resulting consequence.
 13. **Respect the player's time.** Progress comes from decisions, relationships, discoveries, and stories rather than daily-login systems or grind.
 14. **Accessible by default.** Keyboard, mouse, and touch are supported; required information never relies on color alone.
+15. **2D and 3D are one WebGL presentation.** Use the mix that best serves readability, atmosphere, performance, and gameplay; neither 2D nor 3D is restricted to temporary prototypes.
 
 ---
 
 # 🌐 Runtime Architecture, Trust Boundary, Saves, and Privacy
 
-The production game is static HTML, CSS, JavaScript, localization, images, and audio hosted by GitHub Pages. GitHub Pages deploys the verified `LatestRelease/` snapshot as the public site root, preserving a stable player URL.
+The production game is static HTML, CSS, JavaScript, localization, 2D/3D visual assets, images, and audio hosted by GitHub Pages. GitHub Pages deploys the verified `LatestRelease/` snapshot as the public site root, preserving a stable player URL.
 
 No mandatory custom server, serverless function, database, account, or server-side simulation is required. Locally executed systems include world generation, deterministic Character BOT, game-state/action validation, progression, economy/world simulation, seeded checks, saves, and Advisor Instruction Flow storage/validation.
 
@@ -464,9 +467,9 @@ Detailed implementation milestones may live in `SPEC.md`, but they must always c
 
 ---
 
-# 🛠️ Authority for Planning and Coding Agents
+# 🛠️ Authority for Development Workers
 
-Before planning or implementing gameplay, agents **MUST read this README**. It defines product intent and authority.
+Before planning, implementing, testing, or producing game visuals, Workers **MUST read this README**. It defines product intent and authority.
 
 The synchronization direction is:
 
@@ -484,6 +487,25 @@ Every gameplay implementation must preserve the rules already defined above, esp
 - Human players never gain unrestricted direct control over autonomous world characters.
 - LLMs may handle dialogue, roleplay, interpretation, personality, memories, advice evaluation, supported instruction updates, and selection among legal actions; deterministic systems own validation, legal actions, costs, seeded checks, progression, resources, movement legality, combat, state transitions, and consequences.
 - The Advisor Instruction Flow may look like a flowchart, decision tree, algorithm editor, node graph, or rule system, but its system-boundary output remains plain-text advisory instructions that may be edited by the player or updated by Character AI when allowed and may never bypass simulation rules.
+
+## 🎨 Graphic Designer Worker
+
+The **Graphic Designer Worker** owns visual asset creation, visual prototyping, and visual consistency for the evolving game. Its work supports Planner-defined tasks and the same cumulative public application; it does not define gameplay rules, simulation authority, roadmap scope, or release approval.
+
+Its responsibilities include:
+
+- create and maintain **2D assets** such as portraits, illustrations, backgrounds, sprites, textures, material artwork, icons, UI-support graphics, vector art, and other required presentation elements;
+- create and maintain **3D scenes and objects** suitable for the WebGL experience, including low-poly or otherwise performance-appropriate medieval buildings, houses, towers, castles, terrain elements, trees, rocks, roads, bridges, vegetation, props, landmarks, environment pieces, character placeholders, and other required world assets;
+- create isometric/world-map visual prototypes, scene compositions, WebGL preview/test scenes, and representative asset demonstrations when needed to validate visual direction before integration;
+- prepare WebGL-ready 3D assets and decide suitable web-compatible asset/export formats for the current task; README does not mandate a specific model format;
+- maintain a practical visual asset plan/inventory when needed so missing, placeholder, reusable, and production-ready assets can be identified and improved progressively;
+- create early placeholder visual assets when they enable a usable public build, then progressively refine or replace them with higher-quality assets while preserving verified functionality;
+- verify visual scale, orientation, perspective, isometric readability, materials, lighting, responsive presentation, and browser performance for created assets;
+- keep asset families visually coherent and reusable across settlements, terrain, characters, props, interfaces, and progression states;
+- commit accepted visual assets and visual test/prototype work to GitHub with clear task evidence; coordinate with Coder when integration requires gameplay/runtime logic beyond visual implementation;
+- replace missing or inadequate required visuals rather than leaving final-facing debug geometry or unrelated generic placeholders.
+
+Graphic Designer Worker may create the visual code or WebGL demonstration needed to preview and validate its assets, but normal gameplay/simulation logic remains Coder responsibility. If visual work requires a planning/scope change, it must be raised through the project planning workflow rather than changing planning directly.
 
 ## 🔒 README Protection
 
