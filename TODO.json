@@ -22,9 +22,7 @@
       "order": 2,
       "title": "Implement campaign export serialization",
       "status": "closed",
-      "depends_on": [
-        "P01-T01"
-      ],
+      "depends_on": ["P01-T01"],
       "acceptance": [
         "Valid versioned JSON export",
         "SEED and compatible generation version preserved"
@@ -35,10 +33,7 @@
       "order": 3,
       "title": "Implement campaign import validation",
       "status": "closed",
-      "depends_on": [
-        "P01-T01",
-        "P01-T02"
-      ],
+      "depends_on": ["P01-T01", "P01-T02"],
       "acceptance": [
         "Malformed/unsupported JSON rejected safely",
         "Valid export/import round-trip",
@@ -50,10 +45,7 @@
       "order": 4,
       "title": "Add deterministic save round-trip tests",
       "status": "closed",
-      "depends_on": [
-        "P01-T02",
-        "P01-T03"
-      ],
+      "depends_on": ["P01-T02", "P01-T03"],
       "acceptance": [
         "Deterministic round-trip tests pass",
         "Credentials excluded by tests",
@@ -65,9 +57,7 @@
       "order": 5,
       "title": "Establish minimal public application shell",
       "status": "closed",
-      "depends_on": [
-        "P01-T04"
-      ],
+      "depends_on": ["P01-T04"],
       "github_issue": 14,
       "acceptance": [
         "Working static browser entrypoint and minimal supporting UI assets",
@@ -83,9 +73,7 @@
       "order": 6,
       "title": "Expose Phase 1 save workflow in the public UI",
       "status": "closed",
-      "depends_on": [
-        "P01-T05"
-      ],
+      "depends_on": ["P01-T05"],
       "github_issue": 13,
       "acceptance": [
         "Static UI can export current campaign state as versioned JSON",
@@ -93,66 +81,23 @@
         "Invalid/unsupported saves show a clear error without corrupting authoritative state",
         "UI cannot bypass deterministic simulation validation or expose provider credentials/raw model traffic",
         "Workflow remains usable on responsive desktop/mobile interface",
-        "Exact committed static candidate is manually testable before release; canonical GitHub Pages publication belongs to P01-T09",
+        "Exact committed static candidate is manually testable before release; canonical public publication belongs to P01-T07",
         "Relevant automated tests and regression pass"
       ]
     },
     {
       "id": "P01-T07",
       "order": 7,
-      "title": "Design Phase 1 interface visuals and icon set",
-      "status": "open",
-      "depends_on": [
-        "P01-T06"
-      ],
-      "github_issue": 15,
-      "role_owner": "Graphic Designer Worker",
-      "acceptance": [
-        "Coherent reusable 2D visual/icon treatment for Phase 1 save/export/import/reset/status controls",
-        "Readable interface hierarchy on desktop/tablet/phone portrait/phone landscape",
-        "Required information not encoded only by color and practical 44 CSS px targets preserved",
-        "Any SVG/vector deliverables use genuine vector geometry with no embedded raster payload",
-        "Visual presentation preserves deterministic save/import behavior",
-        "Web/static asset cost remains reasonable",
-        "Committed preview/check evidence and independent testability"
-      ]
-    },
-    {
-      "id": "P01-T08",
-      "order": 8,
-      "title": "Create mixed 2D/3D WebGL visual prototype assets",
-      "status": "open",
-      "depends_on": [
-        "P01-T07"
-      ],
-      "github_issue": 16,
-      "role_owner": "Graphic Designer Worker",
-      "acceptance": [
-        "At least one reusable performance-appropriate 3D environment/object family with real geometry/material data",
-        "At least one compatible 2D support asset demonstrated with the 3D content",
-        "Preview/test scene demonstrates coherent isometric scale, orientation, perspective, materials, lighting and readability",
-        "Assets remain legible on representative desktop/tablet/phone presentation sizes",
-        "Web-compatible formats and performance considerations documented",
-        "Visual assets do not become simulation authority",
-        "Committed preview/visual-check evidence and independent testability"
-      ]
-    },
-    {
-      "id": "P01-T09",
-      "order": 9,
       "title": "Phase 1 release gate",
       "status": "open",
-      "depends_on": [
-        "P01-T08"
-      ],
+      "depends_on": ["P01-T06"],
       "github_issue": 12,
       "acceptance": [
-        "All P01 implementation and visual-design issues independently tested",
+        "All P01 implementation issues independently tested",
         "Relevant full regression passes",
         "Cumulative Phase 1 candidate manually usable through the public application interface",
         "Save export/import exercised end-to-end from the UI",
-        "Phase 1 interface visual pass and mixed 2D/3D prototype assets independently verified",
-        "Verified build published at https://sgoxel.github.io/The_Advisor_Game/ and matches tested release state",
+        "Verified build available at https://sgoxel.github.io/The_Advisor_Game/ and matches the independently tested release state",
         "P02 remains inactive until Phase 1 release verification succeeds"
       ]
     }
