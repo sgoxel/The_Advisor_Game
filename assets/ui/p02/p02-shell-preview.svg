@@ -50,8 +50,8 @@
     <rect x="650" y="14" width="102" height="38" rx="10" class="button2"/>
     <text x="670" y="38" class="text" font-size="13" font-weight="700">Language</text>
     <rect x="766" y="14" width="116" height="38" rx="19" fill="#2b261f" stroke="#7a684c"/>
-    <circle cx="786" cy="33" r="5" fill="#79c48b"/>
-    <text x="800" y="38" class="text" font-size="13" font-weight="700">P02 Ready</text>
+    <circle cx="786" cy="33" r="5" fill="#8eb4cf"/>
+    <text x="800" y="38" class="text" font-size="13" font-weight="700">Preview</text>
 
     <rect x="22" y="92" width="392" height="188" rx="18" fill="url(#hero)" stroke="#8a7049"/>
     <text x="44" y="122" class="label">CORE RULE</text>
@@ -122,8 +122,8 @@
 
     <rect x="12" y="360" width="212" height="114" rx="16" class="panel"/>
     <text x="26" y="384" class="label" font-size="9">STATUS</text>
-    <circle cx="32" cy="410" r="5" fill="#79c48b"/>
-    <text x="44" y="414" class="text" font-size="11" font-weight="700">Ready · text + icon</text>
+    <circle cx="32" cy="410" r="5" fill="#8eb4cf"/>
+    <text x="44" y="414" class="text" font-size="11" font-weight="700">UI status · text + icon</text>
     <text x="26" y="442" class="small" font-size="10">Critical state is never color-only.</text>
 
     <rect x="12" y="492" width="212" height="44" rx="14" fill="#211c16" stroke="#5d513e"/>
