@@ -12,9 +12,10 @@
       "id": "R01-T01",
       "order": 1,
       "title": "Reconcile Admin-reset v155 baseline with current README",
-      "status": "in_progress",
+      "status": "completed",
       "github_issue": 62,
       "role_owner": "Planner Worker",
+      "completed_refs": ["3644509177f7b86bed0b6272093179caff490f0e", "3a8a2e6045b3d04d44bf7b648d34133b7a21cabf"],
       "acceptance": [
         "ROADMAP.json is recreated as valid full-project Planner-owned JSON with exactly one active phase",
         "TODO.json is recreated as valid active-phase-only JSON",
