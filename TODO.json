@@ -11,7 +11,7 @@
       "id": "P02-T01",
       "order": 1,
       "title": "Define deterministic RNG and seeded-check contract",
-      "status": "open",
+      "status": "closed",
       "github_issue": 21,
       "role_owner": "Coder Worker",
       "acceptance": [
