@@ -1,0 +1,160 @@
+name: Verified Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      verified_commit:
+        description: "Exact 40-character commit SHA independently verified by Tester"
+        required: true
+        type: string
+      release_tag:
+        description: "GitHub Release tag to create (for example v0.1.0-dev.1)"
+        required: true
+        type: string
+      release_name:
+        description: "Optional human-readable release title; defaults to the tag"
+        required: false
+        default: ""
+        type: string
+      confirm_verified:
+        description: "Confirm that the commit passed the independent release gate"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: verified-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test, publish Pages, and create GitHub Release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Validate verified release inputs
+        shell: bash
+        env:
+          VERIFIED_SHA: ${{ inputs.verified_commit }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CONFIRM_VERIFIED: ${{ inputs.confirm_verified }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRM_VERIFIED" != "true" ]]; then
+            echo "::error::Release blocked: independent verification was not explicitly confirmed."
+            exit 1
+          fi
+          if [[ ! "$VERIFIED_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::verified_commit must be an exact 40-character commit SHA."
+            exit 1
+          fi
+          if [[ -z "$RELEASE_TAG" || "$RELEASE_TAG" =~ [[:space:]] ]]; then
+            echo "::error::release_tag must be non-empty and contain no whitespace."
+            exit 1
+          fi
+
+      - name: Check out exact verified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.verified_commit }}
+          fetch-depth: 0
+
+      - name: Verify checked-out commit identity
+        shell: bash
+        env:
+          VERIFIED_SHA: ${{ inputs.verified_commit }}
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "${ACTUAL_SHA,,}" != "${VERIFIED_SHA,,}" ]]; then
+            echo "::error::Checked-out commit $ACTUAL_SHA does not match verified commit $VERIFIED_SHA."
+            exit 1
+          fi
+          echo "Verified immutable candidate: $ACTUAL_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run regression test suite
+        run: npm test
+
+      - name: Reject an existing release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $RELEASE_TAG already exists. Refusing to overwrite a previous release."
+            exit 1
+          fi
+
+      - name: Prepare static Pages artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir _site
+          rsync -a ./ _site/ \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '_site/' \
+            --exclude 'tests/' \
+            --exclude 'node_modules/' \
+            --exclude 'README.md' \
+            --exclude 'ROADMAP.json' \
+            --exclude 'TODO.json' \
+            --exclude 'package.json' \
+            --exclude 'package-lock.json' \
+            --exclude '.gitignore'
+          test -f _site/index.html
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload verified Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Create draft GitHub Release for exact commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ inputs.verified_commit }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+        run: |
+          set -euo pipefail
+          TITLE="$RELEASE_NAME"
+          if [[ -z "$TITLE" ]]; then
+            TITLE="$RELEASE_TAG"
+          fi
+          gh release create "$RELEASE_TAG" \
+            --target "$VERIFIED_SHA" \
+            --title "$TITLE" \
+            --generate-notes \
+            --draft
+
+      - name: Deploy exact verified artifact to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Publish GitHub Release after successful Pages deployment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --draft=false
