@@ -92,6 +92,7 @@
       "status": "open",
       "depends_on": ["P01-T06"],
       "github_issue": 12,
+      "role_owner": "Tester Worker",
       "acceptance": [
         "All P01 implementation issues independently tested",
         "Relevant full regression passes",
