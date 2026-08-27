@@ -42,17 +42,16 @@
       "id": "P02-T07",
       "order": 3,
       "title": "Inventory and classify previous UI package for P02 reuse",
-      "status": "blocked",
+      "status": "closed",
       "github_issue": 28,
       "role_owner": "Planner Worker",
       "acceptance": [
-        "Complete v155.zip package is inspected file-by-file and significant UI components/functions are inventoried",
+        "Complete committed reference package is inspected file-by-file and significant UI components/functions are inventoried",
         "Each significant item is classified REUSE, ADAPT, DEFER, or REJECT with a README-compatible reason",
-        "Approved REUSE/ADAPT items are converted into measurable active-P02 Coder and/or Graphic Designer issues with dependencies and release relevance",
+        "Approved REUSE/ADAPT items are converted into measurable active-P02 Coder and/or Graphic Designer work",
         "Future-phase gameplay or simulation functionality is deferred rather than pulled into P02",
         "Existing verified P01 behavior and current P02 deterministic-authority boundaries are preserved"
-      ],
-      "blocker": "The Admin attachment v155.zip is referenced by GitHub issue #28 but is not retrievable through the currently connected GitHub repository-file/attachment tool surface; inventory cannot be truthfully completed until the package bytes are accessible from GitHub."
+      ]
     },
     {
       "id": "P02-T03",
@@ -71,25 +70,42 @@
       ]
     },
     {
-      "id": "P02-T04",
+      "id": "P02-T08",
       "order": 5,
+      "title": "Adapt reference UI visual system and assets for current public shell",
+      "status": "open",
+      "depends_on": ["P02-T07"],
+      "github_issue": 29,
+      "role_owner": "Graphic Designer Worker",
+      "acceptance": [
+        "Committed reusable visual treatment/assets are provided for the current P02 public shell",
+        "Reference panel/ribbon/mobile presentation and selected texture assets are reused or adapted only where visually appropriate",
+        "Important controls and states remain readable without relying only on color",
+        "Desktop/tablet/phone portrait/landscape presentation remains coherent and readable",
+        "Visual assets do not imply fake authoritative state or direct character control",
+        "Asset cost and independent visual verification evidence are recorded"
+      ]
+    },
+    {
+      "id": "P02-T04",
+      "order": 6,
       "title": "Expose reproducible seeded-check behavior in public UI",
       "status": "open",
-      "depends_on": ["P02-T03", "P02-T07"],
+      "depends_on": ["P02-T03", "P02-T08"],
       "github_issue": 24,
       "role_owner": "Coder Worker",
       "acceptance": [
         "Public UI exposes a simple seeded-check interaction tied to authoritative deterministic context",
         "Repeated unchanged inputs visibly reproduce the same result",
         "UI cannot directly force or overwrite authoritative outcomes",
-        "Approved P02-compatible REUSE/ADAPT decisions from P02-T07 are respected during UI integration",
+        "Approved reference UI structure/localization patterns and Graphic Designer #29 outputs are integrated without importing deferred world-generation/direct-control functionality",
         "P01 save/import/export/reset/error flows remain usable",
         "Representative desktop/tablet/phone layouts remain usable and accessible"
       ]
     },
     {
       "id": "P02-T05",
-      "order": 6,
+      "order": 7,
       "title": "Add deterministic RNG/check regression and browser coverage",
       "status": "open",
       "depends_on": ["P02-T04"],
@@ -105,7 +121,7 @@
     },
     {
       "id": "P02-T06",
-      "order": 7,
+      "order": 8,
       "title": "Phase 2 release gate",
       "status": "open",
       "depends_on": ["P02-T05"],
