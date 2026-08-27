@@ -84,10 +84,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
 
       - name: Install test dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Run regression test suite
         run: npm test
@@ -124,7 +123,7 @@ jobs:
             --exclude 'package-lock.json' \
             --exclude '.gitignore'
           test -f _site/index.html
-          printf '%s\n' "$VERIFIED_SHA" > _site/.verified-release-sha
+          printf '{"verifiedCommit":"%s"}\n' "$VERIFIED_SHA" > _site/release-candidate.json
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -146,21 +145,22 @@ jobs:
         run: |
           set -euo pipefail
           BASE_URL="${PAGE_URL%/}"
-          MARKER_URL="$BASE_URL/.verified-release-sha"
+          MARKER_URL="$BASE_URL/release-candidate.json"
+          EXPECTED="{\"verifiedCommit\":\"$VERIFIED_SHA\"}"
           for attempt in {1..30}; do
-            DEPLOYED_SHA="$(curl --fail --silent --show-error --location --max-time 15 \
+            BODY="$(curl --fail --silent --show-error --location --max-time 15 \
               -H 'Cache-Control: no-cache' \
-              "$MARKER_URL?attempt=$attempt" 2>/dev/null || true)"
-            DEPLOYED_SHA="${DEPLOYED_SHA//$'\r'/}"
-            DEPLOYED_SHA="${DEPLOYED_SHA//$'\n'/}"
-            if [[ "${DEPLOYED_SHA,,}" == "${VERIFIED_SHA,,}" ]]; then
+              "$MARKER_URL?run=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}&attempt=$attempt" 2>/dev/null || true)"
+            BODY="${BODY//$'\r'/}"
+            BODY="${BODY//$'\n'/}"
+            if [[ "$BODY" == "$EXPECTED" ]]; then
               echo "Live Pages marker matches verified commit $VERIFIED_SHA"
               exit 0
             fi
             echo "Waiting for exact Pages build ($attempt/30)..."
             sleep 10
           done
-          echo "::error::Live Pages did not serve verified commit marker $VERIFIED_SHA."
+          echo "::error::Live Pages did not serve the exact verified release marker for $VERIFIED_SHA."
           exit 1
 
       - name: Install Playwright Chromium
@@ -170,6 +170,17 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.deployment.outputs.page_url }}
         run: npx playwright test
+
+      - name: Upload live release browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-live-browser-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Create verified GitHub Release
         shell: bash
