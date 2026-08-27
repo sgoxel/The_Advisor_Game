@@ -1,0 +1,125 @@
+name: Run OpenCode with NVIDIA retry
+description: Run one bounded OpenCode/NVIDIA attempt with one clean retry only for NVIDIA HTTP 503 overload.
+
+inputs:
+  nvidia_api_key:
+    description: NVIDIA API key
+    required: true
+  issue_number:
+    description: GitHub issue number
+    required: true
+  prompt:
+    description: Role-specific OpenCode prompt
+    required: true
+  model:
+    description: OpenCode model selection
+    required: false
+    default: nvidia/nvidia/nemotron-3-ultra-550b-a55b
+  retry_wait_seconds:
+    description: Wait before the single NVIDIA 503 retry
+    required: false
+    default: "60"
+
+outputs:
+  final_outcome:
+    description: success or failure after the bounded attempt/retry
+    value: ${{ steps.finish.outputs.final_outcome }}
+  retry_used:
+    description: true when the NVIDIA 503 retry was used
+    value: ${{ steps.finish.outputs.retry_used }}
+
+runs:
+  using: composite
+  steps:
+    - name: Record first attempt start time
+      id: attempt_start
+      shell: bash
+      run: |
+        echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+    - name: Run OpenCode
+      id: opencode_first
+      continue-on-error: true
+      uses: anomalyco/opencode/github@latest
+      env:
+        NVIDIA_API_KEY: ${{ inputs.nvidia_api_key }}
+      with:
+        model: ${{ inputs.model }}
+        prompt: ${{ inputs.prompt }}
+
+    - name: Check whether failure was NVIDIA 503
+      id: retry_check
+      if: steps.opencode_first.outcome == 'failure'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        COMMENTS_JSON="$(
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${{ inputs.issue_number }}/comments?per_page=100"
+        )"
+
+        LAST_BOT_COMMENT="$(
+          printf '%s' "$COMMENTS_JSON" |
+            jq -r --arg start "${{ steps.attempt_start.outputs.started_at }}" \
+              '[.[] | select(.created_at >= $start) |
+                select(.user.login == "opencode-agent[bot]" or .user.login == "github-actions[bot]")
+               ] | last | .body // ""'
+        )"
+
+        if printf '%s' "$LAST_BOT_COMMENT" |
+          grep -Eq 'Service temporarily overloaded|"code"[[:space:]]*:[[:space:]]*503|HTTP[[:space:]]+503'; then
+          echo "retry_503=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "retry_503=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Wait and reset before NVIDIA 503 retry
+      if: steps.retry_check.outputs.retry_503 == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sleep "${{ inputs.retry_wait_seconds }}"
+        git reset --hard
+        git clean -fd
+        git checkout -B main origin/main
+
+    - name: Retry OpenCode after NVIDIA 503
+      id: opencode_retry
+      if: steps.retry_check.outputs.retry_503 == 'true'
+      continue-on-error: true
+      uses: anomalyco/opencode/github@latest
+      env:
+        NVIDIA_API_KEY: ${{ inputs.nvidia_api_key }}
+      with:
+        model: ${{ inputs.model }}
+        prompt: |
+          This is the single clean retry after NVIDIA HTTP 503 Service temporarily overloaded.
+
+          ${{ inputs.prompt }}
+
+    - name: Determine bounded final outcome
+      id: finish
+      env:
+        FIRST_OUTCOME: ${{ steps.opencode_first.outcome }}
+        RETRY_503: ${{ steps.retry_check.outputs.retry_503 }}
+        RETRY_OUTCOME: ${{ steps.opencode_retry.outcome }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [ "$FIRST_OUTCOME" = "success" ]; then
+          echo "final_outcome=success" >> "$GITHUB_OUTPUT"
+          echo "retry_used=false" >> "$GITHUB_OUTPUT"
+        elif [ "$RETRY_503" = "true" ] && [ "$RETRY_OUTCOME" = "success" ]; then
+          echo "final_outcome=success" >> "$GITHUB_OUTPUT"
+          echo "retry_used=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "final_outcome=failure" >> "$GITHUB_OUTPUT"
+          if [ "$RETRY_503" = "true" ]; then
+            echo "retry_used=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "retry_used=false" >> "$GITHUB_OUTPUT"
+          fi
+        fi
