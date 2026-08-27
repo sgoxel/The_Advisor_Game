@@ -7,135 +7,15 @@
   "status": "active",
   "phase_issue": 20,
   "tasks": [
-    {
-      "id": "P02-T01",
-      "order": 1,
-      "title": "Define deterministic RNG and seeded-check contract",
-      "status": "closed",
-      "github_issue": 21,
-      "role_owner": "Coder Worker",
-      "acceptance": [
-        "Contract exists below README authority in committed testable project state",
-        "Same compatible SEED plus same check identity/context produces the same deterministic result",
-        "Hidden nondeterministic sources are excluded from authoritative results",
-        "Player/UI input cannot directly force authoritative outcomes",
-        "Existing P01 regression passes"
-      ]
-    },
-    {
-      "id": "P02-T02",
-      "order": 2,
-      "title": "Implement deterministic RNG primitive",
-      "status": "closed",
-      "depends_on": ["P02-T01"],
-      "github_issue": 22,
-      "role_owner": "Coder Worker",
-      "acceptance": [
-        "RNG implementation uses only explicit deterministic inputs",
-        "Same seed/input sequence reproduces the same output sequence",
-        "Distinct deterministic seeds or contexts can produce distinct sequences",
-        "Output contract is stable and test-covered",
-        "Existing P01 regression passes"
-      ]
-    },
-    {
-      "id": "P02-T07",
-      "order": 3,
-      "title": "Inventory and classify previous UI package for P02 reuse",
-      "status": "closed",
-      "github_issue": 28,
-      "role_owner": "Planner Worker",
-      "acceptance": [
-        "Complete committed reference package is inspected file-by-file and significant UI components/functions are inventoried",
-        "Each significant item is classified REUSE, ADAPT, DEFER, or REJECT with a README-compatible reason",
-        "Approved REUSE/ADAPT items are converted into measurable active-P02 Coder and/or Graphic Designer work",
-        "Future-phase gameplay or simulation functionality is deferred rather than pulled into P02",
-        "Existing verified P01 behavior and current P02 deterministic-authority boundaries are preserved"
-      ]
-    },
-    {
-      "id": "P02-T03",
-      "order": 4,
-      "title": "Implement seeded simulation check resolution",
-      "status": "closed",
-      "depends_on": ["P02-T02"],
-      "github_issue": 23,
-      "role_owner": "Coder Worker",
-      "acceptance": [
-        "Check resolution accepts explicit simulation-owned deterministic inputs",
-        "Same compatible state and check context reproduces the same result",
-        "Changed deterministic context can change results without hidden entropy",
-        "UI/player cannot submit a desired authoritative result",
-        "No P03 legal-action scope is prematurely implemented"
-      ]
-    },
-    {
-      "id": "P02-T08",
-      "order": 5,
-      "title": "Adapt reference UI visual system and assets for current public shell",
-      "status": "open",
-      "depends_on": ["P02-T07"],
-      "github_issue": 29,
-      "role_owner": "Graphic Designer Worker",
-      "acceptance": [
-        "Committed reusable visual treatment/assets are provided for the current P02 public shell",
-        "Reference panel/ribbon/mobile presentation and selected texture assets are reused or adapted only where visually appropriate",
-        "Important controls and states remain readable without relying only on color",
-        "Desktop/tablet/phone portrait/landscape presentation remains coherent and readable",
-        "Visual assets do not imply fake authoritative state or direct character control",
-        "Asset cost and independent visual verification evidence are recorded"
-      ]
-    },
-    {
-      "id": "P02-T04",
-      "order": 6,
-      "title": "Expose reproducible seeded-check behavior in public UI",
-      "status": "open",
-      "depends_on": ["P02-T03", "P02-T08"],
-      "github_issue": 24,
-      "role_owner": "Coder Worker",
-      "acceptance": [
-        "Public UI exposes a simple seeded-check interaction tied to authoritative deterministic context",
-        "Repeated unchanged inputs visibly reproduce the same result",
-        "UI cannot directly force or overwrite authoritative outcomes",
-        "Approved reference UI structure/localization patterns and Graphic Designer #29 outputs are integrated without importing deferred world-generation/direct-control functionality",
-        "P01 save/import/export/reset/error flows remain usable",
-        "Representative desktop/tablet/phone layouts remain usable and accessible"
-      ]
-    },
-    {
-      "id": "P02-T05",
-      "order": 7,
-      "title": "Add deterministic RNG/check regression and browser coverage",
-      "status": "open",
-      "depends_on": ["P02-T04"],
-      "github_issue": 25,
-      "role_owner": "Coder Worker",
-      "acceptance": [
-        "Unit tests cover reproducible RNG sequences and seeded check results",
-        "Regression proves P01 campaign behavior remains intact",
-        "Playwright covers visible P02 flow on desktop/tablet/phone portrait/phone landscape",
-        "Browser checks include state safety, console/page errors, and serious accessibility violations",
-        "Committed evidence is suitable for exact-candidate independent Tester verification"
-      ]
-    },
-    {
-      "id": "P02-T06",
-      "order": 8,
-      "title": "Phase 2 release gate",
-      "status": "open",
-      "depends_on": ["P02-T05"],
-      "github_issue": 26,
-      "role_owner": "Tester Worker",
-      "acceptance": [
-        "All P02 implementation issues have independent Tester PASS evidence",
-        "Full relevant regression passes on the exact candidate",
-        "Deterministic RNG/check behavior is reproducible and simulation-owned",
-        "P01 behavior remains intact",
-        "Cumulative public UI passes responsive browser/accessibility verification",
-        "Verified Release proves exact live SHA and creates a release targeting the independently tested commit",
-        "P03 remains inactive until P02 release verification succeeds"
-      ]
-    }
+    {"id":"P02-T01","order":1,"title":"Define deterministic RNG and seeded-check contract","status":"closed","github_issue":21,"role_owner":"Coder Worker","acceptance":["Contract exists below README authority in committed testable project state","Same compatible SEED plus same check identity/context produces the same deterministic result","Hidden nondeterministic sources are excluded from authoritative results","Player/UI input cannot directly force authoritative outcomes","Existing P01 regression passes"]},
+    {"id":"P02-T02","order":2,"title":"Implement deterministic RNG primitive","status":"closed","depends_on":["P02-T01"],"github_issue":22,"role_owner":"Coder Worker","acceptance":["RNG implementation uses only explicit deterministic inputs","Same seed/input sequence reproduces the same output sequence","Distinct deterministic seeds or contexts can produce distinct sequences","Output contract is stable and test-covered","Existing P01 regression passes"]},
+    {"id":"P02-T07","order":3,"title":"Inventory and classify previous UI package for P02 reuse","status":"closed","github_issue":28,"role_owner":"Planner Worker","acceptance":["Complete committed reference package is inspected and significant UI components/functions are inventoried","Each significant item is classified REUSE, ADAPT, DEFER, or REJECT with a README-compatible reason","Approved current-phase work is decomposed by role","Future-phase gameplay remains deferred"]},
+    {"id":"P02-T03","order":4,"title":"Implement seeded simulation check resolution","status":"closed","depends_on":["P02-T02"],"github_issue":23,"role_owner":"Coder Worker","acceptance":["Check resolution accepts explicit simulation-owned deterministic inputs","Same compatible state and check context reproduces the same result","Changed deterministic context can change results without hidden entropy","UI/player cannot submit a desired authoritative result","No P03 legal-action scope is prematurely implemented"]},
+    {"id":"P02-T08","order":5,"title":"Adapt reference UI visual system and assets for current public shell","status":"closed","depends_on":["P02-T07"],"github_issue":29,"role_owner":"Graphic Designer Worker","acceptance":["Committed reusable visual treatment/assets are provided for the current P02 public shell","Important controls/states remain readable without relying only on color","Desktop/tablet/phone portrait/landscape presentation guidance is provided","Visual assets do not imply fake authoritative state or direct character control","Independent Tester verification is required before release"]},
+    {"id":"P02-T09","order":6,"title":"Integrate reference shell structure and localization","status":"open","depends_on":["P02-T03","P02-T08"],"github_issue":30,"role_owner":"Coder Worker","acceptance":["Approved shell structure and #29 visual assets/specification are integrated","EN/TR switching covers integrated shell labels without changing authoritative state","P01 save/import/export/reset/error flows remain usable","No deferred world-generation/direct-control functionality is introduced","Responsive/accessibility regression passes"]},
+    {"id":"P02-T10","order":7,"title":"Add authoritative seeded-check interaction to public UI","status":"open","depends_on":["P02-T03","P02-T09"],"github_issue":31,"role_owner":"Coder Worker","acceptance":["Same unchanged deterministic context visibly reproduces the same result","Changed allowed deterministic context can change the result where applicable","UI cannot force or overwrite authoritative outcomes","Result/context presentation has accessible text semantics","P01 and shell regression passes"]},
+    {"id":"P02-T11","order":8,"title":"Refine seeded-check result presentation after integration","status":"open","depends_on":["P02-T10"],"github_issue":32,"role_owner":"Graphic Designer Worker","acceptance":["Implemented seeded-check presentation has clear hierarchy across representative responsive sizes","Important states do not rely only on color","Touch/focus presentation remains usable","No simulation semantics or authority are changed","Independent Tester verification is required before release"]},
+    {"id":"P02-T05","order":9,"title":"Add deterministic RNG/check regression and browser coverage","status":"open","depends_on":["P02-T10","P02-T11"],"github_issue":25,"role_owner":"Coder Worker","acceptance":["Unit tests cover reproducible RNG sequences and seeded check results","Regression proves P01 campaign behavior remains intact","Playwright covers visible P02 flow on desktop/tablet/phone portrait/phone landscape","Browser checks include state safety, console/page errors, and serious accessibility violations","Committed evidence is suitable for exact-candidate independent Tester verification"]},
+    {"id":"P02-T06","order":10,"title":"Phase 2 release gate","status":"open","depends_on":["P02-T05"],"github_issue":26,"role_owner":"Tester Worker","acceptance":["All required P02 Coder tasks have independent Tester PASS evidence","P02-T08 and P02-T11 both have independent Tester PASS evidence","Full relevant regression passes on the exact candidate","Deterministic RNG/check behavior is reproducible and simulation-owned","P01 behavior remains intact","Cumulative public UI passes responsive browser/accessibility verification","Verified Release proves exact live SHA and creates a release targeting the independently tested commit","P03 remains inactive until P02 release verification succeeds"]}
   ]
 }
