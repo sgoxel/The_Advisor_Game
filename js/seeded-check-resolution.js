@@ -16,7 +16,7 @@ function freezeResult(result) {
  */
 export function resolveSeededSimulationCheck(input) {
   const normalized = createSeededCheckInput(input);
-  const rng = createDeterministicRng(normalized);
+  const rng = createDeterministicRng(input);
   const rollUint32 = rng.nextUint32();
   const unitRoll = rollUint32 / UINT32_RANGE;
 
