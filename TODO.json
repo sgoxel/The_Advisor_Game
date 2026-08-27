@@ -34,7 +34,7 @@
       "id": "P01-T03",
       "order": 3,
       "title": "Implement campaign import validation",
-      "status": "open",
+      "status": "closed",
       "depends_on": [
         "P01-T01",
         "P01-T02"
