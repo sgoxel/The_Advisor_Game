@@ -67,8 +67,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ZIP_PATH='backup/The_Advisor_Game_aeb69788700e.zip'
 
-          # Remove temporary bootstrap artifacts; the ZIP itself keeps /backup present.
+          # Remove the placeholder; the committed ZIP itself keeps /backup present.
           rm -f backup/.keep
           rm -f .github/workflows/backup-snapshot-once.yml
 
@@ -82,6 +83,10 @@ jobs:
 
           git config user.name 'ChatGPT Coder'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A backup .github/workflows/backup-snapshot-once.yml
+
+          # /backup is intentionally ignored by the project. Force-add only the
+          # requested snapshot and preserve the general ignore rule unchanged.
+          git add -f "$ZIP_PATH"
+          git add -u backup/.keep .github/workflows/backup-snapshot-once.yml
           git commit -m 'Coder Worker #61: archive current main snapshot'
           git push origin HEAD:main
