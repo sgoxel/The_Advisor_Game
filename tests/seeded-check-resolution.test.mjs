@@ -40,25 +40,44 @@ test('canonical context key ordering does not change the result', () => {
   assert.deepEqual(first, second);
 });
 
-test('changed deterministic context can change the resolved result', () => {
+test('changed deterministic context can change the resolved result and remains repeatable', () => {
   const first = resolveSeededSimulationCheck(baseInput());
-  const changed = resolveSeededSimulationCheck(baseInput({
+  const changedInput = baseInput({
     context: { turn: 13, actorId: 'character-1', regionKey: '0,0', difficulty: 45 },
-  }));
+  });
+  const changed = resolveSeededSimulationCheck(changedInput);
 
   assert.notEqual(first.rollUint32, changed.rollUint32);
+  assert.deepEqual(changed, resolveSeededSimulationCheck(changedInput));
 });
 
 test('player or UI cannot submit a desired authoritative outcome', () => {
   for (const forbiddenField of [
     ['desiredResult', 'success'],
+    ['desiredOutcome', 'success'],
+    ['forcedResult', true],
     ['success', true],
     ['roll', 100],
+    ['rollUint32', 0xffffffff],
     ['unitRoll', 0.999],
+    ['percentile', 100],
   ]) {
     const [key, value] = forbiddenField;
     assert.throws(
       () => resolveSeededSimulationCheck({ ...baseInput(), [key]: value }),
+      /unsupported fields/,
+    );
+  }
+});
+
+test('ambient entropy fields are rejected before resolution', () => {
+  for (const [field, value] of [
+    ['timestamp', Date.now()],
+    ['randomValue', Math.random()],
+    ['providerOutput', 'model says success'],
+  ]) {
+    assert.throws(
+      () => resolveSeededSimulationCheck({ ...baseInput(), [field]: value }),
       /unsupported fields/,
     );
   }
