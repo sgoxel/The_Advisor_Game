@@ -1,0 +1,60 @@
+name: Tester Approved Verified Release
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  issues: read
+
+jobs:
+  authorize:
+    name: Validate Tester release-gate authorization
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.issue.state == 'open' &&
+      github.actor == github.repository_owner &&
+      startsWith(github.event.comment.body, 'RELEASE CANDIDATE APPROVED FOR VERIFIED RELEASE WORKFLOW')
+    runs-on: ubuntu-latest
+    outputs:
+      verified_commit: ${{ steps.authorize.outputs.verified_commit }}
+      release_tag: ${{ steps.authorize.outputs.release_tag }}
+      release_name: ${{ steps.authorize.outputs.release_name }}
+      restore_existing_verified: ${{ steps.authorize.outputs.restore_existing_verified }}
+      issue_number: ${{ steps.authorize.outputs.issue_number }}
+      authorization_comment_id: ${{ steps.authorize.outputs.authorization_comment_id }}
+    steps:
+      - name: Check out authorization parser
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Validate structured Tester approval
+        id: authorize
+        env:
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: node scripts/authorize-release-comment.mjs
+
+      - name: Record authorization provenance
+        env:
+          ISSUE_NUMBER: ${{ steps.authorize.outputs.issue_number }}
+          COMMENT_ID: ${{ steps.authorize.outputs.authorization_comment_id }}
+          VERIFIED_SHA: ${{ steps.authorize.outputs.verified_commit }}
+        run: |
+          echo "Tester release authorization: issue #$ISSUE_NUMBER comment $COMMENT_ID"
+          echo "Authorized immutable candidate: $VERIFIED_SHA"
+
+  release:
+    name: Execute authorized Verified Release
+    needs: authorize
+    uses: ./.github/workflows/release.yml
+    with:
+      verified_commit: ${{ needs.authorize.outputs.verified_commit }}
+      release_tag: ${{ needs.authorize.outputs.release_tag }}
+      release_name: ${{ needs.authorize.outputs.release_name }}
+      confirm_verified: true
+      restore_existing_verified: ${{ fromJSON(needs.authorize.outputs.restore_existing_verified) }}
