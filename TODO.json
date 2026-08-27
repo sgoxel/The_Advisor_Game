@@ -58,7 +58,7 @@
       "id": "P02-T03",
       "order": 4,
       "title": "Implement seeded simulation check resolution",
-      "status": "open",
+      "status": "closed",
       "depends_on": ["P02-T02"],
       "github_issue": 23,
       "role_owner": "Coder Worker",
