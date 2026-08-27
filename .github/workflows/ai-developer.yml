@@ -30,6 +30,12 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Record first attempt start time
+        id: attempt_start
+        shell: bash
+        run: |
+          echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Run OpenCode
         id: opencode_first
         continue-on-error: true
@@ -72,18 +78,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          LAST_BOT_COMMENT="$(
+          COMMENTS_JSON="$(
             gh api \
-              "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments?per_page=100" \
-              --jq '[.[] | select(.user.login == "opencode-agent[bot]")] | last | .body // ""'
+              "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments?per_page=100"
+          )"
+
+          LAST_BOT_COMMENT="$(
+            printf '%s' "$COMMENTS_JSON" | \
+              jq -r \
+                --arg start "${{ steps.attempt_start.outputs.started_at }}" \
+                '[.[] | select(.user.login == "opencode-agent[bot]" and .created_at >= $start)] | last | .body // ""'
           )"
 
           if printf '%s' "$LAST_BOT_COMMENT" | grep -Eq 'Service temporarily overloaded|"code"[[:space:]]*:[[:space:]]*503'; then
             echo "retry_503=true" >> "$GITHUB_OUTPUT"
-            echo "NVIDIA 503 overload detected. One clean retry will be attempted after 60 seconds."
+            echo "NVIDIA 503 overload detected in this attempt. One clean retry will be attempted after 60 seconds."
           else
             echo "retry_503=false" >> "$GITHUB_OUTPUT"
-            echo "Failure is not an NVIDIA 503 overload. No automatic retry will be used."
+            echo "This attempt did not report an NVIDIA 503 overload. No automatic retry will be used."
           fi
 
       - name: Wait and reset before NVIDIA 503 retry
