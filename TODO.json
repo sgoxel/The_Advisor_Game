@@ -2,104 +2,106 @@
   "schema_version": 1,
   "product": "The Advisor Game",
   "authority": "README.md",
-  "active_phase_id": "P01",
-  "phase_title": "Campaign State and Versioned Saves",
+  "active_phase_id": "P02",
+  "phase_title": "Seeded Checks and RNG Contract",
   "status": "active",
+  "phase_issue": 20,
   "tasks": [
     {
-      "id": "P01-T01",
+      "id": "P02-T01",
       "order": 1,
-      "title": "Define versioned campaign state schema",
-      "status": "closed",
-      "acceptance": [
-        "Explicit campaign schema/version",
-        "Serializable authoritative world and character state",
-        "No provider credentials or raw model traffic in saves"
-      ]
-    },
-    {
-      "id": "P01-T02",
-      "order": 2,
-      "title": "Implement campaign export serialization",
-      "status": "closed",
-      "depends_on": ["P01-T01"],
-      "acceptance": [
-        "Valid versioned JSON export",
-        "SEED and compatible generation version preserved"
-      ]
-    },
-    {
-      "id": "P01-T03",
-      "order": 3,
-      "title": "Implement campaign import validation",
-      "status": "closed",
-      "depends_on": ["P01-T01", "P01-T02"],
-      "acceptance": [
-        "Malformed/unsupported JSON rejected safely",
-        "Valid export/import round-trip",
-        "Import cannot bypass simulation validation"
-      ]
-    },
-    {
-      "id": "P01-T04",
-      "order": 4,
-      "title": "Add deterministic save round-trip tests",
-      "status": "closed",
-      "depends_on": ["P01-T02", "P01-T03"],
-      "acceptance": [
-        "Deterministic round-trip tests pass",
-        "Credentials excluded by tests",
-        "Compatible regression passes"
-      ]
-    },
-    {
-      "id": "P01-T05",
-      "order": 5,
-      "title": "Establish minimal public application shell",
-      "status": "closed",
-      "depends_on": ["P01-T04"],
-      "github_issue": 14,
-      "acceptance": [
-        "Working static browser entrypoint and minimal supporting UI assets",
-        "Loads without mandatory backend or external AI provider",
-        "Responsive minimal layout at representative desktop/mobile widths",
-        "Can integrate existing P01 save/import modules without weakening deterministic validation",
-        "No future-phase gameplay architecture invented",
-        "Relevant smoke/regression checks pass"
-      ]
-    },
-    {
-      "id": "P01-T06",
-      "order": 6,
-      "title": "Expose Phase 1 save workflow in the public UI",
-      "status": "closed",
-      "depends_on": ["P01-T05"],
-      "github_issue": 13,
-      "acceptance": [
-        "Static UI can export current campaign state as versioned JSON",
-        "Static UI can import a compatible save and visibly restore relevant state",
-        "Invalid/unsupported saves show a clear error without corrupting authoritative state",
-        "UI cannot bypass deterministic simulation validation or expose provider credentials/raw model traffic",
-        "Workflow remains usable on responsive desktop/mobile interface",
-        "Exact committed static candidate is manually testable before release; canonical public publication belongs to P01-T07",
-        "Relevant automated tests and regression pass"
-      ]
-    },
-    {
-      "id": "P01-T07",
-      "order": 7,
-      "title": "Phase 1 release gate",
+      "title": "Define deterministic RNG and seeded-check contract",
       "status": "open",
-      "depends_on": ["P01-T06"],
-      "github_issue": 12,
+      "github_issue": 21,
+      "role_owner": "Coder Worker",
+      "acceptance": [
+        "Contract exists below README authority in committed testable project state",
+        "Same compatible SEED plus same check identity/context produces the same deterministic result",
+        "Hidden nondeterministic sources are excluded from authoritative results",
+        "Player/UI input cannot directly force authoritative outcomes",
+        "Existing P01 regression passes"
+      ]
+    },
+    {
+      "id": "P02-T02",
+      "order": 2,
+      "title": "Implement deterministic RNG primitive",
+      "status": "open",
+      "depends_on": ["P02-T01"],
+      "github_issue": 22,
+      "role_owner": "Coder Worker",
+      "acceptance": [
+        "RNG implementation uses only explicit deterministic inputs",
+        "Same seed/input sequence reproduces the same output sequence",
+        "Distinct deterministic seeds or contexts can produce distinct sequences",
+        "Output contract is stable and test-covered",
+        "Existing P01 regression passes"
+      ]
+    },
+    {
+      "id": "P02-T03",
+      "order": 3,
+      "title": "Implement seeded simulation check resolution",
+      "status": "open",
+      "depends_on": ["P02-T02"],
+      "github_issue": 23,
+      "role_owner": "Coder Worker",
+      "acceptance": [
+        "Check resolution accepts explicit simulation-owned deterministic inputs",
+        "Same compatible state and check context reproduces the same result",
+        "Changed deterministic context can change results without hidden entropy",
+        "UI/player cannot submit a desired authoritative result",
+        "No P03 legal-action scope is prematurely implemented"
+      ]
+    },
+    {
+      "id": "P02-T04",
+      "order": 4,
+      "title": "Expose reproducible seeded-check behavior in public UI",
+      "status": "open",
+      "depends_on": ["P02-T03"],
+      "github_issue": 24,
+      "role_owner": "Coder Worker",
+      "acceptance": [
+        "Public UI exposes a simple seeded-check interaction tied to authoritative deterministic context",
+        "Repeated unchanged inputs visibly reproduce the same result",
+        "UI cannot directly force or overwrite authoritative outcomes",
+        "P01 save/import/export/reset/error flows remain usable",
+        "Representative desktop/tablet/phone layouts remain usable and accessible"
+      ]
+    },
+    {
+      "id": "P02-T05",
+      "order": 5,
+      "title": "Add deterministic RNG/check regression and browser coverage",
+      "status": "open",
+      "depends_on": ["P02-T04"],
+      "github_issue": 25,
+      "role_owner": "Coder Worker",
+      "acceptance": [
+        "Unit tests cover reproducible RNG sequences and seeded check results",
+        "Regression proves P01 campaign behavior remains intact",
+        "Playwright covers visible P02 flow on desktop/tablet/phone portrait/phone landscape",
+        "Browser checks include state safety, console/page errors, and serious accessibility violations",
+        "Committed evidence is suitable for exact-candidate independent Tester verification"
+      ]
+    },
+    {
+      "id": "P02-T06",
+      "order": 6,
+      "title": "Phase 2 release gate",
+      "status": "open",
+      "depends_on": ["P02-T05"],
+      "github_issue": 26,
       "role_owner": "Tester Worker",
       "acceptance": [
-        "All P01 implementation issues independently tested",
-        "Relevant full regression passes",
-        "Cumulative Phase 1 candidate manually usable through the public application interface",
-        "Save export/import exercised end-to-end from the UI",
-        "Verified build available at https://sgoxel.github.io/The_Advisor_Game/ and matches the independently tested release state",
-        "P02 remains inactive until Phase 1 release verification succeeds"
+        "All P02 implementation issues have independent Tester PASS evidence",
+        "Full relevant regression passes on the exact candidate",
+        "Deterministic RNG/check behavior is reproducible and simulation-owned",
+        "P01 behavior remains intact",
+        "Cumulative public UI passes responsive browser/accessibility verification",
+        "Verified Release proves exact live SHA and creates a release targeting the independently tested commit",
+        "P03 remains inactive until P02 release verification succeeds"
       ]
     }
   ]
