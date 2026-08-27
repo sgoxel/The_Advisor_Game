@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 64" role="img" aria-labelledby="title desc">
+  <title id="title">R01 strategic map symbol set</title>
+  <desc id="desc">Vector geometry for current location, inspection, settlement and minimap viewport presentation.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <g id="current-location" transform="translate(32 32)">
+      <circle r="18"/>
+      <path d="M0-12 12 0 0 12-12 0Z"/>
+      <circle r="3" fill="currentColor" stroke="none"/>
+    </g>
+    <g id="inspection" transform="translate(96 32)">
+      <path d="M-18-8V-18H-8M8-18H18V-8M18 8V18H8M-8 18H-18V8"/>
+      <circle r="2.5" fill="currentColor" stroke="none"/>
+    </g>
+    <g id="settlement" transform="translate(160 32)">
+      <path d="M-18 12H18M-14 12V-2L0-14 14-2V12M-6 12V2H6V12"/>
+      <path d="M-20 18H20" stroke-width="2"/>
+    </g>
+    <g id="minimap-viewport" transform="translate(224 32)">
+      <rect x="-20" y="-14" width="40" height="28" rx="2"/>
+      <path d="M0-7 7 0 0 7-7 0Z"/>
+      <circle r="2" fill="currentColor" stroke="none"/>
+    </g>
+  </g>
+</svg>
