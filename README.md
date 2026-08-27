@@ -6,7 +6,7 @@
 
 **A medieval fantasy roleplaying and strategy game where the human player advises an autonomous AI-controlled main character as they rise from Peasant to Emperor.**
 
-### 🎮 [Play the Latest Tested Development Release](https://sgoxel.github.io/The_Advisor_Game/)
+### 🎮 [Play the Current Public Development Build](https://sgoxel.github.io/The_Advisor_Game/)
 
 [🏷️ Latest GitHub Release](https://github.com/sgoxel/The_Advisor_Game/releases/latest) · [🌐 Public Game](https://sgoxel.github.io/The_Advisor_Game/)
 
@@ -19,29 +19,43 @@
 
 ---
 
-# 📜 README Authority
+# 👑 Authority
 
-`README.md` defines the **product scope, fundamental principles, non-negotiable rules, and high-level way of working** for The Advisor Game.
+The **Admin is the highest authority for the project**.
 
-It defines **WHAT the project is and what must remain true**, not HOW individual Workers must technically implement it.
+An explicit Admin instruction overrides README, planning records, issues, implementation assumptions, Worker procedures, testing requirements, release procedures, and all other subordinate project state.
 
-README does **not** prescribe:
+Authority order:
 
-- project architecture;
-- repository or file structure;
-- module names;
-- implementation order;
-- roadmap phases;
-- task decomposition;
-- programming libraries or frameworks beyond product-level platform requirements;
-- asset formats, modeling tools, export pipelines, filenames, or directories;
-- detailed testing, deployment, branching, release, or automation procedures.
+**Admin explicit instruction → README.md → ROADMAP → TODO → Issues → Code / Assets → Tests**
+
+`README.md` defines the normal persistent **product scope, fundamental principles, non-negotiable product rules, and high-level way of working** for The Advisor Game.
+
+README defines **WHAT the project is and what should normally remain true**, not HOW individual Workers must technically implement it.
+
+README does **not** prescribe project architecture, repository/file structure, module names, implementation order, roadmap phases, task decomposition, technical libraries beyond product-level requirements, asset pipelines, detailed testing procedures, deployment procedures, branching strategy, or automation implementation.
 
 Those decisions belong to the appropriate development Workers and subordinate planning/implementation records.
 
-When a subordinate plan, task, implementation, asset, test, or assumption conflicts with README, **README wins** and the subordinate work must be corrected.
+When subordinate project state conflicts with README and there is **no explicit Admin instruction authorizing the difference**, README wins and the subordinate state must be corrected.
 
-README itself is protected and may be changed only with explicit Admin authorization.
+When an explicit Admin instruction conflicts with README, **the Admin instruction wins**.
+
+An Admin instruction may:
+
+* change product requirements;
+* change README;
+* override an existing README rule;
+* authorize a one-time exception without permanently changing the general rule;
+* change planning, implementation, testing, release, or publication requirements;
+* require immediate execution without normal Worker, Tester, phase, or release workflow;
+* explicitly accept risks that normal project governance would otherwise block.
+
+Workers must not refuse an explicit Admin instruction solely because it conflicts with README or subordinate governance.
+
+When practical, persistent product-policy changes ordered by Admin should subsequently be reflected in README so future autonomous work follows the new policy.
+
+README itself may be changed only by explicit Admin authorization.
 
 ---
 
@@ -67,15 +81,7 @@ The player may become highly influential, but **influence is never direct contro
 
 ## ✨ Core Promise
 
-The player can:
-
-- converse naturally with the main character;
-- investigate people, places, events, reports, rumors, objects, and opportunities;
-- give advice, warnings, explanations, arguments, and strategic recommendations;
-- recommend or discourage goals, actions, relationships, and priorities;
-- challenge assumptions and remind the character of promises or earlier events;
-- use Advisor tools and mini-games to improve information, leverage, persuasion, or opportunities;
-- shape the character's long-term direction without directly possessing the character.
+The player can converse naturally with the main character; investigate people, places, events, reports, rumors, objects, and opportunities; give advice, warnings, explanations, arguments, and strategic recommendations; recommend or discourage goals, actions, relationships, and priorities; challenge assumptions and remind the character of promises or earlier events; use Advisor tools and mini-games to improve information, leverage, persuasion, or opportunities; and shape the character's long-term direction without directly possessing the character.
 
 The character may accept, partially accept, reinterpret, misunderstand, postpone, reject, remember, or later reconsider advice.
 
@@ -98,15 +104,7 @@ The LLM and BOT are not separate protagonists or separate game modes. They are a
 
 ## Character AI Contract
 
-Character AI must:
-
-- roleplay the main character rather than the human player;
-- act according to the character's personality, memories, goals, relationships, knowledge, and circumstances;
-- treat the human as an Advisor rather than an unrestricted commander;
-- consider advice without being forced to obey it;
-- respect the possibilities and constraints of the authoritative simulation;
-- never invent authoritative resources, status, completed actions, locations, people, possessions, or world facts;
-- never directly mutate authoritative world state.
+Character AI must roleplay the main character rather than the human player; act according to the character's personality, memories, goals, relationships, knowledge, and circumstances; treat the human as an Advisor rather than an unrestricted commander; consider advice without being forced to obey it; respect the possibilities and constraints of the authoritative simulation; never invent authoritative resources, status, completed actions, locations, people, possessions, or world facts; and never directly mutate authoritative world state.
 
 The deterministic simulation remains the authority for what is legal, possible, resolved, and true.
 
@@ -142,22 +140,11 @@ Building a strong advisory relationship is part of the game.
 
 ## Core Gameplay Loop
 
-1. **Observe** events, rumors, opportunities, threats, factions, relationships, and environmental changes.
-2. **Investigate** the world and available information.
-3. **Use Advisor tools or mini-games** to improve information, leverage, or opportunity.
-4. **Discuss** events, risks, goals, and plans with the character.
-5. **Advise** through conversation and persistent Advisor Instructions.
-6. **Character AI evaluates** state, personality, memories, relationships, knowledge, advice, and circumstances.
-7. **Character chooses** among actions legitimately available to them.
-8. **Simulation validates and resolves** actions and consequences.
-9. **World reacts and advances.**
-10. **Consequences become new context** for future advice.
+**Observe → Investigate → Use Advisor tools → Discuss → Advise → Character evaluates → Character decides → Simulation validates → World reacts → Adapt**
 
-<div align="center">
+The player observes events, rumors, opportunities, threats, factions, relationships, and environmental changes; investigates available information; uses Advisor tools and mini-games; discusses risks and plans with the character; advises through conversation and persistent instructions; and watches the autonomous character evaluate context and choose legitimate actions.
 
-### Observe → Investigate → Advise → Character decides → World reacts → Discuss → Adapt
-
-</div>
+The simulation then validates and resolves those actions. The world reacts and advances, and those consequences become context for future advice.
 
 ## 🎮 Player Agency
 
@@ -173,28 +160,21 @@ Accessible alternatives or auto-resolution should exist where appropriate.
 
 ## 📈 Character Progression
 
-| Rank | Typical scale of play |
-| --- | --- |
-| 🌾 **Peasant** | Survival, work, family, shelter, food, local relationships, reputation |
-| 🏡 **Villager** | Local responsibilities, social ties, modest wealth, better information access |
-| 🛡️ **Squire** | Training, loyalty, military culture, patronage, noble relationships |
-| ⚔️ **Knight** | Campaigns, protection duties, tournaments, missions, reputation, title opportunities |
-| 🏰 **Baron / Duke / Lord** | Estates, settlements, factions, economy, diplomacy, court intrigue, broader military responsibility |
-| 👑 **Prince / King** | Realm politics, diplomacy, war, succession, laws, legitimacy, major crises |
-| 🌍 **Emperor** | Multiple kingdoms, imperial administration, alliances, rebellion, large-scale diplomacy and conflict |
+| Rank                       | Typical scale of play                                                                                |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 🌾 **Peasant**             | Survival, work, family, shelter, food, local relationships, reputation                               |
+| 🏡 **Villager**            | Local responsibilities, social ties, modest wealth, better information access                        |
+| 🛡️ **Squire**             | Training, loyalty, military culture, patronage, noble relationships                                  |
+| ⚔️ **Knight**              | Campaigns, protection duties, tournaments, missions, reputation, title opportunities                 |
+| 🏰 **Baron / Duke / Lord** | Estates, settlements, factions, economy, diplomacy, court intrigue, broader military responsibility  |
+| 👑 **Prince / King**       | Realm politics, diplomacy, war, succession, laws, legitimacy, major crises                           |
+| 🌍 **Emperor**             | Multiple kingdoms, imperial administration, alliances, rebellion, large-scale diplomacy and conflict |
 
 As power grows, the Advisor's influence may become historically significant, but the AI character remains the actor.
 
 ## 🧠 Advisor Progression
 
-Advisor capabilities may grow in areas such as:
-
-- Insight
-- Rhetoric
-- Diplomacy
-- Stewardship
-- Command
-- Intrigue
+Advisor capabilities may grow in Insight, Rhetoric, Diplomacy, Stewardship, Command, and Intrigue.
 
 Progression may unlock stronger investigation, analysis, reports, memory tools, private conversations, historical context, predictions, mini-games, and more sophisticated persistent advice.
 
@@ -256,73 +236,31 @@ The Advisor influences them indirectly through information, the protagonist, rel
 
 ## 🗺️ Primary Game Surface — Living Strategic World Map
 
-The primary playable surface of The Advisor Game is a persistent,
-living strategic world map presented in an isometric or near-isometric
-style comparable in spatial readability to classic strategy games.
+The primary playable surface of The Advisor Game is a persistent, living strategic world map presented in an isometric or near-isometric style comparable in spatial readability to classic strategy games.
 
-The game must not be presented primarily as a collection of menus,
-cards, dashboards, text panels, disconnected scenes, or static mockups.
+The game must not be presented primarily as a collection of menus, cards, dashboards, text panels, disconnected scenes, or static mockups.
 
 The player must be able to observe the evolving game world itself.
 
-The strategic world map must visually represent, as applicable to the
-generated world and current campaign state:
+The strategic world map must visually represent, as applicable to the generated world and current campaign state, terrain and elevation; biomes; rivers, lakes, coasts and water; forests and vegetation; roads, paths and bridges; settlements; individual buildings and structures; ruins, caves, dungeons and landmarks; resources and environmental objects; the autonomous main character; other people; animals; fantasy creatures and monsters; armies, groups and caravans; and environmental effects such as weather, lighting, fire, smoke, fog and water.
 
-- terrain and elevation;
-- grasslands, mountains, hills, deserts, snow and other biomes;
-- rivers, lakes, coastlines and water;
-- forests, trees and vegetation;
-- roads, paths, bridges and travel connections;
-- villages, towns, cities, castles and other settlements;
-- individual buildings and important structures;
-- ruins, caves, dungeons and landmarks;
-- resources, props and relevant environmental objects;
-- the autonomous main character;
-- other people and world characters where appropriate;
-- animals;
-- fantasy creatures and monsters appropriate to the medieval fantasy
-  setting, including creatures comparable in variety and role to
-  traditional tabletop fantasy worlds;
-- armies, groups, caravans or other strategically relevant entities
-  where appropriate;
-- weather, lighting, fire, smoke, fog, water and other environmental
-  effects where useful.
+Characters, creatures, buildings, terrain and objects may use a coherent combination of 2D, 2.5D and 3D techniques, but they must appear to inhabit the same spatial world.
 
-Characters, creatures, buildings, terrain and objects may use a coherent
-combination of 2D, 2.5D and 3D techniques, but they must appear to inhabit
-the same spatial world.
+The strategic map is not decorative background art. It is the visual representation of the authoritative simulated world.
 
-The strategic map is not decorative background art. It is the visual
-representation of the authoritative simulated world.
+Locations, movement, settlements, roads, terrain, discoveries, events, characters and world changes represented on the map must correspond to simulation state.
 
-Locations, movement, settlements, roads, terrain, discoveries, events,
-characters and world changes represented on the map must correspond to
-simulation state.
+As the simulation changes the world, the visible strategic map must react accordingly.
 
-As the simulation changes the world, the visible strategic map must
-react accordingly.
+The camera and presentation must allow the player to understand where the main character is, what surrounds them, what places exist nearby, and how the local area relates to the wider world.
 
-The camera and presentation must allow the player to understand where
-the main character is, what surrounds them, what places exist nearby,
-and how the local area relates to the wider world.
-
-Early releases may use simplified or placeholder assets, but they must
-establish and progressively extend this same playable strategic world
-rather than replacing it with disconnected visual prototypes.
+Early releases may use simplified or placeholder assets, but they must establish and progressively extend this same playable strategic world rather than replacing it with disconnected visual prototypes.
 
 ## 🌐 WebGL-Based Mixed 2D / 3D Presentation
 
 The game is a **WebGL-based mixed 2D/3D experience** with an isometric or near-isometric presentation.
 
-The visual world may combine:
-
-- real-time 3D scenes and objects;
-- 2D portraits and character artwork;
-- illustrated or layered backgrounds;
-- sprites and overlays;
-- textures and materials;
-- UI graphics and icons;
-- terrain, buildings, vegetation, props, landmarks, roads, bridges, settlements, and environmental effects.
+The visual world may combine real-time 3D scenes and objects; 2D portraits and character artwork; illustrated or layered backgrounds; sprites and overlays; textures and materials; UI graphics and icons; terrain, buildings, vegetation, props, landmarks, roads, bridges, settlements, and environmental effects.
 
 2D and 3D content must feel like parts of the same coherent game world rather than disconnected visual prototypes.
 
@@ -334,14 +272,7 @@ The world is procedurally generated from a player-visible **SEED**.
 
 A compatible SEED and world-generation rules should reproduce the same base world and regions, including the major environmental and settlement structure that belongs to procedural generation.
 
-The world may include:
-
-- biomes and terrain variation;
-- rivers, lakes, coasts, roads, and paths;
-- settlements and growth anchors;
-- buildings and landmarks;
-- trees, rocks, vegetation, bridges, signs, props, and resources;
-- deterministic visual variation.
+The world may include biomes and terrain variation; rivers, lakes, coasts, roads and paths; settlements and growth anchors; buildings and landmarks; trees, rocks, vegetation, bridges, signs, props and resources; and deterministic visual variation.
 
 Campaign changes such as destruction, upgrades, ownership, relationships, discoveries, politics, or other consequences may alter the world after generation.
 
@@ -349,15 +280,7 @@ Location must remain meaningful to gameplay, including travel, meetings, informa
 
 ## 🎨 Visual Direction
 
-The visual direction should support:
-
-- coherent isometric / near-isometric presentation;
-- high-quality 2D and 3D assets;
-- readable silhouettes, scale, perspective, and scene composition;
-- character emotion and atmosphere;
-- visually distinct settlements, environments, objects, and landmarks;
-- lighting, weather, particles, water, smoke, fire, fog, and vegetation motion where appropriate;
-- progressive improvement from early placeholders to polished visual assets without breaking verified functionality.
+The visual direction should support coherent isometric / near-isometric presentation, high-quality 2D and 3D assets, readable silhouettes and scale, character emotion and atmosphere, distinct settlements and environments, environmental effects, and progressive improvement from early placeholders to polished visual assets.
 
 The Graphic Designer Worker chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
 
@@ -392,10 +315,10 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 13. **Accessibility and responsive usability are fundamental.**
 14. **Privacy-conscious AI use:** external AI receives only necessary game context and must never require storing player credentials inside campaign data.
 15. **The evolving product remains publicly tryable.**
-16. **Development is cumulative:** accepted work extends the last verified product instead of replacing it with disconnected prototypes.
-17. **Broken or unverified work never replaces the latest independently verified public build.**
-18. **The living strategic world map is the primary game surface.**
-    Terrain, locations, settlements, characters, creatures, objects and relevant world changes must be experienced as parts of one coherent simulated world rather than primarily through disconnected menus, dashboards or static scenes.
+16. **Development should normally be cumulative:** accepted work extends the current product instead of replacing it with disconnected prototypes.
+17. **Verified public releases are preferred by default, but explicit Admin publication instructions override normal verification and release-gate requirements.**
+18. **An Admin-directed unverified build may be published when explicitly requested, but it must not be represented as independently verified unless it actually passed independent verification.**
+19. **The living strategic world map is the primary game surface.** Terrain, locations, settlements, characters, creatures, objects and relevant world changes must be experienced as parts of one coherent simulated world rather than primarily through disconnected menus, dashboards or static scenes.
 
 ---
 
@@ -405,43 +328,53 @@ The evolving game must remain accessible through one stable public location:
 
 ### https://sgoxel.github.io/The_Advisor_Game/
 
-Early development should prioritize a usable public interface where the current verified product can be tried manually.
+The public location represents the **current Admin-authorized public development build**.
 
-Each completed development phase should result in an independently tested, manually usable cumulative release.
+Under normal autonomous development, public replacement should follow independent testing and the project's verified release process.
 
-The specific technical method used to build, package, publish, version, or deploy releases is a development decision and is **not defined by README**.
+However, the Admin may explicitly order any specified repository state, commit, branch state, imported template, or development build to be published directly.
+
+When the Admin explicitly requests direct publication:
+
+**Admin authorization itself is sufficient publication authority.**
+
+No Worker execution, independent Tester PASS, phase approval, release-candidate approval, regression gate, or Verified Release workflow is required unless the Admin explicitly requests those checks.
+
+Workers must not add an unrequested verification requirement that blocks or delays an explicit Admin publication instruction.
+
+An Admin-directed publication may therefore intentionally replace the currently verified public build with an unverified development build.
+
+Such a publication must be described accurately as an **Admin-directed public development build** and must not be falsely labeled independently tested or verified.
+
+Admin may later request testing, verification, rollback, release tagging, or promotion to a formally verified release.
+
+The specific technical method used to build, package, publish, version, or deploy releases is a development decision and is not otherwise defined by README.
 
 ---
 
 # 🤖 Development Worker Governance
 
-The project uses five recurring development Workers.
+The project normally uses five recurring development Workers.
 
-README defines their **high-level responsibility and fallback relationship**, while detailed task selection, scheduling, branching, file handling, commands, tools, and execution procedures belong to Worker instructions and planning records.
+README defines their high-level responsibility and fallback relationship, while detailed task selection, scheduling, branching, file handling, commands, tools, and execution procedures belong to Worker instructions and planning records.
 
-| Worker | Primary responsibility | Fallback role |
-| --- | --- | --- |
-| **Planner Worker** | Planning and coordination | Tester |
-| **Coder Worker #1** | Implementation | Graphic Designer |
-| **Coder Worker #2** | Implementation | Graphic Designer |
-| **Graphic Designer Worker** | 2D/3D visual design and asset creation | Coder |
-| **Tester Worker** | Independent verification and release approval | Planner |
+| Worker                      | Primary responsibility                                 | Fallback role    |
+| --------------------------- | ------------------------------------------------------ | ---------------- |
+| **Planner Worker**          | Planning and coordination                              | Tester           |
+| **Coder Worker #1**         | Implementation                                         | Graphic Designer |
+| **Coder Worker #2**         | Implementation                                         | Graphic Designer |
+| **Graphic Designer Worker** | 2D/3D visual design and asset creation                 | Coder            |
+| **Tester Worker**           | Independent verification and verified-release approval | Planner          |
 
 ## Planner
 
 Planner converts README goals and principles into practical project planning.
 
-Planner decides, as needed:
-
-- phases and sequencing;
-- dependencies;
-- architecture and project organization;
-- technical decomposition;
-- task scope and acceptance criteria;
-- assignment of work to the appropriate role;
-- what must be completed before a phase can be independently released.
+Planner decides phases and sequencing, dependencies, architecture and project organization, technical decomposition, task scope and acceptance criteria, assignment of work to the appropriate role, and normal prerequisites for an independently verified phase release.
 
 Planner does not move these decisions into README.
+
+Planner authority remains subordinate to explicit Admin instructions and README.
 
 ## Coder
 
@@ -449,19 +382,11 @@ Coder implements approved project work.
 
 Coder owns technical implementation decisions inside approved scope and coordinates with Graphic Designer when code and visual assets must work together.
 
-Coder does not redefine product principles or independently approve its own implementation.
+Coder does not redefine product principles or independently certify its own implementation as verified.
 
 ## Graphic Designer
 
-Graphic Designer owns the creation and refinement of the game's visual presentation, including:
-
-- 2D art and UI visuals;
-- portraits, backgrounds, sprites, textures, icons, and supporting artwork;
-- 3D scenes, objects, terrain, environments, buildings, vegetation, props, and landmarks;
-- isometric/map visual prototypes;
-- WebGL visual prototypes and preview scenes;
-- placeholder-to-final visual refinement;
-- visual consistency, scale, perspective, materials, lighting, readability, responsiveness, and visual-performance considerations.
+Graphic Designer owns creation and refinement of the game's visual presentation, including 2D art, UI visuals, portraits, backgrounds, sprites, textures, icons, 3D scenes and objects, terrain, environments, buildings, vegetation, props, landmarks, isometric/map visuals, WebGL visuals, placeholder-to-final refinement, consistency, scale, perspective, materials, lighting, readability, responsiveness, and visual-performance considerations.
 
 Graphic Designer chooses suitable tools, formats, workflows, and export methods for the assigned work.
 
@@ -469,92 +394,83 @@ Gameplay and simulation logic remain Coder responsibility.
 
 ## Tester
 
-Tester independently verifies the actual completed project state rather than relying only on implementation claims.
+Tester independently verifies actual completed project state rather than relying only on implementation claims.
 
-Tester verifies relevant functionality, visual work, integration, regression, usability, performance, and public behavior.
+Tester verifies relevant functionality, visual work, integration, regression, usability, performance, accessibility, and public behavior.
 
-Only the dedicated Tester may approve a phase/release as independently verified.
+Only the dedicated Tester may declare a build, phase, or release **independently verified**.
+
+This does not limit Admin authority.
+
+Admin may explicitly authorize publication or use of a build without Tester verification. Such a build is Admin-authorized but remains **unverified** until Tester verification actually occurs.
 
 ## Fallback Principle
 
-Primary-role work always has priority.
+Primary-role work normally has priority.
 
 A Worker may use its defined fallback role only when its primary role has no eligible work requiring attention.
 
-Fallback is limited to **one role transition**; fallback chaining is not allowed.
+Fallback is limited to one role transition; fallback chaining is not allowed.
 
 A Worker acting in fallback follows the responsibility boundaries of that fallback role.
 
-No Worker may independently approve its own implementation or design work.
+No Worker may independently declare its own implementation or design independently verified.
 
-Planner acting as fallback Tester cannot approve a phase/release.
+Planner acting as fallback Tester cannot independently verify a phase/release.
 
-Tester acting as fallback Planner does not gain additional release authority from planning work.
+Tester acting as fallback Planner does not gain additional verification authority from planning work.
+
+These Worker restrictions govern autonomous Worker behavior and do not restrict explicit Admin authority.
 
 ---
 
 # 🔁 Revision and Independence Principles
 
-Testing defects should return to the responsible implementer for correction.
+Testing defects should normally return to the responsible implementer for correction.
 
-When implementation or design reveals that approved scope, dependencies, acceptance criteria, or planning must change, the matter returns to Planner.
+When implementation or design reveals that approved scope, dependencies, acceptance criteria, or planning must change, the matter normally returns to Planner.
 
 Revision decisions and evidence should remain traceable in the project's operational record.
 
-No Worker independently approves its own implementation, visual work, or requested revision.
+No Worker independently declares its own implementation, visual work, or requested revision independently verified.
 
-Independent verification is required before work becomes part of a verified release.
+Independent verification is normally required before work is called a **verified release**.
+
+Independent verification is **not mandatory for publication, deployment, import, replacement, rollback, or other repository/public actions when the Admin explicitly instructs otherwise**.
+
+An Admin-authorized exception does not automatically convert unverified work into verified work; it only authorizes the requested action.
 
 ---
 
-# 🔒 README Protection
+# 🔒 README Protection and Admin Override
 
 > [!CAUTION]
-> `README.md` is protected.
+> `README.md` is protected from autonomous modification.
 >
-> AI Workers must not edit, rewrite, reformat, synchronize, or otherwise modify README unless the Admin explicitly authorizes that specific README change.
+> AI Workers must not edit, rewrite, reformat, synchronize, or otherwise modify README unless the Admin explicitly authorizes the README change.
 >
-> If implementation, testing, design, planning, or existing project data conflicts with README, the subordinate project data must be corrected rather than silently rewriting README.
+> **Admin authority is above README authority.**
+>
+> If subordinate project state conflicts with README and there is no contrary Admin instruction, the subordinate state must be corrected.
+>
+> If an explicit Admin instruction conflicts with README, the Admin instruction must be followed.
+>
+> The Admin may authorize either a permanent README change or a scoped one-time exception.
+>
+> Workers must not reinterpret Worker governance, testing policy, release policy, or automation rules as authority to block an explicit Admin instruction.
 
 ---
 
-# 🤝 Contributing
+# ✅ Authority Summary
 
-Useful contributions should preserve:
+**Admin explicit instruction is the highest project authority.**
 
-- the autonomous-character model;
-- deterministic simulation authority;
-- local BOT fallback;
-- player influence rather than direct control;
-- responsive and accessible presentation;
-- the mixed 2D/3D WebGL visual direction;
-- cumulative public usability;
-- appropriate independent verification.
+**README is the highest persistent project authority below Admin.**
 
-Features should deepen:
+**Workers operate under README unless Admin explicitly instructs otherwise.**
 
-<div align="center">
+**Tester verification determines whether a build may be called independently verified; it does not limit Admin's authority to publish an unverified build.**
 
-## 🧠 Player Advice → 🤖 Autonomous Character Decision → 🌍 World Consequence
+**An explicit Admin instruction may bypass normal Worker, testing, phase, release, or deployment gates.**
 
-</div>
-
-rather than replacing it with conventional direct control.
-
----
-
-# 📄 License
-
-See [LICENSE](LICENSE).
-
----
-
-<div align="center">
-
-### 🏰 The Advisor Game
-
-**Advise wisely. The character may listen. The world will remember.**
-
-🎮 [Play Latest Release](https://sgoxel.github.io/The_Advisor_Game/) · 🏷️ [Latest GitHub Release](https://github.com/sgoxel/The_Advisor_Game/releases/latest)
-
-</div>
+**Player advises → AI Character decides → Simulation validates → World reacts.**
