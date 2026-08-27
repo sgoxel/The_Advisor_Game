@@ -28,7 +28,7 @@
     {"id":"P21","stage":9,"title":"King and Multi-Kingdom Systems","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P22."},
     {"id":"P22","stage":9,"title":"Emperor Administration and Endgame","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P23."},
     {"id":"P23","stage":10,"title":"Advanced Advisor Mini-Games","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P24."},
-    {"id":"P24","stage":10,"title":"2.5D Presentation Audio and Emotion","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P25."},
+    {"id":"P24","stage":10,"title":"Mixed 2D/3D Presentation Audio and Emotion","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P25."},
     {"id":"P25","stage":10,"title":"Accessibility Balance and Campaign Release","status":"planned","release_gate":"Full project independent testing and regression pass; cumulative application manually usable through the public interface; verified final public release required."}
   ]
 }
