@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="The Advisor Game development build">
+  <title>The Advisor Game</title>
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">The Advisor Game</p>
+        <h1>Campaign Foundation</h1>
+      </div>
+      <p class="phase-badge" aria-label="Current development phase">Phase 1</p>
+    </header>
+
+    <main id="main-content" class="app-main">
+      <section class="panel hero-panel" aria-labelledby="core-rule-title">
+        <p class="eyebrow">Core rule</p>
+        <h2 id="core-rule-title">Advise. The character decides.</h2>
+        <p>Player advises → AI Character decides → Simulation validates → World reacts.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="campaign-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Phase 1</p>
+            <h2 id="campaign-title">Campaign state shell</h2>
+          </div>
+          <span id="app-status" class="status" role="status" aria-live="polite">Starting…</span>
+        </div>
+        <p>
+          This static client-side shell hosts the deterministic campaign save foundation. Export and import controls are added by the next Phase 1 task.
+        </p>
+        <dl class="foundation-list">
+          <div>
+            <dt>Runtime</dt>
+            <dd>Static browser application</dd>
+          </div>
+          <div>
+            <dt>Authority</dt>
+            <dd>Deterministic simulation</dd>
+          </div>
+          <div>
+            <dt>External AI</dt>
+            <dd>Not required</dd>
+          </div>
+        </dl>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>Early development build · No mandatory backend</p>
+    </footer>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
