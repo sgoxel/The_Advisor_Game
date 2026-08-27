@@ -72,7 +72,7 @@
       "id": "P01-T06",
       "order": 6,
       "title": "Expose Phase 1 save workflow in the public UI",
-      "status": "closed",
+      "status": "open",
       "depends_on": ["P01-T05"],
       "github_issue": 13,
       "acceptance": [
