@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   release:
-    name: Test, publish Pages, and create GitHub Release
+    name: Test, verify live Pages, and create GitHub Release
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -84,6 +84,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+
+      - name: Install test dependencies
+        run: npm ci
 
       - name: Run regression test suite
         run: npm test
@@ -101,6 +105,8 @@ jobs:
 
       - name: Prepare static Pages artifact
         shell: bash
+        env:
+          VERIFIED_SHA: ${{ inputs.verified_commit }}
         run: |
           set -euo pipefail
           rm -rf _site
@@ -118,6 +124,7 @@ jobs:
             --exclude 'package-lock.json' \
             --exclude '.gitignore'
           test -f _site/index.html
+          printf '%s\n' "$VERIFIED_SHA" > _site/.verified-release-sha
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -127,7 +134,44 @@ jobs:
         with:
           path: _site
 
-      - name: Create draft GitHub Release for exact commit
+      - name: Deploy exact verified artifact to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Wait for exact verified Pages build
+        shell: bash
+        env:
+          VERIFIED_SHA: ${{ inputs.verified_commit }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${PAGE_URL%/}"
+          MARKER_URL="$BASE_URL/.verified-release-sha"
+          for attempt in {1..30}; do
+            DEPLOYED_SHA="$(curl --fail --silent --show-error --location --max-time 15 \
+              -H 'Cache-Control: no-cache' \
+              "$MARKER_URL?attempt=$attempt" 2>/dev/null || true)"
+            DEPLOYED_SHA="${DEPLOYED_SHA//$'\r'/}"
+            DEPLOYED_SHA="${DEPLOYED_SHA//$'\n'/}"
+            if [[ "${DEPLOYED_SHA,,}" == "${VERIFIED_SHA,,}" ]]; then
+              echo "Live Pages marker matches verified commit $VERIFIED_SHA"
+              exit 0
+            fi
+            echo "Waiting for exact Pages build ($attempt/30)..."
+            sleep 10
+          done
+          echo "::error::Live Pages did not serve verified commit marker $VERIFIED_SHA."
+          exit 1
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify deployed Pages browser and accessibility behavior
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: npx playwright test
+
+      - name: Create verified GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -143,18 +187,4 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --target "$VERIFIED_SHA" \
             --title "$TITLE" \
-            --generate-notes \
-            --draft
-
-      - name: Deploy exact verified artifact to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Publish GitHub Release after successful Pages deployment
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          set -euo pipefail
-          gh release edit "$RELEASE_TAG" --draft=false
+            --generate-notes
