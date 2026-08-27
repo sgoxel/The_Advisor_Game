@@ -18,9 +18,9 @@
   <img src="_githubpage/img/Concept Map Generation.png" width="720" alt="Procedurally generated isometric world map from The Advisor Game">
 </p>
 
-### 🎮 [Play the Latest Tested Development Release](https://sgoxel.github.io/The_Advisor_Game/)
+### 🎮 [Play the Latest Tested Development Release](https://sgoxel.github.io/The-Advisor-Game/)
 
-[🏷️ Latest GitHub Release](https://github.com/sgoxel/The_Advisor_Game/releases/latest) · [📘 Implementation specification](SPEC.md) · [🌐 GitHub Pages](https://sgoxel.github.io/The_Advisor_Game/)
+[🏷️ Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest) · [📘 Implementation specification](SPEC.md) · [🌐 GitHub Pages](https://sgoxel.github.io/The-Advisor-Game/)
 
 </div>
 
@@ -250,7 +250,7 @@ Other characters may use deterministic AI, authored behavior, utility systems, s
 
 # 🗺️ Procedural World and Presentation
 
-The game is a **WebGL-based mixed 2D/3D experience** with an isometric / near-isometric 2.5D presentation. The visual world may combine real-time 3D scenes and objects with 2D portraits, illustrations, sprites, textures, overlays, interface elements, and effects. 2D and 3D content must work together as one coherent presentation rather than as separate visual prototypes. Readability, atmosphere, character emotion, clear interaction, responsive performance, and compatibility with the public web build take priority over unnecessary 3D complexity.
+The game is a lightweight **isometric / near-isometric 2.5D experience rendered through WebGL**, with HTML/CSS/SVG/Canvas interfaces for conversation, reports, investigation, mini-games, Advisor tools, and Instruction Flow. Readability, atmosphere, character emotion, and clear interaction take priority over unrestricted free-camera 3D complexity.
 
 ## 🌱 Seeded, Reproducible, Extensible World
 
@@ -270,21 +270,19 @@ Location remains mechanically meaningful for meetings, information access, trave
 
 ## 🎨 Visual Direction and Asset Fallback
 
-Visual direction combines **2D and 3D assets inside the WebGL presentation**. This may include isometric terrain and movement, 3D environments and props, buildings and landmarks, low-poly or otherwise performance-appropriate models, 2D portraits and character art, layered/illustrated backgrounds, sprites, textures, materials, icons, UI graphics, and lightweight atmosphere such as lighting, shadows, weather, particles, water, smoke, fire, fog, and vegetation motion when performance permits. Visual effects must never reduce readability of map information, evidence, reports, character state, or Advisor choices.
+Visual direction includes isometric 2.5D terrain and movement, high-quality 2D portraits, visible emotional states where appropriate, layered/illustrated backgrounds for important scenes, seed-compatible building/object families, unique landmarks, and lightweight atmosphere such as lighting, shadows, weather, particles, water, smoke, fire, fog, and vegetation motion when performance permits. Visual effects must never reduce readability of map information, evidence, reports, character state, or Advisor choices.
 
-**Required gameplay visuals always need repository-shipped fallbacks.** The Graphic Designer Worker owns the creation and maintenance of missing reusable presentation assets and visual prototypes. A missing visual must not remain a final-facing debug box, generic icon, primitive placeholder, or disconnected mockup when the project requires a usable asset.
+**Required gameplay visuals always need repository-shipped fallbacks.** If a required reusable visual is missing during development, an AI development agent should create a **true vector asset** and save it into the appropriate versioned asset directory. Such assets must:
 
-Visual assets must:
+- use genuine vector geometry/styling, never a raster PNG/JPEG merely embedded in SVG;
+- meet the established modern high-quality 2.5D visual language with purposeful silhouette, depth, material cues, shading/highlights, and readable detail;
+- respect isometric direction, scale, proportions, footprint logic, climate/terrain identity, and family consistency in palette, lighting, outline, perspective, and detail;
+- remain readable on supported phones/tablets and credible when enlarged on higher-resolution displays;
+- avoid final-facing debug boxes, simple primitives, generic icons, single-color silhouettes, or similarly minimal placeholders;
+- use stable filenames and predictable family-based directories for deterministic data references and reuse;
+- be optimized so vector complexity does not impose excessive DOM/SVG/memory/GPU cost.
 
-- support the established isometric / near-isometric visual language and remain consistent in scale, perspective, silhouette, lighting, materials, palette, detail, and world identity;
-- remain readable on supported phones/tablets and credible on larger displays;
-- be suitable for the WebGL public build and optimized for practical browser, memory, DOM/SVG, CPU, and GPU limits;
-- use genuine vector geometry when delivered as vector art rather than embedding raster images inside a nominal SVG;
-- use real 3D geometry/material data when an asset is intended to function as a 3D object rather than disguising a raster image as a model;
-- preserve deterministic simulation rules: presentation assets may visualize generated content but never become simulation authority;
-- become normal versioned repository assets once accepted and remain reusable rather than being regenerated during normal gameplay.
-
-The exact graphics tools, asset formats, model formats, scene libraries, export settings, folder layout, naming system, and production pipeline are **not fixed by this README**. They are Worker decisions chosen for compatibility, quality, maintainability, performance, and the current project state.
+This policy fills missing **presentation assets**; it never changes seed-generated simulation content. Accepted generated assets become normal repository assets and are not regenerated during normal gameplay.
 
 ## 📱 Responsive, Touch, Pointer, and Keyboard Requirements
 
@@ -319,13 +317,12 @@ Only visible/nearby regions need full detail. Distant/inactive regions may be si
 12. **Readable causality.** The player should understand their advice, the character's decision, and the resulting consequence.
 13. **Respect the player's time.** Progress comes from decisions, relationships, discoveries, and stories rather than daily-login systems or grind.
 14. **Accessible by default.** Keyboard, mouse, and touch are supported; required information never relies on color alone.
-15. **2D and 3D are one WebGL presentation.** Use the mix that best serves readability, atmosphere, performance, and gameplay; neither 2D nor 3D is restricted to temporary prototypes.
 
 ---
 
 # 🌐 Runtime Architecture, Trust Boundary, Saves, and Privacy
 
-The production game is static HTML, CSS, JavaScript, localization, 2D/3D visual assets, images, and audio hosted by GitHub Pages. GitHub Pages deploys the verified `LatestRelease/` snapshot as the public site root, preserving a stable player URL.
+The production game is static HTML, CSS, JavaScript, localization, images, and audio hosted by GitHub Pages. GitHub Pages deploys the verified `LatestRelease/` snapshot as the public site root, preserving a stable player URL.
 
 No mandatory custom server, serverless function, database, account, or server-side simulation is required. Locally executed systems include world generation, deterministic Character BOT, game-state/action validation, progression, economy/world simulation, seeded checks, saves, and Advisor Instruction Flow storage/validation.
 
@@ -346,7 +343,7 @@ Structured model output must be parsed and validated against supported schemas a
 - Only minimum bounded game context should be sent to a configured external model.
 - The game remains playable through the local BOT without personal information or external accounts.
 - Campaigns can be exported/imported as versioned JSON.
-- Runtime assets use repository-relative URLs so the game works under `https://sgoxel.github.io/The_Advisor_Game/` and compatible static hosts.
+- Runtime assets use repository-relative URLs so the game works under `https://sgoxel.github.io/The-Advisor-Game/` and compatible static hosts.
 
 Opening `index.html` through `file://` is best-effort because browsers restrict some asset/network operations. GitHub Pages or another ordinary HTTPS static host is sufficient.
 
@@ -362,7 +359,7 @@ Implemented today:
 - ✅ Map data/image import and export tools
 - ✅ English and Turkish localization foundation
 - ✅ Responsive desktop/mobile panels
-- ✅ Static deployment at `https://sgoxel.github.io/The_Advisor_Game/`
+- ✅ Static deployment at `https://sgoxel.github.io/The-Advisor-Game/`
 - ✅ Vitest, Playwright, ESLint, JSDoc type checking, and performance checks
 
 > [!WARNING]
@@ -374,9 +371,9 @@ Implemented today:
 
 <div align="center">
 
-## ▶️ [PLAY LATEST TESTED DEVELOPMENT RELEASE](https://sgoxel.github.io/The_Advisor_Game/)
+## ▶️ [PLAY LATEST TESTED DEVELOPMENT RELEASE](https://sgoxel.github.io/The-Advisor-Game/)
 
-[View latest GitHub release](https://github.com/sgoxel/The_Advisor_Game/releases/latest)
+[View latest GitHub release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
 
 </div>
 
@@ -454,8 +451,8 @@ Detailed implementation milestones may live in `SPEC.md`, but they must always c
 # 🚀 Development Releases
 
 - `main` contains accepted source history; the deployable tested snapshot is stored in `LatestRelease/`.
-- GitHub Pages publishes `LatestRelease/` at `https://sgoxel.github.io/The_Advisor_Game/`.
-- Latest GitHub Release remains `https://github.com/sgoxel/The_Advisor_Game/releases/latest`.
+- GitHub Pages publishes `LatestRelease/` at `https://sgoxel.github.io/The-Advisor-Game/`.
+- Latest GitHub Release remains `https://github.com/sgoxel/The-Advisor-Game/releases/latest`.
 - Versions use `v<major>.<minor>.<patch>-dev.<number>` tags; [`VERSION`](VERSION) is the concrete version authority for tooling, tags, manifests, and releases.
 - README must **not** embed the current release number, current tag, or a version query parameter.
 - After a release candidate passes the release gate, Release Manager copies the verified static build into `LatestRelease/` before the final main-targeting release PR is completed.
@@ -463,13 +460,13 @@ Detailed implementation milestones may live in `SPEC.md`, but they must always c
 - Broken intermediate states must never be copied into `LatestRelease/`.
 - Ordinary version increments must not modify this protected README.
 
-[🎮 Launch the latest tested build](https://sgoxel.github.io/The_Advisor_Game/) · [🏷️ Open the latest GitHub Release](https://github.com/sgoxel/The_Advisor_Game/releases/latest)
+[🎮 Launch the latest tested build](https://sgoxel.github.io/The-Advisor-Game/) · [🏷️ Open the latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
 
 ---
 
 # 🛠️ Authority for Development Workers
 
-Before planning, implementing, testing, or producing game visuals, Workers **MUST read this README**. It defines product intent and authority.
+Before planning, implementing, designing, or testing project work, Workers **MUST read this README**. It defines product intent and authority.
 
 The synchronization direction is:
 
@@ -488,24 +485,37 @@ Every gameplay implementation must preserve the rules already defined above, esp
 - LLMs may handle dialogue, roleplay, interpretation, personality, memories, advice evaluation, supported instruction updates, and selection among legal actions; deterministic systems own validation, legal actions, costs, seeded checks, progression, resources, movement legality, combat, state transitions, and consequences.
 - The Advisor Instruction Flow may look like a flowchart, decision tree, algorithm editor, node graph, or rule system, but its system-boundary output remains plain-text advisory instructions that may be edited by the player or updated by Character AI when allowed and may never bypass simulation rules.
 
-## 🎨 Graphic Designer Worker
+## 🤖 Development Worker Roles and Fallbacks
 
-The **Graphic Designer Worker** owns visual asset creation, visual prototyping, and visual consistency for the evolving game. Its work supports Planner-defined tasks and the same cumulative public application; it does not define gameplay rules, simulation authority, roadmap scope, or release approval.
+The project uses five recurring development Workers. Each Worker has one **primary role** and at most one **fallback role** so limited Worker capacity can be reused without weakening role ownership or independent verification.
 
-Its responsibilities include:
+| Worker | Primary role | Fallback role | Fallback identity |
+| --- | --- | --- | --- |
+| **Planner Worker** | Planning | Tester | `Tester Worker (Planner)` |
+| **Coder Worker #1** | Coding | Graphic Designer | `Graphic Designer Worker (Coder)` |
+| **Coder Worker #2** | Coding | Graphic Designer | `Graphic Designer Worker (Coder)` |
+| **Graphic Designer Worker** | Visual design / assets | Coder | `Coder Worker (Designer)` |
+| **Tester Worker** | Independent testing / release gate | Planner | `Planner Worker (Tester)` |
 
-- create and maintain **2D assets** such as portraits, illustrations, backgrounds, sprites, textures, material artwork, icons, UI-support graphics, vector art, and other required presentation elements;
-- create and maintain **3D scenes and objects** suitable for the WebGL experience, including low-poly or otherwise performance-appropriate medieval buildings, houses, towers, castles, terrain elements, trees, rocks, roads, bridges, vegetation, props, landmarks, environment pieces, character placeholders, and other required world assets;
-- create isometric/world-map visual prototypes, scene compositions, WebGL preview/test scenes, and representative asset demonstrations when needed to validate visual direction before integration;
-- prepare WebGL-ready 3D assets and decide suitable web-compatible asset/export formats for the current task; README does not mandate a specific model format;
-- maintain a practical visual asset plan/inventory when needed so missing, placeholder, reusable, and production-ready assets can be identified and improved progressively;
-- create early placeholder visual assets when they enable a usable public build, then progressively refine or replace them with higher-quality assets while preserving verified functionality;
-- verify visual scale, orientation, perspective, isometric readability, materials, lighting, responsive presentation, and browser performance for created assets;
-- keep asset families visually coherent and reusable across settlements, terrain, characters, props, interfaces, and progression states;
-- commit accepted visual assets and visual test/prototype work to GitHub with clear task evidence; coordinate with Coder when integration requires gameplay/runtime logic beyond visual implementation;
-- replace missing or inadequate required visuals rather than leaving final-facing debug geometry or unrelated generic placeholders.
+Primary-role work always has priority. A Worker may enter fallback only when no eligible primary-role task, primary-role continuation, unresolved revision, or primary-role gate requires attention. A run may switch from **primary → fallback only once**; fallback chaining is forbidden. When primary-role work becomes available, the Worker returns to its primary role.
 
-Graphic Designer Worker may create the visual code or WebGL demonstration needed to preview and validate its assets, but normal gameplay/simulation logic remains Coder responsibility. If visual work requires a planning/scope change, it must be raised through the project planning workflow rather than changing planning directly.
+Before claiming work, Workers must inspect the current GitHub issue, comments, commits, branches/PRs, and repository state relevant to the task. They must avoid duplicate active work and must not overwrite newer unrelated work. Each Worker should concentrate on one eligible implementation/design/test/planning target at a time unless a release gate inherently requires broader verification.
+
+### Primary Role Boundaries
+
+- **Planner** owns phases, order, dependencies, architecture/organization decisions, decomposition, ROADMAP/TODO planning state, measurable acceptance criteria, and role routing. Normal Planner does not code, design, or approve releases.
+- **Coder** owns runtime/application implementation, tests, configuration, integration, and other code changes inside Planner-approved scope. Coder does not independently approve its own implementation or releases.
+- **Graphic Designer** owns required 2D/3D visual assets, UI art, portraits, backgrounds, sprites, textures, icons, environments, terrain, props, buildings, vegetation, landmarks, isometric/map prototypes, WebGL visual prototypes/preview scenes, and visual refinement/optimization. Runtime gameplay/simulation logic remains Coder responsibility.
+- **Tester** independently verifies actual committed state, including code, visual assets, integration, regression, performance/readability where relevant, public behavior, and release candidates. The dedicated Tester owns phase/release approval.
+
+### Fallback Boundaries
+
+- **Planner → Tester:** may independently test an eligible closed active-phase or required earlier-fix issue using Tester rules. It must not change planning while testing and **cannot approve a phase or release**.
+- **Coder → Graphic Designer:** may claim one eligible Designer-owned visual task and must follow Graphic Designer rules. It must not use fallback design work to alter gameplay/simulation scope.
+- **Graphic Designer → Coder:** may claim one eligible coding task and must follow Coder rules. It must not change Planner-owned scope, acceptance criteria, dependencies, ROADMAP, or TODO.
+- **Tester → Planner:** may perform eligible planning/reconciliation work only when no testing, retest, revision, or release-gate work exists and no primary Planner work is actively being handled. Planning done in this fallback role does not grant release authority; material fallback planning changes must be visible in GitHub before the dedicated Tester later evaluates the release.
+
+Fallback work is recorded under the fallback identity shown above. All implementation or design work performed in fallback remains subject to independent Tester verification. No Worker may approve its own implementation, design, revision, or fallback work. Revision requests remain role-directed: Tester → responsible Coder/Designer; Coder/Designer → Planner when scope/planning must change.
 
 ## 🔒 README Protection
 
@@ -542,6 +552,6 @@ See [LICENSE](LICENSE).
 
 **Advise wisely. The character may listen. The world will remember.**
 
-🎮 [Play Latest Release](https://sgoxel.github.io/The_Advisor_Game/) · 🏷️ [Latest GitHub Release](https://github.com/sgoxel/The_Advisor_Game/releases/latest)
+🎮 [Play Latest Release](https://sgoxel.github.io/The-Advisor-Game/) · 🏷️ [Latest GitHub Release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
 
 </div>
