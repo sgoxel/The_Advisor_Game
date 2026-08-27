@@ -1,4 +1,6 @@
 import { appendFile, readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const RELEASE_APPROVAL_PHRASE = 'RELEASE CANDIDATE APPROVED FOR VERIFIED RELEASE WORKFLOW';
 
@@ -106,7 +108,7 @@ async function runFromActionsEnvironment() {
   const actor = process.env.GITHUB_ACTOR;
 
   if (!eventPath || !outputPath) {
-    return;
+    fail('GITHUB_EVENT_PATH and GITHUB_OUTPUT are required when running the release authorization parser.');
   }
 
   try {
@@ -125,4 +127,7 @@ async function runFromActionsEnvironment() {
   }
 }
 
-await runFromActionsEnvironment();
+const invokedAsCli = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedAsCli) {
+  await runFromActionsEnvironment();
+}
