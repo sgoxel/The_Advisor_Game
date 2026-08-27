@@ -394,6 +394,8 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 15. **The evolving product remains publicly tryable.**
 16. **Development is cumulative:** accepted work extends the last verified product instead of replacing it with disconnected prototypes.
 17. **Broken or unverified work never replaces the latest independently verified public build.**
+18. **The living strategic world map is the primary game surface.**
+    Terrain, locations, settlements, characters, creatures, objects and relevant world changes must be experienced as parts of one coherent simulated world rather than primarily through disconnected menus, dashboards or static scenes.
 
 ---
 
