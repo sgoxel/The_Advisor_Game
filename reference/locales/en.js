@@ -1,0 +1,135 @@
+/* ROAD_PATCH_V2: diagonal connectivity + color fix */
+window.Game = window.Game || {};
+window.Game.Locales = window.Game.Locales || {};
+window.Game.Locales.en = {
+  "common": {
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "none": "None",
+    "unknown": "Unknown",
+    "error": "Error",
+    "info": "Info",
+    "promiseError": "Promise Error"
+  },
+  "header": {
+    "mainMenu": "Main Menu",
+    "settings": "Settings",
+    "log": "Log",
+    "language": "Language"
+  },
+  "menu": {
+    "githubPage": "Github Page",
+    "save": "Export Map JS",
+    "load": "Load Map",
+    "exportMapData": "Export Map Data",
+    "exportMasks": "Export Tile Masks"
+  },
+  "stats": {
+    "gold": "Gold",
+    "health": "Health",
+    "stamina": "Stamina",
+    "mana": "Mana"
+  },
+  "overlay": {
+    "instructionsHtml": "Left click: select tile<br />Drag: move camera<br />Arrow keys / WASD: navigate the map"
+  },
+  "character": {
+    "title": "Character",
+    "name": "Arin Valen",
+    "metaHtml": "Level 7 Ranger<br />Region: Misty Valley<br />Status: Ready for mission"
+  },
+  "dialog": {
+    "title": "Dialogue",
+    "defaultText": "SEED-based world generation is active. You can inspect the generated topology and infrastructure parameters from the settings menu.",
+    "choices": {
+      "north": "Move north.",
+      "east": "Go to the eastern zone.",
+      "south": "Inspect the southern route.",
+      "wait": "Wait and observe."
+    },
+    "choiceResults": {
+      "north": "You advanced north. Hill structure and transition corridors are being observed.",
+      "east": "You moved toward the eastern region. Road and open terrain structure is more visible here.",
+      "south": "You inspected the southern line. Water structures and environmental transitions may be concentrated here.",
+      "wait": "You stay in place and continue evaluating topology parameters."
+    },
+    "worldSummary": "A new world has been generated. SEED: {{seed}} | Size: {{cols}} x {{rows}} | Hills: {{hills}} | Streams: {{streams}} | Roads: {{roads}}"
+  },
+  "minimap": {
+    "title": "Mini Map"
+  },
+  "settings": {
+    "title": "Settings and SEED Parameters",
+    "seedCode": "SEED Code",
+    "mapWidth": "Map Width",
+    "mapHeight": "Map Height",
+    "cameraPitch": "Camera Pitch Angle",
+    "depthStrength": "Depth Strength",
+    "streamCount": "Stream Count",
+    "lake": "Lake",
+    "hillCount": "Hill Count",
+    "hillArea": "Hill Area Ratio",
+    "roadCount": "Road Count",
+    "forest": "Forest",
+    "forestArea": "Forest Area Ratio",
+    "settlement": "Settlement Area",
+    "grassArea": "Grass Area Ratio",
+    "dirtArea": "Dirt Area Ratio",
+    "waterArea": "Water Area Ratio",
+    "stoneArea": "Stone Area Ratio",
+    "reliefEnabled": "Enable Relief Shading",
+    "sunAzimuth": "Sun Direction (Azimuth)",
+    "sunElevation": "Sun Height",
+    "shadowStrength": "Shadow Strength",
+    "highlightStrength": "Highlight Strength",
+    "shadowLength": "Shadow Length",
+    "note": "These fields are derived only from the SEED and map size. Manual editing is disabled. When the same SEED and dimensions are entered, the application regenerates the same topology and terrain distribution.",
+    "groups": {
+      "topology": "Topology",
+      "infrastructure": "Infrastructure and Land Use",
+      "distribution": "Terrain Distribution"
+    }
+  },
+  "logs": {
+    "title": "Application Logs",
+    "closeAria": "Close log window",
+    "settingsOpened": "Settings window opened.",
+    "settingsClosed": "Settings window closed.",
+    "logOpened": "Log window opened.",
+    "logClosed": "Log window closed.",
+    "dialogChoice": "Dialogue choice made: {{choice}}",
+    "worldRebuilt": "World rebuilt. SEED={{seed}}, size={{cols}}x{{rows}}",
+    "settingsApplied": "Settings applied. New SEED={{seed}}, new size={{cols}}x{{rows}}",
+    "fileModeWarning": "INFO: The application was opened through file://. JS map bundles include image data to avoid file-origin texture loading issues.",
+    "appStarted": "Application started.",
+    "windowResized": "Window resized.",
+    "runtimeError": "ERROR: Runtime error captured.",
+    "globalError": "ERROR: Global error event captured.",
+    "staticResourceFailed": "ERROR: Static resource could not be loaded.",
+    "promiseRejection": "PROMISE ERROR: Unhandled promise rejection.",
+    "message": "Message",
+    "file": "File",
+    "line": "Line",
+    "column": "Column",
+    "extraInfo": "Extra Info",
+    "errorType": "Error Type",
+    "stack": "Stack",
+    "unknownSource": "(no source information)",
+    "unknown": "Unknown error",
+    "noStack": "No stack information.",
+    "resourceLoadError": "Resource loading error",
+    "exportCompleted": "Export completed. File downloaded: {{filename}}",
+    "exportFailed": "Export failed. The file could not be created.",
+    "tag": "Tag"
+  },
+  "paramValues": {
+    "exists": "Yes",
+    "notExists": "No",
+    "percent": "%{{value}}"
+  },
+  "webgl": {
+    "notSupported": "WebGL could not be initialized. The browser or GPU may not support this feature."
+  }
+};
