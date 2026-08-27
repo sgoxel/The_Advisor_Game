@@ -3,152 +3,315 @@ name: AI Developer
 on:
   issues:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: One-time administration action
+        required: true
+        default: setup-labels
+        type: choice
+        options:
+          - setup-labels
 
 concurrency:
   group: ai-developer
   cancel-in-progress: false
 
 jobs:
-  solve-issue:
-    if: github.event.label.name == 'ai-ready'
-
+  setup-labels:
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'setup-labels'
     runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Create or refresh NVIDIA routing labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ensure_label() {
+            local name="$1"; local color="$2"; local description="$3"
+            if gh api "repos/${GITHUB_REPOSITORY}/labels/${name}" >/dev/null 2>&1; then
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/labels/${name}" \
+                -f new_name="${name}" -f color="${color}" -f description="${description}" >/dev/null
+            else
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/labels" \
+                -f name="${name}" -f color="${color}" -f description="${description}" >/dev/null
+            fi
+          }
+          ensure_label "ai-ready" "2c69d0" "Planner reserved this free issue for the auxiliary NVIDIA agent."
+          ensure_label "ai-role-coder" "1f883d" "Auxiliary NVIDIA role: Coder."
+          ensure_label "ai-role-reviewer" "8250df" "Auxiliary NVIDIA role: Reviewer."
+          ensure_label "ai-role-tester" "bf8700" "Auxiliary NVIDIA role: Tester."
+          ensure_label "ai-running" "0e8a16" "Auxiliary NVIDIA agent is currently working."
+          ensure_label "work-claimed" "d4c5f9" "Execution is currently claimed; other executors must skip."
+          ensure_label "ai-awaiting-review" "fbca04" "Auxiliary NVIDIA work/evidence is complete and awaits a formal Worker."
+          ensure_label "ai-handoff" "d93f0b" "Auxiliary NVIDIA agent could not finish; formal Worker must continue."
+          ensure_label "blocked" "b60205" "Issue is blocked and must not be executed."
 
-    # Hard ceiling for the whole job, including the optional retry wait.
-    timeout-minutes: 10
+  triage:
+    if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'ai-ready'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      eligible: ${{ steps.check.outputs.eligible }}
+      role: ${{ steps.check.outputs.role }}
+      issue_number: ${{ steps.check.outputs.issue_number }}
+      started_at: ${{ steps.check.outputs.started_at }}
+    steps:
+      - name: Verify issue is free, unblocked, and has exactly one NVIDIA role
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "eligible=false" >> "$GITHUB_OUTPUT"
+          echo "role=none" >> "$GITHUB_OUTPUT"
+          echo "issue_number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
+          reject_issue() {
+            local reason="$1"
+            gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+              --remove-label "ai-ready" >/dev/null 2>&1 || true
+            gh issue comment "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+              --body "AI AUXILIARY SKIPPED: ${reason} The issue was not claimed by NVIDIA/OpenCode." >/dev/null
+            exit 0
+          }
+
+          ISSUE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}")"
+          [ "$(printf '%s' "$ISSUE_JSON" | jq -r '.state')" = "open" ] || reject_issue "Issue is not open."
+          LABELS="$(printf '%s' "$ISSUE_JSON" | jq -r '.labels[].name')"
+
+          for label in blocked work-claimed ai-running ai-awaiting-review ai-handoff; do
+            if printf '%s\n' "$LABELS" | grep -Fxq "$label"; then
+              reject_issue "Issue is not free because it has label '${label}'."
+            fi
+          done
+
+          ROLE_COUNT="$(printf '%s' "$ISSUE_JSON" | jq '[.labels[].name | select(test("^ai-role-(coder|reviewer|tester)$"))] | length')"
+          [ "$ROLE_COUNT" = "1" ] || reject_issue "Exactly one role label is required: ai-role-coder, ai-role-reviewer, or ai-role-tester."
+          ROLE="$(printf '%s' "$ISSUE_JSON" | jq -r '[.labels[].name | select(test("^ai-role-(coder|reviewer|tester)$"))][0] | sub("^ai-role-"; "")')"
+
+          if ! BLOCKERS="$(gh api -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/dependencies/blocked_by?per_page=100")"; then
+            reject_issue "GitHub dependency state could not be verified safely."
+          fi
+          OPEN_BLOCKERS="$(printf '%s' "$BLOCKERS" | jq '[.[] | select(.state != "closed")] | length')"
+          [ "$OPEN_BLOCKERS" -eq 0 ] || reject_issue "Issue has ${OPEN_BLOCKERS} unresolved GitHub blocker(s)."
+
+          gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --remove-label "ai-ready" --add-label "ai-running" --add-label "work-claimed" >/dev/null
+          gh issue comment "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --body "WORK-CLAIM(worker=OpenCode NVIDIA Auxiliary Agent, role=${ROLE}, issue=${ISSUE_NUMBER})" >/dev/null
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+          echo "role=${ROLE}" >> "$GITHUB_OUTPUT"
+
+  coder:
+    needs: triage
+    if: needs.triage.outputs.eligible == 'true' && needs.triage.outputs.role == 'coder'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
     permissions:
       id-token: write
       contents: write
       issues: write
       pull-requests: write
-
+    outputs:
+      final_outcome: ${{ steps.agent.outputs.final_outcome }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
           persist-credentials: false
-
-      - name: Record first attempt start time
-        id: attempt_start
-        shell: bash
-        run: |
-          echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-
-      - name: Run OpenCode
-        id: opencode_first
-        continue-on-error: true
-        uses: anomalyco/opencode/github@latest
-
-        env:
-          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-
+      - name: Run NVIDIA auxiliary Coder
+        id: agent
+        uses: ./.github/actions/opencode-nvidia
         with:
-          model: nvidia/nvidia/nemotron-3-ultra-550b-a55b
-
+          nvidia_api_key: ${{ secrets.NVIDIA_API_KEY }}
+          issue_number: ${{ needs.triage.outputs.issue_number }}
           prompt: |
-            Work on GitHub issue #${{ github.event.issue.number }}.
+            Act as the Auxiliary NVIDIA Coder for The Advisor Game.
+            Work on GitHub issue #${{ needs.triage.outputs.issue_number }} only.
+            Read main/README.md first. README is protected product authority.
+            Never modify, rewrite, reformat, or request a README change.
+            Read the complete issue and comments. Respect scope, AC, dependencies and role boundaries.
+            Preserve: Player advises -> AI Character decides -> Simulation validates -> World reacts.
+            You are auxiliary, not Planner or Tester authority.
+            Never change ROADMAP/TODO/scope/AC/dependencies/phase order.
+            Never approve a phase/release and never merge or close the issue.
+            Implement only the requested issue. Do not modify unrelated files.
+            Run all relevant tests and fix failures before success.
+            If a planning change is required, information is missing, the task cannot be completed safely,
+            or relevant tests cannot pass, add an issue comment beginning exactly:
+            AI-HANDOFF:
+            Include attempted work, valid commits/branches/PRs, tests, blocker and recommended next action.
+            On success create an unmerged PR referencing this issue and add an issue comment beginning exactly:
+            AI CODER EVIDENCE:
+            List changed files, commit/PR, tests and results. Independent Tester verification is still required.
+      - name: Fail job if NVIDIA Coder did not complete
+        if: steps.agent.outputs.final_outcome != 'success'
+        shell: bash
+        run: exit 1
 
-            Read the complete issue carefully.
+  reviewer:
+    needs: triage
+    if: needs.triage.outputs.eligible == 'true' && needs.triage.outputs.role == 'reviewer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      id-token: write
+      contents: read
+      issues: write
+      pull-requests: write
+    outputs:
+      final_outcome: ${{ steps.agent.outputs.final_outcome }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Run NVIDIA auxiliary Reviewer
+        id: agent
+        uses: ./.github/actions/opencode-nvidia
+        with:
+          nvidia_api_key: ${{ secrets.NVIDIA_API_KEY }}
+          issue_number: ${{ needs.triage.outputs.issue_number }}
+          prompt: |
+            Act as the Auxiliary NVIDIA Reviewer for The Advisor Game.
+            Review issue #${{ needs.triage.outputs.issue_number }} and the exact committed implementation/PR referenced by it.
+            Read main/README.md first. README is protected authority.
+            You are READ-ONLY for production implementation.
+            Do not modify production files, create commits/branches, or create implementation PRs.
+            Do not change README, ROADMAP, TODO, scope, AC, dependencies or phase order.
+            Do not approve a phase or release.
+            Check README compatibility, AC, diff quality, bugs, regressions, unrelated changes,
+            role-boundary violations and available test evidence. Run non-destructive tests if useful.
+            If there is no clear committed target/PR or review cannot be completed safely, comment:
+            AI-HANDOFF:
+            Otherwise comment beginning exactly:
+            AI REVIEW EVIDENCE:
+            State PASS or CHANGES REQUESTED; identify exact commit/PR, checks, findings, risks and follow-up.
+            This is auxiliary evidence only, not final Tester/release approval.
+      - name: Fail job if NVIDIA Reviewer did not complete
+        if: steps.agent.outputs.final_outcome != 'success'
+        shell: bash
+        run: exit 1
 
-            Inspect the relevant source code.
+  tester:
+    needs: triage
+    if: needs.triage.outputs.eligible == 'true' && needs.triage.outputs.role == 'tester'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      id-token: write
+      contents: read
+      issues: write
+      pull-requests: read
+    outputs:
+      final_outcome: ${{ steps.agent.outputs.final_outcome }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Run NVIDIA auxiliary Tester
+        id: agent
+        uses: ./.github/actions/opencode-nvidia
+        with:
+          nvidia_api_key: ${{ secrets.NVIDIA_API_KEY }}
+          issue_number: ${{ needs.triage.outputs.issue_number }}
+          prompt: |
+            Act as the Auxiliary NVIDIA Tester for The Advisor Game.
+            Test issue #${{ needs.triage.outputs.issue_number }} against the exact committed implementation/PR referenced by it.
+            Read main/README.md first. README is protected authority.
+            You are READ-ONLY for production implementation.
+            Do not modify/push production files or create implementation commits/branches/PRs.
+            Do not change README, ROADMAP, TODO, scope, AC, dependencies or phase order.
+            Do not approve a phase or release.
+            Execute every relevant objective test available from committed state:
+            unit/integration/regression, browser/Playwright, axe, Lighthouse, schema/data,
+            console/page errors, responsive checks and artifacts as applicable.
+            Never repair product code while acting as Tester.
+            Product test failure is evidence, not permission to implement a fix.
+            If the target is unclear, required test infrastructure/evidence is unavailable,
+            or verification cannot be executed safely, comment:
+            AI-HANDOFF:
+            Otherwise comment beginning exactly:
+            AI TEST EVIDENCE:
+            State PASS or FAIL; identify exact commit/PR; list checks and actual results.
+            Formal Tester Worker retains independent verification and all phase/release authority.
+      - name: Fail job if NVIDIA Tester did not complete
+        if: steps.agent.outputs.final_outcome != 'success'
+        shell: bash
+        run: exit 1
 
-            Implement only the changes requested by the issue.
-
-            Run the relevant tests.
-
-            If tests fail, diagnose the problem and fix it.
-
-            Do not report success while tests are failing.
-
-            If the implementation is correct and tests pass,
-            create a pull request with the changes.
-
-            Explain clearly what you changed and which tests passed.
-
-            Do not modify unrelated files.
-
-      - name: Check whether failure was NVIDIA 503
-        id: retry_check
-        if: steps.opencode_first.outcome == 'failure'
+  finalize:
+    needs: [triage, coder, reviewer, tester]
+    if: always() && needs.triage.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Release claim and route auxiliary result
         env:
           GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ needs.triage.outputs.issue_number }}
+          STARTED_AT: ${{ needs.triage.outputs.started_at }}
+          ROLE: ${{ needs.triage.outputs.role }}
+          CODER_OUTCOME: ${{ needs.coder.outputs.final_outcome }}
+          REVIEWER_OUTCOME: ${{ needs.reviewer.outputs.final_outcome }}
+          TESTER_OUTCOME: ${{ needs.tester.outputs.final_outcome }}
         shell: bash
         run: |
           set -euo pipefail
 
-          COMMENTS_JSON="$(
-            gh api \
-              "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments?per_page=100"
-          )"
+          case "$ROLE" in
+            coder) FINAL_OUTCOME="$CODER_OUTCOME"; REQUIRED_PREFIX="AI CODER EVIDENCE:" ;;
+            reviewer) FINAL_OUTCOME="$REVIEWER_OUTCOME"; REQUIRED_PREFIX="AI REVIEW EVIDENCE:" ;;
+            tester) FINAL_OUTCOME="$TESTER_OUTCOME"; REQUIRED_PREFIX="AI TEST EVIDENCE:" ;;
+            *) FINAL_OUTCOME="failure"; REQUIRED_PREFIX="";;
+          esac
 
-          LAST_BOT_COMMENT="$(
-            printf '%s' "$COMMENTS_JSON" | \
-              jq -r \
-                --arg start "${{ steps.attempt_start.outputs.started_at }}" \
-                '[.[] | select(.user.login == "opencode-agent[bot]" and .created_at >= $start)] | last | .body // ""'
-          )"
+          COMMENTS="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100")"
+          HANDOFF_COUNT="$(printf '%s' "$COMMENTS" | jq --arg start "$STARTED_AT" \
+            '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI-HANDOFF:"))] | length')"
+          EVIDENCE_COUNT="$(printf '%s' "$COMMENTS" | jq --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
+            '[.[] | select(.created_at >= $start) | select((.body // "") | startswith($prefix))] | length')"
 
-          if printf '%s' "$LAST_BOT_COMMENT" | grep -Eq 'Service temporarily overloaded|"code"[[:space:]]*:[[:space:]]*503'; then
-            echo "retry_503=true" >> "$GITHUB_OUTPUT"
-            echo "NVIDIA 503 overload detected in this attempt. One clean retry will be attempted after 60 seconds."
-          else
-            echo "retry_503=false" >> "$GITHUB_OUTPUT"
-            echo "This attempt did not report an NVIDIA 503 overload. No automatic retry will be used."
+          if [ "$ROLE" = "coder" ] && [ "$FINAL_OUTCOME" = "success" ] && [ "$HANDOFF_COUNT" -eq 0 ]; then
+            PR_COUNT="$(gh pr list --repo "${GITHUB_REPOSITORY}" --state open --limit 100 --json body,url |
+              jq --arg issue "#${ISSUE_NUMBER}" '[.[] | select((.body // "") | contains($issue))] | length')"
+            [ "$PR_COUNT" -gt 0 ] || FINAL_OUTCOME="failure"
           fi
 
-      - name: Wait and reset before NVIDIA 503 retry
-        if: steps.retry_check.outputs.retry_503 == 'true'
-        shell: bash
-        run: |
-          echo "Waiting 60 seconds for NVIDIA capacity to recover..."
-          sleep 60
+          gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "ai-running" >/dev/null 2>&1 || true
+          gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "work-claimed" >/dev/null 2>&1 || true
 
-          echo "Resetting the temporary runner workspace to a clean main branch..."
-          git reset --hard
-          git clean -fd
-          git checkout -B main origin/main
-
-      - name: Retry OpenCode after NVIDIA 503
-        if: steps.retry_check.outputs.retry_503 == 'true'
-        uses: anomalyco/opencode/github@latest
-
-        env:
-          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-
-        with:
-          model: nvidia/nvidia/nemotron-3-ultra-550b-a55b
-
-          prompt: |
-            Work on GitHub issue #${{ github.event.issue.number }}.
-
-            This is a clean retry because the previous attempt failed with
-            NVIDIA HTTP 503 Service temporarily overloaded.
-
-            Read the complete issue carefully.
-
-            Inspect the relevant source code.
-
-            Implement only the changes requested by the issue.
-
-            Run the relevant tests.
-
-            If tests fail, diagnose the problem and fix it.
-
-            Do not report success while tests are failing.
-
-            If the implementation is correct and tests pass,
-            create a pull request with the changes.
-
-            Explain clearly what you changed and which tests passed.
-
-            Do not modify unrelated files.
-
-      - name: Fail non-503 OpenCode errors
-        if: steps.opencode_first.outcome == 'failure' && steps.retry_check.outputs.retry_503 != 'true'
-        shell: bash
-        run: |
-          echo "OpenCode failed for a reason other than NVIDIA 503."
-          echo "Automatic retry is intentionally disabled for non-503 errors."
-          exit 1
+          if [ "$FINAL_OUTCOME" = "success" ] && [ "$HANDOFF_COUNT" -eq 0 ] && [ "$EVIDENCE_COUNT" -gt 0 ]; then
+            gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "ai-handoff" >/dev/null 2>&1 || true
+            gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-label "ai-awaiting-review" >/dev/null
+            gh issue comment "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+              --body "WORK-CLAIM-CLEAR(worker=OpenCode NVIDIA Auxiliary Agent, role=${ROLE}, issue=${ISSUE_NUMBER})"$'\n\n'"AI AUXILIARY COMPLETE: role=${ROLE}. Formal Worker must inspect NVIDIA evidence/PR before any independent PASS, merge, phase, or release decision." >/dev/null
+          else
+            gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "ai-awaiting-review" >/dev/null 2>&1 || true
+            gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-label "ai-handoff" >/dev/null
+            gh issue comment "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+              --body "WORK-CLAIM-CLEAR(worker=OpenCode NVIDIA Auxiliary Agent, role=${ROLE}, issue=${ISSUE_NUMBER})"$'\n\n'"AI-HANDOFF: NVIDIA/OpenCode did not produce a complete verifiable ${ROLE} result. The responsible formal Worker should inspect this issue, Actions run, bot comments, commits/branches/PRs and reuse valid work before continuing." >/dev/null
+            exit 1
+          fi
