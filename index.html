@@ -30,32 +30,43 @@
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Phase 1</p>
-            <h2 id="campaign-title">Campaign state shell</h2>
+            <h2 id="campaign-title">Current campaign</h2>
           </div>
           <span id="app-status" class="status" role="status" aria-live="polite">Starting…</span>
         </div>
-        <p>
-          This static client-side shell hosts the deterministic campaign save foundation. Export and import controls are added by the next Phase 1 task.
-        </p>
-        <dl class="foundation-list">
-          <div>
-            <dt>Runtime</dt>
-            <dd>Static browser application</dd>
-          </div>
-          <div>
-            <dt>Authority</dt>
-            <dd>Deterministic simulation</dd>
-          </div>
-          <div>
-            <dt>External AI</dt>
-            <dd>Not required</dd>
-          </div>
+        <p>The visible state below is authoritative only after deterministic simulation validation.</p>
+        <dl class="foundation-list campaign-summary">
+          <div><dt>Campaign</dt><dd id="campaign-id">—</dd></div>
+          <div><dt>Seed</dt><dd id="campaign-seed">—</dd></div>
+          <div><dt>Turn</dt><dd id="campaign-turn">—</dd></div>
+          <div><dt>Character</dt><dd id="character-name">—</dd></div>
+          <div><dt>Rank</dt><dd id="character-rank">—</dd></div>
+          <div><dt>Gold</dt><dd id="character-gold">—</dd></div>
         </dl>
+      </section>
+
+      <section class="panel save-panel" aria-labelledby="save-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Versioned JSON</p>
+            <h2 id="save-title">Save, export, and import</h2>
+          </div>
+          <span id="save-status" class="status" role="status" aria-live="polite">Ready</span>
+        </div>
+        <p>Export produces the supported campaign schema only. Import is parsed and validated before state replacement.</p>
+        <label for="save-json">Campaign JSON</label>
+        <textarea id="save-json" rows="14" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="save-help"></textarea>
+        <p id="save-help" class="help-text">Export fills this field. You can also paste compatible campaign JSON here before importing.</p>
+        <div class="button-row">
+          <button id="export-save" type="button">Export JSON</button>
+          <button id="import-save" type="button">Import JSON</button>
+          <button id="reset-campaign" type="button" class="secondary-button">Reset demo state</button>
+        </div>
       </section>
     </main>
 
     <footer class="app-footer">
-      <p>Early development build · No mandatory backend</p>
+      <p>Early development build · Static client · No mandatory backend or external AI provider</p>
     </footer>
   </div>
 
