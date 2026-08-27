@@ -50,7 +50,7 @@
       "id": "P01-T06",
       "order": 6,
       "title": "Expose Phase 1 save workflow in the public UI",
-      "status": "open",
+      "status": "closed",
       "depends_on": ["P01-T05"],
       "github_issue": 13,
       "acceptance": ["Static UI can export current campaign state as versioned JSON", "Static UI can import a compatible save and visibly restore relevant state", "Invalid/unsupported saves show a clear error without corrupting authoritative state", "UI cannot bypass deterministic simulation validation or expose provider credentials/raw model traffic", "Workflow remains usable on responsive desktop/mobile interface", "Exact committed static candidate is manually testable before release; canonical GitHub Pages publication belongs to P01-T07", "Relevant automated tests and regression pass"]
