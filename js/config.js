@@ -122,3 +122,9 @@ window.Game.Config = {
   CAMERA_DRAG_INERTIA_MIN_VELOCITY: 0.02,
   CAMERA_DRAG_TOUCH_MULTIPLIER: 1.15,
 };
+
+// Load the terrain-boundary patch while HTML parsing is still in progress so
+// its DOMContentLoaded hook is registered before the application initializer.
+if (typeof document !== "undefined" && document.readyState === "loading") {
+  document.write('<script src="js/organic_elevation.js"><\/script>');
+}
