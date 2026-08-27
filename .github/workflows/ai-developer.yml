@@ -14,6 +14,7 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    # Hard ceiling for the whole job, including the optional retry wait.
     timeout-minutes: 10
 
     permissions:
@@ -30,6 +31,8 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenCode
+        id: opencode_first
+        continue-on-error: true
         uses: anomalyco/opencode/github@latest
 
         env:
@@ -59,3 +62,81 @@ jobs:
             Explain clearly what you changed and which tests passed.
 
             Do not modify unrelated files.
+
+      - name: Check whether failure was NVIDIA 503
+        id: retry_check
+        if: steps.opencode_first.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LAST_BOT_COMMENT="$(
+            gh api \
+              "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments?per_page=100" \
+              --jq '[.[] | select(.user.login == "opencode-agent[bot]")] | last | .body // ""'
+          )"
+
+          if printf '%s' "$LAST_BOT_COMMENT" | grep -Eq 'Service temporarily overloaded|"code"[[:space:]]*:[[:space:]]*503'; then
+            echo "retry_503=true" >> "$GITHUB_OUTPUT"
+            echo "NVIDIA 503 overload detected. One clean retry will be attempted after 60 seconds."
+          else
+            echo "retry_503=false" >> "$GITHUB_OUTPUT"
+            echo "Failure is not an NVIDIA 503 overload. No automatic retry will be used."
+          fi
+
+      - name: Wait and reset before NVIDIA 503 retry
+        if: steps.retry_check.outputs.retry_503 == 'true'
+        shell: bash
+        run: |
+          echo "Waiting 60 seconds for NVIDIA capacity to recover..."
+          sleep 60
+
+          echo "Resetting the temporary runner workspace to a clean main branch..."
+          git reset --hard
+          git clean -fd
+          git checkout -B main origin/main
+
+      - name: Retry OpenCode after NVIDIA 503
+        if: steps.retry_check.outputs.retry_503 == 'true'
+        uses: anomalyco/opencode/github@latest
+
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+
+        with:
+          model: nvidia/nvidia/nemotron-3-ultra-550b-a55b
+
+          prompt: |
+            Work on GitHub issue #${{ github.event.issue.number }}.
+
+            This is a clean retry because the previous attempt failed with
+            NVIDIA HTTP 503 Service temporarily overloaded.
+
+            Read the complete issue carefully.
+
+            Inspect the relevant source code.
+
+            Implement only the changes requested by the issue.
+
+            Run the relevant tests.
+
+            If tests fail, diagnose the problem and fix it.
+
+            Do not report success while tests are failing.
+
+            If the implementation is correct and tests pass,
+            create a pull request with the changes.
+
+            Explain clearly what you changed and which tests passed.
+
+            Do not modify unrelated files.
+
+      - name: Fail non-503 OpenCode errors
+        if: steps.opencode_first.outcome == 'failure' && steps.retry_check.outputs.retry_503 != 'true'
+        shell: bash
+        run: |
+          echo "OpenCode failed for a reason other than NVIDIA 503."
+          echo "Automatic retry is intentionally disabled for non-503 errors."
+          exit 1
