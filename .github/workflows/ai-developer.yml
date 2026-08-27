@@ -36,7 +36,7 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
 
         with:
-          model: nvidia/nemotron-3-super-120b-a12b
+          model: nvidia/nvidia/nemotron-3-ultra-550b-a55b
 
           prompt: |
             Work on GitHub issue #${{ github.event.issue.number }}.
