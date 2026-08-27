@@ -254,6 +254,62 @@ The Advisor influences them indirectly through information, the protagonist, rel
 
 # 🗺️ World and Presentation
 
+## 🗺️ Primary Game Surface — Living Strategic World Map
+
+The primary playable surface of The Advisor Game is a persistent,
+living strategic world map presented in an isometric or near-isometric
+style comparable in spatial readability to classic strategy games.
+
+The game must not be presented primarily as a collection of menus,
+cards, dashboards, text panels, disconnected scenes, or static mockups.
+
+The player must be able to observe the evolving game world itself.
+
+The strategic world map must visually represent, as applicable to the
+generated world and current campaign state:
+
+- terrain and elevation;
+- grasslands, mountains, hills, deserts, snow and other biomes;
+- rivers, lakes, coastlines and water;
+- forests, trees and vegetation;
+- roads, paths, bridges and travel connections;
+- villages, towns, cities, castles and other settlements;
+- individual buildings and important structures;
+- ruins, caves, dungeons and landmarks;
+- resources, props and relevant environmental objects;
+- the autonomous main character;
+- other people and world characters where appropriate;
+- animals;
+- fantasy creatures and monsters appropriate to the medieval fantasy
+  setting, including creatures comparable in variety and role to
+  traditional tabletop fantasy worlds;
+- armies, groups, caravans or other strategically relevant entities
+  where appropriate;
+- weather, lighting, fire, smoke, fog, water and other environmental
+  effects where useful.
+
+Characters, creatures, buildings, terrain and objects may use a coherent
+combination of 2D, 2.5D and 3D techniques, but they must appear to inhabit
+the same spatial world.
+
+The strategic map is not decorative background art. It is the visual
+representation of the authoritative simulated world.
+
+Locations, movement, settlements, roads, terrain, discoveries, events,
+characters and world changes represented on the map must correspond to
+simulation state.
+
+As the simulation changes the world, the visible strategic map must
+react accordingly.
+
+The camera and presentation must allow the player to understand where
+the main character is, what surrounds them, what places exist nearby,
+and how the local area relates to the wider world.
+
+Early releases may use simplified or placeholder assets, but they must
+establish and progressively extend this same playable strategic world
+rather than replacing it with disconnected visual prototypes.
+
 ## 🌐 WebGL-Based Mixed 2D / 3D Presentation
 
 The game is a **WebGL-based mixed 2D/3D experience** with an isometric or near-isometric presentation.
