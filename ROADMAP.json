@@ -5,15 +5,15 @@
   "planning_owner": "Planner Worker",
   "planning_basis": "Planner-owned decomposition derived from the current README and repository evidence; README does not prescribe phases, implementation order, architecture, or task decomposition.",
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
-  "active_phase_id": "P01",
+  "active_phase_id": "P02",
   "phase_policy": {
     "single_active_phase": true,
     "release_rule": "Each phase ends with independent verification and a manually usable cumulative public release before the next phase activates.",
     "visual_work_rule": "2D, 3D, WebGL, icon, and interface-design tasks may be created in any phase when current functionality, usability, or an earlier defect requires them; visual work is not forced into a fixed phase merely because it exists in the product direction."
   },
   "phases": [
-    {"id":"P01","title":"Campaign State and Versioned Saves","status":"active","release_gate":"All P01 tasks independently tested; cumulative Phase 1 save workflow manually usable through the public application; verified public build required before P02."},
-    {"id":"P02","title":"Seeded Checks and RNG Contract","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P03."},
+    {"id":"P01","title":"Campaign State and Versioned Saves","status":"completed","release_gate":"Released as v0.1.0-dev.1 after independent exact-candidate regression, live Pages, browser/accessibility, and release verification at commit 189cf46c79cfe52a0b0de15c7b3860437e5f7855."},
+    {"id":"P02","title":"Seeded Checks and RNG Contract","status":"active","release_gate":"Independent tests and regression pass; deterministic seeded checks remain simulation-owned; cumulative application remains manually usable through the public interface; verified phase release required before P03."},
     {"id":"P03","title":"Legal Action Validation","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P04."},
     {"id":"P04","title":"Autonomous Local BOT Core","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P05."},
     {"id":"P05","title":"BOT Memory and Advisor Influence","status":"planned","release_gate":"Independent tests and regression pass; cumulative application remains manually usable through the public interface; verified phase release required before P06."},
