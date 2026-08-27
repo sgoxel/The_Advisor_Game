@@ -1,4 +1,5 @@
 name: Verified Release
+run-name: Verified Release ${{ inputs.release_tag }} @ ${{ inputs.verified_commit }}
 
 on:
   workflow_dispatch:
@@ -24,6 +25,30 @@ on:
       restore_existing_verified:
         description: "Restore an already-published verified release to Pages without changing its tag or GitHub Release"
         required: true
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      verified_commit:
+        description: "Exact 40-character commit SHA independently verified by Tester"
+        required: true
+        type: string
+      release_tag:
+        description: "GitHub Release tag to create or restore"
+        required: true
+        type: string
+      release_name:
+        description: "Human-readable release title"
+        required: false
+        default: ""
+        type: string
+      confirm_verified:
+        description: "Caller confirms independent Tester authorization"
+        required: true
+        type: boolean
+      restore_existing_verified:
+        description: "Restore an already-published verified release to Pages"
+        required: false
         default: false
         type: boolean
 
