@@ -349,19 +349,6 @@ Opening `index.html` through `file://` is best-effort because browsers restrict 
 
 ---
 
-# 🧪 Current Prototype
-
-Implemented today:
-
-- ✅ Seeded 12×12 to 80×80 procedural worlds
-- ✅ WebGL2 isometric renderer with Canvas2D overlays
-- ✅ Terrain, settlements, connected roads, minimap, camera, and path movement
-- ✅ Map data/image import and export tools
-- ✅ English and Turkish localization foundation
-- ✅ Responsive desktop/mobile panels
-- ✅ Static deployment at `https://sgoxel.github.io/The-Advisor-Game/`
-- ✅ Vitest, Playwright, ESLint, JSDoc type checking, and performance checks
-
 > [!WARNING]
 > Current Gold, Health, Stamina, Mana, Character, and Dialogue displays are prototype UI. They are not evidence that the final autonomous Character AI loop, progression, Advisor Instruction Flow, or long-term campaign systems are already implemented. Existing prototype behavior is not automatically a product requirement.
 
@@ -376,75 +363,6 @@ Implemented today:
 [View latest GitHub release](https://github.com/sgoxel/The-Advisor-Game/releases/latest)
 
 </div>
-
-Players need neither Node.js nor a local server. To deploy another copy, publish the repository root through GitHub Pages or another compatible HTTPS static host and keep the directory structure intact.
-
-Node.js 18+ is required only for local development tools and automated tests:
-
-```bash
-npm install
-npm run dev
-```
-
-Useful checks:
-
-```bash
-npm run lint
-npm run typecheck
-npm run test
-npm run test:playwright
-npm run perf
-```
-
----
-
-# 🗂️ Project Map
-
-| Path | Responsibility |
-| --- | --- |
-| `index.html` | Application shell and script order |
-| `js/config.js` | Constants and adjustable limits |
-| `js/state.js` | Shared runtime and campaign state |
-| `js/simulation.js` | Deterministic validation, world simulation, progression, and consequences |
-| `js/character-ai.js` | Shared Character AI contract, LLM adapter, BOT fallback, and output validation |
-| `js/advisor.js` | Player conversation, advisory context, and Advisor-facing interaction systems |
-| `js/advisor-flow.js` | Advisor Instruction Flow model, plain-text generation, validation, and updates |
-| `js/memory.js` | Structured character memory and conversation summarization |
-| `js/rng.js` | Seeded random helpers |
-| `js/topology.js` | Map topology helpers |
-| `js/terrain.js` | Procedural terrain, settlements, and roads |
-| `js/renderer.js` | WebGL/Canvas rendering |
-| `js/input.js` | Camera, pointer, touch, and movement input |
-| `js/ui.js` | DOM presentation, panels, logs, and import/export |
-| `js/app.js` | Startup and orchestration |
-| `locales/` | English and Turkish strings |
-| `tests/` | Unit, browser, visual, and gameplay checks |
-| `LatestRelease/` | Last verified static release snapshot deployed by GitHub Pages |
-| `VERSION` | Concrete release version used by tooling, tags, manifests, and GitHub Releases |
-| `SPEC.md` | Detailed mechanics, architecture, roadmap, and acceptance criteria subordinate to this README |
-
-Modules listed as product direction need not exist in the current prototype yet.
-
----
-
-# 🛣️ Roadmap
-
-Development proceeds through **playable vertical slices** that preserve the autonomous-character concept:
-
-| Stage | Goal |
-| --- | --- |
-| **1. Deterministic Simulation Foundation** | Campaign/world/character state, saves, seeded checks, legal-action validation |
-| **2. Autonomous Local BOT Character** | One complete autonomous character, goals, legal actions, memories, basic Advisor influence, no external LLM dependency |
-| **3. Conversation System** | Dialogue, bounded character context, structured memories, trust, personality, conversation consequences |
-| **4. Advisor Instruction Flow** | Interactive editing, plain-text output, persistence, validation, BOT interpretation |
-| **5. Optional LLM Character Driver** | Standard Character Instructions, roleplay, structured legal actions, conversation/instruction interpretation and safe BOT fallback |
-| **6. Peasant-to-Knight Vertical Progression** | Local economy, employment, relationships, quests, village events, reputation, military entry, early mini-games |
-| **7. Nobility and Political Progression** | Land, settlements, factions, diplomacy, trade, political relationships, court intrigue |
-| **8. Kingdom and Military Systems** | Strategic armies, commanders, wars, treaties, realm economy, succession, major crises |
-| **9. King-to-Emperor Progression** | Multiple kingdoms, imperial politics, large-scale diplomacy, rebellion, legitimacy, administration, end-game crises |
-| **10. Campaign Polish** | Advanced mini-games, 2.5D characters, emotion, audio, regional backgrounds, accessibility, balancing, replayability |
-
-Detailed implementation milestones may live in `SPEC.md`, but they must always conform to this README.
 
 ---
 
