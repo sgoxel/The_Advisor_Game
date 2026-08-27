@@ -27,6 +27,11 @@ a {
   color: inherit;
 }
 
+button,
+textarea {
+  font: inherit;
+}
+
 .skip-link {
   position: fixed;
   top: 0.75rem;
@@ -100,6 +105,14 @@ h2 {
   background: rgba(213, 183, 130, 0.08);
 }
 
+.status[data-state="success"] {
+  border-color: rgba(121, 196, 139, 0.65);
+}
+
+.status[data-state="error"] {
+  border-color: rgba(231, 126, 126, 0.75);
+}
+
 .app-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
@@ -120,6 +133,10 @@ h2 {
   background: linear-gradient(145deg, rgba(89, 63, 32, 0.92), rgba(38, 31, 23, 0.95));
 }
 
+.save-panel {
+  grid-column: 1 / -1;
+}
+
 .foundation-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -133,7 +150,8 @@ h2 {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.foundation-list dt {
+.foundation-list dt,
+label {
   margin-bottom: 0.25rem;
   font-size: 0.78rem;
   color: #d5b782;
@@ -142,6 +160,59 @@ h2 {
 .foundation-list dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.save-panel label {
+  display: block;
+  font-weight: 700;
+}
+
+textarea {
+  width: 100%;
+  min-height: 12rem;
+  resize: vertical;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  color: inherit;
+  background: rgba(5, 5, 5, 0.28);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.4;
+}
+
+textarea:focus,
+button:focus-visible {
+  outline: 3px solid rgba(213, 183, 130, 0.65);
+  outline-offset: 2px;
+}
+
+.help-text {
+  margin: 0.55rem 0 0;
+  color: #b8b2a7;
+  font-size: 0.88rem;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+button {
+  min-height: 44px;
+  border: 1px solid rgba(213, 183, 130, 0.55);
+  border-radius: 0.7rem;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+  color: #16120d;
+  background: #d5b782;
+  font-weight: 700;
+}
+
+.secondary-button {
+  color: #f7f4ec;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .app-footer {
@@ -171,6 +242,10 @@ h2 {
   .foundation-list {
     grid-template-columns: 1fr;
   }
+
+  .save-panel {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 420px) {
@@ -182,6 +257,14 @@ h2 {
   .phase-badge,
   .status {
     align-self: flex-start;
+  }
+
+  .button-row {
+    display: grid;
+  }
+
+  button {
+    width: 100%;
   }
 }
 
