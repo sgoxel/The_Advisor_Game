@@ -9,7 +9,7 @@ test('Phase 1 save workflow works without corrupting state', async ({ page }, te
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('html')).toHaveAttribute('data-app-ready', 'true');
   await expect(page.locator('#app-status')).toHaveText('Ready');
 
@@ -49,7 +49,7 @@ test('Phase 1 save workflow works without corrupting state', async ({ page }, te
 });
 
 test('Phase 1 layout remains usable and has no serious accessibility violations', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('html')).toHaveAttribute('data-app-ready', 'true');
 
   for (const selector of ['#export-save', '#import-save', '#reset-campaign', '#save-json']) {
