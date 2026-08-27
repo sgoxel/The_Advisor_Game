@@ -1,0 +1,61 @@
+name: AI Developer
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: ai-developer
+  cancel-in-progress: false
+
+jobs:
+  solve-issue:
+    if: github.event.label.name == 'ai-ready'
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    permissions:
+      id-token: write
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+
+        with:
+          model: nvidia/nemotron-3-super-120b-a12b
+
+          prompt: |
+            Work on GitHub issue #${{ github.event.issue.number }}.
+
+            Read the complete issue carefully.
+
+            Inspect the relevant source code.
+
+            Implement only the changes requested by the issue.
+
+            Run the relevant tests.
+
+            If tests fail, diagnose the problem and fix it.
+
+            Do not report success while tests are failing.
+
+            If the implementation is correct and tests pass,
+            create a pull request with the changes.
+
+            Explain clearly what you changed and which tests passed.
+
+            Do not modify unrelated files.
