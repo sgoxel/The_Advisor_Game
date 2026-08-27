@@ -90,9 +90,9 @@ export function initializeApp(documentRef = globalThis.document) {
     status.dataset.state = 'ready';
   }
 
-  const workflow = bindSaveWorkflow(documentRef);
+  bindSaveWorkflow(documentRef);
   documentRef.documentElement.dataset.appReady = 'true';
-  return { ready: true, phase: APP_FOUNDATION.phase, workflow };
+  return { ready: true, phase: APP_FOUNDATION.phase };
 }
 
 if (typeof document !== 'undefined') {
