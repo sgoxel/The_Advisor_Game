@@ -65,6 +65,12 @@ jobs:
       issue_number: ${{ steps.check.outputs.issue_number }}
       started_at: ${{ steps.check.outputs.started_at }}
     steps:
+      - name: Wait for routing metadata to settle
+        shell: bash
+        run: |
+          echo "ai-ready received. Waiting 30 seconds before eligibility checks so labels, dependencies, and claims can settle..."
+          sleep 30
+
       - name: Verify issue is free, unblocked, and has exactly one NVIDIA role
         id: check
         env:
