@@ -2,6 +2,7 @@ import { exportCampaignState } from './campaign-save.js';
 import { importCampaignState } from './campaign-import.js';
 import { createPhase1Simulation } from './phase1-runtime.js';
 import { bindLocalization } from './i18n.js';
+import { resolveSeededSimulationCheck } from './seeded-check-resolution.js';
 
 export const APP_FOUNDATION = Object.freeze({
   phase: 'P02',
@@ -54,7 +55,60 @@ function setWorkflowError(documentRef, error, t) {
   status.dataset.state = 'error';
 }
 
-export function bindSaveWorkflow(documentRef, simulation = createPhase1Simulation(), t = (key) => key) {
+export function createPublicSeededCheckInput(state, checkId = 'p02-public-check-a') {
+  return Object.freeze({
+    worldSeed: state.world.seed,
+    generationVersion: state.world.generationVersion,
+    checkId,
+    context: Object.freeze({
+      campaignId: state.campaignId,
+      turn: state.world.turn,
+      characterId: state.character.id,
+    }),
+  });
+}
+
+export function bindSeededCheckWorkflow(documentRef, simulation, t = (key) => key) {
+  const runButton = documentRef.getElementById?.('run-seeded-check');
+  const checkSelect = documentRef.getElementById?.('check-identity');
+
+  const renderContext = () => {
+    const state = simulation.getCampaignState();
+    const input = createPublicSeededCheckInput(state, checkSelect?.value || 'p02-public-check-a');
+    setText(documentRef, 'check-seed', input.worldSeed);
+    setText(documentRef, 'check-generation', input.generationVersion);
+    setText(documentRef, 'check-turn', input.context.turn);
+    setText(documentRef, 'check-result', '—');
+    setText(documentRef, 'check-percentile', '—');
+    return input;
+  };
+
+  const run = () => {
+    const input = createPublicSeededCheckInput(
+      simulation.getCampaignState(),
+      checkSelect?.value || 'p02-public-check-a'
+    );
+    const result = resolveSeededSimulationCheck(input);
+    setText(documentRef, 'check-seed', input.worldSeed);
+    setText(documentRef, 'check-generation', input.generationVersion);
+    setText(documentRef, 'check-turn', input.context.turn);
+    setText(documentRef, 'check-result', result.rollUint32);
+    setText(documentRef, 'check-percentile', result.percentile);
+    setLocalizedStatus(documentRef, 'check-status', 'status.checkResolved', 'success', t);
+    return result;
+  };
+
+  checkSelect?.addEventListener?.('change', () => {
+    renderContext();
+    setLocalizedStatus(documentRef, 'check-status', 'status.checkReady', 'ready', t);
+  });
+  runButton?.addEventListener?.('click', run);
+  renderContext();
+
+  return { run, renderContext };
+}
+
+export function bindSaveWorkflow(documentRef, simulation = createPhase1Simulation(), t = (key) => key, onStateChange = () => {}) {
   const saveText = documentRef.getElementById?.('save-json');
   const exportButton = documentRef.getElementById?.('export-save');
   const importButton = documentRef.getElementById?.('import-save');
@@ -77,6 +131,7 @@ export function bindSaveWorkflow(documentRef, simulation = createPhase1Simulatio
       }
       importCampaignState(saveText.value, simulation);
       render();
+      onStateChange();
       setLocalizedStatus(documentRef, 'save-status', 'status.imported', 'success', t);
     } catch (error) {
       setWorkflowError(documentRef, error, t);
@@ -86,6 +141,7 @@ export function bindSaveWorkflow(documentRef, simulation = createPhase1Simulatio
   resetButton?.addEventListener?.('click', () => {
     simulation.resetCampaignState();
     render();
+    onStateChange();
     setLocalizedStatus(documentRef, 'save-status', 'status.reset', 'ready', t);
   });
 
@@ -98,8 +154,11 @@ export function initializeApp(documentRef = globalThis.document) {
   }
 
   const localization = bindLocalization(documentRef, documentRef.documentElement?.lang ?? 'en');
+  const simulation = createPhase1Simulation();
+  const checkWorkflow = bindSeededCheckWorkflow(documentRef, simulation, localization.t);
   setLocalizedStatus(documentRef, 'app-status', 'status.ready', 'ready', localization.t);
-  bindSaveWorkflow(documentRef, createPhase1Simulation(), localization.t);
+  setLocalizedStatus(documentRef, 'check-status', 'status.checkReady', 'ready', localization.t);
+  bindSaveWorkflow(documentRef, simulation, localization.t, checkWorkflow.renderContext);
 
   if (documentRef.documentElement?.dataset) {
     documentRef.documentElement.dataset.appReady = 'true';
