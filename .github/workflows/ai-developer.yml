@@ -127,7 +127,7 @@ jobs:
             CLASSIFIER_USER="Classify this GitHub issue.\n\nTITLE:\n${TITLE}\n\nBODY:\n${BODY}"
 
             PAYLOAD="$(jq -n \
-              --arg model 'nvidia/nemotron-3-ultra-550b-a55b' \
+              --arg model 'nvidia/nvidia/nemotron-3-super-120b-a12b' \
               --arg system "$CLASSIFIER_SYSTEM" \
               --arg user "$CLASSIFIER_USER" \
               '{model:$model,temperature:0,max_tokens:16,messages:[{role:"system",content:$system},{role:"user",content:$user}]}')"
