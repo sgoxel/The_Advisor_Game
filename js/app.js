@@ -1,10 +1,11 @@
 import { exportCampaignState } from './campaign-save.js';
 import { importCampaignState } from './campaign-import.js';
 import { createPhase1Simulation } from './phase1-runtime.js';
+import { bindLocalization } from './i18n.js';
 
 export const APP_FOUNDATION = Object.freeze({
-  phase: 'P01',
-  title: 'Campaign State and Versioned Saves',
+  phase: 'P02',
+  title: 'Seeded Checks and RNG Contract',
   runtime: 'static-client',
   coreRule: 'Player advises -> AI Character decides -> Simulation validates -> World reacts.'
 });
@@ -22,7 +23,7 @@ export function summarizeCampaign(state) {
 }
 
 function setText(documentRef, id, value) {
-  const element = documentRef.getElementById(id);
+  const element = documentRef.getElementById?.(id);
   if (element) element.textContent = String(value);
 }
 
@@ -37,43 +38,55 @@ export function renderCampaignSummary(documentRef, state) {
   return summary;
 }
 
-function setWorkflowStatus(documentRef, message, state = 'ready') {
-  const status = documentRef.getElementById('save-status');
+function setLocalizedStatus(documentRef, id, key, state, t) {
+  const status = documentRef.getElementById?.(id);
   if (!status) return;
-  status.textContent = message;
+  status.dataset.i18nStatus = key;
+  status.textContent = t(key);
   status.dataset.state = state;
 }
 
-export function bindSaveWorkflow(documentRef, simulation = createPhase1Simulation()) {
-  const saveText = documentRef.getElementById('save-json');
-  const exportButton = documentRef.getElementById('export-save');
-  const importButton = documentRef.getElementById('import-save');
-  const resetButton = documentRef.getElementById('reset-campaign');
+function setWorkflowError(documentRef, error, t) {
+  const status = documentRef.getElementById?.('save-status');
+  if (!status) return;
+  delete status.dataset.i18nStatus;
+  status.textContent = error instanceof Error ? error.message : t('status.importFailed');
+  status.dataset.state = 'error';
+}
+
+export function bindSaveWorkflow(documentRef, simulation = createPhase1Simulation(), t = (key) => key) {
+  const saveText = documentRef.getElementById?.('save-json');
+  const exportButton = documentRef.getElementById?.('export-save');
+  const importButton = documentRef.getElementById?.('import-save');
+  const resetButton = documentRef.getElementById?.('reset-campaign');
 
   const render = () => renderCampaignSummary(documentRef, simulation.getCampaignState());
   render();
 
-  exportButton?.addEventListener('click', () => {
+  exportButton?.addEventListener?.('click', () => {
     const json = exportCampaignState(simulation.getCampaignState());
     if (saveText) saveText.value = json;
-    setWorkflowStatus(documentRef, 'Exported versioned campaign JSON.', 'success');
+    setLocalizedStatus(documentRef, 'save-status', 'status.exported', 'success', t);
   });
 
-  importButton?.addEventListener('click', () => {
+  importButton?.addEventListener?.('click', () => {
     try {
-      if (!saveText || !saveText.value.trim()) throw new Error('Paste campaign JSON before importing.');
+      if (!saveText || !saveText.value.trim()) {
+        setLocalizedStatus(documentRef, 'save-status', 'status.importPrompt', 'error', t);
+        return;
+      }
       importCampaignState(saveText.value, simulation);
       render();
-      setWorkflowStatus(documentRef, 'Campaign imported after simulation validation.', 'success');
+      setLocalizedStatus(documentRef, 'save-status', 'status.imported', 'success', t);
     } catch (error) {
-      setWorkflowStatus(documentRef, error instanceof Error ? error.message : 'Campaign import failed.', 'error');
+      setWorkflowError(documentRef, error, t);
     }
   });
 
-  resetButton?.addEventListener('click', () => {
+  resetButton?.addEventListener?.('click', () => {
     simulation.resetCampaignState();
     render();
-    setWorkflowStatus(documentRef, 'Campaign reset to the Phase 1 demo state.', 'ready');
+    setLocalizedStatus(documentRef, 'save-status', 'status.reset', 'ready', t);
   });
 
   return { simulation, render };
@@ -84,14 +97,13 @@ export function initializeApp(documentRef = globalThis.document) {
     return { ready: false, reason: 'document-unavailable' };
   }
 
-  const status = documentRef.getElementById('app-status');
-  if (status) {
-    status.textContent = 'Ready';
-    status.dataset.state = 'ready';
-  }
+  const localization = bindLocalization(documentRef, documentRef.documentElement?.lang ?? 'en');
+  setLocalizedStatus(documentRef, 'app-status', 'status.ready', 'ready', localization.t);
+  bindSaveWorkflow(documentRef, createPhase1Simulation(), localization.t);
 
-  bindSaveWorkflow(documentRef);
-  documentRef.documentElement.dataset.appReady = 'true';
+  if (documentRef.documentElement?.dataset) {
+    documentRef.documentElement.dataset.appReady = 'true';
+  }
   return { ready: true, phase: APP_FOUNDATION.phase };
 }
 
