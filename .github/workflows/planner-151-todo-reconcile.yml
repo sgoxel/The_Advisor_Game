@@ -1,0 +1,68 @@
+name: Planner 151 TODO Reconcile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/planner-151-todo-reconcile.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile-todo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconcile TODO to Admin 150 and Planner 151
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          path = Path('TODO.json')
+          text = path.read_text(encoding='utf-8')
+          json.loads(text)
+
+          replacements = [
+            ('"planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28-relevance-bounded-lazy-mobile-performance"',
+             '"planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-29-seinen-old-school-rpg-art-direction"'),
+            ('"readme_commit": "9325b9079a94c3508bff39b3d0379490318edb39"',
+             '"readme_commit": "8e2e3810f03798ae28e0a3c263c1f05ce5b6893d"'),
+            ('"planner_issues": [105, 118, 132, 137, 139, 143]',
+             '"planner_issues": [105, 118, 132, 137, 139, 143, 151]'),
+            ('"admin_issues": [103, 106, 117, 131, 136, 138, 142]',
+             '"admin_issues": [103, 106, 117, 131, 136, 138, 142, 150]'),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected exactly one TODO marker: {old}')
+              text = text.replace(old, new, 1)
+
+          old_gate = '    {"id":"R02-T11","order":32,"title":"Authoritative unbounded hierarchical living world and campaign state phase gate","status":"ready","depends_on":["R02-T01","R02-T02","R02-T03","R02-T04","R02-T05","R02-T06","R02-T07","R02-T08","R02-T09","R02-T10","R02-T12","R02-T13","R02-T14","R02-T15","R02-T16","R02-T17","R02-T18","R02-T19","R02-T20","R02-T21","R02-T22","R02-T23","R02-T24","R02-T25","R02-T26","R02-T27","R02-T28","R02-T29","R02-T30","R02-T31","R02-T32"],"github_issue":93,"role_owner":"Tester role","issue_state":"open_ready_unclaimed"}'
+          new_tasks = '    {"id":"R02-T33","order":32,"title":"Define original seinen-inspired old-school PC RPG art-direction foundation","status":"ready","depends_on":["R02-T19","R02-T26"],"github_issue":152,"role_owner":"Designer role","issue_state":"open_ready_unclaimed","admin_issue":150,"planner_issue":151},\n    {"id":"R02-T11","order":33,"title":"Authoritative unbounded hierarchical living world and campaign state phase gate","status":"blocked","depends_on":["R02-T01","R02-T02","R02-T03","R02-T04","R02-T05","R02-T06","R02-T07","R02-T08","R02-T09","R02-T10","R02-T12","R02-T13","R02-T14","R02-T15","R02-T16","R02-T17","R02-T18","R02-T19","R02-T20","R02-T21","R02-T22","R02-T23","R02-T24","R02-T25","R02-T26","R02-T27","R02-T28","R02-T29","R02-T30","R02-T31","R02-T32","R02-T33"],"github_issue":93,"role_owner":"Tester role","issue_state":"open_blocked_visual_direction"}'
+          if text.count(old_gate) != 1:
+              raise SystemExit('Expected exactly one pre-Admin-150 R02 phase gate line; refusing stale overwrite.')
+          text = text.replace(old_gate, new_tasks, 1)
+
+          parsed = json.loads(text)
+          assert parsed['active_phase_id'] == 'R02'
+          ids = [task['id'] for task in parsed['tasks']]
+          assert len(ids) == len(set(ids))
+          task = next(t for t in parsed['tasks'] if t['id'] == 'R02-T33')
+          gate = next(t for t in parsed['tasks'] if t['id'] == 'R02-T11')
+          assert task['github_issue'] == 152 and task['status'] == 'ready'
+          assert gate['status'] == 'blocked' and 'R02-T33' in gate['depends_on']
+          path.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name "The Advisor Game Worker"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add TODO.json
+          git diff --cached --quiet && { echo 'No TODO change produced'; exit 1; }
+          git commit -m "Reconcile R02 visual-direction task state (#151)"
+          git push origin HEAD:main
