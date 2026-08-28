@@ -1,0 +1,73 @@
+name: R01 Cumulative Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/**'
+      - 'locales/**'
+      - 'textures/**'
+      - 'assets/**'
+      - 'tests/browser/**'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r01-cumulative-regression.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/**'
+      - 'locales/**'
+      - 'textures/**'
+      - 'assets/**'
+      - 'tests/browser/**'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r01-cumulative-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cumulative-r01-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+
+      - name: Record exact candidate SHA
+        run: echo "R01 cumulative candidate ${GITHUB_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run complete R01 cumulative browser regression
+        run: >-
+          npx playwright test
+          tests/browser/r01-baseline.spec.mjs
+          tests/browser/r01-organic-elevation.spec.mjs
+          tests/browser/r01-readability.spec.mjs
+          tests/browser/r01-cumulative.spec.mjs
+
+      - name: Upload cumulative Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r01-cumulative-evidence-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
