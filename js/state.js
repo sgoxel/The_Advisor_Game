@@ -227,12 +227,13 @@ window.Game = window.Game || {};
       const normalizedRow = [];
       for (let col = 0; col < cols; col += 1) {
         const tile = sourceRow[col] && typeof sourceRow[col] === 'object' ? sourceRow[col] : {};
+        const tags = normalizeTags(tile.tags);
         normalizedRow.push({
           type: typeof tile.type === 'string' && tile.type ? tile.type : 'grass',
           elevation: finiteNumber(tile.elevation, 0),
-          tags: normalizeTags(tile.tags),
-          blocked: tile.blocked === true,
-          obstacle: tile.obstacle === true
+          tags,
+          blocked: tile.blocked === true || tags.includes('blocked'),
+          obstacle: tile.obstacle === true || tags.includes('obstacle')
         });
       }
       normalized.push(normalizedRow);
@@ -286,12 +287,81 @@ window.Game = window.Game || {};
     return JSON.stringify(normalizeAuthoritativeState(candidate));
   }
 
+  let lastGeneratedInitialization = null;
+
+  function materializeAuthoritativeTerrain(terrain) {
+    return terrain.map((row) => row.map((tile) => ({
+      type: tile.type,
+      elevation: tile.elevation,
+      tags: new Set(tile.tags),
+      blocked: tile.blocked,
+      obstacle: tile.obstacle
+    })));
+  }
+
+  function bindGeneratedWorldInitialization() {
+    const Terrain = window.Game.Terrain;
+    const RNG = window.Game.RNG;
+    if (!Terrain || !RNG || typeof Terrain.generateWorld !== 'function') return false;
+    if (Terrain.generateWorld.__r02AuthoritativeInitialization === true) return true;
+
+    const generateWorld = Terrain.generateWorld.bind(Terrain);
+    const wrappedGenerateWorld = function (seedInput, colsInput, rowsInput) {
+      const canonicalSeed = RNG.normalizeSeed(seedInput, Config.DEFAULT_SEED);
+      const cols = Math.max(1, integer(colsInput, Config.DEFAULT_COLS));
+      const rows = Math.max(1, integer(rowsInput, Config.DEFAULT_ROWS));
+      const generated = generateWorld(canonicalSeed, cols, rows);
+      const fallbackStart = {
+        row: Math.floor(rows / 2),
+        col: Math.floor(cols / 2)
+      };
+      const playerStart = generated && generated.playerStart ? generated.playerStart : fallbackStart;
+      const authoritative = deepFreeze(normalizeAuthoritativeState({
+        world: {
+          seed: canonicalSeed,
+          rows,
+          cols,
+          terrain: generated && generated.grid,
+          protagonist: playerStart
+        }
+      }));
+
+      lastGeneratedInitialization = authoritative;
+      window.Game.State.world.seed = authoritative.world.seed;
+      window.Game.State.world.rows = authoritative.world.rows;
+      window.Game.State.world.cols = authoritative.world.cols;
+
+      return {
+        ...(generated || {}),
+        grid: materializeAuthoritativeTerrain(authoritative.world.terrain),
+        playerStart: {
+          row: authoritative.world.protagonist.row,
+          col: authoritative.world.protagonist.col
+        }
+      };
+    };
+
+    Object.defineProperty(wrappedGenerateWorld, '__r02AuthoritativeInitialization', {
+      value: true,
+      enumerable: false
+    });
+    Terrain.generateWorld = wrappedGenerateWorld;
+    return true;
+  }
+
+  function getLastGeneratedInitialization() {
+    return lastGeneratedInitialization;
+  }
+
   window.Game.AuthoritativeState = Object.freeze({
     schemaVersion: AUTH_SCHEMA_VERSION,
     authority: 'simulation',
     fields: AUTH_FIELD_PATHS,
     capture: captureAuthoritativeState,
     normalize: normalizeAuthoritativeState,
-    canonicalStringify
+    canonicalStringify,
+    getLastGeneratedInitialization
   });
+
+  window.addEventListener('DOMContentLoaded', bindGeneratedWorldInitialization);
 })();
