@@ -1,16 +1,17 @@
 name: NVIDIA Auxiliary Metrics
 
 on:
-  issues:
-    types: [labeled]
+  workflow_run:
+    workflows: ["AI Developer"]
+    types: [completed]
 
 concurrency:
-  group: nvidia-metrics-${{ github.event.issue.number }}
+  group: nvidia-metrics-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
   cancel-in-progress: false
 
 jobs:
   record:
-    if: github.event_name == 'issues' && github.event.action == 'labeled' && (github.event.label.name == 'ai-awaiting-review' || github.event.label.name == 'ai-handoff')
+    if: github.event.workflow_run.event == 'issues'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -24,49 +25,41 @@ jobs:
       - name: Record and aggregate NVIDIA auxiliary metric
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          STATUS_LABEL: ${{ github.event.label.name }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
         shell: bash
         run: |
           set -euo pipefail
 
-          # Finalize adds the terminal routing label before its final audit comment.
-          # Give GitHub a moment to make all comments and PR metadata visible.
-          sleep 3
-
-          COMMENTS="$(
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" |
+          # The composite action anchors run identity in the central ledger before
+          # calling OpenCode. Runs that never reached NVIDIA have no marker and are
+          # intentionally excluded from auxiliary execution statistics.
+          LEDGER_COMMENTS="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${LEDGER_ISSUE}/comments?per_page=100" |
               jq -s 'add'
           )"
 
           RUN_LINE="$(
-            printf '%s' "$COMMENTS" |
-              jq -r '[.[] | select((.body // "") | startswith("AI AUXILIARY RUN: "))] | last | .body // ""'
+            printf '%s' "$LEDGER_COMMENTS" |
+              jq -r --arg run "$RUN_ID" --arg attempt "$RUN_ATTEMPT" \
+                '[.[] | select((.body // "") | startswith("AI AUXILIARY RUN: ")) | select((.body // "") | contains("run_id=" + $run + " ")) | select((.body // "") | contains("run_attempt=" + $attempt + " "))] | last | .body // ""'
           )"
 
           if [ -z "$RUN_LINE" ]; then
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-              --body "AI AUXILIARY METRICS WARNING: terminal NVIDIA status was observed but no instrumented AI AUXILIARY RUN marker was found. This execution cannot be added safely to the centralized ledger." >/dev/null
+            echo "AI Developer run ${RUN_ID}/${RUN_ATTEMPT} has no NVIDIA run marker; no metric is required."
             exit 0
           fi
 
-          RUN_ID="$(printf '%s' "$RUN_LINE" | sed -n 's/.*run_id=\([0-9][0-9]*\).*/\1/p')"
-          RUN_ATTEMPT="$(printf '%s' "$RUN_LINE" | sed -n 's/.*run_attempt=\([0-9][0-9]*\).*/\1/p')"
+          ISSUE_NUMBER="$(printf '%s' "$RUN_LINE" | sed -n 's/.* issue=\([0-9][0-9]*\).*/\1/p')"
           ROLE="$(printf '%s' "$RUN_LINE" | sed -n 's/.* role=\([^ ]*\) model=.*/\1/p')"
           MODEL="$(printf '%s' "$RUN_LINE" | sed -n 's/.* model=\([^ ]*\) started_at=.*/\1/p')"
           STARTED_AT="$(printf '%s' "$RUN_LINE" | sed -n 's/.* started_at=\([^ ]*\)$/\1/p')"
 
-          if [ -z "$RUN_ID" ] || [ -z "$RUN_ATTEMPT" ] || [ -z "$ROLE" ] || [ -z "$MODEL" ] || [ -z "$STARTED_AT" ]; then
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-              --body "AI AUXILIARY METRICS WARNING: the latest AI AUXILIARY RUN marker is malformed and cannot be aggregated safely: ${RUN_LINE}" >/dev/null
+          if [ -z "$ISSUE_NUMBER" ] || [ -z "$ROLE" ] || [ -z "$MODEL" ] || [ -z "$STARTED_AT" ]; then
+            gh issue comment "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" \
+              --body "AI AUXILIARY METRICS WARNING: run ${RUN_ID}/${RUN_ATTEMPT} has a malformed run marker and cannot be aggregated safely: ${RUN_LINE}" >/dev/null
             exit 0
           fi
-
-          case "$STATUS_LABEL" in
-            ai-awaiting-review) STATUS="success" ;;
-            ai-handoff) STATUS="handoff" ;;
-            *) exit 0 ;;
-          esac
 
           case "$ROLE" in
             coder) REQUIRED_PREFIX="AI CODER EVIDENCE:" ;;
@@ -74,10 +67,57 @@ jobs:
             tester) REQUIRED_PREFIX="AI TEST EVIDENCE:" ;;
             *)
               gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-                --body "AI AUXILIARY METRICS WARNING: unsupported role '${ROLE}' in run marker; ledger record skipped." >/dev/null
+                --body "AI AUXILIARY METRICS WARNING: unsupported role '${ROLE}' in run ${RUN_ID}/${RUN_ATTEMPT}; ledger record skipped." >/dev/null
               exit 0
               ;;
           esac
+
+          # Avoid duplicate records if the metrics workflow itself is re-run.
+          EXISTING_METRIC_COUNT="$(
+            printf '%s' "$LEDGER_COMMENTS" |
+              jq --argjson run "$RUN_ID" --argjson attempt "$RUN_ATTEMPT" \
+                '[.[] | select((.body // "") | startswith("AI AUXILIARY METRIC: ")) | (.body | sub("^AI AUXILIARY METRIC: "; "") | fromjson?) | select(. != null) | select(.run_id == $run and .run_attempt == $attempt)] | length'
+          )"
+          if [ "$EXISTING_METRIC_COUNT" -gt 0 ]; then
+            echo "Metric already exists for AI Developer run ${RUN_ID}/${RUN_ATTEMPT}; skipping duplicate."
+            exit 0
+          fi
+
+          # workflow_run fires only after AI Developer has finished, so terminal
+          # evidence, labels and role-job metadata are stable here.
+          COMMENTS="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" |
+              jq -s 'add'
+          )"
+          ISSUE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}")"
+
+          TERMINAL_SUCCESS_COUNT="$(
+            printf '%s' "$COMMENTS" |
+              jq --arg start "$STARTED_AT" --arg role "$ROLE" \
+                '[.[] | select(.created_at >= $start) | select((.body // "") | contains("AI AUXILIARY COMPLETE: role=" + $role + "."))] | length'
+          )"
+          TERMINAL_HANDOFF_COUNT="$(
+            printf '%s' "$COMMENTS" |
+              jq --arg start "$STARTED_AT" \
+                '[.[] | select(.created_at >= $start) | select((.body // "") | contains("AI-HANDOFF: NVIDIA/OpenCode did not produce a complete verifiable"))] | length'
+          )"
+
+          if [ "$TERMINAL_SUCCESS_COUNT" -gt 0 ]; then
+            STATUS="success"
+          elif [ "$TERMINAL_HANDOFF_COUNT" -gt 0 ]; then
+            STATUS="handoff"
+          else
+            LABELS="$(printf '%s' "$ISSUE_JSON" | jq -r '.labels[].name')"
+            if printf '%s\n' "$LABELS" | grep -Fxq 'ai-awaiting-review'; then
+              STATUS="success"
+            elif printf '%s\n' "$LABELS" | grep -Fxq 'ai-handoff'; then
+              STATUS="handoff"
+            else
+              gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+                --body "AI AUXILIARY METRICS WARNING: AI Developer run ${RUN_ID}/${RUN_ATTEMPT} completed but no terminal auxiliary success/handoff state can be established safely." >/dev/null
+              exit 0
+            fi
+          fi
 
           RUN_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}")"
           HEAD_SHA="$(printf '%s' "$RUN_JSON" | jq -r '.head_sha // "unknown"')"
@@ -216,7 +256,7 @@ jobs:
           cat > /tmp/nvidia-ledger.md <<EOF
           # NVIDIA Agent Metrics Ledger
 
-          Central observability dashboard for auxiliary NVIDIA Nemotron Coder/Reviewer/Tester runs. The append-only comments on this issue are the machine-readable source records; this body is regenerated from those records after every instrumented terminal run.
+          Central observability dashboard for auxiliary NVIDIA Nemotron Coder/Reviewer/Tester runs. The append-only AI AUXILIARY METRIC comments on this issue are the machine-readable source records; this body is regenerated from those records after every instrumented AI Developer completion.
 
           ## Aggregate statistics
 
@@ -254,6 +294,7 @@ jobs:
           - coder_completed is true only for role=coder when the terminal status is success, required AI CODER EVIDENCE exists, no direct AI-HANDOFF comment exists for that run, and at least one open PR references the source issue.
           - coder_completed is auxiliary completion evidence only. It is not independent Tester PASS, merge approval, phase approval, or release approval.
           - Each metric record contains the source issue, exact workflow run/job, head SHA, model, timestamps, duration, retry use, evidence URLs, handoff evidence, and Coder PR evidence.
+          - AI Developer runs that never invoke NVIDIA are intentionally excluded because they have no AI AUXILIARY RUN marker.
 
           Last regenerated: ${ENDED_AT}
           EOF
