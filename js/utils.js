@@ -35,5 +35,17 @@ window.Game.Utils = {
     const b = Math.min(255, (num & 255) + amount);
 
     return `rgb(${r}, ${g}, ${b})`;
+  },
+
+  loadScriptOnce(src, id) {
+    if (id && document.getElementById(id)) return;
+    const script = document.createElement("script");
+    if (id) script.id = id;
+    script.src = src;
+    script.async = false;
+    document.head.appendChild(script);
   }
 };
+
+// R02 uses a standalone module so NPC simulation/presentation remains separate from generic helpers.
+window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
