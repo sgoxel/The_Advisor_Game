@@ -1,0 +1,51 @@
+name: R02 Region Navigation Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/region_navigation.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-region-navigation.spec.mjs'
+      - '.github/workflows/r02-region-navigation-verification.yml'
+  pull_request:
+    paths:
+      - 'js/region_navigation.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-region-navigation.spec.mjs'
+      - '.github/workflows/r02-region-navigation-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  region-navigation-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Run adjacent-region living-map regression
+        run: npx playwright test tests/browser/r02-region-navigation.spec.mjs
+      - name: Re-run world delta persistence regression
+        run: npx playwright test tests/browser/r02-world-delta-persistence.spec.mjs
+      - name: Re-run deterministic multi-region terrain regression
+        run: npx playwright test tests/browser/r02-multi-region-terrain.spec.mjs
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-t18-region-navigation-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
