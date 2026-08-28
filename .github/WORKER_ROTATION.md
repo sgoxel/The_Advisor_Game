@@ -70,6 +70,18 @@ Coder, Designer, and Reviewer changes still require independent Tester verificat
 
 Worker #6 and Worker #7 are separate persistent identities for this rule even though neither has a recurring routine. Work produced manually as Worker #6 cannot later be independently approved by Worker #6, and the same applies to Worker #7. Worker #6 may independently verify Worker #7 work, and Worker #7 may independently verify Worker #6 work, when all normal Tester requirements are satisfied.
 
+## Tester revision resolution
+
+A `TESTER REVISION REQUEST` remains unresolved until its responsible role has accepted/rejected it under normal governance and, when a fix is required, a different independent Tester retests the corrected exact state.
+
+A successful independent revision retest must include this machine-readable line in the same PASS comment:
+
+`T-REV-RESOLVED(request=<request-comment-id>, tested_ref=<exact-commit-sha>)`
+
+`request` is the GitHub issue-comment id of the specific `TESTER REVISION REQUEST`. `tested_ref` is the exact corrected commit SHA independently tested. A generic `TESTER PASS`, a Coder/Designer/Reviewer self-check, or a marker posted before the referenced request does not resolve that revision.
+
+Before closing an issue, re-fetch its comments and confirm every `TESTER REVISION REQUEST` has a later matching `T-REV-RESOLVED(...)` marker. The repository T-REV closure guard performs the same deterministic check on issue-close events and reopens an issue if an unresolved Tester revision remains. The guard is a process safety net only; it never creates Tester PASS, phase approval, or release approval.
+
 ## Claims and overlap
 
 Workers may overlap in time. `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership are the collision controls.
