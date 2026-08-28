@@ -4,10 +4,16 @@ on:
   push:
     branches: [main]
     paths:
+      - 'opencode.json'
+      - '.github/AI_AUXILIARY_RULES.md'
+      - '.github/actions/opencode-nvidia/action.yml'
       - '.github/workflows/ai-developer.yml'
       - '.github/workflows/ai-developer-static-verification.yml'
   pull_request:
     paths:
+      - 'opencode.json'
+      - '.github/AI_AUXILIARY_RULES.md'
+      - '.github/actions/opencode-nvidia/action.yml'
       - '.github/workflows/ai-developer.yml'
       - '.github/workflows/ai-developer-static-verification.yml'
   workflow_dispatch:
@@ -23,11 +29,12 @@ jobs:
       - name: Checkout exact repository state
         uses: actions/checkout@v6
 
-      - name: Parse workflow YAML
+      - name: Parse workflow YAML and OpenCode JSON
         shell: bash
         run: |
           set -euo pipefail
-          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ai-developer.yml"); YAML.load_file(".github/workflows/ai-developer-static-verification.yml")'
+          ruby -e 'require "yaml"; YAML.load_file(".github/actions/opencode-nvidia/action.yml"); YAML.load_file(".github/workflows/ai-developer.yml"); YAML.load_file(".github/workflows/ai-developer-static-verification.yml")'
+          python -m json.tool opencode.json >/dev/null
 
       - name: Verify exact evidence-prefix parsing cases
         shell: bash
@@ -57,27 +64,67 @@ jobs:
 
           assert_count 1 'AI TEST EVIDENCE: PASS' 'AI TEST EVIDENCE:'
           assert_count 1 '**AI TEST EVIDENCE: PASS**' 'AI TEST EVIDENCE:'
+          assert_count 1 'AI REVIEW EVIDENCE: PASS' 'AI REVIEW EVIDENCE:'
           assert_count 1 '**AI REVIEW EVIDENCE: PASS**' 'AI REVIEW EVIDENCE:'
-          assert_count 1 '**AI CODER EVIDENCE: complete**' 'AI CODER EVIDENCE:'
           assert_count 0 'Unrelated note mentioning AI TEST EVIDENCE: PASS' 'AI TEST EVIDENCE:'
           assert_count 0 '**NOT AI TEST EVIDENCE: PASS**' 'AI TEST EVIDENCE:'
 
-      - name: Guard finalization semantics
+      - name: Guard Super Reviewer/Tester-only policy
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          import json
 
-          text = Path('.github/workflows/ai-developer.yml').read_text(encoding='utf-8')
-          required = [
-              'REQUIRED_PREFIX="AI CODER EVIDENCE:"',
+          workflow = Path('.github/workflows/ai-developer.yml').read_text(encoding='utf-8')
+          action = Path('.github/actions/opencode-nvidia/action.yml').read_text(encoding='utf-8')
+          rules = Path('.github/AI_AUXILIARY_RULES.md').read_text(encoding='utf-8')
+          config = json.loads(Path('opencode.json').read_text(encoding='utf-8'))
+
+          required_workflow = [
+              'nvidia/nemotron-3-super-120b-a12b',
+              'NVIDIA Coder routing is disabled by Admin policy',
+              'reviewer|tester)',
               'REQUIRED_PREFIX="AI REVIEW EVIDENCE:"',
               'REQUIRED_PREFIX="AI TEST EVIDENCE:"',
               'startswith("AI-HANDOFF:")',
               'startswith($prefix)) or ((.body // "") | startswith("**" + $prefix))',
+              'needs: [triage, reviewer, tester]',
           ]
-          missing = [item for item in required if item not in text]
+          missing = [item for item in required_workflow if item not in workflow]
           if missing:
-              raise SystemExit(f'Missing expected finalization guard(s): {missing}')
+              raise SystemExit(f'Missing expected Reviewer/Tester-only workflow guard(s): {missing}')
+
+          forbidden_workflow = [
+              '\n  coder:\n',
+              'needs.coder',
+              'REQUIRED_PREFIX="AI CODER EVIDENCE:"',
+              "role == 'coder'",
+              'coder|reviewer|tester) ;;',
+          ]
+          present = [item for item in forbidden_workflow if item in workflow]
+          if present:
+              raise SystemExit(f'Forbidden NVIDIA Coder execution path remains: {present}')
+
+          if 'nvidia/nvidia/nemotron-3-super-120b-a12b' not in action:
+              raise SystemExit('Composite action default is not Nemotron 3 Super.')
+          if 'only Reviewer and Tester are executable' not in action:
+              raise SystemExit('Composite action does not reject unsupported roles.')
+
+          if config.get('model') != 'nvidia/nvidia/nemotron-3-super-120b-a12b':
+              raise SystemExit('OpenCode default model is not Nemotron 3 Super.')
+          models = config.get('provider', {}).get('nvidia', {}).get('models', {})
+          if list(models) != ['nvidia/nemotron-3-super-120b-a12b']:
+              raise SystemExit(f'Unexpected active NVIDIA provider model set: {list(models)}')
+
+          required_rules = [
+              'NVIDIA may execute only as **Reviewer** or **Tester**',
+              'never acts as Coder',
+              'Formal Planner Workers alone may change',
+              'recommendations are advisory evidence only',
+          ]
+          missing_rules = [item for item in required_rules if item not in rules]
+          if missing_rules:
+              raise SystemExit(f'Missing subordinate routing guidance: {missing_rules}')
           PY
