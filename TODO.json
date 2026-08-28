@@ -169,9 +169,16 @@
     {
       "github_issue": 55,
       "title": "Infrastructure — Add auxiliary NVIDIA Coder/Reviewer/Tester routing",
-      "status": "ai_awaiting_formal_review",
+      "status": "formal_partial_verification_waiting_missing_runtime_coverage",
       "release_blocking": false,
-      "note": "Supporting infrastructure is non-release-blocking; auxiliary NVIDIA evidence never grants phase/release authority."
+      "formal_verification": {
+        "result": "PARTIAL_NOT_PASS",
+        "current_reviewer_path": "proven",
+        "failure_handoff_cleanup": "proven",
+        "successful_coder_path": "not_yet_proven",
+        "post_fix_tester_success_path": "not_yet_proven"
+      },
+      "note": "Formal Tester consumed the prior auxiliary review state and kept #55 open because a successful/verifiable NVIDIA Coder success path and a fresh post-fix successful Tester evidence route remain objectively unproven. No current repository defect or mandatory Coder continuation is recorded. Do not repeatedly route #55 as Reviewer merely to create duplicate evidence; future NVIDIA routing must add missing objective coverage through an otherwise eligible focused issue. Supporting infrastructure remains non-release-blocking."
     }
   ]
 }
