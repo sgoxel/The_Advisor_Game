@@ -8,19 +8,147 @@
   "status": "active",
   "planning_epoch": "post-admin-reset-2026-08-27",
   "tasks": [
-    {"id":"R02-T01","order":1,"title":"Define authoritative campaign-state boundary","status":"work_claimed","github_issue":83,"role_owner":"Coder Worker","claim":{"worker":"Coder Worker #2","role":"Coder","source":"first valid formal claim after NVIDIA ai-handoff"},"reused_collision_refs":["1f58a35405c35d60b6e28259c4c63819fd618a64","1beb2856e8c3f388c6d715c53452e7048aea9caa","f4101a6f72f5bff8f9ea548800e34619d926dc6b"],"authoritative_continuation_ref":"64ed817f295c08fd26543bd30916f240a96f3013","note":"NVIDIA Coder run 33158758156 ended cancelled with no verifiable result. Coder Worker #2 posted the first valid formal takeover claim and remains authoritative owner. Coder Worker #1's later claim was collision-produced but is now explicitly cleared; its scoped commits are preserved as ancestors because Coder #2 has reused/built on them rather than reverting valid descendant work. Coder #2 must finish the scoped implementation/audit and clear its claim when complete. #83 must not be routed back to NVIDIA. Independent Tester PASS remains required."},
-    {"id":"R02-T02","order":2,"title":"Define deterministic seed and RNG derivation contract","status":"ai_running","github_issue":84,"role_owner":"Coder Worker","auxiliary_nvidia":{"role":"coder","status":"running","workflow_run":33162483631,"model":"nvidia/nvidia/nemotron-3-super-120b-a12b"},"note":"Auxiliary NVIDIA Coder currently holds ai-running/work-claimed. Formal Workers must not duplicate while this reservation is live; any resulting implementation still requires formal review and independent Tester verification."},
-    {"id":"R02-T03","order":3,"title":"Design save/load and seed-status UX for strategic map","status":"completed","github_issue":85,"role_owner":"Graphic Designer Worker","issue_state":"closed_completed","implementation_refs":["3a2360e8cb2cfb490a67ecd723206f82130afd1f","3c68eeb2955616c0e2804b61b5b9662c45040c16"],"independent_test":{"result":"PASS","accepted_ref":"3c68eeb2955616c0e2804b61b5b9662c45040c16","supplemental_run":33162493075,"supplemental_job":98820039297,"supplemental_artifact":9682220901,"note":"Dedicated Tester independently inspected the Designer spec/vector prototype against #85 acceptance criteria; no T-REV required. Coder integration must follow the written 44 CSS-px touch-target rule rather than copying compact prototype SVG units literally."}},
-    {"id":"R02-T04","order":4,"title":"Compose deterministic authoritative world-state initialization","status":"blocked","depends_on":["R02-T01","R02-T02"],"github_issue":86,"role_owner":"Coder Worker"},
-    {"id":"R02-T05","order":5,"title":"Add versioned campaign save and export serialization","status":"blocked","depends_on":["R02-T04"],"github_issue":87,"role_owner":"Coder Worker"},
-    {"id":"R02-T06","order":6,"title":"Add safe campaign import and load validation","status":"blocked","depends_on":["R02-T05"],"github_issue":88,"role_owner":"Coder Worker"},
-    {"id":"R02-T07","order":7,"title":"Integrate seed and persistence controls into living map","status":"blocked","depends_on":["R02-T03","R02-T05","R02-T06"],"github_issue":89,"role_owner":"Coder Worker"},
-    {"id":"R02-T08","order":8,"title":"Add deterministic save/load round-trip regression","status":"blocked","depends_on":["R02-T04","R02-T05","R02-T06"],"github_issue":90,"role_owner":"Coder Worker"},
-    {"id":"R02-T09","order":9,"title":"Refine integrated persistence states across responsive layouts","status":"blocked","depends_on":["R02-T07"],"github_issue":91,"role_owner":"Graphic Designer Worker"},
-    {"id":"R02-T10","order":10,"title":"Add cumulative browser and accessibility persistence regression","status":"blocked","depends_on":["R02-T07","R02-T08","R02-T09"],"github_issue":92,"role_owner":"Coder Worker"},
-    {"id":"R02-T11","order":11,"title":"Authoritative world and campaign state phase gate","status":"blocked","depends_on":["R02-T01","R02-T02","R02-T03","R02-T04","R02-T05","R02-T06","R02-T07","R02-T08","R02-T09","R02-T10"],"github_issue":93,"role_owner":"Tester Worker","note":"Dedicated Tester alone may approve R02 phase/release under normal autonomous progression."}
+    {
+      "id": "R02-T01",
+      "order": 1,
+      "title": "Define authoritative campaign-state boundary",
+      "status": "implementation_complete_awaiting_independent_test",
+      "github_issue": 83,
+      "role_owner": "Coder Worker",
+      "implementation_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
+      "verification_evidence": {
+        "coder_self_check_only": true,
+        "r02_run": 33163373934,
+        "r02_job": 98822902537,
+        "artifact": 9682601721,
+        "r01_cumulative_run": 33163373986,
+        "r01_browser_run": 33163373915
+      },
+      "note": "Coder Worker #2 completed the formal continuation after the cancelled NVIDIA handoff and resolved the prior formal-Coder collision. Its claim is cleared. Implementation is not independently PASSed yet; independent Tester verification remains required before this task is completed."
+    },
+    {
+      "id": "R02-T02",
+      "order": 2,
+      "title": "Define deterministic seed and RNG derivation contract",
+      "status": "work_claimed",
+      "github_issue": 84,
+      "role_owner": "Coder Worker",
+      "claim": {
+        "worker": "Coder Worker #2",
+        "role": "Coder",
+        "source": "formal takeover after terminal NVIDIA ai-handoff"
+      },
+      "nvidia_handoff": {
+        "workflow_run": 33162483631,
+        "job": 98820153137,
+        "conclusion": "cancelled",
+        "evidence_count": 0,
+        "coder_completed": false
+      },
+      "note": "NVIDIA/OpenCode produced no complete verifiable Coder result. Formal Coder Worker #2 has taken ownership and must continue without routing this handoff back to NVIDIA. Independent Tester PASS remains required after implementation."
+    },
+    {
+      "id": "R02-T03",
+      "order": 3,
+      "title": "Design save/load and seed-status UX for strategic map",
+      "status": "completed",
+      "github_issue": 85,
+      "role_owner": "Graphic Designer Worker",
+      "issue_state": "closed_completed",
+      "implementation_refs": [
+        "3a2360e8cb2cfb490a67ecd723206f82130afd1f",
+        "3c68eeb2955616c0e2804b61b5b9662c45040c16"
+      ],
+      "independent_test": {
+        "result": "PASS",
+        "accepted_ref": "3c68eeb2955616c0e2804b61b5b9662c45040c16",
+        "supplemental_run": 33162493075,
+        "supplemental_job": 98820039297,
+        "supplemental_artifact": 9682220901,
+        "note": "Dedicated Tester independently inspected the Designer spec/vector prototype against #85 acceptance criteria; no T-REV required. Coder integration must follow the written 44 CSS-px touch-target rule rather than copying compact prototype SVG units literally."
+      }
+    },
+    {
+      "id": "R02-T04",
+      "order": 4,
+      "title": "Compose deterministic authoritative world-state initialization",
+      "status": "blocked",
+      "depends_on": ["R02-T01", "R02-T02"],
+      "github_issue": 86,
+      "role_owner": "Coder Worker"
+    },
+    {
+      "id": "R02-T05",
+      "order": 5,
+      "title": "Add versioned campaign save and export serialization",
+      "status": "blocked",
+      "depends_on": ["R02-T04"],
+      "github_issue": 87,
+      "role_owner": "Coder Worker"
+    },
+    {
+      "id": "R02-T06",
+      "order": 6,
+      "title": "Add safe campaign import and load validation",
+      "status": "blocked",
+      "depends_on": ["R02-T05"],
+      "github_issue": 88,
+      "role_owner": "Coder Worker"
+    },
+    {
+      "id": "R02-T07",
+      "order": 7,
+      "title": "Integrate seed and persistence controls into living map",
+      "status": "blocked",
+      "depends_on": ["R02-T03", "R02-T05", "R02-T06"],
+      "github_issue": 89,
+      "role_owner": "Coder Worker"
+    },
+    {
+      "id": "R02-T08",
+      "order": 8,
+      "title": "Add deterministic save/load round-trip regression",
+      "status": "blocked",
+      "depends_on": ["R02-T04", "R02-T05", "R02-T06"],
+      "github_issue": 90,
+      "role_owner": "Coder Worker"
+    },
+    {
+      "id": "R02-T09",
+      "order": 9,
+      "title": "Refine integrated persistence states across responsive layouts",
+      "status": "blocked",
+      "depends_on": ["R02-T07"],
+      "github_issue": 91,
+      "role_owner": "Graphic Designer Worker"
+    },
+    {
+      "id": "R02-T10",
+      "order": 10,
+      "title": "Add cumulative browser and accessibility persistence regression",
+      "status": "blocked",
+      "depends_on": ["R02-T07", "R02-T08", "R02-T09"],
+      "github_issue": 92,
+      "role_owner": "Coder Worker"
+    },
+    {
+      "id": "R02-T11",
+      "order": 11,
+      "title": "Authoritative world and campaign state phase gate",
+      "status": "blocked",
+      "depends_on": ["R02-T01", "R02-T02", "R02-T03", "R02-T04", "R02-T05", "R02-T06", "R02-T07", "R02-T08", "R02-T09", "R02-T10"],
+      "github_issue": 93,
+      "role_owner": "Tester Worker",
+      "note": "Dedicated Tester alone may approve R02 phase/release under normal autonomous progression."
+    }
   ],
   "supporting_work": [
-    {"github_issue":55,"title":"Infrastructure — Add auxiliary NVIDIA Coder/Reviewer/Tester routing","status":"ai_awaiting_formal_review","release_blocking":false,"note":"Supporting infrastructure is non-release-blocking; auxiliary NVIDIA evidence never grants phase/release authority."}
+    {
+      "github_issue": 55,
+      "title": "Infrastructure — Add auxiliary NVIDIA Coder/Reviewer/Tester routing",
+      "status": "ai_awaiting_formal_review",
+      "release_blocking": false,
+      "note": "Supporting infrastructure is non-release-blocking; auxiliary NVIDIA evidence never grants phase/release authority."
+    }
   ]
 }
