@@ -1,0 +1,33 @@
+name: Playwright Workflow Integrity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'playwright.config.mjs'
+      - 'scripts/check-playwright-workflow-projects.mjs'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'playwright.config.mjs'
+      - 'scripts/check-playwright-workflow-projects.mjs'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-project-selectors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned Playwright dependency
+        run: npm install --ignore-scripts
+      - name: Validate configured workflow project selectors
+        run: node scripts/check-playwright-workflow-projects.mjs --self-test
