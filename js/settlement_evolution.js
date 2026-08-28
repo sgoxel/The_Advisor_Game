@@ -3,6 +3,7 @@
   window.Game = window.Game || {};
   const Game = window.Game;
   const VERSION = 'r02-settlement-evolution-v1';
+  const GAME_MINUTES_PER_DAY = 1440;
 
   function hash32(text) {
     let hash = 2166136261 >>> 0;
@@ -63,6 +64,7 @@
       status: 'stable',
       economicFunction: trade >= 55 ? 'trade' : resources >= 58 ? 'resource' : security >= 62 ? 'defensive' : 'local-service',
       lastGameMinute: 0,
+      pendingGameMinutes: 0,
       accumulatedHistory: Object.freeze({ growth: 0, decline: 0, damage: 0, recovery: 0 }),
       presentationAuthority: false
     });
@@ -73,6 +75,8 @@
     if (prior.authority !== 'simulation' || String(prior.settlementId) !== base.settlementId) throw new TypeError('Compatible Simulation-owned settlement development state is required.');
     const metrics = prior.metrics || {};
     const history = prior.accumulatedHistory || {};
+    const pendingGameMinutes = Math.max(0, Number(prior.pendingGameMinutes) || 0);
+    if (!Number.isFinite(pendingGameMinutes) || pendingGameMinutes >= GAME_MINUTES_PER_DAY) throw new TypeError('Settlement pending game minutes must be within one day.');
     return Object.freeze({
       ...base,
       base: false,
@@ -87,6 +91,7 @@
         abandonment: clamp(metrics.abandonment ?? base.metrics.abandonment)
       }),
       lastGameMinute: Math.max(0, Number(prior.lastGameMinute) || 0),
+      pendingGameMinutes,
       accumulatedHistory: Object.freeze({
         growth: Math.max(0, Number(history.growth) || 0),
         decline: Math.max(0, Number(history.decline) || 0),
@@ -116,7 +121,10 @@
     const prior = normalizePrior(base, options.priorState || null);
     const targetMinute = options.campaignMinutes === undefined ? currentMinutes() : Number(options.campaignMinutes);
     if (!Number.isFinite(targetMinute) || targetMinute < prior.lastGameMinute) throw new RangeError('Settlement evolution cannot move backwards.');
-    const elapsedDays = Math.floor((targetMinute - prior.lastGameMinute) / 1440);
+    const newlyObservedMinutes = targetMinute - prior.lastGameMinute;
+    const accumulatedMinutes = prior.pendingGameMinutes + newlyObservedMinutes;
+    const elapsedDays = Math.floor(accumulatedMinutes / GAME_MINUTES_PER_DAY);
+    const pendingGameMinutes = accumulatedMinutes - elapsedDays * GAME_MINUTES_PER_DAY;
     const refinement = Game.WorldHierarchy.refinementInput(seed, regionX, regionY, targetMinute, options.persistentHistory || {});
     const aggregate = refinement.settlement?.aggregate || refinement.region.aggregate;
     const hazardPressure = clamp(Number(options.hazardPressure || 0));
@@ -130,6 +138,7 @@
     const change = Math.trunc((net / 100) * dailyScale);
     const recovery = Math.trunc(((Number(aggregate.security || 0) + constructionSupport) / 200) * dailyScale);
     const damageGain = Math.trunc(((warPressure + hazardPressure + historyDamage) / 300) * dailyScale);
+    const fortificationGain = dailyScale > 0 ? Math.trunc((constructionSupport + Math.max(0, warPressure - 35)) / 35) : 0;
     const metrics = {
       population: clamp(prior.metrics.population + change - Math.trunc(damageGain / 2)),
       prosperity: clamp(prior.metrics.prosperity + change - damageGain),
@@ -137,7 +146,7 @@
       trade: clamp(prior.metrics.trade + Math.trunc(change / 2) - Math.trunc(damageGain / 2)),
       resources: clamp(prior.metrics.resources + Math.trunc(change / 3) - Math.trunc(damageGain / 2)),
       damage: clamp(prior.metrics.damage + damageGain - recovery),
-      fortification: clamp(prior.metrics.fortification + Math.trunc((constructionSupport + Math.max(0, warPressure - 35)) / 35)),
+      fortification: clamp(prior.metrics.fortification + fortificationGain),
       abandonment: clamp(prior.metrics.abandonment + Math.max(0, -change) + Math.trunc(damageGain / 2) - Math.trunc(recovery / 2))
     };
     const status = outcomeStatus(metrics, change - damageGain + recovery);
@@ -161,6 +170,7 @@
       status,
       economicFunction: metrics.trade >= 62 ? 'trade' : metrics.resources >= 62 ? 'resource' : metrics.fortification >= 65 ? 'defensive' : base.economicFunction,
       lastGameMinute: targetMinute,
+      pendingGameMinutes: Number(pendingGameMinutes.toFixed(6)),
       elapsedDaysApplied: elapsedDays,
       boundedCatchUp: true,
       localTicksReplayed: 0,
