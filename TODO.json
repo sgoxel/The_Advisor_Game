@@ -6,8 +6,8 @@
   "phase_title": "Authoritative Unbounded World and Campaign State",
   "phase_issue": 82,
   "status": "active",
-  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28",
-  "readme_reconciliation": {"readme_commit":"64819e9d1ee0725a91df83ddce971f8038ee114f","planner_issue":105,"admin_issues":[103,106]},
+  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28-worker-governance",
+  "readme_reconciliation": {"readme_commit":"f0a65387344c444acbfd0f287236016ea6829cd2","planner_issue":105,"admin_issues":[103,106],"governance_issue":97},
   "tasks": [
     {"id":"R02-T01","order":1,"title":"Define authoritative campaign-state boundary","status":"completed","github_issue":83,"role_owner":"Coder role","issue_state":"closed_completed","implementation_ref":"c5273b0c30a1370dfdb73e6a5b1a479f7c600f77","independent_test":{"result":"PASS","tested_ref":"c5273b0c30a1370dfdb73e6a5b1a479f7c600f77","run":33163373934,"job":98822902537,"artifact":9682601721}},
     {"id":"R02-T02","order":2,"title":"Define deterministic seed and RNG derivation contract","status":"completed","github_issue":84,"role_owner":"Coder role","issue_state":"closed_completed","implementation_refs":["67b252f4d7cd5a82e94a828b96358ea5ae65ef3d","8c182c8272d28923142c7b310aa77ea60ff097f4","eddcdf8b5f0a205c29d23045aaf9c4285714853d"],"independent_test":{"result":"PASS","tested_ref":"eddcdf8b5f0a205c29d23045aaf9c4285714853d","run":33166302222,"job":98832425073,"artifact":9683767822}},
