@@ -58,4 +58,5 @@ window.Game.Utils.loadScriptOnce("js/ecology.js", "r02EcologyModule");
 window.Game.Utils.loadScriptOnce("js/world_hierarchy.js", "r02WorldHierarchyModule");
 window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeographyModule");
 window.Game.Utils.loadScriptOnce("js/settlement_evolution.js", "r02SettlementEvolutionModule");
+window.Game.Utils.loadScriptOnce("js/relevance_bounded_compute.js", "r02RelevanceBoundedComputeModule");
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
