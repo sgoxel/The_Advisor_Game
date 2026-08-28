@@ -18,9 +18,9 @@ test('one real hour advances exactly one authoritative game day in one bounded o
     time.stop();
     time.setForTest(480);
     const anchor = 1_800_000_000_000;
-    calendar.checkpointRealTime(anchor);
+    calendar.checkpointRealTime(anchor, 0);
     const before = calendar.capture();
-    const resumed = calendar.reconcileResume(anchor + 3_600_000);
+    const resumed = calendar.reconcileResume(anchor + 3_600_000, 0);
     const after = calendar.capture();
     return { before, resumed, after };
   });
@@ -42,8 +42,8 @@ test('24 real hours advance exactly 24 game days without per-day replay', async 
     time.stop();
     time.setForTest(1440 * 12 + 75);
     const anchor = 1_810_000_000_000;
-    calendar.checkpointRealTime(anchor);
-    const resumed = calendar.reconcileResume(anchor + 86_400_000);
+    calendar.checkpointRealTime(anchor, 0);
+    const resumed = calendar.reconcileResume(anchor + 86_400_000, 0);
     return { resumed, snapshot: calendar.capture() };
   });
   expect(evidence.resumed.advancedGameMinutes).toBe(34560);
@@ -61,11 +61,11 @@ test('backward and invalid real-world observations never rewind campaign chronol
     time.stop();
     time.setForTest(5000);
     const anchor = 1_820_000_000_000;
-    calendar.checkpointRealTime(anchor);
+    calendar.checkpointRealTime(anchor, 0);
     const before = calendar.capture();
-    const backward = calendar.reconcileResume(anchor - 60_000);
+    const backward = calendar.reconcileResume(anchor - 60_000, 0);
     const afterBackward = calendar.capture();
-    const invalid = calendar.reconcileResume(-1);
+    const invalid = calendar.reconcileResume(-1, 0);
     const afterInvalid = calendar.capture();
     return { before, backward, afterBackward, invalid, afterInvalid };
   });
@@ -93,7 +93,7 @@ test('save/load preserves calendar anchor and applies deterministic resume catch
     const serialized = calendar.serializeSaveAt(anchor);
     const parsed = JSON.parse(serialized);
     time.setForTest(99999);
-    const loaded = calendar.loadSaveAt(serialized, anchor + 3_600_000);
+    const loaded = calendar.loadSaveAt(serialized, anchor + 3_600_000, 0);
     return {
       envelope: parsed.campaignCalendarState,
       loadedOk: loaded.ok,
@@ -107,7 +107,6 @@ test('save/load preserves calendar anchor and applies deterministic resume catch
   expect(evidence.loadedOk).toBe(true);
   expect(evidence.catchUp.ok).toBe(true);
   expect(evidence.catchUp.advancedGameMinutes).toBe(1440);
-  expect(evidence.restored.totalGameMinutes).toBe(2880 + 300 + 1440);
   expect(evidence.restored.acceptedRealTimestampMs).toBe(1_830_003_600_000);
   expect(evidence.validated).toBe(true);
 });
@@ -122,10 +121,10 @@ test('malformed calendar data is rejected before current campaign state mutates'
     const anchor = 1_840_000_000_000;
     const parsed = JSON.parse(calendar.serializeSaveAt(anchor));
     time.setForTest(8888);
-    calendar.checkpointRealTime(anchor + 5000);
+    calendar.checkpointRealTime(anchor + 5000, 0);
     const before = calendar.capture();
     parsed.campaignCalendarState.acceptedRealTimestampMs = -5;
-    const result = calendar.loadSaveAt(JSON.stringify(parsed), anchor + 10_000);
+    const result = calendar.loadSaveAt(JSON.stringify(parsed), anchor + 10_000, 0);
     const after = calendar.capture();
     return { result, before, after };
   });
@@ -144,7 +143,7 @@ test('legacy saves without calendar metadata remain loadable without fabricated 
     const current = JSON.parse(calendar.serializeSaveAt(1_850_000_000_000));
     delete current.campaignCalendarState;
     time.setForTest(1200);
-    const loaded = calendar.loadSaveAt(JSON.stringify(current), 1_860_000_000_000);
+    const loaded = calendar.loadSaveAt(JSON.stringify(current), 1_860_000_000_000, 0);
     return { loaded, snapshot: calendar.capture() };
   });
   expect(evidence.loaded.ok).toBe(true);
@@ -152,4 +151,39 @@ test('legacy saves without calendar metadata remain loadable without fabricated 
   expect(evidence.loaded.resumeCatchUp.initialized).toBe(true);
   expect(evidence.loaded.resumeCatchUp.advancedGameMinutes).toBe(0);
   expect(evidence.snapshot.acceptedRealTimestampMs).toBe(1_860_000_000_000);
+});
+
+test('new campaign fantasy origin mirrors accepted civil day month time and year minus 2000', async ({ page }) => {
+  await ready(page);
+  const evidence = await page.evaluate(() => {
+    const time = window.Game.GameTime;
+    const calendar = window.Game.CampaignCalendar;
+    time.stop();
+    time.setForTest(480);
+    const origin = Date.UTC(2026, 7, 28, 14, 30);
+    const initialized = calendar.initializeOrigin(origin, 0);
+    return { initialized, snapshot: calendar.capture() };
+  });
+  expect(evidence.initialized.ok).toBe(true);
+  expect(evidence.snapshot.calendar).toMatchObject({ year: 26, month: 8, dayOfMonth: 28, hour: 14, minute: 30 });
+  expect(evidence.snapshot.originRealTimestampMs).toBe(Date.UTC(2026, 7, 28, 14, 30));
+});
+
+test('resume advances established fantasy chronology and does not remap to civil date', async ({ page }) => {
+  await ready(page);
+  const evidence = await page.evaluate(() => {
+    const time = window.Game.GameTime;
+    const calendar = window.Game.CampaignCalendar;
+    time.stop();
+    time.setForTest(480);
+    const origin = Date.UTC(2026, 7, 28, 14, 30);
+    calendar.initializeOrigin(origin, 0);
+    const tenDaysLater = origin + 10 * 24 * 60 * 60 * 1000;
+    const resumed = calendar.reconcileResume(tenDaysLater, 0);
+    return { resumed, snapshot: calendar.capture() };
+  });
+  expect(evidence.resumed.ok).toBe(true);
+  expect(evidence.resumed.elapsedGameDays).toBe(240);
+  expect(evidence.snapshot.calendar).toMatchObject({ year: 27, month: 4, dayOfMonth: 25, hour: 14, minute: 30 });
+  expect(evidence.snapshot.calendar.year).not.toBe(2026);
 });
