@@ -72,12 +72,13 @@
     const now = currentGameMinute();
     const last = prior.lastSimulatedGameMinute;
     const elapsed = last === null ? 0 : Math.max(0, now - last);
-    return writeProgression(regionX, regionY, {
+    const progression = writeProgression(regionX, regionY, {
       mode: 'active-high-detail',
       lastSimulatedGameMinute: now,
       totalElapsedGameMinutes: prior.totalElapsedGameMinutes + elapsed,
       coarseTicks: prior.coarseTicks
     });
+    return Object.freeze({ ...progression, advancedGameMinutes: elapsed });
   }
 
   function progressInactive(regionXInput, regionYInput, targetGameMinuteInput = null) {
@@ -90,12 +91,13 @@
     if (target < baseline) throw new RangeError('Region time cannot move backwards.');
     const elapsed = target - baseline;
     const coarseTicks = prior.coarseTicks + Math.floor(elapsed / COARSE_STEP_MINUTES);
-    return writeProgression(regionX, regionY, {
+    const progression = writeProgression(regionX, regionY, {
       mode: 'inactive-aggregate',
       lastSimulatedGameMinute: target,
       totalElapsedGameMinutes: prior.totalElapsedGameMinutes + elapsed,
       coarseTicks
     });
+    return Object.freeze({ ...progression, advancedGameMinutes: elapsed });
   }
 
   function leaveActiveRegion(regionXInput, regionYInput) {
@@ -104,14 +106,14 @@
 
   function returnToRegion(regionXInput, regionYInput) {
     const { regionX, regionY } = coordinates(regionXInput, regionYInput);
-    const before = progressInactive(regionX, regionY);
+    const progressed = progressInactive(regionX, regionY);
     const reconstructed = Game.WorldDeltaPersistence.reconstructRegion(seed(), regionX, regionY);
     const active = markActive(regionX, regionY);
     return Object.freeze({
       authority: 'simulation',
       regionX,
       regionY,
-      elapsedGameMinutes: Math.max(0, active.totalElapsedGameMinutes - (before.totalElapsedGameMinutes - Math.max(0, before.totalElapsedGameMinutes))),
+      elapsedGameMinutes: progressed.advancedGameMinutes,
       progression: active,
       region: reconstructed
     });
