@@ -12,12 +12,13 @@ window.Game = window.Game || {};
 
     const style = document.createElement('style');
     style.textContent = `
-      .persistence-tools{display:flex;align-items:center;gap:6px;margin-left:auto;padding:4px 6px;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(16,24,34,.78);backdrop-filter:blur(4px);min-height:44px}
+      .persistence-tools{display:flex;align-items:center;gap:6px;margin-left:auto;padding:4px 6px;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(16,24,34,.78);backdrop-filter:blur(4px);min-height:44px;max-width:100%;box-sizing:border-box}
       .persistence-seed{display:flex;align-items:center;gap:4px;min-width:0}
       .persistence-seed-value{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 12px/1.2 system-ui,sans-serif}
-      .persistence-status{display:flex;align-items:center;gap:5px;min-width:72px;font:600 12px/1.2 system-ui,sans-serif}
+      .persistence-status{display:flex;align-items:center;gap:5px;min-width:72px;padding:0 6px;border-radius:999px;background:rgba(255,255,255,.06);white-space:nowrap;font:600 12px/1.2 system-ui,sans-serif}
       .persistence-status-symbol{width:10px;height:10px;border:2px solid currentColor;border-radius:50%;box-sizing:border-box}
       .persistence-action{min-width:44px;min-height:44px;padding:7px 10px;border:1px solid rgba(255,255,255,.28);border-radius:7px;background:rgba(255,255,255,.08);color:inherit;font:600 12px/1.2 system-ui,sans-serif;cursor:pointer}
+      .persistence-action:disabled{opacity:.52;cursor:not-allowed}
       .persistence-action:focus-visible{outline:2px solid currentColor;outline-offset:2px}
       .persistence-overlay{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(4,8,12,.52)}
       .persistence-overlay[hidden]{display:none}
@@ -25,9 +26,10 @@ window.Game = window.Game || {};
       .persistence-sheet h2{margin:0 0 12px;font-size:20px}.persistence-sheet p{margin:8px 0;line-height:1.4}
       .persistence-sheet-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.persistence-sheet-actions .persistence-action{flex:1 1 140px}
       .persistence-file{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-      .persistence-result{border-left:3px solid currentColor;padding:8px 10px;margin:12px 0;background:rgba(255,255,255,.06)}
+      .persistence-result{min-height:38px;box-sizing:border-box;border-left:3px solid currentColor;border-radius:0 7px 7px 0;padding:8px 10px;margin:12px 0;background:rgba(255,255,255,.06)}
       .persistence-meta{font-size:12px;opacity:.86;overflow-wrap:anywhere}
-      @media(max-width:720px){.persistence-tools{position:absolute;left:8px;right:8px;top:58px;z-index:30;margin:0;justify-content:space-between}.persistence-seed-value{max-width:32vw}.persistence-overlay{align-items:flex-end;padding:0}.persistence-sheet{width:100%;max-height:72vh;border-radius:14px 14px 0 0;padding:16px}.persistence-sheet-actions{display:grid;grid-template-columns:1fr}.persistence-sheet-actions .persistence-action{width:100%}}
+      @media(max-width:720px){.persistence-tools{position:absolute;left:8px;right:8px;top:58px;z-index:30;margin:0;justify-content:flex-start;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}.persistence-seed{flex:0 1 auto}.persistence-seed-value{max-width:28vw}.persistence-status,.persistence-action{flex:0 0 auto}.persistence-overlay{align-items:flex-end;padding:0}.persistence-sheet{width:100%;max-height:72vh;border-radius:14px 14px 0 0;padding:16px}.persistence-sheet-actions{display:grid;grid-template-columns:1fr}.persistence-sheet-actions .persistence-action{width:100%}}
+      @media(max-width:420px){.persistence-tools{left:6px;right:6px}.persistence-seed-value{max-width:24vw}.persistence-action{padding-inline:8px}}
       @media(max-width:720px) and (orientation:landscape){.persistence-overlay{align-items:stretch;justify-content:flex-end;background:rgba(4,8,12,.38)}.persistence-sheet{width:min(440px,64vw);max-height:none;border-radius:12px 0 0 12px}}
       @media(prefers-reduced-motion:reduce){.persistence-tools,.persistence-sheet{scroll-behavior:auto}}
     `;
