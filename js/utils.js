@@ -32,7 +32,7 @@ window.Game.Utils = {
 
     const r = Math.min(255, (num >> 16) + amount);
     const g = Math.min(255, ((num >> 8) & 255) + amount);
-    const b = Math.min(255, (num & 255) + amount);
+    const b = Math.min(255, num & 255);
 
     return `rgb(${r}, ${g}, ${b})`;
   },
@@ -58,3 +58,4 @@ window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
 window.Game.Utils.loadScriptOnce("js/ecology.js", "r02EcologyModule");
 window.Game.Utils.loadScriptOnce("js/world_hierarchy.js", "r02WorldHierarchyModule");
 window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeographyModule");
+window.Game.Utils.loadScriptOnce("js/settlement_evolution.js", "r02SettlementEvolutionModule");
