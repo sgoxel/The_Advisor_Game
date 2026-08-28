@@ -47,5 +47,6 @@ window.Game.Utils = {
   }
 };
 
-// R02 uses a standalone module so NPC simulation/presentation remains separate from generic helpers.
+// R02 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
+window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
