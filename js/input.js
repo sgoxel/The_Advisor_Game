@@ -1,7 +1,7 @@
 /* ROAD_PATCH_V2: diagonal connectivity + color fix */
 /*
   FILE PURPOSE:
-  Handle mouse and keyboard input for camera, tile picking, zoom, and movement/pathfinding.
+  Handle mouse and keyboard input for camera, tile picking, zoom, and non-binding path preview.
 */
 
 window.Game = window.Game || {};
@@ -181,18 +181,6 @@ window.Game = window.Game || {};
     return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
   }
 
-  function startMoveAlongPath(path) {
-    const player = State.world.player;
-    if (!path || path.length < 2) return false;
-    player.pathQueue = path.slice(1);
-    player.moving = false;
-    player.progress = 1;
-    player.startRow = player.row;
-    player.startCol = player.col;
-    advanceToNextQueuedStep(performance.now());
-    return true;
-  }
-
   function advanceToNextQueuedStep(now) {
     const player = State.world.player;
     if (!player.pathQueue || !player.pathQueue.length) {
@@ -212,7 +200,6 @@ window.Game = window.Game || {};
     player.moving = true;
     return true;
   }
-
 
   function resetCameraInertia() {
     const camera = State.camera;
@@ -254,6 +241,17 @@ window.Game = window.Game || {};
     camera.lastDragTime = 0;
     if (Math.abs(camera.inertiaVelocityX) < camera.inertiaMinVelocity) camera.inertiaVelocityX = 0;
     if (Math.abs(camera.inertiaVelocityY) < camera.inertiaMinVelocity) camera.inertiaVelocityY = 0;
+  }
+
+  function selectTileForInspection(picked) {
+    const world = State.world;
+    const input = State.input;
+    world.selected = picked;
+    world.previewPath = buildPathToTarget(picked.row, picked.col);
+    input.lastTileClick = null;
+    input.lastTileClickTime = 0;
+    Renderer.markDirty(true, true);
+    UI.addLog(`Tile seçildi; rota yalnızca önizlemedir: satır=${picked.row}, sütun=${picked.col}`);
   }
 
   function bindInputEvents() {
@@ -325,27 +323,8 @@ window.Game = window.Game || {};
       input.mouseY = pos.y;
       const picked = Renderer.pickTile(pos.x, pos.y);
       if (!picked) return;
-
-      const now = performance.now();
-      const sameTile = input.lastTileClick && input.lastTileClick.row === picked.row && input.lastTileClick.col === picked.col;
-      const withinThreshold = sameTile && (now - input.lastTileClickTime) <= input.doubleClickThresholdMs;
-
-      world.selected = picked;
-      world.previewPath = buildPathToTarget(picked.row, picked.col);
-      Renderer.markDirty(true, true);
-
-      if (withinThreshold && world.previewPath.length > 1) {
-        startMoveAlongPath(world.previewPath);
-        UI.addLog(`Çift tık ile hareket başlatıldı: satır=${picked.row}, sütun=${picked.col}`);
-        input.lastTileClick = null;
-        input.lastTileClickTime = 0;
-      } else {
-        UI.addLog(`Tile seçildi: satır=${picked.row}, sütun=${picked.col}`);
-        input.lastTileClick = picked;
-        input.lastTileClickTime = now;
-      }
+      selectTileForInspection(picked);
     });
-
 
     dom.canvas.addEventListener('touchstart', (event) => {
       if (!event.touches || event.touches.length !== 1) return;
@@ -382,25 +361,7 @@ window.Game = window.Game || {};
 
       const picked = Renderer.pickTile(pos.x, pos.y);
       if (!picked) return;
-
-      const now = performance.now();
-      const sameTile = input.lastTileClick && input.lastTileClick.row === picked.row && input.lastTileClick.col === picked.col;
-      const withinThreshold = sameTile && (now - input.lastTileClickTime) <= input.doubleClickThresholdMs;
-
-      world.selected = picked;
-      world.previewPath = buildPathToTarget(picked.row, picked.col);
-      Renderer.markDirty(true, true);
-
-      if (withinThreshold && world.previewPath.length > 1) {
-        startMoveAlongPath(world.previewPath);
-        UI.addLog(`Çift dokunuş ile hareket başlatıldı: satır=${picked.row}, sütun=${picked.col}`);
-        input.lastTileClick = null;
-        input.lastTileClickTime = 0;
-      } else {
-        UI.addLog(`Tile seçildi: satır=${picked.row}, sütun=${picked.col}`);
-        input.lastTileClick = picked;
-        input.lastTileClickTime = now;
-      }
+      selectTileForInspection(picked);
     }, { passive: false });
 
     dom.canvas.addEventListener('touchcancel', () => {
@@ -446,7 +407,6 @@ window.Game = window.Game || {};
     if (moved) Renderer.markDirty();
   }
 
-
   function updateCameraInertia(deltaMs) {
     const camera = State.camera;
     if (camera.dragActive) return;
@@ -489,7 +449,6 @@ window.Game = window.Game || {};
     updateCameraInertia,
     updatePlayerMovement,
     buildPathToTarget,
-    startMoveAlongPath,
     isBlockedTile
   };
 })();
