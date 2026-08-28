@@ -8,9 +8,9 @@
   "status": "active",
   "planning_epoch": "post-admin-reset-2026-08-27",
   "tasks": [
-    {"id":"R02-T01","order":1,"title":"Define authoritative campaign-state boundary","status":"open","github_issue":83,"role_owner":"Coder Worker"},
-    {"id":"R02-T02","order":2,"title":"Define deterministic seed and RNG derivation contract","status":"open","github_issue":84,"role_owner":"Coder Worker"},
-    {"id":"R02-T03","order":3,"title":"Design save/load and seed-status UX for strategic map","status":"open","github_issue":85,"role_owner":"Graphic Designer Worker"},
+    {"id":"R02-T01","order":1,"title":"Define authoritative campaign-state boundary","status":"ai_handoff_formal_coder_continuation","github_issue":83,"role_owner":"Coder Worker","note":"NVIDIA Coder run 33158758156 ended cancelled and produced AI-HANDOFF with no verifiable coder result; formal Coder must inspect/reuse any valid evidence and continue. Do not route back to NVIDIA while ai-handoff remains."},
+    {"id":"R02-T02","order":2,"title":"Define deterministic seed and RNG derivation contract","status":"ai_ready","github_issue":84,"role_owner":"Coder Worker","note":"Planner routed to auxiliary NVIDIA Coder with verified ai-role-coder + ai-ready; formal Workers must not duplicate while reserved/running/awaiting-review."},
+    {"id":"R02-T03","order":3,"title":"Design save/load and seed-status UX for strategic map","status":"work_claimed","github_issue":85,"role_owner":"Graphic Designer Worker","note":"Graphic Designer Worker has an active WORK-CLAIM; Designer production remains formal Designer work and is never NVIDIA filler."},
     {"id":"R02-T04","order":4,"title":"Compose deterministic authoritative world-state initialization","status":"blocked","depends_on":["R02-T01","R02-T02"],"github_issue":86,"role_owner":"Coder Worker"},
     {"id":"R02-T05","order":5,"title":"Add versioned campaign save and export serialization","status":"blocked","depends_on":["R02-T04"],"github_issue":87,"role_owner":"Coder Worker"},
     {"id":"R02-T06","order":6,"title":"Add safe campaign import and load validation","status":"blocked","depends_on":["R02-T05"],"github_issue":88,"role_owner":"Coder Worker"},
