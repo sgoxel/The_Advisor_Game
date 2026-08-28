@@ -135,9 +135,74 @@ test('completion-order inversion converges to the newest authoritative revision 
   expect(evidence.inverted.resultFingerprint).toBe(evidence.newer.resultFingerprint);
   expect(evidence.inverted).toEqual(evidence.chronological);
   expect(evidence.staleAttempt.accepted).toBe(false);
-  expect(evidence.staleAttempt.reason).toBe('stale-revision');
+  expect(evidence.staleAttempt.reason).toBe('stale-campaign-time');
   expect(evidence.staleKnown).toBe(true);
   expect(evidence.inverted.result.meaningfulEvents.map((entry) => entry.id)).toEqual(['older-event', 'newer-event']);
+});
+
+test('higher revisions cannot rewind campaign chronology and may replace at same or later time', async ({ page }) => {
+  await ready(page);
+  const target = await findSettlement(page, 'campaign-time-boundary-seed');
+  const evidence = await page.evaluate(({ seed, x, y }) => {
+    const api = window.Game.RelevanceBoundedCompute;
+    let state = api.initialCommitState('campaign:time-boundary');
+
+    const currentResult = api.compute(api.prepare(seed, x, y, {
+      authorityEpoch: 'campaign:time-boundary',
+      authorityRevision: 5,
+      targetCampaignMinutes: 2880,
+      meaningfulEvents: [{ id: 'current' }]
+    }));
+    state = api.acceptResult(state, currentResult).state;
+
+    const backwardJob = api.prepare(seed, x, y, {
+      authorityEpoch: 'campaign:time-boundary',
+      authorityRevision: 6,
+      targetCampaignMinutes: 1440,
+      meaningfulEvents: [{ id: 'backward' }]
+    });
+    const backwardAttempt = api.acceptResult(state, api.compute(backwardJob));
+
+    const sameTimeResult = api.compute(api.prepare(seed, x, y, {
+      authorityEpoch: 'campaign:time-boundary',
+      authorityRevision: 6,
+      targetCampaignMinutes: 2880,
+      meaningfulEvents: [{ id: 'same-time-replacement' }]
+    }));
+    const sameTimeAttempt = api.acceptResult(state, sameTimeResult);
+
+    const laterResult = api.compute(api.prepare(seed, x, y, {
+      authorityEpoch: 'campaign:time-boundary',
+      authorityRevision: 7,
+      targetCampaignMinutes: 4320,
+      meaningfulEvents: [{ id: 'later' }]
+    }));
+    const laterAttempt = api.acceptResult(sameTimeAttempt.state, laterResult);
+
+    return {
+      currentResult,
+      backwardAttempt,
+      backwardStale: api.isStale(state, backwardJob),
+      sameTimeAttempt,
+      sameTimeStale: api.isStale(state, sameTimeResult),
+      laterAttempt
+    };
+  }, target);
+
+  expect(evidence.backwardAttempt.accepted).toBe(false);
+  expect(evidence.backwardAttempt.reason).toBe('stale-campaign-time');
+  expect(evidence.backwardAttempt.state.resultFingerprint).toBe(evidence.currentResult.resultFingerprint);
+  expect(evidence.backwardAttempt.state.targetCampaignMinutes).toBe(2880);
+  expect(evidence.backwardStale).toBe(true);
+
+  expect(evidence.sameTimeAttempt.accepted).toBe(true);
+  expect(evidence.sameTimeAttempt.reason).toBe('newer-authoritative-revision');
+  expect(evidence.sameTimeAttempt.state.targetCampaignMinutes).toBe(2880);
+  expect(evidence.sameTimeStale).toBe(false);
+
+  expect(evidence.laterAttempt.accepted).toBe(true);
+  expect(evidence.laterAttempt.state.targetCampaignMinutes).toBe(4320);
+  expect(evidence.laterAttempt.state.authorityRevision).toBe(7);
 });
 
 test('visit order does not change deterministic region reconciliation results', async ({ page }) => {
