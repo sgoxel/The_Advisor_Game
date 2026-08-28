@@ -20,7 +20,9 @@
   }
 
   function bounded(hash, min, max) {
-    return min + (hash % (max - min + 1));
+    const span = max - min + 1;
+    const normalized = ((Number(hash) % span) + span) % span;
+    return min + normalized;
   }
 
   function regionKey(seed, x, y, salt) {
