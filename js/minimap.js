@@ -276,6 +276,9 @@ window.Game = window.Game || {};
   }
 
   function renderReadabilityCues() {
+    const canvas = State && State.dom && State.dom.canvas;
+    if (!canvas || !canvas.isConnected || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) return;
+
     const layer = ensureMapCueLayer();
     if (!layer) return;
     const world = State.world || {};
