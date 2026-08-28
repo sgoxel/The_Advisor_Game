@@ -1,0 +1,67 @@
+name: R02 Cumulative Persistence Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/persistence_ui.js'
+      - 'js/campaign_persistence.js'
+      - 'js/state.js'
+      - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
+      - 'tests/browser/r02-persistence-ui.spec.mjs'
+      - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
+      - 'tests/browser/r02-save-load-validation.spec.mjs'
+      - '.github/workflows/r02-cumulative-persistence-regression.yml'
+  pull_request:
+    paths:
+      - 'js/persistence_ui.js'
+      - 'js/campaign_persistence.js'
+      - 'js/state.js'
+      - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
+      - 'tests/browser/r02-persistence-ui.spec.mjs'
+      - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
+      - 'tests/browser/r02-save-load-validation.spec.mjs'
+      - '.github/workflows/r02-cumulative-persistence-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  cumulative-persistence-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run cumulative responsive and accessibility persistence regression
+        run: npx playwright test tests/browser/r02-cumulative-persistence-regression.spec.mjs
+      - name: Re-run persistence UI integration
+        run: npx playwright test tests/browser/r02-persistence-ui.spec.mjs
+      - name: Re-run deterministic save-load round trip
+        run: npx playwright test tests/browser/r02-deterministic-roundtrip.spec.mjs
+      - name: Re-run save-load validation and rollback
+        run: npx playwright test tests/browser/r02-save-load-validation.spec.mjs
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Audit dependency production surface
+        run: npm audit --omit=dev --audit-level=high
+      - name: Upload cumulative Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-t10-cumulative-persistence-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
