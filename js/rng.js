@@ -327,3 +327,189 @@ window.Game.RNG = {
     fingerprint
   });
 })();
+
+/*
+  R02-T15 / #110: deterministic inhabited origin-village base state.
+
+  This is Simulation-owned generated base data. It binds every newly generated campaign to
+  region coordinate (0,0), derives stable village/building/population identities from SEED,
+  and deliberately excludes NPC movement/routine logic (#111) and persistent deltas (#112).
+*/
+(function installOriginVillageContract() {
+  const Game = window.Game;
+  const RNG = Game.RNG;
+  const Coordinates = Game.WorldCoordinates;
+  const RegionTerrain = Game.RegionTerrain;
+  const VERSION = 'r02-origin-village-v1';
+  const CENTER = Object.freeze({ row: 12, col: 12 });
+  const BUILDING_BLUEPRINTS = Object.freeze([
+    Object.freeze({ type: 'well', role: 'landmark', dr: 0, dc: 0 }),
+    Object.freeze({ type: 'village_hall', role: 'landmark', dr: -2, dc: 1 }),
+    Object.freeze({ type: 'inn', role: 'lodging', dr: 2, dc: -3 }),
+    Object.freeze({ type: 'bakery', role: 'food', dr: -3, dc: -3 }),
+    Object.freeze({ type: 'market', role: 'trade', dr: 1, dc: 4 }),
+    Object.freeze({ type: 'smithy', role: 'production', dr: 4, dc: 2 }),
+    Object.freeze({ type: 'workshop', role: 'labor', dr: 4, dc: -2 }),
+    Object.freeze({ type: 'guard_post', role: 'guard', dr: -4, dc: 3 }),
+    Object.freeze({ type: 'home', role: 'housing', dr: -5, dc: -2 }),
+    Object.freeze({ type: 'home', role: 'housing', dr: -1, dc: -5 }),
+    Object.freeze({ type: 'home', role: 'housing', dr: 3, dc: 5 }),
+    Object.freeze({ type: 'home', role: 'housing', dr: 5, dc: -5 })
+  ]);
+  const OCCUPATIONS = Object.freeze([
+    'innkeeper', 'baker', 'trader', 'blacksmith', 'carpenter', 'laborer',
+    'farmer', 'farmer', 'herder', 'guard', 'guard', 'guard',
+    'miller', 'woodcutter', 'healer', 'villager'
+  ]);
+  const GIVEN_NAMES = Object.freeze(['Alda', 'Borin', 'Cera', 'Dain', 'Elin', 'Fara', 'Garr', 'Hale', 'Iven', 'Jora', 'Kell', 'Lysa', 'Mara', 'Noll', 'Orin', 'Pera', 'Rian', 'Sela', 'Tarn', 'Vera']);
+  const FAMILY_NAMES = Object.freeze(['Ash', 'Brook', 'Dale', 'Fenn', 'Field', 'Forge', 'Glen', 'Hart', 'Moor', 'Oak', 'Reed', 'Stone', 'Vale', 'Ward']);
+  const VILLAGE_PREFIX = Object.freeze(['Alder', 'Briar', 'Clear', 'Dawn', 'Elder', 'Fair', 'Green', 'High', 'Oak', 'River', 'Stone', 'Willow']);
+  const VILLAGE_SUFFIX = Object.freeze(['bridge', 'brook', 'ford', 'haven', 'mead', 'stead', 'vale', 'wick', 'wood']);
+
+  function deepFreeze(value) {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+    Object.freeze(value);
+    Object.keys(value).forEach((key) => deepFreeze(value[key]));
+    return value;
+  }
+
+  function pick(seed, key, values) {
+    const random = RNG.createStream(seed, VERSION, key)();
+    return values[Math.min(values.length - 1, Math.floor(random * values.length))];
+  }
+
+  function jitter(seed, key) {
+    return Math.floor(RNG.createStream(seed, VERSION, key)() * 3) - 1;
+  }
+
+  function clampLocal(value) { return Math.max(2, Math.min(21, value)); }
+
+  function makePath(from, to) {
+    const points = [{ row: from.row, col: from.col }];
+    let row = from.row;
+    let col = from.col;
+    while (col !== to.col) {
+      col += col < to.col ? 1 : -1;
+      points.push({ row, col });
+    }
+    while (row !== to.row) {
+      row += row < to.row ? 1 : -1;
+      points.push({ row, col });
+    }
+    return points;
+  }
+
+  function generate(seedInput) {
+    const seed = Coordinates.canonicalSeed(seedInput);
+    const region = Coordinates.describeRegion(seed, Coordinates.origin.x, Coordinates.origin.y);
+    const terrain = RegionTerrain.generateRegion(seed, region.x, region.y);
+    const villageName = `${pick(seed, 'village-prefix', VILLAGE_PREFIX)}${pick(seed, 'village-suffix', VILLAGE_SUFFIX)}`;
+
+    const buildings = BUILDING_BLUEPRINTS.map((blueprint, index) => {
+      const row = clampLocal(CENTER.row + blueprint.dr + jitter(seed, `building-${index}-row`));
+      const col = clampLocal(CENTER.col + blueprint.dc + jitter(seed, `building-${index}-col`));
+      return {
+        id: `${region.id}:building:${index}:${blueprint.type}`,
+        authority: 'simulation',
+        type: blueprint.type,
+        role: blueprint.role,
+        row,
+        col,
+        worldX: terrain.originWorldX + col,
+        worldY: terrain.originWorldY + row
+      };
+    });
+
+    const population = OCCUPATIONS.map((occupation, index) => {
+      const home = buildings[8 + (index % Math.max(1, buildings.length - 8))] || buildings[1];
+      return {
+        id: `${region.id}:person:${index}`,
+        authority: 'simulation',
+        name: `${pick(seed, `person-${index}-given`, GIVEN_NAMES)} ${pick(seed, `person-${index}-family`, FAMILY_NAMES)}`,
+        occupation,
+        homeBuildingId: home.id,
+        regionX: region.x,
+        regionY: region.y
+      };
+    });
+
+    const paths = buildings.slice(1).map((building, index) => ({
+      id: `${region.id}:path:${index}`,
+      authority: 'simulation',
+      fromBuildingId: buildings[0].id,
+      toBuildingId: building.id,
+      points: makePath(CENTER, { row: building.row, col: building.col })
+    }));
+
+    return deepFreeze({
+      schemaVersion: 1,
+      generatorVersion: VERSION,
+      authority: 'simulation',
+      seed,
+      region,
+      protagonistOrigin: {
+        regionX: 0,
+        regionY: 0,
+        worldX: 0,
+        worldY: 0,
+        localRow: CENTER.row,
+        localCol: CENTER.col
+      },
+      village: {
+        id: `${region.id}:village:origin`,
+        name: villageName,
+        inhabited: true,
+        center: { row: CENTER.row, col: CENTER.col },
+        buildings,
+        paths,
+        population
+      },
+      surroundingTerrain: {
+        generatorVersion: terrain.generatorVersion,
+        counts: { ...terrain.counts },
+        regionFingerprint: RegionTerrain.fingerprint(terrain)
+      }
+    });
+  }
+
+  function bindRuntime() {
+    const Terrain = Game.Terrain;
+    if (!Terrain || typeof Terrain.generateWorld !== 'function') return false;
+    if (Terrain.generateWorld.__r02OriginVillageBinding === true) return true;
+
+    const generateWorld = Terrain.generateWorld.bind(Terrain);
+    const wrappedGenerateWorld = function (seedInput, colsInput, rowsInput) {
+      const generated = generateWorld(seedInput, colsInput, rowsInput);
+      const base = generate(seedInput);
+      const world = Game.State && Game.State.world;
+      if (world) {
+        world.currentRegion = base.region;
+        world.originVillage = base.village;
+        world.originBaseState = base;
+        if (world.player) {
+          world.player.regionX = 0;
+          world.player.regionY = 0;
+          world.player.worldX = 0;
+          world.player.worldY = 0;
+        }
+      }
+      return { ...(generated || {}), originVillageBase: base };
+    };
+
+    Object.defineProperty(wrappedGenerateWorld, '__r02OriginVillageBinding', { value: true, enumerable: false });
+    Terrain.generateWorld = wrappedGenerateWorld;
+    return true;
+  }
+
+  Game.OriginVillage = Object.freeze({
+    schemaVersion: 1,
+    generatorVersion: VERSION,
+    authority: 'simulation',
+    origin: Coordinates.origin,
+    generate,
+    bindRuntime
+  });
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindRuntime);
+  else bindRuntime();
+})();
