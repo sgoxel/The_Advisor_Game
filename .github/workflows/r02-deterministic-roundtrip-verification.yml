@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install pinned browser test dependency
-        run: npm ci
+        run: npm install --ignore-scripts
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run deterministic R02 save-load roundtrip regression
