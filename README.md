@@ -358,11 +358,21 @@ The project normally uses five recurring Worker identities: **Worker #1, Worker 
 
 The Worker identities are equivalent. No Worker has a permanent development role.
 
-Each Worker invocation assumes exactly one role from this ordered rotation:
+Worker roles use this ordered cycle:
 
 **Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
 
-Role assignment advances when a Worker claims the current role, so the next Worker may claim the next role without waiting for the previous Worker to finish. Multiple Workers may therefore be active concurrently in different roles while claims and dependency rules prevent duplicate work.
+Each Worker invocation receives a **starting role** from that cycle. The starting role is the first role the Worker must try, not a requirement to stop when that role has no eligible work.
+
+Beginning with the starting role, the Worker checks roles in cycle order until it finds eligible work. If the starting role has no eligible work, it must try the next role, then the next, and may inspect all five roles before concluding that no eligible work exists. A role that is unavailable because of Worker-identity independence restrictions is treated as having no eligible target for that Worker, so the Worker continues to the next role.
+
+A Worker performs at most **one actual role and one focused eligible task** per invocation.
+
+After the Worker selects and claims the actual role it will perform, the next Worker's starting role is the successor of that **actual role**, not the successor of any skipped empty role. Therefore the rotation continues from where the previous Worker actually left off. For example, if a Worker starts at Coder, finds no Coder or Designer work, and performs Tester work, the next Worker starts at Reviewer.
+
+If all five roles are checked and none has eligible work, the Worker makes no unrelated change and records that the full role cycle had no eligible task; the rotation should preserve the unresolved starting point rather than falsely consuming empty roles.
+
+Role continuity may advance before the previous Worker finishes its selected task so another Worker may begin from the next role while claims and dependency rules prevent duplicate work. Multiple Workers may therefore be active concurrently in different roles.
 
 README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records.
 
@@ -424,7 +434,7 @@ Role rotation never removes Worker identity.
 
 A Worker must not independently verify or approve its own prior implementation, design, revision, bug fix, workflow fix, process improvement, or other change when that same Worker later rotates into Tester or Reviewer.
 
-If the current role would require reviewing or testing the same Worker's own prior change, the Worker must select another eligible independent target or leave that target for another Worker identity.
+If the current role would require reviewing or testing the same Worker's own prior change, the Worker must select another eligible independent target or treat that role as having no eligible target and continue the cyclic role search.
 
 Implementation, design, and Reviewer-produced changes require independent Tester verification by a different Worker identity before they are called independently verified.
 
