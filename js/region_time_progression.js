@@ -2,13 +2,15 @@
 (function installRegionTimeProgression() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r02-region-time-progression-v2';
+  const VERSION = 'r02-region-time-progression-v3';
   const COARSE_STEP_MINUTES = 60;
 
   function requireDependencies() {
     if (!Game.GameTime?.capture) throw new Error('GameTime is required before region time progression.');
     if (!Game.CampaignCalendar?.capture) throw new Error('CampaignCalendar is required before region time progression.');
     if (!Game.WorldHierarchy?.refinementInput || !Game.WorldHierarchy?.materializeLocal) throw new Error('WorldHierarchy is required before region time progression.');
+    if (!Game.PoliticalGeography?.baseRegion || !Game.PoliticalGeography?.resolveCurrent) throw new Error('PoliticalGeography is required before region time progression.');
+    if (!Game.SettlementEvolution?.advance || !Game.SettlementEvolution?.materializationInput) throw new Error('SettlementEvolution is required before region time progression.');
     if (!Game.WorldDeltaPersistence?.capture || !Game.WorldDeltaPersistence?.setRegionFlag || !Game.WorldDeltaPersistence?.reconstructRegion) {
       throw new Error('WorldDeltaPersistence is required before region time progression.');
     }
@@ -50,7 +52,9 @@
       lastSimulatedGameMinute: Number.isFinite(lastMinute) ? lastMinute : null,
       totalElapsedGameMinutes: Number.isFinite(totalElapsed) && totalElapsed >= 0 ? totalElapsed : 0,
       coarseTicks: Number(flags.regionTimeCoarseTicks || 0) || 0,
-      hierarchy: flags.regionTimeHierarchy || null
+      hierarchy: flags.regionTimeHierarchy || null,
+      politicalGeography: flags.regionTimePoliticalGeography || null,
+      settlementEvolution: flags.regionTimeSettlementEvolution || null
     });
   }
 
@@ -68,6 +72,41 @@
     });
   }
 
+  function politicalFor(regionX, regionY, persistentFlags = {}) {
+    const base = Game.PoliticalGeography.baseRegion(seed(), regionX, regionY);
+    const history = persistentFlags.regionPoliticalHistory || persistentFlags.politicalHistory || {};
+    const current = Game.PoliticalGeography.resolveCurrent(base, history);
+    return Object.freeze({
+      authority: 'simulation',
+      baseRealmId: base.realm.id,
+      baseProvinceId: base.province.id,
+      settlementAffiliation: base.settlementAffiliation,
+      borders: base.borders,
+      current: current.current,
+      basePreserved: current.basePreserved,
+      presentationAuthority: false
+    });
+  }
+
+  function settlementFor(regionX, regionY, campaignMinutes, persistentFlags = {}) {
+    const state = Game.SettlementEvolution.advance(seed(), regionX, regionY, {
+      campaignMinutes,
+      priorState: persistentFlags.regionTimeSettlementEvolution || null,
+      persistentHistory: persistentFlags
+    });
+    if (!state) return null;
+    return Object.freeze({ state, materialization: Game.SettlementEvolution.materializationInput(state) });
+  }
+
+  function contextFor(regionX, regionY, campaignMinutes) {
+    const flags = persistedRegion(regionX, regionY)?.flags || {};
+    return Object.freeze({
+      hierarchy: hierarchyFor(regionX, regionY, campaignMinutes, flags),
+      political: politicalFor(regionX, regionY, flags),
+      settlement: settlementFor(regionX, regionY, campaignMinutes, flags)
+    });
+  }
+
   function writeProgression(regionX, regionY, next) {
     const deltas = Game.WorldDeltaPersistence;
     deltas.setRegionFlag(regionX, regionY, 'regionTimeVersion', VERSION);
@@ -77,6 +116,8 @@
     deltas.setRegionFlag(regionX, regionY, 'regionTimeElapsedMinutes', Number(next.totalElapsedGameMinutes.toFixed(6)));
     deltas.setRegionFlag(regionX, regionY, 'regionTimeCoarseTicks', next.coarseTicks);
     if (next.hierarchy) deltas.setRegionFlag(regionX, regionY, 'regionTimeHierarchy', next.hierarchy);
+    if (next.politicalGeography) deltas.setRegionFlag(regionX, regionY, 'regionTimePoliticalGeography', next.politicalGeography);
+    if (next.settlementEvolution) deltas.setRegionFlag(regionX, regionY, 'regionTimeSettlementEvolution', next.settlementEvolution);
     return progressionFrom(regionX, regionY);
   }
 
@@ -87,11 +128,14 @@
     const now = currentGameMinute();
     const last = prior.lastSimulatedGameMinute;
     const elapsed = last === null ? 0 : Math.max(0, now - last);
-    const hierarchical = hierarchyFor(regionX, regionY, now, persistedRegion(regionX, regionY)?.flags || {});
+    const context = contextFor(regionX, regionY, now);
     const progression = writeProgression(regionX, regionY, {
       mode: 'active-high-detail', lastSimulatedGameMinute: now,
       totalElapsedGameMinutes: prior.totalElapsedGameMinutes + elapsed,
-      coarseTicks: prior.coarseTicks, hierarchy: hierarchical.compact
+      coarseTicks: prior.coarseTicks,
+      hierarchy: context.hierarchy.compact,
+      politicalGeography: context.political,
+      settlementEvolution: context.settlement?.state || null
     });
     return Object.freeze({ ...progression, advancedGameMinutes: elapsed });
   }
@@ -106,11 +150,14 @@
     if (target < baseline) throw new RangeError('Region time cannot move backwards.');
     const elapsed = target - baseline;
     const coarseTicks = prior.coarseTicks + Math.floor(elapsed / COARSE_STEP_MINUTES);
-    const hierarchical = hierarchyFor(regionX, regionY, target, persistedRegion(regionX, regionY)?.flags || {});
+    const context = contextFor(regionX, regionY, target);
     const progression = writeProgression(regionX, regionY, {
       mode: 'inactive-aggregate', lastSimulatedGameMinute: target,
       totalElapsedGameMinutes: prior.totalElapsedGameMinutes + elapsed,
-      coarseTicks, hierarchy: hierarchical.compact
+      coarseTicks,
+      hierarchy: context.hierarchy.compact,
+      politicalGeography: context.political,
+      settlementEvolution: context.settlement?.state || null
     });
     return Object.freeze({
       ...progression,
@@ -118,7 +165,9 @@
       lazyCatchUp: true,
       fullDetailReplayTicks: 0,
       materializedLocalEntities: 0,
-      hierarchy: hierarchical.compact
+      hierarchy: context.hierarchy.compact,
+      politicalGeography: context.political,
+      settlementEvolution: context.settlement?.state || null
     });
   }
 
@@ -134,7 +183,13 @@
     const { regionX, regionY } = coordinates(regionXInput, regionYInput);
     const progressed = catchUpInactive(regionX, regionY);
     const reconstructed = Game.WorldDeltaPersistence.reconstructRegion(seed(), regionX, regionY);
-    const refinement = hierarchyFor(regionX, regionY, progressed.lastSimulatedGameMinute, reconstructed.persistentDeltas?.flags || {}).refinement;
+    const flags = reconstructed.persistentDeltas?.flags || {};
+    const context = Object.freeze({
+      hierarchy: hierarchyFor(regionX, regionY, progressed.lastSimulatedGameMinute, flags),
+      political: politicalFor(regionX, regionY, flags),
+      settlement: settlementFor(regionX, regionY, progressed.lastSimulatedGameMinute, flags)
+    });
+    const refinement = context.hierarchy.refinement;
     const local = Game.WorldHierarchy.materializeLocal(refinement, { importantEntityIds: options.importantEntityIds || [] });
     const active = markActive(regionX, regionY);
     return Object.freeze({
@@ -145,8 +200,12 @@
       materializedOffscreenRegions: 0,
       progression: active,
       hierarchy: Object.freeze({ world: refinement.world, realm: refinement.realm, region: refinement.region, settlement: refinement.settlement }),
+      politicalGeography: context.political,
+      settlementEvolution: context.settlement?.state || null,
+      settlementMaterialization: context.settlement?.materialization || null,
       local,
-      region: reconstructed
+      region: reconstructed,
+      presentationAuthority: false
     });
   }
 
