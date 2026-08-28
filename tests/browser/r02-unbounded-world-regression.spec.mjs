@@ -35,8 +35,6 @@ async function ready(page) {
   ));
 }
 
-function stable(value) { return JSON.stringify(value); }
-
 test('multiple seeds and positive/negative coordinates remain deterministic, diverse and unbounded', async ({ page }) => {
   const failures = collectRuntimeFailures(page);
   await ready(page);
@@ -97,7 +95,7 @@ test('origin remains inhabited and multiple simulation-owned NPCs visibly progre
     const npc = window.Game.NPCWorld;
     npc.updateAt(0);
     const before = npc.capture();
-    npc.updateAt(8000);
+    npc.updateAt(7000);
     const after = npc.capture();
     const moved = before.filter((entry, index) => {
       const later = after[index];
@@ -185,7 +183,7 @@ test('region leave/return and campaign save/load preserve sparse world changes o
       storedRegions: captured.regions.length,
       storesFullTiles: captured.regions.some((region) => Object.prototype.hasOwnProperty.call(region, 'tiles')),
       untouchedStable: terrain.fingerprint(untouchedBase) === terrain.fingerprint(untouched),
-      repeatedStable: stable(firstReturn) === stable(secondReturn)
+      repeatedStable: JSON.stringify(firstReturn) === JSON.stringify(secondReturn)
     };
   });
 
@@ -209,14 +207,12 @@ test('living map remains primary, bounded and accessible across configured respo
 
   const evidence = await page.evaluate(() => {
     const viewportWidth = document.documentElement.clientWidth;
-    const viewportHeight = document.documentElement.clientHeight;
     const canvas = document.getElementById('gameCanvas')?.getBoundingClientRect();
     const center = document.getElementById('center-area')?.getBoundingClientRect();
     const overlay = document.getElementById('npcWorldOverlay')?.getBoundingClientRect();
     const controls = document.querySelector('[aria-label="Campaign persistence controls"]');
     return {
       viewportWidth,
-      viewportHeight,
       scrollWidth: document.documentElement.scrollWidth,
       canvas: canvas ? { width: canvas.width, height: canvas.height } : null,
       center: center ? { width: center.width, height: center.height } : null,
