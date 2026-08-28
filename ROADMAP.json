@@ -3,12 +3,12 @@
   "product": "The Advisor Game",
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
-  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28-settlement-evolution-political-geography",
-  "planning_basis": "Planner-owned decomposition reconciled through #105, #118, #132, #137 and #139 after Admin README updates #103, #106, #117, #131, #136 and #138. Compatible verified work remains preserved; completed region navigation, game-time, real-world-origin fantasy calendar, NPC-life, settlement/environment, ecology, Designer, unbounded-world regression and hierarchical-state foundations are reused rather than reopened. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
+  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28-relevance-bounded-lazy-mobile-performance",
+  "planning_basis": "Planner-owned decomposition reconciled through #105, #118, #132, #137, #139 and #143 after Admin README updates #103, #106, #117, #131, #136, #138 and #142. Compatible verified work remains preserved; completed region navigation, game-time, real-world-origin fantasy calendar, NPC-life, settlement/environment, ecology, Designer, unbounded-world regression, hierarchical-state and political-geography foundations are reused rather than reopened. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
   "readme_reconciliation": {
-    "readme_commit": "01684713b0593a72c952e2cf750d81329b97b3c9",
-    "admin_issues": [103, 106, 117, 131, 136, 138],
-    "planner_issues": [105, 118, 132, 137, 139],
+    "readme_commit": "9325b9079a94c3508bff39b3d0379490318edb39",
+    "admin_issues": [103, 106, 117, 131, 136, 138, 142],
+    "planner_issues": [105, 118, 132, 137, 139, 143],
     "governance_issue": 97
   },
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
@@ -36,9 +36,12 @@
     "calendar_origin_rule": "A new campaign fantasy chronology is initialized from accepted real-world civil date/time at creation: fantasy day and month numbers and time-of-day equal the real-world origin, while fantasy year = real-world year - 2000. Example: 28.08.2026 14:30 -> 28.08.0026 14:30. The initial game time is therefore not fixed at 06:00.",
     "calendar_continuity_rule": "The real-world creation mapping is only the synchronization origin. After creation, fantasy campaign chronology remains its own accelerated authoritative timeline and must not be directly remapped to current civil date/time on launch. Accepted real-world elapsed time advances that established chronology at normal speed: one real-world hour = one in-game day, 24 real hours = 24 in-game days, and 10 real days = 240 in-game days, using bounded catch-up rather than replaying every missed tick.",
     "day_night_rule": "Authoritative game time defines dawn/daylight transition at 05:00 and darkness/night transition at 22:00. Moving physically accurate shadows are not required.",
-    "simulation_fidelity_rule": "The protagonist's active/relevant region uses continuous high-detail simulation; inactive regions use lower-cost authoritative elapsed-time progression/aggregation rather than freezing or full-detail ticking.",
+    "simulation_fidelity_rule": "The protagonist's active/relevant region uses continuous high-detail simulation; nearby relevant state may use reduced-frequency or aggregate processing; far inactive/unloaded detail should normally perform no continuous entity-level ticking and instead use lower-cost authoritative derivation or elapsed-time reconciliation when required.",
     "hierarchical_simulation_rule": "The same authoritative world may be represented at progressively different resolution from global/world through realm/country, region, settlement and local active layers. Compact higher-level state preserves large-scale causality, settlement-development history and political/territorial state without materializing all local entities.",
-    "lazy_materialization_rule": "Unvisited or inactive detailed state is materialized only when relevant from compatible SEED base state, coordinates, authoritative fantasy campaign date/time, accumulated hierarchical outcomes including settlement-development and political-geography history, persistent changes and local rules; visit/render order must not become authority.",
+    "relevance_bounded_simulation_rule": "Invisible-world computation scales with relevance and authoritative information required, not total generated, discovered or theoretically unbounded world size. Irrelevant local detail remains unticked where possible; long elapsed periods use bounded aggregate/end-state reconciliation rather than replaying every missed local action or tick.",
+    "asynchronous_determinism_rule": "Expensive generation, catch-up, refinement and materialization should be asynchronous-capable where practical so unrelated distant work does not block interactive play. Scheduling, completion order, render order, visit order, device speed, synchronous/asynchronous execution and stale job timing must not change authoritative results; late/stale results cannot overwrite newer authoritative state.",
+    "lazy_materialization_rule": "Unvisited or inactive detailed state is materialized only when relevant from compatible SEED base state, coordinates, authoritative fantasy campaign date/time, accumulated hierarchical outcomes including settlement-development and political-geography history, meaningful events, persistent changes and local rules; visit/render/scheduling order must not become authority.",
+    "device_performance_rule": "Current desktop browsers, phones and tablets are gameplay targets. Presentation quality and non-authoritative fidelity may scale to device capability, while simulation correctness, chronology, legal outcomes, persistence and deterministic world reconstruction remain unchanged. Performance validation must include representative mobile/tablet conditions before final release.",
     "strategic_scale_view_rule": "As protagonist authority expands, regional, realm/country and wider-world strategic views must summarize authoritative aggregate state and evolving political geography from the same living world rather than create disconnected dashboard truth.",
     "npc_life_rule": "NPC routines may be time-aware and role/location dependent; simple varied deterministic/Local-BOT ambient NPC-to-NPC dialogue may respond to profession, settlement/location, environment, time and relevant local conditions without becoming authoritative truth by itself.",
     "ecology_rule": "Domestic/farm animals, wildlife and a broad original medieval-fantasy bestiary are SEED/habitat/context-aware simulation-backed world content where gameplay-relevant.",
@@ -61,10 +64,12 @@
       "completed #126 deterministic settlement/environment composition foundation",
       "completed #127 ecology foundation",
       "completed #128 day/night, settlement and ecology Designer foundation",
-      "completed #134 compact global-to-local hierarchical state/refinement foundation"
+      "completed #134 compact global-to-local hierarchical state/refinement foundation",
+      "completed #140 compact SEED-derived political-geography foundation"
     ],
     "ADAPT": [
-      "#124 off-screen progression into a relevance-scaled hierarchical global-to-local integration consuming #133, #134, #140 and #141",
+      "#141 compact settlement-evolution implementation through its active deterministic elapsed-time T-REV without broadening later-phase settlement mechanics",
+      "#124 off-screen progression into a relevance-bounded hierarchical global-to-local integration consuming #133, #134, #140, #141 and #144",
       "existing persistence into SEED base + fantasy campaign date/time + hierarchical progression + settlement-development/political-history state + sparse persistent changes",
       "existing region activation so later materialization composes elapsed fantasy campaign time, settlement development and political/territorial history while preserving #113 verified spatial continuity",
       "later strategic presentation so region/realm/world views read evolving aggregate and political-geography authority from the same simulated world"
@@ -73,6 +78,7 @@
       "deep settlement morphology, building-by-building growth/decline, settlement management and profession economy beyond the compact #141 R02 foundation",
       "deep mutable realm/country borders, ownership dynamics, faction diplomacy, war, population and political economy beyond the compact #140 R02 base-geography foundation",
       "full region/realm/world strategic UI production until the appropriate later gameplay phase",
+      "device-specific render pipelines and exact quality presets beyond current product-performance requirements",
       "deep creature combat/faction AI beyond ecology foundation behavior",
       "natural Advisor conversation and persistent Advisor influence beyond current R02 world foundations",
       "future protagonist Local BOT and optional LLM character decision systems",
@@ -86,8 +92,12 @@
       "a gameplay-defined finite outer world edge or disconnected random maps masquerading as one continuous world",
       "turn-based world authority that freezes normal world progression until player turns",
       "permanently frozen inactive regions when campaign time advances",
-      "continuous full-detail ticking/materialization of the unbounded invisible world merely because time passes",
-      "resume logic that replays every missed tick/day instead of bounded catch-up",
+      "continuous entity-level ticking/materialization of irrelevant unbounded invisible detail merely because time passes",
+      "invisible-world continuous work that grows linearly with total discovered/generated world size rather than relevance",
+      "resume or lazy catch-up that replays every missed local tick/day/micro-action instead of bounded reconciliation",
+      "asynchronous scheduling or completion order changing authoritative outcomes",
+      "late or stale asynchronous work overwriting newer authoritative campaign state",
+      "device-specific quality scaling changing simulation truth, chronology, legal outcomes or persistent history",
       "a fixed historical fantasy epoch that ignores the accepted real-world campaign creation date/time",
       "a fixed 06:00 campaign start instead of using the accepted real-world creation time-of-day",
       "launch/resume logic that directly remaps an established fantasy campaign date to the current civil date rather than applying elapsed-time advancement",
@@ -115,7 +125,7 @@
       "status": "active",
       "phase_issue": 82,
       "phase_gate_issue": 93,
-      "release_gate": "Preserve verified seed/save/world/navigation/time/composition/NPC/ecology/Designer/hierarchy foundations while establishing the README-defined real-world-origin fantasy chronology, accelerated bounded resume catch-up, 05:00 dawn and 22:00 darkness, compact authoritative global/world→realm/country→region→settlement→local hierarchy, compact SEED-derived base political geography, compact settlement-development history, bounded high-detail active-region life, lazy lower-cost off-screen progression/materialization, persistent deltas and coherent living-map presentation. R02 requires only the compact political/settlement foundations needed for correct lazy materialization; deep settlement morphology and realm politics remain later phases. Independent phase verification required before R03."
+      "release_gate": "Preserve verified seed/save/world/navigation/time/composition/NPC/ecology/Designer/hierarchy/political foundations while establishing the README-defined real-world-origin fantasy chronology, compact settlement-development history, relevance-bounded high-detail active vs unticked/lazy inactive-world computation, deterministic asynchronous-capable catch-up/materialization, persistent deltas and coherent living-map presentation. Invisible-world continuous work must not scale with total world size; stale/asynchronous work must not alter authority. Representative phone/tablet browser conditions are included in cumulative performance-sensitive validation. Independent phase verification required before R03."
     },
     {
       "id": "R03",
@@ -169,19 +179,19 @@
       "id": "R11",
       "title": "Evolving Settlements, Political Geography, Region and Realm Views; Ecology, Factions, Trade and Diplomacy",
       "status": "planned",
-      "release_gate": "Deepen SEED-derived settlements into authoritative historical growth/decline and material morphology; deepen SEED-derived realm/country and region/province geography, borders and settlement affiliations; activate mutable ownership/territorial relationships, factions, trade, diplomacy, prosperity, security, population trends and major events. Settlement physical state must reflect accumulated authoritative development, and political geography may evolve through campaign history rather than remain fixed to base SEED state. Provide readable local/region/realm strategic views derived from the same hierarchy; independent phase verification required before R12."
+      "release_gate": "Deepen SEED-derived settlements into authoritative historical growth/decline and material morphology; deepen SEED-derived realm/country and region/province geography, borders and settlement affiliations; activate mutable ownership/territorial relationships, factions, trade, diplomacy, prosperity, security, population trends and major events. Higher-level/off-screen simulation must preserve relevance-bounded lazy computation rather than reintroduce world-size-proportional local ticking. Provide readable local/region/realm strategic views derived from the same hierarchy; independent phase verification required before R12."
     },
     {
       "id": "R12",
       "title": "Court, Realm Economy, Military and Succession",
       "status": "planned",
-      "release_gate": "Add higher-rank court, realm economy, strategic military and succession systems that operate on and update compact authoritative realm/region aggregates, settlement development, ownership and territorial/border state; propagate meaningful outcomes downward/upward through the hierarchy and continue coherently through offline fantasy campaign time without direct unit-by-unit player control; independent phase verification required before R13."
+      "release_gate": "Add higher-rank court, realm economy, strategic military and succession systems that operate on compact authoritative realm/region aggregates, settlement development, ownership and territorial/border state; propagate meaningful outcomes through relevance-scaled hierarchy and offline fantasy time without direct unit-by-unit player control or continuous full-world local ticking; independent phase verification required before R13."
     },
     {
       "id": "R13",
       "title": "King, Multi-Kingdom and Emperor Endgame",
       "status": "planned",
-      "release_gate": "Extend the hierarchical simulation and strategic views to sovereign, multi-kingdom and imperial/world scale with evolving realm composition, borders, ownership and settlement history while preserving character autonomy, real-world-origin accelerated fantasy campaign chronology, compact large-scale state, lazy local materialization and readable causality; independent phase verification required before R14."
+      "release_gate": "Extend hierarchical simulation and strategic views to sovereign, multi-kingdom and imperial/world scale with evolving realm composition, borders, ownership and settlement history while preserving character autonomy, accelerated fantasy chronology, compact large-scale state, relevance-bounded lazy local materialization and deterministic asynchronous-capable computation; independent phase verification required before R14."
     },
     {
       "id": "R14",
@@ -193,7 +203,7 @@
       "id": "R15",
       "title": "Presentation, Accessibility, Balance and Campaign Release",
       "status": "planned",
-      "release_gate": "Complete cumulative local/region/realm/world presentation, fantasy calendar/day-night readability, evolving-settlement and political-geography readability, ecology/settlement coherence, accessibility, responsiveness, balance, performance and campaign-level regression across the unbounded hierarchical real-time living world; obtain independent Tester-role verification for the final normal release state."
+      "release_gate": "Complete cumulative local/region/realm/world presentation, fantasy calendar/day-night readability, evolving-settlement and political-geography readability, ecology/settlement coherence, accessibility, responsiveness, balance and performance across the unbounded hierarchical real-time living world. Final verification must include representative current desktop, phone and tablet gameplay conditions, device-quality scaling that does not change authoritative outcomes, and sustained relevance-bounded invisible-world behavior; obtain independent Tester-role verification for the final normal release state."
     }
   ]
 }
