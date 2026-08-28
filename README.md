@@ -217,7 +217,6 @@ The player analyzes and advises; autonomous characters with legitimate authority
 Settlement scale may grow from villages to towns, cities, castles, capitals, and imperial centers.
 
 ## 🤝 Diplomacy and Autonomous Factions
-
 Factions have leaders, needs, memories, relationships, territory, incomplete knowledge, and political objectives.
 
 Treaties, alliances, trade, dependency, insults, marriages, betrayals, debts, succession disputes, religious disputes, and historical conflicts may affect relations.
@@ -405,7 +404,7 @@ The specific technical method used to build, package, publish, version, or deplo
 
 # 🤖 Development Worker Governance
 
-The project normally uses five recurring scheduled Worker identities: **Worker #1, Worker #2, Worker #3, Worker #4, and Worker #5**. It also supports **Worker #6** as a persistent, manually invoked Worker identity that is not part of the recurring schedule.
+The project normally uses exactly five recurring scheduled Worker identities: **Worker #1, Worker #2, Worker #3, Worker #4, and Worker #5**. **Worker #6 is not a sixth scheduled routine**; it is a reserved manual Admin-invoked instruction/execution profile and persistent identity used only when the Admin directly invokes Worker #6.
 
 All Worker identities retain the same role boundaries and independence rules. No Worker has a permanent development role.
 
@@ -413,7 +412,7 @@ Worker roles use this ordered cycle:
 
 **Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
 
-A scheduled Worker invocation receives a **starting role** from the recurring rotation. Worker #6 is manually invoked and does not consume or advance the recurring scheduled rotation merely by being invoked.
+A scheduled Worker invocation receives a **starting role** from the recurring rotation. Worker #6 has no automation, timer, recurrence, scheduled slot, or recurring cursor. A direct Admin instruction may define Worker #6's role, target, scope, or starting point; a broad Worker #6 invocation uses the same role boundaries and work-conserving cycle without consuming the scheduled cursor.
 
 Worker runs are **work-conserving**. Starting from the applicable role, a Worker continues through the role cycle and should perform all currently eligible work it can safely complete within each role, in project-priority order, rather than stopping after one task merely because a role already produced useful work.
 
@@ -427,7 +426,7 @@ Worker identity and independence restrictions remain in force throughout multi-r
 
 For recurring Workers #1–#5, the next scheduled starting point should follow the **last role in which useful work was actually performed** during the preceding completed run. If the preceding Worker made no eligible progress in any role, the unresolved starting point is preserved rather than falsely consuming empty roles.
 
-Worker #6 uses normal claims and audit records but remains outside the recurring schedule cursor so a manual capacity run cannot silently disturb the scheduled Worker sequence.
+When Worker #6 performs project work, it uses normal claims and audit records but never consumes, advances, reserves, or rewrites the recurring schedule cursor. Its changes are discovered by scheduled Workers through normal GitHub state re-fetch and claim/dependency checks.
 
 Multiple Workers may overlap in time. Claims, dependency rules, committed-state checks, NVIDIA ownership, and independent-verification rules remain responsible for preventing duplicate work, self-approval, and unsafe concurrency.
 
