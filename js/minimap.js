@@ -143,6 +143,11 @@ window.Game = window.Game || {};
   }
 
   function renderMinimap(force) {
+    // Keep non-interactive #66 readability cues synchronized with the same
+    // animation-frame presentation path even when the WebGL world is clean.
+    // This does not mutate authoritative world/input/movement state.
+    renderReadabilityCues();
+
     const dom = State.dom;
     const world = State.world;
     if (!dom.minimap || !dom.miniCtx || !world.terrain.length) return;
