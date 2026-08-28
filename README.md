@@ -362,19 +362,21 @@ Worker roles use this ordered cycle:
 
 **Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
 
-Each Worker invocation receives a **starting role** from that cycle. The starting role is the first role the Worker must try, not a requirement to stop when that role has no eligible work.
+Each Worker invocation receives a **starting role** from that cycle.
 
-Beginning with the starting role, the Worker checks roles in cycle order until it finds eligible work. If the starting role has no eligible work, it must try the next role, then the next, and may inspect all five roles before concluding that no eligible work exists. A role that is unavailable because of Worker-identity independence restrictions is treated as having no eligible target for that Worker, so the Worker continues to the next role.
+During one invocation, the Worker should continue through the complete role cycle from that starting point and attempt **all five roles once**, rather than stopping after the first role with eligible work or the first empty role.
 
-A Worker performs at most **one actual role and one focused eligible task** per invocation.
+For each role reached during the cycle, the Worker may perform at most **one focused eligible task** for that role before continuing to the next role. A role with no eligible work is skipped without ending the invocation. This permits one Worker run to contribute across planning, implementation, design, verification, and review while preventing one role from consuming the entire run.
 
-After the Worker selects and claims the actual role it will perform, the next Worker's starting role is the successor of that **actual role**, not the successor of any skipped empty role. Therefore the rotation continues from where the previous Worker actually left off. For example, if a Worker starts at Coder, finds no Coder or Designer work, and performs Tester work, the next Worker starts at Reviewer.
+Within every role, blocking corrections, revisions, handoffs, verification obligations, and release-critical work take priority over ordinary backlog appropriate to that role. Workers must not invent work merely to keep a role busy.
 
-If all five roles are checked and none has eligible work, the Worker makes no unrelated change and records that the full role cycle had no eligible task; the rotation should preserve the unresolved starting point rather than falsely consuming empty roles.
+Worker identity and independence restrictions remain in force throughout a multi-role run. A Worker must not independently verify or approve its own earlier implementation, design, revision, bug fix, workflow fix, or process fix; when no independent target exists for a role, that role is skipped and the Worker continues to the next role.
 
-Role continuity may advance before the previous Worker finishes its selected task so another Worker may begin from the next role while claims and dependency rules prevent duplicate work. Multiple Workers may therefore be active concurrently in different roles.
+The next Worker's starting point should follow the **last role in which useful work was actually performed** during the preceding run. If the preceding Worker found no eligible work in any role, the unresolved starting point is preserved rather than falsely consuming empty roles.
 
-README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records.
+Multiple Workers may still overlap in time. Claims, dependency rules, committed-state checks, and independent-verification rules remain responsible for preventing duplicate work, self-approval, and unsafe concurrency.
+
+README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, claim syntax, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records.
 
 ## Planner
 
@@ -432,9 +434,9 @@ Reviewer may assess quality and process health but is not phase or release appro
 
 Role rotation never removes Worker identity.
 
-A Worker must not independently verify or approve its own prior implementation, design, revision, bug fix, workflow fix, process improvement, or other change when that same Worker later rotates into Tester or Reviewer.
+A Worker must not independently verify or approve its own prior implementation, design, revision, bug fix, workflow fix, process improvement, or other change when that same Worker later reaches Tester or Reviewer, whether in the same invocation or a later run.
 
-If the current role would require reviewing or testing the same Worker's own prior change, the Worker must select another eligible independent target or treat that role as having no eligible target and continue the cyclic role search.
+If a Tester or Reviewer stage would require evaluating the same Worker's own prior change, the Worker must select another eligible independent target for that role or skip that role and continue the current full-cycle run.
 
 Implementation, design, and Reviewer-produced changes require independent Tester verification by a different Worker identity before they are called independently verified.
 
