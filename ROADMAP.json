@@ -2,9 +2,9 @@
   "schema_version": 1,
   "product": "The Advisor Game",
   "authority": "README.md",
-  "planning_owner": "Planner Worker",
+  "planning_owner": "Planner role (rotating Worker)",
   "planning_epoch": "post-admin-reset-2026-08-27",
-  "planning_basis": "Planner-owned decomposition rebuilt after the explicit Admin reset and v155 baseline import. README defines product requirements and governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
+  "planning_basis": "Planner-owned decomposition rebuilt after the explicit Admin reset and v155 baseline import. README defines product requirements and governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority. Worker identities now rotate through Planner, Coder, Designer, Tester and Reviewer roles without changing this planning authority.",
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "baseline": {
     "admin_reset_commit": "c27511b0477ace430080751704b4fac3e3f19d71",
@@ -20,8 +20,8 @@
     "oldest_unfinished_first": true,
     "living_strategic_world_map_required": true,
     "map_rule": "Every cumulative phase must preserve and progressively extend the persistent living strategic world map as the primary playable surface rather than replacing it with disconnected dashboards, static mockups or menu-only presentation.",
-    "designer_rule": "Every phase requires at least one independently testable Graphic Designer task before normal phase completion.",
-    "normal_phase_transition_rule": "Under normal autonomous progression, the dedicated Tester must independently pass the active phase gate before the next phase activates. Explicit Admin instructions may override normal publication or phase/release workflow requirements without converting unverified work into verified work."
+    "designer_rule": "Every phase requires at least one independently testable Designer-role task before normal phase completion.",
+    "normal_phase_transition_rule": "Under normal autonomous progression, an independent Worker acting in the Tester role must independently pass the active phase gate before the next phase activates. The Tester must not approve work produced by the same Worker identity. Explicit Admin instructions may override normal publication or phase/release workflow requirements without converting unverified work into verified work."
   },
   "migration_classification": {
     "REUSE": ["Admin-selected v155 WebGL/isometric strategic map as the current development baseline","camera pan, zoom and inertial navigation","tile picking, hover, selection and non-authoritative inspection","seeded procedural terrain foundation","roads, settlements, minimap and compatible localization","compatible textures, terrain rendering and current organic elevation work"],
@@ -44,6 +44,6 @@
     {"id":"R12","title":"Court, Realm Economy, Military and Succession","status":"planned","release_gate":"Add higher-rank court, realm economy, strategic military and succession systems without direct unit-by-unit player control; independent phase verification required before R13."},
     {"id":"R13","title":"King, Multi-Kingdom and Emperor Endgame","status":"planned","release_gate":"Extend authoritative simulation and living-world presentation to sovereign and imperial scale while preserving character autonomy and readable causality; independent phase verification required before R14."},
     {"id":"R14","title":"Advanced Advisor Tools and Mini-Games","status":"planned","release_gate":"Add direct Advisor tools and mini-games that improve information or influence without bypassing character autonomy or simulation authority; independent phase verification required before R15."},
-    {"id":"R15","title":"Presentation, Accessibility, Balance and Campaign Release","status":"planned","release_gate":"Complete cumulative presentation, accessibility, responsiveness, balance, performance and campaign-level regression across the living strategic world and obtain dedicated Tester verification for the final normal release state."}
+    {"id":"R15","title":"Presentation, Accessibility, Balance and Campaign Release","status":"planned","release_gate":"Complete cumulative presentation, accessibility, responsiveness, balance, performance and campaign-level regression across the living strategic world and obtain independent Tester-role verification by a different Worker identity for the final normal release state."}
   ]
 }
