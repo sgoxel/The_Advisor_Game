@@ -337,7 +337,7 @@ jobs:
           HANDOFF_COUNT="$(printf '%s' "$COMMENTS" | jq --arg start "$STARTED_AT" \
             '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI-HANDOFF:"))] | length')"
           EVIDENCE_COUNT="$(printf '%s' "$COMMENTS" | jq --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
-            '[.[] | select(.created_at >= $start) | select((.body // "") | startswith($prefix))] | length')"
+            '[.[] | select(.created_at >= $start) | select(((.body // "") | startswith($prefix)) or ((.body // "") | startswith("**" + $prefix)))] | length')"
 
           if [ "$ROLE" = "coder" ] && [ "$FINAL_OUTCOME" = "success" ] && [ "$HANDOFF_COUNT" -eq 0 ]; then
             PR_COUNT="$(gh pr list --repo "${GITHUB_REPOSITORY}" --state open --limit 100 --json body,url |
