@@ -1,0 +1,53 @@
+name: R02 Ecology Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/ecology.js'
+      - 'js/world_composition.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-ecology.spec.mjs'
+      - '.github/workflows/r02-ecology-verification.yml'
+  pull_request:
+    paths:
+      - 'js/ecology.js'
+      - 'js/world_composition.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-ecology.spec.mjs'
+      - '.github/workflows/r02-ecology-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ecology-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Run deterministic habitat ecology regression
+        run: npx playwright test tests/browser/r02-ecology.spec.mjs
+      - name: Re-run settlement and environment composition regression
+        run: npx playwright test tests/browser/r02-world-composition.spec.mjs
+      - name: Re-run deterministic multi-region terrain regression
+        run: npx playwright test tests/browser/r02-multi-region-terrain.spec.mjs
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-t25-ecology-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
