@@ -66,9 +66,15 @@ runs:
 
     - name: Record first attempt start time
       id: attempt_start
+      env:
+        GH_TOKEN: ${{ github.token }}
       shell: bash
       run: |
-        echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+        set -euo pipefail
+        STARTED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        echo "started_at=${STARTED_AT}" >> "$GITHUB_OUTPUT"
+        gh issue comment "${{ inputs.issue_number }}" --repo "${GITHUB_REPOSITORY}" \
+          --body "AI AUXILIARY RUN: run_id=${GITHUB_RUN_ID} run_attempt=${GITHUB_RUN_ATTEMPT} role=${{ steps.role_mode.outputs.role }} model=${{ inputs.model }} started_at=${STARTED_AT}" >/dev/null
 
     - name: Run OpenCode
       id: opencode_first
@@ -113,9 +119,13 @@ runs:
 
     - name: Wait and reset before NVIDIA 503 retry
       if: steps.retry_check.outputs.retry_503 == 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
       shell: bash
       run: |
         set -euo pipefail
+        gh issue comment "${{ inputs.issue_number }}" --repo "${GITHUB_REPOSITORY}" \
+          --body "AI AUXILIARY RETRY: run_id=${GITHUB_RUN_ID} run_attempt=${GITHUB_RUN_ATTEMPT} role=${{ steps.role_mode.outputs.role }} reason=nvidia-http-503" >/dev/null
         sleep "${{ inputs.retry_wait_seconds }}"
         git reset --hard
         git clean -fd
