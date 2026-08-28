@@ -1,0 +1,10 @@
+{
+  "name": "the-advisor-game-browser-verification",
+  "private": true,
+  "scripts": {
+    "test:browser:r01": "playwright test tests/browser/r01-baseline.spec.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0"
+  }
+}
