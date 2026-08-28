@@ -50,3 +50,4 @@ window.Game.Utils = {
 // R02 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
+window.Game.Utils.loadScriptOnce("js/game_time.js", "r02GameTimeModule");
