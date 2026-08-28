@@ -5,6 +5,9 @@
   const VERSION = 'r02-political-geography-v1';
   const REALM_SPAN = 12;
   const PROVINCE_SPAN = 4;
+  const CACHE_LIMIT = 160;
+  const regionContextCache = new Map();
+  const realmCandidateCache = new Map();
 
   function hash32(text) {
     let hash = 2166136261 >>> 0;
@@ -22,10 +25,33 @@
   }
 
   function requireComposition() {
-    if (!Game.WorldComposition?.composeRegion) {
-      throw new Error('WorldComposition is required before political geography queries.');
-    }
+    if (!Game.WorldComposition?.composeRegion) throw new Error('WorldComposition is required before political geography queries.');
     return Game.WorldComposition;
+  }
+
+  function boundedSet(cache, key, value) {
+    if (cache.has(key)) cache.delete(key);
+    cache.set(key, value);
+    while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
+    return value;
+  }
+
+  function regionContext(seed, x, y) {
+    const key = `${seed}|${x}|${y}`;
+    if (regionContextCache.has(key)) {
+      const value = regionContextCache.get(key);
+      regionContextCache.delete(key);
+      regionContextCache.set(key, value);
+      return value;
+    }
+    const source = requireComposition().composeRegion(seed, x, y);
+    return boundedSet(regionContextCache, key, Object.freeze({
+      environment: source.environment,
+      environmentFeatures: Object.freeze([...source.environmentFeatures]),
+      connections: source.connections,
+      settlement: source.settlement,
+      baseFingerprint: source.baseFingerprint
+    }));
   }
 
   function macroAnchor(seed, macroX, macroY) {
@@ -43,9 +69,10 @@
   }
 
   function realmCandidate(seed, macroX, macroY) {
-    const composition = requireComposition();
+    const cacheKey = `${seed}|${macroX}|${macroY}`;
+    if (realmCandidateCache.has(cacheKey)) return realmCandidateCache.get(cacheKey);
     const anchor = macroAnchor(seed, macroX, macroY);
-    const anchorRegion = composition.composeRegion(seed, anchor.x, anchor.y);
+    const anchorRegion = regionContext(seed, anchor.x, anchor.y);
     const terrainKey = [
       anchorRegion.environmentFeatures.join(','),
       anchorRegion.environment.waterRatio,
@@ -53,23 +80,21 @@
       anchorRegion.connections.continuityKey
     ].join('|');
     const identityHash = hash32(`${seed}|realm:${macroX}:${macroY}|${terrainKey}`);
-    return Object.freeze({
+    return boundedSet(realmCandidateCache, cacheKey, Object.freeze({
       id: `realm:${identityHash.toString(16).padStart(8, '0')}`,
       macroX,
       macroY,
       anchor,
       anchorEnvironment: anchorRegion.environment,
       terrainIdentity: identityHash.toString(16).padStart(8, '0')
-    });
+    }));
   }
 
   function selectRealm(seed, regionX, regionY) {
-    const composition = requireComposition();
-    const region = composition.composeRegion(seed, regionX, regionY);
+    const region = regionContext(seed, regionX, regionY);
     const baseMacroX = Math.floor(regionX / REALM_SPAN);
     const baseMacroY = Math.floor(regionY / REALM_SPAN);
     let best = null;
-
     for (let my = baseMacroY - 1; my <= baseMacroY + 1; my += 1) {
       for (let mx = baseMacroX - 1; mx <= baseMacroX + 1; mx += 1) {
         const candidate = realmCandidate(seed, mx, my);
@@ -77,7 +102,7 @@
         const dy = regionY - candidate.anchor.y;
         const distanceCost = (dx * dx) + (dy * dy);
         const geographyCost = environmentDistance(region.environment, candidate.anchorEnvironment) * 18;
-        const routeBonus = region.connections && Object.values(region.connections.roads || {}).some(Boolean) ? -2 : 0;
+        const routeBonus = Object.values(region.connections.roads || {}).some(Boolean) ? -2 : 0;
         const tieBreak = (hash32(`${seed}|${regionX}:${regionY}|${candidate.id}`) % 1000) / 1000000;
         const score = distanceCost + geographyCost + routeBonus + tieBreak;
         if (!best || score < best.score) best = { candidate, score };
@@ -89,8 +114,8 @@
   function provinceState(seed, regionX, regionY, realm) {
     const px = Math.floor(regionX / PROVINCE_SPAN);
     const py = Math.floor(regionY / PROVINCE_SPAN);
-    const composition = requireComposition().composeRegion(seed, regionX, regionY);
-    const terrainClass = composition.environmentFeatures[0] || (composition.environment.meanElevation >= 0.5 ? 'upland' : 'lowland');
+    const context = regionContext(seed, regionX, regionY);
+    const terrainClass = context.environmentFeatures[0] || (context.environment.meanElevation >= 0.5 ? 'upland' : 'lowland');
     const idHash = hash32(`${seed}|${realm.id}|province:${px}:${py}|${terrainClass}`);
     return Object.freeze({
       id: `region-polity:${idHash.toString(16).padStart(8, '0')}`,
@@ -113,12 +138,11 @@
   }
 
   function borderDescriptor(seed, regionX, regionY, direction) {
-    const composition = requireComposition();
     const pair = edgePair(regionX, regionY, direction);
     const hereRealm = selectRealm(seed, regionX, regionY);
     const thereRealm = selectRealm(seed, pair.neighbor.x, pair.neighbor.y);
-    const here = composition.composeRegion(seed, regionX, regionY);
-    const there = composition.composeRegion(seed, pair.neighbor.x, pair.neighbor.y);
+    const here = regionContext(seed, regionX, regionY);
+    const there = regionContext(seed, pair.neighbor.x, pair.neighbor.y);
     const waterBarrier = Math.max(here.environment.waterRatio, there.environment.waterRatio);
     const mountainBarrier = Math.max(here.environment.mountainRatio, there.environment.mountainRatio);
     const routeConnected = Object.values(here.connections.roads || {}).some(Boolean) && Object.values(there.connections.roads || {}).some(Boolean);
@@ -147,11 +171,11 @@
     const seed = String(seedInput ?? Game.State?.world?.seed ?? '');
     const regionX = intCoord(regionXInput, 'regionX');
     const regionY = intCoord(regionYInput, 'regionY');
-    const composition = requireComposition().composeRegion(seed, regionX, regionY);
+    const context = regionContext(seed, regionX, regionY);
     const realm = selectRealm(seed, regionX, regionY);
     const province = provinceState(seed, regionX, regionY, realm);
-    const settlementAffiliation = composition.settlement ? Object.freeze({
-      settlementId: composition.settlement.id,
+    const settlementAffiliation = context.settlement ? Object.freeze({
+      settlementId: context.settlement.id,
       realmId: realm.id,
       provinceId: province.id,
       base: true
@@ -178,24 +202,20 @@
       settlementAffiliation,
       borders: Object.freeze(borders),
       geographyContext: Object.freeze({
-        environmentFeatures: Object.freeze([...composition.environmentFeatures]),
-        connectionKey: composition.connections.continuityKey,
-        compositionFingerprint: composition.baseFingerprint
+        environmentFeatures: context.environmentFeatures,
+        connectionKey: context.connections.continuityKey,
+        compositionFingerprint: context.baseFingerprint
       }),
       presentationAuthority: false
     });
   }
 
   function resolveCurrent(baseState, campaignHistory = {}) {
-    if (!baseState || baseState.authority !== 'simulation' || baseState.base !== true) {
-      throw new TypeError('Simulation-owned base political geography is required.');
-    }
+    if (!baseState || baseState.authority !== 'simulation' || baseState.base !== true) throw new TypeError('Simulation-owned base political geography is required.');
     const history = campaignHistory && typeof campaignHistory === 'object' ? campaignHistory : {};
     const realmId = String(history.realmId || baseState.realm.id);
     const provinceId = String(history.provinceId || baseState.province.id);
-    const settlementRealmId = baseState.settlementAffiliation
-      ? String(history.settlementRealmId || realmId)
-      : null;
+    const settlementRealmId = baseState.settlementAffiliation ? String(history.settlementRealmId || realmId) : null;
     return Object.freeze({
       version: VERSION,
       authority: 'simulation',
