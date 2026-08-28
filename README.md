@@ -400,6 +400,8 @@ Regions that are not currently active or visible must not be treated as permanen
 
 The game is not required to render or individually tick every entity in the unbounded world at full detail while off-screen. Off-screen processing may use coarser models appropriate to distance, relevance and performance, but resulting world changes must remain compatible with simulation authority and campaign causality.
 
+Invisible or unloaded detail should normally consume **no continuous entity-level simulation work unless an authoritative consequence actually requires it**. A distant region, settlement, ordinary NPC population or ecological population may instead preserve compact state, meaningful history and a last reconciled campaign-time boundary, then derive or advance its current state only when the information becomes relevant.
+
 When an inactive region becomes relevant again, its current state should reflect elapsed game time and applicable off-screen progression together with its deterministic base world and persistent changes, rather than simply returning to the state in which it was last rendered.
 
 ### 🏛️ Hierarchical Global-to-Local Simulation
@@ -419,6 +421,20 @@ When a region, settlement, neighboring map area, or important entity becomes rel
 Unvisited or distant areas must not consume continuous full-detail simulation resources merely because time passes. Their detailed catch-up may be deferred until needed, while the compact higher-level state required to preserve world history and large-scale balances continues at an appropriate simulation resolution.
 
 This hierarchy must support later regional, realm/country, and wider-world strategic views so the player can understand the big picture as the protagonist rises in authority without requiring every village, NPC, animal, or tile to be active at full detail simultaneously.
+
+### ⚙️ Relevance-Bounded Lazy and Asynchronous Simulation
+
+Invisible-world simulation cost must scale primarily with **relevance and authoritative information actually required**, not with the total size of the unbounded world. Expanding the generated world, discovering additional coordinates, or allowing campaign time to pass must not by itself require a proportional increase in continuously active local simulation.
+
+For irrelevant or unloaded detail, the preferred default is **do not continuously tick it**. Current state may be derived or advanced on demand from compatible **SEED, world coordinates, authoritative fantasy campaign date/time, hierarchical aggregate state, settlement-development and political history, meaningful recorded events, and persistent changes**. Previously visited detail may additionally use its last authoritative reconciled state/time as an input.
+
+Long elapsed periods should normally be reconciled by computing bounded aggregate or end-state consequences rather than replaying every missed local action, NPC routine, animal movement, construction step, or day/night cycle. Ordinary off-screen micro-actions do not need individual historical replay unless they produced a meaningful authoritative consequence that must persist.
+
+Expensive generation, catch-up, refinement, or materialization should be performed asynchronously where practical so the interactive game, input handling, and visible rendering are not unnecessarily blocked. The game may prepare nearby or soon-relevant state before it is displayed, while distant state may remain unmaterialized until needed.
+
+Asynchronous execution timing is **never simulation authority**. Equivalent authoritative inputs must produce equivalent authoritative results regardless of task scheduling, completion order, render order, visit order, device speed, or whether computation occurred synchronously or asynchronously. A late or stale asynchronous result must not overwrite newer authoritative campaign state.
+
+The active local world may continue using high-detail real-time simulation, nearby relevant state may use lower-frequency or aggregate processing, and far/unloaded detail may remain unticked until needed. This difference in computational fidelity must not change causal truth or create a separate world.
 
 ## 🌱 Seeded, Reproducible, Unbounded World
 
@@ -490,11 +506,15 @@ Visual assets never become simulation authority.
 
 The complete game must be usable on current desktop browsers, tablets, and phones in portrait and landscape.
 
+Current phones and tablets are supported gameplay targets, not presentation-only viewers. Core play, world navigation, input, simulation continuity, save/load and required information must remain practical on representative current mobile hardware, with device-appropriate quality/performance scaling where necessary.
+
 Interaction and required information must remain understandable with touch, mouse, and keyboard where applicable.
 
 Important information must not depend only on color, hover, tiny targets, or precision input.
 
-Presentation may adapt to device capability, but visual quality scaling must never change simulation outcomes, AI knowledge, legal actions, game time, or campaign state.
+Presentation and non-authoritative visual fidelity may adapt to device capability, including reduced detail, render scale, effects, density or other performance-oriented presentation choices. Such scaling must never change authoritative simulation outcomes, AI knowledge, legal actions, game time, campaign state, world history or deterministic reconstruction.
+
+The size of the unbounded world must not force invisible-world computation to grow linearly on phones, tablets or desktop devices; relevance-bounded simulation and lazy materialization remain the product model across device classes.
 
 ---
 
@@ -537,6 +557,9 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 35. **A new fantasy campaign starts from the accepted real-world date and time.** Day, month and time-of-day match the real-world creation origin, while the fantasy year is exactly 2000 years behind; after creation, accelerated campaign chronology advances from that origin and resume uses elapsed real time rather than remapping the campaign to the current civil calendar.
 36. **Settlements have history, not frozen templates.** Authoritative time and simulation outcomes may grow, shrink, damage, rebuild, repurpose, fortify, abandon or otherwise change settlements; later materialization must reflect accumulated development rather than reset to the original SEED layout.
 37. **The SEED defines coherent base political geography as well as physical geography.** Realms/countries, regions/provinces, borders/territorial relationships and settlement affiliations may be generated as reproducible base-world structure and then evolve through authoritative campaign history.
+38. **Invisible-world computation scales with relevance, not total world size.** Irrelevant unloaded detail should normally remain unticked and be derived or advanced only when authoritative information is required.
+39. **Lazy and asynchronous computation must remain deterministic.** Scheduling, completion order, render order, visit order or device speed may change when work finishes, but must not change authoritative results or allow stale work to overwrite newer campaign state.
+40. **Phones and tablets are first-class gameplay targets.** Device-specific quality or fidelity scaling may protect responsiveness and performance, but must never alter simulation truth, chronology, legal outcomes or persistent world history.
 
 ---
 
