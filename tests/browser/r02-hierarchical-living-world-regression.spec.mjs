@@ -35,8 +35,8 @@ async function ready(page) {
     window.Game?.PoliticalGeography?.baseRegion &&
     window.Game?.SettlementEvolution?.advance &&
     window.Game?.NPCWorld?.capture &&
-    window.Game?.NPCLife?.snapshotForNpc &&
-    window.Game?.Ecology?.generateForRegion &&
+    window.Game?.NPCLife?.scheduleState &&
+    window.Game?.Ecology?.composeRegion &&
     window.Game?.WorldDeltaPersistence?.clearAll
   ));
 }
