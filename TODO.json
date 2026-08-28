@@ -73,17 +73,19 @@
       "id": "R02-T04",
       "order": 4,
       "title": "Compose deterministic authoritative world-state initialization",
-      "status": "ai_ready_auxiliary_coder",
+      "status": "ai_running",
       "depends_on": ["R02-T01", "R02-T02"],
       "github_issue": 86,
       "role_owner": "Coder Worker",
       "auxiliary_nvidia": {
         "role": "coder",
-        "status": "ai_ready",
-        "labels_verified": ["ai-role-coder", "ai-ready"],
+        "status": "running",
+        "workflow_run": 33172638124,
+        "model": "nvidia/nvidia/nemotron-3-super-120b-a12b",
+        "labels_verified": ["ai-role-coder", "ai-running", "work-claimed"],
         "authority": "auxiliary only; formal Worker review and independent Tester PASS remain required"
       },
-      "note": "Planner accepted the #86 P-REV after #83/#84 formal completion. Scope/AC/dependencies are unchanged. Repository NVIDIA slot was free, so #86 was routed as the single eligible auxiliary Coder target with ai-ready added last. Formal Workers must skip while NVIDIA reservation/running labels are active; any success still requires formal review and independent Tester verification, and any ai-handoff must continue with the responsible formal Coder rather than being rerouted to NVIDIA."
+      "note": "Planner accepted the #86 P-REV after #83/#84 formal completion and routed #86 as the single eligible auxiliary NVIDIA Coder target. Run 33172638124 is active. Formal Workers must skip while ai-running/work-claimed remains. On success, formal Worker must verify exact commits/PR/evidence before independent Tester verification; on failure, ai-handoff goes to the responsible formal Coder and must not be rerouted to NVIDIA."
     },
     {
       "id": "R02-T05",
