@@ -323,6 +323,8 @@ As the simulation changes the world, the visible strategic map must react accord
 
 The camera and presentation must allow the player to understand where the main character is, what surrounds them, what places exist nearby, and how the local area relates to the wider world.
 
+As the campaign grows in geographic and political scale, the same authoritative living world must also support readable regional, realm/country, and wider-world strategic views. These higher-level views may summarize aggregate state and major relationships without materializing every local entity, but they must remain views of the same simulated world rather than disconnected dashboard-only substitutes.
+
 Early releases may use simplified or placeholder assets, but they must establish and progressively extend this same playable strategic world rather than replacing it with disconnected visual prototypes.
 
 ## 🌐 WebGL-Based Mixed 2D / 3D Presentation
@@ -354,6 +356,20 @@ Dynamic movement of physically accurate shadows is **not required**. Performance
 
 The authoritative game time and any persistent time-dependent consequences must survive save/load according to campaign persistence rules.
 
+### 📅 Real-World Calendar Continuity and Resume Catch-Up
+
+The campaign has an authoritative **date and time**, not only a time-of-day clock. Campaign time must be able to advance through days and longer calendar periods while preserving chronology and historical consequences.
+
+Real-world date/time is the continuity reference while the game is not running. The campaign records an accepted real-world timestamp together with authoritative campaign date/time so elapsed real time can be converted into elapsed game time when play resumes.
+
+At normal speed, the existing time ratio also applies across offline/resume gaps: **one real-world hour advances one in-game day**. Therefore, if the player resumes the same campaign **24 real-world hours** after the last accepted timestamp, **24 in-game days** must have elapsed before interactive play resumes.
+
+Resume catch-up must be performance-efficient. The game must not replay every missed game minute, render every missed day/night cycle, or individually simulate every entity in the unbounded world merely to account for elapsed real time.
+
+Startup should materialize and reconcile only the campaign state needed for immediate play and other currently relevant authoritative state. Distant or unloaded world detail may remain compact and may catch up lazily when that place, entity, region, realm, or strategic scale becomes relevant.
+
+A backward or otherwise invalid real-world clock change must not silently rewind established campaign chronology. Exact clock-validation, trust, anti-tamper, pause, speed-control, and calendar-presentation techniques are implementation decisions below this product rule.
+
 ## 🔄 Active and Off-Screen World Simulation
 
 The world continues to live as game time advances.
@@ -365,6 +381,24 @@ Regions that are not currently active or visible must not be treated as permanen
 The game is not required to render or individually tick every entity in the unbounded world at full detail while off-screen. Off-screen processing may use coarser models appropriate to distance, relevance and performance, but resulting world changes must remain compatible with simulation authority and campaign causality.
 
 When an inactive region becomes relevant again, its current state should reflect elapsed game time and applicable off-screen progression together with its deterministic base world and persistent changes, rather than simply returning to the state in which it was last rendered.
+
+### 🏛️ Hierarchical Global-to-Local Simulation
+
+Off-screen and large-scale simulation follows a **general-to-specific hierarchy** so the world can remain historically coherent without spending local-detail computation everywhere.
+
+The simulation may represent the same authoritative world at progressively different resolution, including **global/world → realm/country → region → settlement → local active world**, while especially important entities or events may retain more detail when their relevance justifies it.
+
+Distant layers should preserve the big picture with compact authoritative state rather than full local materialization. Depending on later systems, this may include aggregate population trends, prosperity, food/resources, security, trade, military pressure, diplomacy, unrest, migration, hazards, major events, territorial control, and other meaningful balances.
+
+Broad world or realm outcomes may influence regions and settlements below them. Significant local or settlement outcomes may in turn update regional, realm, or global aggregates. This propagation must preserve readable causality rather than create disconnected random results.
+
+**Simulation fidelity is not simulation authority.** A distant realm represented by compact aggregate state is still part of the same authoritative world. Increasing detail when it becomes relevant must refine/materialize that established state rather than replace its history.
+
+When a region, settlement, neighboring map area, or important entity becomes relevant, higher-detail state should be reconstructed or materialized from the compatible **SEED-derived base world, world coordinates, authoritative campaign date/time, accumulated higher-level simulation outcomes, persistent historical changes, neighboring-world continuity, and applicable local rules**.
+
+Unvisited or distant areas must not consume continuous full-detail simulation resources merely because time passes. Their detailed catch-up may be deferred until needed, while the compact higher-level state required to preserve world history and large-scale balances continues at an appropriate simulation resolution.
+
+This hierarchy must support later regional, realm/country, and wider-world strategic views so the player can understand the big picture as the protagonist rises in authority without requiring every village, NPC, animal, or tile to be active at full detail simultaneously.
 
 ## 🌱 Seeded, Reproducible, Unbounded World
 
@@ -386,6 +420,8 @@ Generated regions are different parts of one continuous world, not independent r
 
 Previously unseen areas may be generated when needed. Returning to the same unchanged coordinates with the same compatible SEED and generation rules must reconstruct the same base world.
 
+When a neighboring or previously unseen region becomes relevant later in the campaign, its current materialized state must also account for authoritative campaign date/time and applicable hierarchical world/realm/region development rather than behaving as though no campaign time has passed.
+
 ### 🏞️ Terrain Diversity and Continuity
 
 The generated world must contain meaningful terrain and environmental diversity across local and distant regions.
@@ -402,9 +438,9 @@ Campaign persistence must preserve authoritative differences from that generated
 
 Objects, entities, locations, relationships, discoveries, damage, construction, ownership, resource use, inventory-affecting world interactions, time-dependent consequences, or other meaningful simulation consequences caused or influenced by campaign events must not silently reset when their region leaves the active view or when the campaign is saved and loaded.
 
-Returning to previously visited coordinates must therefore reconstruct the current campaign world from the deterministic base world plus authoritative persistent changes and applicable elapsed-time/off-screen progression.
+Returning to previously visited coordinates must therefore reconstruct the current campaign world from the deterministic base world plus authoritative persistent changes and applicable elapsed-time, hierarchical, and off-screen progression.
 
-**SEED-generated base world + authoritative elapsed-time progression + saved persistent changes = current campaign world.**
+**SEED-generated base world + authoritative campaign date/time + accumulated hierarchical/off-screen progression + saved persistent changes = current campaign world.**
 
 This model allows unexplored or unchanged regions to remain deterministically generable while preventing meaningful character/world consequences from disappearing.
 
@@ -462,6 +498,10 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 28. **The active local world stays alive while off-screen regions still progress.** The protagonist's relevant region uses detailed continuous simulation, while inactive regions may use lower-cost authoritative elapsed-time simulation or approximation rather than freezing permanently.
 29. **World ecology belongs to the generated world.** Domestic animals, wildlife and a broad original medieval-fantasy bestiary should fit SEED-derived habitat, terrain, settlement context and campaign state.
 30. **NPC life follows time and place.** Daily routines and simple varied ambient NPC-to-NPC dialogue should respond to profession, settlement/location, environment, time and relevant local conditions.
+31. **Campaign chronology continues from real-world elapsed time even while the game is closed.** At normal speed, one real-world hour advances one in-game day; resume must efficiently reconcile the elapsed calendar before interactive play continues.
+32. **World simulation is hierarchical and relevance-scaled.** Global/world, realm/country, region, settlement and local layers may use progressively different detail, but all remain parts of the same authoritative causal history.
+33. **Materialize detail only when it matters.** Unvisited or distant areas should remain compact and lazily reconstruct higher-detail state from SEED, coordinates, campaign date/time, accumulated simulation outcomes and persistent history when they become relevant.
+34. **The same living world supports local and big-picture views.** Regional, realm/country and wider-world strategic views summarize authoritative aggregate state rather than creating disconnected substitute worlds.
 
 ---
 
