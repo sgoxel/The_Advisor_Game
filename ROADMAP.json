@@ -4,7 +4,7 @@
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
   "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28-settlement-evolution-political-geography",
-  "planning_basis": "Planner-owned decomposition reconciled through #105, #118, #132, #137 and #139 after Admin README updates #103, #106, #117, #131, #136 and #138. Compatible verified work remains preserved; completed region navigation, game-time, NPC-life, settlement/environment, ecology, Designer, unbounded-world regression and hierarchical-state foundations are reused rather than reopened. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
+  "planning_basis": "Planner-owned decomposition reconciled through #105, #118, #132, #137 and #139 after Admin README updates #103, #106, #117, #131, #136 and #138. Compatible verified work remains preserved; completed region navigation, game-time, real-world-origin fantasy calendar, NPC-life, settlement/environment, ecology, Designer, unbounded-world regression and hierarchical-state foundations are reused rather than reopened. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
   "readme_reconciliation": {
     "readme_commit": "01684713b0593a72c952e2cf750d81329b97b3c9",
     "admin_issues": [103, 106, 117, 131, 136, 138],
@@ -56,6 +56,7 @@
       "completed #113 deterministic adjacent-region navigation as the spatial activation foundation",
       "completed #115 cumulative unbounded-world and delta-persistence regression",
       "completed #122 authoritative real-time game clock/day-night foundation",
+      "completed #133 real-world-origin fantasy calendar and bounded resume catch-up foundation including production-startup T-REV retest",
       "completed #125 time-aware NPC schedules and ambient dialogue foundation",
       "completed #126 deterministic settlement/environment composition foundation",
       "completed #127 ecology foundation",
@@ -63,7 +64,6 @@
       "completed #134 compact global-to-local hierarchical state/refinement foundation"
     ],
     "ADAPT": [
-      "#133 real-world-origin calendar implementation through its current accepted T-REV fix, pending independent retest of the production startup bootstrap",
       "#124 off-screen progression into a relevance-scaled hierarchical global-to-local integration consuming #133, #134, #140 and #141",
       "existing persistence into SEED base + fantasy campaign date/time + hierarchical progression + settlement-development/political-history state + sparse persistent changes",
       "existing region activation so later materialization composes elapsed fantasy campaign time, settlement development and political/territorial history while preserving #113 verified spatial continuity",
