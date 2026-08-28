@@ -36,9 +36,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run R02 persistence UI integration smoke
-        run: npx playwright test tests/browser/r02-persistence-ui.spec.mjs --project=chromium
+        run: npx playwright test tests/browser/r02-persistence-ui.spec.mjs
       - name: Re-run focused R02 save/load validation
-        run: npx playwright test tests/browser/r02-save-load-validation.spec.mjs --project=chromium
+        run: npx playwright test tests/browser/r02-save-load-validation.spec.mjs
       - name: Run stabilized R01 browser regression
         run: npm run test:browser:r01
       - name: Upload Playwright evidence
