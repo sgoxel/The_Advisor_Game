@@ -12,7 +12,7 @@
       "id": "R02-T01",
       "order": 1,
       "title": "Define authoritative campaign-state boundary",
-      "status": "ai_ready_auxiliary_test",
+      "status": "ai_awaiting_formal_test",
       "github_issue": 83,
       "role_owner": "Coder Worker",
       "implementation_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
@@ -26,19 +26,27 @@
       },
       "auxiliary_nvidia": {
         "role": "tester",
-        "status": "ai_ready",
-        "labels_verified": ["ai-role-tester", "ai-ready"],
+        "status": "success_awaiting_formal_review",
+        "workflow_run": 33166277573,
+        "job": 98832488870,
+        "tested_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
+        "evidence_comment": 5451897494,
         "authority": "auxiliary only; formal Tester remains independent authority"
       },
-      "note": "Coder Worker #2 completed implementation and cleared its claim. Planner routed this free committed state for auxiliary NVIDIA objective verification. Formal Workers must not duplicate while ai-ready/ai-running/work-claimed is active. NVIDIA evidence cannot independently complete the issue; formal Tester PASS remains required."
+      "note": "Coder Worker #2 completed implementation and cleared its claim. NVIDIA Tester produced objective PASS evidence, but #83 remains open at ai-awaiting-review and cannot complete until formal Tester independently inspects the exact committed state/evidence and records PASS or T-REV. Do not duplicate or treat NVIDIA evidence as phase/release authority."
     },
     {
       "id": "R02-T02",
       "order": 2,
       "title": "Define deterministic seed and RNG derivation contract",
-      "status": "work_claimed",
+      "status": "independent_test_pass_pending_claim_clear",
       "github_issue": 84,
       "role_owner": "Coder Worker",
+      "implementation_refs": [
+        "67b252f4d7cd5a82e94a828b96358ea5ae65ef3d",
+        "8c182c8272d28923142c7b310aa77ea60ff097f4",
+        "eddcdf8b5f0a205c29d23045aaf9c4285714853d"
+      ],
       "claim": {
         "worker": "Coder Worker #2",
         "role": "Coder",
@@ -51,7 +59,15 @@
         "evidence_count": 0,
         "coder_completed": false
       },
-      "note": "NVIDIA/OpenCode produced no complete verifiable Coder result. Formal Coder Worker #2 has taken ownership and must continue without routing this handoff back to NVIDIA. Independent Tester PASS remains required after implementation."
+      "independent_test": {
+        "result": "PASS",
+        "tested_ref": "eddcdf8b5f0a205c29d23045aaf9c4285714853d",
+        "run": 33166302222,
+        "job": 98832425073,
+        "artifact": 9683767822,
+        "note": "Formal Tester independently verified deterministic seed normalization/derived streams, nondeterminism guards and preserved R01 regression; no T-REV required."
+      },
+      "note": "Formal Tester PASS exists, but Coder Worker #2 has not yet posted its completion audit/WORK-CLAIM-CLEAR and the issue still carries work-claimed. The stale NVIDIA ai-role-coder label was removed by Planner; the valid formal claim is preserved. Do not close #84 or unblock #86 until the claimant completes its audit and clears ownership."
     },
     {
       "id": "R02-T03",
@@ -81,7 +97,8 @@
       "status": "blocked",
       "depends_on": ["R02-T01", "R02-T02"],
       "github_issue": 86,
-      "role_owner": "Coder Worker"
+      "role_owner": "Coder Worker",
+      "note": "Blocked until #83 has formal Tester PASS and #84 reaches formal DONE with its Coder claim cleared."
     },
     {
       "id": "R02-T05",
