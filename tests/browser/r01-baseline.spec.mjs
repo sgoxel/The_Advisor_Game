@@ -49,11 +49,18 @@ async function findInspectableCanvasPoint(page) {
 }
 
 function isExpectedOptionalMap404(message) {
+  if (message.type() !== 'error') return false;
+
   const text = message.text();
-  return message.type() === 'error' &&
-    text.includes('Failed to load resource') &&
-    text.includes('404') &&
-    EXPECTED_OPTIONAL_MAP_404S.some((path) => text.includes(path));
+  const locationUrl = message.location().url || '';
+  if (!text.includes('Failed to load resource') || !text.includes('404')) return false;
+
+  try {
+    const pathname = new URL(locationUrl).pathname;
+    return EXPECTED_OPTIONAL_MAP_404S.includes(pathname);
+  } catch {
+    return false;
+  }
 }
 
 function collectRuntimeFailures(page) {
@@ -61,7 +68,8 @@ function collectRuntimeFailures(page) {
   page.on('pageerror', (error) => failures.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
     if (message.type() === 'error' && !isExpectedOptionalMap404(message)) {
-      failures.push(`console.error: ${message.text()}`);
+      const locationUrl = message.location().url;
+      failures.push(`console.error: ${message.text()}${locationUrl ? ` @ ${locationUrl}` : ''}`);
     }
   });
   return failures;
