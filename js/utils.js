@@ -53,3 +53,4 @@ window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldComposition
 window.Game.Utils.loadScriptOnce("js/game_time.js", "r02GameTimeModule");
 window.Game.Utils.loadScriptOnce("js/region_navigation.js", "r02RegionNavigationModule");
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
+window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
