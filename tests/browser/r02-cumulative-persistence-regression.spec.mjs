@@ -50,9 +50,9 @@ test('cumulative persistence surface remains responsive accessible and map-prima
     viewportWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
     canvas: document.querySelector('#gameCanvas')?.getBoundingClientRect().toJSON(),
-    buttons: [...document.querySelectorAll('.persistence-action')].map((node) => {
+    buttons: [...document.querySelectorAll('.persistence-tools .persistence-action')].map((node) => {
       const rect = node.getBoundingClientRect();
-      return { width: rect.width, height: rect.height, disabled: node.disabled };
+      return { width: rect.width, height: rect.height };
     })
   }));
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.viewportWidth + 2);
@@ -68,6 +68,12 @@ test('cumulative persistence surface remains responsive accessible and map-prima
   await expect(dialog).toBeVisible();
   await expect(page.getByRole('button', { name: 'Load campaign' })).toBeDisabled();
   await expect(page.locator('#persistenceDialogStatus')).toContainText('No file selected');
+  for (const name of ['Choose save file', 'Cancel', 'Load campaign']) {
+    const box = await page.getByRole('button', { name }).boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
 
   const before = await page.evaluate(() => window.Game.State.world.seed);
   await page.locator('#campaignSaveFile').setInputFiles({
