@@ -51,3 +51,4 @@ window.Game.Utils = {
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
 window.Game.Utils.loadScriptOnce("js/game_time.js", "r02GameTimeModule");
+window.Game.Utils.loadScriptOnce("js/region_navigation.js", "r02RegionNavigationModule");
