@@ -144,3 +144,30 @@ test('equivalent inputs are reproducible and backwards chronology is rejected', 
   expect(evidence.a).toEqual(evidence.b);
   expect(evidence.backwardsRejected).toBe(true);
 });
+
+test('partial-day integration preserves remainder and matches one full-day application', async ({ page }) => {
+  await ready(page);
+  const target = await findSettlement(page, 'settlement-partition-seed');
+  expect(target).not.toBeNull();
+  const evidence = await page.evaluate(({ seed, x, y }) => {
+    const api = window.Game.SettlementEvolution;
+    const base = api.baseState(seed, x, y);
+    const common = { warPressure: 35, hazardPressure: 20, constructionSupport: 40, historicalDamage: 10 };
+    const halfDay = api.advance(seed, x, y, { ...common, priorState: base, campaignMinutes: 720 });
+    const split = api.advance(seed, x, y, { ...common, priorState: halfDay, campaignMinutes: 1440 });
+    const single = api.advance(seed, x, y, { ...common, priorState: base, campaignMinutes: 1440 });
+    return { base, halfDay, split, single };
+  }, target);
+
+  expect(evidence.halfDay.elapsedDaysApplied).toBe(0);
+  expect(evidence.halfDay.pendingGameMinutes).toBe(720);
+  expect(evidence.halfDay.metrics).toEqual(evidence.base.metrics);
+  expect(evidence.halfDay.accumulatedHistory).toEqual(evidence.base.accumulatedHistory);
+  expect(evidence.split.elapsedDaysApplied).toBe(1);
+  expect(evidence.split.pendingGameMinutes).toBe(0);
+  expect(evidence.split.metrics).toEqual(evidence.single.metrics);
+  expect(evidence.split.accumulatedHistory).toEqual(evidence.single.accumulatedHistory);
+  expect(evidence.split.status).toBe(evidence.single.status);
+  expect(evidence.split.economicFunction).toBe(evidence.single.economicFunction);
+  expect(evidence.split.hierarchyRefinementKey).toBe(evidence.single.hierarchyRefinementKey);
+});
