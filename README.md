@@ -282,7 +282,7 @@ Location must remain meaningful to gameplay, including travel, meetings, informa
 
 The visual direction should support coherent isometric / near-isometric presentation, high-quality 2D and 3D assets, readable silhouettes and scale, character emotion and atmosphere, distinct settlements and environments, environmental effects, and progressive improvement from early placeholders to polished visual assets.
 
-The Graphic Designer Worker chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
+A Worker acting in the **Designer** role chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
 
 Visual assets never become simulation authority.
 
@@ -354,17 +354,17 @@ The specific technical method used to build, package, publish, version, or deplo
 
 # 🤖 Development Worker Governance
 
-The project normally uses five recurring development Workers.
+The project normally uses five recurring Worker identities: **Worker #1, Worker #2, Worker #3, Worker #4, and Worker #5**.
 
-README defines their high-level responsibility and fallback relationship, while detailed task selection, scheduling, branching, file handling, commands, tools, and execution procedures belong to Worker instructions and planning records.
+The Worker identities are equivalent. No Worker has a permanent development role.
 
-| Worker                      | Primary responsibility                                 | Fallback role    |
-| --------------------------- | ------------------------------------------------------ | ---------------- |
-| **Planner Worker**          | Planning and coordination                              | Tester           |
-| **Coder Worker #1**         | Implementation                                         | Graphic Designer |
-| **Coder Worker #2**         | Implementation                                         | Graphic Designer |
-| **Graphic Designer Worker** | 2D/3D visual design and asset creation                 | Coder            |
-| **Tester Worker**           | Independent verification and verified-release approval | Planner          |
+Each Worker invocation assumes exactly one role from this ordered rotation:
+
+**Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
+
+Role assignment advances when a Worker claims the current role, so the next Worker may claim the next role without waiting for the previous Worker to finish. Multiple Workers may therefore be active concurrently in different roles while claims and dependency rules prevent duplicate work.
+
+README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records.
 
 ## Planner
 
@@ -372,53 +372,61 @@ Planner converts README goals and principles into practical project planning.
 
 Planner decides phases and sequencing, dependencies, architecture and project organization, technical decomposition, task scope and acceptance criteria, assignment of work to the appropriate role, and normal prerequisites for an independently verified phase release.
 
-Planner does not move these decisions into README.
+Planner keeps planning state consistent with Admin instructions and README, maintains enough focused work for implementation and design, and does not move planning detail into README.
 
-Planner authority remains subordinate to explicit Admin instructions and README.
+Planner does not normally implement product code or visual production and does not approve releases.
 
 ## Coder
 
 Coder implements approved project work.
 
-Coder owns technical implementation decisions inside approved scope and coordinates with Graphic Designer when code and visual assets must work together.
+Coder owns technical implementation decisions inside approved scope, including runtime/application code, configuration, integration, and implementation-focused tests, and coordinates with Designer when code and visual assets must work together.
 
-Coder does not redefine product principles or independently certify its own implementation as verified.
+Coder does not redefine Planner-owned scope, acceptance criteria, dependencies, or phase order and does not independently certify its own implementation as verified.
 
-## Graphic Designer
+## Designer
 
-Graphic Designer owns creation and refinement of the game's visual presentation, including 2D art, UI visuals, portraits, backgrounds, sprites, textures, icons, 3D scenes and objects, terrain, environments, buildings, vegetation, props, landmarks, isometric/map visuals, WebGL visuals, placeholder-to-final refinement, consistency, scale, perspective, materials, lighting, readability, responsiveness, and visual-performance considerations.
+Designer owns creation and refinement of the game's visual presentation, including 2D art, UI visuals, portraits, backgrounds, sprites, textures, icons, 3D scenes and objects, terrain, environments, buildings, vegetation, props, landmarks, isometric/map visuals, WebGL visuals, placeholder-to-final refinement, consistency, scale, perspective, materials, lighting, readability, responsiveness, accessibility, and visual-performance considerations.
 
-Graphic Designer chooses suitable tools, formats, workflows, and export methods for the assigned work.
+Designer chooses suitable tools, formats, workflows, and export methods for approved visual work.
 
-Gameplay and simulation logic remain Coder responsibility.
+Gameplay and authoritative simulation logic remain Coder responsibility unless an approved task explicitly includes technical visual integration.
+
+Designer does not redefine Planner-owned scope, acceptance criteria, dependencies, or phase order and does not approve releases.
 
 ## Tester
 
-Tester independently verifies actual completed project state rather than relying only on implementation claims.
+Tester independently verifies actual committed project state rather than relying only on implementation or review claims.
 
-Tester verifies relevant functionality, visual work, integration, regression, usability, performance, accessibility, and public behavior.
+Tester verifies relevant functionality, visual work, integration, regression, usability, performance, accessibility, public behavior, revisions, and release candidates against exact committed evidence.
 
-Only the dedicated Tester may declare a build, phase, or release **independently verified**.
+Under normal autonomous development, only an **independent Worker acting in the Tester role** may declare a build, phase, or release independently verified.
 
-This does not limit Admin authority.
+A Worker acting as Tester must not independently PASS or approve implementation, design, revision, bug fix, process fix, or other change previously produced by the same Worker identity.
 
-Admin may explicitly authorize publication or use of a build without Tester verification. Such a build is Admin-authorized but remains **unverified** until Tester verification actually occurs.
+This does not limit Admin authority. Admin may explicitly authorize publication or use of a build without Tester verification; such a build is Admin-authorized but remains **unverified** until independent Tester verification actually occurs.
 
-## Fallback Principle
+## Reviewer
 
-Primary-role work normally has priority.
+Reviewer owns development-process control, defect analysis, bottleneck detection, corrective maintenance, and continuous improvement.
 
-A Worker may use its defined fallback role only when its primary role has no eligible work requiring attention.
+Reviewer examines project execution health across issues, claims, revisions, CI/Actions, automation, auxiliary AI evidence and metrics, recurring failures, stale state, excessive latency, missing checks, fragile workflows, bug patterns, process defects, and avoidable development friction.
 
-Fallback is limited to one role transition; fallback chaining is not allowed.
+When evidence supports a concrete improvement, Reviewer may create a focused bug/infrastructure task and implement a scoped bug fix, workflow/configuration correction, reliability improvement, or process optimization without inventing product scope or overriding Planner-owned phase, dependency, or acceptance-criteria authority.
 
-A Worker acting in fallback follows the responsibility boundaries of that fallback role.
+Reviewer-produced code, configuration, assets, or process fixes remain implementation work and require independent Tester verification by a different Worker identity before being treated as independently verified.
 
-No Worker may independently declare its own implementation or design independently verified.
+Reviewer may assess quality and process health but is not phase or release approval authority.
 
-Planner acting as fallback Tester cannot independently verify a phase/release.
+## Worker Identity and Independence
 
-Tester acting as fallback Planner does not gain additional verification authority from planning work.
+Role rotation never removes Worker identity.
+
+A Worker must not independently verify or approve its own prior implementation, design, revision, bug fix, workflow fix, process improvement, or other change when that same Worker later rotates into Tester or Reviewer.
+
+If the current role would require reviewing or testing the same Worker's own prior change, the Worker must select another eligible independent target or leave that target for another Worker identity.
+
+Implementation, design, and Reviewer-produced changes require independent Tester verification by a different Worker identity before they are called independently verified.
 
 These Worker restrictions govern autonomous Worker behavior and do not restrict explicit Admin authority.
 
@@ -430,9 +438,11 @@ Testing defects should normally return to the responsible implementer for correc
 
 When implementation or design reveals that approved scope, dependencies, acceptance criteria, or planning must change, the matter normally returns to Planner.
 
+Reviewer may identify and correct development-process defects and bottlenecks, but changes it produces remain subject to independent Tester verification.
+
 Revision decisions and evidence should remain traceable in the project's operational record.
 
-No Worker independently declares its own implementation, visual work, or requested revision independently verified.
+No Worker independently declares its own implementation, visual work, process fix, or requested revision independently verified.
 
 Independent verification is normally required before work is called a **verified release**.
 
@@ -469,7 +479,9 @@ An Admin-authorized exception does not automatically convert unverified work int
 
 **Workers operate under README unless Admin explicitly instructs otherwise.**
 
-**Tester verification determines whether a build may be called independently verified; it does not limit Admin's authority to publish an unverified build.**
+**Independent Tester verification determines whether a build may be called independently verified; it does not limit Admin's authority to publish an unverified build.**
+
+**Reviewer improves process health and fixes evidenced development defects, but Reviewer is not phase/release approval authority.**
 
 **An explicit Admin instruction may bypass normal Worker, testing, phase, release, or deployment gates.**
 
