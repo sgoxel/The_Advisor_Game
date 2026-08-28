@@ -549,3 +549,7 @@ An Admin-authorized exception does not automatically convert unverified work int
 **Independent Tester verification determines whether a build may be called independently verified; it does not limit Admin's authority to publish an unverified build.**
 
 **Reviewer improves process health and fixes evidenced development defects, but Reviewer is not phase/release approval authority.**
+
+**An explicit Admin instruction may bypass normal Worker, testing, phase, release, or deployment gates.**
+
+**Player advises → AI Character decides → Simulation validates → World reacts.**
