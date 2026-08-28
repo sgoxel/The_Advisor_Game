@@ -57,3 +57,4 @@ window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTime
 window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
 window.Game.Utils.loadScriptOnce("js/ecology.js", "r02EcologyModule");
 window.Game.Utils.loadScriptOnce("js/world_hierarchy.js", "r02WorldHierarchyModule");
+window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeographyModule");
