@@ -247,9 +247,9 @@ The Advisor influences them indirectly through information, the protagonist, rel
 
 ## 🏡 Starting Village and Living Local World
 
-Every new campaign begins with the autonomous protagonist as an ordinary low-rank character in a procedurally generated village.
+Every new campaign begins with the autonomous protagonist as an ordinary low-rank character in a procedurally generated village at world coordinate **(0, 0)**. The initial playable view is centered on this campaign origin.
 
-When the player does not explicitly provide a SEED, the game generates one. The starting village is selected or generated deterministically from the campaign SEED, so a compatible SEED and generation rules reproduce the same starting settlement and generator-defined base-world structure.
+When the player does not explicitly provide a SEED, the game generates one. The starting village is selected or generated deterministically from the campaign SEED, so a compatible SEED and generation rules reproduce the same starting settlement and generator-defined base-world structure around the origin.
 
 The player must begin inside a visibly inhabited medieval-fantasy environment rather than on an empty map, abstract dashboard, or isolated character screen.
 
@@ -309,19 +309,47 @@ The visual world may combine real-time 3D scenes and objects; 2D portraits and c
 
 Readability, atmosphere, character emotion, clear interaction, responsive performance, and broad browser/device usability take priority over unnecessary visual complexity.
 
-## 🌱 Seeded, Reproducible, Extensible World
+## 🌱 Seeded, Reproducible, Unbounded World
 
-The world is procedurally generated from a player-visible **SEED**.
+The world is procedurally generated from a player-visible **SEED** and has no gameplay-defined outer map boundary.
 
-A compatible SEED and world-generation rules should reproduce the same base world and regions, including the major environmental and settlement structure that belongs to procedural generation.
+The complete world is not one finite displayed map. The strategic tile area currently shown to the player is only a local active region of a much larger continuous world.
 
-For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: the starting settlement and settlement archetype, settlement layout, roads and paths, major buildings and landmarks, surrounding terrain and biomes, local population generation, important world locations, and other deterministic base-world features defined by the generator.
+A compatible SEED, world coordinates, and compatible world-generation rules must reproduce the same unmodified base world at the same coordinates.
 
-Procedurally generated scenes and settlement areas must derive their generator-defined base composition from the SEED. Dynamic campaign consequences, character decisions, destruction, construction, ownership, relationships, discoveries, politics, and other simulation changes may subsequently alter that base world.
+For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: settlement archetypes and layouts, roads and paths, major buildings and landmarks, surrounding terrain and biomes, local population generation, important world locations, and other deterministic base-world features.
 
-The world may include biomes and terrain variation; rivers, lakes, coasts, roads and paths; settlements and growth anchors; buildings and landmarks; trees, rocks, vegetation, bridges, signs, props and resources; local populations; creatures; and deterministic visual variation.
+### 🧭 World Coordinates and Regional Continuity
 
-Campaign changes such as destruction, upgrades, ownership, relationships, discoveries, politics, or other consequences may alter the world after generation.
+The campaign uses continuous world coordinates with **(0, 0)** as the campaign origin.
+
+As the protagonist travels away from the origin, additional neighboring world regions must become available from the same SEED and coordinate space. Reaching or crossing the edge of the currently active region must allow travel to continue into the adjacent world rather than ending exploration at an artificial map border.
+
+Generated regions are different parts of one continuous world, not independent random maps or disconnected scenes. Region boundaries are presentation/runtime boundaries only and must not appear as arbitrary world resets, disconnected terrain, or visible seams.
+
+Previously unseen areas may be generated when needed. Returning to the same unchanged coordinates with the same compatible SEED and generation rules must reconstruct the same base world.
+
+### 🏞️ Terrain Diversity and Continuity
+
+The generated world must contain meaningful terrain and environmental diversity across local and distant regions.
+
+Depending on SEED and location, the world may contain different elevations, plains, hills, mountains, valleys, forests, grasslands, wetlands, rivers, lakes, coasts, rocky areas, agricultural land, roads, wilderness, settlements, ruins, and other medieval-fantasy environments.
+
+Terrain, biomes, vegetation, water, roads, settlements, landmarks, and other generated features must remain spatially coherent across neighboring regions. Different coordinates should be capable of producing substantially different landscapes while remaining deterministic for the same compatible SEED.
+
+### 💾 Persistent Changes over a Regenerable Base World
+
+The deterministic SEED-generated world is the reproducible base state. Unchanged generated terrain, buildings, vegetation, objects, and other deterministic base-world content do not need separate permanent campaign copies merely because they were visited or rendered.
+
+Campaign persistence must preserve authoritative differences from that generated base world wherever persistent change is required.
+
+Objects, entities, locations, relationships, discoveries, damage, construction, ownership, resource use, inventory-affecting world interactions, or other meaningful simulation consequences caused or influenced by campaign events must not silently reset when their region leaves the active view or when the campaign is saved and loaded.
+
+Returning to previously visited coordinates must therefore reconstruct the current campaign world from the deterministic base world plus the authoritative persistent changes that apply there.
+
+**SEED-generated base world + saved authoritative changes = current campaign world.**
+
+This model allows unexplored or unchanged regions to remain deterministically generable while preventing meaningful character/world consequences from disappearing.
 
 Location must remain meaningful to gameplay, including travel, meetings, information access, trade, military movement, employment, politics, events, and hazards.
 
@@ -366,9 +394,12 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 17. **Verified public releases are preferred by default, but explicit Admin publication instructions override normal verification and release-gate requirements.**
 18. **An Admin-directed unverified build may be published when explicitly requested, but it must not be represented as independently verified unless it actually passed independent verification.**
 19. **The living strategic world map is the primary game surface.** Terrain, locations, settlements, characters, creatures, objects and relevant world changes must be experienced as parts of one coherent simulated world rather than primarily through disconnected menus, dashboards or static scenes.
-20. **A new campaign begins in a SEED-generated inhabited village.** The starting world must already contain a meaningful settlement, buildings, local environment, and autonomous local population rather than an empty or purely abstract starting surface.
+20. **A new campaign begins in a SEED-generated inhabited village at world origin (0, 0).** The starting world must already contain a meaningful settlement, buildings, local environment, and autonomous local population rather than an empty or purely abstract starting surface.
 21. **World characters are living simulation participants, not decoration.** Local NPCs should visibly move, follow appropriate activities or routines, occupy useful roles and professions, and provide potential interaction within the same world as the protagonist.
 22. **Advice must connect to observable world behavior.** When the autonomous protagonist chooses valid advice, the resulting movement, action, interaction, and consequences must be represented through the living strategic world without giving the player direct control.
+23. **The SEED defines an unbounded continuous world.** The visible tile region is only the currently active local part of the world; exploration must be able to continue beyond every displayed region without a gameplay-defined outer boundary.
+24. **World coordinates are stable and meaningful.** The campaign begins at (0, 0), and the same compatible SEED and coordinates reproduce the same unmodified base-world location.
+25. **Persist changes; regenerate unchanged base content.** Deterministic unchanged world content may be reconstructed from SEED and coordinates, while authoritative changes that must survive leaving or reloading a region are preserved in campaign state.
 
 ---
 
