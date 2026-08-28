@@ -62,7 +62,7 @@ window.Game = window.Game || {};
       showTerrainWalls: Config.DEFAULT_SHOW_TERRAIN_WALLS,
       blendPixelSize: Config.DEFAULT_BLEND_PIXEL_SIZE,
       blendStrength: Config.DEFAULT_BLEND_STRENGTH,
-      
+
       noiseGridDivisions: Config.DEFAULT_NOISE_GRID_DIVISIONS,
       reliefEnabled: Config.DEFAULT_RELIEF_ENABLED,
       sunAzimuth: Config.DEFAULT_SUN_AZIMUTH,
@@ -109,7 +109,7 @@ window.Game = window.Game || {};
       cameraPitchInput: null,
       depthStrengthInput: null,
       blendPixelSizeInput: null,
-      
+
       blendStrengthInput: null,
       noiseGridDivisionsInput: null,
       showGridInput: null,
@@ -174,30 +174,29 @@ window.Game = window.Game || {};
     R02 authoritative campaign-state boundary.
 
     Simulation-owned truth admitted by this contract today:
-    - seeded world identity and dimensions;
-    - deterministic generation parameters;
-    - row-major terrain type/elevation;
-    - protagonist simulation location/direction.
+    - the visible seed identity and world dimensions;
+    - row-major terrain semantics (type, elevation and gameplay-relevant tags/flags);
+    - the autonomous protagonist's world location.
 
-    Presentation/runtime-only values intentionally excluded include camera, DOM,
-    render caches, input state, logs/i18n, tile hover/selection/route previews and
-    transient protagonist animation/path fields. The API is read-only: it can
-    capture/normalize/canonicalize simulation state but exposes no setter that UI
-    code could use to promote presentation state into authoritative truth.
+    Deliberately derived/presentation-only R01 values are excluded: tile pixel size,
+    generated parameter summaries, camera, DOM/render/input caches, hover/selection,
+    path previews, locale/log data and transient movement/facing animation fields.
+    Seed parsing/RNG stream derivation belongs to R02-T02/#84 and is not duplicated
+    here. The API is read-only and exposes no setter that UI/presentation code can
+    use to install candidate data as authoritative simulation truth.
   */
   const AUTH_SCHEMA_VERSION = 1;
   const AUTH_FIELD_PATHS = Object.freeze([
     'world.seed',
     'world.rows',
     'world.cols',
-    'world.tileWidth',
-    'world.tileHeight',
-    'world.params',
     'world.terrain[].type',
     'world.terrain[].elevation',
-    'world.player.row',
-    'world.player.col',
-    'world.player.direction'
+    'world.terrain[].tags',
+    'world.terrain[].blocked',
+    'world.terrain[].obstacle',
+    'world.protagonist.row',
+    'world.protagonist.col'
   ]);
 
   function finiteNumber(value, fallback) {
@@ -209,21 +208,15 @@ window.Game = window.Game || {};
     return Math.trunc(finiteNumber(value, fallback));
   }
 
-  function canonicalData(value) {
-    if (value === null || value === undefined) return null;
-    if (Array.isArray(value)) return value.map(canonicalData);
-    if (typeof value === 'object') {
-      const output = {};
-      Object.keys(value).sort().forEach((key) => {
-        const child = value[key];
-        if (child === undefined || typeof child === 'function') return;
-        output[key] = canonicalData(child);
-      });
-      return output;
-    }
-    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-    if (typeof value === 'boolean' || typeof value === 'string') return value;
-    return String(value);
+  function normalizeTags(tags) {
+    let source = [];
+    if (tags instanceof Set) source = Array.from(tags);
+    else if (Array.isArray(tags)) source = tags;
+
+    return Array.from(new Set(source
+      .map((tag) => String(tag))
+      .filter((tag) => tag.length > 0)))
+      .sort();
   }
 
   function normalizeTerrain(terrain, rows, cols) {
@@ -236,7 +229,10 @@ window.Game = window.Game || {};
         const tile = sourceRow[col] && typeof sourceRow[col] === 'object' ? sourceRow[col] : {};
         normalizedRow.push({
           type: typeof tile.type === 'string' && tile.type ? tile.type : 'grass',
-          elevation: finiteNumber(tile.elevation, 0)
+          elevation: finiteNumber(tile.elevation, 0),
+          tags: normalizeTags(tile.tags),
+          blocked: tile.blocked === true,
+          obstacle: tile.obstacle === true
         });
       }
       normalized.push(normalizedRow);
@@ -244,10 +240,18 @@ window.Game = window.Game || {};
     return normalized;
   }
 
+  function clampCoordinate(value, size) {
+    if (size <= 0) return 0;
+    return Math.min(size - 1, Math.max(0, integer(value, 0)));
+  }
+
   function normalizeAuthoritativeState(candidate) {
     const root = candidate && typeof candidate === 'object' ? candidate : {};
     const world = root.world && typeof root.world === 'object' ? root.world : root;
-    const player = world.player && typeof world.player === 'object' ? world.player : {};
+    const legacyPlayer = world.player && typeof world.player === 'object' ? world.player : {};
+    const protagonist = world.protagonist && typeof world.protagonist === 'object'
+      ? world.protagonist
+      : legacyPlayer;
     const rows = Math.max(0, integer(world.rows, 0));
     const cols = Math.max(0, integer(world.cols, 0));
 
@@ -258,14 +262,10 @@ window.Game = window.Game || {};
         seed: world.seed === undefined || world.seed === null ? '' : String(world.seed),
         rows,
         cols,
-        tileWidth: finiteNumber(world.tileWidth, 0),
-        tileHeight: finiteNumber(world.tileHeight, 0),
-        params: canonicalData(world.params),
         terrain: normalizeTerrain(world.terrain, rows, cols),
-        player: {
-          row: integer(player.row, 0),
-          col: integer(player.col, 0),
-          direction: typeof player.direction === 'string' && player.direction ? player.direction : 's'
+        protagonist: {
+          row: clampCoordinate(protagonist.row, rows),
+          col: clampCoordinate(protagonist.col, cols)
         }
       }
     };
