@@ -201,6 +201,20 @@
     return deepFreeze({ ...loaded, campaignCalendarState: capture(), resumeCatchUp: resumed });
   }
 
+  function bootstrapNewCampaign(observedRealTimestampMs = Date.now(), timezoneOffsetMinutes = new Date(observedRealTimestampMs).getTimezoneOffset()) {
+    const state = ensureState();
+    if (state.fantasyOriginUtcMs !== null && state.originGameMinutes !== null) return deepFreeze({ ok: true, initialized: false, state: capture() });
+    return initializeOrigin(observedRealTimestampMs, timezoneOffsetMinutes);
+  }
+
   Game.CampaignPersistence = Object.freeze({ ...basePersistence, createSaveEnvelope(candidate, deltaCandidate) { return createWrappedEnvelope(candidate, deltaCandidate, Date.now()); }, serializeSave(candidate, deltaCandidate) { return JSON.stringify(createWrappedEnvelope(candidate, deltaCandidate, Date.now())); }, validateSave: validateWrappedSave, loadSave(input) { return loadSaveAt(input, Date.now()); } });
-  Game.CampaignCalendar = Object.freeze({ version: VERSION, authority: AUTHORITY, realMillisecondsPerGameDay: 3600000, gameMinutesPerDay: GAME_MINUTES_PER_DAY, capture, initializeOrigin, checkpointRealTime, reconcileResume, validate: validateCalendarState, install: installCalendarState, serializeSaveAt, loadSaveAt });
+  Game.CampaignCalendar = Object.freeze({ version: VERSION, authority: AUTHORITY, realMillisecondsPerGameDay: 3600000, gameMinutesPerDay: GAME_MINUTES_PER_DAY, capture, initializeOrigin, bootstrapNewCampaign, checkpointRealTime, reconcileResume, validate: validateCalendarState, install: installCalendarState, serializeSaveAt, loadSaveAt });
+
+  function bootstrapInstalledNewCampaign() {
+    if (!Game.GameTime?.capture || !Game.State?.world) return;
+    bootstrapNewCampaign(Date.now(), new Date().getTimezoneOffset());
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootstrapInstalledNewCampaign, { once: true });
+  else bootstrapInstalledNewCampaign();
 })();
