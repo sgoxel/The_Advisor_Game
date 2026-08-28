@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">The Advisor Game R02 original art direction foundation</title>
+  <desc id="desc">Vector reference sheet demonstrating grounded character silhouettes, portrait-to-world continuity, near-isometric medieval village materials, classic PC RPG interface framing, and responsive desktop tablet and phone compositions.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E5D8BE"/>
+      <stop offset="1" stop-color="#C9B892"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#343638"/>
+      <stop offset="1" stop-color="#1B1D1F"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.3"/>
+    </filter>
+    <style>
+      .ink{fill:#17191B}.paper{fill:#E5D8BE}.stone{fill:#7B756C}.timber{fill:#6E4F38}.moss{fill:#687258}.ochre{fill:#A88A54}.iron{fill:#52616B}.warn{fill:#8D4942}.gold{fill:#C89A4B}
+      .line{stroke:#17191B;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.thin{stroke:#17191B;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+      .label{font:700 17px system-ui,sans-serif;letter-spacing:1.2px;fill:#E5D8BE}.small{font:500 13px system-ui,sans-serif;fill:#E5D8BE}.note{font:500 12px system-ui,sans-serif;fill:#17191B}.head{font:800 26px system-ui,sans-serif;letter-spacing:1px;fill:#17191B}.sub{font:700 15px system-ui,sans-serif;fill:#17191B}
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#BBA982"/>
+  <rect x="24" y="24" width="1392" height="852" rx="8" fill="url(#paper)" class="line" filter="url(#soft)"/>
+  <text x="54" y="66" class="head">R02 ART DIRECTION FOUNDATION</text>
+  <text x="54" y="91" class="sub">Original mature character language + old-school PC RPG world/UI framing · presentation only</text>
+  <line x1="54" y1="106" x2="1386" y2="106" class="thin"/>
+
+  <!-- Character family -->
+  <g transform="translate(54 132)">
+    <rect width="430" height="356" rx="5" fill="#D7C9A9" class="line"/>
+    <rect x="12" y="12" width="406" height="38" rx="3" fill="#17191B"/>
+    <text x="28" y="38" class="label">01 · CHARACTER FAMILY</text>
+
+    <!-- portrait -->
+    <rect x="22" y="66" width="166" height="208" rx="4" fill="#62615C" class="thin"/>
+    <path d="M62 248 C66 203 72 170 85 151 C91 142 99 138 105 134 C91 124 86 111 88 95 C91 71 107 58 128 59 C151 60 164 77 164 99 C164 116 157 128 145 136 C155 142 164 151 170 165 C180 189 184 216 185 248 Z" fill="#3C3A37"/>
+    <path d="M101 77 C107 66 121 61 133 64 C149 68 158 82 157 101 C157 112 152 124 143 131 C132 139 115 137 106 129 C96 120 93 108 95 96 Z" fill="#C2A27E" class="thin"/>
+    <path d="M98 95 C103 75 121 66 140 71 C149 74 155 82 159 91 C148 84 139 82 128 83 C116 83 108 87 98 95 Z" class="ink"/>
+    <path d="M108 104 L118 102 M136 102 L146 104 M121 118 C128 121 135 120 140 116" fill="none" class="thin"/>
+    <path d="M87 162 L104 144 L147 143 L169 163 L158 214 L98 214 Z" fill="#52616B" class="thin"/>
+    <path d="M98 214 L158 214 L173 248 L84 248 Z" fill="#6E4F38" class="thin"/>
+    <circle cx="160" cy="158" r="5" class="gold"/>
+    <text x="38" y="298" class="sub">Portrait cue</text>
+    <text x="38" y="318" class="note">restrained expression</text>
+    <text x="38" y="336" class="note">worn wool + iron accent</text>
+
+    <!-- in-world matching figure -->
+    <g transform="translate(226 73)">
+      <ellipse cx="76" cy="180" rx="48" ry="15" fill="#000" opacity="0.16"/>
+      <circle cx="76" cy="48" r="22" fill="#C2A27E" class="thin"/>
+      <path d="M54 45 C57 24 74 18 90 27 C96 30 100 37 101 44 C86 37 70 37 54 45 Z" class="ink"/>
+      <path d="M54 73 L76 65 L98 73 L109 126 L95 147 L57 147 L43 126 Z" class="iron thin"/>
+      <path d="M58 147 L75 146 L72 180 L52 180 Z M78 146 L96 147 L100 180 L80 180 Z" class="timber thin"/>
+      <path d="M44 83 L27 120 L39 125 L60 96 M107 82 L126 116 L115 123 L94 96" class="thin" fill="#6E4F38"/>
+      <circle cx="101" cy="78" r="4.5" class="gold"/>
+      <text x="16" y="211" class="sub">Map cue</text>
+      <text x="7" y="231" class="note">same hair / iron-blue</text>
+      <text x="19" y="249" class="note">same gold clasp</text>
+    </g>
+
+    <!-- NPC silhouettes -->
+    <g transform="translate(206 292)">
+      <g transform="translate(0 0)"><circle cx="24" cy="15" r="9" fill="#B7906E"/><path d="M14 28 L34 28 L39 58 L9 58 Z" class="moss"/><path d="M7 58 L41 58" class="thin"/><path d="M8 31 L0 51 M40 31 L48 51" class="thin"/></g>
+      <g transform="translate(68 -4)"><circle cx="24" cy="18" r="10" fill="#C4A27D"/><path d="M12 31 L36 31 L42 62 L6 62 Z" class="ochre"/><rect x="34" y="37" width="14" height="18" rx="2" class="timber"/></g>
+      <g transform="translate(138 -8)"><circle cx="24" cy="20" r="11" fill="#9B765D"/><path d="M10 34 L38 34 L45 66 L3 66 Z" class="iron"/><path d="M6 40 L-1 66 M42 40 L50 66" class="thin"/><rect x="14" y="31" width="20" height="5" class="stone"/></g>
+      <text x="207" y="16" class="note">profession by</text><text x="207" y="33" class="note">silhouette, prop,</text><text x="207" y="50" class="note">material + posture</text>
+    </g>
+  </g>
+
+  <!-- World vignette -->
+  <g transform="translate(504 132)">
+    <rect width="520" height="356" rx="5" fill="#D7C9A9" class="line"/>
+    <rect x="12" y="12" width="496" height="38" rx="3" fill="#17191B"/>
+    <text x="28" y="38" class="label">02 · WORLD / MATERIAL LANGUAGE</text>
+    <polygon points="54,242 234,132 466,240 284,339" fill="#7B756C" class="thin"/>
+    <polygon points="70,232 235,144 446,239 282,323" fill="#687258"/>
+    <path d="M102 249 C157 218 203 209 249 220 C291 229 329 258 396 275" stroke="#A88A54" stroke-width="22" fill="none" opacity="0.9"/>
+    <path d="M102 249 C157 218 203 209 249 220 C291 229 329 258 396 275" stroke="#6E4F38" stroke-width="2" fill="none" stroke-dasharray="5 8"/>
+
+    <!-- isometric houses -->
+    <g transform="translate(140 145)">
+      <polygon points="0,54 54,24 108,54 54,84" fill="#7B756C" class="thin"/>
+      <polygon points="0,54 54,84 54,132 0,100" fill="#6E4F38" class="thin"/>
+      <polygon points="54,84 108,54 108,102 54,132" fill="#8B7763" class="thin"/>
+      <polygon points="-7,50 54,14 116,49 55,75" fill="#4B3B31" class="thin"/>
+      <rect x="20" y="78" width="15" height="33" transform="skewY(28)" fill="#17191B" opacity="0.65"/>
+    </g>
+    <g transform="translate(280 185) scale(.72)">
+      <polygon points="0,54 54,24 108,54 54,84" fill="#A88A54" class="thin"/>
+      <polygon points="0,54 54,84 54,132 0,100" fill="#6E4F38" class="thin"/>
+      <polygon points="54,84 108,54 108,102 54,132" fill="#7B756C" class="thin"/>
+      <polygon points="-7,50 54,14 116,49 55,75" fill="#513D2D" class="thin"/>
+    </g>
+    <g transform="translate(315 110) scale(.62)">
+      <polygon points="0,54 54,24 108,54 54,84" fill="#7B756C" class="thin"/>
+      <polygon points="0,54 54,84 54,132 0,100" fill="#6E4F38" class="thin"/>
+      <polygon points="54,84 108,54 108,102 54,132" fill="#8B7763" class="thin"/>
+      <polygon points="-7,50 54,14 116,49 55,75" fill="#4B3B31" class="thin"/>
+    </g>
+
+    <!-- trees -->
+    <g fill="#4F5B43" stroke="#17191B" stroke-width="1.5"><circle cx="112" cy="176" r="18"/><circle cx="92" cy="190" r="14"/><circle cx="403" cy="203" r="20"/><circle cx="425" cy="218" r="14"/></g>
+    <g stroke="#6E4F38" stroke-width="7"><line x1="112" y1="190" x2="112" y2="218"/><line x1="403" y1="218" x2="403" y2="247"/></g>
+
+    <text x="24" y="82" class="sub">Near-isometric hierarchy</text>
+    <text x="24" y="102" class="note">landmark → path → work zone → homes → terrain</text>
+    <g transform="translate(26 311)">
+      <rect width="28" height="18" class="ink"/><rect x="32" width="28" height="18" class="paper"/><rect x="64" width="28" height="18" class="stone"/><rect x="96" width="28" height="18" class="timber"/><rect x="128" width="28" height="18" class="moss"/><rect x="160" width="28" height="18" class="ochre"/><rect x="192" width="28" height="18" class="iron"/><rect x="224" width="28" height="18" class="warn"/><rect x="256" width="28" height="18" class="gold"/>
+      <text x="300" y="14" class="note">grounded material palette</text>
+    </g>
+  </g>
+
+  <!-- UI frame -->
+  <g transform="translate(1044 132)">
+    <rect width="342" height="356" rx="5" fill="#D7C9A9" class="line"/>
+    <rect x="12" y="12" width="318" height="38" rx="3" fill="#17191B"/>
+    <text x="28" y="38" class="label">03 · RPG UI FRAME</text>
+    <rect x="23" y="68" width="296" height="248" rx="3" fill="url(#panel)" class="line"/>
+    <path d="M35 82 H307 M35 302 H307" stroke="#C89A4B" stroke-width="2"/>
+    <circle cx="53" cy="105" r="20" fill="#52616B" stroke="#C89A4B" stroke-width="2"/>
+    <path d="M44 111 C46 97 53 90 61 91 C70 93 74 104 70 115 C62 121 52 121 44 111Z" fill="#C2A27E"/>
+    <text x="84" y="101" class="small" font-weight="700">ELIAN · VILLAGER</text>
+    <text x="84" y="122" class="small">Trust 62 · Tired · 18:40</text>
+    <rect x="35" y="142" width="272" height="72" rx="3" fill="#272A2C" stroke="#7B756C"/>
+    <text x="48" y="166" class="small">“The road is safer before nightfall.”</text>
+    <text x="48" y="188" class="small">Advisor: recommend a route, do not command.</text>
+    <rect x="35" y="228" width="128" height="48" rx="4" fill="#52616B" stroke="#E5D8BE" stroke-width="1.5"/>
+    <rect x="179" y="228" width="128" height="48" rx="4" fill="#6E4F38" stroke="#E5D8BE" stroke-width="1.5"/>
+    <text x="63" y="258" class="small">Investigate</text><text x="205" y="258" class="small">Advise</text>
+    <text x="24" y="339" class="note">ornament frames information;</text>
+    <text x="24" y="354" class="note">legibility + touch targets win</text>
+  </g>
+
+  <!-- Responsive strip -->
+  <g transform="translate(54 516)">
+    <rect width="1332" height="322" rx="5" fill="#D7C9A9" class="line"/>
+    <rect x="12" y="12" width="1308" height="38" rx="3" fill="#17191B"/>
+    <text x="28" y="38" class="label">04 · RESPONSIVE PRODUCT FAMILY · WORLD FIRST AT EVERY SIZE</text>
+
+    <!-- desktop -->
+    <g transform="translate(28 72)">
+      <text x="0" y="0" class="sub">DESKTOP</text>
+      <rect x="0" y="14" width="530" height="214" rx="4" fill="#1F2223" class="thin"/>
+      <rect x="12" y="26" width="340" height="150" rx="3" class="moss"/>
+      <path d="M28 150 L154 78 L330 150 L202 211" fill="#687258" stroke="#A88A54" stroke-width="12" opacity="0.8"/>
+      <g transform="translate(82 71) scale(.35)"><polygon points="0,54 54,24 108,54 54,84" class="stone"/><polygon points="0,54 54,84 54,132 0,100" class="timber"/><polygon points="54,84 108,54 108,102 54,132" fill="#8B7763"/></g>
+      <rect x="366" y="26" width="151" height="68" rx="3" fill="#343638" stroke="#C89A4B"/>
+      <rect x="366" y="105" width="151" height="71" rx="3" fill="#343638" stroke="#7B756C"/>
+      <rect x="12" y="188" width="505" height="27" rx="3" fill="#343638"/>
+      <text x="381" y="52" class="small">portrait + status</text><text x="381" y="132" class="small">Advisor context</text>
+    </g>
+
+    <!-- tablet -->
+    <g transform="translate(592 72)">
+      <text x="0" y="0" class="sub">TABLET</text>
+      <rect x="0" y="14" width="330" height="214" rx="7" fill="#1F2223" class="thin"/>
+      <rect x="12" y="26" width="306" height="132" rx="3" class="moss"/>
+      <path d="M32 132 L121 74 L292 136" stroke="#A88A54" stroke-width="10" fill="none"/>
+      <rect x="12" y="169" width="147" height="46" rx="3" fill="#343638" stroke="#C89A4B"/>
+      <rect x="171" y="169" width="147" height="46" rx="3" fill="#343638" stroke="#7B756C"/>
+      <text x="30" y="197" class="small">Character</text><text x="202" y="197" class="small">Advisor</text>
+    </g>
+
+    <!-- phone portrait -->
+    <g transform="translate(962 72)">
+      <text x="0" y="0" class="sub">PHONE</text>
+      <rect x="0" y="14" width="132" height="214" rx="12" fill="#1F2223" class="thin"/>
+      <rect x="8" y="24" width="116" height="140" rx="5" class="moss"/>
+      <path d="M15 142 L55 92 L118 139" stroke="#A88A54" stroke-width="7" fill="none"/>
+      <rect x="8" y="172" width="116" height="44" rx="5" fill="#343638" stroke="#C89A4B"/>
+      <text x="25" y="199" class="small">Advisor panel</text>
+    </g>
+
+    <!-- phone landscape -->
+    <g transform="translate(1128 72)">
+      <text x="0" y="0" class="sub">LANDSCAPE</text>
+      <rect x="0" y="48" width="174" height="116" rx="9" fill="#1F2223" class="thin"/>
+      <rect x="8" y="56" width="116" height="100" rx="4" class="moss"/>
+      <rect x="132" y="56" width="34" height="100" rx="4" fill="#343638" stroke="#C89A4B"/>
+      <path d="M15 137 L56 94 L116 137" stroke="#A88A54" stroke-width="6" fill="none"/>
+    </g>
+
+    <text x="28" y="300" class="note">Fidelity may scale (ornament, texture, particles, foliage, shadows); simulation truth, identity, route readability, text and controls may not.</text>
+  </g>
+</svg>
