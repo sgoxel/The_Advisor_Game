@@ -1,0 +1,262 @@
+name: NVIDIA Auxiliary Metrics
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: nvidia-metrics-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  record:
+    if: github.event_name == 'issues' && github.event.action == 'labeled' && (github.event.label.name == 'ai-awaiting-review' || github.event.label.name == 'ai-handoff')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
+    env:
+      LEDGER_ISSUE: "79"
+    steps:
+      - name: Record and aggregate NVIDIA auxiliary metric
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          STATUS_LABEL: ${{ github.event.label.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Finalize adds the terminal routing label before its final audit comment.
+          # Give GitHub a moment to make all comments and PR metadata visible.
+          sleep 3
+
+          COMMENTS="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" |
+              jq -s 'add'
+          )"
+
+          RUN_LINE="$(
+            printf '%s' "$COMMENTS" |
+              jq -r '[.[] | select((.body // "") | startswith("AI AUXILIARY RUN: "))] | last | .body // ""'
+          )"
+
+          if [ -z "$RUN_LINE" ]; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "AI AUXILIARY METRICS WARNING: terminal NVIDIA status was observed but no instrumented AI AUXILIARY RUN marker was found. This execution cannot be added safely to the centralized ledger." >/dev/null
+            exit 0
+          fi
+
+          RUN_ID="$(printf '%s' "$RUN_LINE" | sed -n 's/.*run_id=\([0-9][0-9]*\).*/\1/p')"
+          RUN_ATTEMPT="$(printf '%s' "$RUN_LINE" | sed -n 's/.*run_attempt=\([0-9][0-9]*\).*/\1/p')"
+          ROLE="$(printf '%s' "$RUN_LINE" | sed -n 's/.* role=\([^ ]*\) model=.*/\1/p')"
+          MODEL="$(printf '%s' "$RUN_LINE" | sed -n 's/.* model=\([^ ]*\) started_at=.*/\1/p')"
+          STARTED_AT="$(printf '%s' "$RUN_LINE" | sed -n 's/.* started_at=\([^ ]*\)$/\1/p')"
+
+          if [ -z "$RUN_ID" ] || [ -z "$RUN_ATTEMPT" ] || [ -z "$ROLE" ] || [ -z "$MODEL" ] || [ -z "$STARTED_AT" ]; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "AI AUXILIARY METRICS WARNING: the latest AI AUXILIARY RUN marker is malformed and cannot be aggregated safely: ${RUN_LINE}" >/dev/null
+            exit 0
+          fi
+
+          case "$STATUS_LABEL" in
+            ai-awaiting-review) STATUS="success" ;;
+            ai-handoff) STATUS="handoff" ;;
+            *) exit 0 ;;
+          esac
+
+          case "$ROLE" in
+            coder) REQUIRED_PREFIX="AI CODER EVIDENCE:" ;;
+            reviewer) REQUIRED_PREFIX="AI REVIEW EVIDENCE:" ;;
+            tester) REQUIRED_PREFIX="AI TEST EVIDENCE:" ;;
+            *)
+              gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+                --body "AI AUXILIARY METRICS WARNING: unsupported role '${ROLE}' in run marker; ledger record skipped." >/dev/null
+              exit 0
+              ;;
+          esac
+
+          RUN_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}")"
+          HEAD_SHA="$(printf '%s' "$RUN_JSON" | jq -r '.head_sha // "unknown"')"
+          RUN_URL="$(printf '%s' "$RUN_JSON" | jq -r '.html_url // ""')"
+
+          JOBS="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" |
+              jq -s '[.[] | .jobs[]]'
+          )"
+          JOB_ID="$(printf '%s' "$JOBS" | jq -r --arg role "$ROLE" '[.[] | select(.name == $role)] | last | .id // 0')"
+          JOB_URL="$(printf '%s' "$JOBS" | jq -r --arg role "$ROLE" '[.[] | select(.name == $role)] | last | .html_url // ""')"
+          JOB_CONCLUSION="$(printf '%s' "$JOBS" | jq -r --arg role "$ROLE" '[.[] | select(.name == $role)] | last | .conclusion // "unknown"')"
+
+          EVIDENCE_COUNT="$(
+            printf '%s' "$COMMENTS" |
+              jq --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
+                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith($prefix))] | length'
+          )"
+          EVIDENCE_URL="$(
+            printf '%s' "$COMMENTS" |
+              jq -r --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
+                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith($prefix))] | last | .html_url // ""'
+          )"
+          HANDOFF_COUNT="$(
+            printf '%s' "$COMMENTS" |
+              jq --arg start "$STARTED_AT" \
+                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI-HANDOFF:"))] | length'
+          )"
+          HANDOFF_URL="$(
+            printf '%s' "$COMMENTS" |
+              jq -r --arg start "$STARTED_AT" \
+                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI-HANDOFF:"))] | last | .html_url // ""'
+          )"
+          RETRY_COUNT="$(
+            printf '%s' "$COMMENTS" |
+              jq --arg start "$STARTED_AT" --arg run "$RUN_ID" \
+                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI AUXILIARY RETRY: ")) | select((.body // "") | contains("run_id=" + $run))] | length'
+          )"
+          if [ "$RETRY_COUNT" -gt 0 ]; then
+            RETRY_USED=true
+          else
+            RETRY_USED=false
+          fi
+
+          PR_COUNT=0
+          PR_URL=""
+          if [ "$ROLE" = "coder" ]; then
+            PRS="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json body,url,number)"
+            PR_COUNT="$(printf '%s' "$PRS" | jq --arg issue "#${ISSUE_NUMBER}" '[.[] | select((.body // "") | contains($issue))] | length')"
+            PR_URL="$(printf '%s' "$PRS" | jq -r --arg issue "#${ISSUE_NUMBER}" '[.[] | select((.body // "") | contains($issue))] | first | .url // ""')"
+          fi
+
+          CODER_COMPLETED=false
+          if [ "$ROLE" = "coder" ] && [ "$STATUS" = "success" ] && \
+             [ "$EVIDENCE_COUNT" -gt 0 ] && [ "$HANDOFF_COUNT" -eq 0 ] && [ "$PR_COUNT" -gt 0 ]; then
+            CODER_COMPLETED=true
+          fi
+
+          ENDED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          START_EPOCH="$(date -u -d "$STARTED_AT" +%s)"
+          END_EPOCH="$(date -u -d "$ENDED_AT" +%s)"
+          DURATION_SECONDS="$((END_EPOCH - START_EPOCH))"
+          if [ "$DURATION_SECONDS" -lt 0 ]; then DURATION_SECONDS=0; fi
+
+          SOURCE_ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}"
+
+          METRIC="$(jq -cn \
+            --argjson schema_version 1 \
+            --arg timestamp "$ENDED_AT" \
+            --argjson issue_number "$ISSUE_NUMBER" \
+            --arg source_issue_url "$SOURCE_ISSUE_URL" \
+            --arg role "$ROLE" \
+            --arg model "$MODEL" \
+            --argjson run_id "$RUN_ID" \
+            --argjson run_attempt "$RUN_ATTEMPT" \
+            --arg run_url "$RUN_URL" \
+            --argjson job_id "$JOB_ID" \
+            --arg job_url "$JOB_URL" \
+            --arg job_conclusion "$JOB_CONCLUSION" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg started_at "$STARTED_AT" \
+            --arg ended_at "$ENDED_AT" \
+            --argjson duration_seconds "$DURATION_SECONDS" \
+            --argjson retry_used "$RETRY_USED" \
+            --arg status "$STATUS" \
+            --argjson evidence_count "$EVIDENCE_COUNT" \
+            --arg evidence_url "$EVIDENCE_URL" \
+            --argjson handoff_count "$HANDOFF_COUNT" \
+            --arg handoff_url "$HANDOFF_URL" \
+            --argjson coder_pr_count "$PR_COUNT" \
+            --arg coder_pr_url "$PR_URL" \
+            --argjson coder_completed "$CODER_COMPLETED" \
+            --argjson ledger_issue "$LEDGER_ISSUE" \
+            '{schema_version:$schema_version,timestamp:$timestamp,issue_number:$issue_number,source_issue_url:$source_issue_url,role:$role,model:$model,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,job_id:$job_id,job_url:$job_url,job_conclusion:$job_conclusion,head_sha:$head_sha,started_at:$started_at,ended_at:$ended_at,duration_seconds:$duration_seconds,retry_used:$retry_used,status:$status,evidence_count:$evidence_count,evidence_url:$evidence_url,handoff_count:$handoff_count,handoff_url:$handoff_url,coder_pr_count:$coder_pr_count,coder_pr_url:$coder_pr_url,coder_completed:$coder_completed,ledger_issue:$ledger_issue}')"
+
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
+          gh issue comment "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" \
+            --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
+
+          LEDGER_COMMENTS="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${LEDGER_ISSUE}/comments?per_page=100" |
+              jq -s 'add'
+          )"
+          METRICS="$(
+            printf '%s' "$LEDGER_COMMENTS" |
+              jq '[.[] | select((.body // "") | startswith("AI AUXILIARY METRIC: ")) | (.body | sub("^AI AUXILIARY METRIC: "; "") | fromjson?)] | map(select(. != null))'
+          )"
+
+          TOTAL="$(printf '%s' "$METRICS" | jq 'length')"
+          SUCCESS="$(printf '%s' "$METRICS" | jq '[.[] | select(.status == "success")] | length')"
+          HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.status == "handoff")] | length')"
+          RETRIES="$(printf '%s' "$METRICS" | jq '[.[] | select(.retry_used == true)] | length')"
+          CODER_RUNS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "coder")] | length')"
+          CODER_SUCCESS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "coder" and .status == "success")] | length')"
+          CODER_HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "coder" and .status == "handoff")] | length')"
+          CODER_COMPLETED_RUNS="$(printf '%s' "$METRICS" | jq '[.[] | select(.coder_completed == true)] | length')"
+          CODER_COMPLETED_ISSUES="$(printf '%s' "$METRICS" | jq '[.[] | select(.coder_completed == true) | .issue_number] | unique | length')"
+          REVIEWER_RUNS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "reviewer")] | length')"
+          REVIEWER_SUCCESS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "reviewer" and .status == "success")] | length')"
+          REVIEWER_HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "reviewer" and .status == "handoff")] | length')"
+          TESTER_RUNS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "tester")] | length')"
+          TESTER_SUCCESS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "tester" and .status == "success")] | length')"
+          TESTER_HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "tester" and .status == "handoff")] | length')"
+          SUCCESS_RATE="$(awk -v success="$SUCCESS" -v total="$TOTAL" 'BEGIN { if (total == 0) printf "0.0"; else printf "%.1f", (100 * success / total) }')"
+
+          FIRST_CODER="$(
+            printf '%s' "$METRICS" |
+              jq -r '[.[] | select(.coder_completed == true)] | sort_by(.timestamp) | if length == 0 then "None yet" else (.[0] | "#" + (.issue_number|tostring) + " at " + .timestamp + " — run " + (.run_id|tostring)) end'
+          )"
+          LATEST_RUN="$(
+            printf '%s' "$METRICS" |
+              jq -r 'sort_by(.timestamp) | if length == 0 then "None" else (last | "#" + (.issue_number|tostring) + " / " + .role + " / " + .status + " / run " + (.run_id|tostring) + " / " + .timestamp) end'
+          )"
+
+          cat > /tmp/nvidia-ledger.md <<EOF
+          # NVIDIA Agent Metrics Ledger
+
+          Central observability dashboard for auxiliary NVIDIA Nemotron Coder/Reviewer/Tester runs. The append-only comments on this issue are the machine-readable source records; this body is regenerated from those records after every instrumented terminal run.
+
+          ## Aggregate statistics
+
+          | Metric | Value |
+          | --- | ---: |
+          | Instrumented execution attempts | ${TOTAL} |
+          | Successful auxiliary results | ${SUCCESS} |
+          | Handoffs to formal Workers | ${HANDOFF} |
+          | Overall auxiliary success rate | ${SUCCESS_RATE}% |
+          | Runs using the bounded NVIDIA HTTP 503 retry | ${RETRIES} |
+          | NVIDIA Coder attempts | ${CODER_RUNS} |
+          | NVIDIA Coder successful/verifiable runs | ${CODER_SUCCESS} |
+          | NVIDIA Coder handoffs | ${CODER_HANDOFF} |
+          | NVIDIA Coder completed-run records | ${CODER_COMPLETED_RUNS} |
+          | Distinct real issues completed by NVIDIA Coder gate | ${CODER_COMPLETED_ISSUES} |
+          | NVIDIA Reviewer attempts | ${REVIEWER_RUNS} |
+          | NVIDIA Reviewer successes | ${REVIEWER_SUCCESS} |
+          | NVIDIA Reviewer handoffs | ${REVIEWER_HANDOFF} |
+          | NVIDIA Tester attempts | ${TESTER_RUNS} |
+          | NVIDIA Tester successes | ${TESTER_SUCCESS} |
+          | NVIDIA Tester handoffs | ${TESTER_HANDOFF} |
+
+          ## First real NVIDIA Coder completion
+
+          ${FIRST_CODER}
+
+          ## Latest instrumented run
+
+          ${LATEST_RUN}
+
+          ## Definitions
+
+          - success means the existing AI Developer finalize gate routed the auxiliary result to ai-awaiting-review.
+          - handoff means the auxiliary result was routed to ai-handoff for formal Worker continuation.
+          - coder_completed is true only for role=coder when the terminal status is success, required AI CODER EVIDENCE exists, no direct AI-HANDOFF comment exists for that run, and at least one open PR references the source issue.
+          - coder_completed is auxiliary completion evidence only. It is not independent Tester PASS, merge approval, phase approval, or release approval.
+          - Each metric record contains the source issue, exact workflow run/job, head SHA, model, timestamps, duration, retry use, evidence URLs, handoff evidence, and Coder PR evidence.
+
+          Last regenerated: ${ENDED_AT}
+          EOF
+
+          sed -i 's/^          //' /tmp/nvidia-ledger.md
+          gh issue edit "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/nvidia-ledger.md >/dev/null
