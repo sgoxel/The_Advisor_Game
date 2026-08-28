@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'index.html'
-      - 'js/campaign-save.js'
+      - 'js/campaign_persistence.js'
       - 'js/state.js'
       - 'js/rng.js'
       - 'js/terrain.js'
@@ -22,7 +22,7 @@ on:
   pull_request:
     paths:
       - 'index.html'
-      - 'js/campaign-save.js'
+      - 'js/campaign_persistence.js'
       - 'js/state.js'
       - 'js/rng.js'
       - 'js/terrain.js'
