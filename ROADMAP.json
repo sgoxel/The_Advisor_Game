@@ -4,7 +4,7 @@
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
   "planning_epoch": "post-admin-reset-2026-08-27",
-  "planning_basis": "Planner-owned decomposition rebuilt after the explicit Admin reset and v155 baseline import. README defines product requirements and governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority. Five scheduled Worker identities use work-conserving multi-role rotation, while manual Worker #6 may add independent capacity without consuming the scheduled rotation cursor; role authority and independence remain unchanged.",
+  "planning_basis": "Planner-owned decomposition rebuilt after the explicit Admin reset and v155 baseline import. README defines product requirements and governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority. Exactly five scheduled Worker identities use work-conserving multi-role rotation. Worker #6 is a manual Admin-invoked instruction/execution profile only, has no scheduled routine or recurring cursor slot, and may add independent capacity only when directly invoked; role authority and identity independence remain unchanged.",
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "baseline": {
     "admin_reset_commit": "c27511b0477ace430080751704b4fac3e3f19d71",
