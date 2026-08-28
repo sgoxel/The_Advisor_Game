@@ -147,6 +147,10 @@
     const { regionX, regionY } = coordinates(regionXInput, regionYInput);
     const flags = persistedRegion(regionX, regionY)?.flags || {};
     const currentState = schedulingStateFromFlags(regionX, regionY, flags);
+    const latestProgression = progressionFrom(regionX, regionY);
+    if (latestProgression.lastSimulatedGameMinute !== null && Number(candidate?.targetCampaignMinutes) < latestProgression.lastSimulatedGameMinute) {
+      return Object.freeze({ accepted: false, reason: 'stale-region-progression', state: currentState });
+    }
     const decision = Game.RelevanceBoundedCompute.acceptResult(currentState, candidate);
     if (decision.accepted) Game.WorldDeltaPersistence.setRegionFlag(regionX, regionY, 'regionTimeSchedulingState', decision.state);
     return decision;
