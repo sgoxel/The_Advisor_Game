@@ -169,4 +169,129 @@ window.Game = window.Game || {};
       messages: {}
     }
   };
+
+  /*
+    R02 authoritative campaign-state boundary.
+
+    Simulation-owned truth admitted by this contract today:
+    - seeded world identity and dimensions;
+    - deterministic generation parameters;
+    - row-major terrain type/elevation;
+    - protagonist simulation location/direction.
+
+    Presentation/runtime-only values intentionally excluded include camera, DOM,
+    render caches, input state, logs/i18n, tile hover/selection/route previews and
+    transient protagonist animation/path fields. The API is read-only: it can
+    capture/normalize/canonicalize simulation state but exposes no setter that UI
+    code could use to promote presentation state into authoritative truth.
+  */
+  const AUTH_SCHEMA_VERSION = 1;
+  const AUTH_FIELD_PATHS = Object.freeze([
+    'world.seed',
+    'world.rows',
+    'world.cols',
+    'world.tileWidth',
+    'world.tileHeight',
+    'world.params',
+    'world.terrain[].type',
+    'world.terrain[].elevation',
+    'world.player.row',
+    'world.player.col',
+    'world.player.direction'
+  ]);
+
+  function finiteNumber(value, fallback) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
+  function integer(value, fallback) {
+    return Math.trunc(finiteNumber(value, fallback));
+  }
+
+  function canonicalData(value) {
+    if (value === null || value === undefined) return null;
+    if (Array.isArray(value)) return value.map(canonicalData);
+    if (typeof value === 'object') {
+      const output = {};
+      Object.keys(value).sort().forEach((key) => {
+        const child = value[key];
+        if (child === undefined || typeof child === 'function') return;
+        output[key] = canonicalData(child);
+      });
+      return output;
+    }
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'boolean' || typeof value === 'string') return value;
+    return String(value);
+  }
+
+  function normalizeTerrain(terrain, rows, cols) {
+    const source = Array.isArray(terrain) ? terrain : [];
+    const normalized = [];
+    for (let row = 0; row < rows; row += 1) {
+      const sourceRow = Array.isArray(source[row]) ? source[row] : [];
+      const normalizedRow = [];
+      for (let col = 0; col < cols; col += 1) {
+        const tile = sourceRow[col] && typeof sourceRow[col] === 'object' ? sourceRow[col] : {};
+        normalizedRow.push({
+          type: typeof tile.type === 'string' && tile.type ? tile.type : 'grass',
+          elevation: finiteNumber(tile.elevation, 0)
+        });
+      }
+      normalized.push(normalizedRow);
+    }
+    return normalized;
+  }
+
+  function normalizeAuthoritativeState(candidate) {
+    const root = candidate && typeof candidate === 'object' ? candidate : {};
+    const world = root.world && typeof root.world === 'object' ? root.world : root;
+    const player = world.player && typeof world.player === 'object' ? world.player : {};
+    const rows = Math.max(0, integer(world.rows, 0));
+    const cols = Math.max(0, integer(world.cols, 0));
+
+    return {
+      schemaVersion: AUTH_SCHEMA_VERSION,
+      authority: 'simulation',
+      world: {
+        seed: world.seed === undefined || world.seed === null ? '' : String(world.seed),
+        rows,
+        cols,
+        tileWidth: finiteNumber(world.tileWidth, 0),
+        tileHeight: finiteNumber(world.tileHeight, 0),
+        params: canonicalData(world.params),
+        terrain: normalizeTerrain(world.terrain, rows, cols),
+        player: {
+          row: integer(player.row, 0),
+          col: integer(player.col, 0),
+          direction: typeof player.direction === 'string' && player.direction ? player.direction : 's'
+        }
+      }
+    };
+  }
+
+  function deepFreeze(value) {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+    Object.freeze(value);
+    Object.keys(value).forEach((key) => deepFreeze(value[key]));
+    return value;
+  }
+
+  function captureAuthoritativeState(runtimeState) {
+    return deepFreeze(normalizeAuthoritativeState(runtimeState || window.Game.State));
+  }
+
+  function canonicalStringify(candidate) {
+    return JSON.stringify(normalizeAuthoritativeState(candidate));
+  }
+
+  window.Game.AuthoritativeState = Object.freeze({
+    schemaVersion: AUTH_SCHEMA_VERSION,
+    authority: 'simulation',
+    fields: AUTH_FIELD_PATHS,
+    capture: captureAuthoritativeState,
+    normalize: normalizeAuthoritativeState,
+    canonicalStringify
+  });
 })();
