@@ -38,7 +38,7 @@ jobs:
       - name: Re-run deterministic multi-region terrain regression
         run: npx playwright test tests/browser/r02-multi-region-terrain.spec.mjs
       - name: Re-run world-coordinate contract regression
-        run: npx playwright test tests/browser/r02-world-coordinate.spec.mjs
+        run: npx playwright test tests/browser/r02-world-coordinate-contract.spec.mjs
       - name: Run stabilized R01 browser regression
         run: npm run test:browser:r01
       - name: Upload Playwright evidence
