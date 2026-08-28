@@ -8,7 +8,7 @@
 (function installNpcWorldFoundation() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r02-npc-world-v1';
+  const VERSION = 'r02-npc-world-v2';
   const CYCLE_MS = 24000;
   const MAX_VISIBLE_NPCS = 16;
 
@@ -50,13 +50,47 @@
     return buildings.find((building) => building.role === role) || fallback;
   }
 
-  function buildNpcState(person, index, village) {
+  function resolveOriginBinding(world, village) {
+    const localOrigin = world.originBaseState?.protagonistOrigin || {};
+    const player = world.player || {};
+    const localRow = Number.isFinite(Number(localOrigin.localRow))
+      ? Number(localOrigin.localRow)
+      : Number(village.center?.row || 0);
+    const localCol = Number.isFinite(Number(localOrigin.localCol))
+      ? Number(localOrigin.localCol)
+      : Number(village.center?.col || 0);
+    const strategicRow = Number.isFinite(Number(player.row)) ? Number(player.row) : localRow;
+    const strategicCol = Number.isFinite(Number(player.col)) ? Number(player.col) : localCol;
+    return {
+      localRow,
+      localCol,
+      strategicRow,
+      strategicCol,
+      rowOffset: strategicRow - localRow,
+      colOffset: strategicCol - localCol
+    };
+  }
+
+  function strategicPoint(point, binding) {
+    const local = clonePoint(point);
+    return {
+      localRow: local.row,
+      localCol: local.col,
+      row: local.row + binding.rowOffset,
+      col: local.col + binding.colOffset
+    };
+  }
+
+  function buildNpcState(person, index, village, binding) {
     const buildings = Array.isArray(village.buildings) ? village.buildings : [];
     const home = buildings.find((building) => building.id === person.homeBuildingId) || buildings[0];
     const workRole = OCCUPATION_ROLE[person.occupation] || 'trade';
     const work = buildingForRole(buildings, workRole, home);
     const social = buildingForRole(buildings, 'trade', buildingForRole(buildings, 'landmark', home));
     const start = home || work || social || { row: village.center?.row || 0, col: village.center?.col || 0 };
+    const homePoint = strategicPoint(start, binding);
+    const workPoint = strategicPoint(work || start, binding);
+    const socialPoint = strategicPoint(social || start, binding);
 
     return {
       id: person.id,
@@ -65,16 +99,18 @@
       occupation: person.occupation,
       regionX: Number(person.regionX || 0),
       regionY: Number(person.regionY || 0),
-      row: Number(start.row),
-      col: Number(start.col),
+      row: homePoint.row,
+      col: homePoint.col,
+      localRow: homePoint.localRow,
+      localCol: homePoint.localCol,
       activity: 'home',
       controlledBy: 'simulation',
       playerControllable: false,
       routineOffsetMs: stableOffset(`${person.id}|${index}`),
       anchors: {
-        home: { buildingId: home?.id || null, ...clonePoint(start) },
-        work: { buildingId: work?.id || null, ...clonePoint(work || start) },
-        social: { buildingId: social?.id || null, ...clonePoint(social || start) }
+        home: { buildingId: home?.id || null, ...homePoint },
+        work: { buildingId: work?.id || null, ...workPoint },
+        social: { buildingId: social?.id || null, ...socialPoint }
       }
     };
   }
@@ -86,21 +122,37 @@
     if (!world || !village || !Array.isArray(village.population)) return false;
 
     const seed = String(world.seed || '');
+    const binding = resolveOriginBinding(world, village);
+    const bindingKey = `${binding.localRow},${binding.localCol}->${binding.strategicRow},${binding.strategicCol}`;
     const existingRuntime = world.npcRuntime;
-    if (existingRuntime && existingRuntime.version === VERSION && existingRuntime.seed === seed && Array.isArray(world.npcs)) {
+    if (
+      existingRuntime &&
+      existingRuntime.version === VERSION &&
+      existingRuntime.seed === seed &&
+      existingRuntime.bindingKey === bindingKey &&
+      Array.isArray(world.npcs)
+    ) {
       return true;
     }
 
     const previousById = new Map(Array.isArray(world.npcs) ? world.npcs.map((npc) => [npc.id, npc]) : []);
     world.npcs = village.population.slice(0, MAX_VISIBLE_NPCS).map((person, index) => {
       const previous = previousById.get(person.id);
-      if (previous && previous.authority === 'simulation') return previous;
-      return buildNpcState(person, index, village);
+      if (
+        previous &&
+        previous.authority === 'simulation' &&
+        existingRuntime?.version === VERSION &&
+        existingRuntime?.seed === seed &&
+        existingRuntime?.bindingKey === bindingKey
+      ) return previous;
+      return buildNpcState(person, index, village, binding);
     });
     world.npcRuntime = {
       version: VERSION,
       authority: 'simulation',
       seed,
+      bindingKey,
+      originBinding: binding,
       startedAtMs: typeof performance !== 'undefined' ? performance.now() : 0,
       lastElapsedMs: 0
     };
@@ -128,6 +180,8 @@
       const segment = segmentFor(npc, value);
       npc.row = interpolate(segment.from.row, segment.to.row, segment.t);
       npc.col = interpolate(segment.from.col, segment.to.col, segment.t);
+      npc.localRow = npc.row - runtime.originBinding.rowOffset;
+      npc.localCol = npc.col - runtime.originBinding.colOffset;
       npc.activity = segment.activity;
     }
     runtime.lastElapsedMs = value;
