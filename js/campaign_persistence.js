@@ -179,4 +179,12 @@ window.Game = window.Game || {};
     validateSave,
     loadSave
   });
+
+  if (!document.querySelector('script[data-r02-persistence-ui]')) {
+    const uiScript = document.createElement('script');
+    uiScript.src = 'js/persistence_ui.js';
+    uiScript.defer = true;
+    uiScript.dataset.r02PersistenceUi = 'true';
+    document.head.appendChild(uiScript);
+  }
 })();
