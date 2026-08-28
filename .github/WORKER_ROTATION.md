@@ -30,13 +30,21 @@ A Worker should maximize useful work in the current invocation without inventing
 
 Starting from the applicable role, the Worker traverses the role cycle. In each role it processes eligible work sequentially in role-specific priority order rather than stopping after one task.
 
+There is no artificial one-task, one-role, or one-pass work cap. A run may complete multiple eligible targets in the same role and may repeat the full five-role cycle as long as useful eligible progress continues and project safety/authority rules remain satisfied.
+
 After every material state change — including a commit, issue transition, revision outcome, claim change, dependency change, test result, NVIDIA handoff, or planning update — re-fetch the relevant GitHub state before selecting the next target.
+
+At the start of the run and after every material state change, perform a project-wide critical-work scan. Critical work remains owned by its proper role, but it must not be starved by lower-value ordinary backlog in another role. Before taking another ordinary target in the current role, check whether a blocking correction, revision, handoff, verification obligation, continuation, release blocker, or active-phase dependency has become eligible elsewhere in the cycle; if so, advance through the role cycle toward that critical work instead of draining lower-priority backlog first.
 
 When one role has no further eligible work, continue to the next role. After all five roles have been visited, begin another pass if the preceding pass performed useful work or materially changed eligibility.
 
-Stop only when one complete five-role pass produces no eligible progress.
+Stop normally only when one complete five-role pass produces no eligible progress.
 
 A blocked or unchanged target must not be retried indefinitely in the same invocation. Record the blocker, clear or preserve ownership according to project rules, and skip that unchanged target until external state materially changes.
+
+Do not wait idly for CI, GitHub Actions, NVIDIA/OpenCode, another Worker, or another external result when other eligible work exists. Record the pending external state, continue through other roles and eligible targets, and revisit the waiting target only if its state materially changes during the same invocation.
+
+If a hard platform, tool, connector, or execution limit prevents further safe work before the normal no-progress stopping condition is reached, checkpoint safely: preserve or clear claims accurately, record exact completed work and pending continuations, and report `continuation required`. A limit-interrupted run must not be reported as a full no-progress pass or as completed work that was not actually completed.
 
 ## Critical priority inside roles
 
@@ -72,9 +80,9 @@ A Worker must not treat NVIDIA Coder self-test as independent PASS.
 
 The canonical recurring cursor is the latest valid `WORKER ROTATION STATE:` JSON comment on GitHub issue #97. Scheduled Workers append state comments; they do not rewrite history.
 
-At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, and claim-clear state.
+At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, claim-clear state, pending external work, and whether continuation is required.
 
-The next scheduled cursor uses the successor of the last role in which useful work was actually performed. If the run produced no eligible progress in any role, preserve the original starting role.
+The next scheduled cursor uses the successor of the last role in which useful work was actually performed. If the run produced no eligible progress in any role, preserve the original starting role. If the run was interrupted by a hard execution limit while eligible work remained, preserve continuity from the last useful role and explicitly record the pending continuation so the next Worker can resume from current GitHub state rather than repeating completed work.
 
 ## Manual Worker #6
 
@@ -85,12 +93,12 @@ Worker #6 must:
 1. Read current `main/README.md` first.
 2. Inspect active/earlier phase state, dependencies, revisions, claims, NVIDIA state, CI/Actions, and current issue/task eligibility.
 3. Use the same Planner/Coder/Designer/Tester/Reviewer authority boundaries and critical priorities as scheduled Workers.
-4. Run work-conservingly across roles and repeat passes until a complete five-role pass makes no eligible progress.
+4. Run work-conservingly across roles with no artificial task/pass cap, repeat passes until a complete five-role pass makes no eligible progress, and use the same anti-idle/external-wait rules as scheduled Workers.
 5. Respect Worker #6 identity independence across all current and future runs.
 6. Use normal `WORK-CLAIM` collision protection.
 7. Never edit README without explicit Admin authorization.
 8. Never advance or rewrite the scheduled `WORKER ROTATION STATE:` cursor.
-9. Post a `MANUAL WORKER #6 RESULT:` audit on issue #97 with roles attempted, targets, commits/PRs, checks/results, blockers/revisions, and claim-clear state.
+9. Post a `MANUAL WORKER #6 RESULT:` audit on issue #97 with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, and claim-clear state.
 
 Because Worker #6 does not advance the scheduled cursor, its repository changes are discovered by the next scheduled Worker through normal state re-fetch and claim/dependency checks.
 
