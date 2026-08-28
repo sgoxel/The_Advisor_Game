@@ -1,0 +1,93 @@
+name: R02 Save Export Serialization Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/campaign-save.js'
+      - 'js/state.js'
+      - 'js/rng.js'
+      - 'js/terrain.js'
+      - 'js/topology.js'
+      - 'js/organic_elevation.js'
+      - 'tests/browser/r02-save-export-serialization.spec.mjs'
+      - 'tests/browser/r02-world-initialization.spec.mjs'
+      - 'tests/browser/r02-authoritative-state.spec.mjs'
+      - 'tests/browser/r02-seed-rng.spec.mjs'
+      - 'tests/browser/r01-*.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r02-save-export-serialization-verification.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/campaign-save.js'
+      - 'js/state.js'
+      - 'js/rng.js'
+      - 'js/terrain.js'
+      - 'js/topology.js'
+      - 'js/organic_elevation.js'
+      - 'tests/browser/r02-save-export-serialization.spec.mjs'
+      - 'tests/browser/r02-world-initialization.spec.mjs'
+      - 'tests/browser/r02-authoritative-state.spec.mjs'
+      - 'tests/browser/r02-seed-rng.spec.mjs'
+      - 'tests/browser/r01-*.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r02-save-export-serialization-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  save-export-and-cumulative-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+
+      - name: Record exact candidate SHA
+        run: echo "R02-T05 candidate ${GITHUB_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run focused R02 save/export serialization checks
+        run: npx playwright test tests/browser/r02-save-export-serialization.spec.mjs
+
+      - name: Re-run approved R02 contracts
+        run: >-
+          npx playwright test
+          tests/browser/r02-authoritative-state.spec.mjs
+          tests/browser/r02-seed-rng.spec.mjs
+          tests/browser/r02-world-initialization.spec.mjs
+
+      - name: Run complete stabilized R01 browser regression
+        run: >-
+          npx playwright test
+          tests/browser/r01-baseline.spec.mjs
+          tests/browser/r01-organic-elevation.spec.mjs
+          tests/browser/r01-readability.spec.mjs
+          tests/browser/r01-cumulative.spec.mjs
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-t05-save-export-evidence-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
