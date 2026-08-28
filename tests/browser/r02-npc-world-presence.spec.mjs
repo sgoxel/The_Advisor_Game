@@ -43,7 +43,10 @@ test('local routines move multiple villagers deterministically between role-appr
     const second = api.capture();
     api.updateAt(7000);
     const repeated = api.capture();
-    return { first, second, repeated };
+    const roleByBuildingId = Object.fromEntries(
+      window.Game.State.world.originVillage.buildings.map((building) => [building.id, building.role])
+    );
+    return { first, second, repeated, roleByBuildingId };
   });
 
   const moved = evidence.first.filter((npc, index) => {
@@ -55,11 +58,11 @@ test('local routines move multiple villagers deterministically between role-appr
   expect(new Set(evidence.second.map((npc) => npc.activity)).size).toBeGreaterThanOrEqual(2);
 
   const roleEvidence = new Map(evidence.second.map((npc) => [npc.occupation, npc]));
-  expect(roleEvidence.get('innkeeper')?.anchors.work.buildingId).toContain(':lodging');
-  expect(roleEvidence.get('baker')?.anchors.work.buildingId).toContain(':food');
-  expect(roleEvidence.get('trader')?.anchors.work.buildingId).toContain(':trade');
-  expect(roleEvidence.get('blacksmith')?.anchors.work.buildingId).toContain(':production');
-  expect(roleEvidence.get('guard')?.anchors.work.buildingId).toContain(':guard');
+  expect(evidence.roleByBuildingId[roleEvidence.get('innkeeper')?.anchors.work.buildingId]).toBe('lodging');
+  expect(evidence.roleByBuildingId[roleEvidence.get('baker')?.anchors.work.buildingId]).toBe('food');
+  expect(evidence.roleByBuildingId[roleEvidence.get('trader')?.anchors.work.buildingId]).toBe('trade');
+  expect(evidence.roleByBuildingId[roleEvidence.get('blacksmith')?.anchors.work.buildingId]).toBe('production');
+  expect(evidence.roleByBuildingId[roleEvidence.get('guard')?.anchors.work.buildingId]).toBe('guard');
 });
 
 test('presentation recreation does not fabricate identities or reset authoritative NPC state', async ({ page }) => {
