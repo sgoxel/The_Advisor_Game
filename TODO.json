@@ -73,7 +73,7 @@
       "id": "R02-T04",
       "order": 4,
       "title": "Compose deterministic authoritative world-state initialization",
-      "status": "ai_ready_auxiliary_test",
+      "status": "ai_running_auxiliary_test",
       "depends_on": ["R02-T01", "R02-T02"],
       "github_issue": 86,
       "role_owner": "Coder Worker",
@@ -94,11 +94,13 @@
       },
       "auxiliary_nvidia": {
         "role": "tester",
-        "status": "ai_ready",
-        "labels_verified": ["ai-role-tester", "ai-ready"],
+        "status": "running",
+        "workflow_run": 33177350289,
+        "model": "nvidia/nvidia/nemotron-3-ultra-550b-a55b",
+        "labels_verified": ["ai-role-tester", "ai-running", "work-claimed"],
         "authority": "auxiliary only; formal Tester remains independent authority"
       },
-      "note": "The prior NVIDIA Coder run 33172638124 ended ai-handoff with no accepted Coder implementation. Coder Worker #1 completed the formal continuation and cleared ownership on exact candidate 543edd3e.... Planner removed the stale auxiliary Coder role and routed the free committed candidate for NVIDIA Tester evidence with ai-ready added last. Formal Tester PASS or T-REV remains mandatory before #86 completes and #87 can unblock."
+      "note": "The prior NVIDIA Coder run 33172638124 ended ai-handoff with no accepted Coder implementation. Coder Worker #1 completed the formal continuation and cleared ownership on exact candidate 543edd3e.... Planner then routed the free committed candidate for NVIDIA Tester evidence. Auxiliary Tester run 33177350289 is active; formal Workers must not duplicate while ai-running/work-claimed remains. Formal Tester PASS or T-REV remains mandatory before #86 completes and #87 can unblock."
     },
     {
       "id": "R02-T05",
