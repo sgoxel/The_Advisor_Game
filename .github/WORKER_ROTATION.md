@@ -1,6 +1,6 @@
 # Worker Rotation Control
 
-This file documents the ChatGPT Worker rotation protocol only. It is not product scope, phase planning, release authority, or a replacement for README/ROADMAP/TODO/issues.
+This file documents the ChatGPT Worker execution protocol only. It is not product scope, phase planning, release authority, or a replacement for README/ROADMAP/TODO/issues.
 
 ## Worker identities
 
@@ -12,25 +12,31 @@ Five independent scheduled Workers exist:
 - Worker #4
 - Worker #5
 
-All five use the same Worker profile. Worker identity persists across runs and roles.
+One additional persistent manual Worker exists:
+
+- Worker #6
+
+Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker #6 is manual-only and does not consume or advance the recurring cursor merely by being invoked. All Worker identities persist across runs and roles.
 
 ## Role cycle
 
 `Planner -> Coder -> Designer -> Tester -> Reviewer -> Planner`
 
-The canonical cursor provides the starting role for a scheduled run.
+The canonical cursor provides the starting role for scheduled Workers #1–#5. Worker #6 is cursor-independent and begins with a priority scan before entering the same role boundaries.
 
-A Worker does not stop after the first role or first eligible task. Starting from the cursor role, it traverses all five roles exactly once in cycle order during that invocation.
+## Work-conserving execution
 
-For each role:
+A Worker should maximize useful work in the current invocation without inventing scope.
 
-1. Inspect active/earlier phase state, dependencies, revisions, claims, NVIDIA state, and eligible targets relevant to that role.
-2. Prefer critical obligations for that role over ordinary backlog.
-3. If eligible work exists, take at most one highest-priority focused target for the role, create the required `WORK-CLAIM`, perform the allowed work and checks, audit the result, and resolve the claim according to project rules.
-4. If no eligible target exists, skip the role without ending the run.
-5. Continue to the next role until all five roles have been attempted once.
+Starting from the applicable role, the Worker traverses the role cycle. In each role it processes eligible work sequentially in role-specific priority order rather than stopping after one task.
 
-Maximum normal work per scheduled invocation is one focused target per role, up to five role-targets total. This prevents one role from monopolizing a run while allowing every Worker to use available capacity across the full development cycle.
+After every material state change — including a commit, issue transition, revision outcome, claim change, dependency change, test result, NVIDIA handoff, or planning update — re-fetch the relevant GitHub state before selecting the next target.
+
+When one role has no further eligible work, continue to the next role. After all five roles have been visited, begin another pass if the preceding pass performed useful work or materially changed eligibility.
+
+Stop only when one complete five-role pass produces no eligible progress.
+
+A blocked or unchanged target must not be retried indefinitely in the same invocation. Record the blocker, clear or preserve ownership according to project rules, and skip that unchanged target until external state materially changes.
 
 ## Critical priority inside roles
 
@@ -42,28 +48,50 @@ Critical obligations outrank ordinary backlog inside the relevant role:
 - Tester: revision retest, blockers, `ai-awaiting-review` or Tester handoff, active untested work, earlier fixes, then release gates.
 - Reviewer: evidenced blocking process/workflow/CI/automation defects, stale-state risks, and reliability problems before ordinary process improvement.
 
+Within those priorities, prefer the oldest/highest-priority eligible unclaimed target whose dependencies are satisfied.
+
 Workers must not invent work merely to keep a role busy.
 
 ## Independence
 
 A Worker must never independently approve its own implementation, design, revision, bug fix, workflow fix, process fix, or other prior change from the same or an earlier run.
 
-When reaching Tester or Reviewer, the Worker first seeks another eligible independent target. If none exists, it skips that role and continues the full cycle.
+When reaching Tester or Reviewer, the Worker first seeks another eligible independent target. If none exists, that self-authored target remains for another Worker identity while the current Worker continues with other eligible work.
 
 Coder, Designer, and Reviewer changes still require independent Tester verification by a different Worker identity before being called independently verified.
 
 ## Claims and overlap
 
-Scheduled Workers may overlap in time. `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership are the collision controls.
+Workers may overlap in time. `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership are the collision controls.
 
-A Worker must not duplicate a live claimed target, break live NVIDIA ownership, or treat NVIDIA Coder self-test as independent PASS.
+Before modifying a target, claim it with the current Worker identity and role. Re-fetch before important writes. Never duplicate a live claim or break live NVIDIA ownership merely because a run is old.
 
-## Rotation state
+A Worker must not treat NVIDIA Coder self-test as independent PASS.
 
-The canonical rotation cursor is the latest valid `WORKER ROTATION STATE:` JSON comment on the dedicated GitHub control issue. Workers append state comments; they do not rewrite history.
+## Scheduled rotation state
 
-At the end of a full-cycle run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, every role attempted, selected task or skip for each role, commits/PRs, checks/results, blockers/revisions, and claim-clear state.
+The canonical recurring cursor is the latest valid `WORKER ROTATION STATE:` JSON comment on GitHub issue #97. Scheduled Workers append state comments; they do not rewrite history.
 
-The next cursor uses the successor of the last role in which useful work was actually performed. If no role had eligible work, the original starting role is preserved. This lets the next Worker continue from where useful work actually ended instead of consuming empty roles.
+At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, and claim-clear state.
+
+The next scheduled cursor uses the successor of the last role in which useful work was actually performed. If the run produced no eligible progress in any role, preserve the original starting role.
+
+## Manual Worker #6
+
+Worker #6 is a manually invoked capacity Worker, not a sixth recurring scheduled slot.
+
+Worker #6 must:
+
+1. Read current `main/README.md` first.
+2. Inspect active/earlier phase state, dependencies, revisions, claims, NVIDIA state, CI/Actions, and current issue/task eligibility.
+3. Use the same Planner/Coder/Designer/Tester/Reviewer authority boundaries and critical priorities as scheduled Workers.
+4. Run work-conservingly across roles and repeat passes until a complete five-role pass makes no eligible progress.
+5. Respect Worker #6 identity independence across all current and future runs.
+6. Use normal `WORK-CLAIM` collision protection.
+7. Never edit README without explicit Admin authorization.
+8. Never advance or rewrite the scheduled `WORKER ROTATION STATE:` cursor.
+9. Post a `MANUAL WORKER #6 RESULT:` audit on issue #97 with roles attempted, targets, commits/PRs, checks/results, blockers/revisions, and claim-clear state.
+
+Because Worker #6 does not advance the scheduled cursor, its repository changes are discovered by the next scheduled Worker through normal state re-fetch and claim/dependency checks.
 
 Detailed scheduling times and automation implementation remain outside this file.
