@@ -1,0 +1,83 @@
+name: AI Developer Static Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ai-developer.yml'
+      - '.github/workflows/ai-developer-static-verification.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/ai-developer.yml'
+      - '.github/workflows/ai-developer-static-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-finalization-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v6
+
+      - name: Parse workflow YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ai-developer.yml"); YAML.load_file(".github/workflows/ai-developer-static-verification.yml")'
+
+      - name: Verify exact evidence-prefix parsing cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          START='2026-08-28T00:00:00Z'
+
+          evidence_count() {
+            local body="$1"
+            local prefix="$2"
+            jq -cn --arg body "$body" '[{created_at:"2026-08-28T00:00:01Z",body:$body}]' |
+              jq --arg start "$START" --arg prefix "$prefix" \
+                '[.[] | select(.created_at >= $start) | select(((.body // "") | startswith($prefix)) or ((.body // "") | startswith("**" + $prefix)))] | length'
+          }
+
+          assert_count() {
+            local expected="$1"
+            local body="$2"
+            local prefix="$3"
+            local actual
+            actual="$(evidence_count "$body" "$prefix")"
+            if [ "$actual" != "$expected" ]; then
+              echo "Evidence parser mismatch: expected=$expected actual=$actual prefix=$prefix body=$body" >&2
+              exit 1
+            fi
+          }
+
+          assert_count 1 'AI TEST EVIDENCE: PASS' 'AI TEST EVIDENCE:'
+          assert_count 1 '**AI TEST EVIDENCE: PASS**' 'AI TEST EVIDENCE:'
+          assert_count 1 '**AI REVIEW EVIDENCE: PASS**' 'AI REVIEW EVIDENCE:'
+          assert_count 1 '**AI CODER EVIDENCE: complete**' 'AI CODER EVIDENCE:'
+          assert_count 0 'Unrelated note mentioning AI TEST EVIDENCE: PASS' 'AI TEST EVIDENCE:'
+          assert_count 0 '**NOT AI TEST EVIDENCE: PASS**' 'AI TEST EVIDENCE:'
+
+      - name: Guard finalization semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          text = Path('.github/workflows/ai-developer.yml').read_text(encoding='utf-8')
+          required = [
+              'REQUIRED_PREFIX="AI CODER EVIDENCE:"',
+              'REQUIRED_PREFIX="AI REVIEW EVIDENCE:"',
+              'REQUIRED_PREFIX="AI TEST EVIDENCE:"',
+              'startswith("AI-HANDOFF:")',
+              'startswith($prefix)) or ((.body // "") | startswith("**" + $prefix))',
+          ]
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit(f'Missing expected finalization guard(s): {missing}')
+          PY
