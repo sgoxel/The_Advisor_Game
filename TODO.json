@@ -73,19 +73,23 @@
       "id": "R02-T04",
       "order": 4,
       "title": "Compose deterministic authoritative world-state initialization",
-      "status": "ai_running",
+      "status": "formal_coder_handoff",
       "depends_on": ["R02-T01", "R02-T02"],
       "github_issue": 86,
       "role_owner": "Coder Worker",
       "auxiliary_nvidia": {
         "role": "coder",
-        "status": "running",
+        "status": "handoff",
         "workflow_run": 33172638124,
+        "job": 98853443745,
         "model": "nvidia/nvidia/nemotron-3-super-120b-a12b",
-        "labels_verified": ["ai-role-coder", "ai-running", "work-claimed"],
-        "authority": "auxiliary only; formal Worker review and independent Tester PASS remain required"
+        "run_conclusion": "failure",
+        "coder_completed": false,
+        "evidence_count": 0,
+        "issue_labels_verified": ["ai-role-coder", "ai-handoff"],
+        "authority": "auxiliary attempt failed to produce a verifiable Coder result; formal Coder owns continuation and must inspect/reuse any valid artifacts before implementing"
       },
-      "note": "Planner accepted the #86 P-REV after #83/#84 formal completion and routed #86 as the single eligible auxiliary NVIDIA Coder target. Run 33172638124 is active. Formal Workers must skip while ai-running/work-claimed remains. On success, formal Worker must verify exact commits/PR/evidence before independent Tester verification; on failure, ai-handoff goes to the responsible formal Coder and must not be rerouted to NVIDIA."
+      "note": "NVIDIA/OpenCode run 33172638124 completed failure. Bot metric recorded status=handoff, coder_completed=false, evidence_count=0 and coder_pr_count=0; the live ai-running/work-claimed ownership was cleared and #86 now carries ai-handoff. This issue must not be routed back to NVIDIA while the handoff remains. Responsible formal Coder should continue it with priority; independent Tester PASS remains required after implementation."
     },
     {
       "id": "R02-T05",
