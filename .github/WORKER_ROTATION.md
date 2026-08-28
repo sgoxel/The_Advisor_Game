@@ -12,9 +12,9 @@ Five independent scheduled Workers exist:
 - Worker #4
 - Worker #5
 
-Worker #6 is different: it is a reserved **manual Admin-invoked execution identity / instruction profile**, not a scheduled routine.
+Worker #6 and Worker #7 are different: they are reserved **manual Admin-invoked execution identities / instruction profiles**, not scheduled routines.
 
-Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker #6 exists only when the Admin directly invokes Worker #6 or gives a manual Worker #6 instruction in chat. Worker #6 has no automation, timer, recurrence, scheduled task, or recurring cursor slot. All Worker identities persist across runs for independence purposes.
+Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker #6 and Worker #7 exist only when the Admin directly invokes the respective Worker or gives that manual Worker an instruction in chat. Neither manual Worker has automation, timer, recurrence, scheduled task, or recurring cursor slot. All Worker identities persist across runs for independence purposes.
 
 ## Role cycle
 
@@ -22,7 +22,7 @@ Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker
 
 The canonical cursor provides the starting role for scheduled Workers #1–#5.
 
-Worker #6 is cursor-independent. A direct Admin instruction may define Worker #6's role, target, scope, or starting point. When the Admin invokes Worker #6 broadly without narrowing the role, Worker #6 reads README first, performs a project-priority scan, and then uses the same role boundaries and work-conserving cycle as the scheduled Workers.
+Worker #6 and Worker #7 are cursor-independent. A direct Admin instruction may define either manual Worker's role, target, scope, or starting point. When the Admin invokes either manual Worker broadly without narrowing the role, that Worker reads README first, performs a project-priority scan, and then uses the same role boundaries and work-conserving cycle as the scheduled Workers.
 
 ## Work-conserving execution
 
@@ -68,7 +68,7 @@ When reaching Tester or Reviewer, the Worker first seeks another eligible indepe
 
 Coder, Designer, and Reviewer changes still require independent Tester verification by a different Worker identity before being called independently verified.
 
-Worker #6 is a persistent identity for this rule even though it has no recurring routine. Work produced manually as Worker #6 cannot later be independently approved by Worker #6.
+Worker #6 and Worker #7 are separate persistent identities for this rule even though neither has a recurring routine. Work produced manually as Worker #6 cannot later be independently approved by Worker #6, and the same applies to Worker #7. Worker #6 may independently verify Worker #7 work, and Worker #7 may independently verify Worker #6 work, when all normal Tester requirements are satisfied.
 
 ## Claims and overlap
 
@@ -86,23 +86,23 @@ At the end of a scheduled work-conserving run, the Worker records one `WORKER RO
 
 The next scheduled cursor uses the successor of the last role in which useful work was actually performed. If the run produced no eligible progress in any role, preserve the original starting role. If the run was interrupted by a hard execution limit while eligible work remained, preserve continuity from the last useful role and explicitly record the pending continuation so the next Worker can resume from current GitHub state rather than repeating completed work.
 
-## Manual Worker #6 instruction profile
+## Manual Worker #6 and Worker #7 instruction profiles
 
-Worker #6 is available only through direct Admin invocation. It is not created, enabled, scheduled, resumed, or triggered by an automation routine.
+Worker #6 and Worker #7 are available only through direct Admin invocation. Neither is created, enabled, scheduled, resumed, or triggered by an automation routine.
 
-A manual Worker #6 invocation must:
+A manual Worker #6 or Worker #7 invocation must:
 
 1. Treat the Admin's direct instruction as the highest authority and use it to determine any explicitly supplied role, target, scope, or exception.
 2. Read current `main/README.md` first before project work.
 3. Inspect relevant active/earlier state, dependencies, revisions, claims, NVIDIA state, CI/Actions, and task eligibility.
 4. Use the same Planner/Coder/Designer/Tester/Reviewer authority boundaries and critical priorities unless the Admin explicitly narrows or overrides the normal workflow.
-5. When the Admin gives a broad Worker #6 instruction rather than a single-role/task instruction, run work-conservingly across roles with no artificial task/pass cap and stop normally only after a complete five-role pass makes no eligible progress.
-6. Respect Worker #6 identity independence across all current and future manual invocations.
-7. Use normal `WORK-CLAIM` collision protection and never interfere with live scheduled Worker or NVIDIA ownership.
+5. When the Admin gives a broad instruction rather than a single-role/task instruction, run work-conservingly across roles with no artificial task/pass cap and stop normally only after a complete five-role pass makes no eligible progress.
+6. Respect its own persistent Worker identity independence across all current and future manual invocations.
+7. Use normal `WORK-CLAIM` collision protection and never interfere with live scheduled Worker, the other manual Worker, or NVIDIA ownership.
 8. Never edit README without explicit Admin authorization.
 9. Never consume, advance, rewrite, or reserve the scheduled `WORKER ROTATION STATE:` cursor.
-10. If project work is performed, post a `MANUAL WORKER #6 RESULT:` audit on issue #97 with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, and claim-clear state.
+10. If project work is performed, post a `MANUAL WORKER #6 RESULT:` or `MANUAL WORKER #7 RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, and claim-clear state.
 
-Because Worker #6 does not participate in the recurring cursor, its repository changes are discovered by scheduled Workers #1–#5 through normal state re-fetch and claim/dependency checks.
+Because Worker #6 and Worker #7 do not participate in the recurring cursor, their repository changes are discovered by scheduled Workers #1–#5 and by each other through normal state re-fetch and claim/dependency checks.
 
 Detailed scheduling times and automation implementation remain outside this file.
