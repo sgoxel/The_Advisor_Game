@@ -1,0 +1,53 @@
+name: R02 Origin Village Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/rng.js'
+      - 'tests/browser/r02-origin-village.spec.mjs'
+      - '.github/workflows/r02-origin-village-verification.yml'
+  pull_request:
+    paths:
+      - 'js/rng.js'
+      - 'tests/browser/r02-origin-village.spec.mjs'
+      - '.github/workflows/r02-origin-village-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  origin-village-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run deterministic inhabited origin village regression
+        run: npx playwright test tests/browser/r02-origin-village.spec.mjs
+      - name: Re-run deterministic multi-region terrain regression
+        run: npx playwright test tests/browser/r02-multi-region-terrain.spec.mjs
+      - name: Re-run world-coordinate contract regression
+        run: npx playwright test tests/browser/r02-world-coordinate.spec.mjs
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-t15-origin-village-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
