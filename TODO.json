@@ -12,62 +12,41 @@
       "id": "R02-T01",
       "order": 1,
       "title": "Define authoritative campaign-state boundary",
-      "status": "ai_awaiting_formal_test",
+      "status": "completed",
       "github_issue": 83,
       "role_owner": "Coder Worker",
+      "issue_state": "closed_completed",
       "implementation_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
-      "verification_evidence": {
-        "coder_self_check_only": true,
-        "r02_run": 33163373934,
-        "r02_job": 98822902537,
-        "artifact": 9682601721,
-        "r01_cumulative_run": 33163373986,
-        "r01_browser_run": 33163373915
-      },
-      "auxiliary_nvidia": {
-        "role": "tester",
-        "status": "success_awaiting_formal_review",
-        "workflow_run": 33166277573,
-        "job": 98832488870,
+      "independent_test": {
+        "result": "PASS",
         "tested_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
-        "evidence_comment": 5451897494,
-        "authority": "auxiliary only; formal Tester remains independent authority"
-      },
-      "note": "Coder Worker #2 completed implementation and cleared its claim. NVIDIA Tester produced objective PASS evidence, but #83 remains open at ai-awaiting-review and cannot complete until formal Tester independently inspects the exact committed state/evidence and records PASS or T-REV. Do not duplicate or treat NVIDIA evidence as phase/release authority."
+        "run": 33163373934,
+        "job": 98822902537,
+        "artifact": 9682601721,
+        "note": "Formal Tester independently verified the authoritative-state boundary and compatible R01 regression; no T-REV required. Prior NVIDIA Tester evidence was auxiliary only and not the authority for completion."
+      }
     },
     {
       "id": "R02-T02",
       "order": 2,
       "title": "Define deterministic seed and RNG derivation contract",
-      "status": "independent_test_pass_pending_claim_clear",
+      "status": "completed",
       "github_issue": 84,
       "role_owner": "Coder Worker",
+      "issue_state": "closed_completed",
       "implementation_refs": [
         "67b252f4d7cd5a82e94a828b96358ea5ae65ef3d",
         "8c182c8272d28923142c7b310aa77ea60ff097f4",
         "eddcdf8b5f0a205c29d23045aaf9c4285714853d"
       ],
-      "claim": {
-        "worker": "Coder Worker #2",
-        "role": "Coder",
-        "source": "formal takeover after terminal NVIDIA ai-handoff"
-      },
-      "nvidia_handoff": {
-        "workflow_run": 33162483631,
-        "job": 98820153137,
-        "conclusion": "cancelled",
-        "evidence_count": 0,
-        "coder_completed": false
-      },
       "independent_test": {
         "result": "PASS",
         "tested_ref": "eddcdf8b5f0a205c29d23045aaf9c4285714853d",
         "run": 33166302222,
         "job": 98832425073,
         "artifact": 9683767822,
-        "note": "Formal Tester independently verified deterministic seed normalization/derived streams, nondeterminism guards and preserved R01 regression; no T-REV required."
-      },
-      "note": "Formal Tester PASS exists, but Coder Worker #2 has not yet posted its completion audit/WORK-CLAIM-CLEAR and the issue still carries work-claimed. The stale NVIDIA ai-role-coder label was removed by Planner; the valid formal claim is preserved. Do not close #84 or unblock #86 until the claimant completes its audit and clears ownership."
+        "note": "Formal Tester independently verified deterministic seed normalization/derived streams, nondeterminism guards and preserved R01 regression; Coder Worker #2 subsequently completed its audit and cleared ownership. No T-REV required."
+      }
     },
     {
       "id": "R02-T03",
@@ -94,11 +73,17 @@
       "id": "R02-T04",
       "order": 4,
       "title": "Compose deterministic authoritative world-state initialization",
-      "status": "blocked",
+      "status": "ai_ready_auxiliary_coder",
       "depends_on": ["R02-T01", "R02-T02"],
       "github_issue": 86,
       "role_owner": "Coder Worker",
-      "note": "Blocked until #83 has formal Tester PASS and #84 reaches formal DONE with its Coder claim cleared."
+      "auxiliary_nvidia": {
+        "role": "coder",
+        "status": "ai_ready",
+        "labels_verified": ["ai-role-coder", "ai-ready"],
+        "authority": "auxiliary only; formal Worker review and independent Tester PASS remain required"
+      },
+      "note": "Planner accepted the #86 P-REV after #83/#84 formal completion. Scope/AC/dependencies are unchanged. Repository NVIDIA slot was free, so #86 was routed as the single eligible auxiliary Coder target with ai-ready added last. Formal Workers must skip while NVIDIA reservation/running labels are active; any success still requires formal review and independent Tester verification, and any ai-handoff must continue with the responsible formal Coder rather than being rerouted to NVIDIA."
     },
     {
       "id": "R02-T05",
