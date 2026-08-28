@@ -32,9 +32,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run deterministic R02 save-load roundtrip regression
-        run: npx playwright test tests/browser/r02-deterministic-roundtrip.spec.mjs --project=chromium
+        run: npx playwright test tests/browser/r02-deterministic-roundtrip.spec.mjs
       - name: Re-run focused R02 save-load validation
-        run: npx playwright test tests/browser/r02-save-load-validation.spec.mjs --project=chromium
+        run: npx playwright test tests/browser/r02-save-load-validation.spec.mjs
       - name: Run stabilized R01 browser regression
         run: npm run test:browser:r01
       - name: Upload Playwright evidence
