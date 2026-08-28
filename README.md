@@ -354,27 +354,31 @@ The specific technical method used to build, package, publish, version, or deplo
 
 # 🤖 Development Worker Governance
 
-The project normally uses five recurring Worker identities: **Worker #1, Worker #2, Worker #3, Worker #4, and Worker #5**.
+The project normally uses five recurring scheduled Worker identities: **Worker #1, Worker #2, Worker #3, Worker #4, and Worker #5**. It also supports **Worker #6** as a persistent, manually invoked Worker identity that is not part of the recurring schedule.
 
-The Worker identities are equivalent. No Worker has a permanent development role.
+All Worker identities retain the same role boundaries and independence rules. No Worker has a permanent development role.
 
 Worker roles use this ordered cycle:
 
 **Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
 
-Each Worker invocation receives a **starting role** from that cycle.
+A scheduled Worker invocation receives a **starting role** from the recurring rotation. Worker #6 is manually invoked and does not consume or advance the recurring scheduled rotation merely by being invoked.
 
-During one invocation, the Worker should continue through the complete role cycle from that starting point and attempt **all five roles once**, rather than stopping after the first role with eligible work or the first empty role.
+Worker runs are **work-conserving**. Starting from the applicable role, a Worker continues through the role cycle and should perform all currently eligible work it can safely complete within each role, in project-priority order, rather than stopping after one task merely because a role already produced useful work.
 
-For each role reached during the cycle, the Worker may perform at most **one focused eligible task** for that role before continuing to the next role. A role with no eligible work is skipped without ending the invocation. This permits one Worker run to contribute across planning, implementation, design, verification, and review while preventing one role from consuming the entire run.
+After a material issue, commit, verification, claim, dependency, or planning-state change, the Worker should re-evaluate current eligibility before selecting further work. Completing one task may unblock or create legitimate work for another role.
 
-Within every role, blocking corrections, revisions, handoffs, verification obligations, and release-critical work take priority over ordinary backlog appropriate to that role. Workers must not invent work merely to keep a role busy.
+After all five roles have been visited, the Worker begins another pass when the preceding pass performed work or materially changed eligibility. The Worker continues until a complete five-role pass produces **no eligible progress**. A blocked or unchanged target must not be retried indefinitely in the same invocation unless relevant external state materially changes.
 
-Worker identity and independence restrictions remain in force throughout a multi-role run. A Worker must not independently verify or approve its own earlier implementation, design, revision, bug fix, workflow fix, or process fix; when no independent target exists for a role, that role is skipped and the Worker continues to the next role.
+Blocking corrections, revisions, handoffs, verification obligations, continuations, and release-critical work take priority over ordinary backlog appropriate to their owning role. Workers must not invent work merely to keep themselves busy.
 
-The next Worker's starting point should follow the **last role in which useful work was actually performed** during the preceding run. If the preceding Worker found no eligible work in any role, the unresolved starting point is preserved rather than falsely consuming empty roles.
+Worker identity and independence restrictions remain in force throughout multi-role and multi-pass runs. A Worker must not independently verify or approve its own earlier implementation, design, revision, bug fix, workflow fix, or process fix. When no independent target exists for Tester or Reviewer, that target remains for another Worker identity while the current Worker continues with other eligible work.
 
-Multiple Workers may still overlap in time. Claims, dependency rules, committed-state checks, and independent-verification rules remain responsible for preventing duplicate work, self-approval, and unsafe concurrency.
+For recurring Workers #1–#5, the next scheduled starting point should follow the **last role in which useful work was actually performed** during the preceding completed run. If the preceding Worker made no eligible progress in any role, the unresolved starting point is preserved rather than falsely consuming empty roles.
+
+Worker #6 uses normal claims and audit records but remains outside the recurring schedule cursor so a manual capacity run cannot silently disturb the scheduled Worker sequence.
+
+Multiple Workers may overlap in time. Claims, dependency rules, committed-state checks, NVIDIA ownership, and independent-verification rules remain responsible for preventing duplicate work, self-approval, and unsafe concurrency.
 
 README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, claim syntax, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records.
 
@@ -436,7 +440,7 @@ Role rotation never removes Worker identity.
 
 A Worker must not independently verify or approve its own prior implementation, design, revision, bug fix, workflow fix, process improvement, or other change when that same Worker later reaches Tester or Reviewer, whether in the same invocation or a later run.
 
-If a Tester or Reviewer stage would require evaluating the same Worker's own prior change, the Worker must select another eligible independent target for that role or skip that role and continue the current full-cycle run.
+If a Tester or Reviewer stage would require evaluating the same Worker's own prior change, the Worker must select another eligible independent target for that role or leave that target for another Worker identity while continuing other eligible work.
 
 Implementation, design, and Reviewer-produced changes require independent Tester verification by a different Worker identity before they are called independently verified.
 
