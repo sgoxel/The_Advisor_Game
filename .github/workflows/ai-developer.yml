@@ -130,7 +130,7 @@ jobs:
               --arg model 'nvidia/nemotron-3-super-120b-a12b' \
               --arg system "$CLASSIFIER_SYSTEM" \
               --arg user "$CLASSIFIER_USER" \
-              '{model:$model,temperature:0,max_tokens:16,messages:[{role:"system",content:$system},{role:"user",content:$user}]}')"
+              '{model:$model,temperature:0,max_tokens:16,reasoning_effort:"none",messages:[{role:"system",content:$system},{role:"user",content:$user}]}')"
 
             if ! RESPONSE="$(curl --fail --silent --show-error --max-time 90 \
               -H "Authorization: Bearer ${NVIDIA_API_KEY}" \
