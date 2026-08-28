@@ -73,8 +73,11 @@
       "id": "R02-T04",
       "order": 4,
       "title": "Compose deterministic authoritative world-state initialization",
-      "status": "ai_running_auxiliary_test",
-      "depends_on": ["R02-T01", "R02-T02"],
+      "status": "formal_tester_handoff",
+      "depends_on": [
+        "R02-T01",
+        "R02-T02"
+      ],
       "github_issue": 86,
       "role_owner": "Coder Worker",
       "implementation_refs": [
@@ -94,20 +97,28 @@
       },
       "auxiliary_nvidia": {
         "role": "tester",
-        "status": "running",
+        "status": "handoff",
         "workflow_run": 33177350289,
+        "job": 98869482749,
+        "head_sha": "543edd3ed97aa53888ff9236c09b69149194b87c",
         "model": "nvidia/nvidia/nemotron-3-ultra-550b-a55b",
-        "labels_verified": ["ai-role-tester", "ai-running", "work-claimed"],
-        "authority": "auxiliary only; formal Tester remains independent authority"
+        "metric_status": "handoff",
+        "evidence_count": 0,
+        "coder_completed": false,
+        "live_claim_cleared": true,
+        "authority": "auxiliary attempt ended without complete verifiable Tester evidence; formal Tester remains independent authority"
       },
-      "note": "The prior NVIDIA Coder run 33172638124 ended ai-handoff with no accepted Coder implementation. Coder Worker #1 completed the formal continuation and cleared ownership on exact candidate 543edd3e.... Planner then routed the free committed candidate for NVIDIA Tester evidence. Auxiliary Tester run 33177350289 is active; formal Workers must not duplicate while ai-running/work-claimed remains. Formal Tester PASS or T-REV remains mandatory before #86 completes and #87 can unblock."
+      "note": "NVIDIA Tester run 33177350289 ended in ai-handoff with zero verifiable evidence; its live claim was cleared. Exact Coder candidate 543edd3e... remains the implementation candidate. #86 is now formal Tester continuation/handoff work and must not be routed back to NVIDIA while ai-handoff remains. Formal Tester must inspect the exact candidate and handoff evidence, then record PASS or T-REV. #87 remains blocked until #86 receives formal independent PASS.",
+      "issue_state": "open_ai_handoff"
     },
     {
       "id": "R02-T05",
       "order": 5,
       "title": "Add versioned campaign save and export serialization",
       "status": "blocked",
-      "depends_on": ["R02-T04"],
+      "depends_on": [
+        "R02-T04"
+      ],
       "github_issue": 87,
       "role_owner": "Coder Worker"
     },
@@ -116,7 +127,9 @@
       "order": 6,
       "title": "Add safe campaign import and load validation",
       "status": "blocked",
-      "depends_on": ["R02-T05"],
+      "depends_on": [
+        "R02-T05"
+      ],
       "github_issue": 88,
       "role_owner": "Coder Worker"
     },
@@ -125,7 +138,11 @@
       "order": 7,
       "title": "Integrate seed and persistence controls into living map",
       "status": "blocked",
-      "depends_on": ["R02-T03", "R02-T05", "R02-T06"],
+      "depends_on": [
+        "R02-T03",
+        "R02-T05",
+        "R02-T06"
+      ],
       "github_issue": 89,
       "role_owner": "Coder Worker"
     },
@@ -134,7 +151,11 @@
       "order": 8,
       "title": "Add deterministic save/load round-trip regression",
       "status": "blocked",
-      "depends_on": ["R02-T04", "R02-T05", "R02-T06"],
+      "depends_on": [
+        "R02-T04",
+        "R02-T05",
+        "R02-T06"
+      ],
       "github_issue": 90,
       "role_owner": "Coder Worker"
     },
@@ -143,7 +164,9 @@
       "order": 9,
       "title": "Refine integrated persistence states across responsive layouts",
       "status": "blocked",
-      "depends_on": ["R02-T07"],
+      "depends_on": [
+        "R02-T07"
+      ],
       "github_issue": 91,
       "role_owner": "Graphic Designer Worker"
     },
@@ -152,7 +175,11 @@
       "order": 10,
       "title": "Add cumulative browser and accessibility persistence regression",
       "status": "blocked",
-      "depends_on": ["R02-T07", "R02-T08", "R02-T09"],
+      "depends_on": [
+        "R02-T07",
+        "R02-T08",
+        "R02-T09"
+      ],
       "github_issue": 92,
       "role_owner": "Coder Worker"
     },
@@ -161,7 +188,18 @@
       "order": 11,
       "title": "Authoritative world and campaign state phase gate",
       "status": "blocked",
-      "depends_on": ["R02-T01", "R02-T02", "R02-T03", "R02-T04", "R02-T05", "R02-T06", "R02-T07", "R02-T08", "R02-T09", "R02-T10"],
+      "depends_on": [
+        "R02-T01",
+        "R02-T02",
+        "R02-T03",
+        "R02-T04",
+        "R02-T05",
+        "R02-T06",
+        "R02-T07",
+        "R02-T08",
+        "R02-T09",
+        "R02-T10"
+      ],
       "github_issue": 93,
       "role_owner": "Tester Worker",
       "note": "Dedicated Tester alone may approve R02 phase/release under normal autonomous progression."
