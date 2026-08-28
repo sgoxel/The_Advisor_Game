@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">R02 day-night, settlement diversity and ecology presentation prototype</title>
+  <desc id="desc">Presentation-only vector prototype showing a map-primary living world with explicit 05:00 dawn and 22:00 night cues, settlement silhouette diversity, and non-color ecology markers. Simulation remains authoritative.</desc>
+  <defs>
+    <linearGradient id="mapDay" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#617c4d"/><stop offset="1" stop-color="#7f8555"/></linearGradient>
+    <linearGradient id="dawnBand" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#273b50"/><stop offset=".55" stop-color="#ba7652"/><stop offset="1" stop-color="#e6b875"/></linearGradient>
+    <linearGradient id="nightBand" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#18243a"/><stop offset="1" stop-color="#0b1323"/></linearGradient>
+    <pattern id="forest" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M18 4 7 25h22Z" fill="#33503b"/><rect x="16" y="24" width="4" height="8" fill="#513d2a"/></pattern>
+    <filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity=".32"/></filter>
+  </defs>
+
+  <rect width="1440" height="900" fill="#101820"/>
+  <rect x="28" y="28" width="1384" height="844" rx="24" fill="#141e27" stroke="#91a0aa" stroke-opacity=".32"/>
+  <text x="58" y="69" fill="#f1f5f6" font-family="Arial, sans-serif" font-size="23" font-weight="700">R02 • Day/Night + Settlement + Ecology Presentation</text>
+  <text x="58" y="97" fill="#becbd1" font-family="Arial, sans-serif" font-size="13">Presentation only — time, settlement and ecology truth remain Simulation-owned</text>
+
+  <!-- Main map-first surface -->
+  <g transform="translate(58 124)">
+    <rect width="1000" height="700" rx="18" fill="url(#mapDay)" stroke="#d7e0d7" stroke-opacity=".28"/>
+    <path d="M0 105 C170 55 268 125 410 98 S710 62 1000 135 V0H0Z" fill="url(#forest)" opacity=".9"/>
+    <path d="M-10 470 C130 430 265 448 408 410 S720 330 1010 382" fill="none" stroke="#4d839e" stroke-width="44" opacity=".88"/>
+    <path d="M-10 470 C130 430 265 448 408 410 S720 330 1010 382" fill="none" stroke="#abd1dc" stroke-width="4" stroke-dasharray="4 13"/>
+    <path d="M70 620 C225 530 310 440 450 357 S690 217 936 110" fill="none" stroke="#b79a6c" stroke-width="27" stroke-linecap="round"/>
+    <path d="M70 620 C225 530 310 440 450 357 S690 217 936 110" fill="none" stroke="#59472f" stroke-width="3" stroke-dasharray="12 10"/>
+
+    <!-- Settlement silhouette samples embedded into one continuous map -->
+    <g transform="translate(118 310)" filter="url(#shadow)" stroke="#3b3027" stroke-width="2">
+      <rect width="54" height="38" rx="4" fill="#a58256"/><path d="M-5 5 27-19 59 5Z" fill="#714b37"/>
+      <rect x="58" y="12" width="45" height="31" rx="3" fill="#9a774e"/><path d="M54 16 80-4 107 16Z" fill="#694635"/>
+      <rect x="20" y="44" width="49" height="33" rx="3" fill="#af8c5b"/><path d="M16 48 44 27 73 48Z" fill="#754f39"/>
+    </g>
+    <text x="165" y="405" fill="#162028" font-family="Arial" font-size="12" font-weight="700">VILLAGE • clustered homes</text>
+
+    <g transform="translate(360 275)" filter="url(#shadow)" stroke="#382d25" stroke-width="2">
+      <rect width="58" height="45" fill="#a78355"/><path d="M-5 5 29-22 63 5Z" fill="#6e4937"/>
+      <rect x="66" y="-4" width="67" height="52" fill="#b08a5a"/><path d="M61 2 99-28 138 2Z" fill="#744c37"/>
+      <rect x="22" y="54" width="72" height="45" fill="#a17b51"/><path d="M17 59 58 30 99 59Z" fill="#6c4935"/>
+      <path d="M-15 112h160" stroke="#6d5437" stroke-width="8" stroke-dasharray="14 8"/>
+    </g>
+    <text x="421" y="405" fill="#162028" font-family="Arial" font-size="12" font-weight="700">TOWN • market + road hierarchy</text>
+
+    <g transform="translate(610 250)" filter="url(#shadow)" stroke="#382d25" stroke-width="2">
+      <rect width="58" height="58" fill="#a17e55"/><path d="M-5 5 29-23 63 5Z" fill="#704a37"/>
+      <rect x="64" y="-15" width="68" height="73" fill="#b08a5a"/><path d="M59-8 98-39 137-8Z" fill="#744c37"/>
+      <rect x="139" y="7" width="52" height="51" fill="#98744e"/><path d="M134 12 165-13 196 12Z" fill="#684533"/>
+      <rect x="27" y="66" width="76" height="58" fill="#aa8657"/><path d="M22 72 65 39 108 72Z" fill="#714b36"/>
+      <rect x="112" y="70" width="72" height="54" fill="#9f7b50"/><path d="M107 76 148 44 189 76Z" fill="#694635"/>
+    </g>
+    <text x="698" y="405" fill="#162028" font-family="Arial" font-size="12" font-weight="700">CITY • dense districts</text>
+
+    <g transform="translate(815 510)" stroke="#342b25" stroke-width="3" fill="#9b7952" filter="url(#shadow)">
+      <path d="M0 72V18h22V0h22v18h52V0h22v18h22v54Z"/>
+      <rect x="51" y="39" width="38" height="33" fill="#4b3b2f"/>
+      <path d="M-15 80h170" stroke="#5b4a3b" stroke-width="10"/>
+    </g>
+    <text x="887" y="618" fill="#162028" font-family="Arial" font-size="12" font-weight="700">FORTIFIED TOWN • wall + gate</text>
+
+    <g transform="translate(540 515)" stroke="#342b25" stroke-width="3" filter="url(#shadow)">
+      <rect x="24" y="23" width="92" height="66" fill="#9b7952"/>
+      <rect x="0" y="0" width="34" height="92" fill="#a6855e"/>
+      <rect x="106" y="0" width="34" height="92" fill="#a6855e"/>
+      <path d="M0 0h34v-14H0ZM106 0h34v-14h-34Z" fill="#6e5947"/>
+      <rect x="61" y="56" width="20" height="33" fill="#49382d"/>
+    </g>
+    <text x="610" y="642" fill="#162028" font-family="Arial" font-size="12" font-weight="700">CASTLE • keep + towers</text>
+
+    <!-- Ecology markers -->
+    <g font-family="Arial" font-size="11" font-weight="700">
+      <g transform="translate(245 515)"><circle r="14" fill="#e6e9e8" stroke="#24313a" stroke-width="4"/><path d="M-6 1h12M-4-5 0-9 4-5" fill="none" stroke="#24313a" stroke-width="2"/><text x="0" y="34" text-anchor="middle" fill="#17212a">DOMESTIC</text></g>
+      <g transform="translate(330 555)"><path d="M0-15 15 0 0 15-15 0Z" fill="#d6ddc8" stroke="#24313a" stroke-width="4"/><path d="M-5-2 0-7 5-2 0 7Z" fill="none" stroke="#24313a" stroke-width="2"/><text x="0" y="36" text-anchor="middle" fill="#17212a">WILD</text></g>
+      <g transform="translate(400 530)"><path d="M0-16 16 0 0 16-16 0Z" fill="#edd18a" stroke="#24313a" stroke-width="4"/><path d="M-6 4 0-7 6 4Z" fill="none" stroke="#24313a" stroke-width="2"/><text x="0" y="37" text-anchor="middle" fill="#17212a">ANIMAL-LIKE</text></g>
+      <g transform="translate(735 500)"><path d="M-13-8 0-16 13-8 13 8 0 16-13 8Z" fill="#b5d4d9" stroke="#24313a" stroke-width="4"/><circle r="4" fill="none" stroke="#24313a" stroke-width="2"/><path d="M0 4v8" stroke="#24313a" stroke-width="2"/><text x="0" y="38" text-anchor="middle" fill="#17212a">HUMANOID</text></g>
+      <g transform="translate(785 590)"><path d="M0-18 17 15-17 15Z" fill="#d9ad91" stroke="#24313a" stroke-width="5"/><path d="M-6 6h12M0-7v8" stroke="#24313a" stroke-width="2"/><text x="0" y="39" text-anchor="middle" fill="#17212a">MONSTROUS</text></g>
+      <g transform="translate(450 620)"><circle r="16" fill="none" stroke="#24313a" stroke-width="4" stroke-dasharray="5 4"/><path d="m0-12 3 8 9 1-7 5 2 9-7-5-7 5 2-9-7-5 9-1Z" fill="#e4d8ef" stroke="#24313a" stroke-width="2"/><text x="0" y="39" text-anchor="middle" fill="#17212a">SUPERNATURAL</text></g>
+    </g>
+
+    <!-- phase status overlay -->
+    <g transform="translate(24 22)" font-family="Arial">
+      <rect width="294" height="84" rx="12" fill="#121b24" fill-opacity=".9" stroke="#e6ecef" stroke-opacity=".32"/>
+      <text x="15" y="25" fill="#f0f4f5" font-size="13" font-weight="700">AUTHORITATIVE TIME PRESENTATION</text>
+      <path d="M24 53a11 11 0 0 1 20 0" fill="none" stroke="#efc06d" stroke-width="3"/><path d="M34 37v-7M18 41l-5-5M50 41l5-5" stroke="#efc06d" stroke-width="2"/>
+      <text x="58" y="57" fill="#f3dca9" font-size="13" font-weight="700">05:00 • DAWN / DAYLIGHT</text>
+      <text x="15" y="76" fill="#b9c5cb" font-size="11">Luminance + glyph + text, never color alone</text>
+    </g>
+  </g>
+
+  <!-- Right-side phase and responsive guidance -->
+  <g transform="translate(1085 124)" font-family="Arial, sans-serif">
+    <rect width="297" height="700" rx="18" fill="#19242e" stroke="#ffffff" stroke-opacity=".12"/>
+    <text x="18" y="32" fill="#eef3f5" font-size="15" font-weight="700">Time phase cues</text>
+
+    <g transform="translate(18 48)">
+      <rect width="261" height="85" rx="10" fill="url(#dawnBand)"/>
+      <path d="M24 46a13 13 0 0 1 26 0" fill="none" stroke="#fff0c6" stroke-width="3"/>
+      <text x="63" y="35" fill="#fff6df" font-size="13" font-weight="700">05:00 • DAWN</text>
+      <text x="63" y="57" fill="#fff6df" font-size="11">sunrise glyph + brightness lift</text>
+    </g>
+    <g transform="translate(18 145)">
+      <rect width="261" height="85" rx="10" fill="#6f8555"/>
+      <circle cx="34" cy="42" r="13" fill="#f5d37c" stroke="#27323a" stroke-width="2"/>
+      <text x="63" y="35" fill="#f7faf6" font-size="13" font-weight="700">DAYLIGHT</text>
+      <text x="63" y="57" fill="#f7faf6" font-size="11">map contrast remains primary</text>
+    </g>
+    <g transform="translate(18 242)">
+      <rect width="261" height="85" rx="10" fill="url(#nightBand)" stroke="#8fa6c8" stroke-opacity=".45"/>
+      <path d="M43 26a16 16 0 1 0 0 30 13 13 0 1 1 0-30Z" fill="#e7ecf7"/>
+      <text x="63" y="35" fill="#f3f5fa" font-size="13" font-weight="700">22:00 • NIGHT</text>
+      <text x="63" y="57" fill="#d2dbea" font-size="11">moon glyph + explicit text</text>
+    </g>
+
+    <line x1="18" y1="350" x2="279" y2="350" stroke="#ffffff" stroke-opacity=".12"/>
+    <text x="18" y="379" fill="#eef3f5" font-size="14" font-weight="700">Responsive priority</text>
+    <text x="18" y="407" fill="#c5d0d5" font-size="12">Desktop • map + compact legend</text>
+    <text x="18" y="431" fill="#c5d0d5" font-size="12">Tablet • collapse legend detail</text>
+    <text x="18" y="455" fill="#c5d0d5" font-size="12">Phone • map + phase badge +</text>
+    <text x="18" y="475" fill="#c5d0d5" font-size="12">selected/relevant entity only</text>
+
+    <line x1="18" y1="498" x2="279" y2="498" stroke="#ffffff" stroke-opacity=".12"/>
+    <text x="18" y="527" fill="#eef3f5" font-size="14" font-weight="700">Accessibility / performance</text>
+    <text x="18" y="555" fill="#c5d0d5" font-size="12">Shape + glyph + text + outline</text>
+    <text x="18" y="579" fill="#c5d0d5" font-size="12">Night keeps focus boundaries</text>
+    <text x="18" y="603" fill="#c5d0d5" font-size="12">Cull labels by zoom/relevance</text>
+    <text x="18" y="627" fill="#c5d0d5" font-size="12">No required moving shadows</text>
+    <text x="18" y="651" fill="#c5d0d5" font-size="12">No off-screen materialization</text>
+    <text x="18" y="680" fill="#9fb0b9" font-size="10">No direct protagonist/NPC/creature controls</text>
+  </g>
+</svg>
