@@ -356,19 +356,27 @@ Dynamic movement of physically accurate shadows is **not required**. Performance
 
 The authoritative game time and any persistent time-dependent consequences must survive save/load according to campaign persistence rules.
 
-### 📅 Real-World Calendar Continuity and Resume Catch-Up
+### 📅 Fantasy Campaign Calendar, Real-World Origin, and Resume Catch-Up
 
-The campaign has an authoritative **date and time**, not only a time-of-day clock. Campaign time must be able to advance through days and longer calendar periods while preserving chronology and historical consequences.
+The campaign has an authoritative **fantasy date and time**, not only a time-of-day clock. Campaign time must advance through days and longer calendar periods while preserving chronology and historical consequences.
 
-Real-world date/time is the continuity reference while the game is not running. The campaign records an accepted real-world timestamp together with authoritative campaign date/time so elapsed real time can be converted into elapsed game time when play resumes.
+When a **new campaign is created**, its fantasy calendar origin is derived from the accepted real-world civil date and time at that moment. The fantasy origin keeps the same **day number, month number, and time-of-day** as the accepted real-world origin, while the fantasy year is exactly **2000 years behind** the corresponding real-world year:
 
-At normal speed, the existing time ratio also applies across offline/resume gaps: **one real-world hour advances one in-game day**. Therefore, if the player resumes the same campaign **24 real-world hours** after the last accepted timestamp, **24 in-game days** must have elapsed before interactive play resumes.
+**fantasy year = real-world year − 2000**
+
+For example, an accepted real-world campaign creation time of **28.08.2026 14:30** creates the fantasy campaign origin **28.08.0026 14:30**. The previously considered fixed 06:00 campaign start is superseded; a new campaign begins at the accepted real-world time-of-day so its zero point is directly synchronized to the creation timestamp.
+
+This mapping defines the campaign's **initial synchronization origin only**. After creation, the fantasy campaign chronology is its own accelerated authoritative timeline and must not be reset or directly remapped to the current civil date/time whenever the game launches.
+
+Real-world date/time remains the continuity reference while the game is not running. The campaign records an accepted real-world timestamp together with authoritative fantasy campaign date/time so elapsed real time can be converted into elapsed game time when play resumes.
+
+At normal speed, the existing time ratio also applies across offline/resume gaps: **one real-world hour advances one in-game day**. Therefore, if the player resumes the same campaign **24 real-world hours** after the last accepted timestamp, **24 in-game days** must have elapsed before interactive play resumes. If the player returns after **10 real-world days**, the established fantasy campaign chronology must advance by **240 in-game days** rather than being directly replaced by the current real-world calendar date.
 
 Resume catch-up must be performance-efficient. The game must not replay every missed game minute, render every missed day/night cycle, or individually simulate every entity in the unbounded world merely to account for elapsed real time.
 
 Startup should materialize and reconcile only the campaign state needed for immediate play and other currently relevant authoritative state. Distant or unloaded world detail may remain compact and may catch up lazily when that place, entity, region, realm, or strategic scale becomes relevant.
 
-A backward or otherwise invalid real-world clock change must not silently rewind established campaign chronology. Exact clock-validation, trust, anti-tamper, pause, speed-control, and calendar-presentation techniques are implementation decisions below this product rule.
+A backward or otherwise invalid real-world clock change must not silently rewind established campaign chronology. Exact clock-validation, trust, anti-tamper, pause, speed-control, timezone representation, calendar arithmetic, migration, and calendar-presentation techniques are implementation decisions below this product rule.
 
 ## 🔄 Active and Off-Screen World Simulation
 
@@ -502,6 +510,7 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 32. **World simulation is hierarchical and relevance-scaled.** Global/world, realm/country, region, settlement and local layers may use progressively different detail, but all remain parts of the same authoritative causal history.
 33. **Materialize detail only when it matters.** Unvisited or distant areas should remain compact and lazily reconstruct higher-detail state from SEED, coordinates, campaign date/time, accumulated simulation outcomes and persistent history when they become relevant.
 34. **The same living world supports local and big-picture views.** Regional, realm/country and wider-world strategic views summarize authoritative aggregate state rather than creating disconnected substitute worlds.
+35. **A new fantasy campaign starts from the accepted real-world date and time.** Day, month and time-of-day match the real-world creation origin, while the fantasy year is exactly 2000 years behind; after creation, accelerated campaign chronology advances from that origin and resume uses elapsed real time rather than remapping the campaign to the current civil calendar.
 
 ---
 
