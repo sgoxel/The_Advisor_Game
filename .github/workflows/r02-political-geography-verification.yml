@@ -1,0 +1,57 @@
+name: R02 Political Geography Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/political_geography.js'
+      - 'js/world_composition.js'
+      - 'js/world_hierarchy.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-political-geography.spec.mjs'
+      - '.github/workflows/r02-political-geography-verification.yml'
+  pull_request:
+    paths:
+      - 'js/political_geography.js'
+      - 'js/world_composition.js'
+      - 'js/world_hierarchy.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-political-geography.spec.mjs'
+      - '.github/workflows/r02-political-geography-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  political-geography-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Run focused political-geography regression
+        run: npx playwright test tests/browser/r02-political-geography.spec.mjs
+      - name: Re-run deterministic world-composition regression
+        run: npx playwright test tests/browser/r02-world-composition.spec.mjs
+      - name: Re-run hierarchy regression
+        run: npx playwright test tests/browser/r02-world-hierarchy.spec.mjs
+      - name: Re-run adjacent-region continuity regression
+        run: npx playwright test tests/browser/r02-region-navigation.spec.mjs
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-political-geography-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
