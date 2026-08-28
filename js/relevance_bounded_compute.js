@@ -195,6 +195,9 @@
     if (candidate.authorityEpoch !== currentState.authorityEpoch) {
       return Object.freeze({ accepted: false, reason: 'authority-epoch-mismatch', state: currentState });
     }
+    if (candidate.targetCampaignMinutes < currentState.targetCampaignMinutes) {
+      return Object.freeze({ accepted: false, reason: 'stale-campaign-time', state: currentState });
+    }
     if (candidate.authorityRevision < currentState.authorityRevision) {
       return Object.freeze({ accepted: false, reason: 'stale-revision', state: currentState });
     }
@@ -220,7 +223,9 @@
   function isStale(currentState, jobOrResult) {
     if (!currentState || currentState.authority !== 'simulation') throw new TypeError('Simulation-owned commit state is required.');
     if (!jobOrResult || jobOrResult.authority !== 'simulation') throw new TypeError('Simulation-owned work is required.');
-    return jobOrResult.authorityEpoch !== currentState.authorityEpoch || jobOrResult.authorityRevision < currentState.authorityRevision;
+    return jobOrResult.authorityEpoch !== currentState.authorityEpoch
+      || jobOrResult.targetCampaignMinutes < currentState.targetCampaignMinutes
+      || jobOrResult.authorityRevision < currentState.authorityRevision;
   }
 
   Game.RelevanceBoundedCompute = Object.freeze({
