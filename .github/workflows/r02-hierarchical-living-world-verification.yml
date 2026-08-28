@@ -1,0 +1,65 @@
+name: R02 Hierarchical Living World Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/**'
+      - 'tests/browser/r02-*.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r02-hierarchical-living-world-verification.yml'
+  pull_request:
+    paths:
+      - 'js/**'
+      - 'tests/browser/r02-*.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r02-hierarchical-living-world-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  cumulative-r02-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Run cumulative hierarchical living-world regression on desktop/tablet/phones
+        run: npx playwright test tests/browser/r02-hierarchical-living-world-regression.spec.mjs
+      - name: Re-run campaign calendar regression
+        run: npx playwright test tests/browser/r02-campaign-calendar.spec.mjs --project=desktop
+      - name: Re-run authoritative game-time regression
+        run: npx playwright test tests/browser/r02-game-time.spec.mjs --project=desktop
+      - name: Re-run active/off-screen integration regression
+        run: npx playwright test tests/browser/r02-region-time-progression.spec.mjs tests/browser/r02-region-time-relevance-integration.spec.mjs --project=desktop
+      - name: Re-run relevance-bounded scheduling regression
+        run: npx playwright test tests/browser/r02-relevance-bounded-compute.spec.mjs --project=desktop
+      - name: Re-run hierarchy, political geography and settlement evolution foundations
+        run: npx playwright test tests/browser/r02-world-hierarchy.spec.mjs tests/browser/r02-political-geography.spec.mjs tests/browser/r02-settlement-evolution.spec.mjs --project=desktop
+      - name: Re-run region navigation and persistent world-delta regressions
+        run: npx playwright test tests/browser/r02-region-navigation.spec.mjs tests/browser/r02-world-delta-persistence.spec.mjs tests/browser/r02-cumulative-persistence-regression.spec.mjs --project=desktop
+      - name: Re-run NPC life and ecology foundations
+        run: npx playwright test tests/browser/r02-npc-life.spec.mjs tests/browser/r02-ecology.spec.mjs --project=desktop
+      - name: Re-run unbounded-world cumulative regression
+        run: npx playwright test tests/browser/r02-unbounded-world-regression.spec.mjs --project=desktop
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Upload cumulative Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-hierarchical-living-world-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
