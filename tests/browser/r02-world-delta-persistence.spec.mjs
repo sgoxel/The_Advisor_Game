@@ -63,6 +63,22 @@ test('sparse tile, entity and region changes reconstruct as deterministic base p
     const otherBase = terrain.generateRegion(seed, -4, 5);
     const otherReconstructed = deltas.reconstructRegion(seed, -4, 5);
     const region = captured.regions[0];
+
+    let firstSave;
+    let secondSave;
+    if (window.Game.CampaignCalendar?.serializeSaveAt && window.Game.GameTime?.setForTest) {
+      window.Game.GameTime.stop?.();
+      const fixedGameMinutes = 480;
+      const fixedRealTimestampMs = 1787947200000;
+      window.Game.GameTime.setForTest(fixedGameMinutes);
+      firstSave = window.Game.CampaignCalendar.serializeSaveAt(fixedRealTimestampMs);
+      window.Game.GameTime.setForTest(fixedGameMinutes);
+      secondSave = window.Game.CampaignCalendar.serializeSaveAt(fixedRealTimestampMs);
+    } else {
+      firstSave = window.Game.CampaignPersistence.serializeSave();
+      secondSave = window.Game.CampaignPersistence.serializeSave();
+    }
+
     return {
       captured,
       replacementType,
@@ -74,8 +90,8 @@ test('sparse tile, entity and region changes reconstruct as deterministic base p
       tileChangeCount: region.tileChanges.length,
       entityChangeCount: region.entityChanges.length,
       flagValue: region.flags.bridgeRepaired,
-      firstSave: window.Game.CampaignPersistence.serializeSave(),
-      secondSave: window.Game.CampaignPersistence.serializeSave()
+      firstSave,
+      secondSave
     };
   });
 
