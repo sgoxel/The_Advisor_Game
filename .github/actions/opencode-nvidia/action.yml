@@ -19,6 +19,10 @@ inputs:
     description: Wait before the single NVIDIA 503 retry
     required: false
     default: "60"
+  metrics_ledger_issue:
+    description: Central GitHub issue used to anchor NVIDIA run identity for completion metrics
+    required: false
+    default: "79"
 
 outputs:
   final_outcome:
@@ -73,8 +77,11 @@ runs:
         set -euo pipefail
         STARTED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
         echo "started_at=${STARTED_AT}" >> "$GITHUB_OUTPUT"
+        RUN_MARKER="AI AUXILIARY RUN: run_id=${GITHUB_RUN_ID} run_attempt=${GITHUB_RUN_ATTEMPT} issue=${{ inputs.issue_number }} role=${{ steps.role_mode.outputs.role }} model=${{ inputs.model }} started_at=${STARTED_AT}"
         gh issue comment "${{ inputs.issue_number }}" --repo "${GITHUB_REPOSITORY}" \
-          --body "AI AUXILIARY RUN: run_id=${GITHUB_RUN_ID} run_attempt=${GITHUB_RUN_ATTEMPT} role=${{ steps.role_mode.outputs.role }} model=${{ inputs.model }} started_at=${STARTED_AT}" >/dev/null
+          --body "$RUN_MARKER" >/dev/null
+        gh issue comment "${{ inputs.metrics_ledger_issue }}" --repo "${GITHUB_REPOSITORY}" \
+          --body "$RUN_MARKER" >/dev/null
 
     - name: Run OpenCode
       id: opencode_first
