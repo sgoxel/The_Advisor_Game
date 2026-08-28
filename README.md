@@ -114,6 +114,22 @@ The player talks directly with the character through normal dialogue: questions,
 
 Conversation can affect beliefs, intentions, trust, memories, priorities, and later choices, but conversation alone does not directly rewrite authoritative world state.
 
+## 🧭 Advice-to-World Action
+
+Advice must be capable of influencing what the autonomous protagonist actually does inside the living strategic world.
+
+The player may suggest destinations, people to meet, activities, jobs, investigations, purchases, travel, priorities, precautions, or other possible actions through normal conversation or Advisor systems. Such advice is never a binding movement or action command.
+
+The protagonist evaluates advice using personality, goals, knowledge, memory, relationships, trust, needs, authority, and current circumstances. The protagonist may accept, reject, delay, reinterpret, or modify the recommendation.
+
+If the protagonist chooses an advised action, the simulation validates it and the resulting behavior must be represented in the living world. This includes visible movement, travel, arrival, interaction, consequences, and resulting world-state changes where applicable.
+
+For example, advice such as **“Go to the tavern and ask the innkeeper about work.”** does not directly move the character. If the protagonist accepts it and the action is valid, the expected flow is:
+
+**Advice → Character decision → Simulation validation → World movement/action → Interaction → Consequence → Player observes the result**
+
+The player must therefore be able to influence visible protagonist movement and behavior through advice without receiving direct real-time control of the protagonist.
+
 ## 🧩 Advisor Instruction Flow
 
 The player has a persistent behavioral instruction system for longer-term advice such as goals, priorities, conditions, exceptions, trust rules, diplomacy preferences, safety rules, or strategic principles.
@@ -230,6 +246,34 @@ Other characters may have their own identity, personality, occupation, status, r
 
 The Advisor influences them indirectly through information, the protagonist, relationships, opportunities, and world consequences rather than directly controlling them.
 
+## 🏡 Starting Village and Living Local World
+
+Every new campaign begins with the autonomous protagonist as an ordinary low-rank character in a procedurally generated village.
+
+When the player does not explicitly provide a SEED, the game generates one. The starting village is selected or generated deterministically from the campaign SEED, so a compatible SEED and generation rules reproduce the same starting settlement and generator-defined base-world structure.
+
+The player must begin inside a visibly inhabited medieval-fantasy environment rather than on an empty map, abstract dashboard, or isolated character screen.
+
+The starting village must contain a coherent village environment with appropriate homes, roads and paths, gathering areas, farms or fields where suitable, trees and surrounding terrain, shops, workshops, service buildings, food and lodging locations, storage or production locations, and settlement-specific landmarks.
+
+The village must be populated by numerous autonomous world characters that visibly exist, move, perform routines, travel locally, work, idle, socialize, and interact within the same strategic world where appropriate.
+
+Local characters should represent useful occupations and social roles appropriate to the generated settlement, including examples such as butcher, greengrocer or produce seller, woodcutter, charcoal burner, tavern keeper, inn or lodging owner, market or shop owner, farmer, craftsperson, guard, traveler, laborer, and other residents.
+
+These characters are not decorative crowd sprites. They are simulation-backed world characters with locations, activities, roles, relationships, potential needs, and potential interactions that may become relevant to the protagonist.
+
+The protagonist may meet, converse with, trade with, work for, cooperate with, avoid, investigate, or otherwise interact with appropriate world characters according to simulation rules and current circumstances.
+
+## 🏘️ Settlement Diversity and World Scale
+
+The world must support multiple visually and functionally distinct settlement archetypes rather than repeating one generic settlement layout.
+
+Settlement types may include small rural villages, farming villages, forest villages, mining or production villages, roadside and trade settlements, frontier villages, border villages, fortified villages, abandoned or ruined villages, towns, market towns, fortified towns, large cities, castle settlements, capitals, and other regionally appropriate settlement forms.
+
+Settlement appearance, layout, buildings, population, professions, resources, roads, defenses, prosperity, hazards, and surrounding environment should reflect settlement type, geography, region, history, and campaign state.
+
+As the protagonist progresses from Peasant toward noble, royal, and eventually imperial authority, the spatial and political scale of play must expand naturally from local village life toward towns, cities, kingdoms, and multiple realms without replacing the living strategic world with menu-only gameplay.
+
 ---
 
 # 🗺️ World and Presentation
@@ -272,7 +316,11 @@ The world is procedurally generated from a player-visible **SEED**.
 
 A compatible SEED and world-generation rules should reproduce the same base world and regions, including the major environmental and settlement structure that belongs to procedural generation.
 
-The world may include biomes and terrain variation; rivers, lakes, coasts, roads and paths; settlements and growth anchors; buildings and landmarks; trees, rocks, vegetation, bridges, signs, props and resources; and deterministic visual variation.
+For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: the starting settlement and settlement archetype, settlement layout, roads and paths, major buildings and landmarks, surrounding terrain and biomes, local population generation, important world locations, and other deterministic base-world features defined by the generator.
+
+Procedurally generated scenes and settlement areas must derive their generator-defined base composition from the SEED. Dynamic campaign consequences, character decisions, destruction, construction, ownership, relationships, discoveries, politics, and other simulation changes may subsequently alter that base world.
+
+The world may include biomes and terrain variation; rivers, lakes, coasts, roads and paths; settlements and growth anchors; buildings and landmarks; trees, rocks, vegetation, bridges, signs, props and resources; local populations; creatures; and deterministic visual variation.
 
 Campaign changes such as destruction, upgrades, ownership, relationships, discoveries, politics, or other consequences may alter the world after generation.
 
@@ -319,6 +367,9 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 17. **Verified public releases are preferred by default, but explicit Admin publication instructions override normal verification and release-gate requirements.**
 18. **An Admin-directed unverified build may be published when explicitly requested, but it must not be represented as independently verified unless it actually passed independent verification.**
 19. **The living strategic world map is the primary game surface.** Terrain, locations, settlements, characters, creatures, objects and relevant world changes must be experienced as parts of one coherent simulated world rather than primarily through disconnected menus, dashboards or static scenes.
+20. **A new campaign begins in a SEED-generated inhabited village.** The starting world must already contain a meaningful settlement, buildings, local environment, and autonomous local population rather than an empty or purely abstract starting surface.
+21. **World characters are living simulation participants, not decoration.** Local NPCs should visibly move, follow appropriate activities or routines, occupy useful roles and professions, and provide potential interaction within the same world as the protagonist.
+22. **Advice must connect to observable world behavior.** When the autonomous protagonist chooses valid advice, the resulting movement, action, interaction, and consequences must be represented through the living strategic world without giving the player direct control.
 
 ---
 
@@ -498,7 +549,3 @@ An Admin-authorized exception does not automatically convert unverified work int
 **Independent Tester verification determines whether a build may be called independently verified; it does not limit Admin's authority to publish an unverified build.**
 
 **Reviewer improves process health and fixes evidenced development defects, but Reviewer is not phase/release approval authority.**
-
-**An explicit Admin instruction may bypass normal Worker, testing, phase, release, or deployment gates.**
-
-**Player advises → AI Character decides → Simulation validates → World reacts.**
