@@ -1,0 +1,85 @@
+name: T-REV Closure Guard
+
+on:
+  issues:
+    types: [closed]
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/t-rev-closure-guard.cjs'
+      - 'tests/tooling/t-rev-closure-guard.test.cjs'
+      - '.github/workflows/t-rev-closure-guard.yml'
+      - '.github/WORKER_ROTATION.md'
+  pull_request:
+    paths:
+      - '.github/scripts/t-rev-closure-guard.cjs'
+      - 'tests/tooling/t-rev-closure-guard.test.cjs'
+      - '.github/workflows/t-rev-closure-guard.yml'
+      - '.github/WORKER_ROTATION.md'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  parser-regression:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test unresolved T-REV parser
+        run: node --test tests/tooling/t-rev-closure-guard.test.cjs
+
+  enforce-issue-closure:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reopen issue when a Tester revision is unresolved
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const path = require('path');
+            const { findUnresolvedTesterRevisions } = require(
+              path.join(process.env.GITHUB_WORKSPACE, '.github/scripts/t-rev-closure-guard.cjs')
+            );
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100
+            });
+            const unresolved = findUnresolvedTesterRevisions(comments);
+            if (unresolved.length === 0) {
+              core.info(`Issue #${issue_number} has no unresolved TESTER REVISION REQUEST.`);
+              return;
+            }
+            const requestIds = unresolved.map((entry) => entry.requestId);
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              state: 'open'
+            });
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              body: [
+                'T-REV CLOSURE GUARD — automatic governance correction',
+                '',
+                `Issue closure was rejected because unresolved TESTER REVISION REQUEST comment(s) remain: ${requestIds.map((id) => `#issuecomment-${id}`).join(', ')}.`,
+                '',
+                'A different independent Tester must retest the corrected exact state and include the machine-readable marker:',
+                '`T-REV-RESOLVED(request=<request-comment-id>, tested_ref=<exact-commit-sha>)`',
+                '',
+                'The issue has been reopened. This automation does not provide Tester PASS or release approval.'
+              ].join('\n')
+            });
+            core.setFailed(`Reopened issue #${issue_number}: unresolved T-REV ${requestIds.join(', ')}`);
