@@ -10,6 +10,50 @@ async function ready(page) {
   ));
 }
 
+test('production startup automatically establishes the real-world-origin fantasy calendar', async ({ page }) => {
+  await ready(page);
+  const evidence = await page.evaluate(() => {
+    const time = window.Game.GameTime;
+    const calendar = window.Game.CampaignCalendar;
+    time.stop();
+    const snapshot = calendar.capture();
+    const civil = new Date(snapshot.originRealTimestampMs - snapshot.originTimezoneOffsetMinutes * 60000);
+    const fantasy = new Date(snapshot.fantasyOriginUtcMs);
+    return {
+      snapshot,
+      civil: {
+        year: civil.getUTCFullYear(),
+        month: civil.getUTCMonth() + 1,
+        dayOfMonth: civil.getUTCDate(),
+        hour: civil.getUTCHours(),
+        minute: civil.getUTCMinutes()
+      },
+      fantasy: {
+        year: fantasy.getUTCFullYear(),
+        month: fantasy.getUTCMonth() + 1,
+        dayOfMonth: fantasy.getUTCDate(),
+        hour: fantasy.getUTCHours(),
+        minute: fantasy.getUTCMinutes()
+      },
+      originMinuteOfDay: snapshot.originGameMinutes % 1440
+    };
+  });
+
+  expect(evidence.snapshot.authority).toBe('simulation');
+  expect(evidence.snapshot.originRealTimestampMs).not.toBeNull();
+  expect(evidence.snapshot.originTimezoneOffsetMinutes).not.toBeNull();
+  expect(evidence.snapshot.fantasyOriginUtcMs).not.toBeNull();
+  expect(evidence.snapshot.originGameMinutes).not.toBeNull();
+  expect(evidence.fantasy).toEqual({
+    year: evidence.civil.year - 2000,
+    month: evidence.civil.month,
+    dayOfMonth: evidence.civil.dayOfMonth,
+    hour: evidence.civil.hour,
+    minute: evidence.civil.minute
+  });
+  expect(evidence.originMinuteOfDay).toBe(evidence.civil.hour * 60 + evidence.civil.minute);
+});
+
 test('one real hour advances exactly one authoritative game day in one bounded operation', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(() => {
@@ -159,12 +203,14 @@ test('new campaign fantasy origin mirrors accepted civil day month time and year
     const time = window.Game.GameTime;
     const calendar = window.Game.CampaignCalendar;
     time.stop();
+    delete window.Game.State.world.campaignCalendar;
     time.setForTest(480);
     const origin = Date.UTC(2026, 7, 28, 14, 30);
     const initialized = calendar.initializeOrigin(origin, 0);
     return { initialized, snapshot: calendar.capture() };
   });
   expect(evidence.initialized.ok).toBe(true);
+  expect(evidence.initialized.initialized).toBe(true);
   expect(evidence.snapshot.calendar).toMatchObject({ year: 26, month: 8, dayOfMonth: 28, hour: 14, minute: 30 });
   expect(evidence.snapshot.originRealTimestampMs).toBe(Date.UTC(2026, 7, 28, 14, 30));
 });
@@ -175,6 +221,7 @@ test('resume advances established fantasy chronology and does not remap to civil
     const time = window.Game.GameTime;
     const calendar = window.Game.CampaignCalendar;
     time.stop();
+    delete window.Game.State.world.campaignCalendar;
     time.setForTest(480);
     const origin = Date.UTC(2026, 7, 28, 14, 30);
     calendar.initializeOrigin(origin, 0);
