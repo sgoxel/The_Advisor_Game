@@ -165,7 +165,7 @@ jobs:
     needs: triage
     if: needs.triage.outputs.eligible == 'true' && needs.triage.outputs.role == 'coder'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 30
     permissions:
       id-token: write
       contents: write
@@ -213,7 +213,7 @@ jobs:
     needs: triage
     if: needs.triage.outputs.eligible == 'true' && needs.triage.outputs.role == 'reviewer'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 30
     permissions:
       id-token: write
       contents: read
@@ -258,7 +258,7 @@ jobs:
     needs: triage
     if: needs.triage.outputs.eligible == 'true' && needs.triage.outputs.role == 'tester'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 30
     permissions:
       id-token: write
       contents: read
