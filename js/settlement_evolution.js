@@ -170,7 +170,7 @@
       status,
       economicFunction: metrics.trade >= 62 ? 'trade' : metrics.resources >= 62 ? 'resource' : metrics.fortification >= 65 ? 'defensive' : base.economicFunction,
       lastGameMinute: targetMinute,
-      pendingGameMinutes: Number(pendingGameMinutes.toFixed(6)),
+      pendingGameMinutes,
       elapsedDaysApplied: elapsedDays,
       boundedCatchUp: true,
       localTicksReplayed: 0,
