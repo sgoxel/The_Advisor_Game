@@ -162,6 +162,8 @@ The player observes events, rumors, opportunities, threats, factions, relationsh
 
 The simulation then validates and resolves those actions. The world reacts and advances, and those consequences become context for future advice.
 
+The campaign is **real-time rather than turn-based**. The authoritative game clock advances continuously at the current game speed, and world activity may react to elapsed game time without waiting for player turns.
+
 ## 🎮 Player Agency
 
 The player may investigate, reason, persuade, warn, recommend, analyze, negotiate, gather information, use Advisor tools, and solve mini-games.
@@ -263,6 +265,30 @@ These characters are not decorative crowd sprites. They are simulation-backed wo
 
 The protagonist may meet, converse with, trade with, work for, cooperate with, avoid, investigate, or otherwise interact with appropriate world characters according to simulation rules and current circumstances.
 
+## 🕰️ NPC Daily Life and Ambient Dialogue
+
+World characters should have time-aware daily life appropriate to their role, home, workplace, location and current circumstances.
+
+Representative routines may include sleeping or remaining at home, traveling to work, opening and operating shops or services, working at farms/workshops/markets, taking breaks, visiting social locations, closing for the day, returning home, guarding, traveling, or following other role-appropriate schedules.
+
+NPC schedules need not be identical. Profession, settlement type, geography, local conditions, relationships and events may alter normal routines.
+
+NPCs may also exchange simple ambient dialogue with each other without requiring an external LLM. These conversations may use varied deterministic or Local-BOT dialogue pools and should reflect context such as profession, settlement type, current location, terrain/environment, time of day, local conditions and relevant world events.
+
+Ambient dialogue helps communicate that the world is alive but does not itself become authoritative simulation truth unless the simulation records a resulting fact, relationship or consequence.
+
+## 🐄 Animals, Creatures and Local Ecology
+
+The living world includes ordinary animals as well as a broad original medieval-fantasy bestiary.
+
+Domestic and farm life may include animals such as cattle, chickens, dogs, cats, horses, sheep, goats and other regionally appropriate animals.
+
+Wild and fantasy ecology may include ordinary wildlife and original humanoid, animal-like, monstrous and supernatural creatures appropriate to medieval-fantasy environments.
+
+Animal and creature presence should reflect SEED-defined world composition, habitat, terrain, biome, settlement type, danger level and campaign state rather than appearing as unrelated decorative placement.
+
+Animals and creatures may move, idle, forage, flee, guard territory, travel, gather, threaten, interact or follow other suitable behaviors. Their authoritative identity/state, when gameplay-relevant, belongs to the simulation rather than rendering alone.
+
 ## 🏘️ Settlement Diversity and World Scale
 
 The world must support multiple visually and functionally distinct settlement archetypes rather than repeating one generic settlement layout.
@@ -285,7 +311,7 @@ The game must not be presented primarily as a collection of menus, cards, dashbo
 
 The player must be able to observe the evolving game world itself.
 
-The strategic world map must visually represent, as applicable to the generated world and current campaign state, terrain and elevation; biomes; rivers, lakes, coasts and water; forests and vegetation; roads, paths and bridges; settlements; individual buildings and structures; ruins, caves, dungeons and landmarks; resources and environmental objects; the autonomous main character; other people; animals; fantasy creatures and monsters; armies, groups and caravans; and environmental effects such as weather, lighting, fire, smoke, fog and water.
+The strategic world map must visually represent, as applicable to the generated world and current campaign state, terrain and elevation; biomes; rivers, streams, lakes, coasts and water; forests and vegetation; roads, paths and bridges; settlements; individual buildings and structures; ruins, caves, dungeons and landmarks; resources and environmental objects; the autonomous main character; other people; domestic animals and wildlife; fantasy creatures and monsters; armies, groups and caravans; and environmental effects such as weather, lighting, fire, smoke, fog and water.
 
 Characters, creatures, buildings, terrain and objects may use a coherent combination of 2D, 2.5D and 3D techniques, but they must appear to inhabit the same spatial world.
 
@@ -309,6 +335,37 @@ The visual world may combine real-time 3D scenes and objects; 2D portraits and c
 
 Readability, atmosphere, character emotion, clear interaction, responsive performance, and broad browser/device usability take priority over unnecessary visual complexity.
 
+## ⏱️ Real-Time World Clock and Day/Night
+
+The campaign runs in **real time, not turns**.
+
+At normal game speed, **60 real-world minutes correspond to one complete 24-hour in-game day**. This means one in-game hour corresponds to **2.5 real-world minutes** at normal speed.
+
+The game clock is authoritative simulation state. Time-dependent activity, schedules, travel, environment changes and other systems must use game time rather than presentation-only timers.
+
+The day/night presentation follows the authoritative game clock:
+
+* **05:00 — dawn begins and the world transitions into daylight.**
+* **22:00 — night begins and the world transitions into a dark nighttime presentation.**
+
+Lighting must visibly communicate daytime versus nighttime. Smooth transitions may be used, but the required temporal anchors remain 05:00 for dawn/daylight transition and 22:00 for darkness/night transition.
+
+Dynamic movement of physically accurate shadows is **not required**. Performance-friendly lighting, overlays, sky/environment changes or other coherent techniques may be used as long as the player can clearly perceive the day/night state.
+
+The authoritative game time and any persistent time-dependent consequences must survive save/load according to campaign persistence rules.
+
+## 🔄 Active and Off-Screen World Simulation
+
+The world continues to live as game time advances.
+
+The region containing the protagonist and the currently relevant visible/local world must support continuous high-detail simulation appropriate to the active gameplay surface: movement, routines, local activities, nearby animals/creatures, relevant interactions, environmental presentation and other current events should visibly progress rather than waiting for turns.
+
+Regions that are not currently active or visible must not be treated as permanently frozen. They may use lower-cost simulation, aggregated progression, elapsed-time advancement or deterministic approximation based on authoritative game time, SEED-derived base state and persistent campaign state.
+
+The game is not required to render or individually tick every entity in the unbounded world at full detail while off-screen. Off-screen processing may use coarser models appropriate to distance, relevance and performance, but resulting world changes must remain compatible with simulation authority and campaign causality.
+
+When an inactive region becomes relevant again, its current state should reflect elapsed game time and applicable off-screen progression together with its deterministic base world and persistent changes, rather than simply returning to the state in which it was last rendered.
+
 ## 🌱 Seeded, Reproducible, Unbounded World
 
 The world is procedurally generated from a player-visible **SEED** and has no gameplay-defined outer map boundary.
@@ -317,7 +374,7 @@ The complete world is not one finite displayed map. The strategic tile area curr
 
 A compatible SEED, world coordinates, and compatible world-generation rules must reproduce the same unmodified base world at the same coordinates.
 
-For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: settlement archetypes and layouts, roads and paths, major buildings and landmarks, surrounding terrain and biomes, local population generation, important world locations, and other deterministic base-world features.
+For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: settlement archetypes and layouts including villages, towns, cities and fortified/castle locations where appropriate; roads, paths and bridges; major buildings and landmarks; surrounding terrain and biomes; local population generation; habitat/ecology foundations; important world locations; and other deterministic base-world features.
 
 ### 🧭 World Coordinates and Regional Continuity
 
@@ -333,9 +390,9 @@ Previously unseen areas may be generated when needed. Returning to the same unch
 
 The generated world must contain meaningful terrain and environmental diversity across local and distant regions.
 
-Depending on SEED and location, the world may contain different elevations, plains, hills, mountains, valleys, forests, grasslands, wetlands, rivers, lakes, coasts, rocky areas, agricultural land, roads, wilderness, settlements, ruins, and other medieval-fantasy environments.
+Depending on SEED and location, the world may contain different elevations, plains, hills, mountains, valleys, forests, grasslands, wetlands, rivers, streams, lakes, coasts, rocky areas, agricultural land, roads, paths, bridges, wilderness, settlements, ruins, caves/dungeons, and other medieval-fantasy environments.
 
-Terrain, biomes, vegetation, water, roads, settlements, landmarks, and other generated features must remain spatially coherent across neighboring regions. Different coordinates should be capable of producing substantially different landscapes while remaining deterministic for the same compatible SEED.
+Terrain, biomes, vegetation, water, roads, bridges, settlements, landmarks, habitat/ecology foundations and other generated features must remain spatially coherent across neighboring regions. Different coordinates should be capable of producing substantially different landscapes and local-world compositions while remaining deterministic for the same compatible SEED.
 
 ### 💾 Persistent Changes over a Regenerable Base World
 
@@ -343,19 +400,19 @@ The deterministic SEED-generated world is the reproducible base state. Unchanged
 
 Campaign persistence must preserve authoritative differences from that generated base world wherever persistent change is required.
 
-Objects, entities, locations, relationships, discoveries, damage, construction, ownership, resource use, inventory-affecting world interactions, or other meaningful simulation consequences caused or influenced by campaign events must not silently reset when their region leaves the active view or when the campaign is saved and loaded.
+Objects, entities, locations, relationships, discoveries, damage, construction, ownership, resource use, inventory-affecting world interactions, time-dependent consequences, or other meaningful simulation consequences caused or influenced by campaign events must not silently reset when their region leaves the active view or when the campaign is saved and loaded.
 
-Returning to previously visited coordinates must therefore reconstruct the current campaign world from the deterministic base world plus the authoritative persistent changes that apply there.
+Returning to previously visited coordinates must therefore reconstruct the current campaign world from the deterministic base world plus authoritative persistent changes and applicable elapsed-time/off-screen progression.
 
-**SEED-generated base world + saved authoritative changes = current campaign world.**
+**SEED-generated base world + authoritative elapsed-time progression + saved persistent changes = current campaign world.**
 
 This model allows unexplored or unchanged regions to remain deterministically generable while preventing meaningful character/world consequences from disappearing.
 
-Location must remain meaningful to gameplay, including travel, meetings, information access, trade, military movement, employment, politics, events, and hazards.
+Location must remain meaningful to gameplay, including travel, meetings, information access, trade, military movement, employment, politics, events, hazards, schedules and ecology.
 
 ## 🎨 Visual Direction
 
-The visual direction should support coherent isometric / near-isometric presentation, high-quality 2D and 3D assets, readable silhouettes and scale, character emotion and atmosphere, distinct settlements and environments, environmental effects, and progressive improvement from early placeholders to polished visual assets.
+The visual direction should support coherent isometric / near-isometric presentation, high-quality 2D and 3D assets, readable silhouettes and scale, character emotion and atmosphere, distinct settlements and environments, animals and creatures, environmental effects, day/night readability, and progressive improvement from early placeholders to polished visual assets.
 
 A Worker acting in the **Designer** role chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
 
@@ -369,7 +426,7 @@ Interaction and required information must remain understandable with touch, mous
 
 Important information must not depend only on color, hover, tiny targets, or precision input.
 
-Presentation may adapt to device capability, but visual quality scaling must never change simulation outcomes, AI knowledge, legal actions, or campaign state.
+Presentation may adapt to device capability, but visual quality scaling must never change simulation outcomes, AI knowledge, legal actions, game time, or campaign state.
 
 ---
 
@@ -400,6 +457,11 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 23. **The SEED defines an unbounded continuous world.** The visible tile region is only the currently active local part of the world; exploration must be able to continue beyond every displayed region without a gameplay-defined outer boundary.
 24. **World coordinates are stable and meaningful.** The campaign begins at (0, 0), and the same compatible SEED and coordinates reproduce the same unmodified base-world location.
 25. **Persist changes; regenerate unchanged base content.** Deterministic unchanged world content may be reconstructed from SEED and coordinates, while authoritative changes that must survive leaving or reloading a region are preserved in campaign state.
+26. **The campaign is real-time.** At normal speed, 60 real-world minutes equal one 24-hour in-game day; world activity progresses through authoritative game time rather than player turns.
+27. **Day and night are gameplay-visible world states.** Dawn begins at 05:00 and darkness/night begins at 22:00; dynamic shadow movement is optional rather than required.
+28. **The active local world stays alive while off-screen regions still progress.** The protagonist's relevant region uses detailed continuous simulation, while inactive regions may use lower-cost authoritative elapsed-time simulation or approximation rather than freezing permanently.
+29. **World ecology belongs to the generated world.** Domestic animals, wildlife and a broad original medieval-fantasy bestiary should fit SEED-derived habitat, terrain, settlement context and campaign state.
+30. **NPC life follows time and place.** Daily routines and simple varied ambient NPC-to-NPC dialogue should respond to profession, settlement/location, environment, time and relevant local conditions.
 
 ---
 
