@@ -66,6 +66,32 @@ test('late reconciliation cannot overwrite a newer authoritative regional schedu
   expect(evidence.stored.resultFingerprint).toBe(evidence.newer.state.resultFingerprint);
 });
 
+test('background work older than a newer active-region state is rejected', async ({ page }) => {
+  await ready(page);
+  const evidence = await page.evaluate(() => {
+    const Game = window.Game;
+    const progression = Game.RegionTimeProgression;
+    const compute = Game.RelevanceBoundedCompute;
+    Game.GameTime.stop();
+    Game.WorldDeltaPersistence.clearAll();
+    Game.GameTime.setForTest(100);
+    progression.markActive(6, -1);
+    const pending = progression.prepareInactiveReconciliation(6, -1, 200);
+
+    Game.GameTime.setForTest(300);
+    const active = progression.markActive(6, -1);
+    const late = progression.acceptInactiveReconciliation(6, -1, compute.compute(pending));
+    const stored = progression.capture(6, -1);
+    return { active, late, stored };
+  });
+
+  expect(evidence.active.lastSimulatedGameMinute).toBe(300);
+  expect(evidence.late.accepted).toBe(false);
+  expect(evidence.late.reason).toBe('stale-region-progression');
+  expect(evidence.stored.lastSimulatedGameMinute).toBe(300);
+  expect(evidence.stored.relevanceBoundedScheduling).toBeNull();
+});
+
 test('materialization carries scheduling evidence while preserving Simulation authority', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(() => {
