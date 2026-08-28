@@ -17,14 +17,7 @@
       "role_owner": "Coder Worker",
       "issue_state": "closed_completed",
       "implementation_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
-      "independent_test": {
-        "result": "PASS",
-        "tested_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
-        "run": 33163373934,
-        "job": 98822902537,
-        "artifact": 9682601721,
-        "note": "Formal Tester independently verified the authoritative-state boundary and compatible R01 regression; no T-REV required. Prior NVIDIA Tester evidence was auxiliary only and not the authority for completion."
-      }
+      "independent_test": {"result":"PASS","tested_ref":"c5273b0c30a1370dfdb73e6a5b1a479f7c600f77","run":33163373934,"job":98822902537,"artifact":9682601721}
     },
     {
       "id": "R02-T02",
@@ -34,19 +27,8 @@
       "github_issue": 84,
       "role_owner": "Coder Worker",
       "issue_state": "closed_completed",
-      "implementation_refs": [
-        "67b252f4d7cd5a82e94a828b96358ea5ae65ef3d",
-        "8c182c8272d28923142c7b310aa77ea60ff097f4",
-        "eddcdf8b5f0a205c29d23045aaf9c4285714853d"
-      ],
-      "independent_test": {
-        "result": "PASS",
-        "tested_ref": "eddcdf8b5f0a205c29d23045aaf9c4285714853d",
-        "run": 33166302222,
-        "job": 98832425073,
-        "artifact": 9683767822,
-        "note": "Formal Tester independently verified deterministic seed normalization/derived streams, nondeterminism guards and preserved R01 regression; Coder Worker #2 subsequently completed its audit and cleared ownership. No T-REV required."
-      }
+      "implementation_refs": ["67b252f4d7cd5a82e94a828b96358ea5ae65ef3d","8c182c8272d28923142c7b310aa77ea60ff097f4","eddcdf8b5f0a205c29d23045aaf9c4285714853d"],
+      "independent_test": {"result":"PASS","tested_ref":"eddcdf8b5f0a205c29d23045aaf9c4285714853d","run":33166302222,"job":98832425073,"artifact":9683767822}
     },
     {
       "id": "R02-T03",
@@ -56,169 +38,50 @@
       "github_issue": 85,
       "role_owner": "Graphic Designer Worker",
       "issue_state": "closed_completed",
-      "implementation_refs": [
-        "3a2360e8cb2cfb490a67ecd723206f82130afd1f",
-        "3c68eeb2955616c0e2804b61b5b9662c45040c16"
-      ],
-      "independent_test": {
-        "result": "PASS",
-        "accepted_ref": "3c68eeb2955616c0e2804b61b5b9662c45040c16",
-        "supplemental_run": 33162493075,
-        "supplemental_job": 98820039297,
-        "supplemental_artifact": 9682220901,
-        "note": "Dedicated Tester independently inspected the Designer spec/vector prototype against #85 acceptance criteria; no T-REV required. Coder integration must follow the written 44 CSS-px touch-target rule rather than copying compact prototype SVG units literally."
-      }
+      "implementation_refs": ["3a2360e8cb2cfb490a67ecd723206f82130afd1f","3c68eeb2955616c0e2804b61b5b9662c45040c16"],
+      "independent_test": {"result":"PASS","accepted_ref":"3c68eeb2955616c0e2804b61b5b9662c45040c16","supplemental_run":33162493075,"supplemental_job":98820039297,"supplemental_artifact":9682220901}
     },
     {
       "id": "R02-T04",
       "order": 4,
       "title": "Compose deterministic authoritative world-state initialization",
-      "status": "formal_tester_handoff",
-      "depends_on": [
-        "R02-T01",
-        "R02-T02"
-      ],
+      "status": "completed",
+      "depends_on": ["R02-T01","R02-T02"],
       "github_issue": 86,
       "role_owner": "Coder Worker",
-      "implementation_refs": [
-        "344cc28fcaa9dded7cb164d29257ac99e38bd775",
-        "078425b2639f5919b93ee914d16ac16e25b73269",
-        "543edd3ed97aa53888ff9236c09b69149194b87c"
-      ],
-      "coder_completion": {
-        "worker": "Coder Worker #1",
-        "exact_candidate": "543edd3ed97aa53888ff9236c09b69149194b87c",
-        "run": 33174672302,
-        "job": 98860074353,
-        "artifact": 9687144932,
-        "pages_run": 33174671264,
-        "claim_cleared": true,
-        "note": "Formal Coder takeover inspected the failed NVIDIA Coder handoff, accepted no NVIDIA implementation, completed scoped deterministic authoritative initialization, and reported focused R02-T04 plus approved #83/#84 contracts and full R01 regression green. Coder self-verification is not independent PASS."
-      },
-      "auxiliary_nvidia": {
-        "role": "tester",
-        "status": "handoff",
-        "workflow_run": 33177350289,
-        "job": 98869482749,
-        "head_sha": "543edd3ed97aa53888ff9236c09b69149194b87c",
-        "model": "nvidia/nvidia/nemotron-3-ultra-550b-a55b",
-        "metric_status": "handoff",
-        "evidence_count": 0,
-        "coder_completed": false,
-        "live_claim_cleared": true,
-        "authority": "auxiliary attempt ended without complete verifiable Tester evidence; formal Tester remains independent authority"
-      },
-      "note": "NVIDIA Tester run 33177350289 ended in ai-handoff with zero verifiable evidence; its live claim was cleared. Exact Coder candidate 543edd3e... remains the implementation candidate. #86 is now formal Tester continuation/handoff work and must not be routed back to NVIDIA while ai-handoff remains. Formal Tester must inspect the exact candidate and handoff evidence, then record PASS or T-REV. #87 remains blocked until #86 receives formal independent PASS.",
-      "issue_state": "open_ai_handoff"
+      "issue_state": "closed_completed",
+      "implementation_refs": ["344cc28fcaa9dded7cb164d29257ac99e38bd775","078425b2639f5919b93ee914d16ac16e25b73269","543edd3ed97aa53888ff9236c09b69149194b87c"],
+      "coder_completion": {"worker":"Coder Worker #1","exact_candidate":"543edd3ed97aa53888ff9236c09b69149194b87c","run":33174672302,"job":98860074353,"artifact":9687144932,"pages_run":33174671264,"claim_cleared":true},
+      "independent_test": {"result":"PASS","tested_ref":"543edd3ed97aa53888ff9236c09b69149194b87c","comment":5453633416,"run":33174672302,"job":98860074353,"artifact":9687144932,"browser_summary":"40 expected, 0 unexpected, 0 skipped, 0 flaky","note":"Formal Tester accepted the exact Coder candidate. The auxiliary NVIDIA Tester finalizer false-handoff was diagnosed as #55 infrastructure behavior, not a #86 product defect."},
+      "auxiliary_nvidia_history": {"tester_run":33177350289,"tester_job":98869482749,"result":"false_handoff_due_to_evidence_prefix_finalizer_bug","authority":"non-authoritative"}
     },
     {
       "id": "R02-T05",
       "order": 5,
       "title": "Add versioned campaign save and export serialization",
-      "status": "blocked",
-      "depends_on": [
-        "R02-T04"
-      ],
+      "status": "ai_running",
+      "depends_on": ["R02-T04"],
       "github_issue": 87,
-      "role_owner": "Coder Worker"
+      "role_owner": "Coder Worker",
+      "auxiliary_nvidia": {"role":"coder","status":"running","workflow_run":33181172550,"model":"nvidia/nvidia/nemotron-3-ultra-550b-a55b","authority":"auxiliary only; formal Worker review and independent Tester PASS remain required"},
+      "note": "#86 is formally complete. #87 was routed with ai-role-coder first and ai-ready last, then claimed by the single NVIDIA auxiliary Coder slot. Formal Coders must skip while the auxiliary claim is active."
     },
-    {
-      "id": "R02-T06",
-      "order": 6,
-      "title": "Add safe campaign import and load validation",
-      "status": "blocked",
-      "depends_on": [
-        "R02-T05"
-      ],
-      "github_issue": 88,
-      "role_owner": "Coder Worker"
-    },
-    {
-      "id": "R02-T07",
-      "order": 7,
-      "title": "Integrate seed and persistence controls into living map",
-      "status": "blocked",
-      "depends_on": [
-        "R02-T03",
-        "R02-T05",
-        "R02-T06"
-      ],
-      "github_issue": 89,
-      "role_owner": "Coder Worker"
-    },
-    {
-      "id": "R02-T08",
-      "order": 8,
-      "title": "Add deterministic save/load round-trip regression",
-      "status": "blocked",
-      "depends_on": [
-        "R02-T04",
-        "R02-T05",
-        "R02-T06"
-      ],
-      "github_issue": 90,
-      "role_owner": "Coder Worker"
-    },
-    {
-      "id": "R02-T09",
-      "order": 9,
-      "title": "Refine integrated persistence states across responsive layouts",
-      "status": "blocked",
-      "depends_on": [
-        "R02-T07"
-      ],
-      "github_issue": 91,
-      "role_owner": "Graphic Designer Worker"
-    },
-    {
-      "id": "R02-T10",
-      "order": 10,
-      "title": "Add cumulative browser and accessibility persistence regression",
-      "status": "blocked",
-      "depends_on": [
-        "R02-T07",
-        "R02-T08",
-        "R02-T09"
-      ],
-      "github_issue": 92,
-      "role_owner": "Coder Worker"
-    },
-    {
-      "id": "R02-T11",
-      "order": 11,
-      "title": "Authoritative world and campaign state phase gate",
-      "status": "blocked",
-      "depends_on": [
-        "R02-T01",
-        "R02-T02",
-        "R02-T03",
-        "R02-T04",
-        "R02-T05",
-        "R02-T06",
-        "R02-T07",
-        "R02-T08",
-        "R02-T09",
-        "R02-T10"
-      ],
-      "github_issue": 93,
-      "role_owner": "Tester Worker",
-      "note": "Dedicated Tester alone may approve R02 phase/release under normal autonomous progression."
-    }
+    {"id":"R02-T06","order":6,"title":"Add safe campaign import and load validation","status":"blocked","depends_on":["R02-T05"],"github_issue":88,"role_owner":"Coder Worker"},
+    {"id":"R02-T07","order":7,"title":"Integrate seed and persistence controls into living map","status":"blocked","depends_on":["R02-T03","R02-T05","R02-T06"],"github_issue":89,"role_owner":"Coder Worker"},
+    {"id":"R02-T08","order":8,"title":"Add deterministic save/load round-trip regression","status":"blocked","depends_on":["R02-T04","R02-T05","R02-T06"],"github_issue":90,"role_owner":"Coder Worker"},
+    {"id":"R02-T09","order":9,"title":"Refine integrated persistence states across responsive layouts","status":"blocked","depends_on":["R02-T07"],"github_issue":91,"role_owner":"Graphic Designer Worker"},
+    {"id":"R02-T10","order":10,"title":"Add cumulative browser and accessibility persistence regression","status":"blocked","depends_on":["R02-T07","R02-T08","R02-T09"],"github_issue":92,"role_owner":"Coder Worker"},
+    {"id":"R02-T11","order":11,"title":"Authoritative world and campaign state phase gate","status":"blocked","depends_on":["R02-T01","R02-T02","R02-T03","R02-T04","R02-T05","R02-T06","R02-T07","R02-T08","R02-T09","R02-T10"],"github_issue":93,"role_owner":"Tester Worker","note":"Dedicated Tester alone may approve R02 phase/release under normal autonomous progression."}
   ],
   "supporting_work": [
     {
       "github_issue": 55,
       "title": "Infrastructure — Add auxiliary NVIDIA Coder/Reviewer/Tester routing",
-      "status": "formal_partial_verification_waiting_missing_runtime_coverage",
+      "status": "tester_revision_request_formal_coder_fix_required",
+      "role_owner": "Coder Worker #2",
       "release_blocking": false,
-      "formal_verification": {
-        "result": "PARTIAL_NOT_PASS",
-        "current_reviewer_path": "proven",
-        "failure_handoff_cleanup": "proven",
-        "successful_coder_path": "not_yet_proven",
-        "post_fix_tester_success_path": "not_yet_proven"
-      },
-      "note": "Formal Tester consumed the prior auxiliary review state and kept #55 open because a successful/verifiable NVIDIA Coder success path and a fresh post-fix successful Tester evidence route remain objectively unproven. No current repository defect or mandatory Coder continuation is recorded. Do not repeatedly route #55 as Reviewer merely to create duplicate evidence; future NVIDIA routing must add missing objective coverage through an otherwise eligible focused issue. Supporting infrastructure remains non-release-blocking."
+      "defect": {"source_run":33177350289,"source_issue":86,"root_cause":"Tester evidence was emitted as **AI TEST EVIDENCE: PASS** while finalizer requires raw startswith(\"AI TEST EVIDENCE:\"), causing a false zero-evidence handoff.","tester_revision_request":"open","planner_audit_comment":5453866897},
+      "note": "Formal Coder should minimally repair evidence finalization without weakening role/read-only/evidence requirements, then independent Tester must retest. This supporting defect does not block R02 product progression."
     }
   ]
 }
