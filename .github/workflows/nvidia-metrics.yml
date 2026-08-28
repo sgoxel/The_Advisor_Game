@@ -13,7 +13,7 @@ jobs:
   record:
     if: github.event.workflow_run.event == 'issues'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     permissions:
       actions: read
       contents: read
@@ -31,9 +31,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The composite action anchors run identity in the central ledger before
-          # calling OpenCode. Runs that never reached NVIDIA have no marker and are
-          # intentionally excluded from auxiliary execution statistics.
           LEDGER_COMMENTS="$(
             gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${LEDGER_ISSUE}/comments?per_page=100" |
               jq -s 'add'
@@ -42,7 +39,11 @@ jobs:
           RUN_LINE="$(
             printf '%s' "$LEDGER_COMMENTS" |
               jq -r --arg run "$RUN_ID" --arg attempt "$RUN_ATTEMPT" \
-                '[.[] | select((.body // "") | startswith("AI AUXILIARY RUN: ")) | select((.body // "") | contains("run_id=" + $run + " ")) | select((.body // "") | contains("run_attempt=" + $attempt + " "))] | last | .body // ""'
+                '[.[]
+                  | select((.body // "") | startswith("AI AUXILIARY RUN: "))
+                  | select((.body // "") | contains("run_id=" + $run + " "))
+                  | select((.body // "") | contains("run_attempt=" + $attempt + " "))
+                ] | last | .body // ""'
           )"
 
           if [ -z "$RUN_LINE" ]; then
@@ -72,19 +73,21 @@ jobs:
               ;;
           esac
 
-          # Avoid duplicate records if the metrics workflow itself is re-run.
           EXISTING_METRIC_COUNT="$(
             printf '%s' "$LEDGER_COMMENTS" |
               jq --argjson run "$RUN_ID" --argjson attempt "$RUN_ATTEMPT" \
-                '[.[] | select((.body // "") | startswith("AI AUXILIARY METRIC: ")) | (.body | sub("^AI AUXILIARY METRIC: "; "") | fromjson?) | select(. != null) | select(.run_id == $run and .run_attempt == $attempt)] | length'
+                '[.[]
+                  | select((.body // "") | startswith("AI AUXILIARY METRIC: "))
+                  | (.body | sub("^AI AUXILIARY METRIC: "; "") | fromjson?)
+                  | select(. != null)
+                  | select(.run_id == $run and .run_attempt == $attempt)
+                ] | length'
           )"
           if [ "$EXISTING_METRIC_COUNT" -gt 0 ]; then
             echo "Metric already exists for AI Developer run ${RUN_ID}/${RUN_ATTEMPT}; skipping duplicate."
             exit 0
           fi
 
-          # workflow_run fires only after AI Developer has finished, so terminal
-          # evidence, labels and role-job metadata are stable here.
           COMMENTS="$(
             gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100" |
               jq -s 'add'
@@ -94,12 +97,16 @@ jobs:
           TERMINAL_SUCCESS_COUNT="$(
             printf '%s' "$COMMENTS" |
               jq --arg start "$STARTED_AT" --arg role "$ROLE" \
-                '[.[] | select(.created_at >= $start) | select((.body // "") | contains("AI AUXILIARY COMPLETE: role=" + $role + "."))] | length'
+                '[.[] | select(.created_at >= $start)
+                  | select((.body // "") | contains("AI AUXILIARY COMPLETE: role=" + $role + "."))
+                ] | length'
           )"
           TERMINAL_HANDOFF_COUNT="$(
             printf '%s' "$COMMENTS" |
               jq --arg start "$STARTED_AT" \
-                '[.[] | select(.created_at >= $start) | select((.body // "") | contains("AI-HANDOFF: NVIDIA/OpenCode did not produce a complete verifiable"))] | length'
+                '[.[] | select(.created_at >= $start)
+                  | select((.body // "") | contains("AI-HANDOFF: NVIDIA/OpenCode did not produce a complete verifiable"))
+                ] | length'
           )"
 
           if [ "$TERMINAL_SUCCESS_COUNT" -gt 0 ]; then
@@ -133,34 +140,59 @@ jobs:
 
           EVIDENCE_COUNT="$(
             printf '%s' "$COMMENTS" |
-              jq --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
-                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith($prefix))] | length'
+              jq --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" '
+                def normalized: gsub("^[[:space:]*_`#>-]+"; "");
+                [.[] | select(.created_at >= $start)
+                  | select(((.body // "") | normalized) | startswith($prefix))
+                ] | length'
           )"
           EVIDENCE_URL="$(
             printf '%s' "$COMMENTS" |
-              jq -r --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
-                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith($prefix))] | last | .html_url // ""'
+              jq -r --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" '
+                def normalized: gsub("^[[:space:]*_`#>-]+"; "");
+                [.[] | select(.created_at >= $start)
+                  | select(((.body // "") | normalized) | startswith($prefix))
+                ] | last | .html_url // ""'
           )"
           HANDOFF_COUNT="$(
             printf '%s' "$COMMENTS" |
-              jq --arg start "$STARTED_AT" \
-                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI-HANDOFF:"))] | length'
+              jq --arg start "$STARTED_AT" '
+                def normalized: gsub("^[[:space:]*_`#>-]+"; "");
+                [.[] | select(.created_at >= $start)
+                  | select(((.body // "") | normalized) | startswith("AI-HANDOFF:"))
+                ] | length'
           )"
           HANDOFF_URL="$(
             printf '%s' "$COMMENTS" |
-              jq -r --arg start "$STARTED_AT" \
-                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI-HANDOFF:"))] | last | .html_url // ""'
+              jq -r --arg start "$STARTED_AT" '
+                def normalized: gsub("^[[:space:]*_`#>-]+"; "");
+                [.[] | select(.created_at >= $start)
+                  | select(((.body // "") | normalized) | startswith("AI-HANDOFF:"))
+                ] | last | .html_url // ""'
           )"
+
           RETRY_COUNT="$(
             printf '%s' "$COMMENTS" |
               jq --arg start "$STARTED_AT" --arg run "$RUN_ID" \
-                '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI AUXILIARY RETRY: ")) | select((.body // "") | contains("run_id=" + $run))] | length'
+                '[.[] | select(.created_at >= $start)
+                  | select((.body // "") | startswith("AI AUXILIARY RETRY: "))
+                  | select((.body // "") | contains("run_id=" + $run))
+                ] | length'
           )"
-          if [ "$RETRY_COUNT" -gt 0 ]; then
-            RETRY_USED=true
-          else
-            RETRY_USED=false
+          if [ "$RETRY_COUNT" -gt 0 ]; then RETRY_USED=true; else RETRY_USED=false; fi
+
+          JOB_LOG_AVAILABLE=false
+          PROVIDER_503_COUNT=0
+          if [ "$JOB_ID" -gt 0 ]; then
+            if gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --job "$JOB_ID" --log > /tmp/nvidia-role-job.log 2>/dev/null; then
+              JOB_LOG_AVAILABLE=true
+              PROVIDER_503_COUNT="$(grep -c 'Service temporarily overloaded' /tmp/nvidia-role-job.log || true)"
+              if [ "$PROVIDER_503_COUNT" -eq 0 ]; then
+                PROVIDER_503_COUNT="$(grep -Ec 'HTTP[[:space:]]+503|"code"[[:space:]]*:[[:space:]]*503' /tmp/nvidia-role-job.log || true)"
+              fi
+            fi
           fi
+          if [ "$PROVIDER_503_COUNT" -gt 0 ]; then PROVIDER_503_SEEN=true; else PROVIDER_503_SEEN=false; fi
 
           PR_COUNT=0
           PR_URL=""
@@ -181,11 +213,10 @@ jobs:
           END_EPOCH="$(date -u -d "$ENDED_AT" +%s)"
           DURATION_SECONDS="$((END_EPOCH - START_EPOCH))"
           if [ "$DURATION_SECONDS" -lt 0 ]; then DURATION_SECONDS=0; fi
-
           SOURCE_ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}"
 
           METRIC="$(jq -cn \
-            --argjson schema_version 1 \
+            --argjson schema_version 2 \
             --arg timestamp "$ENDED_AT" \
             --argjson issue_number "$ISSUE_NUMBER" \
             --arg source_issue_url "$SOURCE_ISSUE_URL" \
@@ -202,6 +233,9 @@ jobs:
             --arg ended_at "$ENDED_AT" \
             --argjson duration_seconds "$DURATION_SECONDS" \
             --argjson retry_used "$RETRY_USED" \
+            --argjson job_log_available "$JOB_LOG_AVAILABLE" \
+            --argjson provider_503_seen "$PROVIDER_503_SEEN" \
+            --argjson provider_503_count "$PROVIDER_503_COUNT" \
             --arg status "$STATUS" \
             --argjson evidence_count "$EVIDENCE_COUNT" \
             --arg evidence_url "$EVIDENCE_URL" \
@@ -211,12 +245,10 @@ jobs:
             --arg coder_pr_url "$PR_URL" \
             --argjson coder_completed "$CODER_COMPLETED" \
             --argjson ledger_issue "$LEDGER_ISSUE" \
-            '{schema_version:$schema_version,timestamp:$timestamp,issue_number:$issue_number,source_issue_url:$source_issue_url,role:$role,model:$model,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,job_id:$job_id,job_url:$job_url,job_conclusion:$job_conclusion,head_sha:$head_sha,started_at:$started_at,ended_at:$ended_at,duration_seconds:$duration_seconds,retry_used:$retry_used,status:$status,evidence_count:$evidence_count,evidence_url:$evidence_url,handoff_count:$handoff_count,handoff_url:$handoff_url,coder_pr_count:$coder_pr_count,coder_pr_url:$coder_pr_url,coder_completed:$coder_completed,ledger_issue:$ledger_issue}')"
+            '{schema_version:$schema_version,timestamp:$timestamp,issue_number:$issue_number,source_issue_url:$source_issue_url,role:$role,model:$model,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,job_id:$job_id,job_url:$job_url,job_conclusion:$job_conclusion,head_sha:$head_sha,started_at:$started_at,ended_at:$ended_at,duration_seconds:$duration_seconds,retry_used:$retry_used,job_log_available:$job_log_available,provider_503_seen:$provider_503_seen,provider_503_count:$provider_503_count,status:$status,evidence_count:$evidence_count,evidence_url:$evidence_url,handoff_count:$handoff_count,handoff_url:$handoff_url,coder_pr_count:$coder_pr_count,coder_pr_url:$coder_pr_url,coder_completed:$coder_completed,ledger_issue:$ledger_issue}')"
 
-          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
-          gh issue comment "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" \
-            --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
+          gh issue comment "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
 
           LEDGER_COMMENTS="$(
             gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${LEDGER_ISSUE}/comments?per_page=100" |
@@ -224,13 +256,18 @@ jobs:
           )"
           METRICS="$(
             printf '%s' "$LEDGER_COMMENTS" |
-              jq '[.[] | select((.body // "") | startswith("AI AUXILIARY METRIC: ")) | (.body | sub("^AI AUXILIARY METRIC: "; "") | fromjson?)] | map(select(. != null))'
+              jq '[.[]
+                | select((.body // "") | startswith("AI AUXILIARY METRIC: "))
+                | (.body | sub("^AI AUXILIARY METRIC: "; "") | fromjson?)
+              ] | map(select(. != null))'
           )"
 
           TOTAL="$(printf '%s' "$METRICS" | jq 'length')"
           SUCCESS="$(printf '%s' "$METRICS" | jq '[.[] | select(.status == "success")] | length')"
           HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.status == "handoff")] | length')"
           RETRIES="$(printf '%s' "$METRICS" | jq '[.[] | select(.retry_used == true)] | length')"
+          PROVIDER_503_RUNS="$(printf '%s' "$METRICS" | jq '[.[] | select((.provider_503_count // 0) > 0)] | length')"
+          PROVIDER_503_EVENTS="$(printf '%s' "$METRICS" | jq '[.[] | (.provider_503_count // 0)] | add // 0')"
           CODER_RUNS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "coder")] | length')"
           CODER_SUCCESS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "coder" and .status == "success")] | length')"
           CODER_HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "coder" and .status == "handoff")] | length')"
@@ -244,16 +281,36 @@ jobs:
           TESTER_HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "tester" and .status == "handoff")] | length')"
           SUCCESS_RATE="$(awk -v success="$SUCCESS" -v total="$TOTAL" 'BEGIN { if (total == 0) printf "0.0"; else printf "%.1f", (100 * success / total) }')"
 
+          MODEL_ROWS="$(
+            printf '%s' "$METRICS" |
+              jq -r '
+                group_by(.model)[] as $rows
+                | ($rows | length) as $attempts
+                | ($rows | map(select(.status == "success")) | length) as $success
+                | ($rows | map(select(.status == "handoff")) | length) as $handoff
+                | ($rows | map(select((.provider_503_count // 0) > 0)) | length) as $p503runs
+                | ($rows | map(.provider_503_count // 0) | add // 0) as $p503events
+                | ($rows | map(select(.coder_completed == true) | .issue_number) | unique | length) as $coderissues
+                | (($success * 1000 / $attempts | floor) / 10) as $rate
+                | "| `\($rows[0].model)` | \($attempts) | \($success) | \($handoff) | \($rate)% | \($p503runs) | \($p503events) | \($coderissues) |"'
+          )"
+
           FIRST_CODER="$(
             printf '%s' "$METRICS" |
-              jq -r '[.[] | select(.coder_completed == true)] | sort_by(.timestamp) | if length == 0 then "None yet" else (.[0] | "#" + (.issue_number|tostring) + " at " + .timestamp + " — run " + (.run_id|tostring)) end'
+              jq -r '[.[] | select(.coder_completed == true)] | sort_by(.timestamp)
+                | if length == 0 then "None yet"
+                  else (.[0] | "#" + (.issue_number|tostring) + " at " + .timestamp + " — run " + (.run_id|tostring))
+                  end'
           )"
           LATEST_RUN="$(
             printf '%s' "$METRICS" |
-              jq -r 'sort_by(.timestamp) | if length == 0 then "None" else (last | "#" + (.issue_number|tostring) + " / " + .role + " / " + .status + " / run " + (.run_id|tostring) + " / " + .timestamp) end'
+              jq -r 'sort_by(.timestamp)
+                | if length == 0 then "None"
+                  else (last | "#" + (.issue_number|tostring) + " / " + .role + " / " + .status + " / run " + (.run_id|tostring) + " / " + .timestamp)
+                  end'
           )"
 
-          cat > /tmp/nvidia-ledger.md <<EOF
+          cat > /tmp/nvidia-ledger.md <<EOF2
           # NVIDIA Agent Metrics Ledger
 
           Central observability dashboard for auxiliary NVIDIA Nemotron Coder/Reviewer/Tester runs. The append-only AI AUXILIARY METRIC comments on this issue are the machine-readable source records; this body is regenerated from those records after every instrumented AI Developer completion.
@@ -266,7 +323,9 @@ jobs:
           | Successful auxiliary results | ${SUCCESS} |
           | Handoffs to formal Workers | ${HANDOFF} |
           | Overall auxiliary success rate | ${SUCCESS_RATE}% |
-          | Runs using the bounded NVIDIA HTTP 503 retry | ${RETRIES} |
+          | Runs using the bounded outer NVIDIA HTTP 503 retry | ${RETRIES} |
+          | Runs with provider/OpenCode 503 observed in schema-v2 logs | ${PROVIDER_503_RUNS} |
+          | Provider/OpenCode 503 events observed in schema-v2 logs | ${PROVIDER_503_EVENTS} |
           | NVIDIA Coder attempts | ${CODER_RUNS} |
           | NVIDIA Coder successful/verifiable runs | ${CODER_SUCCESS} |
           | NVIDIA Coder handoffs | ${CODER_HANDOFF} |
@@ -279,6 +338,12 @@ jobs:
           | NVIDIA Tester successes | ${TESTER_SUCCESS} |
           | NVIDIA Tester handoffs | ${TESTER_HANDOFF} |
 
+          ## Model-specific performance
+
+          | Model | Attempts | Success | Handoff | Success rate | Runs with provider 503 | Provider 503 events | Coder issues completed |
+          | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+          ${MODEL_ROWS}
+
           ## First real NVIDIA Coder completion
 
           ${FIRST_CODER}
@@ -289,15 +354,18 @@ jobs:
 
           ## Definitions
 
-          - success means the existing AI Developer finalize gate routed the auxiliary result to ai-awaiting-review.
+          - success means the AI Developer finalize gate routed the auxiliary result to ai-awaiting-review.
           - handoff means the auxiliary result was routed to ai-handoff for formal Worker continuation.
-          - coder_completed is true only for role=coder when the terminal status is success, required AI CODER EVIDENCE exists, no direct AI-HANDOFF comment exists for that run, and at least one open PR references the source issue.
+          - retry_used tracks only the explicit bounded outer retry in the composite action.
+          - provider_503_count/provider_503_seen are schema-v2 fields derived from the exact completed role-job log and include OpenCode/NVIDIA internal overload events that do not trigger the outer retry.
+          - Historical schema-v1 metric comments remain append-only and are not rewritten; their provider 503 fields are unknown and therefore excluded from provider-503 totals.
+          - Evidence matching tolerates harmless leading Markdown wrappers but still requires the normalized comment to begin with the exact role evidence marker.
+          - coder_completed is true only for role=coder when terminal status is success, required AI CODER EVIDENCE exists, no direct AI-HANDOFF exists for that run, and at least one open PR references the source issue.
           - coder_completed is auxiliary completion evidence only. It is not independent Tester PASS, merge approval, phase approval, or release approval.
-          - Each metric record contains the source issue, exact workflow run/job, head SHA, model, timestamps, duration, retry use, evidence URLs, handoff evidence, and Coder PR evidence.
           - AI Developer runs that never invoke NVIDIA are intentionally excluded because they have no AI AUXILIARY RUN marker.
 
           Last regenerated: ${ENDED_AT}
-          EOF
+          EOF2
 
           sed -i 's/^          //' /tmp/nvidia-ledger.md
           gh issue edit "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/nvidia-ledger.md >/dev/null
