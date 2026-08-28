@@ -145,3 +145,147 @@ test('repeated click or tap inspects a real tile without directly starting prota
   expect(after.previewLength).toBeGreaterThanOrEqual(0);
   expect(failures).toEqual([]);
 });
+
+test('R02 authoritative-state contract normalizes only allowlisted simulation truth deterministically', async ({ page }) => {
+  await waitForStrategicMap(page);
+
+  const result = await page.evaluate(() => {
+    const api = window.Game.AuthoritativeState;
+    const candidateA = {
+      world: {
+        seed: 'R02-BOUNDARY',
+        rows: 2.9,
+        cols: 2.1,
+        tileWidth: 100,
+        tileHeight: 100,
+        params: { zeta: 2, alpha: 1 },
+        terrain: [
+          [{ type: 'grass', elevation: 1, selected: true }, { type: 'forest', elevation: '2' }],
+          [{ type: '', elevation: Number.NaN }, null]
+        ],
+        player: {
+          row: 1.8,
+          col: 0.4,
+          direction: 'n',
+          moving: true,
+          pathQueue: [{ row: 0, col: 1 }]
+        },
+        selected: { row: 1, col: 1 },
+        hover: { row: 0, col: 0 },
+        previewPath: [{ row: 1, col: 0 }]
+      },
+      camera: { x: 999 },
+      dom: { injected: true },
+      render: { injected: true }
+    };
+    const candidateB = structuredClone(candidateA);
+    candidateB.world.params = { alpha: 1, zeta: 2 };
+    candidateB.world.selected = { row: 0, col: 0 };
+    candidateB.camera = { x: -999 };
+
+    const normalized = api.normalize(candidateA);
+    const defaulted = api.normalize({ world: {} });
+    return {
+      exists: Boolean(api),
+      schemaVersion: api?.schemaVersion,
+      authority: api?.authority,
+      fields: api?.fields ? [...api.fields] : [],
+      apiKeys: api ? Object.keys(api) : [],
+      normalized,
+      defaulted,
+      sameCanonical: api.canonicalStringify(candidateA) === api.canonicalStringify(candidateB)
+    };
+  });
+
+  expect(result.exists).toBe(true);
+  expect(result.schemaVersion).toBe(1);
+  expect(result.authority).toBe('simulation');
+  expect(result.apiKeys).not.toContain('set');
+  expect(result.apiKeys).not.toContain('apply');
+  expect(result.apiKeys).not.toContain('replace');
+  expect(result.fields).not.toContain('camera');
+  expect(result.fields).not.toContain('world.selected');
+  expect(result.fields).not.toContain('world.hover');
+  expect(result.fields).not.toContain('world.previewPath');
+
+  expect(result.normalized.world.rows).toBe(2);
+  expect(result.normalized.world.cols).toBe(2);
+  expect(result.normalized.world.params).toEqual({ alpha: 1, zeta: 2 });
+  expect(result.normalized.world.terrain).toEqual([
+    [{ type: 'grass', elevation: 1 }, { type: 'forest', elevation: 2 }],
+    [{ type: 'grass', elevation: 0 }, { type: 'grass', elevation: 0 }]
+  ]);
+  expect(result.normalized.world.player).toEqual({ row: 1, col: 0, direction: 'n' });
+  expect(result.normalized.world).not.toHaveProperty('selected');
+  expect(result.normalized.world).not.toHaveProperty('hover');
+  expect(result.normalized.world).not.toHaveProperty('previewPath');
+  expect(result.normalized).not.toHaveProperty('camera');
+  expect(result.defaulted).toEqual({
+    schemaVersion: 1,
+    authority: 'simulation',
+    world: {
+      seed: '',
+      rows: 0,
+      cols: 0,
+      tileWidth: 0,
+      tileHeight: 0,
+      params: null,
+      terrain: [],
+      player: { row: 0, col: 0, direction: 's' }
+    }
+  });
+  expect(result.sameCanonical).toBe(true);
+});
+
+test('R02 authoritative capture is immutable and unaffected by presentation-only runtime changes', async ({ page }) => {
+  await waitForStrategicMap(page);
+
+  const result = await page.evaluate(() => {
+    const api = window.Game.AuthoritativeState;
+    const state = window.Game.State;
+    const originalCameraX = state.camera.x;
+    const originalSelected = state.world.selected;
+    const originalHover = state.world.hover;
+    const originalPreviewPath = state.world.previewPath;
+
+    const before = api.capture();
+    const beforeCanonical = api.canonicalStringify(before);
+
+    state.camera.x = originalCameraX + 12345;
+    state.world.selected = { row: 0, col: 0 };
+    state.world.hover = { row: 0, col: 1 };
+    state.world.previewPath = [{ row: 1, col: 1 }];
+
+    const after = api.capture();
+    const afterCanonical = api.canonicalStringify(after);
+
+    state.camera.x = originalCameraX;
+    state.world.selected = originalSelected;
+    state.world.hover = originalHover;
+    state.world.previewPath = originalPreviewPath;
+
+    return {
+      sameCanonical: beforeCanonical === afterCanonical,
+      rootFrozen: Object.isFrozen(before),
+      worldFrozen: Object.isFrozen(before.world),
+      playerFrozen: Object.isFrozen(before.world.player),
+      terrainFrozen: Object.isFrozen(before.world.terrain),
+      firstRowFrozen: Object.isFrozen(before.world.terrain[0]),
+      firstTileFrozen: Object.isFrozen(before.world.terrain[0][0]),
+      hasCamera: Object.prototype.hasOwnProperty.call(before, 'camera'),
+      hasSelected: Object.prototype.hasOwnProperty.call(before.world, 'selected'),
+      hasTransientMovement: Object.prototype.hasOwnProperty.call(before.world.player, 'moving')
+    };
+  });
+
+  expect(result.sameCanonical).toBe(true);
+  expect(result.rootFrozen).toBe(true);
+  expect(result.worldFrozen).toBe(true);
+  expect(result.playerFrozen).toBe(true);
+  expect(result.terrainFrozen).toBe(true);
+  expect(result.firstRowFrozen).toBe(true);
+  expect(result.firstTileFrozen).toBe(true);
+  expect(result.hasCamera).toBe(false);
+  expect(result.hasSelected).toBe(false);
+  expect(result.hasTransientMovement).toBe(false);
+});
