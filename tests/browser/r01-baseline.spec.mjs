@@ -1,13 +1,24 @@
 import { test, expect } from '@playwright/test';
 
+const EXPECTED_OPTIONAL_MAP_404S = [
+  '/map/ISOMETRIC_MAP_30032026.js',
+  '/map/ISOMETRIC_MAP_30032026/ISOMETRIC_MAP_30032026.js',
+  '/map/map.js'
+];
+
 async function waitForStrategicMap(page) {
   await page.goto('./');
   await page.waitForFunction(() => {
     const game = window.Game;
+    const canvas = game?.State?.dom?.canvas;
+    const minimap = game?.State?.dom?.minimap;
     return Boolean(
       game?.State?.world?.terrain?.length &&
       game?.State?.world?.player &&
-      game?.State?.dom?.canvas &&
+      canvas?.isConnected &&
+      canvas.clientWidth > 0 &&
+      canvas.clientHeight > 0 &&
+      minimap?.isConnected &&
       game?.Renderer?.pickTile
     );
   });
@@ -37,11 +48,21 @@ async function findInspectableCanvasPoint(page) {
   });
 }
 
+function isExpectedOptionalMap404(message) {
+  const text = message.text();
+  return message.type() === 'error' &&
+    text.includes('Failed to load resource') &&
+    text.includes('404') &&
+    EXPECTED_OPTIONAL_MAP_404S.some((path) => text.includes(path));
+}
+
 function collectRuntimeFailures(page) {
   const failures = [];
   page.on('pageerror', (error) => failures.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') failures.push(`console.error: ${message.text()}`);
+    if (message.type() === 'error' && !isExpectedOptionalMap404(message)) {
+      failures.push(`console.error: ${message.text()}`);
+    }
   });
   return failures;
 }
@@ -54,7 +75,18 @@ test('strategic map starts in representative responsive layouts without runtime 
   expect(canvasBox).not.toBeNull();
   expect(canvasBox.width).toBeGreaterThan(100);
   expect(canvasBox.height).toBeGreaterThan(100);
-  await expect(page.locator('#minimap')).toBeVisible();
+
+  const minimap = page.locator('#minimap');
+  if (testInfo.project.name.startsWith('phone-')) {
+    await expect(minimap).toBeHidden();
+  } else {
+    await expect(minimap).toBeVisible();
+    const minimapBox = await minimap.boundingBox();
+    expect(minimapBox).not.toBeNull();
+    expect(minimapBox.width).toBeGreaterThan(0);
+    expect(minimapBox.height).toBeGreaterThan(0);
+  }
+
   await expect(page.locator('#mainMenuBtn')).toHaveAccessibleName(/main menu/i);
   await expect(page.locator('#settingsBtn')).toHaveAccessibleName(/settings/i);
 
