@@ -3,12 +3,13 @@
   "product": "The Advisor Game",
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
-  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28",
-  "planning_basis": "Planner-owned decomposition reconciled through #105 after Admin README updates #103 and #106. README defines product requirements and governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority. Compatible completed and in-flight R01/R02 work is preserved while new fundamental world requirements enter the earliest unfinished phase that owns SEED, authoritative state and persistence.",
+  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28-worker-governance",
+  "planning_basis": "Planner-owned decomposition reconciled through #105 after Admin README updates #103 and #106, then governance-reconciled through #97 to the current README Worker model. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority. Worker scheduling/cursor mechanics remain operational HOW outside ROADMAP. Compatible completed and in-flight R01/R02 work is preserved while fundamental world requirements remain in the earliest unfinished phase that owns SEED, authoritative state and persistence.",
   "readme_reconciliation": {
-    "readme_commit": "64819e9d1ee0725a91df83ddce971f8038ee114f",
+    "readme_commit": "f0a65387344c444acbfd0f287236016ea6829cd2",
     "admin_issues": [103, 106],
-    "planner_issue": 105
+    "planner_issue": 105,
+    "governance_issue": 97
   },
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "baseline": {
