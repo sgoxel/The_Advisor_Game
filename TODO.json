@@ -12,7 +12,7 @@
       "id": "R02-T01",
       "order": 1,
       "title": "Define authoritative campaign-state boundary",
-      "status": "implementation_complete_awaiting_independent_test",
+      "status": "ai_ready_auxiliary_test",
       "github_issue": 83,
       "role_owner": "Coder Worker",
       "implementation_ref": "c5273b0c30a1370dfdb73e6a5b1a479f7c600f77",
@@ -24,7 +24,13 @@
         "r01_cumulative_run": 33163373986,
         "r01_browser_run": 33163373915
       },
-      "note": "Coder Worker #2 completed the formal continuation after the cancelled NVIDIA handoff and resolved the prior formal-Coder collision. Its claim is cleared. Implementation is not independently PASSed yet; independent Tester verification remains required before this task is completed."
+      "auxiliary_nvidia": {
+        "role": "tester",
+        "status": "ai_ready",
+        "labels_verified": ["ai-role-tester", "ai-ready"],
+        "authority": "auxiliary only; formal Tester remains independent authority"
+      },
+      "note": "Coder Worker #2 completed implementation and cleared its claim. Planner routed this free committed state for auxiliary NVIDIA objective verification. Formal Workers must not duplicate while ai-ready/ai-running/work-claimed is active. NVIDIA evidence cannot independently complete the issue; formal Tester PASS remains required."
     },
     {
       "id": "R02-T02",
