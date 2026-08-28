@@ -31,6 +31,39 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Select role safety mode
+      id: role_mode
+      env:
+        GH_TOKEN: ${{ github.token }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        LABELS="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${{ inputs.issue_number }}" --jq '.labels[].name')"
+        ROLE="coder"
+        if printf '%s\n' "$LABELS" | grep -Fxq 'ai-role-reviewer'; then
+          ROLE="reviewer"
+        elif printf '%s\n' "$LABELS" | grep -Fxq 'ai-role-tester'; then
+          ROLE="tester"
+        fi
+
+        echo "role=${ROLE}" >> "$GITHUB_OUTPUT"
+        if [ "$ROLE" = "reviewer" ] || [ "$ROLE" = "tester" ]; then
+          echo "agent=plan" >> "$GITHUB_OUTPUT"
+          echo "use_github_token=true" >> "$GITHUB_OUTPUT"
+          # Read-only roles may create disposable local test output, but it must not
+          # be mistaken for implementation that OpenCode should push as a PR.
+          cat >> .git/info/exclude <<'EOF'
+        /package-lock.json
+        /playwright-report/
+        /test-results/
+        /.lighthouseci/
+        /coverage/
+        EOF
+        else
+          echo "agent=" >> "$GITHUB_OUTPUT"
+          echo "use_github_token=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Record first attempt start time
       id: attempt_start
       shell: bash
@@ -43,8 +76,11 @@ runs:
       uses: anomalyco/opencode/github@latest
       env:
         NVIDIA_API_KEY: ${{ inputs.nvidia_api_key }}
+        GITHUB_TOKEN: ${{ github.token }}
       with:
         model: ${{ inputs.model }}
+        agent: ${{ steps.role_mode.outputs.agent }}
+        use_github_token: ${{ steps.role_mode.outputs.use_github_token }}
         prompt: ${{ inputs.prompt }}
 
     - name: Check whether failure was NVIDIA 503
@@ -92,8 +128,11 @@ runs:
       uses: anomalyco/opencode/github@latest
       env:
         NVIDIA_API_KEY: ${{ inputs.nvidia_api_key }}
+        GITHUB_TOKEN: ${{ github.token }}
       with:
         model: ${{ inputs.model }}
+        agent: ${{ steps.role_mode.outputs.agent }}
+        use_github_token: ${{ steps.role_mode.outputs.use_github_token }}
         prompt: |
           This is the single clean retry after NVIDIA HTTP 503 Service temporarily overloaded.
 
