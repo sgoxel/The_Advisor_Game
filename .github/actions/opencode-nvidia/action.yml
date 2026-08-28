@@ -14,7 +14,7 @@ inputs:
   model:
     description: OpenCode model selection
     required: false
-    default: nvidia/nvidia/nemotron-3-ultra-550b-a55b
+    default: nvidia/nvidia/nemotron-3-super-120b-a12b
   retry_wait_seconds:
     description: Wait before the single NVIDIA 503 retry
     required: false
@@ -43,30 +43,28 @@ runs:
       run: |
         set -euo pipefail
         LABELS="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${{ inputs.issue_number }}" --jq '.labels[].name')"
-        ROLE="coder"
+        ROLE=""
         if printf '%s\n' "$LABELS" | grep -Fxq 'ai-role-reviewer'; then
           ROLE="reviewer"
         elif printf '%s\n' "$LABELS" | grep -Fxq 'ai-role-tester'; then
           ROLE="tester"
+        else
+          echo "Unsupported NVIDIA role: only Reviewer and Tester are executable." >&2
+          exit 1
         fi
 
         echo "role=${ROLE}" >> "$GITHUB_OUTPUT"
-        if [ "$ROLE" = "reviewer" ] || [ "$ROLE" = "tester" ]; then
-          echo "agent=plan" >> "$GITHUB_OUTPUT"
-          echo "use_github_token=true" >> "$GITHUB_OUTPUT"
-          # Read-only roles may create disposable local test output, but it must not
-          # be mistaken for implementation that OpenCode should push as a PR.
-          cat >> .git/info/exclude <<'EOF'
+        echo "agent=plan" >> "$GITHUB_OUTPUT"
+        echo "use_github_token=true" >> "$GITHUB_OUTPUT"
+        # Read-only roles may create disposable local test output, but it must not
+        # be mistaken for implementation that OpenCode should push as a PR.
+        cat >> .git/info/exclude <<'EOF'
         /package-lock.json
         /playwright-report/
         /test-results/
         /.lighthouseci/
         /coverage/
         EOF
-        else
-          echo "agent=" >> "$GITHUB_OUTPUT"
-          echo "use_github_token=false" >> "$GITHUB_OUTPUT"
-        fi
 
     - name: Record first attempt start time
       id: attempt_start
