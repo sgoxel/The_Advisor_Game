@@ -61,7 +61,7 @@ test('late reconciliation cannot overwrite a newer authoritative regional schedu
 
   expect(evidence.newer.accepted).toBe(true);
   expect(evidence.lateOlder.accepted).toBe(false);
-  expect(evidence.lateOlder.reason).toBe('stale-revision');
+  expect(evidence.lateOlder.reason).toBe('stale-campaign-time');
   expect(evidence.stored.authorityRevision).toBe(evidence.newer.state.authorityRevision);
   expect(evidence.stored.resultFingerprint).toBe(evidence.newer.state.resultFingerprint);
 });
