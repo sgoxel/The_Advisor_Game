@@ -3,8 +3,13 @@
   "product": "The Advisor Game",
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
-  "planning_epoch": "post-admin-reset-2026-08-27",
-  "planning_basis": "Planner-owned decomposition rebuilt after the explicit Admin reset and v155 baseline import. README defines product requirements and governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority. Exactly five scheduled Worker identities use work-conserving multi-role rotation. Worker #6 is a manual Admin-invoked instruction/execution profile only, has no scheduled routine or recurring cursor slot, and may add independent capacity only when directly invoked; role authority and identity independence remain unchanged.",
+  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28",
+  "planning_basis": "Planner-owned decomposition reconciled through #105 after Admin README updates #103 and #106. README defines product requirements and governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority. Compatible completed and in-flight R01/R02 work is preserved while new fundamental world requirements enter the earliest unfinished phase that owns SEED, authoritative state and persistence.",
+  "readme_reconciliation": {
+    "readme_commit": "64819e9d1ee0725a91df83ddce971f8038ee114f",
+    "admin_issues": [103, 106],
+    "planner_issue": 105
+  },
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "baseline": {
     "admin_reset_commit": "c27511b0477ace430080751704b4fac3e3f19d71",
@@ -19,31 +24,141 @@
     "single_active_phase": true,
     "oldest_unfinished_first": true,
     "living_strategic_world_map_required": true,
-    "map_rule": "Every cumulative phase must preserve and progressively extend the persistent living strategic world map as the primary playable surface rather than replacing it with disconnected dashboards, static mockups or menu-only presentation.",
+    "unbounded_seed_world_required": true,
+    "origin_rule": "Every new campaign begins at authoritative world coordinate (0,0) in the SEED-generated inhabited starting village, with the initial playable view centered on the campaign origin.",
+    "map_rule": "Every cumulative phase must preserve and progressively extend the persistent living strategic world map as the primary playable surface. The visible tile region is only a local active part of the larger continuous world, not a finite complete map.",
+    "world_generation_rule": "Compatible SEED + world coordinates + compatible generator rules reproduce the same unmodified base world. Neighboring regions remain deterministic, coherent and available without a gameplay-defined outer boundary.",
+    "persistence_rule": "Deterministic unchanged base-world content may be regenerated from SEED and coordinates; authoritative campaign changes that must survive leaving or reloading a region are persisted as current-world deltas/state.",
     "designer_rule": "Every phase requires at least one independently testable Designer-role task before normal phase completion.",
     "normal_phase_transition_rule": "Under normal autonomous progression, an independent Worker acting in the Tester role must independently pass the active phase gate before the next phase activates. The Tester must not approve work produced by the same Worker identity. Explicit Admin instructions may override normal publication or phase/release workflow requirements without converting unverified work into verified work."
   },
   "migration_classification": {
-    "REUSE": ["Admin-selected v155 WebGL/isometric strategic map as the current development baseline","camera pan, zoom and inertial navigation","tile picking, hover, selection and non-authoritative inspection","seeded procedural terrain foundation","roads, settlements, minimap and compatible localization","compatible textures, terrain rendering and current organic elevation work"],
-    "ADAPT": ["binding double-click/double-tap protagonist movement so map interaction preserves character autonomy","authoritative-state boundaries inherited from the legacy map generator","legacy menu, tool or wording patterns that imply direct command authority","legacy subordinate technical documentation that attempts to override README or Planner-approved architecture/decomposition"],
-    "DEFER": ["legacy or imported economy, progression, faction, campaign, AI or other gameplay behavior not required by the current active phase","future autonomous Local BOT and optional LLM character decision systems beyond current state/persistence work"],
-    "REJECT": ["legacy rules that override Admin or README authority","runtime behavior that gives the player binding direct control over the autonomous protagonist","visual assets or presentation state acting as authoritative simulation truth by themselves","hidden nondeterministic inputs controlling authoritative outcomes"]
+    "REUSE": [
+      "Admin-selected v155 WebGL/isometric strategic map as the current development baseline",
+      "camera pan, zoom and inertial navigation",
+      "tile picking, hover, selection and non-authoritative inspection",
+      "seeded procedural terrain foundation",
+      "roads, settlements, minimap and compatible localization",
+      "compatible textures, terrain rendering and current organic elevation work",
+      "completed R02 authoritative-state, seed/RNG and safe persistence foundations",
+      "#89 and #90 in-flight implementation/evidence where independently verified or still compatible"
+    ],
+    "ADAPT": [
+      "finite single-map assumptions into coordinate-addressed continuous regions",
+      "existing seeded generator so terrain/biomes/roads/water remain coherent across neighboring regions",
+      "existing save model so deterministic unchanged world content can be regenerated while persistent deltas survive",
+      "binding double-click/double-tap protagonist movement so map interaction preserves character autonomy",
+      "authoritative-state boundaries inherited from the legacy map generator",
+      "legacy menu, tool or wording patterns that imply direct command authority"
+    ],
+    "DEFER": [
+      "natural Advisor conversation and persistent Advisor influence beyond current R02 world foundations",
+      "future protagonist Local BOT and optional LLM character decision systems",
+      "rank progression, realm economy, diplomacy, military and imperial gameplay beyond the active phase"
+    ],
+    "REJECT": [
+      "legacy rules that override Admin or README authority",
+      "runtime behavior that gives the player binding direct control over the autonomous protagonist",
+      "visual assets or presentation state acting as authoritative simulation truth by themselves",
+      "hidden nondeterministic inputs controlling authoritative outcomes",
+      "a gameplay-defined finite outer world edge or disconnected random maps masquerading as one continuous world",
+      "save behavior that silently loses meaningful persistent world changes when a region unloads or reloads"
+    ]
   },
   "phases": [
-    {"id":"R01","title":"Strategic World Baseline Reconciliation and Stabilization","status":"completed","phase_issue":69,"phase_gate_issue":68,"completion":"Dedicated Tester PHASE GATE PASS on current compatible descendant 893a38aec36c5e7a5b616d7968481a776aa3edd0; tracker and gate closed completed."},
-    {"id":"R02","title":"Authoritative World and Campaign State","status":"active","phase_issue":82,"phase_gate_issue":93,"release_gate":"Establish deterministic simulation-owned campaign/world state, seeded reproducibility and cumulative versioned save/load behavior while the living strategic map remains the primary surface; independent phase verification required before R03."},
-    {"id":"R03","title":"Legal Action Validation","status":"planned","release_gate":"Add deterministic simulation-owned legality validation without player result injection or direct action execution; expose consequences through the living map and pass independent phase verification before R04."},
-    {"id":"R04","title":"Autonomous Local BOT Core","status":"planned","release_gate":"Add the deterministic local character driver so the protagonist chooses actions within simulation constraints and the living world visibly reflects validated movement/state; independent phase verification required before R05."},
-    {"id":"R05","title":"Conversation and Advisor Influence","status":"planned","release_gate":"Add natural advisor-character interaction and influence boundaries without binding direct control, integrated with the same living strategic world; independent phase verification required before R06."},
-    {"id":"R06","title":"Memory, Trust and Relationships","status":"planned","release_gate":"Add persistent character memory, trust and relationship effects that influence autonomous decisions and are reflected coherently in the cumulative world; independent phase verification required before R07."},
-    {"id":"R07","title":"Advisor Instruction Plain-Text System","status":"planned","release_gate":"Add structured human-readable persistent Advisor Instructions as an influence system, never as direct authority over simulation truth; independent phase verification required before R08."},
-    {"id":"R08","title":"Optional LLM Adapter and Deterministic Fallback","status":"planned","release_gate":"Add an optional LLM driver for the same protagonist with privacy-conscious context boundaries and deterministic Local BOT fallback; authoritative simulation and living-map behavior remain intact; independent phase verification required before R09."},
-    {"id":"R09","title":"Peasant Survival and Local Economy","status":"planned","release_gate":"Extend the living map with meaningful local survival, work, resources, locations and relationships appropriate to early-rank authority; independent phase verification required before R10."},
-    {"id":"R10","title":"Squire and Knight Progression","status":"planned","release_gate":"Add rank-appropriate training, patronage, duties, missions and progression while maintaining autonomous character choice and spatial world continuity; independent phase verification required before R11."},
-    {"id":"R11","title":"Settlements, Factions, Trade and Diplomacy","status":"planned","release_gate":"Expand settlements, factions, economy, trade and diplomacy as simulation-backed systems represented through the living strategic world; independent phase verification required before R12."},
-    {"id":"R12","title":"Court, Realm Economy, Military and Succession","status":"planned","release_gate":"Add higher-rank court, realm economy, strategic military and succession systems without direct unit-by-unit player control; independent phase verification required before R13."},
-    {"id":"R13","title":"King, Multi-Kingdom and Emperor Endgame","status":"planned","release_gate":"Extend authoritative simulation and living-world presentation to sovereign and imperial scale while preserving character autonomy and readable causality; independent phase verification required before R14."},
-    {"id":"R14","title":"Advanced Advisor Tools and Mini-Games","status":"planned","release_gate":"Add direct Advisor tools and mini-games that improve information or influence without bypassing character autonomy or simulation authority; independent phase verification required before R15."},
-    {"id":"R15","title":"Presentation, Accessibility, Balance and Campaign Release","status":"planned","release_gate":"Complete cumulative presentation, accessibility, responsiveness, balance, performance and campaign-level regression across the living strategic world and obtain independent Tester-role verification by a different Worker identity for the final normal release state."}
+    {
+      "id": "R01",
+      "title": "Strategic World Baseline Reconciliation and Stabilization",
+      "status": "completed",
+      "phase_issue": 69,
+      "phase_gate_issue": 68,
+      "completion": "Dedicated Tester PHASE GATE PASS on current compatible descendant 893a38aec36c5e7a5b616d7968481a776aa3edd0; tracker and gate closed completed."
+    },
+    {
+      "id": "R02",
+      "title": "Authoritative Unbounded World and Campaign State",
+      "status": "active",
+      "phase_issue": 82,
+      "phase_gate_issue": 93,
+      "release_gate": "Preserve completed seed/save foundations while establishing authoritative continuous world coordinates, origin (0,0), deterministic neighboring-region generation, meaningful terrain diversity/continuity, an inhabited origin-village/base-population foundation, local NPC world presence, and persistent world deltas over regenerable SEED base state. Independent phase verification required before R03."
+    },
+    {
+      "id": "R03",
+      "title": "Legal Action and World Interaction Validation",
+      "status": "planned",
+      "release_gate": "Add deterministic simulation-owned legality and interaction validation for spatial world actions and NPC/location interactions without player result injection or direct execution; expose validated possibilities/consequences through the living unbounded world and pass independent phase verification before R04."
+    },
+    {
+      "id": "R04",
+      "title": "Autonomous Protagonist and Local BOT Core",
+      "status": "planned",
+      "release_gate": "Add the deterministic local character driver so the protagonist chooses valid goals/actions and can travel across the continuous world through simulation-controlled movement, including region transitions, while the world visibly reflects validated state; independent phase verification required before R05."
+    },
+    {
+      "id": "R05",
+      "title": "Conversation and Advisor Influence",
+      "status": "planned",
+      "release_gate": "Add natural advisor-character interaction so advice can influence observable protagonist decisions, travel and interactions in the same living world without becoming binding direct control; independent phase verification required before R06."
+    },
+    {
+      "id": "R06",
+      "title": "Memory, Trust and Relationships",
+      "status": "planned",
+      "release_gate": "Add persistent character memory, trust and relationship effects that influence autonomous decisions and interactions with world characters and remain coherent across the cumulative world; independent phase verification required before R07."
+    },
+    {
+      "id": "R07",
+      "title": "Advisor Instruction Plain-Text System",
+      "status": "planned",
+      "release_gate": "Add structured human-readable persistent Advisor Instructions as an influence system, never as direct authority over simulation truth; independent phase verification required before R08."
+    },
+    {
+      "id": "R08",
+      "title": "Optional LLM Adapter and Deterministic Fallback",
+      "status": "planned",
+      "release_gate": "Add an optional LLM driver for the same protagonist with privacy-conscious context boundaries and deterministic Local BOT fallback; authoritative simulation and living-world behavior remain intact; independent phase verification required before R09."
+    },
+    {
+      "id": "R09",
+      "title": "Peasant Survival, Jobs and Local Economy",
+      "status": "planned",
+      "release_gate": "Make the inhabited local world meaningfully playable through survival, work, resources, shops/services and interactions with profession-based NPCs appropriate to early-rank authority; independent phase verification required before R10."
+    },
+    {
+      "id": "R10",
+      "title": "Squire and Knight Progression",
+      "status": "planned",
+      "release_gate": "Add rank-appropriate training, patronage, duties, missions and progression while maintaining autonomous character choice and continuous spatial world travel; independent phase verification required before R11."
+    },
+    {
+      "id": "R11",
+      "title": "Settlement Diversity, Factions, Trade and Diplomacy",
+      "status": "planned",
+      "release_gate": "Expand the SEED-generated continuous world with functionally and visually distinct settlement archetypes including varied villages, frontier/border/abandoned settlements, towns and large cities, plus factions, trade and diplomacy represented through the living strategic world; independent phase verification required before R12."
+    },
+    {
+      "id": "R12",
+      "title": "Court, Realm Economy, Military and Succession",
+      "status": "planned",
+      "release_gate": "Add higher-rank court, realm economy, strategic military and succession systems without direct unit-by-unit player control; independent phase verification required before R13."
+    },
+    {
+      "id": "R13",
+      "title": "King, Multi-Kingdom and Emperor Endgame",
+      "status": "planned",
+      "release_gate": "Extend authoritative simulation and the continuous living-world presentation to sovereign, multi-kingdom and imperial scale while preserving character autonomy and readable causality; independent phase verification required before R14."
+    },
+    {
+      "id": "R14",
+      "title": "Advanced Advisor Tools and Mini-Games",
+      "status": "planned",
+      "release_gate": "Add direct Advisor tools and mini-games that improve information or influence without bypassing character autonomy or simulation authority; independent phase verification required before R15."
+    },
+    {
+      "id": "R15",
+      "title": "Presentation, Accessibility, Balance and Campaign Release",
+      "status": "planned",
+      "release_gate": "Complete cumulative presentation, accessibility, responsiveness, balance, performance and campaign-level regression across the unbounded living strategic world and obtain independent Tester-role verification by a different Worker identity for the final normal release state."
+    }
   ]
 }
