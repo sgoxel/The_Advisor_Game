@@ -496,7 +496,17 @@ Location must remain meaningful to gameplay, including travel, meetings, informa
 
 ## 🎨 Visual Direction
 
-The visual direction should support coherent isometric / near-isometric presentation, high-quality 2D and 3D assets, readable silhouettes and scale, character emotion and atmosphere, distinct settlements and environments, animals and creatures, environmental effects, day/night readability, and progressive improvement from early placeholders to polished visual assets.
+The visual identity combines an **original seinen-anime-inspired character language** with the atmosphere and spatial readability of **old-school computer role-playing games**. This is a broad art-direction target rather than a request to imitate any specific manga, anime, artist, game, protected character, costume, composition, or signature style.
+
+Characters should feel mature, grounded and dramatically expressive rather than cute, chibi, super-deformed or toy-like. Proportions should generally remain believable; faces should support subtle and restrained emotion as well as strong dramatic moments; silhouettes, age, social status, profession, culture and personality should remain readable; and medieval-fantasy clothing, armor, equipment and wear should feel materially plausible within the generated world. Portraits and closer character art may use stronger line, shape and painterly detail than distant in-world figures, but both must clearly belong to the same character family.
+
+The wider game should evoke classic PC RPG presentation through **isometric or near-isometric spatial composition, hand-crafted or painterly surfaces, pre-rendered-feeling depth where appropriate, grounded medieval-fantasy color and material treatment, readable silhouettes, restrained effects, strong environmental atmosphere, and clear information-dense interface framing**. Nostalgia is a visual influence, not permission to recreate obsolete usability problems: text, controls, hierarchy, contrast, touch targets and responsive layouts must remain accessible on current desktop, tablet and phone screens.
+
+The mixed 2D/2.5D/3D WebGL presentation may use portraits, sprites, illustrated layers, modeled geometry, textured environments and UI illustration together, but character portraits, in-world characters, settlements, environments, creatures, UI ornament and later region/realm/world views should feel like parts of one coherent visual product rather than unrelated art packs.
+
+Visual effects should support atmosphere and readability rather than spectacle for its own sake. The old-school RPG direction should favor deliberate composition, material richness and mood over expensive visual complexity, which is compatible with the project's mobile/tablet performance goals and performance-friendly day/night approach.
+
+Early releases may continue to use placeholders, simplified geometry or temporary assets when required for development. Those assets do not define the final style; replacement and final production should progressively converge toward the original seinen-inspired character direction and old-school PC RPG visual language.
 
 A Worker acting in the **Designer** role chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
 
@@ -560,6 +570,8 @@ The size of the unbounded world must not force invisible-world computation to gr
 38. **Invisible-world computation scales with relevance, not total world size.** Irrelevant unloaded detail should normally remain unticked and be derived or advanced only when authoritative information is required.
 39. **Lazy and asynchronous computation must remain deterministic.** Scheduling, completion order, render order, visit order or device speed may change when work finishes, but must not change authoritative results or allow stale work to overwrite newer campaign state.
 40. **Phones and tablets are first-class gameplay targets.** Device-specific quality or fidelity scaling may protect responsiveness and performance, but must never alter simulation truth, chronology, legal outcomes or persistent world history.
+41. **Character art follows an original seinen-anime-inspired visual language.** Mature proportions, grounded silhouettes, expressive but restrained emotion, age/status/profession distinction and believable medieval-fantasy costume/material treatment should define the character family without copying a specific existing artist, series or protected character design.
+42. **The game evokes old-school PC RPG presentation without inheriting old usability limits.** Isometric/near-isometric composition, painterly or pre-rendered-feeling depth, restrained effects, grounded atmosphere and classic RPG interface framing should remain coherent with modern accessibility, responsive layouts and mobile/tablet performance.
 
 ---
 
