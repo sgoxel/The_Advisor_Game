@@ -1,0 +1,57 @@
+name: R02 Campaign Calendar Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/campaign_calendar.js'
+      - 'js/game_time.js'
+      - 'js/campaign_persistence.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-campaign-calendar.spec.mjs'
+      - '.github/workflows/r02-campaign-calendar-verification.yml'
+  pull_request:
+    paths:
+      - 'js/campaign_calendar.js'
+      - 'js/game_time.js'
+      - 'js/campaign_persistence.js'
+      - 'js/utils.js'
+      - 'tests/browser/r02-campaign-calendar.spec.mjs'
+      - '.github/workflows/r02-campaign-calendar-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  campaign-calendar-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Run campaign calendar and resume catch-up regression
+        run: npx playwright test tests/browser/r02-campaign-calendar.spec.mjs
+      - name: Re-run authoritative game-time regression
+        run: npx playwright test tests/browser/r02-game-time.spec.mjs
+      - name: Re-run deterministic save/load roundtrip regression
+        run: npx playwright test tests/browser/r02-deterministic-roundtrip.spec.mjs
+      - name: Re-run cumulative persistence regression
+        run: npx playwright test tests/browser/r02-cumulative-persistence-regression.spec.mjs
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r02-calendar-catchup-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
