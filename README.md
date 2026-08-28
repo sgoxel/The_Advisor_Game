@@ -435,7 +435,7 @@ The specific technical method used to build, package, publish, version, or deplo
 
 # 🤖 Development Worker Governance
 
-The project normally uses exactly five recurring scheduled Worker identities: **Worker #1, Worker #2, Worker #3, Worker #4, and Worker #5**. **Worker #6 is not a sixth scheduled routine**; it is a reserved manual Admin-invoked instruction/execution profile and persistent identity used only when the Admin directly invokes Worker #6.
+The project normally uses exactly five recurring scheduled Worker identities: **Worker #1, Worker #2, Worker #3, Worker #4, and Worker #5**. **Worker #6 and Worker #7 are not scheduled routines**; they are reserved manual Admin-invoked instruction/execution profiles and separate persistent identities used only when the Admin directly invokes the respective Worker.
 
 All Worker identities retain the same role boundaries and independence rules. No Worker has a permanent development role.
 
@@ -443,7 +443,7 @@ Worker roles use this ordered cycle:
 
 **Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
 
-A scheduled Worker invocation receives a **starting role** from the recurring rotation. Worker #6 has no automation, timer, recurrence, scheduled slot, or recurring cursor. A direct Admin instruction may define Worker #6's role, target, scope, or starting point; a broad Worker #6 invocation uses the same role boundaries and work-conserving cycle without consuming the scheduled cursor.
+A scheduled Worker invocation receives a **starting role** from the recurring rotation. Worker #6 and Worker #7 have no automation, timer, recurrence, scheduled slot, or recurring cursor. A direct Admin instruction may define either manual Worker's role, target, scope, or starting point; a broad Worker #6 or Worker #7 invocation uses the same role boundaries and work-conserving cycle without consuming the scheduled cursor.
 
 Worker runs are **work-conserving**. Starting from the applicable role, a Worker continues through the role cycle and should perform all currently eligible work it can safely complete within each role, in project-priority order, rather than stopping after one task merely because a role already produced useful work.
 
@@ -457,7 +457,9 @@ Worker identity and independence restrictions remain in force throughout multi-r
 
 For recurring Workers #1–#5, the next scheduled starting point should follow the **last role in which useful work was actually performed** during the preceding completed run. If the preceding Worker made no eligible progress in any role, the unresolved starting point is preserved rather than falsely consuming empty roles.
 
-When Worker #6 performs project work, it uses normal claims and audit records but never consumes, advances, reserves, or rewrites the recurring schedule cursor. Its changes are discovered by scheduled Workers through normal GitHub state re-fetch and claim/dependency checks.
+When Worker #6 or Worker #7 performs project work, it uses normal claims and audit records but never consumes, advances, reserves, or rewrites the recurring schedule cursor. Their changes are discovered by scheduled and manual Workers through normal GitHub state re-fetch and claim/dependency checks.
+
+Worker #6 and Worker #7 are independent identities from each other. Either may independently verify the other's prior work when acting as Tester and when all normal verification requirements are satisfied, but neither may independently verify or approve its own prior work.
 
 Multiple Workers may overlap in time. Claims, dependency rules, committed-state checks, NVIDIA ownership, and independent-verification rules remain responsible for preventing duplicate work, self-approval, and unsafe concurrency.
 
