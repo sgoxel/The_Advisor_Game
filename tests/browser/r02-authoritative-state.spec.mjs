@@ -10,7 +10,7 @@ async function waitForAuthorityBoundary(page) {
   ));
 }
 
-test('authoritative boundary captures only the current simulation-owned R02 envelope', async ({ page }) => {
+test('authoritative boundary captures only current simulation-owned R02 truth', async ({ page }) => {
   await waitForAuthorityBoundary(page);
 
   const evidence = await page.evaluate(() => {
@@ -23,11 +23,21 @@ test('authoritative boundary captures only the current simulation-owned R02 enve
       seedMatches: snapshot.world.seed === String(runtime.world.seed),
       rowsMatch: snapshot.world.rows === runtime.world.rows,
       colsMatch: snapshot.world.cols === runtime.world.cols,
-      playerMatches: snapshot.world.player.row === runtime.world.player.row && snapshot.world.player.col === runtime.world.player.col,
+      protagonistMatches:
+        snapshot.world.protagonist.row === runtime.world.player.row &&
+        snapshot.world.protagonist.col === runtime.world.player.col,
       rootKeys: Object.keys(snapshot).sort(),
       worldKeys: Object.keys(snapshot.world).sort(),
-      playerKeys: Object.keys(snapshot.world.player).sort(),
-      frozen: Object.isFrozen(snapshot) && Object.isFrozen(snapshot.world) && Object.isFrozen(snapshot.world.player) && Object.isFrozen(snapshot.world.terrain),
+      protagonistKeys: Object.keys(snapshot.world.protagonist).sort(),
+      firstTileKeys: Object.keys(snapshot.world.terrain[0][0]).sort(),
+      frozen:
+        Object.isFrozen(snapshot) &&
+        Object.isFrozen(snapshot.world) &&
+        Object.isFrozen(snapshot.world.protagonist) &&
+        Object.isFrozen(snapshot.world.terrain) &&
+        Object.isFrozen(snapshot.world.terrain[0]) &&
+        Object.isFrozen(snapshot.world.terrain[0][0]) &&
+        Object.isFrozen(snapshot.world.terrain[0][0].tags),
       hasMutationApi: ['set', 'apply', 'commit', 'replace', 'update'].some((name) => typeof api[name] === 'function')
     };
   });
@@ -37,15 +47,16 @@ test('authoritative boundary captures only the current simulation-owned R02 enve
   expect(evidence.seedMatches).toBe(true);
   expect(evidence.rowsMatch).toBe(true);
   expect(evidence.colsMatch).toBe(true);
-  expect(evidence.playerMatches).toBe(true);
+  expect(evidence.protagonistMatches).toBe(true);
   expect(evidence.rootKeys).toEqual(['authority', 'schemaVersion', 'world']);
-  expect(evidence.worldKeys).toEqual(['cols', 'params', 'player', 'rows', 'seed', 'terrain', 'tileHeight', 'tileWidth']);
-  expect(evidence.playerKeys).toEqual(['col', 'direction', 'row']);
+  expect(evidence.worldKeys).toEqual(['cols', 'protagonist', 'rows', 'seed', 'terrain']);
+  expect(evidence.protagonistKeys).toEqual(['col', 'row']);
+  expect(evidence.firstTileKeys).toEqual(['blocked', 'elevation', 'obstacle', 'tags', 'type']);
   expect(evidence.frozen).toBe(true);
   expect(evidence.hasMutationApi).toBe(false);
 });
 
-test('presentation, cache and transient input fields cannot enter authoritative state', async ({ page }) => {
+test('presentation and derived R01 fields cannot become authoritative state', async ({ page }) => {
   await waitForAuthorityBoundary(page);
 
   const comparison = await page.evaluate(() => {
@@ -55,12 +66,16 @@ test('presentation, cache and transient input fields cannot enter authoritative 
     const candidate = {
       world: {
         ...state.world,
+        tileWidth: state.world.tileWidth + 1000,
+        tileHeight: state.world.tileHeight + 1000,
+        params: { injected: 'derived-only' },
         selected: { row: 1, col: 1 },
         hover: { row: 2, col: 2 },
         previewPath: [{ row: 3, col: 3 }],
         player: {
           ...state.world.player,
           moving: true,
+          direction: 'n',
           pathQueue: [{ row: 4, col: 4 }],
           progress: 0.25
         }
@@ -74,27 +89,25 @@ test('presentation, cache and transient input fields cannot enter authoritative 
     const normalized = api.normalize(candidate);
     return {
       equal: api.canonicalStringify(candidate) === baseline,
-      selectedPresent: Object.prototype.hasOwnProperty.call(normalized.world, 'selected'),
-      hoverPresent: Object.prototype.hasOwnProperty.call(normalized.world, 'hover'),
-      previewPresent: Object.prototype.hasOwnProperty.call(normalized.world, 'previewPath'),
-      movingPresent: Object.prototype.hasOwnProperty.call(normalized.world.player, 'moving'),
-      queuePresent: Object.prototype.hasOwnProperty.call(normalized.world.player, 'pathQueue'),
+      worldKeys: Object.keys(normalized.world),
+      protagonistKeys: Object.keys(normalized.world.protagonist),
       cameraPresent: Object.prototype.hasOwnProperty.call(normalized, 'camera'),
       renderPresent: Object.prototype.hasOwnProperty.call(normalized, 'render')
     };
   });
 
   expect(comparison.equal).toBe(true);
-  expect(comparison.selectedPresent).toBe(false);
-  expect(comparison.hoverPresent).toBe(false);
-  expect(comparison.previewPresent).toBe(false);
-  expect(comparison.movingPresent).toBe(false);
-  expect(comparison.queuePresent).toBe(false);
+  for (const derived of ['tileWidth', 'tileHeight', 'params', 'selected', 'hover', 'previewPath', 'player']) {
+    expect(comparison.worldKeys).not.toContain(derived);
+  }
+  for (const transient of ['moving', 'direction', 'pathQueue', 'progress']) {
+    expect(comparison.protagonistKeys).not.toContain(transient);
+  }
   expect(comparison.cameraPresent).toBe(false);
   expect(comparison.renderPresent).toBe(false);
 });
 
-test('equivalent inputs normalize and canonicalize deterministically', async ({ page }) => {
+test('terrain semantics and equivalent inputs canonicalize deterministically', async ({ page }) => {
   await waitForAuthorityBoundary(page);
 
   const result = await page.evaluate(() => {
@@ -103,24 +116,20 @@ test('equivalent inputs normalize and canonicalize deterministically', async ({ 
       seed: 42,
       rows: '2',
       cols: 2,
-      tileWidth: '48',
-      tileHeight: 24,
-      params: { zeta: 2, alpha: { y: 2, x: 1 } },
+      tileWidth: 48,
+      params: { ignored: true },
       terrain: [
-        [{ type: 'grass', elevation: '1' }, { type: 'forest', elevation: 2 }],
-        [{ type: 'road', elevation: 1 }, { type: 'lake', elevation: '0' }]
+        [{ type: 'grass', elevation: '1', tags: new Set(['road', 'safe', 'road']) }, { type: 'forest', elevation: 2, tags: ['blocked', 'forest'] }],
+        [{ type: 'road', elevation: 1, obstacle: true }, { type: 'lake', elevation: '0', blocked: true }]
       ],
-      player: { row: '1', col: 0, direction: 'e' }
+      player: { row: '9', col: -4, direction: 'e' }
     };
     const b = {
-      player: { direction: 'e', col: 0, row: 1, moving: true },
+      protagonist: { col: 0, row: 1 },
       terrain: [
-        [{ elevation: 1, type: 'grass', decoration: 'ignored' }, { elevation: 2, type: 'forest' }],
-        [{ elevation: 1, type: 'road' }, { elevation: 0, type: 'lake' }]
+        [{ elevation: 1, type: 'grass', tags: ['safe', 'road'], decoration: 'ignored' }, { tags: ['forest', 'blocked'], elevation: 2, type: 'forest' }],
+        [{ obstacle: true, elevation: 1, type: 'road' }, { blocked: true, elevation: 0, type: 'lake' }]
       ],
-      params: { alpha: { x: 1, y: 2 }, zeta: 2 },
-      tileHeight: 24,
-      tileWidth: 48,
       cols: '2',
       rows: 2,
       seed: '42',
@@ -129,11 +138,18 @@ test('equivalent inputs normalize and canonicalize deterministically', async ({ 
     return {
       canonicalA: api.canonicalStringify(a),
       canonicalB: api.canonicalStringify(b),
+      normalizedA: api.normalize(a),
       normalizedEmpty: api.normalize({})
     };
   });
 
   expect(result.canonicalA).toBe(result.canonicalB);
+  expect(result.normalizedA.world.protagonist).toEqual({ row: 1, col: 0 });
+  expect(result.normalizedA.world.terrain[0][0]).toEqual({
+    type: 'grass', elevation: 1, tags: ['road', 'safe'], blocked: false, obstacle: false
+  });
+  expect(result.normalizedA.world.terrain[1][0].obstacle).toBe(true);
+  expect(result.normalizedA.world.terrain[1][1].blocked).toBe(true);
   expect(result.normalizedEmpty).toEqual({
     schemaVersion: 1,
     authority: 'simulation',
@@ -141,11 +157,8 @@ test('equivalent inputs normalize and canonicalize deterministically', async ({ 
       seed: '',
       rows: 0,
       cols: 0,
-      tileWidth: 0,
-      tileHeight: 0,
-      params: null,
       terrain: [],
-      player: { row: 0, col: 0, direction: 's' }
+      protagonist: { row: 0, col: 0 }
     }
   });
 });
