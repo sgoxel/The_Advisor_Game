@@ -1,14 +1,27 @@
 import { test, expect } from '@playwright/test';
 
+const EXPECTED_OPTIONAL_MAP_404S = [
+  '/map/ISOMETRIC_MAP_30032026.js',
+  '/map/ISOMETRIC_MAP_30032026/ISOMETRIC_MAP_30032026.js',
+  '/map/map.js'
+];
+
 async function waitForStrategicMap(page) {
   await page.goto('./');
-  await page.waitForFunction(() => Boolean(
-    window.Game?.State?.world?.terrain?.length &&
-    window.Game?.State?.world?.player &&
-    window.Game?.State?.dom?.canvas &&
-    window.Game?.Renderer?.pickTile &&
-    document.getElementById('r01-current-location')
-  ));
+  await page.waitForFunction(() => {
+    const game = window.Game;
+    const canvas = game?.State?.dom?.canvas;
+    return Boolean(
+      game?.State?.world?.terrain?.length &&
+      game?.State?.world?.player &&
+      canvas?.isConnected &&
+      canvas.clientWidth > 0 &&
+      canvas.clientHeight > 0 &&
+      game?.Renderer?.pickTile &&
+      document.getElementById('r01-current-location')
+    );
+  });
+  await expect(page.locator('#gameCanvas')).toBeVisible();
 }
 
 async function findInspectableCanvasPoint(page) {
@@ -34,11 +47,29 @@ async function findInspectableCanvasPoint(page) {
   });
 }
 
+function isExpectedOptionalMap404(message) {
+  if (message.type() !== 'error') return false;
+
+  const text = message.text();
+  const locationUrl = message.location().url || '';
+  if (!text.includes('Failed to load resource') || !text.includes('404')) return false;
+
+  try {
+    const pathname = new URL(locationUrl).pathname;
+    return EXPECTED_OPTIONAL_MAP_404S.includes(pathname);
+  } catch {
+    return false;
+  }
+}
+
 function collectRuntimeFailures(page) {
   const failures = [];
   page.on('pageerror', (error) => failures.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') failures.push(`console.error: ${message.text()}`);
+    if (message.type() === 'error' && !isExpectedOptionalMap404(message)) {
+      const locationUrl = message.location().url;
+      failures.push(`console.error: ${message.text()}${locationUrl ? ` @ ${locationUrl}` : ''}`);
+    }
   });
   return failures;
 }
