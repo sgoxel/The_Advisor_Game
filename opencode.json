@@ -7,7 +7,14 @@
       "name": "NVIDIA NIM",
       "options": {
         "baseURL": "https://integrate.api.nvidia.com/v1",
-        "apiKey": "{env:NVIDIA_API_KEY}"
+        "apiKey": "{env:NVIDIA_API_KEY}",
+        "timeout": 600000,
+        "chunkTimeout": 60000,
+        "extraBody": {
+          "chat_template_kwargs": {
+            "force_nonempty_content": true
+          }
+        }
       },
       "models": {
         "nvidia/nemotron-3-super-120b-a12b": {
@@ -24,12 +31,14 @@
     "build": {
       "temperature": 1.0,
       "top_p": 0.95,
-      "max_tokens": 32000
+      "max_tokens": 32000,
+      "reasoningEffort": "high"
     },
     "plan": {
       "temperature": 1.0,
       "top_p": 0.95,
-      "max_tokens": 32000
+      "max_tokens": 32000,
+      "reasoningEffort": "high"
     }
   }
 }
