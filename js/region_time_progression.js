@@ -2,7 +2,7 @@
 (function installRegionTimeProgression() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r02-region-time-progression-v3';
+  const VERSION = 'r02-region-time-progression-v4';
   const COARSE_STEP_MINUTES = 60;
 
   function requireDependencies() {
@@ -11,6 +11,9 @@
     if (!Game.WorldHierarchy?.refinementInput || !Game.WorldHierarchy?.materializeLocal) throw new Error('WorldHierarchy is required before region time progression.');
     if (!Game.PoliticalGeography?.baseRegion || !Game.PoliticalGeography?.resolveCurrent) throw new Error('PoliticalGeography is required before region time progression.');
     if (!Game.SettlementEvolution?.advance || !Game.SettlementEvolution?.materializationInput) throw new Error('SettlementEvolution is required before region time progression.');
+    if (!Game.RelevanceBoundedCompute?.prepare || !Game.RelevanceBoundedCompute?.compute || !Game.RelevanceBoundedCompute?.acceptResult) {
+      throw new Error('RelevanceBoundedCompute is required before region time progression.');
+    }
     if (!Game.WorldDeltaPersistence?.capture || !Game.WorldDeltaPersistence?.setRegionFlag || !Game.WorldDeltaPersistence?.reconstructRegion) {
       throw new Error('WorldDeltaPersistence is required before region time progression.');
     }
@@ -34,10 +37,18 @@
 
   function currentGameMinute() { return Number(campaignSnapshot().totalGameMinutes); }
   function seed() { return String(Game.State?.world?.seed ?? ''); }
+  function schedulingEpoch(regionX, regionY) { return `region:${seed()}:${regionX}:${regionY}`; }
+  function schedulingRevision(targetGameMinute) { return Math.max(0, Math.round(Number(targetGameMinute) * 1000)); }
 
   function persistedRegion(regionX, regionY) {
     const captured = Game.WorldDeltaPersistence.capture(seed());
     return captured.regions.find((region) => Number(region.regionX) === regionX && Number(region.regionY) === regionY) || null;
+  }
+
+  function schedulingStateFromFlags(regionX, regionY, flags = {}) {
+    const stored = flags.regionTimeSchedulingState;
+    if (stored && stored.authority === 'simulation' && stored.authorityEpoch === schedulingEpoch(regionX, regionY)) return stored;
+    return Game.RelevanceBoundedCompute.initialCommitState(schedulingEpoch(regionX, regionY));
   }
 
   function progressionFrom(regionX, regionY) {
@@ -54,7 +65,8 @@
       coarseTicks: Number(flags.regionTimeCoarseTicks || 0) || 0,
       hierarchy: flags.regionTimeHierarchy || null,
       politicalGeography: flags.regionTimePoliticalGeography || null,
-      settlementEvolution: flags.regionTimeSettlementEvolution || null
+      settlementEvolution: flags.regionTimeSettlementEvolution || null,
+      relevanceBoundedScheduling: flags.regionTimeSchedulingState || null
     });
   }
 
@@ -101,10 +113,43 @@
   function contextFor(regionX, regionY, campaignMinutes) {
     const flags = persistedRegion(regionX, regionY)?.flags || {};
     return Object.freeze({
+      flags,
       hierarchy: hierarchyFor(regionX, regionY, campaignMinutes, flags),
       political: politicalFor(regionX, regionY, flags),
       settlement: settlementFor(regionX, regionY, campaignMinutes, flags)
     });
+  }
+
+  function prepareInactiveReconciliation(regionXInput, regionYInput, targetGameMinuteInput = null, options = {}) {
+    requireDependencies();
+    const { regionX, regionY } = coordinates(regionXInput, regionYInput);
+    const target = targetGameMinuteInput === null ? currentGameMinute() : Number(targetGameMinuteInput);
+    if (!Number.isFinite(target) || target < 0) throw new TypeError('Target game minute must be non-negative and finite.');
+    const prior = progressionFrom(regionX, regionY);
+    const baseline = prior.lastSimulatedGameMinute === null ? target : prior.lastSimulatedGameMinute;
+    if (target < baseline) throw new RangeError('Region time cannot move backwards.');
+    const flags = persistedRegion(regionX, regionY)?.flags || {};
+    return Game.RelevanceBoundedCompute.prepare(seed(), regionX, regionY, {
+      authorityEpoch: schedulingEpoch(regionX, regionY),
+      authorityRevision: schedulingRevision(target),
+      priorCampaignMinutes: baseline,
+      targetCampaignMinutes: target,
+      irrelevantRegionCount: options.irrelevantRegionCount ?? flags.regionTimeIrrelevantRegionCount ?? 0,
+      meaningfulEvents: options.meaningfulEvents ?? flags.regionMeaningfulEvents ?? [],
+      persistentChanges: flags,
+      politicalHistory: flags.regionPoliticalHistory || flags.politicalHistory || {},
+      priorSettlementState: flags.regionTimeSettlementEvolution || null
+    });
+  }
+
+  function acceptInactiveReconciliation(regionXInput, regionYInput, candidate) {
+    requireDependencies();
+    const { regionX, regionY } = coordinates(regionXInput, regionYInput);
+    const flags = persistedRegion(regionX, regionY)?.flags || {};
+    const currentState = schedulingStateFromFlags(regionX, regionY, flags);
+    const decision = Game.RelevanceBoundedCompute.acceptResult(currentState, candidate);
+    if (decision.accepted) Game.WorldDeltaPersistence.setRegionFlag(regionX, regionY, 'regionTimeSchedulingState', decision.state);
+    return decision;
   }
 
   function writeProgression(regionX, regionY, next) {
@@ -151,6 +196,9 @@
     const elapsed = target - baseline;
     const coarseTicks = prior.coarseTicks + Math.floor(elapsed / COARSE_STEP_MINUTES);
     const context = contextFor(regionX, regionY, target);
+    const schedulingJob = prepareInactiveReconciliation(regionX, regionY, target);
+    const schedulingResult = Game.RelevanceBoundedCompute.compute(schedulingJob);
+    const schedulingDecision = acceptInactiveReconciliation(regionX, regionY, schedulingResult);
     const progression = writeProgression(regionX, regionY, {
       mode: 'inactive-aggregate', lastSimulatedGameMinute: target,
       totalElapsedGameMinutes: prior.totalElapsedGameMinutes + elapsed,
@@ -167,7 +215,16 @@
       materializedLocalEntities: 0,
       hierarchy: context.hierarchy.compact,
       politicalGeography: context.political,
-      settlementEvolution: context.settlement?.state || null
+      settlementEvolution: context.settlement?.state || null,
+      relevanceBoundedScheduling: Object.freeze({
+        accepted: schedulingDecision.accepted,
+        reason: schedulingDecision.reason,
+        authorityRevision: schedulingResult.authorityRevision,
+        resultFingerprint: schedulingResult.resultFingerprint,
+        workAccounting: schedulingResult.workAccounting,
+        boundedCatchUp: schedulingResult.boundedCatchUp,
+        presentationAuthority: false
+      })
     });
   }
 
@@ -203,6 +260,7 @@
       politicalGeography: context.political,
       settlementEvolution: context.settlement?.state || null,
       settlementMaterialization: context.settlement?.materialization || null,
+      relevanceBoundedScheduling: progressed.relevanceBoundedScheduling,
       local,
       region: reconstructed,
       presentationAuthority: false
@@ -214,6 +272,7 @@
 
   Game.RegionTimeProgression = Object.freeze({
     version: VERSION, authority: 'simulation', coarseStepMinutes: COARSE_STEP_MINUTES,
-    markActive, progressInactive, catchUpInactive, leaveActiveRegion, materializeRelevantRegion, returnToRegion, capture
+    markActive, progressInactive, catchUpInactive, leaveActiveRegion, materializeRelevantRegion, returnToRegion, capture,
+    prepareInactiveReconciliation, acceptInactiveReconciliation
   });
 })();
