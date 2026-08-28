@@ -4,7 +4,7 @@
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
   "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-28-relevance-bounded-lazy-mobile-performance",
-  "planning_basis": "Planner-owned decomposition reconciled through #105, #118, #132, #137, #139 and #143 after Admin README updates #103, #106, #117, #131, #136, #138 and #142. Compatible verified work remains preserved; completed region navigation, game-time, real-world-origin fantasy calendar, NPC-life, settlement/environment, ecology, Designer, unbounded-world regression, hierarchical-state and political-geography foundations are reused rather than reopened. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
+  "planning_basis": "Planner-owned decomposition reconciled through #105, #118, #132, #137, #139 and #143 after Admin README updates #103, #106, #117, #131, #136, #138 and #142. Compatible verified work remains preserved; completed region navigation, game-time, real-world-origin fantasy calendar, NPC-life, settlement/environment, ecology, Designer, unbounded-world regression, hierarchical-state, political-geography and settlement-evolution foundations are reused rather than reopened. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
   "readme_reconciliation": {
     "readme_commit": "9325b9079a94c3508bff39b3d0379490318edb39",
     "admin_issues": [103, 106, 117, 131, 136, 138, 142],
@@ -65,10 +65,10 @@
       "completed #127 ecology foundation",
       "completed #128 day/night, settlement and ecology Designer foundation",
       "completed #134 compact global-to-local hierarchical state/refinement foundation",
-      "completed #140 compact SEED-derived political-geography foundation"
+      "completed #140 compact SEED-derived political-geography foundation",
+      "completed corrected #141 compact settlement-evolution foundation with independent T-REV retest"
     ],
     "ADAPT": [
-      "#141 compact settlement-evolution implementation through its active deterministic elapsed-time T-REV without broadening later-phase settlement mechanics",
       "#124 off-screen progression into a relevance-bounded hierarchical global-to-local integration consuming #133, #134, #140, #141 and #144",
       "existing persistence into SEED base + fantasy campaign date/time + hierarchical progression + settlement-development/political-history state + sparse persistent changes",
       "existing region activation so later materialization composes elapsed fantasy campaign time, settlement development and political/territorial history while preserving #113 verified spatial continuity",
@@ -125,7 +125,7 @@
       "status": "active",
       "phase_issue": 82,
       "phase_gate_issue": 93,
-      "release_gate": "Preserve verified seed/save/world/navigation/time/composition/NPC/ecology/Designer/hierarchy/political foundations while establishing the README-defined real-world-origin fantasy chronology, compact settlement-development history, relevance-bounded high-detail active vs unticked/lazy inactive-world computation, deterministic asynchronous-capable catch-up/materialization, persistent deltas and coherent living-map presentation. Invisible-world continuous work must not scale with total world size; stale/asynchronous work must not alter authority. Representative phone/tablet browser conditions are included in cumulative performance-sensitive validation. Independent phase verification required before R03."
+      "release_gate": "Preserve verified seed/save/world/navigation/time/composition/NPC/ecology/Designer/hierarchy/political/settlement foundations while establishing the README-defined real-world-origin fantasy chronology, relevance-bounded high-detail active vs unticked/lazy inactive-world computation, deterministic asynchronous-capable catch-up/materialization, persistent deltas and coherent living-map presentation. Invisible-world continuous work must not scale with total world size; stale/asynchronous work must not alter authority. Representative phone/tablet browser conditions are included in cumulative performance-sensitive validation. Independent phase verification required before R03."
     },
     {
       "id": "R03",
