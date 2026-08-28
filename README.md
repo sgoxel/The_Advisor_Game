@@ -214,9 +214,11 @@ Advisor Trust is especially important: useful advice may increase influence; man
 
 As the character's responsibility expands, the game may include resources, population, prosperity, stability, legitimacy, production, trade, buildings, settlement development, and military readiness.
 
+Settlement development is part of authoritative campaign history rather than a presentation-only upgrade track. Population, prosperity, security, trade, resources, hazards, construction, destruction, war and other simulation-backed pressures may cause a settlement to grow, decline, recover, change function, fortify, lose structures, become abandoned or ruined, or otherwise change materially over campaign time.
+
 The player analyzes and advises; autonomous characters with legitimate authority make decisions.
 
-Settlement scale may grow from villages to towns, cities, castles, capitals, and imperial centers.
+Settlement scale may grow from villages to towns, cities, castles, capitals, and imperial centers when authoritative circumstances support that evolution; the game is not required to force every settlement through the same growth path.
 
 ## 🤝 Diplomacy and Autonomous Factions
 Factions have leaders, needs, memories, relationships, territory, incomplete knowledge, and political objectives.
@@ -296,6 +298,16 @@ The world must support multiple visually and functionally distinct settlement ar
 Settlement types may include small rural villages, farming villages, forest villages, mining or production villages, roadside and trade settlements, frontier villages, border villages, fortified villages, abandoned or ruined villages, towns, market towns, fortified towns, large cities, castle settlements, capitals, and other regionally appropriate settlement forms.
 
 Settlement appearance, layout, buildings, population, professions, resources, roads, defenses, prosperity, hazards, and surrounding environment should reflect settlement type, geography, region, history, and campaign state.
+
+### 🏗️ Settlement Evolution and Historical Change
+
+Settlements are not permanently frozen versions of their initial SEED-generated templates. Authoritative campaign time and simulation history may change their population, prosperity, security, economy, role, buildings, defenses, infrastructure, ownership, damage, abandonment status and relationship to nearby routes or settlements.
+
+A settlement may remain stable, expand, contract, recover, fortify, change economic function, become damaged, partially rebuilt, abandoned, ruined, repopulated, or otherwise evolve when authoritative causes support that outcome. Growth from a village toward a town or city is possible but is not automatic or universal; decline is equally possible.
+
+When settlement detail is visible or otherwise relevant, its materialized buildings, infrastructure, population and local conditions must be compatible with its accumulated authoritative state. A settlement that has experienced major growth, war damage, abandonment, reconstruction or another meaningful historical change must not simply reappear as its untouched original template.
+
+Off-screen settlement evolution must remain performance-conscious. Distant settlements may retain compact authoritative development state and aggregate consequences instead of continuously simulating every resident, building or construction step. When they become relevant, higher-detail state is materialized from the compatible SEED base plus elapsed campaign time, hierarchical outcomes and persistent historical changes.
 
 As the protagonist progresses from Peasant toward noble, royal, and eventually imperial authority, the spatial and political scale of play must expand naturally from local village life toward towns, cities, kingdoms, and multiple realms without replacing the living strategic world with menu-only gameplay.
 
@@ -396,7 +408,7 @@ Off-screen and large-scale simulation follows a **general-to-specific hierarchy*
 
 The simulation may represent the same authoritative world at progressively different resolution, including **global/world → realm/country → region → settlement → local active world**, while especially important entities or events may retain more detail when their relevance justifies it.
 
-Distant layers should preserve the big picture with compact authoritative state rather than full local materialization. Depending on later systems, this may include aggregate population trends, prosperity, food/resources, security, trade, military pressure, diplomacy, unrest, migration, hazards, major events, territorial control, and other meaningful balances.
+Distant layers should preserve the big picture with compact authoritative state rather than full local materialization. Depending on later systems, this may include aggregate population trends, prosperity, food/resources, security, trade, military pressure, diplomacy, unrest, migration, hazards, major events, territorial control, settlement-development state, political geography changes and other meaningful balances.
 
 Broad world or realm outcomes may influence regions and settlements below them. Significant local or settlement outcomes may in turn update regional, realm, or global aggregates. This propagation must preserve readable causality rather than create disconnected random results.
 
@@ -417,6 +429,18 @@ The complete world is not one finite displayed map. The strategic tile area curr
 A compatible SEED, world coordinates, and compatible world-generation rules must reproduce the same unmodified base world at the same coordinates.
 
 For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: settlement archetypes and layouts including villages, towns, cities and fortified/castle locations where appropriate; roads, paths and bridges; major buildings and landmarks; surrounding terrain and biomes; local population generation; habitat/ecology foundations; important world locations; and other deterministic base-world features.
+
+### 🏰 SEED-Derived Political Geography
+
+The compatible SEED and world-generation rules must also support a coherent **base political geography** for the wider world where political organization is applicable. This may include realms or countries, regions or provinces, territorial relationships and borders, settlement affiliation, major political centers and other large-scale spatial identity required for later faction, diplomacy, war and sovereign gameplay.
+
+Base political geography must be spatially coherent with the same generated world. Terrain, mountain ranges, rivers, coasts, routes, settlements, strategic locations and neighboring generated regions should be able to influence or constrain plausible territorial structure rather than producing disconnected random labels or political maps unrelated to geography.
+
+Compatible SEED + coordinates + compatible generation rules must reproduce the same unchanged base political geography just as they reproduce other base-world features. Political geography may be represented compactly until relevant and does not require all borders, settlements or political entities to be fully materialized at local detail.
+
+The SEED defines the **base** political world, not an immutable eternal map. Campaign history may change settlement ownership, territorial control, borders, political relationships, capitals, realm composition or other authoritative political state. When such changes occur, accumulated hierarchical simulation and persistent campaign history override the unchanged SEED base while preserving causal continuity.
+
+Regional, realm/country and wider-world strategic views must present this same authoritative evolving geography rather than inventing independent presentation-only borders or affiliations.
 
 ### 🧭 World Coordinates and Regional Continuity
 
@@ -440,11 +464,11 @@ Terrain, biomes, vegetation, water, roads, bridges, settlements, landmarks, habi
 
 ### 💾 Persistent Changes over a Regenerable Base World
 
-The deterministic SEED-generated world is the reproducible base state. Unchanged generated terrain, buildings, vegetation, objects, and other deterministic base-world content do not need separate permanent campaign copies merely because they were visited or rendered.
+The deterministic SEED-generated world is the reproducible base state. Unchanged generated terrain, buildings, vegetation, objects, political geography and other deterministic base-world content do not need separate permanent campaign copies merely because they were visited or rendered.
 
 Campaign persistence must preserve authoritative differences from that generated base world wherever persistent change is required.
 
-Objects, entities, locations, relationships, discoveries, damage, construction, ownership, resource use, inventory-affecting world interactions, time-dependent consequences, or other meaningful simulation consequences caused or influenced by campaign events must not silently reset when their region leaves the active view or when the campaign is saved and loaded.
+Objects, entities, locations, relationships, discoveries, damage, construction, ownership, territorial control, borders, settlement development, resource use, inventory-affecting world interactions, time-dependent consequences, or other meaningful simulation consequences caused or influenced by campaign events must not silently reset when their region leaves the active view or when the campaign is saved and loaded.
 
 Returning to previously visited coordinates must therefore reconstruct the current campaign world from the deterministic base world plus authoritative persistent changes and applicable elapsed-time, hierarchical, and off-screen progression.
 
@@ -511,6 +535,8 @@ Presentation may adapt to device capability, but visual quality scaling must nev
 33. **Materialize detail only when it matters.** Unvisited or distant areas should remain compact and lazily reconstruct higher-detail state from SEED, coordinates, campaign date/time, accumulated simulation outcomes and persistent history when they become relevant.
 34. **The same living world supports local and big-picture views.** Regional, realm/country and wider-world strategic views summarize authoritative aggregate state rather than creating disconnected substitute worlds.
 35. **A new fantasy campaign starts from the accepted real-world date and time.** Day, month and time-of-day match the real-world creation origin, while the fantasy year is exactly 2000 years behind; after creation, accelerated campaign chronology advances from that origin and resume uses elapsed real time rather than remapping the campaign to the current civil calendar.
+36. **Settlements have history, not frozen templates.** Authoritative time and simulation outcomes may grow, shrink, damage, rebuild, repurpose, fortify, abandon or otherwise change settlements; later materialization must reflect accumulated development rather than reset to the original SEED layout.
+37. **The SEED defines coherent base political geography as well as physical geography.** Realms/countries, regions/provinces, borders/territorial relationships and settlement affiliations may be generated as reproducible base-world structure and then evolve through authoritative campaign history.
 
 ---
 
