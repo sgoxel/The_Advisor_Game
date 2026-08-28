@@ -73,6 +73,45 @@ test('higher-level aggregate state constrains refinement without full local mate
   expect(evidence.local.presentationAuthority).toBe(false);
 });
 
+test('aggregate bounds hold for signed-XOR and representative hierarchy inputs', async ({ page }) => {
+  await waitForHierarchy(page);
+  const evidence = await page.evaluate(() => {
+    const h = window.Game.WorldHierarchy;
+    const samples = [];
+    for (const seed of ['hierarchy-seed', 'range-seed-a', 'range-seed-b']) {
+      for (const day of [0, 1, 37, 365, 4096]) {
+        const minutes = day * 1440 + 480;
+        const r = h.refinementInput(seed, day - 100, 100 - day, minutes, {});
+        samples.push(r.world.aggregate, r.realm.aggregate, r.region.aggregate);
+        if (r.settlement) samples.push(r.settlement.aggregate);
+      }
+    }
+    return {
+      repro: h.worldState('hierarchy-seed', 1440 * 37 + 480).aggregate.populationTrend,
+      samples
+    };
+  });
+
+  expect(evidence.repro).toBeGreaterThanOrEqual(-3);
+  expect(evidence.repro).toBeLessThanOrEqual(5);
+  for (const aggregate of evidence.samples) {
+    expect(aggregate.populationTrend).toBeGreaterThanOrEqual(-3);
+    expect(aggregate.populationTrend).toBeLessThanOrEqual(5);
+    expect(aggregate.prosperity).toBeGreaterThanOrEqual(20);
+    expect(aggregate.prosperity).toBeLessThanOrEqual(90);
+    expect(aggregate.resources).toBeGreaterThanOrEqual(15);
+    expect(aggregate.resources).toBeLessThanOrEqual(95);
+    expect(aggregate.security).toBeGreaterThanOrEqual(20);
+    expect(aggregate.security).toBeLessThanOrEqual(95);
+    expect(aggregate.trade).toBeGreaterThanOrEqual(10);
+    expect(aggregate.trade).toBeLessThanOrEqual(90);
+    expect(aggregate.militaryPressure).toBeGreaterThanOrEqual(0);
+    expect(aggregate.militaryPressure).toBeLessThanOrEqual(75);
+    expect(aggregate.unrest).toBeGreaterThanOrEqual(0);
+    expect(aggregate.unrest).toBeLessThanOrEqual(65);
+  }
+});
+
 test('significant local outcomes expose deterministic upward aggregate signals', async ({ page }) => {
   await waitForHierarchy(page);
   const evidence = await page.evaluate(() => {
