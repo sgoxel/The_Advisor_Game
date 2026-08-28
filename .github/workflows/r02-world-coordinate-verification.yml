@@ -4,11 +4,13 @@ on:
   push:
     branches: [main]
     paths:
+      - 'js/config.js'
       - 'js/rng.js'
       - 'tests/browser/r02-world-coordinate-contract.spec.mjs'
       - '.github/workflows/r02-world-coordinate-verification.yml'
   pull_request:
     paths:
+      - 'js/config.js'
       - 'js/rng.js'
       - 'tests/browser/r02-world-coordinate-contract.spec.mjs'
       - '.github/workflows/r02-world-coordinate-verification.yml'
