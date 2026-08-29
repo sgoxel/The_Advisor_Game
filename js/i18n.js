@@ -106,6 +106,17 @@ window.Game = window.Game || {};
   function applyTranslations(root) {
     const scope = root || document;
 
+    // Legacy markup still renders the main-menu button without a data-i18n
+    // attribute. Keep it on the same locale source as the rest of the header
+    // until that markup is migrated, instead of leaving a hard-coded English
+    // label after the authoritative language state changes.
+    const mainMenuButton = scope === document
+      ? document.getElementById("mainMenuBtn")
+      : scope.querySelector?.("#mainMenuBtn");
+    if (mainMenuButton) {
+      mainMenuButton.textContent = t("header.mainMenu");
+    }
+
     scope.querySelectorAll("[data-i18n]").forEach((node) => {
       const key = node.getAttribute("data-i18n");
       const value = t(key);
