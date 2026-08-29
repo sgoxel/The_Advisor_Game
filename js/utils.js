@@ -61,6 +61,19 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   window.Game.Utils.loadScriptOnce("js/starter_village_runtime_terrain.js", "r04StarterVillageRuntimeTerrainModule");
 }
 
+// #301: the semantic Road presentation and its final render-chain bridge are startup-critical.
+// Loading them with the compatibility queue made their execution race the statically parsed
+// Renderer/app scripts in the real public startup path. Parser-load them deterministically;
+// both modules already defer actual Renderer/world work until DOM/load readiness and remain
+// presentation-only. The fallback branch preserves non-parser embedding/test compatibility.
+if (typeof document !== "undefined" && document.readyState === "loading") {
+  document.write('<script id="r04StarterVillageRoadsModule" src="js/starter_village_roads.js"><\/script>');
+  document.write('<script id="r04RoadRuntimeBridgeModule" src="js/road_runtime_bridge.js"><\/script>');
+} else {
+  window.Game.Utils.loadScriptOnce("js/starter_village_roads.js", "r04StarterVillageRoadsModule");
+  window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
+}
+
 // R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 window.Game.Utils.loadScriptOnce("js/world_object_renderer.js", "r04WorldObjectRendererModule");
@@ -83,18 +96,12 @@ window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeogr
 window.Game.Utils.loadScriptOnce("js/settlement_evolution.js", "r02SettlementEvolutionModule");
 window.Game.Utils.loadScriptOnce("js/relevance_bounded_compute.js", "r02RelevanceBoundedComputeModule");
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
-window.Game.Utils.loadScriptOnce("js/starter_village_roads.js", "r04StarterVillageRoadsModule");
 window.Game.Utils.loadScriptOnce("js/starter_village_exteriors.js", "r04StarterVillageExteriorsModule");
 
 // Loaded after NPC life/presentation modules so it can add deterministic tile occupancy,
 // route-conflict resolution, adjacent dialogue and development bubbles without duplicating
 // the existing character-world-icon implementation.
 window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatialRuntimeModule");
-
-// Final production-startup integration bridge. It waits until page load before wrapping
-// Renderer, so semantic roads remain visible even when later compatibility modules add
-// their own render wrappers.
-window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
 
 // Final Simulation-integration bridge for NPC positions. It attaches after the compatibility
 // wrappers and restores NPCSpatial authority if an older renderer wrapper drifts coordinates
