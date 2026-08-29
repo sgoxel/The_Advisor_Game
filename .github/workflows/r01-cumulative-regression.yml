@@ -28,6 +28,10 @@ on:
       - '.github/workflows/r01-cumulative-regression.yml'
   workflow_dispatch:
 
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
