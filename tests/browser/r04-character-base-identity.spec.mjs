@@ -11,14 +11,18 @@ test('normal product startup exposes the Simulation-owned character identity mod
   const startup = await page.evaluate(() => ({
     available: Boolean(window.Game?.CharacterIdentity?.generateBaseIdentity),
     authority: window.Game?.CharacterIdentity?.authority,
+    generatorVersion: window.Game?.CharacterIdentity?.generatorVersion,
+    birthDateCalendar: window.Game?.CharacterIdentity?.birthDateCalendar,
     scriptLoaded: Array.from(document.scripts).some((script) => script.src.endsWith('/js/character_identity.js'))
   }));
   expect(startup.available).toBe(true);
   expect(startup.authority).toBe('simulation');
+  expect(startup.generatorVersion).toBe('r04-character-base-identity-v2');
+  expect(startup.birthDateCalendar).toBe('campaign-calendar-civil-year-minus-2000');
   expect(startup.scriptLoaded).toBe(true);
 });
 
-test('same SEED and stable character id reproduce identical base identity', async ({ page }) => {
+test('same SEED and stable character id reproduce identical base identity in canonical campaign-year domain', async ({ page }) => {
   await loadIdentity(page);
   const evidence = await page.evaluate(() => {
     const api = window.Game.CharacterIdentity;
@@ -28,6 +32,7 @@ test('same SEED and stable character id reproduce identical base identity', asyn
       authority: api.authority,
       a,
       b,
+      range: api.canonicalBirthYearRange,
       fingerprintA: api.fingerprint(a),
       fingerprintB: api.fingerprint(b),
       frozen: Object.isFrozen(a) && Object.isFrozen(a.baselinePersonality) && Object.isFrozen(a.birthplace)
@@ -40,8 +45,57 @@ test('same SEED and stable character id reproduce identical base identity', asyn
   expect(evidence.frozen).toBe(true);
   expect(evidence.a.name.length).toBeGreaterThan(3);
   expect(['female', 'male']).toContain(evidence.a.gender);
-  expect(evidence.a.birthDate.year).toBeGreaterThan(900);
+  expect(evidence.range).toEqual({ min: -44, max: 8 });
+  expect(evidence.a.birthDate.year).toBeGreaterThanOrEqual(evidence.range.min);
+  expect(evidence.a.birthDate.year).toBeLessThanOrEqual(evidence.range.max);
+  expect(evidence.a.birthDateCalendar).toBe('campaign-calendar-civil-year-minus-2000');
+  expect(26 - evidence.a.birthDate.year).toBeGreaterThanOrEqual(18);
+  expect(26 - evidence.a.birthDate.year).toBeLessThanOrEqual(70);
   expect(evidence.a.baseProfession.length).toBeGreaterThan(2);
+});
+
+test('v1 identity migration translates only the birth-year epoch and preserves the deterministic person', async ({ page }) => {
+  await loadIdentity(page);
+  const evidence = await page.evaluate(() => {
+    const api = window.Game.CharacterIdentity;
+    const current = api.generateBaseIdentity('IDENTITY-SEED-MIGRATE', 'npc:legacy:01', { baseProfession: 'farmer' });
+    const legacy = {
+      ...current,
+      schemaVersion: 1,
+      generatorVersion: api.legacyGeneratorVersion,
+      birthDate: {
+        year: current.birthDate.year + api.legacyBirthYearOffset,
+        month: current.birthDate.month,
+        day: current.birthDate.day
+      }
+    };
+    delete legacy.birthDateCalendar;
+
+    const migrated = api.migrateBaseIdentity(legacy);
+    return {
+      current,
+      legacy,
+      migrated,
+      currentFingerprint: api.fingerprint(current),
+      migratedFingerprint: api.fingerprint(migrated),
+      frozen: Object.isFrozen(migrated) && Object.isFrozen(migrated.birthDate)
+    };
+  });
+
+  expect(evidence.legacy.generatorVersion).toBe('r04-character-base-identity-v1');
+  expect(evidence.legacy.birthDate.year).toBeGreaterThanOrEqual(930);
+  expect(evidence.legacy.birthDate.year).toBeLessThanOrEqual(982);
+  expect(evidence.migrated.generatorVersion).toBe('r04-character-base-identity-v2');
+  expect(evidence.migrated.birthDate.year).toBe(evidence.legacy.birthDate.year - 974);
+  expect(evidence.migrated.birthDate.month).toBe(evidence.legacy.birthDate.month);
+  expect(evidence.migrated.birthDate.day).toBe(evidence.legacy.birthDate.day);
+  expect(evidence.migrated.name).toBe(evidence.legacy.name);
+  expect(evidence.migrated.gender).toBe(evidence.legacy.gender);
+  expect(evidence.migrated.birthplace).toEqual(evidence.legacy.birthplace);
+  expect(evidence.migrated.baselinePersonality).toEqual(evidence.legacy.baselinePersonality);
+  expect(evidence.migrated.baseProfession).toBe(evidence.legacy.baseProfession);
+  expect(evidence.migratedFingerprint).toBe(evidence.currentFingerprint);
+  expect(evidence.frozen).toBe(true);
 });
 
 test('different stable character identities remain distinct under the same SEED', async ({ page }) => {
@@ -91,6 +145,33 @@ test('current region travel cannot reroll the deterministic base person', async 
   expect(evidence.currentLocation.regionX).toBe(8);
   expect(evidence.currentLocation.regionY).toBe(-3);
   expect(evidence.currentProfession).toBe(evidence.baseProfession);
+});
+
+test('campaign resume catch-up cannot remap the deterministic birth date', async ({ page }) => {
+  await loadIdentity(page);
+  const evidence = await page.evaluate(() => {
+    const api = window.Game.CharacterIdentity;
+    const calendar = window.Game.CampaignCalendar;
+    const before = api.generateBaseIdentity('IDENTITY-SEED-TIME', 'npc:stable-time:01');
+    const calendarBefore = calendar.capture();
+    const accepted = calendarBefore.acceptedRealTimestampMs;
+    if (!Number.isFinite(accepted)) throw new Error('CampaignCalendar startup origin is required.');
+    const resumed = calendar.reconcileResume(accepted + 3600000, calendarBefore.originTimezoneOffsetMinutes || 0);
+    const after = api.generateBaseIdentity('IDENTITY-SEED-TIME', 'npc:stable-time:01');
+    return {
+      beforeFingerprint: api.fingerprint(before),
+      afterFingerprint: api.fingerprint(after),
+      beforeBirthDate: before.birthDate,
+      afterBirthDate: after.birthDate,
+      resumeOk: resumed.ok,
+      advancedGameMinutes: resumed.advancedGameMinutes
+    };
+  });
+
+  expect(evidence.resumeOk).toBe(true);
+  expect(evidence.advancedGameMinutes).toBe(1440);
+  expect(evidence.afterBirthDate).toEqual(evidence.beforeBirthDate);
+  expect(evidence.afterFingerprint).toBe(evidence.beforeFingerprint);
 });
 
 test('campaign profession change stays a delta and does not rewrite base profession', async ({ page }) => {
