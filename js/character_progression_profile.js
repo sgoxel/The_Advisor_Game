@@ -110,9 +110,12 @@
     return profile;
   }
 
-  function installCurrent(candidateInput = null, seedInput = undefined) {
+  function installCurrent(candidateInput = undefined, seedInput = undefined) {
     if (!Game.State) throw new Error('Game.State is required.');
-    const profile = normalize(seedInput, 'protagonist', candidateInput || Game.State.characterProfile || null);
+    // Undefined means preserve an already-established campaign profile. Explicit null means
+    // a fresh campaign/world generation and must therefore rebuild the Peasant starter state.
+    const candidate = candidateInput === undefined ? (Game.State.characterProfile || null) : candidateInput;
+    const profile = normalize(seedInput, 'protagonist', candidate);
     Game.State.characterProfile = profile;
     render(profile);
     return profile;
