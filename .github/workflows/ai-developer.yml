@@ -197,22 +197,35 @@ jobs:
             Formal Planner Workers retain all planning decisions and authority.
             Do not approve a phase or release.
             Check README compatibility, AC, diff quality, bugs, regressions, unrelated changes,
-            role-boundary violations and available test evidence. Run non-destructive tests if useful.
+            role-boundary violations and available test evidence. Run non-destructive tests/searches if useful.
 
-            For product/gameplay/world-system work, also perform an explicit dynamics logic audit.
+            STRICT GROUNDING: never invent README sections/appendices, lore, resources, mechanics, numeric values,
+            implementation behavior, tests, or repository facts. Before making a factual repository claim, open/search the exact source.
+            Every repository-grounded finding must include a separate exact line:
+            SOURCE: relative/path :: exact literal token copied from that file
+            The path must exist and the token after `::` must occur verbatim in that file on this exact checkout.
+            Use a short heading, function/symbol, test title, constant, or rule fragment; never use a paraphrase as the token.
+            If a dimension has no documented/implemented evidence, say NO EVIDENCE / NOT IMPLEMENTED rather than guessing.
+            Do not cite a README section number or appendix unless that exact heading/identifier exists in README.
+
+            For product/gameplay/world-system work, perform an explicit dynamics logic audit.
             Treat README/game rules and intentional fantasy abstractions as authoritative before applying real-world assumptions.
             Check causal consistency across time, location, travel/movement, status/rank/authority, resources/possessions,
             NPC schedules and occupations, economy/trade/production, settlement state, ecology/creatures,
             military/logistics/diplomacy where present, persistence/off-screen progression and event ordering.
             Flag behavior that assumes unestablished resources/facts/authority, contradicts another rule,
             produces impossible chronology or cause/effect, or is otherwise nonsensical in the game's own logic.
-            Use real-world plausibility as advisory evidence where relevant, but do not reject a coherent intentional abstraction merely for being unrealistic.
+            Real-world plausibility is advisory context only: do not fabricate precise speeds/percentages/costs and do not reject
+            a coherent intentional abstraction merely for being unrealistic.
 
-            If there is no clear review target or review cannot be completed safely, comment:
+            If there is no clear review target or you cannot ground the findings safely, comment beginning exactly:
             AI-HANDOFF:
             Otherwise comment beginning exactly:
             AI REVIEW EVIDENCE:
+            Include exactly one line `GROUNDING: VERIFIED` only after checking every SOURCE path/token against the exact checkout.
             Include exactly one line `VERDICT: PASS` or `VERDICT: CHANGES REQUESTED`.
+            `VERDICT: CHANGES REQUESTED` is allowed only when at least one BLOCKING or MAJOR concern has valid SOURCE evidence.
+            Unverified hypotheses or realism preferences may be observations only and cannot request changes.
             Identify exact commit/PR/state, checks, findings, risks and follow-up.
             For gameplay/world dynamics include applicable categorized findings under:
             RULE CONSISTENCY, GAMEPLAY LOGIC, REAL-WORLD PLAUSIBILITY, INTENTIONAL ABSTRACTION.
@@ -262,6 +275,10 @@ jobs:
             Where encoded behavior permits objective verification, also test logic invariants such as chronology/order,
             stale-state rejection, location/travel constraints, rank/authority constraints, resource prerequisites,
             deterministic cause/effect and impossible-state prevention. Do not turn subjective realism preferences into test authority.
+            Never invent repository facts or tests. Open/search exact sources before factual claims.
+            For each repository-grounded conclusion include at least one exact line:
+            SOURCE: relative/path :: exact literal token copied from that file
+            The path/token must exist verbatim on this exact checkout. If evidence is unavailable, use AI-HANDOFF rather than guess.
             Never repair product code while acting as Tester.
             Product test failure is evidence, not permission to implement a fix.
             If the target is unclear, required test infrastructure/evidence is unavailable,
@@ -269,6 +286,7 @@ jobs:
             AI-HANDOFF:
             Otherwise comment beginning exactly:
             AI TEST EVIDENCE:
+            Include exactly one line `GROUNDING: VERIFIED` only after checking every SOURCE path/token.
             Include exactly one line `VERDICT: PASS` or `VERDICT: FAIL`.
             Identify exact commit/PR; list checks, objective logic invariants checked, and actual results.
             Formal Tester Worker retains independent verification and all phase/release authority.
@@ -281,12 +299,17 @@ jobs:
     needs: [triage, reviewer, tester]
     if: always() && needs.triage.outputs.eligible == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     permissions:
       contents: read
       issues: write
       pull-requests: read
     steps:
+      - name: Checkout exact workflow repository state for grounding validation
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
       - name: Release claim and route auxiliary result
         env:
           GH_TOKEN: ${{ github.token }}
@@ -308,8 +331,34 @@ jobs:
           COMMENTS="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments?per_page=100")"
           HANDOFF_COUNT="$(printf '%s' "$COMMENTS" | jq --arg start "$STARTED_AT" \
             '[.[] | select(.created_at >= $start) | select((.body // "") | startswith("AI-HANDOFF:"))] | length')"
-          EVIDENCE_COUNT="$(printf '%s' "$COMMENTS" | jq --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
+          RAW_EVIDENCE_COUNT="$(printf '%s' "$COMMENTS" | jq --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
             '[.[] | select(.created_at >= $start) | select(((.body // "") | startswith($prefix)) or ((.body // "") | startswith("**" + $prefix)))] | length')"
+          EVIDENCE_BODY="$(printf '%s' "$COMMENTS" | jq -r --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" \
+            '[.[] | select(.created_at >= $start) | select(((.body // "") | startswith($prefix)) or ((.body // "") | startswith("**" + $prefix)))] | last | .body // ""')"
+
+          EVIDENCE_COUNT=0
+          GROUNDING_VALID=false
+          SOURCE_COUNT=0
+          if [ "$RAW_EVIDENCE_COUNT" -gt 0 ] && printf '%s\n' "$EVIDENCE_BODY" | grep -Fxq 'GROUNDING: VERIFIED'; then
+            GROUNDING_VALID=true
+            while IFS= read -r source_line; do
+              [ -n "$source_line" ] || continue
+              SOURCE_COUNT=$((SOURCE_COUNT + 1))
+              entry="${source_line#SOURCE: }"
+              path="${entry%% :: *}"
+              needle="${entry#* :: }"
+              if [ "$path" = "$entry" ] || [ -z "$path" ] || [ -z "$needle" ] || [ ! -f "$path" ] || ! grep -Fq -- "$needle" "$path"; then
+                echo "Invalid NVIDIA grounding source: ${source_line}" >&2
+                GROUNDING_VALID=false
+                break
+              fi
+            done < <(printf '%s\n' "$EVIDENCE_BODY" | sed -n 's/^SOURCE: /SOURCE: /p')
+            if [ "$SOURCE_COUNT" -eq 0 ]; then
+              echo "NVIDIA evidence has no machine-checkable SOURCE lines." >&2
+              GROUNDING_VALID=false
+            fi
+          fi
+          if [ "$GROUNDING_VALID" = true ]; then EVIDENCE_COUNT=1; fi
 
           gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "ai-running" >/dev/null 2>&1 || true
           gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "work-claimed" >/dev/null 2>&1 || true
@@ -318,11 +367,11 @@ jobs:
             gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "ai-handoff" >/dev/null 2>&1 || true
             gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-label "ai-awaiting-review" >/dev/null
             gh issue comment "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-              --body "WORK-CLAIM-CLEAR(worker=OpenCode NVIDIA Auxiliary Agent, role=${ROLE}, issue=${ISSUE_NUMBER})"$'\n\n'"AI AUXILIARY COMPLETE: role=${ROLE}. Formal Worker must inspect NVIDIA evidence before any independent PASS, planning decision, merge, phase, or release decision. When a comparable formal verdict later exists, record the AI AUXILIARY FOLLOW-UP metric defined by .github/AI_AUXILIARY_RULES.md." >/dev/null
+              --body "WORK-CLAIM-CLEAR(worker=OpenCode NVIDIA Auxiliary Agent, role=${ROLE}, issue=${ISSUE_NUMBER})"$'\n\n'"AI AUXILIARY COMPLETE: role=${ROLE}. Grounding gate verified ${SOURCE_COUNT} repository source line(s). Formal Worker must independently inspect NVIDIA evidence before any PASS, planning decision, merge, phase, or release decision. When a comparable formal verdict later exists, record the AI AUXILIARY FOLLOW-UP metric defined by .github/AI_AUXILIARY_RULES.md." >/dev/null
           else
             gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --remove-label "ai-awaiting-review" >/dev/null 2>&1 || true
             gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-label "ai-handoff" >/dev/null
             gh issue comment "${ISSUE_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-              --body "WORK-CLAIM-CLEAR(worker=OpenCode NVIDIA Auxiliary Agent, role=${ROLE}, issue=${ISSUE_NUMBER})"$'\n\n'"AI-HANDOFF: NVIDIA/OpenCode did not produce a complete verifiable ${ROLE} result. The responsible formal Worker should inspect this issue, Actions run, bot comments and available evidence before continuing." >/dev/null
+              --body "WORK-CLAIM-CLEAR(worker=OpenCode NVIDIA Auxiliary Agent, role=${ROLE}, issue=${ISSUE_NUMBER})"$'\n\n'"AI-HANDOFF: NVIDIA/OpenCode did not produce a complete repository-grounded verifiable ${ROLE} result. The responsible formal Worker should inspect this issue, Actions run, bot comments and available evidence before continuing." >/dev/null
             exit 1
           fi
