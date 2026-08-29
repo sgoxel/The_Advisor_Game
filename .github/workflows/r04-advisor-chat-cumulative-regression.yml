@@ -1,0 +1,129 @@
+name: R04 Advisor Chat Cumulative Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/advisor_chat_ui.js'
+      - 'js/advisor_influence_bridge.js'
+      - 'js/advisor_conversation_contract.js'
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'js/autonomous_action_execution.js'
+      - 'js/autonomous_decision_loop.js'
+      - 'js/action_legality.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/interaction_validation.js'
+      - 'js/world_action_resolution.js'
+      - 'js/game_time.js'
+      - 'js/campaign_persistence.js'
+      - 'js/input.js'
+      - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
+      - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
+      - 'tests/browser/r04-advisor-influence-local-bot.spec.mjs'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
+      - 'tests/browser/r03-*.spec.mjs'
+      - 'tests/browser/r02-hierarchical-living-world-regression.spec.mjs'
+      - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-advisor-chat-cumulative-regression.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/advisor_chat_ui.js'
+      - 'js/advisor_influence_bridge.js'
+      - 'js/advisor_conversation_contract.js'
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'js/autonomous_action_execution.js'
+      - 'js/autonomous_decision_loop.js'
+      - 'js/action_legality.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/interaction_validation.js'
+      - 'js/world_action_resolution.js'
+      - 'js/game_time.js'
+      - 'js/campaign_persistence.js'
+      - 'js/input.js'
+      - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
+      - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
+      - 'tests/browser/r04-advisor-influence-local-bot.spec.mjs'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
+      - 'tests/browser/r03-*.spec.mjs'
+      - 'tests/browser/r02-hierarchical-living-world-regression.spec.mjs'
+      - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-advisor-chat-cumulative-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cumulative-advisor-chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04 Advisor chat cumulative candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify usable free-text Advisor chat and responsive accessibility
+        run: npx playwright test tests/browser/r04-advisor-chat-surface.spec.mjs --project=desktop
+      - name: Preserve deterministic Advisor conversation contract
+        run: npx playwright test tests/browser/r04-advisor-conversation-contract.spec.mjs --project=desktop
+      - name: Preserve bounded Advisor influence in Local BOT
+        run: npx playwright test tests/browser/r04-advisor-influence-local-bot.spec.mjs --project=desktop
+      - name: Preserve deterministic Local BOT and autonomous action path
+        run: >-
+          npx playwright test
+          tests/browser/r04-local-bot-selection.spec.mjs
+          tests/browser/r04-autonomous-action-execution.spec.mjs
+          tests/browser/r04-autonomous-decision-loop.spec.mjs
+          --project=desktop
+      - name: Preserve R03 legality and interaction authority seams
+        run: >-
+          npx playwright test
+          tests/browser/r03-cumulative-accessibility.spec.mjs
+          tests/browser/r03-spatial-action-resolution-regression.spec.mjs
+          tests/browser/r03-context-interaction-regression.spec.mjs
+          tests/browser/r03-legality-feedback-ui.spec.mjs
+          --project=desktop
+      - name: Preserve R02 chronology hierarchy relevance and persistence
+        run: >-
+          npx playwright test
+          tests/browser/r02-hierarchical-living-world-regression.spec.mjs
+          tests/browser/r02-cumulative-persistence-regression.spec.mjs
+          --project=desktop
+      - name: Preserve canonical R01 responsive baseline
+        run: npm run test:browser:r01
+      - name: Upload cumulative Advisor chat evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-advisor-chat-cumulative-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
