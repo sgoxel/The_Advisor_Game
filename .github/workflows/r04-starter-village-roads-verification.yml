@@ -26,6 +26,7 @@ on:
       - '.github/workflows/r04-starter-village-roads-verification.yml'
   workflow_dispatch:
 
+# Verification-only descendant for #235/#277 authoritative road repair.
 permissions:
   contents: read
 
