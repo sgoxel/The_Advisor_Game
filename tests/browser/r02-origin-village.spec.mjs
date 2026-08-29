@@ -60,6 +60,52 @@ test('origin village covers required settlement functions with stable simulation
   }
 });
 
+test('R02-ORIGIN-RUNTIME deterministically avoids the housing placement dead-end', async ({ page }) => {
+  await waitForOriginVillage(page);
+  const evidence = await page.evaluate(() => {
+    const api = window.Game.OriginVillage;
+    const first = api.generate('R02-ORIGIN-RUNTIME');
+    const repeated = api.generate('R02-ORIGIN-RUNTIME');
+    const homes = first.village.buildings
+      .filter((building) => building.type === 'home')
+      .map((home) => ({
+        id: home.id,
+        footprint: home.footprint,
+        entrance: home.entrance,
+        roomCount: Array.isArray(home.rooms) ? home.rooms.length : 0
+      }));
+    return { first: first.village, repeated: repeated.village, homes };
+  });
+
+  expect(stable(evidence.first)).toBe(stable(evidence.repeated));
+  expect(evidence.first.regionSize).toBe(100);
+  expect(evidence.homes).toHaveLength(12);
+  expect(evidence.homes.every((home) => home.footprint.width >= 10 && home.footprint.height >= 10)).toBe(true);
+  expect(evidence.homes.every((home) => home.roomCount >= 2)).toBe(true);
+  expect(evidence.homes.every((home) => (
+    home.footprint.row >= 0 &&
+    home.footprint.col >= 0 &&
+    home.footprint.row + home.footprint.height <= 100 &&
+    home.footprint.col + home.footprint.width <= 100 &&
+    home.entrance.row >= 0 && home.entrance.row < 100 &&
+    home.entrance.col >= 0 && home.entrance.col < 100
+  ))).toBe(true);
+
+  for (let i = 0; i < evidence.homes.length; i += 1) {
+    const a = evidence.homes[i].footprint;
+    for (let j = i + 1; j < evidence.homes.length; j += 1) {
+      const b = evidence.homes[j].footprint;
+      const separatedByTwoTiles = (
+        a.row + a.height + 2 <= b.row ||
+        b.row + b.height + 2 <= a.row ||
+        a.col + a.width + 2 <= b.col ||
+        b.col + b.width + 2 <= a.col
+      );
+      expect(separatedByTwoTiles, `home padding overlap between ${evidence.homes[i].id} and ${evidence.homes[j].id}`).toBe(true);
+    }
+  }
+});
+
 test('new campaign generation binds runtime to canonical 100x100 origin region without direct player control', async ({ page }) => {
   await waitForOriginVillage(page);
   await page.getByRole('button', { name: /Settings/i }).click();
