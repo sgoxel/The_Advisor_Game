@@ -3,10 +3,10 @@
   "product": "The Advisor Game",
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
-  "planning_epoch": "readme-2b57975b-r04-chat-p-rev-5461318031-2026-08-29",
-  "planning_basis": "R03 completed through normal independent Worker #4 Tester PASS on #167. R04 tracker #169 remains the single active phase. Compatible verified R01-R03 and completed R04 foundations remain preserved. README commit 2b57975b9ceabba359714b4cc9909a2c7b221b1f defines the canonical 100x100 spatial-world contract. Admin public-build P-REV 5461318031 is ACCEPTED by Planner decision 5461353196: the minimum usable free-text Advisor conversation slice is adapted into active R04 without activating full R05. Current reopened #228/#235 and #237 revision work remain unresolved active-phase blockers.",
+  "planning_epoch": "readme-f9062b85-r04-manual-workers-6-20-2026-08-29",
+  "planning_basis": "R03 completed through normal independent Worker #4 Tester PASS on #167. R04 tracker #169 remains the single active phase. Compatible verified R01-R03 and completed R04 foundations remain preserved. README commit 2b57975b9ceabba359714b4cc9909a2c7b221b1f defines the canonical 100x100 spatial-world contract. Admin public-build P-REV 5461318031 is ACCEPTED by Planner decision 5461353196: the minimum usable free-text Advisor conversation slice is adapted into active R04 without activating full R05. README commit f9062b85fb493c6c92a795552af4024ba54ea039 expands manual Admin-invoked persistent Worker identities from #6/#7 to #6-#20 without changing product scope, phase order, task dependencies, or scheduled Worker #1-#5 cursor semantics. Current reopened #228/#235 and #237 revision work remain unresolved active-phase blockers.",
   "readme_reconciliation": {
-    "readme_commit": "2b57975b9ceabba359714b4cc9909a2c7b221b1f",
+    "readme_commit": "f9062b85fb493c6c92a795552af4024ba54ea039",
     "admin_233_readme_sync_commit": "2b57975b9ceabba359714b4cc9909a2c7b221b1f",
     "admin_issues": [103, 106, 117, 131, 136, 138, 142, 150, 225, 233],
     "planner_issues": [105, 118, 132, 137, 139, 143, 151, 154, 155, 169, 226, 234, 240],
