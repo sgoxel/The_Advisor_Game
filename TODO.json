@@ -6,12 +6,13 @@
   "phase_title": "Authoritative Unbounded Hierarchical Living World and Campaign State",
   "phase_issue": 82,
   "status": "active",
-  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-29-seinen-old-school-rpg-art-direction",
+  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-29-tester-deadlock-pass-policy",
   "readme_reconciliation": {
-    "readme_commit": "8e2e3810f03798ae28e0a3c263c1f05ce5b6893d",
-    "planner_issues": [105, 118, 132, 137, 139, 143, 151],
+    "readme_commit": "3b5c38e9df9c0d54c13c85fe423f04cad6588eb7",
+    "planner_issues": [105, 118, 132, 137, 139, 143, 151, 154],
     "admin_issues": [103, 106, 117, 131, 136, 138, 142, 150],
-    "governance_issue": 97
+    "governance_issue": 97,
+    "deadlock_policy_issue": 154
   },
   "tasks": [
     {"id":"R02-T01","order":1,"title":"Define authoritative campaign-state boundary","status":"completed","github_issue":83,"role_owner":"Coder role","issue_state":"closed_completed","independent_test":{"result":"PASS","tested_ref":"c5273b0c30a1370dfdb73e6a5b1a479f7c600f77"}},
@@ -46,7 +47,7 @@
     {"id":"R02-T26","order":30,"title":"Design day/night, settlement diversity and ecology presentation","status":"completed","depends_on":["R02-T21","R02-T24","R02-T25"],"github_issue":128,"role_owner":"Designer role","issue_state":"closed_completed","independent_test":{"result":"PASS","worker":"Worker #2","tested_refs":["1273daae250735072062fb8f2e957483b7c644e9","3d49f58c3cf8b28ee723f41c316270277e5dddbd"]}},
     {"id":"R02-T27","order":31,"title":"Add real-time hierarchical living-world regression","status":"completed","depends_on":["R02-T20","R02-T22","R02-T23","R02-T25","R02-T26","R02-T28","R02-T29","R02-T30","R02-T31","R02-T32"],"github_issue":130,"role_owner":"Coder role","issue_state":"closed_completed","independent_test":{"result":"PASS","worker":"Worker #7","tested_ref":"ada54db7211ac29c35955c1a3411b1e4bf047294","comment":5458154337,"run":33213968442,"job":98993340252,"artifact":9702755940}},
     {"id":"R02-T33","order":32,"title":"Define original seinen-inspired old-school PC RPG art direction foundation","status":"completed","depends_on":["R02-T19","R02-T26"],"github_issue":152,"role_owner":"Designer role","issue_state":"closed_completed","admin_issue":150,"planner_issue":151,"independent_test":{"result":"PASS","worker":"Worker #6","tested_ref":"b430a4c4194d2c67e8b73141842005187916775e","comment":5458286875}},
-    {"id":"R02-T11","order":33,"title":"Authoritative unbounded hierarchical living world and campaign state phase gate","status":"blocked","depends_on":["R02-T01","R02-T02","R02-T03","R02-T04","R02-T05","R02-T06","R02-T07","R02-T08","R02-T09","R02-T10","R02-T12","R02-T13","R02-T14","R02-T15","R02-T16","R02-T17","R02-T18","R02-T19","R02-T20","R02-T21","R02-T22","R02-T23","R02-T24","R02-T25","R02-T26","R02-T27","R02-T28","R02-T29","R02-T30","R02-T31","R02-T32","R02-T33"],"github_issue":93,"role_owner":"Tester role","issue_state":"open_governance_blocked","governance_blocker":154}
+    {"id":"R02-T11","order":33,"title":"Authoritative unbounded hierarchical living world and campaign state phase gate","status":"ready","depends_on":["R02-T01","R02-T02","R02-T03","R02-T04","R02-T05","R02-T06","R02-T07","R02-T08","R02-T09","R02-T10","R02-T12","R02-T13","R02-T14","R02-T15","R02-T16","R02-T17","R02-T18","R02-T19","R02-T20","R02-T21","R02-T22","R02-T23","R02-T24","R02-T25","R02-T26","R02-T27","R02-T28","R02-T29","R02-T30","R02-T31","R02-T32","R02-T33"],"github_issue":93,"role_owner":"Tester role","issue_state":"open_ready_deadlock_exception","deadlock_policy_issue":154,"deadlock_pass_allowed":true}
   ],
   "supporting_work": [
     {"github_issue":55,"title":"Infrastructure — Add auxiliary NVIDIA Coder/Reviewer/Tester routing","status":"closed_not_planned","issue_state":"closed_not_planned","role_owner":"Coder role","release_blocking":false},
