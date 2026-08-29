@@ -18,6 +18,7 @@ on:
       - '.github/workflows/r04-spatial-world-verification.yml'
   workflow_dispatch:
 
+# Verification-only descendant for #235/#277 authoritative road repair.
 permissions:
   contents: read
 
