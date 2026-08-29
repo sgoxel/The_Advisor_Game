@@ -57,8 +57,11 @@ jobs:
         run: npm install --ignore-scripts
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      # This spec already runs explicit phone/tablet/desktop viewport assertions internally.
+      # Restricting the outer Playwright project avoids executing the complete spec four
+      # duplicate times while preserving those responsive checks and all simulation assertions.
       - name: Run focused 100x100 spatial-world regression
-        run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs
+        run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs --project=desktop
       - name: Re-run deterministic origin village regression
         run: npx playwright test tests/browser/r02-origin-village.spec.mjs
       - name: Re-run deterministic multi-region terrain regression
