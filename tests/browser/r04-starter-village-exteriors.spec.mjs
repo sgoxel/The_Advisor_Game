@@ -19,7 +19,7 @@ function entranceTouchesFootprint(building) {
   return horizontalDoor || verticalDoor;
 }
 
-test('exterior layer derives from authoritative building descriptors without mutation', async ({ page }) => {
+test('temporary building placeholder uses authoritative settlement stone tiles without rectangle overlays', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(() => {
     const village = window.Game.State.world.originVillage;
@@ -28,6 +28,7 @@ test('exterior layer derives from authoritative building descriptors without mut
     window.Game.StarterVillageExteriors.drawPresentation();
     const authoritativeAfter = JSON.stringify(village.buildings);
     const descriptorAfter = JSON.stringify(window.Game.StarterVillageExteriors.snapshotDescriptors());
+    const coverage = window.Game.StarterVillageExteriors.snapshotPlaceholderCoverage();
     const overlay = document.getElementById('starterVillageExteriorOverlay');
     return {
       authoritativeBefore,
@@ -43,14 +44,19 @@ test('exterior layer derives from authoritative building descriptors without mut
         footprint: { ...b.footprint },
         entrance: { ...b.entrance }
       })),
+      coverage,
       overlay: {
         count: Number(overlay?.dataset.buildingCount || 0),
-        visible: Number(overlay?.dataset.visibleBuildingCount || 0),
-        types: overlay?.dataset.visibleBuildingTypes || '',
+        drawnBuildings: Number(overlay?.dataset.visibleBuildingCount || 0),
         authority: overlay?.dataset.presentationAuthority,
         source: overlay?.dataset.descriptorSource,
         regionSize: Number(overlay?.dataset.regionSize || 0),
-        pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : null
+        pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : null,
+        placeholderMode: overlay?.dataset.placeholderMode,
+        rectangleOverlay: overlay?.dataset.rectangleOverlay,
+        fullyStoneCoveredBuildings: Number(overlay?.dataset.fullyStoneCoveredBuildings || 0),
+        stoneCoveredTiles: Number(overlay?.dataset.stoneCoveredTiles || 0),
+        footprintTiles: Number(overlay?.dataset.footprintTiles || 0)
       }
     };
   });
@@ -58,11 +64,17 @@ test('exterior layer derives from authoritative building descriptors without mut
   expect(evidence.authoritativeAfter).toBe(evidence.authoritativeBefore);
   expect(evidence.descriptorAfter).toBe(evidence.descriptorBefore);
   expect(evidence.overlay.count).toBe(evidence.buildingCount);
-  expect(evidence.overlay.visible).toBeGreaterThan(0);
+  expect(evidence.overlay.drawnBuildings).toBe(0);
   expect(evidence.overlay.authority).toBe('presentation-only');
   expect(evidence.overlay.source).toBe('originVillage.buildings');
   expect(evidence.overlay.regionSize).toBe(100);
   expect(evidence.overlay.pointerEvents).toBe('none');
+  expect(evidence.overlay.placeholderMode).toBe('existing-settlement-terrain-tiles');
+  expect(evidence.overlay.rectangleOverlay).toBe('disabled');
+  expect(evidence.overlay.footprintTiles).toBeGreaterThan(0);
+  expect(evidence.overlay.stoneCoveredTiles).toBe(evidence.overlay.footprintTiles);
+  expect(evidence.overlay.fullyStoneCoveredBuildings).toBe(evidence.buildingCount);
+  expect(evidence.coverage.every((item) => item.total > 0 && item.settlement === item.total)).toBe(true);
   expect(evidence.types).toEqual(expect.arrayContaining(['home', 'inn', 'village_hall', 'smithy', 'guard_post', 'farmstead']));
 
   const roadSet = new Set(evidence.roads);
@@ -77,7 +89,7 @@ for (const viewport of [
   { name: 'tablet', width: 820, height: 1180 },
   { name: 'desktop', width: 1440, height: 900 }
 ]) {
-  test(`starter-village exterior overlay stays bounded and passive on ${viewport.name}`, async ({ page }) => {
+  test(`stone-tile building placeholder overlay stays transparent, bounded and passive on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await ready(page);
     const evidence = await page.evaluate(() => {
@@ -87,9 +99,13 @@ for (const viewport of [
       return {
         rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
         buildingCount: Number(overlay?.dataset.buildingCount || 0),
-        visible: Number(overlay?.dataset.visibleBuildingCount || 0),
+        drawnBuildings: Number(overlay?.dataset.visibleBuildingCount || 0),
         pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : null,
-        authority: overlay?.dataset.presentationAuthority
+        authority: overlay?.dataset.presentationAuthority,
+        placeholderMode: overlay?.dataset.placeholderMode,
+        rectangleOverlay: overlay?.dataset.rectangleOverlay,
+        stoneCoveredTiles: Number(overlay?.dataset.stoneCoveredTiles || 0),
+        footprintTiles: Number(overlay?.dataset.footprintTiles || 0)
       };
     });
 
@@ -97,8 +113,11 @@ for (const viewport of [
     expect(evidence.rect.width).toBeGreaterThan(100);
     expect(evidence.rect.height).toBeGreaterThan(100);
     expect(evidence.buildingCount).toBeGreaterThanOrEqual(20);
-    expect(evidence.visible).toBeGreaterThan(0);
+    expect(evidence.drawnBuildings).toBe(0);
     expect(evidence.pointerEvents).toBe('none');
     expect(evidence.authority).toBe('presentation-only');
+    expect(evidence.placeholderMode).toBe('existing-settlement-terrain-tiles');
+    expect(evidence.rectangleOverlay).toBe('disabled');
+    expect(evidence.stoneCoveredTiles).toBe(evidence.footprintTiles);
   });
 }
