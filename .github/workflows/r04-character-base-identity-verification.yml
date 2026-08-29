@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'js/character_identity.js'
+      - 'js/utils.js'
       - 'tests/browser/r04-character-base-identity.spec.mjs'
       - '.github/workflows/r04-character-base-identity-verification.yml'
   pull_request:
     paths:
       - 'js/character_identity.js'
+      - 'js/utils.js'
       - 'tests/browser/r04-character-base-identity.spec.mjs'
       - '.github/workflows/r04-character-base-identity-verification.yml'
 
