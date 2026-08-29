@@ -116,6 +116,28 @@ jobs:
           if validate_grounding "$BAD_TOKEN"; then echo 'Bad token unexpectedly passed grounding.' >&2; exit 1; fi
           if validate_grounding "$NO_GROUNDING"; then echo 'Missing grounding marker unexpectedly passed.' >&2; exit 1; fi
 
+      - name: Verify read-only dirty-gate isolation behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -z "$(git status --porcelain)" ]
+          cp package.json /tmp/nvidia-readonly-package.json
+          printf '%s\n' '/*' >> .git/info/exclude
+          git update-index --skip-worktree package.json
+          printf '\n' >> package.json
+          printf 'disposable\n' > nvidia-readonly-test-output.tmp
+
+          if [ -n "$(git status --porcelain)" ]; then
+            echo 'skip-worktree/untracked isolation did not keep the upstream dirty gate clean.' >&2
+            git status --short >&2
+            exit 1
+          fi
+
+          git update-index --no-skip-worktree package.json
+          cp /tmp/nvidia-readonly-package.json package.json
+          git diff --exit-code -- package.json
+          [ -z "$(git status --porcelain --untracked-files=no)" ]
+
       - name: Guard Super Reviewer/Tester-only preflight policy
         shell: bash
         run: |
@@ -165,16 +187,46 @@ jobs:
           if present:
               raise SystemExit(f'Forbidden NVIDIA Coder execution path remains: {present}')
 
+          required_action = [
+              'only Reviewer and Tester are executable',
+              "printf '%s\\n' '/*' >> .git/info/exclude",
+              'npm install --no-save --package-lock=false --ignore-scripts',
+              'git update-index --skip-worktree',
+              'git update-index --no-skip-worktree',
+              'Read-only NVIDIA setup changed tracked repository content.',
+              'Read-only NVIDIA worktree is not clean before OpenCode execution.',
+          ]
+          missing_action = [item for item in required_action if item not in action]
+          if missing_action:
+              raise SystemExit(f'Missing read-only NVIDIA action guard(s): {missing_action}')
           if 'nvidia/nvidia/nemotron-3-super-120b-a12b' not in action:
               raise SystemExit('Composite action default is not Nemotron 3 Super.')
-          if 'only Reviewer and Tester are executable' not in action:
-              raise SystemExit('Composite action does not reject unsupported roles.')
 
           if config.get('model') != 'nvidia/nvidia/nemotron-3-super-120b-a12b':
               raise SystemExit('OpenCode default model is not Nemotron 3 Super.')
           models = config.get('provider', {}).get('nvidia', {}).get('models', {})
           if list(models) != ['nvidia/nemotron-3-super-120b-a12b']:
               raise SystemExit(f'Unexpected active NVIDIA provider model set: {list(models)}')
+
+          plan_permission = config.get('agent', {}).get('plan', {}).get('permission', {})
+          if plan_permission.get('edit') != 'deny':
+              raise SystemExit('NVIDIA plan agent must deny edit/write/patch tools.')
+          bash_permission = plan_permission.get('bash', {})
+          if bash_permission.get('*') != 'allow':
+              raise SystemExit('NVIDIA plan agent bash baseline changed unexpectedly.')
+          required_denied = [
+              'git add *', 'git commit *', 'git push *', 'git checkout *',
+              'git switch *', 'git restore *', 'git reset *', 'git clean *',
+              'git rm *', 'git mv *', 'git merge *', 'git rebase *',
+              'git cherry-pick *', 'git tag *', 'npm install *', 'npm i *',
+              'npm add *', 'npm ci *', 'npm update *', 'npm uninstall *',
+              'npm remove *', 'pnpm add *', 'pnpm install *', 'pnpm update *',
+              'yarn add *', 'yarn install *', 'yarn up *', 'bun add *',
+              'bun install *', '*--update-snapshots*',
+          ]
+          bad_permissions = [key for key in required_denied if bash_permission.get(key) != 'deny']
+          if bad_permissions:
+              raise SystemExit(f'NVIDIA plan agent mutation command(s) are not denied: {bad_permissions}')
 
           required_rules = [
               'NVIDIA may execute only as **Reviewer** or **Tester**',
