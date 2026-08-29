@@ -56,7 +56,7 @@ If a hard platform, tool, connector, or execution limit prevents further safe wo
 
 Critical obligations outrank ordinary backlog inside the relevant role:
 
-- Planner: README reconciliation, blocking Planner revisions, active-phase planning repair, **NVIDIA utilization/preflight scan**, then normal backlog and work-inventory capacity.
+- Planner: README reconciliation, blocking Planner revisions, active-phase planning repair, **NVIDIA utilization/preflight scan**, then actionable-capacity repair before lower-value ordinary planning when the executable pool is below its floor.
 - Coder: accepted Tester revision correction, continuation, `ai-handoff`, then ordinary eligible coding.
 - Designer: accepted Designer revision correction or continuation, then required active/earlier visual work.
 - Tester: revision retest, blockers, `ai-awaiting-review` or Tester handoff, active untested work, earlier fixes, then release gates including any documented Tester-deadlock gate that has become executable.
@@ -103,22 +103,39 @@ For gameplay/world-system work, formal Workers should inspect NVIDIA Reviewer lo
 
 ## Planner work-inventory capacity
 
-Planner maintains a deep but legitimate issue inventory so scheduled and manual Workers have enough real work to consume without weakening phase priority or product authority.
+Planner maintains two separate capacity measures so scheduled and manual Workers have enough legitimate work to consume without weakening phase priority or product authority:
 
-After README reconciliation, blocking P-REV work, active-phase planning repairs, and the NVIDIA utilization/preflight scan, Planner counts usable open focused work issues. Pure phase trackers, ledgers, rotation/governance records, and similar non-executable bookkeeping do not count toward work-inventory capacity.
+1. **Total focused inventory** — open focused issues that legitimately describe approved current work or clearly blocked near-future work.
+2. **Immediately executable pool** — current/earlier work that an authorized Worker can actually claim and act on now.
+
+After README reconciliation, blocking P-REV work, active-phase planning repairs, and the NVIDIA utilization/preflight scan, Planner measures both values separately. Pure phase trackers, ledgers, rotation/governance records, and similar non-executable bookkeeping do not count toward total focused inventory.
 
 When legitimate Admin/README/ROADMAP-approved scope supports it:
 
-- target roughly **45–55 open focused work issues**;
-- if usable inventory falls below **40**, replenish by decomposing already approved work toward roughly 50;
-- aim for at least **10 immediately eligible, unclaimed targets** when real dependencies and approved scope permit;
-- preserve useful parallel work for both Coder and Designer when legitimate work permits.
+- target roughly **45–55 total open focused work issues**;
+- if total usable inventory falls below **40**, replenish by decomposing already approved work toward roughly 50;
+- target roughly **12–15 immediately executable, unclaimed current/earlier targets**;
+- if the immediately executable pool falls below **10**, actionable-capacity replenishment becomes a Planner priority in that same Planner pass after higher-priority reconciliation/P-REV/active planning repair/NVIDIA preflight;
+- preserve useful role diversity, especially genuinely independent Coder and Designer work, plus integration, regression, verification and supporting work when legitimate scope permits.
 
-Current and earlier unresolved work always remains higher priority. README/ROADMAP-defined near-future work may be pre-decomposed only when useful for capacity planning, and every such issue must be explicitly blocked by its future phase and/or real dependencies until it becomes legitimately eligible. Pre-decomposition never activates a future phase early.
+A target counts as **immediately executable** only when all of the following are true at the current GitHub state:
+
+- it belongs to the active/current phase or required earlier unresolved work;
+- it is open and its real dependencies are satisfied;
+- an authorized role can act on it now;
+- it has no live conflicting target `WORK-CLAIM` and no target-specific NVIDIA reservation/ownership that excludes the formal Worker action;
+- it has no blocking unresolved T-REV/P-REV that prevents the intended action;
+- it is not waiting for a required external CI/Actions/other-Worker result before any legitimate role action can proceed.
+
+Future-phase issues and dependency-blocked current issues may remain useful total inventory, but **they never count toward immediately executable capacity**.
+
+When executable depth is below 10, Planner first inspects already approved current/earlier scope for genuine safe parallelism. It may split a large approved outcome into truly independent focused implementation, Designer, integration, regression, verification, or supporting issues; expose independent sibling work that was previously hidden inside one oversized issue; and remove only unnecessary serialization. Planner must never remove, falsify, weaken or bypass a real dependency, revision, acceptance criterion, scope boundary or verification requirement merely to improve the metric.
+
+Current and earlier unresolved work always remains higher priority. README/ROADMAP-defined near-future work may be pre-decomposed only when useful for total capacity planning, and every such issue must be explicitly blocked by its future phase and/or real dependencies until it becomes legitimately eligible. Pre-decomposition never activates a future phase early and never substitutes for executable depth.
 
 Every capacity issue must trace to an Admin instruction, README requirement, ROADMAP-approved outcome, evidenced defect, required prerequisite, integration need, verification/regression need, or a justified focused decomposition of approved scope. Normally one issue represents one focused, measurable, independently testable outcome.
 
-The numeric inventory target is not a quota and never grants scope authority. Planner must not create filler, duplicate issues, speculative features, invented gameplay, unnecessary artificial micro-tasks, fake dependencies, or future work unsupported by README/ROADMAP merely to reach a count. If the legitimate approved scope supports fewer issues or fewer immediately eligible targets, the truthful lower number is correct and must be reported rather than padded.
+The numeric targets are not quotas and never grant scope authority. Planner must not create filler, duplicate issues, speculative features, invented gameplay, unnecessary artificial micro-tasks, fake dependencies, fake eligibility, or future work unsupported by README/ROADMAP merely to reach a count. If legitimate approved scope or real dependencies support fewer total issues or fewer immediately executable targets, the truthful lower number is correct. Planner records the shortfall and concrete blocker categories rather than padding the backlog.
 
 ## Independence
 
@@ -193,7 +210,15 @@ The canonical recurring cursor is the latest valid `WORKER ROTATION STATE:` JSON
 
 The cursor never grants exclusive ownership of the run. Multiple Workers may execute concurrently from GitHub's current state, may use different role profiles at the same time, and may work related issue chains in parallel when each selected target is independently eligible. They must claim only the single concrete target currently being worked and obey target collision, actual dependency eligibility, independence, revision, exact-state, and NVIDIA rules.
 
-At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, claim-clear state, pending external work, and whether continuation is required. Normally the Worker must end with zero live formal target claims.
+At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, pending external work and whether continuation is required. The result must separately report:
+
+- `claims_acquired_this_run=<n>` — successful formal target claims acquired during this invocation;
+- `claims_cleared_this_run=<n>` — those claims explicitly cleared/yielded during this invocation;
+- `live_claims_at_end=<n>` — formal target claims still live when the invocation ends.
+
+Normally `live_claims_at_end=0`. This is expected cleanup state and **must never be presented or interpreted as “zero work” or “zero claims during the run.”**
+
+If `claims_acquired_this_run=0`, the Worker must also report `eligible_targets_found=<n>` and concise exclusion counts/reasons sufficient to diagnose the empty run, using applicable categories such as `live_target_claim_or_nvidia`, `dependency_or_revision_blocked`, `independence_conflict`, `required_external_wait`, `role_or_phase_ineligible`, and `no_legitimate_scope`. A genuine no-work run should therefore make clear whether the problem is exhausted actionable capacity, temporary collisions/waits, or legitimate dependency structure.
 
 The next scheduled cursor uses the successor of the last role in which useful work was actually performed. If the run produced no eligible progress in any role, preserve the original starting role. If the run was interrupted by a hard execution limit while eligible work remained, preserve continuity from the last useful role and explicitly record the pending continuation so the next Worker can resume from current GitHub state rather than repeating completed work.
 
@@ -214,7 +239,7 @@ A manual Worker #6 through #20 invocation must:
 7. Use the same strict single-target claim rule: at most one live formal `WORK-CLAIM`, only for the exact issue currently being worked; clear/yield it before changing targets. Never treat linked/dependent issues, another Worker invocation, or the scheduled cursor as owned.
 8. Never edit README without explicit Admin authorization.
 9. Never consume, advance, rewrite, or reserve the scheduled `WORKER ROTATION STATE:` cursor.
-10. If project work is performed, post a `MANUAL WORKER #<n> RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, claim-clear state, and any deadlock-exception use.
+10. If project work is performed, post a `MANUAL WORKER #<n> RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, and the same separate `claims_acquired_this_run`, `claims_cleared_this_run`, and `live_claims_at_end` metrics. If no claim was acquired, include the same empty-run eligibility/exclusion diagnostics used by scheduled Workers.
 
 Because Workers #6 through #20 do not participate in the recurring cursor, their repository changes are discovered by scheduled Workers #1–#5 and by other manual Workers through normal GitHub state re-fetch and claim/dependency checks.
 
