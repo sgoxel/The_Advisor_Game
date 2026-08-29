@@ -1,0 +1,48 @@
+name: R04 Local BOT Selection
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - '.github/workflows/r04-local-bot-selection.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-r04-local-bot-selection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "$GITHUB_SHA"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R04 Local BOT selection regression
+        run: npx playwright test tests/browser/r04-local-bot-selection.spec.mjs
+      - name: Preserve R04 protagonist driver contract
+        run: npx playwright test tests/browser/r04-protagonist-driver-intent.spec.mjs
+      - name: Preserve canonical R01 responsive browser baseline
+        run: npx playwright test tests/browser/r01-baseline.spec.mjs
+      - name: Upload focused R04 Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-local-bot-selection-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
