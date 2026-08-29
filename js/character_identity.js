@@ -1,5 +1,5 @@
 /*
-  R04 #267/#279: deterministic SEED-backed character base identity.
+  R04 #267/#279/#282: deterministic SEED-backed character base identity.
 
   This module owns only regenerable base identity. Current location, current profession,
   relationships, memories, injuries, emotional consequences, and other campaign history
@@ -11,13 +11,18 @@
 
   const Game = global.Game = global.Game || {};
   const LEGACY_VERSION = 'r04-character-base-identity-v1';
-  const VERSION = 'r04-character-base-identity-v2';
+  const PREVIOUS_VERSION = 'r04-character-base-identity-v2';
+  const VERSION = 'r04-character-base-identity-v3';
   const RNG_STREAM_VERSION = LEGACY_VERSION;
   const AUTHORITY = 'simulation';
-  const BIRTH_DATE_CALENDAR = 'campaign-calendar-civil-year-minus-2000';
+  const BIRTH_DATE_CALENDAR = 'campaign-calendar-civil-year-minus-1900';
+  const PREVIOUS_BIRTH_DATE_CALENDAR = 'campaign-calendar-civil-year-minus-2000';
   const LEGACY_BIRTH_YEAR_MIN = 930;
   const LEGACY_BIRTH_YEAR_MAX = 982;
-  const LEGACY_BIRTH_YEAR_OFFSET = 974;
+  const LEGACY_BIRTH_YEAR_OFFSET = 874;
+  const PREVIOUS_CANONICAL_BIRTH_YEAR_MIN = -44;
+  const PREVIOUS_CANONICAL_BIRTH_YEAR_MAX = 8;
+  const PREVIOUS_TO_CURRENT_YEAR_OFFSET = 100;
   const CANONICAL_BIRTH_YEAR_MIN = LEGACY_BIRTH_YEAR_MIN - LEGACY_BIRTH_YEAR_OFFSET;
   const CANONICAL_BIRTH_YEAR_MAX = LEGACY_BIRTH_YEAR_MAX - LEGACY_BIRTH_YEAR_OFFSET;
 
@@ -58,8 +63,8 @@
     return hash >>> 0;
   }
 
-  // Preserve the accepted v1 deterministic streams so #279 changes only the calendar-year
-  // domain. Names, gender, birthplace, personality and profession must not be re-rolled.
+  // Preserve the accepted v1 deterministic streams so epoch migration changes only the
+  // calendar-year domain. Names, gender, birthplace, personality and profession are not re-rolled.
   function unit(seed, characterId, streamName) {
     return hash32(`${RNG_STREAM_VERSION}|${seed}|${characterId}|${streamName}`) / 0x100000000;
   }
@@ -145,10 +150,10 @@
     return value;
   }
 
-  function validLegacyBirthDate(value) {
+  function validBirthDateInRange(value, minYear, maxYear) {
     return Boolean(
       value && typeof value === 'object' &&
-      Number.isInteger(value.year) && value.year >= LEGACY_BIRTH_YEAR_MIN && value.year <= LEGACY_BIRTH_YEAR_MAX &&
+      Number.isInteger(value.year) && value.year >= minYear && value.year <= maxYear &&
       Number.isInteger(value.month) && value.month >= 1 && value.month <= 12 &&
       Number.isInteger(value.day) && value.day >= 1 && value.day <= 28
     );
@@ -159,17 +164,27 @@
       throw new TypeError('A Simulation-owned CharacterIdentity base identity is required.');
     }
     if (candidate.generatorVersion === VERSION) return candidate;
-    if (candidate.generatorVersion !== LEGACY_VERSION || !validLegacyBirthDate(candidate.birthDate)) {
+
+    let translatedYear;
+    if (candidate.generatorVersion === LEGACY_VERSION && validBirthDateInRange(candidate.birthDate, LEGACY_BIRTH_YEAR_MIN, LEGACY_BIRTH_YEAR_MAX)) {
+      translatedYear = candidate.birthDate.year - LEGACY_BIRTH_YEAR_OFFSET;
+    } else if (
+      candidate.generatorVersion === PREVIOUS_VERSION &&
+      candidate.birthDateCalendar === PREVIOUS_BIRTH_DATE_CALENDAR &&
+      validBirthDateInRange(candidate.birthDate, PREVIOUS_CANONICAL_BIRTH_YEAR_MIN, PREVIOUS_CANONICAL_BIRTH_YEAR_MAX)
+    ) {
+      translatedYear = candidate.birthDate.year + PREVIOUS_TO_CURRENT_YEAR_OFFSET;
+    } else {
       throw new TypeError('Unsupported CharacterIdentity generator version or legacy birth date.');
     }
 
     return deepFreeze({
       ...candidate,
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatorVersion: VERSION,
       birthDateCalendar: BIRTH_DATE_CALENDAR,
       birthDate: {
-        year: candidate.birthDate.year - LEGACY_BIRTH_YEAR_OFFSET,
+        year: translatedYear,
         month: candidate.birthDate.month,
         day: candidate.birthDate.day
       }
@@ -191,7 +206,7 @@
       : pick(seed, characterId, 'base-profession', BASE_PROFESSIONS);
 
     return deepFreeze({
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatorVersion: VERSION,
       authority: AUTHORITY,
       seed,
@@ -255,14 +270,17 @@
   }
 
   Game.CharacterIdentity = Object.freeze({
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatorVersion: VERSION,
+    previousGeneratorVersion: PREVIOUS_VERSION,
     legacyGeneratorVersion: LEGACY_VERSION,
     authority: AUTHORITY,
     birthDateCalendar: BIRTH_DATE_CALENDAR,
     canonicalBirthYearRange: Object.freeze({ min: CANONICAL_BIRTH_YEAR_MIN, max: CANONICAL_BIRTH_YEAR_MAX }),
+    previousCanonicalBirthYearRange: Object.freeze({ min: PREVIOUS_CANONICAL_BIRTH_YEAR_MIN, max: PREVIOUS_CANONICAL_BIRTH_YEAR_MAX }),
     legacyBirthYearRange: Object.freeze({ min: LEGACY_BIRTH_YEAR_MIN, max: LEGACY_BIRTH_YEAR_MAX }),
     legacyBirthYearOffset: LEGACY_BIRTH_YEAR_OFFSET,
+    previousToCurrentYearOffset: PREVIOUS_TO_CURRENT_YEAR_OFFSET,
     generateBaseIdentity,
     migrateBaseIdentity,
     fingerprint: canonicalBaseFingerprint,
