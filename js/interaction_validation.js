@@ -24,6 +24,8 @@ window.Game = window.Game || {};
     NON_SIMULATION_CONTEXT: 'NON_SIMULATION_CONTEXT',
     MALFORMED_INTERACTION_REQUEST: 'MALFORMED_INTERACTION_REQUEST',
     STALE_INTERACTION_CONTEXT: 'STALE_INTERACTION_CONTEXT',
+    WORLD_CONTEXT_MISMATCH: 'WORLD_CONTEXT_MISMATCH',
+    REGION_CONTEXT_MISMATCH: 'REGION_CONTEXT_MISMATCH',
     TARGET_REFERENCE_REJECTED: 'TARGET_REFERENCE_REJECTED',
     TARGET_UNAVAILABLE: 'TARGET_UNAVAILABLE',
     TARGET_IRRELEVANT: 'TARGET_IRRELEVANT',
@@ -82,8 +84,7 @@ window.Game = window.Game || {};
       requiredTargetStates: stringSet(source.requiredTargetStates),
       requiresSameSettlement: source.requiresSameSettlement === true,
       requiresSameSite: source.requiresSameSite === true,
-      timeWindows: (Array.isArray(source.timeWindows) ? source.timeWindows : [])
-        .map(normalizeWindow)
+      timeWindows: (Array.isArray(source.timeWindows) ? source.timeWindows : []).map(normalizeWindow)
     };
   }
 
@@ -98,7 +99,6 @@ window.Game = window.Game || {};
           regionRef: source.regionRef,
           contextRevision: source.targetContextRevision
         };
-
     const targetApi = window.Game?.InteractionTarget;
     const normalizedTargetReference = targetApi?.normalizeReference
       ? targetApi.normalizeReference(targetSource)
@@ -136,20 +136,12 @@ window.Game = window.Game || {};
 
   function normalizeContext(candidate) {
     const source = candidate && typeof candidate === 'object' ? candidate : {};
-    const interactions = source.interactions && typeof source.interactions === 'object'
-      ? source.interactions
-      : {};
+    const interactions = source.interactions && typeof source.interactions === 'object' ? source.interactions : {};
     const normalizedInteractions = {};
     Object.keys(interactions).sort().forEach((key) => {
       const interactionType = cleanString(key).toLowerCase();
-      if (!interactionType) return;
-      normalizedInteractions[interactionType] = normalizeRule(interactions[key]);
+      if (interactionType) normalizedInteractions[interactionType] = normalizeRule(interactions[key]);
     });
-
-    const targetContext = source.targetContext && typeof source.targetContext === 'object'
-      ? source.targetContext
-      : {};
-
     return {
       authority: cleanString(source.authority).toLowerCase(),
       actorId: cleanString(source.actorId),
@@ -162,15 +154,13 @@ window.Game = window.Game || {};
       actorTags: stringSet(source.actorTags),
       actorLocation: normalizeActorLocation(source.actorLocation),
       interactions: normalizedInteractions,
-      targetContext
+      targetContext: source.targetContext && typeof source.targetContext === 'object' ? source.targetContext : {}
     };
   }
 
   function minuteWithinWindow(minute, window) {
     if (window.startMinute === window.endMinute) return true;
-    if (window.startMinute < window.endMinute) {
-      return minute >= window.startMinute && minute < window.endMinute;
-    }
+    if (window.startMinute < window.endMinute) return minute >= window.startMinute && minute < window.endMinute;
     return minute >= window.startMinute || minute < window.endMinute;
   }
 
@@ -214,6 +204,12 @@ window.Game = window.Game || {};
     if (request.contextRevision !== context.revision) {
       return result(STATUS.REJECTED, REASON.STALE_INTERACTION_CONTEXT, request, null, null, null);
     }
+    if (!context.worldRef || request.worldRef !== context.worldRef) {
+      return result(STATUS.REJECTED, REASON.WORLD_CONTEXT_MISMATCH, request, null, null, null);
+    }
+    if (!context.regionRef || request.regionRef !== context.regionRef) {
+      return result(STATUS.REJECTED, REASON.REGION_CONTEXT_MISMATCH, request, null, null, null);
+    }
 
     const rule = context.interactions[request.interactionType];
     const baseResult = actionApi.validate({
@@ -237,9 +233,7 @@ window.Game = window.Game || {};
       targets: [{ ref: request.targetReference.ref, category: request.targetReference.category }]
     });
 
-    if (!rule) {
-      return result(STATUS.NOT_APPLICABLE, REASON.INTERACTION_NOT_SUPPORTED, request, null, null, baseResult);
-    }
+    if (!rule) return result(STATUS.NOT_APPLICABLE, REASON.INTERACTION_NOT_SUPPORTED, request, null, null, baseResult);
     if (baseResult.status !== actionApi.statuses.ALLOWED) {
       return result(baseResult.status, baseResult.reasonCode, request, null, null, baseResult);
     }
@@ -253,9 +247,7 @@ window.Game = window.Game || {};
     if (rule.allowedTargetCategories.length > 0 && !rule.allowedTargetCategories.includes(target.category)) {
       return result(STATUS.NOT_APPLICABLE, REASON.INTERACTION_CATEGORY_NOT_APPLICABLE, request, targetResolution, target, baseResult);
     }
-    if (!target.available) {
-      return result(STATUS.IMPOSSIBLE, REASON.TARGET_UNAVAILABLE, request, targetResolution, target, baseResult);
-    }
+    if (!target.available) return result(STATUS.IMPOSSIBLE, REASON.TARGET_UNAVAILABLE, request, targetResolution, target, baseResult);
     if (rule.allowedRelevance.length > 0 && !rule.allowedRelevance.includes(target.relevance)) {
       return result(STATUS.IMPOSSIBLE, REASON.TARGET_IRRELEVANT, request, targetResolution, target, baseResult);
     }
@@ -268,10 +260,12 @@ window.Game = window.Game || {};
     if (!timeAllowed(context.gameMinute, rule.timeWindows)) {
       return result(STATUS.IMPOSSIBLE, REASON.TIME_WINDOW_CLOSED, request, targetResolution, target, baseResult);
     }
-    if (rule.requiresSameSettlement && context.actorLocation.settlementRef !== target.location.settlementRef) {
+    if (rule.requiresSameSettlement && (!context.actorLocation.settlementRef || !target.location.settlementRef ||
+        context.actorLocation.settlementRef !== target.location.settlementRef)) {
       return result(STATUS.IMPOSSIBLE, REASON.LOCATION_MISMATCH, request, targetResolution, target, baseResult);
     }
-    if (rule.requiresSameSite && context.actorLocation.siteRef !== target.location.siteRef) {
+    if (rule.requiresSameSite && (!context.actorLocation.siteRef || !target.location.siteRef ||
+        context.actorLocation.siteRef !== target.location.siteRef)) {
       return result(STATUS.IMPOSSIBLE, REASON.LOCATION_MISMATCH, request, targetResolution, target, baseResult);
     }
     if (rule.requiredActorTags.some((tag) => !context.actorTags.includes(tag))) {
