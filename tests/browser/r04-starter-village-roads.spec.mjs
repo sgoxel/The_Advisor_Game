@@ -8,31 +8,21 @@ async function ready(page) {
     window.Game?.SpatialWorld?.generateOriginVillage &&
     window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain
   ), null, { timeout: 20_000 });
-
-  await page.evaluate(() => {
-    const Game = window.Game;
-    const world = Game.State.world;
-    if (Array.isArray(world?.originVillage?.roadTiles) && world.originVillage.roadTiles.length > 0) return;
-
-    // #277 owns presentation of authoritative road descriptors, not the separate unresolved
-    // startup/spatial-generator correction chain. Build a deterministic representative village
-    // through the production Simulation API so this focused renderer regression does not time out
-    // merely because an unrelated startup seed is blocked upstream.
-    const generated = Game.SpatialWorld.generateOriginVillage('R04-SEEDED-ROADS-A');
-    world.originVillage = generated.village;
-    world.rows = 100;
-    world.cols = 100;
-    Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
-  });
-
-  await page.waitForFunction(() => Boolean(
-    Array.isArray(window.Game?.State?.world?.originVillage?.roadTiles) &&
-    window.Game.State.world.originVillage.roadTiles.length > 0
-  ), null, { timeout: 20_000 });
 }
 
 function roadKey(point) {
   return `${point.row},${point.col}`;
+}
+
+function representativeVillageEvidence() {
+  const Game = window.Game;
+  const world = Game.State.world;
+  const generated = Game.SpatialWorld.generateOriginVillage('R04-SEEDED-ROADS-A');
+  world.originVillage = generated.village;
+  world.rows = 100;
+  world.cols = 100;
+  Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
+  return generated.village;
 }
 
 test('authoritative roads render as a continuous non-mutating cardinal surface', async ({ page }) => {
@@ -41,7 +31,7 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
   await ready(page);
 
   const evidence = await page.evaluate(() => {
-    const village = window.Game.State.world.originVillage;
+    const village = representativeVillageEvidence();
     const roadBefore = JSON.stringify(village.roadTiles);
     const buildingBefore = JSON.stringify(village.buildings);
     const firstTopology = window.Game.StarterVillageRoads.snapshotTopology();
@@ -111,6 +101,7 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await ready(page);
     const evidence = await page.evaluate(() => {
+      representativeVillageEvidence();
       window.Game.StarterVillageRoads.drawPresentation();
       const overlay = document.getElementById('starterVillageRoadOverlay');
       const rect = overlay?.getBoundingClientRect();
