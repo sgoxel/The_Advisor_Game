@@ -1,0 +1,62 @@
+name: R04 Autonomy Feedback Design Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'css/autonomy-feedback.css'
+      - 'js/autonomy_feedback_presentation.js'
+      - 'tests/browser/r04-autonomy-feedback-design.spec.mjs'
+      - 'tests/browser/r03-legality-feedback-ui.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomy-feedback-design-verification.yml'
+  pull_request:
+    paths:
+      - 'css/autonomy-feedback.css'
+      - 'js/autonomy_feedback_presentation.js'
+      - 'tests/browser/r04-autonomy-feedback-design.spec.mjs'
+      - 'tests/browser/r03-legality-feedback-ui.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomy-feedback-design-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-autonomy-feedback-design:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04-T05 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R04 autonomous activity presentation regression
+        run: npx playwright test tests/browser/r04-autonomy-feedback-design.spec.mjs
+      - name: Preserve R03 legality feedback presentation
+        run: npx playwright test tests/browser/r03-legality-feedback-ui.spec.mjs
+      - name: Preserve canonical R01 responsive browser baseline
+        run: npm run test:browser:r01
+      - name: Upload focused R04 presentation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-autonomy-feedback-design-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
