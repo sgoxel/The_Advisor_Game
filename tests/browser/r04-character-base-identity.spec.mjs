@@ -5,6 +5,19 @@ async function loadIdentity(page) {
   await page.waitForFunction(() => Boolean(window.Game?.CharacterIdentity?.generateBaseIdentity));
 }
 
+test('normal product startup exposes the Simulation-owned character identity module', async ({ page }) => {
+  await page.goto('./');
+  await page.waitForFunction(() => Boolean(window.Game?.CharacterIdentity?.generateBaseIdentity));
+  const startup = await page.evaluate(() => ({
+    available: Boolean(window.Game?.CharacterIdentity?.generateBaseIdentity),
+    authority: window.Game?.CharacterIdentity?.authority,
+    scriptLoaded: Array.from(document.scripts).some((script) => script.src.endsWith('/js/character_identity.js'))
+  }));
+  expect(startup.available).toBe(true);
+  expect(startup.authority).toBe('simulation');
+  expect(startup.scriptLoaded).toBe(true);
+});
+
 test('same SEED and stable character id reproduce identical base identity', async ({ page }) => {
   await loadIdentity(page);
   const evidence = await page.evaluate(() => {
