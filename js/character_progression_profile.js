@@ -131,6 +131,11 @@
     Terrain.generateWorld = wrapped;
   }
 
+  function initialize() {
+    bindGenerationRefresh();
+    installCurrent();
+  }
+
   Game.CharacterProgressionProfile = Object.freeze({
     schemaVersion: SCHEMA_VERSION,
     authority: AUTHORITY,
@@ -143,9 +148,7 @@
   });
 
   if (global.document) {
-    global.addEventListener('DOMContentLoaded', () => {
-      bindGenerationRefresh();
-      installCurrent();
-    });
+    if (global.document.readyState === 'loading') global.addEventListener('DOMContentLoaded', initialize, { once: true });
+    else initialize();
   }
 })(typeof window !== 'undefined' ? window : globalThis);
