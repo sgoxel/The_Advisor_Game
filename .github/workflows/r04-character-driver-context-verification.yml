@@ -1,0 +1,71 @@
+name: R04 Character Driver Context Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/character_driver_context.js'
+      - 'js/local_bot_character_context_bridge.js'
+      - 'js/local_bot_driver.js'
+      - 'js/character_identity.js'
+      - 'js/character_age.js'
+      - 'js/character_location_context.js'
+      - 'js/character_emotion.js'
+      - 'js/utils.js'
+      - 'tests/browser/r04-character-driver-context-local-bot.spec.mjs'
+      - '.github/workflows/r04-character-driver-context-verification.yml'
+  pull_request:
+    paths:
+      - 'js/character_driver_context.js'
+      - 'js/local_bot_character_context_bridge.js'
+      - 'js/local_bot_driver.js'
+      - 'js/character_identity.js'
+      - 'js/character_age.js'
+      - 'js/character_location_context.js'
+      - 'js/character_emotion.js'
+      - 'js/utils.js'
+      - 'tests/browser/r04-character-driver-context-local-bot.spec.mjs'
+      - '.github/workflows/r04-character-driver-context-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  character-context-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Verify unified character context consumption
+        run: npx playwright test tests/browser/r04-character-driver-context-local-bot.spec.mjs --project=desktop
+      - name: Preserve deterministic Local BOT selection
+        run: npx playwright test tests/browser/r04-local-bot-selection.spec.mjs --project=desktop
+      - name: Preserve deterministic character identity
+        run: npx playwright test tests/browser/r04-character-base-identity.spec.mjs --project=desktop
+      - name: Preserve authoritative character age
+        run: npx playwright test tests/browser/r04-character-age.spec.mjs --project=desktop
+      - name: Preserve current-location character context
+        run: npx playwright test tests/browser/r04-character-location-context.spec.mjs --project=desktop
+      - name: Preserve Simulation-owned emotional context
+        run: npx playwright test tests/browser/r04-character-emotion.spec.mjs --project=desktop
+      - name: Preserve non-binding Advisor influence
+        run: npx playwright test tests/browser/r04-advisor-influence-local-bot.spec.mjs --project=desktop
+      - name: Preserve Simulation execution authority
+        run: npx playwright test tests/browser/r04-autonomous-action-execution.spec.mjs --project=desktop
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-character-driver-context-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
