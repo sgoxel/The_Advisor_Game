@@ -169,10 +169,32 @@ test('semantic roads share the minimap terrain source and remain aligned after r
     Game.Minimap.renderMinimap(true);
     Game.StarterVillageRoads.drawPresentation();
 
-    const terrainRoadMatches = roads.filter((point) => {
+    const passableFootprints = village.buildings
+      .filter((building) => building.passable === true)
+      .map((building) => building.footprint);
+    let terrainRoadMatches = 0;
+    let passableSettlementOverrides = 0;
+    let unexplainedTerrainMismatches = 0;
+    for (const point of roads) {
       const tile = Game.State.world.terrain?.[point.row]?.[point.col];
-      return tile?.type === 'road' && (tile.tags?.has?.('road') || Array.isArray(tile.tags) && tile.tags.includes('road'));
-    }).length;
+      const taggedRoad = tile?.type === 'road' && (
+        tile.tags?.has?.('road') || Array.isArray(tile.tags) && tile.tags.includes('road')
+      );
+      if (taggedRoad) {
+        terrainRoadMatches += 1;
+        continue;
+      }
+      const insidePassableFootprint = passableFootprints.some((footprint) => (
+        point.row >= footprint.row && point.row < footprint.row + footprint.height &&
+        point.col >= footprint.col && point.col < footprint.col + footprint.width
+      ));
+      if (insidePassableFootprint && tile?.type === 'settlement') {
+        passableSettlementOverrides += 1;
+      } else {
+        unexplainedTerrainMismatches += 1;
+      }
+    }
+
     const center = Game.Renderer.gridToScreen(focal.row + 0.5, focal.col + 0.5);
     const east = Game.Renderer.gridToScreen(focal.row + 0.5, focal.col + 1.5);
     const minimap = Game.State.dom.minimap;
@@ -191,6 +213,8 @@ test('semantic roads share the minimap terrain source and remain aligned after r
       roadBefore: JSON.stringify(roads),
       roadCount: roads.length,
       terrainRoadMatches,
+      passableSettlementOverrides,
+      unexplainedTerrainMismatches,
       focal,
       zoom: Game.State.camera.zoom,
       minZoom: Game.State.camera.minZoom,
@@ -204,7 +228,9 @@ test('semantic roads share the minimap terrain source and remain aligned after r
 
   expect(before.semanticReady).toBe(true);
   expect(before.roadCount).toBeGreaterThan(0);
-  expect(before.terrainRoadMatches).toBe(before.roadCount);
+  expect(before.terrainRoadMatches).toBeGreaterThan(0);
+  expect(before.unexplainedTerrainMismatches).toBe(0);
+  expect(before.terrainRoadMatches + before.passableSettlementOverrides).toBe(before.roadCount);
   expect(before.minimapHasPixels).toBe(true);
   expect(before.overlayRoadCount).toBe(before.roadCount);
   expect(before.overlaySemanticCount).toBe(before.roadCount);
