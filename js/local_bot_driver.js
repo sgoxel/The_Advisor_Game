@@ -32,6 +32,14 @@ window.Game = window.Game || {};
     return Math.min(max, Math.max(min, value));
   }
 
+  function normalizeNeeds(value) {
+    const source = value && typeof value === 'object' ? value : {};
+    return freeze(Object.fromEntries(Object.entries(source)
+      .map(([key, item]) => [text(key).toLowerCase(), clamp(integer(item), 0, 100)])
+      .filter(([key]) => Boolean(key))
+      .sort(([a], [b]) => a.localeCompare(b))));
+  }
+
   function normalizeContext(input) {
     const source = input && typeof input === 'object' ? input : {};
     return freeze({
@@ -44,9 +52,7 @@ window.Game = window.Game || {};
       contextRevision: Math.max(0, integer(source.contextRevision)),
       campaignMinute: Math.max(0, integer(source.campaignMinute)),
       actorStateRef: text(source.actorStateRef) || null,
-      needs: freeze(Object.fromEntries(Object.entries(source.needs && typeof source.needs === 'object' ? source.needs : {})
-        .map(([key, value]) => [text(key).toLowerCase(), clamp(integer(value), 0, 100)])
-        .filter(([key]) => Boolean(key))))
+      needs: normalizeNeeds(source.needs)
     });
   }
 
