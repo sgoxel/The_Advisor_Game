@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'index.html'
+      - 'js/config.js'
       - 'js/autonomy_feedback_runtime.js'
       - 'js/autonomy_feedback_presentation.js'
       - 'css/autonomy-feedback.css'
@@ -15,6 +17,8 @@ on:
       - '.github/workflows/r04-autonomy-feedback-runtime-verification.yml'
   pull_request:
     paths:
+      - 'index.html'
+      - 'js/config.js'
       - 'js/autonomy_feedback_runtime.js'
       - 'js/autonomy_feedback_presentation.js'
       - 'css/autonomy-feedback.css'
