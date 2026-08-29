@@ -60,6 +60,25 @@ Within those priorities, prefer the oldest/highest-priority eligible unclaimed t
 
 Workers must not invent work merely to keep a role busy.
 
+## Planner work-inventory capacity
+
+Planner maintains a deep but legitimate issue inventory so scheduled and manual Workers have enough real work to consume without weakening phase priority or product authority.
+
+After README reconciliation, blocking P-REV work, and active-phase planning repairs, Planner counts usable open focused work issues. Pure phase trackers, ledgers, rotation/governance records, and similar non-executable bookkeeping do not count toward work-inventory capacity.
+
+When legitimate Admin/README/ROADMAP-approved scope supports it:
+
+- target roughly **45–55 open focused work issues**;
+- if usable inventory falls below **40**, replenish by decomposing already approved work toward roughly 50;
+- aim for at least **10 immediately eligible, unclaimed targets** when real dependencies and approved scope permit;
+- preserve useful parallel work for both Coder and Designer when legitimate work permits.
+
+Current and earlier unresolved work always remains higher priority. README/ROADMAP-defined near-future work may be pre-decomposed only when useful for capacity planning, and every such issue must be explicitly blocked by its future phase and/or real dependencies until it becomes legitimately eligible. Pre-decomposition never activates a future phase early.
+
+Every capacity issue must trace to an Admin instruction, README requirement, ROADMAP-approved outcome, evidenced defect, required prerequisite, integration need, verification/regression need, or a justified focused decomposition of approved scope. Normally one issue represents one focused, measurable, independently testable outcome.
+
+The numeric inventory target is not a quota and never grants scope authority. Planner must not create filler, duplicate issues, speculative features, invented gameplay, unnecessary artificial micro-tasks, fake dependencies, or future work unsupported by README/ROADMAP merely to reach a count. If the legitimate approved scope supports fewer issues or fewer immediately eligible targets, the truthful lower number is correct and must be reported rather than padded.
+
 ## Independence
 
 A Worker must never **independently** approve its own implementation, design, revision, bug fix, workflow fix, process fix, or other prior change from the same or an earlier run.
