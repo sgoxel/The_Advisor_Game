@@ -22,6 +22,8 @@ Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker
 
 The canonical cursor provides the starting role for scheduled Workers #1–#5.
 
+The scheduled cursor is a continuity pointer only. It does not reserve an invocation, pass, role cycle, or cursor sequence for one Worker. No Worker may create or honor whole-run/cycle reservation ownership. Historical reservation comments are superseded and have no operational blocking effect. Safe overlap is controlled only by target-level `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership.
+
 Workers #6 through #20 are cursor-independent. A direct Admin instruction may define any manual Worker's role, target, scope, or starting point. When the Admin invokes any manual Worker broadly without narrowing the role, that Worker reads README first, performs a project-priority scan, and then uses the same role boundaries and work-conserving cycle as the scheduled Workers.
 
 ## Work-conserving execution
@@ -165,6 +167,8 @@ Before closing an issue, re-fetch its comments and confirm every `TESTER REVISIO
 
 Workers may overlap in time. `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership are the collision controls.
 
+Only a concrete target may be reserved. Never reserve an entire invocation, pass, role cycle, or scheduled cursor. A whole-run reservation must not block another Worker from independently selecting and claiming a different eligible target.
+
 Before modifying a target, claim it with the current Worker identity and role. Claim acquisition is a two-phase pre-write safety check: **(1)** immediately before posting `WORK-CLAIM`, re-fetch the target issue comments/state and confirm there is no earlier live conflicting claim or NVIDIA ownership; **(2)** immediately after posting the claim, re-fetch the target issue comments/state again before the first repository, product, planning, design, test, or workflow write. If that second read reveals an earlier conflicting live claim, the earlier claim wins deterministically; the later claimant must treat its claim as superseded, post a claim-clear/collision audit, make no target write, and continue the work-conserving cycle. Re-fetch again before other important writes. Never duplicate a live claim or break live NVIDIA ownership merely because a run is old.
 
 A Worker must not treat NVIDIA Coder self-test as independent PASS. NVIDIA is not phase/release authority and cannot consume the Tester deadlock exception.
@@ -172,6 +176,8 @@ A Worker must not treat NVIDIA Coder self-test as independent PASS. NVIDIA is no
 ## Scheduled rotation state
 
 The canonical recurring cursor is the latest valid `WORKER ROTATION STATE:` JSON comment on GitHub issue #97. It applies only to scheduled Workers #1–#5. Scheduled Workers append state comments; they do not rewrite history.
+
+The cursor never grants exclusive ownership of the run. Multiple Workers may execute concurrently from GitHub's current state provided they claim only concrete targets and obey target collision, dependency, independence, and NVIDIA rules.
 
 At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, claim-clear state, pending external work, and whether continuation is required.
 
