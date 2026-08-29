@@ -1,0 +1,41 @@
+name: R04 NPC Default Init Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/npc_spatial_runtime.js'
+      - 'tests/browser/r04-npc-default-init.spec.mjs'
+      - 'tests/browser/r01-readability.spec.mjs'
+      - '.github/workflows/r04-npc-default-init-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npc-default-init:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify normal-start NPC occupancy
+        run: npx playwright test tests/browser/r04-npc-default-init.spec.mjs --project=desktop
+      - name: Preserve R01 readability across configured form factors
+        run: npx playwright test tests/browser/r01-readability.spec.mjs
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-npc-default-init-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
