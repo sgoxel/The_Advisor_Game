@@ -1,0 +1,73 @@
+name: R04 100x100 Spatial World Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/config.js'
+      - 'js/spatial_world.js'
+      - 'js/region_navigation.js'
+      - 'js/npc_spatial_runtime.js'
+      - 'js/npc_world.js'
+      - 'js/npc_life.js'
+      - 'js/utils.js'
+      - 'tests/browser/r04-spatial-world-100.spec.mjs'
+      - 'tests/browser/r02-origin-village.spec.mjs'
+      - 'tests/browser/r02-multi-region-terrain.spec.mjs'
+      - 'tests/browser/r02-region-navigation.spec.mjs'
+      - '.github/workflows/r04-spatial-world-100-verification.yml'
+  pull_request:
+    paths:
+      - 'js/config.js'
+      - 'js/spatial_world.js'
+      - 'js/region_navigation.js'
+      - 'js/npc_spatial_runtime.js'
+      - 'js/npc_world.js'
+      - 'js/npc_life.js'
+      - 'js/utils.js'
+      - 'tests/browser/r04-spatial-world-100.spec.mjs'
+      - 'tests/browser/r02-origin-village.spec.mjs'
+      - 'tests/browser/r02-multi-region-terrain.spec.mjs'
+      - 'tests/browser/r02-region-navigation.spec.mjs'
+      - '.github/workflows/r04-spatial-world-100-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  spatial-world-and-npc-occupancy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused 100x100 spatial-world regression
+        run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs
+      - name: Re-run deterministic origin village regression
+        run: npx playwright test tests/browser/r02-origin-village.spec.mjs
+      - name: Re-run deterministic multi-region terrain regression
+        run: npx playwright test tests/browser/r02-multi-region-terrain.spec.mjs
+      - name: Re-run adjacent-region navigation regression
+        run: npx playwright test tests/browser/r02-region-navigation.spec.mjs
+      - name: Run stabilized R01 browser regression
+        run: npm run test:browser:r01
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-spatial-world-100-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
