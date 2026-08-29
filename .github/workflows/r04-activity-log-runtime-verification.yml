@@ -1,0 +1,80 @@
+name: R04 Activity Log Runtime Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'css/activity_log.css'
+      - 'js/state.js'
+      - 'js/ui.js'
+      - 'js/utils.js'
+      - 'js/app.js'
+      - 'js/activity_log_runtime.js'
+      - 'js/advisor_chat_ui.js'
+      - 'js/npc_spatial_runtime.js'
+      - 'tests/browser/r04-activity-log-runtime.spec.mjs'
+      - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
+      - 'tests/browser/r04-npc-authoritative-game-time.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-activity-log-runtime-verification.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'css/activity_log.css'
+      - 'js/state.js'
+      - 'js/ui.js'
+      - 'js/utils.js'
+      - 'js/app.js'
+      - 'js/activity_log_runtime.js'
+      - 'js/advisor_chat_ui.js'
+      - 'js/npc_spatial_runtime.js'
+      - 'tests/browser/r04-activity-log-runtime.spec.mjs'
+      - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
+      - 'tests/browser/r04-npc-authoritative-game-time.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-activity-log-runtime-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-activity-log-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04 activity-log candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run structured Activity Log regression
+        run: npx playwright test tests/browser/r04-activity-log-runtime.spec.mjs --project=desktop
+      - name: Preserve Advisor chat integration
+        run: npx playwright test tests/browser/r04-advisor-chat-surface.spec.mjs --project=desktop
+      - name: Preserve NPC authoritative GameTime integration
+        run: npx playwright test tests/browser/r04-npc-authoritative-game-time.spec.mjs --project=desktop
+      - name: Preserve baseline browser behavior
+        run: npx playwright test tests/browser/r01-baseline.spec.mjs --project=desktop
+      - name: Upload Activity Log verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-activity-log-runtime-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
