@@ -8,21 +8,26 @@ async function ready(page) {
     window.Game?.SpatialWorld?.generateOriginVillage &&
     window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain
   ), null, { timeout: 20_000 });
+
+  // Keep the representative authoritative village creation in the browser realm and invoke it
+  // immediately before each assertion block. This avoids racing the normal asynchronous startup
+  // world replacement while still exercising only production Simulation APIs and #277 rendering.
+  await page.evaluate(() => {
+    window.__r04RepresentativeRoadVillage = () => {
+      const Game = window.Game;
+      const world = Game.State.world;
+      const generated = Game.SpatialWorld.generateOriginVillage('R04-SEEDED-ROADS-A');
+      world.originVillage = generated.village;
+      world.rows = 100;
+      world.cols = 100;
+      Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
+      return generated.village;
+    };
+  });
 }
 
 function roadKey(point) {
   return `${point.row},${point.col}`;
-}
-
-function representativeVillageEvidence() {
-  const Game = window.Game;
-  const world = Game.State.world;
-  const generated = Game.SpatialWorld.generateOriginVillage('R04-SEEDED-ROADS-A');
-  world.originVillage = generated.village;
-  world.rows = 100;
-  world.cols = 100;
-  Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
-  return generated.village;
 }
 
 test('authoritative roads render as a continuous non-mutating cardinal surface', async ({ page }) => {
@@ -31,7 +36,7 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
   await ready(page);
 
   const evidence = await page.evaluate(() => {
-    const village = representativeVillageEvidence();
+    const village = window.__r04RepresentativeRoadVillage();
     const roadBefore = JSON.stringify(village.roadTiles);
     const buildingBefore = JSON.stringify(village.buildings);
     const firstTopology = window.Game.StarterVillageRoads.snapshotTopology();
@@ -101,7 +106,7 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await ready(page);
     const evidence = await page.evaluate(() => {
-      representativeVillageEvidence();
+      window.__r04RepresentativeRoadVillage();
       window.Game.StarterVillageRoads.drawPresentation();
       const overlay = document.getElementById('starterVillageRoadOverlay');
       const rect = overlay?.getBoundingClientRect();
