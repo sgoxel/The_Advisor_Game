@@ -1,0 +1,42 @@
+name: Tile Atlas Splitter Verification
+
+on:
+  push:
+    paths:
+      - 'tools/split_tile_atlas.mjs'
+      - 'tests/node/tile-atlas-splitter.test.mjs'
+      - '.github/workflows/tile-atlas-splitter-verification.yml'
+  pull_request:
+    paths:
+      - 'tools/split_tile_atlas.mjs'
+      - 'tests/node/tile-atlas-splitter.test.mjs'
+      - '.github/workflows/tile-atlas-splitter-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  tile-atlas-splitter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run canonical tile atlas splitter tests
+        run: |
+          set -o pipefail
+          node --test tests/node/tile-atlas-splitter.test.mjs | tee tile-atlas-splitter.tap
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tile-atlas-splitter-${{ github.sha }}
+          path: tile-atlas-splitter.tap
+          if-no-files-found: error
+          retention-days: 30
