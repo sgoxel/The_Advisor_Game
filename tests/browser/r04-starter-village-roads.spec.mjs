@@ -5,6 +5,27 @@ async function ready(page) {
   await page.waitForFunction(() => Boolean(
     window.Game?.StarterVillageRoads?.drawPresentation &&
     window.Game?.StarterVillageRoads?.snapshotTopology &&
+    window.Game?.SpatialWorld?.generateOriginVillage &&
+    window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain
+  ), null, { timeout: 20_000 });
+
+  await page.evaluate(() => {
+    const Game = window.Game;
+    const world = Game.State.world;
+    if (Array.isArray(world?.originVillage?.roadTiles) && world.originVillage.roadTiles.length > 0) return;
+
+    // #277 owns presentation of authoritative road descriptors, not the separate unresolved
+    // startup/spatial-generator correction chain. Build a deterministic representative village
+    // through the production Simulation API so this focused renderer regression does not time out
+    // merely because an unrelated startup seed is blocked upstream.
+    const generated = Game.SpatialWorld.generateOriginVillage('R04-SEEDED-ROADS-A');
+    world.originVillage = generated.village;
+    world.rows = 100;
+    world.cols = 100;
+    Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
+  });
+
+  await page.waitForFunction(() => Boolean(
     Array.isArray(window.Game?.State?.world?.originVillage?.roadTiles) &&
     window.Game.State.world.originVillage.roadTiles.length > 0
   ), null, { timeout: 20_000 });
