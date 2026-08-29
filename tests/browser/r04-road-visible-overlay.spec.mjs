@@ -5,10 +5,25 @@ async function waitForRoadWorld(page) {
   await page.waitForFunction(() => Boolean(
     window.Game?.StarterVillageRoads?.ensureSemanticAssets &&
     window.Game?.StarterVillageRoads?.drawPresentation &&
+    window.Game?.SpatialWorld?.generateOriginVillage &&
+    window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain &&
     window.Game?.Renderer?.renderWorld &&
     window.Game?.Renderer?.gridToScreen &&
-    window.Game?.State?.world?.originVillage?.roadTiles?.length
+    window.Game?.State?.world?.terrain
   ), null, { timeout: 20_000 });
+
+  // Install the same deterministic representative Simulation-owned village used by the
+  // sibling R04 road regression. Do not race asynchronous startup world replacement or
+  // rely on whichever originVillage happens to be present while the page is booting.
+  await page.evaluate(() => {
+    const Game = window.Game;
+    const world = Game.State.world;
+    const generated = Game.SpatialWorld.generateOriginVillage('R04-VISIBLE-ROAD-OVERLAY');
+    world.originVillage = generated.village;
+    world.rows = 100;
+    world.cols = 100;
+    Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
+  });
 }
 
 async function visibleRoadEvidence(page) {
