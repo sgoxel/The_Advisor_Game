@@ -69,7 +69,7 @@
       width: '100%',
       height: '100%',
       pointerEvents: 'none',
-      zIndex: '0'
+      zIndex: '1'
     });
     host.appendChild(overlayCanvas);
     return overlayCanvas;
