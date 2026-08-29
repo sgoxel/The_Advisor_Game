@@ -261,6 +261,14 @@ The generator-defined locations and spatial relationships of starter-village bui
 
 Buildings must occupy logical footprints appropriate to their represented use rather than existing as dimensionless points when local spatial detail matters. A representative ordinary starter-village home occupies **at least 10 × 10 logical tiles** and contains **at least two logical rooms**, with a usable relationship to an entrance and the local road/path network. Different building types may require larger or otherwise appropriate footprints.
 
+Locally materialized buildings are **physical, enterable parts of the living world**, not merely exterior markers, decorative ground footprints, menu shortcuts, or disconnected interior scenes. When local detail is relevant, a building must be able to materialize simulation-compatible wall boundaries, interior floor/walkable space, usable doors or entrances, logical rooms, and role-appropriate furniture, fixtures, work positions, storage, beds, counters, tables, or other interaction anchors as applicable to the building's function and authoritative state.
+
+Walls and other solid structural boundaries constrain local movement. Doors and entrances connect exterior roads/paths and exterior walkable space to the building's interior walkable space. Interior scale must remain compatible with the world-space character scale so a resident can logically move, stand, work, sleep, converse and interact inside the building rather than being represented by impossible or purely decorative geometry.
+
+Entering or leaving a building must preserve the **same authoritative building, characters, location and campaign state**. An interior must not become a disconnected duplicate map or presentation-only copy of the building. For performance, interior detail may be streamed, layered, culled, or lazily materialized when relevant, but materialization must refine the same authoritative world state.
+
+The presentation must make an occupied interior readable. Roofs, ceilings, upper walls or other occluding presentation layers may hide, cut away, fade, become transparent, or use another coherent reveal technique when needed so the player can see characters and relevant interior space. The exact reveal technique is an implementation/design decision; the product requirement is that entering an accessible building produces a readable, spatially continuous interior experience.
+
 The player must begin inside a visibly inhabited medieval-fantasy environment rather than on an empty map, abstract dashboard, or isolated character screen.
 
 The starting village must contain a coherent village environment with appropriate homes, roads and paths, gathering areas, farms or fields where suitable, trees and surrounding terrain, shops, workshops, service buildings, food and lodging locations, storage or production locations, and settlement-specific landmarks.
@@ -331,15 +339,15 @@ As the protagonist progresses from Peasant toward noble, royal, and eventually i
 
 ## 🗺️ Primary Game Surface — Living Strategic World Map
 
-The primary playable surface of The Advisor Game is a persistent, living strategic world map presented in an isometric or near-isometric style comparable in spatial readability to classic strategy games.
+The primary playable surface of The Advisor Game is a persistent, living strategic world map. Local play uses a **classic tile-based 2D/2.5D RPG composition**, using a readable top-down, shallow-isometric or near-isometric camera/perspective appropriate to the environment and interaction. The local camera must preserve clear tile relationships, character positions, building entrances and interior readability rather than forcing a steep perspective that hides usable space.
 
 The game must not be presented primarily as a collection of menus, cards, dashboards, text panels, disconnected scenes, or static mockups.
 
 The player must be able to observe the evolving game world itself.
 
-The strategic world map must visually represent, as applicable to the generated world and current campaign state, terrain and elevation; biomes; rivers, streams, lakes, coasts and water; forests and vegetation; roads, paths and bridges; settlements; individual buildings and structures; ruins, caves, dungeons and landmarks; resources and environmental objects; the autonomous main character; other people; domestic animals and wildlife; fantasy creatures and monsters; armies, groups and caravans; and environmental effects such as weather, lighting, fire, smoke, fog and water.
+The strategic world map must visually represent, as applicable to the generated world and current campaign state, terrain and elevation; biomes; rivers, streams, lakes, coasts and water; forests and vegetation; roads, paths and bridges; settlements; individual buildings and structures; accessible building interiors when locally relevant; rooms, doors and important interior props; ruins, caves, dungeons and landmarks; resources and environmental objects; the autonomous main character; other people; domestic animals and wildlife; fantasy creatures and monsters; armies, groups and caravans; and environmental effects such as weather, lighting, fire, smoke, fog and water.
 
-Characters, creatures, buildings, terrain and objects may use a coherent combination of 2D, 2.5D and 3D techniques, but they must appear to inhabit the same spatial world.
+Characters, creatures, buildings, interiors, terrain, furniture and objects must appear to inhabit the same spatial world and use a coherent tile/sprite scale. Mixed techniques are allowed when coherent, but the final local-world presentation must not look like unrelated photorealistic terrain, generic markers and disconnected character art layered together.
 
 The strategic map is not decorative background art. It is the visual representation of the authoritative simulated world.
 
@@ -347,19 +355,31 @@ Locations, movement, settlements, roads, terrain, discoveries, events, character
 
 As the simulation changes the world, the visible strategic map must react accordingly.
 
-The camera and presentation must allow the player to understand where the main character is, what surrounds them, what places exist nearby, and how the local area relates to the wider world.
+The camera and presentation must allow the player to understand where the main character is, what surrounds them, what places exist nearby, what spaces are enterable, and how the local area relates to the wider world.
 
 As the campaign grows in geographic and political scale, the same authoritative living world must also support readable regional, realm/country, and wider-world strategic views. These higher-level views may summarize aggregate state and major relationships without materializing every local entity, but they must remain views of the same simulated world rather than disconnected dashboard-only substitutes.
 
 Early releases may use simplified or placeholder assets, but they must establish and progressively extend this same playable strategic world rather than replacing it with disconnected visual prototypes.
 
-## 🌐 WebGL-Based Mixed 2D / 3D Presentation
+## 🚪 Enterable Buildings and Seamless Interiors
 
-The game is a **WebGL-based mixed 2D/3D experience** with an isometric or near-isometric presentation.
+Locally relevant buildings are part of the playable spatial world. A building that is represented as accessible must be able to support exterior approach, entrance through a valid door/opening, interior navigation, interior activity, and exit back to the exterior while retaining one continuous building identity.
 
-The visual world may combine real-time 3D scenes and objects; 2D portraits and character artwork; illustrated or layered backgrounds; sprites and overlays; textures and materials; UI graphics and icons; terrain, buildings, vegetation, props, landmarks, roads, bridges, settlements, and environmental effects.
+Interior spatial structure should correspond to the authoritative/generated building footprint and current campaign state. At local detail this may include exterior/perimeter walls, interior walls or dividers, floors, rooms, doors, windows where relevant, furniture, workstations, beds, counters, storage, decoration, service points and other function-appropriate objects. Presentation details may be richer than Simulation data, but they must not contradict authoritative layout, access, damage, ownership, use or occupancy.
 
-2D and 3D content must feel like parts of the same coherent game world rather than disconnected visual prototypes.
+Accessible walls and solid obstacles must be respected by local movement. Characters should use entrances and walkable interior space instead of visibly crossing solid walls or occupying impossible furniture geometry. Buildings and interior props should be scaled so the world-space character sprite can move and stand naturally within rooms.
+
+Entering a building does not create a second independent version of that place. The interior is a detailed view/materialization of the same authoritative building and may be loaded, generated, streamed, layered or cached lazily for performance. Returning outside or revisiting later must preserve applicable campaign history and persistent changes.
+
+To keep interiors readable in the tile-based camera, roof/ceiling/upper-wall layers may automatically hide, cut away, fade or become translucent when an interior must be seen. The exact technique may vary by building and device, but the player must be able to understand interior walls, rooms, occupants and interaction points without leaving the living-world presentation.
+
+## 🌐 WebGL-Based Tile-Oriented 2D / 2.5D Presentation
+
+The game is a **WebGL-based, primarily tile-oriented 2D/2.5D experience** for its local living-world presentation. Classic sprite/tile readability is the target; real-time 3D may be used selectively where it contributes coherently, but a fully 3D local world is not required and must not override the approved tile-RPG visual identity.
+
+The visual world may combine tile layers; transparent PNG character sprites; full-body dialogue artwork; hand-crafted or painterly raster assets; walls, floors and interior tiles; illustrated layers; textures; UI graphics and icons; vegetation, props, landmarks, roads, bridges, settlements, weather and environmental effects.
+
+Terrain, buildings, interiors, props, vegetation and characters should converge toward one original handcrafted visual family. Photographic or highly photorealistic textures that visibly clash with the intended classic tile/sprite RPG language are development placeholders rather than the target final presentation.
 
 Readability, atmosphere, character emotion, clear interaction, responsive performance, and broad browser/device usability take priority over unnecessary visual complexity.
 
@@ -514,38 +534,42 @@ Location must remain meaningful to gameplay, including travel, meetings, informa
 
 ## 🎨 Visual Direction
 
-The visual identity combines an **original seinen-anime-inspired character language** with the atmosphere and spatial readability of **old-school computer role-playing games**. This is a broad art-direction target rather than a request to imitate any specific manga, anime, artist, game, protected character, costume, composition, or signature style.
+The visual identity combines an **original seinen-anime-inspired character language** for character-focused art with the spatial readability and handcrafted atmosphere of a **classic old-school tile-based computer RPG**. The Admin-provided visual reference defines the intended composition, readability, interior-building logic and sprite/tile relationship; it is not an asset source and must not be copied as a protected layout, logo, character, sprite sheet, texture set or identifiable artwork.
 
-Characters should feel mature, grounded and dramatically expressive rather than cute, chibi, super-deformed or toy-like. Proportions should generally remain believable; faces should support subtle and restrained emotion as well as strong dramatic moments; silhouettes, age, social status, profession, culture and personality should remain readable; and medieval-fantasy clothing, armor, equipment and wear should feel materially plausible within the generated world. Portraits and closer character art may use stronger line, shape and painterly detail than distant in-world figures, but both must clearly belong to the same character family.
+Character-focused and full-body dialogue art should feel mature, grounded and dramatically expressive. Proportions should generally remain believable; faces should support restrained emotion and strong dramatic moments; silhouettes, age, social status, profession, culture and personality should remain readable; and medieval-fantasy clothing, armor, equipment and wear should feel materially plausible within the generated world.
 
-The wider game should evoke classic PC RPG presentation through **isometric or near-isometric spatial composition, hand-crafted or painterly surfaces, pre-rendered-feeling depth where appropriate, grounded medieval-fantasy color and material treatment, readable silhouettes, restrained effects, strong environmental atmosphere, and clear information-dense interface framing**. Nostalgia is a visual influence, not permission to recreate obsolete usability problems: text, controls, hierarchy, contrast, touch targets and responsive layouts must remain accessible on current desktop, tablet and phone screens.
+World-space character sprites deliberately operate at a smaller tile-readable scale and may simplify proportions, features and detail more strongly than full-body dialogue art. This simplification is allowed to achieve immediate world readability, but the sprite must remain recognizably connected to the same character identity through silhouette, palette, clothing, equipment, hair, role/status cues or other appropriate markers. The world sprite should not become an anonymous marker or unrelated generic avatar.
 
-The mixed 2D/2.5D/3D WebGL presentation may use portraits, sprites, illustrated layers, modeled geometry, textured environments and UI illustration together, but character portraits, in-world characters, settlements, environments, creatures, UI ornament and later region/realm/world views should feel like parts of one coherent visual product rather than unrelated art packs.
+The local world should evoke classic handcrafted tile RPG presentation through **readable tile floors and terrain, clearly bounded walls and rooms, obvious doors and entrances, compact world-space sprites, interior props and furniture, coherent vegetation and roads, restrained effects, strong environmental atmosphere, and a camera angle that keeps navigation and interiors legible**. Pixel-art or pixel-art-like raster treatment is suitable where it supports the approved direction, but exact pixel dimensions and production technique remain Designer decisions.
 
-Visual effects should support atmosphere and readability rather than spectacle for its own sake. The old-school RPG direction should favor deliberate composition, material richness and mood over expensive visual complexity, which is compatible with the project's mobile/tablet performance goals and performance-friendly day/night approach.
+Terrain, buildings, walls, floors, furniture, vegetation, creatures and character sprites should converge toward one original stylization family. Photorealistic terrain underneath unrelated sprite overlays is not the target final visual language. Nostalgia is a visual influence, not permission to recreate obsolete usability problems: text, controls, hierarchy, contrast, touch targets and responsive layouts must remain accessible on current desktop, tablet and phone screens.
 
-Early releases may continue to use placeholders, simplified geometry or temporary assets when required for development. Those assets do not define the final style; replacement and final production should progressively converge toward the original seinen-inspired character direction and old-school PC RPG visual language.
+Visual effects should support atmosphere and readability rather than spectacle for its own sake. The classic tile-RPG direction should favor deliberate composition, material richness, clear silhouettes and mood over expensive visual complexity, which is compatible with the project's mobile/tablet performance goals and performance-friendly day/night approach.
 
-### 🧍 Static Character PNG Identity and Presentation
+Early releases may continue to use placeholders, simplified geometry or temporary assets when required for development. Those assets do not define the final style; replacement and final production should progressively converge toward the original full-body seinen-inspired character art, matching world-space PNG sprites, enterable tile buildings and coherent classic RPG environment language.
+
+### 🧍 PNG Character Identity — Full-Body Art and World-Space Sprites
 
 At the current development stage, static **PNG character assets** are an approved primary presentation model for the protagonist and other gameplay-relevant characters. Animation is not required for this model to be considered valid or playable; later animation may extend the same character identity without redefining it.
 
 A gameplay-relevant character should maintain one recognizable visual identity across at least two related presentation forms when those surfaces are available:
 
-1. **Full-body character PNG** — used for direct dialogue, character-focused interaction, inspection and other close presentation where the character is a primary subject.
-2. **Tile/world icon PNG** — a simplified small-scale representation derived from the same character identity for the living strategic map.
+1. **Full-body character PNG** — higher-detail character art used for direct dialogue, character-focused interaction, inspection and other close presentation where the character is a primary subject.
+2. **World-space PNG sprite** — a transparent-background, scale-appropriate representation of the same character that visibly occupies the character's authoritative world position/tile in the local living map.
 
-The tile/world representation should be character-based rather than a generic rectangular NPC block or anonymous token. Simplification for map scale is expected, but silhouette, clothing cues, role/status cues or other identity markers should make the world icon recognizably related to the same full-body character.
+The world-space representation is part of the world scene, not a detached map pin, floating marker or permanent generic rectangle. It should be sized and anchored consistently with logical tiles, building doors, room dimensions, furniture and other local-world objects. When the Simulation says the character is inside a home, shop, tavern or other accessible structure, the same world-space sprite should be able to appear and move within that interior space.
+
+World sprites may use a simplified top-down, shallow-isometric or near-isometric body treatment appropriate to the approved tile camera. Static facing/pose variants may be added when useful, but a complete walk/idle animation set is not required at this stage. Animation must not block the transition from generic markers to actual character sprites.
 
 During direct two-character dialogue, the dialogue presentation should show the relevant characters as full-body character art where the available responsive layout permits it. Dialogue presentation may adapt composition on smaller screens, but it should preserve character identity rather than replacing the participants with unrelated generic markers.
 
 Character variants should reflect authoritative context where visually meaningful, including **rank/progression, profession or duty, social status, culture/faction, equipment, environment/region and current circumstances**, while remaining coherent with the original seinen-inspired character family. Visual variation must not invent rank, equipment, profession or other authoritative facts that the Simulation does not support.
 
-Static PNGs may be progressively produced and replaced as the character roster grows. Temporary placeholders may remain for characters whose approved art is not yet available, but new/final gameplay-relevant character presentation should converge toward the full-body + matching world-icon identity model rather than permanent generic rectangles.
+Static PNGs may be progressively produced and replaced as the character roster grows. Temporary placeholders may remain for characters whose approved art is not yet available, but new/final gameplay-relevant character presentation should converge toward the full-body + matching world-space-sprite identity model rather than permanent generic rectangles or detached icon overlays.
 
-PNG assets, icons and dialogue art are presentation only. Character identity, location, profession, rank, equipment, relationships and other authoritative state continue to come from Simulation-backed data.
+PNG assets, sprites and dialogue art are presentation only. Character identity, location, profession, rank, equipment, relationships and other authoritative state continue to come from Simulation-backed data.
 
-The full-body and tile/world forms must remain readable and performant on desktop, tablet and phone; device-specific scaling or simplification may reduce visual detail but must preserve the same character identity and must not alter simulation truth.
+The full-body and world-space forms must remain readable and performant on desktop, tablet and phone; device-specific scaling or simplification may reduce visual detail but must preserve the same character identity and must not alter simulation truth.
 
 A Worker acting in the **Designer** role chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
 
@@ -609,18 +633,23 @@ The size of the unbounded world must not force invisible-world computation to gr
 38. **Invisible-world computation scales with relevance, not total world size.** Irrelevant unloaded detail should normally remain unticked and be derived or advanced only when authoritative information is required.
 39. **Lazy and asynchronous computation must remain deterministic.** Scheduling, completion order, render order, visit order or device speed may change when work finishes, but must not change authoritative results or allow stale work to overwrite newer campaign state.
 40. **Phones and tablets are first-class gameplay targets.** Device-specific quality or fidelity scaling may protect responsiveness and performance, but must never alter simulation truth, chronology, legal outcomes or persistent world history.
-41. **Character art follows an original seinen-anime-inspired visual language.** Mature proportions, grounded silhouettes, expressive but restrained emotion, age/status/profession distinction and believable medieval-fantasy costume/material treatment should define the character family without copying a specific existing artist, series or protected character design.
-42. **The game evokes old-school PC RPG presentation without inheriting old usability limits.** Isometric/near-isometric composition, painterly or pre-rendered-feeling depth, restrained effects, grounded atmosphere and classic RPG interface framing should remain coherent with modern accessibility, responsive layouts and mobile/tablet performance.
-43. **Gameplay-relevant characters preserve visual identity across world and dialogue presentation.** A character's full-body PNG and simplified tile/world icon should clearly represent the same person while allowing scale-appropriate detail.
+41. **Character-focused art follows an original seinen-anime-inspired visual language.** Mature proportions, grounded silhouettes, expressive but restrained emotion, age/status/profession distinction and believable medieval-fantasy costume/material treatment should define full-body and close character art without copying a specific existing artist, series or protected character design.
+42. **The local world evokes a classic old-school tile-based PC RPG without inheriting old usability limits.** Top-down, shallow-isometric or near-isometric tile composition, handcrafted raster/sprite presentation, restrained effects and grounded atmosphere should remain coherent with modern accessibility, responsive layouts and mobile/tablet performance.
+43. **Gameplay-relevant characters preserve visual identity across world and dialogue presentation.** A character's full-body PNG and simplified world-space PNG sprite should clearly represent the same person while allowing scale-appropriate detail.
 44. **Direct dialogue favors full-body static character art.** When two characters converse directly, responsive dialogue presentation should show the relevant participants with full-body character PNGs where the layout permits it.
-45. **World-map characters should look like characters, not permanent rectangles.** Tile/world presentation should progressively replace generic rectangular NPC placeholders with character-derived PNG icons tied to Simulation-backed identities.
-46. **Animation is optional at the current stage.** Static PNG character presentation is sufficient for current playable development and animation must not block character-identity, dialogue or world-icon progress.
+45. **World characters occupy the world as sprites, not permanent rectangles or detached pins.** Local presentation should progressively replace generic NPC blocks and floating marker-style icons with transparent PNG sprites aligned to Simulation-backed positions/tiles.
+46. **Animation is optional at the current stage.** Static full-body PNG art and static world-space PNG sprites are sufficient for current playable development; animation must not block character-identity or local-world progress.
 47. **One canonical local region is 100 × 100 logical tiles.** The fixed region scale is a simulation/world-identity invariant, while the overall SEED world remains continuous and unbounded.
 48. **SEED determines coherent local spatial structure, not only terrain.** Region theme, starter-settlement layout, building footprints and locations, entrances, roads/paths, and NPC home/work relationships must be reproducible from compatible SEED, coordinates and generation rules.
 49. **Large settlements may span regions without losing identity.** Large cities must support one coherent settlement across a 2 × 2 group of four neighboring 100 × 100 regions when that scale is appropriate.
 50. **NPC tile occupancy is exclusive.** Active NPCs do not share one authoritative logical tile; deterministic movement conflict resolution must yield, wait or route around occupancy rather than overlap.
 51. **NPC conversations remain spatially grounded.** Two NPCs in direct local dialogue occupy adjacent logical tiles, while development activity/dialogue bubbles remain presentation-only diagnostics.
-52. **Local buildings have meaningful footprints.** A representative starter-village home is at least 10 × 10 logical tiles with at least two logical rooms, and local buildings should relate coherently to entrances, roads, occupants and uses.
+52. **Local buildings have meaningful footprints and usable rooms.** A representative starter-village home is at least 10 × 10 logical tiles with at least two logical rooms, and local buildings should relate coherently to entrances, roads, occupants and uses.
+53. **Accessible buildings are physically enterable parts of the same living world.** Local buildings materialize walls, floors, doors, walkable interiors and function-appropriate interior space instead of acting only as exterior markers or menu destinations.
+54. **Interiors refine one authoritative location rather than creating duplicate worlds.** Interior detail may be lazy, streamed or layered for performance, but must preserve the same building, occupants, history and persistent campaign state.
+55. **Interior visibility must remain readable.** Roofs, ceilings or upper walls may cut away, hide, fade or become translucent when necessary so rooms, characters and interaction points can be understood in the local camera.
+56. **World-space sprite scale and building scale belong together.** Doors, walls, rooms, furniture and walkable space should be proportioned so Simulation-backed character sprites can move, stand, work, converse and interact plausibly inside buildings.
+57. **The approved visual reference is a composition guide, not an asset source.** The project should reproduce the intended tile/sprite/interior readability with original assets and must not copy protected artwork, layouts, logos, characters, textures or identifiable game content.
 
 ---
 
