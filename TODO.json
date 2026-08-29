@@ -36,6 +36,6 @@
     {"github_issue":55,"title":"Infrastructure — Add auxiliary NVIDIA Coder/Reviewer/Tester routing","status":"closed_not_planned","issue_state":"closed_not_planned","role_owner":"Coder role","release_blocking":false},
     {"github_issue":116,"title":"Infrastructure — Guard Playwright workflow project selectors","status":"completed","issue_state":"closed_completed","role_owner":"Reviewer role","release_blocking":false,"independent_test":{"result":"PASS","worker":"Worker #2","tested_ref":"16b48697255d4dc652a0e3afff07c8dbf54c6af2"}},
     {"github_issue":146,"title":"Infrastructure — Guard issue closure against unresolved Tester revisions","status":"completed","issue_state":"closed_completed","role_owner":"Reviewer role","release_blocking":false,"independent_test":{"result":"PASS","worker":"Worker #2","tested_ref":"e5edf338fee58c45d96d5f3e2634b106d272f430","comment":5458119919}},
-    {"github_issue":154,"title":"Governance policy — Tester deadlock PASS exception","status":"resolved_policy","issue_state":"pending_close_after_reconciliation","role_owner":"Planner role","release_blocking":false}
+    {"github_issue":154,"title":"Governance policy — Tester deadlock PASS exception","status":"completed","issue_state":"closed_completed","role_owner":"Planner role","release_blocking":false}
   ]
 }
