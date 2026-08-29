@@ -22,7 +22,9 @@ window.Game = window.Game || {};
   const REASON = Object.freeze({
     OK: 'OK',
     NON_SIMULATION_CONTEXT: 'NON_SIMULATION_CONTEXT',
+    GAME_TIME_UNAVAILABLE: 'GAME_TIME_UNAVAILABLE',
     INVALID_CAMPAIGN_MINUTE: 'INVALID_CAMPAIGN_MINUTE',
+    CAMPAIGN_TIME_MISMATCH: 'CAMPAIGN_TIME_MISMATCH',
     INVALID_CONTEXT_REVISION: 'INVALID_CONTEXT_REVISION',
     IRRELEVANT_CONTEXT: 'IRRELEVANT_CONTEXT',
     WAIT_INTERVAL: 'WAIT_INTERVAL',
@@ -43,16 +45,22 @@ window.Game = window.Game || {};
     const number = Number(value);
     return Number.isSafeInteger(number) ? number : fallback;
   }
-  function minute(value) {
+  function campaignMinute(value) {
     const number = Number(value);
-    return Number.isFinite(number) && number >= 0 ? Number(number.toFixed(6)) : null;
+    return Number.isFinite(number) && number >= 0 ? Math.floor(number) : null;
+  }
+
+  function authoritativeCampaignMinute() {
+    const snapshot = Game.GameTime?.capture?.();
+    if (!snapshot || snapshot.authority !== 'simulation') return null;
+    return campaignMinute(snapshot.totalGameMinutes);
   }
 
   function normalizeContext(input) {
     const source = input && typeof input === 'object' ? input : {};
     return deepFreeze({
       authority: text(source.authority).toLowerCase(),
-      campaignMinute: minute(source.campaignMinute),
+      campaignMinute: campaignMinute(source.campaignMinute),
       contextRevision: integer(source.contextRevision),
       worldRef: text(source.worldRef),
       regionRef: text(source.regionRef),
@@ -74,7 +82,7 @@ window.Game = window.Game || {};
     if (!state || typeof state !== 'object') return null;
     return deepFreeze({
       serial: Math.max(0, integer(state.serial, 0) || 0),
-      campaignMinute: minute(state.campaignMinute) ?? 0,
+      campaignMinute: campaignMinute(state.campaignMinute) ?? 0,
       contextRevision: Math.max(0, integer(state.contextRevision, 0) || 0),
       worldRef: text(state.worldRef),
       regionRef: text(state.regionRef),
@@ -104,11 +112,11 @@ window.Game = window.Game || {};
     return checkpointFromDelta(context);
   }
 
-  function withinSchedule(opportunity, campaignMinute) {
+  function withinSchedule(opportunity, minute) {
     if (opportunity?.scheduleOpen === false) return false;
     const windows = Array.isArray(opportunity?.timeWindows) ? opportunity.timeWindows : [];
     if (!windows.length) return true;
-    const minuteOfDay = Math.floor(campaignMinute) % 1440;
+    const minuteOfDay = minute % 1440;
     return windows.some((window) => {
       const start = integer(window?.startMinute);
       const end = integer(window?.endMinute);
@@ -144,6 +152,9 @@ window.Game = window.Game || {};
     const context = normalizeContext(contextInput);
     if (context.authority !== 'simulation') return frozenResult(STATUS.REJECTED, REASON.NON_SIMULATION_CONTEXT, context, null);
     if (context.campaignMinute === null) return frozenResult(STATUS.REJECTED, REASON.INVALID_CAMPAIGN_MINUTE, context, null);
+    const authoritativeMinute = authoritativeCampaignMinute();
+    if (authoritativeMinute === null) return frozenResult(STATUS.REJECTED, REASON.GAME_TIME_UNAVAILABLE, context, null);
+    if (context.campaignMinute !== authoritativeMinute) return frozenResult(STATUS.REJECTED, REASON.CAMPAIGN_TIME_MISMATCH, context, checkpointFromDelta(context), { authoritativeCampaignMinute: authoritativeMinute });
     if (context.contextRevision === null || context.contextRevision < 0) return frozenResult(STATUS.REJECTED, REASON.INVALID_CONTEXT_REVISION, context, null);
     if (!RELEVANT.has(context.relevance)) return frozenResult(STATUS.IDLE, REASON.IRRELEVANT_CONTEXT, context, checkpointFromDelta(context));
 
@@ -188,6 +199,11 @@ window.Game = window.Game || {};
       return frozenResult(STATUS.REJECTED, REASON.NON_SIMULATION_CONTEXT, context, checkpointFromDelta(context));
     }
     const currentCheckpoint = checkpointFromDelta(context);
+    const authoritativeMinute = authoritativeCampaignMinute();
+    if (authoritativeMinute === null) return frozenResult(STATUS.REJECTED, REASON.GAME_TIME_UNAVAILABLE, context, currentCheckpoint);
+    if (context.campaignMinute !== authoritativeMinute) {
+      return frozenResult(STATUS.STALE, REASON.STALE_PREPARED_WORK, context, currentCheckpoint, { authoritativeCampaignMinute: authoritativeMinute });
+    }
     const stale = prepared.campaignMinute !== context.campaignMinute ||
       prepared.contextRevision !== context.contextRevision ||
       prepared.worldRef !== context.worldRef ||
