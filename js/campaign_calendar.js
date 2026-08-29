@@ -211,7 +211,7 @@
     if (!calendarInstalled.ok) return calendarInstalled;
     const resumed = reconcileResume(observedRealTimestampMs, timezoneOffsetMinutes);
     if (!resumed.ok && resumed.code !== 'BACKWARD_REAL_CLOCK') return resumed;
-    return deepFreeze({ ...loaded, campaignCalendarState: capture(), calendarMigrated: calendarInstalled.migrated, resumeCatchUp: resumed });
+    return deepFreeze({ ...loaded, campaignCalendarState: capture(), calendarMigrated: Boolean(checked.migratedCalendar || calendarInstalled.migrated), resumeCatchUp: resumed });
   }
 
   function bootstrapNewCampaign(observedRealTimestampMs = Date.now(), timezoneOffsetMinutes = new Date(observedRealTimestampMs).getTimezoneOffset()) {
