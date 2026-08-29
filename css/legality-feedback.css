@@ -1,0 +1,147 @@
+/* R03-T09 / #164 — presentation-only legality and interaction feedback. */
+.legality-feedback-card {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 24;
+  width: min(320px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  border: 1px solid rgba(200, 154, 75, 0.72);
+  border-radius: 10px;
+  background: rgba(23, 25, 27, 0.94);
+  color: #e5d8be;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.35;
+  backdrop-filter: blur(5px);
+}
+
+.legality-feedback-card[hidden] { display: none !important; }
+
+.legality-feedback-header,
+.legality-feedback-state-row,
+.legality-feedback-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legality-feedback-header {
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #c9bda5;
+}
+
+.legality-feedback-authority {
+  white-space: nowrap;
+  color: #c89a4b;
+}
+
+.legality-feedback-state-row { align-items: flex-start; }
+
+.legality-feedback-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-weight: 800;
+  color: #9fadb5;
+}
+
+.legality-feedback-card[data-state="candidate"] .legality-feedback-icon {
+  border-radius: 4px;
+  transform: rotate(45deg) scale(0.72);
+  color: #8ea0aa;
+}
+
+.legality-feedback-card[data-state="candidate"] .legality-feedback-icon > span { transform: rotate(-45deg) scale(1.3); }
+.legality-feedback-card[data-state="allowed"] .legality-feedback-icon { color: #aebc8c; border-style: double; }
+.legality-feedback-card[data-state="rejected"] .legality-feedback-icon { color: #d2867d; }
+.legality-feedback-card[data-state="pending"] .legality-feedback-icon { color: #d8c7a7; border-style: dashed; }
+.legality-feedback-card[data-state="resolved"] .legality-feedback-icon { color: #e0b662; background: rgba(200, 154, 75, 0.16); }
+
+.legality-feedback-copy { min-width: 0; }
+.legality-feedback-label { margin: 0; font-size: 17px; font-weight: 750; color: #f1e7d3; }
+.legality-feedback-summary { margin: 2px 0 0; color: #e5d8be; overflow-wrap: anywhere; }
+.legality-feedback-reason { margin: 9px 0 0; color: #c9bda5; overflow-wrap: anywhere; }
+
+.legality-feedback-reason code {
+  color: inherit;
+  font-size: 0.86em;
+}
+
+.legality-feedback-actions {
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.legality-feedback-action {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #76684f;
+  border-radius: 7px;
+  padding: 8px 12px;
+  background: #2b2c2b;
+  color: #f0e4ce;
+  font: inherit;
+  cursor: pointer;
+}
+
+.legality-feedback-action:hover { background: #36362f; }
+.legality-feedback-action:disabled { opacity: 0.52; cursor: not-allowed; }
+.legality-feedback-action:focus-visible,
+.legality-feedback-details:focus-visible {
+  outline: 3px solid #e5d8be;
+  outline-offset: 2px;
+}
+
+.legality-feedback-details {
+  margin-top: 10px;
+  border-top: 1px solid rgba(229, 216, 190, 0.18);
+  padding-top: 8px;
+  color: #c9bda5;
+}
+
+.legality-feedback-details summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.legality-feedback-meta { margin: 4px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .legality-feedback-card[data-state="pending"] .legality-feedback-icon { animation: legality-feedback-pulse 1.35s ease-in-out infinite; }
+  @keyframes legality-feedback-pulse { 50% { opacity: 0.48; } }
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .legality-feedback-card {
+    top: auto;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+    max-height: min(42vh, 300px);
+    border-radius: 12px;
+  }
+  .legality-feedback-details { max-height: 120px; overflow: auto; }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .legality-feedback-card {
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: min(38vw, 310px);
+    max-height: none;
+    padding: 10px;
+  }
+  .legality-feedback-header { margin-bottom: 6px; }
+  .legality-feedback-reason { margin-top: 5px; }
+  .legality-feedback-actions { margin-top: 7px; }
+  .legality-feedback-details { display: none; }
+}
