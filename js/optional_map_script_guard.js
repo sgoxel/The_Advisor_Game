@@ -7,7 +7,7 @@
 window.Game = window.Game || {};
 
 (function installOptionalMapScriptGuard() {
-  if (typeof document === "undefined" || typeof window === "undefined" || typeof fetch !== "function") return;
+  if (typeof document === "undefined" || typeof window === "undefined") return;
 
   const head = document.head;
   if (!head || head.__simsoftOptionalMapScriptGuardInstalled) return;
@@ -28,44 +28,82 @@ window.Game = window.Game || {};
     }
   }
 
+  function probeOptionalScriptInWorker(url) {
+    if (typeof Worker !== "function" || typeof Blob !== "function" || !URL || typeof URL.createObjectURL !== "function") {
+      return Promise.resolve({ ok: false, unavailable: true });
+    }
+
+    const workerSource = `
+      self.onmessage = async function (event) {
+        try {
+          const response = await fetch(event.data.url, { cache: "no-cache" });
+          if (!response.ok) {
+            self.postMessage({ ok: false, status: response.status });
+            return;
+          }
+          const source = await response.text();
+          self.postMessage({ ok: true, source: source });
+        } catch (error) {
+          self.postMessage({ ok: false, networkError: true });
+        }
+      };
+    `;
+
+    const workerUrl = URL.createObjectURL(new Blob([workerSource], { type: "text/javascript" }));
+
+    return new Promise((resolve) => {
+      const worker = new Worker(workerUrl);
+      let settled = false;
+
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        worker.terminate();
+        URL.revokeObjectURL(workerUrl);
+        resolve(result);
+      };
+
+      worker.onmessage = (event) => finish(event && event.data ? event.data : { ok: false });
+      worker.onerror = () => finish({ ok: false, workerError: true });
+      worker.postMessage({ url });
+    });
+  }
+
   head.appendChild = function appendChildWithOptionalMapProbe(node) {
     if (!isGuardedOptionalMapScript(node)) return appendChild(node);
 
     const requestedSrc = node.src;
 
     Promise.resolve().then(async () => {
-      try {
-        const response = await fetch(requestedSrc, { cache: "no-cache" });
-        if (!response.ok) {
-          if (typeof node.onerror === "function") node.onerror.call(node, new Event("error"));
-          return;
-        }
-
-        const source = await response.text();
-        const objectUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-        const originalOnload = node.onload;
-        const originalOnerror = node.onerror;
-        let cleaned = false;
-
-        const cleanup = () => {
-          if (cleaned) return;
-          cleaned = true;
-          URL.revokeObjectURL(objectUrl);
-        };
-
-        node.onload = function guardedScriptLoad(event) {
-          cleanup();
-          if (typeof originalOnload === "function") originalOnload.call(node, event);
-        };
-        node.onerror = function guardedScriptError(event) {
-          cleanup();
-          if (typeof originalOnerror === "function") originalOnerror.call(node, event);
-        };
-        node.src = objectUrl;
-        appendChild(node);
-      } catch (error) {
+      const probe = await probeOptionalScriptInWorker(requestedSrc);
+      if (!probe || !probe.ok || typeof probe.source !== "string") {
         if (typeof node.onerror === "function") node.onerror.call(node, new Event("error"));
+        return;
       }
+
+      const objectUrl = URL.createObjectURL(new Blob([probe.source], { type: "text/javascript" }));
+      const originalOnload = node.onload;
+      const originalOnerror = node.onerror;
+      let cleaned = false;
+
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      node.onload = function guardedScriptLoad(event) {
+        cleanup();
+        if (typeof originalOnload === "function") originalOnload.call(node, event);
+      };
+      node.onerror = function guardedScriptError(event) {
+        cleanup();
+        if (typeof originalOnerror === "function") originalOnerror.call(node, event);
+      };
+      node.src = objectUrl;
+      appendChild(node);
+    }).catch(() => {
+      if (typeof node.onerror === "function") node.onerror.call(node, new Event("error"));
     });
 
     return node;
