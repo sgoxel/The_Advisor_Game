@@ -153,6 +153,9 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<script src="js/protagonist_driver_intent.js"><\/script>');
   document.write('<script src="js/local_bot_driver.js"><\/script>');
   document.write('<script src="js/advisor_conversation_contract.js"><\/script>');
+  // #293 exposes Simulation-owned object facts to presentation without rendering
+  // objects or deriving gameplay authority from assets/pixels.
+  document.write('<script src="js/world_object_presentation_descriptor.js"><\/script>');
   document.write('<script src="js/autonomous_action_execution.js"><\/script>');
   document.write('<script src="js/autonomous_decision_loop.js"><\/script>');
   document.write('<script src="js/autonomy_feedback_presentation.js"><\/script>');
