@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'js/starter_village_roads.js'
+      - 'js/road_runtime_bridge.js'
       - 'js/utils.js'
       - 'js/renderer.js'
       - 'js/spatial_world.js'
@@ -12,12 +13,14 @@ on:
       - 'tests/browser/r04-starter-village-roads.spec.mjs'
       - 'tests/browser/r04-road-semantic-only.spec.mjs'
       - 'tests/browser/r04-road-visible-overlay.spec.mjs'
+      - 'tests/browser/r04-road-public-startup.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-starter-village-roads-verification.yml'
   pull_request:
     paths:
       - 'js/starter_village_roads.js'
+      - 'js/road_runtime_bridge.js'
       - 'js/utils.js'
       - 'js/renderer.js'
       - 'js/spatial_world.js'
@@ -25,6 +28,7 @@ on:
       - 'tests/browser/r04-starter-village-roads.spec.mjs'
       - 'tests/browser/r04-road-semantic-only.spec.mjs'
       - 'tests/browser/r04-road-visible-overlay.spec.mjs'
+      - 'tests/browser/r04-road-public-startup.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-starter-village-roads-verification.yml'
@@ -47,7 +51,9 @@ jobs:
         run: git rev-parse HEAD
 
       - name: Validate road presentation source syntax
-        run: node --check js/starter_village_roads.js
+        run: |
+          node --check js/starter_village_roads.js
+          node --check js/road_runtime_bridge.js
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -60,12 +66,13 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run focused starter-village road regression
+      - name: Run focused starter-village road regression including untouched startup
         run: >-
           npx playwright test
           tests/browser/r04-starter-village-roads.spec.mjs
           tests/browser/r04-road-semantic-only.spec.mjs
           tests/browser/r04-road-visible-overlay.spec.mjs
+          tests/browser/r04-road-public-startup.spec.mjs
           --project=desktop
 
       - name: Upload Playwright evidence
