@@ -11,6 +11,7 @@ async function ready(page) {
   await page.waitForFunction(() => Boolean(
     window.Game?.SpatialWorld?.generateOriginVillage &&
     window.Game?.RegionTerrain?.generateRegion &&
+    window.Game?.GameTime?.setForTest &&
     window.Game?.NPCSpatial?.updateAt &&
     window.Game?.NPCWorld?.drawPresentation &&
     window.Game?.State?.world?.originVillage?.spatialModelVersion &&
@@ -177,14 +178,16 @@ test('starter village uses deterministic full-region building, road, home and wo
   expect(Math.max(...homeCenters.map((p) => p.col))).toBeGreaterThan(60);
 });
 
-test('active NPC movement remains integer-tile and collision-free across representative times', async ({ page }) => {
+test('active NPC movement remains integer-tile and collision-free across representative authoritative game times', async ({ page }) => {
   await ready(page);
   const samples = await page.evaluate(() => {
-    const times = [0, 1250, 3500, 6200, 9500, 12_500, 15_500, 18_500, 22_000, 27_500];
-    return times.map((time) => {
-      window.Game.NPCSpatial.updateAt(time);
+    window.Game.GameTime.stop();
+    const times = [0, 180, 360, 480, 600, 720, 840, 960, 1080, 1260];
+    return times.map((totalGameMinutes) => {
+      window.Game.GameTime.setForTest(totalGameMinutes);
+      window.Game.NPCSpatial.updateAt(987654321);
       return {
-        time,
+        totalGameMinutes,
         npcs: window.Game.NPCSpatial.capture().map((npc) => ({
           id: npc.id, row: npc.row, col: npc.col, activity: npc.activity, decision: npc.movementDecision
         })),
@@ -200,7 +203,7 @@ test('active NPC movement remains integer-tile and collision-free across represe
   expect(samples.length).toBeGreaterThan(5);
   for (const sample of samples) {
     const keys = sample.npcs.map((npc) => `${npc.row},${npc.col}`);
-    expect(new Set(keys).size, `overlap at ${sample.time}`).toBe(keys.length);
+    expect(new Set(keys).size, `overlap at game minute ${sample.totalGameMinutes}`).toBe(keys.length);
     expect(sample.npcs.every((npc) => Number.isInteger(npc.row) && Number.isInteger(npc.col))).toBe(true);
     expect(sample.npcs.every((npc) => npc.row >= 0 && npc.row < 100 && npc.col >= 0 && npc.col < 100)).toBe(true);
   }
@@ -242,7 +245,9 @@ test('deterministic conflict resolution yields or side-steps instead of overlapp
 test('NPC dialogue occupies adjacent tiles and renders one shared development bubble', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(() => {
-    // Global dialogue window is 65%-80% of the demonstration cycle.
+    window.Game.GameTime.stop();
+    // 18:00 is 75% through the authoritative 24-hour day, inside the dialogue window.
+    window.Game.GameTime.setForTest(18 * 60);
     window.Game.NPCSpatial.updateAt(16_800);
     window.Game.NPCWorld.drawPresentation();
     const dialogue = window.Game.State.world.npcDialogues?.[0] || null;
@@ -282,6 +287,8 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     const errors = await ready(page);
     const overlay = await page.evaluate(() => {
+      window.Game.GameTime.stop();
+      window.Game.GameTime.setForTest(18 * 60);
       window.Game.NPCSpatial.updateAt(16_800);
       window.Game.NPCWorld.drawPresentation();
       const element = document.getElementById('npcWorldOverlay');
