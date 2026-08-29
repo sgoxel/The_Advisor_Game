@@ -30,7 +30,7 @@ permissions:
 jobs:
   verify-character-world-icons:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout exact repository state
         uses: actions/checkout@v4
@@ -48,8 +48,13 @@ jobs:
         run: npx playwright test tests/browser/r04-character-world-icons.spec.mjs
       - name: Preserve R02 simulation-owned NPC world presence
         run: npx playwright test tests/browser/r02-npc-world-presence.spec.mjs
-      - name: Preserve R04 autonomous protagonist regression
-        run: npx playwright test tests/browser/r04-autonomous-protagonist-regression.spec.mjs
+      - name: Preserve R04 deterministic Local BOT and Simulation-only autonomy regressions
+        run: >-
+          npx playwright test
+          tests/browser/r04-local-bot-selection.spec.mjs
+          tests/browser/r04-autonomous-action-execution.spec.mjs
+          tests/browser/r04-autonomous-decision-loop.spec.mjs
+          tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs
       - name: Upload focused R04 character world-icon evidence
         if: always()
         uses: actions/upload-artifact@v4
