@@ -37,8 +37,8 @@ window.Game.Locales.en = {
   },
   "character": {
     "title": "Character",
-    "name": "Arin Valen",
-    "metaHtml": "Level 7 Ranger<br />Region: Misty Valley<br />Status: Ready for mission"
+    "name": "Protagonist",
+    "metaHtml": "Rank, profession and status are supplied by authoritative campaign state."
   },
   "dialog": {
     "title": "Dialogue",
