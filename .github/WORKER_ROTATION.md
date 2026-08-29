@@ -12,9 +12,9 @@ Five independent scheduled Workers exist:
 - Worker #4
 - Worker #5
 
-Worker #6 and Worker #7 are different: they are reserved **manual Admin-invoked execution identities / instruction profiles**, not scheduled routines.
+Workers #6 through #20 are different: they are reserved **manual Admin-invoked execution identities / instruction profiles**, not scheduled routines.
 
-Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker #6 and Worker #7 exist only when the Admin directly invokes the respective Worker or gives that manual Worker an instruction in chat. Neither manual Worker has automation, timer, recurrence, scheduled task, or recurring cursor slot. All Worker identities persist across runs for independence purposes.
+Workers #1–#5 use the recurring schedule and canonical rotation cursor. Workers #6 through #20 exist only when the Admin directly invokes the respective Worker or gives that manual Worker an instruction in chat. No manual Worker has automation, timer, recurrence, scheduled task, or recurring cursor slot. All Worker identities persist across runs for independence purposes.
 
 ## Role cycle
 
@@ -22,7 +22,7 @@ Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker
 
 The canonical cursor provides the starting role for scheduled Workers #1–#5.
 
-Worker #6 and Worker #7 are cursor-independent. A direct Admin instruction may define either manual Worker's role, target, scope, or starting point. When the Admin invokes either manual Worker broadly without narrowing the role, that Worker reads README first, performs a project-priority scan, and then uses the same role boundaries and work-conserving cycle as the scheduled Workers.
+Workers #6 through #20 are cursor-independent. A direct Admin instruction may define any manual Worker's role, target, scope, or starting point. When the Admin invokes any manual Worker broadly without narrowing the role, that Worker reads README first, performs a project-priority scan, and then uses the same role boundaries and work-conserving cycle as the scheduled Workers.
 
 ## Work-conserving execution
 
@@ -122,7 +122,7 @@ When reaching Tester or Reviewer, the Worker first seeks another eligible indepe
 
 Coder, Designer, and Reviewer changes still require independent Tester verification by a different Worker identity before being called independently verified.
 
-Worker #6 and Worker #7 are separate persistent identities for this rule even though neither has a recurring routine. Work produced manually as Worker #6 cannot later be independently approved by Worker #6, and the same applies to Worker #7. Worker #6 may independently verify Worker #7 work, and Worker #7 may independently verify Worker #6 work, when all normal Tester requirements are satisfied.
+Workers #6 through #20 are separate persistent identities for this rule even though none has a recurring routine. Work produced manually by a Worker cannot later be independently approved by that same Worker. Any Worker #6 through #20 may independently verify another Worker's work when all normal Tester requirements are satisfied.
 
 ### Tester deadlock exception
 
@@ -135,7 +135,7 @@ A cumulative phase or release gate enters **Tester deadlock** only when all of t
 
 When this exact condition is documented, Worker-identity independence must not leave the project permanently blocked.
 
-For scheduled Workers #1–#5, the **first Worker whose normal canonical rotation/run reaches the Tester gate after the deadlock is documented** may claim and execute that gate. The Worker must not skip ahead in the scheduled cursor merely to obtain the exception. Worker #6 or Worker #7 may execute the deadlock gate only when directly invoked by Admin while the deadlock is still unresolved and no other Worker already owns the gate.
+For scheduled Workers #1–#5, the **first Worker whose normal canonical rotation/run reaches the Tester gate after the deadlock is documented** may claim and execute that gate. The Worker must not skip ahead in the scheduled cursor merely to obtain the exception. Any Worker #6 through #20 may execute the deadlock gate only when directly invoked by Admin while the deadlock is still unresolved and no other Worker already owns the gate.
 
 The deadlock Worker must perform the same complete exact-state gate verification that an independent Tester would perform. No test, browser, responsive, accessibility, performance, regression, public-state, CI, artifact, exact-SHA, or unresolved-revision requirement is waived by this exception.
 
@@ -179,11 +179,11 @@ The next scheduled cursor uses the successor of the last role in which useful wo
 
 A documented Tester deadlock does not itself rewrite or fast-forward the scheduled cursor. The first scheduled Worker that reaches the gate through normal rotation may use the exception; once that Worker claims the gate, later Workers must respect the live claim.
 
-## Manual Worker #6 and Worker #7 instruction profiles
+## Manual Worker #6 through #20 instruction profiles
 
-Worker #6 and Worker #7 are available only through direct Admin invocation. Neither is created, enabled, scheduled, resumed, or triggered by an automation routine.
+Workers #6 through #20 are available only through direct Admin invocation. None is created, enabled, scheduled, resumed, or triggered by an automation routine.
 
-A manual Worker #6 or Worker #7 invocation must:
+A manual Worker #6 through #20 invocation must:
 
 1. Treat the Admin's direct instruction as the highest authority and use it to determine any explicitly supplied role, target, scope, or exception.
 2. Read current `main/README.md` first before project work.
@@ -191,11 +191,11 @@ A manual Worker #6 or Worker #7 invocation must:
 4. Use the same Planner/Coder/Designer/Tester/Reviewer authority boundaries and critical priorities unless the Admin explicitly narrows or overrides the normal workflow.
 5. When the Admin gives a broad instruction rather than a single-role/task instruction, run work-conservingly across roles with no artificial task/pass cap and stop normally only after a complete five-role pass makes no eligible progress.
 6. Respect its own persistent Worker identity independence across all current and future manual invocations, except that it may use the documented cumulative Tester deadlock exception when directly Admin-invoked and all exception conditions are satisfied.
-7. Use normal `WORK-CLAIM` collision protection and never interfere with live scheduled Worker, the other manual Worker, or NVIDIA ownership.
+7. Use normal `WORK-CLAIM` collision protection and never interfere with live scheduled Workers, another manual Worker, or NVIDIA ownership.
 8. Never edit README without explicit Admin authorization.
 9. Never consume, advance, rewrite, or reserve the scheduled `WORKER ROTATION STATE:` cursor.
-10. If project work is performed, post a `MANUAL WORKER #6 RESULT:` or `MANUAL WORKER #7 RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, claim-clear state, and any deadlock-exception use.
+10. If project work is performed, post a `MANUAL WORKER #<n> RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, claim-clear state, and any deadlock-exception use.
 
-Because Worker #6 and Worker #7 do not participate in the recurring cursor, their repository changes are discovered by scheduled Workers #1–#5 and by each other through normal GitHub state re-fetch and claim/dependency checks.
+Because Workers #6 through #20 do not participate in the recurring cursor, their repository changes are discovered by scheduled Workers #1–#5 and by other manual Workers through normal GitHub state re-fetch and claim/dependency checks.
 
 Detailed scheduling times and automation implementation remain outside this file.
