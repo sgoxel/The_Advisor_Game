@@ -602,6 +602,12 @@
 
     const usedWorkTiles = new Set();
     const usedSocialTiles = new Set();
+    // Social/public destinations are deterministic products of the generated
+    // settlement, not of the protagonist or the village-center coordinate.
+    const socialDestinations = buildings.filter((building) => building && building.entrance);
+    const socialOffset = socialDestinations.length
+      ? integer(seed, 'social-destination-offset', 0, socialDestinations.length - 1)
+      : 0;
     const population = OCCUPATIONS.map((occupation, index) => {
       const home = homes[index % homes.length];
       const residentSlot = Math.floor(index / homes.length);
@@ -610,7 +616,10 @@
       const work = workChoices[index % workChoices.length];
       const homeTile = residentHomeTile(home, residentSlot);
       const workTile = nearestAvailableRoadTile(roads, work.entrance, usedWorkTiles);
-      const socialTile = nearestAvailableRoadTile(roads, CENTER, usedSocialTiles);
+      const socialDestination = socialDestinations.length
+        ? socialDestinations[(socialOffset + index * 5) % socialDestinations.length]
+        : home;
+      const socialTile = nearestAvailableRoadTile(roads, socialDestination.entrance, usedSocialTiles);
       const homeRoad = roadPath(home.entrance, work.entrance, roads);
       const workSocialRoad = roadPath(work.entrance, socialTile, roads);
       const socialHomeRoad = roadPath(socialTile, home.entrance, roads);
