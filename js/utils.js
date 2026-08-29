@@ -47,9 +47,9 @@ window.Game.Utils = {
   }
 };
 
-// Admin #233 upgrades the coordinate-addressable world/origin settlement contract before
-// NPC runtime modules bind to generated state. It preserves Simulation authority.
-window.Game.Utils.loadScriptOnce("js/spatial_world.js", "admin100SpatialWorldModule");
+// `js/spatial_world.js` is loaded statically immediately after `js/rng.js` in index.html.
+// That explicit order guarantees its RNG/WorldCoordinates/RegionTerrain dependencies exist
+// before the Admin #233 100x100 compatibility contract installs.
 
 // R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
