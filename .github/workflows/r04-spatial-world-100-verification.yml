@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'index.html'
       - 'js/config.js'
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
@@ -15,9 +16,11 @@ on:
       - 'tests/browser/r02-origin-village.spec.mjs'
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
+      - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
       - '.github/workflows/r04-spatial-world-100-verification.yml'
   pull_request:
     paths:
+      - 'index.html'
       - 'js/config.js'
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
@@ -29,6 +32,7 @@ on:
       - 'tests/browser/r02-origin-village.spec.mjs'
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
+      - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
       - '.github/workflows/r04-spatial-world-100-verification.yml'
 
 permissions:
@@ -37,7 +41,7 @@ permissions:
 jobs:
   spatial-world-and-npc-occupancy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout exact repository state
         uses: actions/checkout@v4
@@ -59,6 +63,8 @@ jobs:
         run: npx playwright test tests/browser/r02-multi-region-terrain.spec.mjs
       - name: Re-run adjacent-region navigation regression
         run: npx playwright test tests/browser/r02-region-navigation.spec.mjs
+      - name: Re-run deterministic save-load roundtrip regression
+        run: npx playwright test tests/browser/r02-deterministic-roundtrip.spec.mjs
       - name: Run stabilized R01 browser regression
         run: npm run test:browser:r01
       - name: Upload Playwright evidence
