@@ -5,12 +5,35 @@ test('untouched production startup visibly renders semantic road tiles without d
 
   // This test intentionally does NOT call StarterVillageRoads.drawPresentation(),
   // does NOT replace originVillage, and does NOT move the camera. It observes the
-  // same startup path used by the public Pages build.
-  await page.waitForFunction(() => Boolean(
-    window.Game?.State?.world?.originVillage?.roadTiles?.length &&
-    window.Game?.RoadRuntimeBridge?.installed &&
-    document.getElementById('starterVillageRoadOverlay')
-  ), null, { timeout: 25_000 });
+  // same startup path used by the public Pages build. Poll a structured startup
+  // snapshot so a failure identifies the missing integration stage instead of
+  // reporting only an opaque timeout.
+  const readStartupState = () => page.evaluate(() => ({
+    appState: Boolean(window.Game?.State?.world),
+    originVillage: Boolean(window.Game?.State?.world?.originVillage),
+    originRoadCount: Number(window.Game?.State?.world?.originVillage?.roadTiles?.length || 0),
+    roadApi: Boolean(window.Game?.StarterVillageRoads?.drawPresentation),
+    bridgeApi: Boolean(window.Game?.RoadRuntimeBridge),
+    bridgeInstalled: Boolean(window.Game?.RoadRuntimeBridge?.installed),
+    overlayPresent: Boolean(document.getElementById('starterVillageRoadOverlay'))
+  }));
+
+  await expect.poll(readStartupState, {
+    timeout: 25_000,
+    intervals: [100, 250, 500, 1000],
+    message: 'untouched startup must bind the authoritative origin village and install the semantic Road presentation chain'
+  }).toEqual({
+    appState: true,
+    originVillage: true,
+    originRoadCount: expect.any(Number),
+    roadApi: true,
+    bridgeApi: true,
+    bridgeInstalled: true,
+    overlayPresent: true
+  });
+
+  const startupState = await readStartupState();
+  expect(startupState.originRoadCount).toBeGreaterThan(0);
 
   await page.waitForFunction(() => {
     const overlay = document.getElementById('starterVillageRoadOverlay');
