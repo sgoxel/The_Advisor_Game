@@ -3,10 +3,10 @@
   "product": "The Advisor Game",
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
-  "planning_epoch": "post-r03-independent-pass-r04-activation-2026-08-29",
-  "planning_basis": "R03 completed through normal independent Worker #4 Tester PASS on gate #167 comment 5459994413 after all #156-#166 dependencies had independent verification. R04 tracker #169 is now the single active phase with tasks #170-#178. Compatible verified R01-R03 world, chronology, persistence, legality, interaction, relevance-bounded performance and visual foundations remain preserved and are reused rather than reopened.",
+  "planning_epoch": "post-r03-independent-pass-r04-activation-planner-capacity-2026-08-29",
+  "planning_basis": "R03 completed through normal independent Worker #4 Tester PASS on gate #167 comment 5459994413 after all #156-#166 dependencies had independent verification. R04 tracker #169 is now the single active phase with tasks #170-#178. Compatible verified R01-R03 world, chronology, persistence, legality, interaction, relevance-bounded performance and visual foundations remain preserved and are reused rather than reopened. README commit c88be0a0325bf8018c0dda67aa5b6d16f9892e08 adds a deep legitimate Planner work-inventory principle; detailed inventory thresholds are planning/execution HOW and must never authorize filler, duplicate, speculative or invented scope.",
   "readme_reconciliation": {
-    "readme_commit": "3b5c38e9df9c0d54c13c85fe423f04cad6588eb7",
+    "readme_commit": "c88be0a0325bf8018c0dda67aa5b6d16f9892e08",
     "admin_issues": [103,106,117,131,136,138,142,150],
     "planner_issues": [105,118,132,137,139,143,151,154,155,169],
     "governance_issue": 97,
@@ -19,6 +19,16 @@
     "completed_r03_gate_result": "TESTER PASS",
     "completed_r03_gate_comment": 5459994413,
     "completed_r03_gate_worker": "Worker #4"
+  },
+  "planner_capacity_policy": {
+    "target_open_focused_work_issues": "45-55 when legitimate approved scope supports it",
+    "replenish_when_usable_inventory_below": 40,
+    "target_immediately_eligible_unclaimed": ">=10 when legitimate dependencies and scope permit",
+    "exclude_from_capacity_count": ["pure phase trackers", "ledgers", "rotation/governance records"],
+    "current_priority": "Current and earlier unresolved active work always outranks dependency-blocked future work.",
+    "future_predecomposition": "README/ROADMAP-defined near-future work may be pre-decomposed only when useful for capacity and must remain explicitly blocked until its phase/dependencies are eligible.",
+    "parallelism": "Maintain useful Coder and Designer parallelism when legitimate approved work permits.",
+    "anti_filler": "Never invent features/gameplay, duplicate existing scope, split into artificial micro-tasks, or create filler merely to satisfy an issue-count target. If fewer legitimate issues exist, keep the truthful lower count."
   },
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "baseline": {
