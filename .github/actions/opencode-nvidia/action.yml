@@ -56,15 +56,40 @@ runs:
         echo "role=${ROLE}" >> "$GITHUB_OUTPUT"
         echo "agent=plan" >> "$GITHUB_OUTPUT"
         echo "use_github_token=true" >> "$GITHUB_OUTPUT"
-        # Read-only roles may create disposable local test output, but it must not
-        # be mistaken for implementation that OpenCode should push as a PR.
-        cat >> .git/info/exclude <<'EOF'
-        /package-lock.json
-        /playwright-report/
-        /test-results/
-        /.lighthouseci/
-        /coverage/
-        EOF
+        # NVIDIA Reviewer/Tester work is evidence-only. All untracked local output is
+        # disposable and must stay invisible to the upstream GitHub action's dirty-tree
+        # auto-commit path. Tracked files are protected separately below.
+        printf '%s\n' '/*' >> .git/info/exclude
+
+    - name: Prepare isolated read-only verification worktree
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Install declared test dependencies before OpenCode without changing the
+        # manifest or creating a lockfile. The plan agent is not allowed to run
+        # package-manager mutation commands itself.
+        if [ -f package.json ]; then
+          npm install --no-save --package-lock=false --ignore-scripts
+        fi
+
+        if ! git diff --quiet || ! git diff --cached --quiet; then
+          echo "Read-only NVIDIA setup changed tracked repository content." >&2
+          git status --short >&2
+          exit 1
+        fi
+
+        # The upstream OpenCode GitHub wrapper auto-commits whenever `git status`
+        # is dirty. Hide all disposable untracked output and mark tracked paths
+        # skip-worktree so Reviewer/Tester-local side effects cannot enter that
+        # implementation branch/commit path. Final grounding uses a separate clean
+        # checkout, so this never changes repository authority or accepted evidence.
+        git ls-files -z | xargs -0 -r git update-index --skip-worktree
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "Read-only NVIDIA worktree is not clean before OpenCode execution." >&2
+          git status --short >&2
+          exit 1
+        fi
 
     - name: Record first attempt start time
       id: attempt_start
@@ -132,9 +157,19 @@ runs:
         gh issue comment "${{ inputs.issue_number }}" --repo "${GITHUB_REPOSITORY}" \
           --body "AI AUXILIARY RETRY: run_id=${GITHUB_RUN_ID} run_attempt=${GITHUB_RUN_ATTEMPT} role=${{ steps.role_mode.outputs.role }} reason=nvidia-http-503" >/dev/null
         sleep "${{ inputs.retry_wait_seconds }}"
+        git ls-files -z | xargs -0 -r git update-index --no-skip-worktree
         git reset --hard
         git clean -fd
         git checkout -B main origin/main
+        if ! git diff --quiet || ! git diff --cached --quiet; then
+          echo "NVIDIA retry reset did not restore a clean tracked worktree." >&2
+          exit 1
+        fi
+        git ls-files -z | xargs -0 -r git update-index --skip-worktree
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "Read-only NVIDIA retry worktree is not clean." >&2
+          exit 1
+        fi
 
     - name: Retry OpenCode after NVIDIA 503
       id: opencode_retry
