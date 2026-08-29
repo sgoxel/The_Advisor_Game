@@ -1,0 +1,82 @@
+name: R03 Context Interaction Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/interaction_validation.js'
+      - 'js/world_action_resolution.js'
+      - 'js/campaign_persistence.js'
+      - 'tests/browser/r03-context-interaction-regression.spec.mjs'
+      - 'tests/browser/r03-interaction-validation.spec.mjs'
+      - 'tests/browser/r03-world-action-resolution.spec.mjs'
+      - 'tests/browser/r02-world-delta-persistence.spec.mjs'
+      - 'tests/browser/r02-campaign-persistence.spec.mjs'
+      - 'tests/browser/r01-cumulative.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-context-interaction-regression.yml'
+  pull_request:
+    paths:
+      - 'js/action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/interaction_validation.js'
+      - 'js/world_action_resolution.js'
+      - 'js/campaign_persistence.js'
+      - 'tests/browser/r03-context-interaction-regression.spec.mjs'
+      - 'tests/browser/r03-interaction-validation.spec.mjs'
+      - 'tests/browser/r03-world-action-resolution.spec.mjs'
+      - 'tests/browser/r02-world-delta-persistence.spec.mjs'
+      - 'tests/browser/r02-campaign-persistence.spec.mjs'
+      - 'tests/browser/r01-cumulative.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-context-interaction-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  context-interaction-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R03-T08 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R03 context interaction regression
+        run: npx playwright test tests/browser/r03-context-interaction-regression.spec.mjs
+      - name: Preserve R03 interaction validation and resolution
+        run: >-
+          npx playwright test
+          tests/browser/r03-interaction-validation.spec.mjs
+          tests/browser/r03-world-action-resolution.spec.mjs
+      - name: Preserve R02 world-delta and campaign persistence
+        run: >-
+          npx playwright test
+          tests/browser/r02-world-delta-persistence.spec.mjs
+          tests/browser/r02-campaign-persistence.spec.mjs
+      - name: Preserve stabilized R01 cumulative regression
+        run: npx playwright test tests/browser/r01-cumulative.spec.mjs
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r03-t08-context-interaction-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
