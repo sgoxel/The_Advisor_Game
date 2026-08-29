@@ -38,9 +38,10 @@ on:
       - 'tests/browser/r02-region-navigation.spec.mjs'
       - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
       - '.github/workflows/r04-spatial-world-100-verification.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   spatial-world-and-npc-occupancy:
@@ -49,149 +50,39 @@ jobs:
     steps:
       - name: Checkout exact repository state
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+
       - name: Record exact candidate SHA
         run: git rev-parse HEAD
-      - name: Apply idempotent NPC distribution repair
-        run: |
-          python - <<'PY'
-          from pathlib import Path
 
-          spatial = Path('js/spatial_world.js')
-          text = spatial.read_text(encoding='utf-8')
-          old = (
-              "    const usedWorkTiles = new Set();\n"
-              "    const usedSocialTiles = new Set();\n"
-              "    const population = OCCUPATIONS.map((occupation, index) => {\n"
-              "      const home = homes[index % homes.length];\n"
-              "      const residentSlot = Math.floor(index / homes.length);\n"
-              "      const workRole = workRoleForOccupation(occupation);\n"
-              "      const workChoices = byRole.get(workRole) || byRole.get('trade') || [buildings[0]];\n"
-              "      const work = workChoices[index % workChoices.length];\n"
-              "      const homeTile = residentHomeTile(home, residentSlot);\n"
-              "      const workTile = nearestAvailableRoadTile(roads, work.entrance, usedWorkTiles);\n"
-              "      const socialTile = nearestAvailableRoadTile(roads, CENTER, usedSocialTiles);\n"
-          )
-          new = (
-              "    const usedWorkTiles = new Set();\n"
-              "    const usedSocialTiles = new Set();\n"
-              "    // Social/public destinations come from generated world structure rather than\n"
-              "    // the protagonist/village-center coordinate. A seed-derived rotation spreads\n"
-              "    // residents across valid building-adjacent road destinations deterministically.\n"
-              "    const socialDestinations = buildings.filter((building) => building && building.entrance);\n"
-              "    const socialOffset = socialDestinations.length\n"
-              "      ? integer(seed, 'social-destination-offset', 0, socialDestinations.length - 1)\n"
-              "      : 0;\n"
-              "    const population = OCCUPATIONS.map((occupation, index) => {\n"
-              "      const home = homes[index % homes.length];\n"
-              "      const residentSlot = Math.floor(index / homes.length);\n"
-              "      const workRole = workRoleForOccupation(occupation);\n"
-              "      const workChoices = byRole.get(workRole) || byRole.get('trade') || [buildings[0]];\n"
-              "      const work = workChoices[index % workChoices.length];\n"
-              "      const homeTile = residentHomeTile(home, residentSlot);\n"
-              "      const workTile = nearestAvailableRoadTile(roads, work.entrance, usedWorkTiles);\n"
-              "      const socialDestination = socialDestinations.length\n"
-              "        ? socialDestinations[(socialOffset + index * 5) % socialDestinations.length]\n"
-              "        : home;\n"
-              "      const socialTile = nearestAvailableRoadTile(roads, socialDestination.entrance, usedSocialTiles);\n"
-          )
-          if old in text:
-              spatial.write_text(text.replace(old, new, 1), encoding='utf-8')
-          elif "social-destination-offset" not in text:
-              raise SystemExit('Unexpected spatial_world social destination state')
-
-          runtime = Path('js/npc_spatial_runtime.js')
-          text = runtime.read_text(encoding='utf-8')
-          old = (
-              "  function findDialoguePairTiles(village, roads, occupied) {\n"
-              "    const center = point(village?.center || { row: 50, col: 50 });\n"
-              "    const all = Array.from(roads).map((text) => {\n"
-              "      const [r, c] = text.split(',');\n"
-              "      return { row: Number(r), col: Number(c) };\n"
-              "    });\n"
-              "    all.sort((a, b) => distance(a, center) - distance(b, center) || a.row - b.row || a.col - b.col);\n"
-              "    const dirs = [[0,1],[1,0],[0,-1],[-1,0]];\n"
-          )
-          new = (
-              "  function findDialoguePairTiles(village, roads, occupied, preferredPoints = []) {\n"
-              "    const preferred = preferredPoints.map(point).filter(inBounds);\n"
-              "    const structuralFallback = (village?.buildings || [])\n"
-              "      .map((building) => building?.entrance)\n"
-              "      .filter(Boolean)\n"
-              "      .map(point)\n"
-              "      .filter(inBounds);\n"
-              "    const anchors = preferred.length ? preferred : structuralFallback;\n"
-              "    const all = Array.from(roads).map((text) => {\n"
-              "      const [r, c] = text.split(',');\n"
-              "      return { row: Number(r), col: Number(c) };\n"
-              "    });\n"
-              "    const nearestAnchorDistance = (candidate) => anchors.length\n"
-              "      ? Math.min(...anchors.map((anchor) => distance(candidate, anchor)))\n"
-              "      : 0;\n"
-              "    all.sort((a, b) => nearestAnchorDistance(a) - nearestAnchorDistance(b) || a.row - b.row || a.col - b.col);\n"
-              "    const dirs = [[0,1],[1,0],[0,-1],[-1,0]];\n"
-          )
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif "function findDialoguePairTiles(village, roads, occupied, preferredPoints = [])" not in text:
-              raise SystemExit('Unexpected NPC dialogue tile selector state')
-
-          old_call = (
-              "    const tiles = findDialoguePairTiles(village, roads, new Set());\n"
-              "    if (!tiles) return null;\n"
-          )
-          new_call = (
-              "    const preferredDialogueContext = [\n"
-              "      point(npcs[first]?.anchors?.social || npcs[first]),\n"
-              "      point(npcs[second]?.anchors?.social || npcs[second])\n"
-              "    ];\n"
-              "    const tiles = findDialoguePairTiles(village, roads, new Set(), preferredDialogueContext);\n"
-              "    if (!tiles) return null;\n"
-          )
-          if old_call in text:
-              text = text.replace(old_call, new_call, 1)
-          elif "preferredDialogueContext" not in text:
-              raise SystemExit('Unexpected NPC dialogue plan state')
-          runtime.write_text(text, encoding='utf-8')
-          PY
-          node --check js/spatial_world.js
-          node --check js/npc_spatial_runtime.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: Install pinned browser test dependency
         run: npm install --ignore-scripts
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Verify distributed NPC daily-life destinations
-        run: npx playwright test tests/browser/r04-npc-distribution.spec.mjs --project=desktop
-      - name: Run focused 100x100 spatial-world regression
+
+      - name: Run focused 100x100 spatial-world and NPC occupancy regression
         run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs --project=desktop
+
       - name: Re-run deterministic origin village regression
         run: npx playwright test tests/browser/r02-origin-village.spec.mjs
+
       - name: Re-run deterministic multi-region terrain regression
         run: npx playwright test tests/browser/r02-multi-region-terrain.spec.mjs
+
       - name: Re-run adjacent-region navigation regression
         run: npx playwright test tests/browser/r02-region-navigation.spec.mjs
+
       - name: Re-run deterministic save-load roundtrip regression
         run: npx playwright test tests/browser/r02-deterministic-roundtrip.spec.mjs
+
       - name: Run stabilized R01 browser regression
         run: npm run test:browser:r01
-      - name: Commit NPC distribution correction after green checks
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add js/spatial_world.js js/npc_spatial_runtime.js
-          git diff --cached --check
-          if git diff --cached --quiet; then
-            echo "No product mutation required."
-          else
-            git commit -m "Distribute NPC daily-life destinations (#302)"
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+
       - name: Upload Playwright evidence
         if: always()
         uses: actions/upload-artifact@v4
