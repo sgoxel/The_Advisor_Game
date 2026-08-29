@@ -93,3 +93,8 @@ window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatia
 // Renderer, so semantic roads remain visible even when later compatibility modules add
 // their own render wrappers.
 window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
+
+// Final Simulation-integration bridge for NPC positions. It attaches after the compatibility
+// wrappers and restores NPCSpatial authority if an older renderer wrapper drifts coordinates
+// inside the same authoritative game minute.
+window.Game.Utils.loadScriptOnce("js/npc_runtime_bridge.js", "r04NpcRuntimeBridgeModule");
