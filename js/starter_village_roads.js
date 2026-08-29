@@ -97,8 +97,19 @@
       const f = building?.footprint;
       const row = Number(f?.row), col = Number(f?.col), height = Number(f?.height), width = Number(f?.width);
       if (![row, col, height, width].every(Number.isFinite)) continue;
+      const entranceRow = Number(building?.entrance?.row);
+      const entranceCol = Number(building?.entrance?.col);
+      const entranceKey = Number.isInteger(entranceRow) && Number.isInteger(entranceCol)
+        ? key(entranceRow, entranceCol)
+        : null;
       for (let r = row; r < row + height; r += 1) {
-        for (let c = col; c < col + width; c += 1) occupied.add(key(r, c));
+        for (let c = col; c < col + width; c += 1) {
+          const cellKey = key(r, c);
+          // Building entrances are authoritative road/path endpoints. Their pixels may visually
+          // meet the doorway even when the entrance coordinate lies on the footprint boundary;
+          // the presentation layer must not erase that Simulation-owned road descriptor.
+          if (cellKey !== entranceKey) occupied.add(cellKey);
+        }
       }
     }
     return occupied;
