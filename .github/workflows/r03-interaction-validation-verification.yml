@@ -1,0 +1,84 @@
+name: R03 Interaction Validation Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_validation.js'
+      - 'tests/browser/r03-interaction-target-context.spec.mjs'
+      - 'tests/browser/r03-spatial-action-legality.spec.mjs'
+      - 'tests/browser/r03-interaction-validation.spec.mjs'
+      - 'js/npc_world.js'
+      - 'js/ecology.js'
+      - 'js/world_hierarchy.js'
+      - 'tests/browser/r02-npc-world-presence.spec.mjs'
+      - 'tests/browser/r02-ecology.spec.mjs'
+      - 'tests/browser/r02-world-hierarchy.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-interaction-validation-verification.yml'
+  pull_request:
+    paths:
+      - 'js/action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_validation.js'
+      - 'tests/browser/r03-interaction-target-context.spec.mjs'
+      - 'tests/browser/r03-spatial-action-legality.spec.mjs'
+      - 'tests/browser/r03-interaction-validation.spec.mjs'
+      - 'js/npc_world.js'
+      - 'js/ecology.js'
+      - 'js/world_hierarchy.js'
+      - 'tests/browser/r02-npc-world-presence.spec.mjs'
+      - 'tests/browser/r02-ecology.spec.mjs'
+      - 'tests/browser/r02-world-hierarchy.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-interaction-validation-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  interaction-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R03-T05 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R03 interaction-validation checks
+        run: npx playwright test tests/browser/r03-interaction-validation.spec.mjs
+      - name: Preserve R03 interaction-target contract
+        run: npx playwright test tests/browser/r03-interaction-target-context.spec.mjs
+      - name: Preserve R03 spatial-action legality contract
+        run: npx playwright test tests/browser/r03-spatial-action-legality.spec.mjs
+      - name: Preserve NPC, ecology and hierarchy contracts
+        run: >-
+          npx playwright test
+          tests/browser/r02-npc-world-presence.spec.mjs
+          tests/browser/r02-ecology.spec.mjs
+          tests/browser/r02-world-hierarchy.spec.mjs
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r03-t05-interaction-validation-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
