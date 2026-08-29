@@ -94,6 +94,9 @@
     const occupied = new Set();
     if (!Array.isArray(buildings)) return occupied;
     for (const building of buildings) {
+      // Simulation explicitly permits passable structures (for example the village well/market)
+      // to share authoritative road tiles. They are compatible crossings, not blocked footprints.
+      if (building?.passable === true) continue;
       const f = building?.footprint;
       const row = Number(f?.row), col = Number(f?.col), height = Number(f?.height), width = Number(f?.width);
       if (![row, col, height, width].every(Number.isFinite)) continue;
