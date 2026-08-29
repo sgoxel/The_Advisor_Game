@@ -10,23 +10,25 @@ NVIDIA may execute only as **Reviewer** or **Tester**. It is not a sixth authori
 
 NVIDIA Reviewer may assist planning by performing read-only audits of planning/process state and reporting recommendations. Those recommendations are advisory evidence only. Formal Planner Workers alone may change `ROADMAP`, `TODO`, scope, acceptance criteria, dependencies, phase order, or other Planner-owned state.
 
+NVIDIA is intended to be used proactively as a preflight/evidence layer when suitable committed work exists. It should reduce formal Worker review effort without becoming a blocker or replacing independent formal verification.
+
 ## Labels
 
 - `ai-ready`: Planner reserved a free eligible issue for NVIDIA/OpenCode.
 - `ai-role-coder`: legacy/disabled routing label. If present, NVIDIA must skip the issue without claiming it.
-- `ai-role-reviewer`: read-only review/audit/inspection, including read-only planning/process analysis when no Planner-authoritative change is requested.
-- `ai-role-tester`: read-only objective testing of an explicitly referenced committed target/PR.
+- `ai-role-reviewer`: read-only review/audit/inspection, including read-only planning/process analysis and gameplay/game-world logic review when no Planner-authoritative change is requested.
+- `ai-role-tester`: read-only objective preflight testing of an explicitly referenced committed target/PR.
 - `ai-running`: NVIDIA/OpenCode is currently executing.
 - `work-claimed`: execution is reserved; other executors must skip.
 - `ai-awaiting-review`: NVIDIA completed auxiliary evidence; a formal Worker must inspect it.
 - `ai-handoff`: NVIDIA could not complete safely; the responsible formal Worker must continue.
 - `blocked`: issue must not execute.
 
-`ai-ready` should normally be added last. After it is added, the workflow waits 30 seconds before reading fresh issue state.
+`ai-ready` must be added last, after the supported role label and all eligibility/claim/dependency checks. After it is added, the workflow waits 30 seconds before reading fresh issue state.
 
 An explicit single supported role label is preferred. If no role label exists after the 30-second grace period, NVIDIA semantically classifies the issue title and body. It may return only `reviewer`, `tester`, or `none`.
 
-- `reviewer`: read-only review/audit/inspection/analysis of an existing committed implementation, PR, infrastructure/process state, or planning state where only recommendations are requested.
+- `reviewer`: read-only review/audit/inspection/analysis of an existing committed implementation, PR, infrastructure/process state, planning state, or game-dynamics/logic state where only findings or recommendations are requested.
 - `tester`: objective verification/testing of an existing committed target or PR.
 - `none`: implementation/coding/fixing/configuration writes, Planner-authoritative work, Graphic Designer production, README/governance changes, release/phase approval, admin-only, unclear, mixed-role, or otherwise unsuitable auxiliary work.
 
@@ -39,6 +41,56 @@ NVIDIA may run only when the issue is open, free, unblocked, has no open GitHub 
 Eligibility and dependency checks occur before semantic role inference where possible, so blocked or occupied work does not consume NVIDIA classification work.
 
 `ai-ready` is a reservation signal, not permission to bypass dependencies or governance.
+
+At most one NVIDIA issue may be reserved or running at a time. A formal phase/release gate is never routed to NVIDIA as the authority that decides the gate.
+
+## Proactive Utilization and Preflight
+
+After blocking README reconciliation, blocking Planner revision work, and active-phase planning repair, the Planner performs an NVIDIA utilization scan before ordinary Planner backlog/capacity work. The scan is repeated after material state changes that may create a new committed review/test candidate.
+
+If NVIDIA is idle and a suitable free target exists, Planner should route one target rather than leaving the auxiliary agent unused. Candidate priority is:
+
+1. **Reviewer preflight for a newly committed Coder/Designer/Reviewer candidate**, especially product behavior, simulation/world logic, integration, workflow/config/process, or regression-risk review.
+2. **Reviewer game-dynamics audit** for implemented or specified behavior where causal consistency, game-rule coherence, or plausibility can be meaningfully inspected.
+3. **Reviewer read-only planning/process analysis** where recommendations can help a formal Planner without changing Planner-owned state.
+4. **Tester preflight** for objective exact-SHA tests/artifacts when that is more useful than a Reviewer pass or when a Reviewer pass is already available.
+
+NVIDIA work is opportunistic and non-blocking. Formal Workers must not wait idly for NVIDIA if other eligible work exists. If a formal Tester is already actively claiming the same target, do not race it merely to increase NVIDIA usage.
+
+When Planner finds a suitable candidate, record one deduplicated machine-readable opportunity on ledger issue #79 before routing, using:
+
+`AI AUXILIARY OPPORTUNITY: {"schema_version":1,"timestamp":"<UTC ISO-8601>","source_issue":123,"target_ref":"<sha/pr/state>","role":"reviewer|tester","disposition":"routed|deferred_busy|skipped_formal_claim","reason":"<short machine-readable reason>"}`
+
+Do not repeat the same source issue + target ref + role + disposition unless material state changes. If `disposition` is `routed`, add exactly one supported `ai-role-*` label and add `ai-ready` last.
+
+## Gameplay Logic and Plausibility Review
+
+For product/gameplay/world-system work, NVIDIA Reviewer must inspect more than code syntax and test status. It should assess whether the implemented dynamics make sense under the authoritative game rules and whether the resulting behavior is causally coherent.
+
+README/game rules and explicit fantasy abstractions are checked first. Real-world plausibility is secondary evidence and must never override an intentional project rule merely because reality would behave differently.
+
+Where relevant, Reviewer should examine:
+
+- chronology, travel time, movement, distance and location consistency;
+- character status, rank, authority, permissions and social hierarchy;
+- resources, possessions, costs, production, trade and economic cause/effect;
+- NPC work/sleep/travel/service schedules and settlement daily life;
+- settlement population, prosperity, security, construction, decline and recovery logic;
+- ecology, habitat, animal/creature behavior and environmental consistency;
+- military/logistics/diplomacy cause/effect when present;
+- persistence, off-screen progression, catch-up and event ordering;
+- whether an outcome assumes facts/resources/authority that were never established;
+- whether two rules or systems produce contradictory or impossible outcomes;
+- whether a simplification is a coherent intentional abstraction or an accidental logical gap.
+
+`AI REVIEW EVIDENCE:` should clearly categorize applicable observations as:
+
+- `RULE CONSISTENCY` — compatibility with README and established game/simulation rules;
+- `GAMEPLAY LOGIC` — internal causal coherence and absence of contradictory/impossible dynamics;
+- `REAL-WORLD PLAUSIBILITY` — realism-informed observations where useful;
+- `INTENTIONAL ABSTRACTION` — unrealistic but coherent simplifications that appear deliberate and acceptable.
+
+Each concern should include a severity such as `BLOCKING`, `MAJOR`, `MINOR`, or `OBSERVATION`, with a concise rationale. Reviewer must not invent new product requirements while doing this analysis.
 
 ## Independence
 
@@ -53,13 +105,23 @@ No NVIDIA role may:
 - silently merge implementation;
 - overwrite unrelated/newer work.
 
+NVIDIA Tester preflight is not a formal independent Tester PASS. A formal Tester must independently inspect exact-state evidence and make the authoritative verification decision when normal governance requires it.
+
 ## Planning Assistance
 
 A formal Planner may route a suitable read-only planning/process audit to NVIDIA Reviewer when the requested outcome is analysis or recommendations only.
 
-NVIDIA Reviewer may inspect current README, ROADMAP/TODO, issue/dependency state, workflow/process evidence, and bottlenecks, then report findings using `AI REVIEW EVIDENCE:`.
+NVIDIA Reviewer may inspect current README, ROADMAP/TODO, issue/dependency state, workflow/process evidence, bottlenecks, and implemented gameplay/world dynamics, then report findings using `AI REVIEW EVIDENCE:`.
 
 NVIDIA Reviewer must use `AI-HANDOFF:` instead of making changes whenever the requested outcome would require Planner authority.
+
+## Formal Follow-up and Agreement Tracking
+
+When a formal Worker consumes `ai-awaiting-review` evidence and later has a comparable formal verdict, it should record one machine-readable follow-up on #79:
+
+`AI AUXILIARY FOLLOW-UP: {"schema_version":1,"timestamp":"<UTC ISO-8601>","source_issue":123,"target_ref":"<sha/pr/state>","ai_run_id":123456789,"ai_role":"reviewer|tester","ai_verdict":"pass|changes_requested|fail|unknown","formal_verdict":"pass|changes_requested|fail|not_comparable","agreement":"agree|disagree|not_comparable"}`
+
+This record measures usefulness; it does not grant NVIDIA approval authority. Do not fabricate comparability when a Reviewer advisory finding and a formal Tester decision answer different questions.
 
 ## Handoff
 
@@ -71,7 +133,7 @@ Formal Worker priority should treat `ai-handoff` above ordinary unclaimed work, 
 
 Successful auxiliary execution releases `ai-running` and `work-claimed` and adds `ai-awaiting-review`.
 
-- Reviewer success requires `AI REVIEW EVIDENCE:`.
-- Tester success requires `AI TEST EVIDENCE:`.
+- Reviewer success requires `AI REVIEW EVIDENCE:` and should include `VERDICT: PASS` or `VERDICT: CHANGES REQUESTED`.
+- Tester success requires `AI TEST EVIDENCE:` and should include `VERDICT: PASS` or `VERDICT: FAIL`.
 
 No auxiliary success is a Planner decision, merge approval, phase approval, or release approval.
