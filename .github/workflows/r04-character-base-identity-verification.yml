@@ -1,0 +1,47 @@
+name: R04 Character Base Identity Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/character_identity.js'
+      - 'tests/browser/r04-character-base-identity.spec.mjs'
+      - '.github/workflows/r04-character-base-identity-verification.yml'
+  pull_request:
+    paths:
+      - 'js/character_identity.js'
+      - 'tests/browser/r04-character-base-identity.spec.mjs'
+      - '.github/workflows/r04-character-base-identity-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-character-base-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run deterministic character base identity regression
+        run: npx playwright test tests/browser/r04-character-base-identity.spec.mjs
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-character-base-identity-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
