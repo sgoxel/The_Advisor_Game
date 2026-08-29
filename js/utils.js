@@ -107,3 +107,8 @@ window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatia
 // wrappers and restores NPCSpatial authority if an older renderer wrapper drifts coordinates
 // inside the same authoritative game minute.
 window.Game.Utils.loadScriptOnce("js/npc_runtime_bridge.js", "r04NpcRuntimeBridgeModule");
+
+// #309 presentation-only compatibility bridge. It may load before UI exists; the module
+// retries installation until UI/state are ready, then converts legacy addLog calls into a
+// bounded structured activity stream without changing Simulation authority.
+window.Game.Utils.loadScriptOnce("js/activity_log_runtime.js", "r04ActivityLogRuntimeModule");
