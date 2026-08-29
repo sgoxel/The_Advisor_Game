@@ -24,23 +24,22 @@ jobs:
 
           path = Path('js/spatial_world.js')
           text = path.read_text(encoding='utf-8')
-          old = """    const paths = [];
-              for (let index = 1; index < buildings.length; index += 1) {
-          """.replace('              for', '    for')
-          new = """    // The anchor/well is building[0]. It is part of the same authoritative
-              // Simulation-owned road network as every other required village structure.
-              // Connect it before the remaining building connectors; do not create a
-              // second/decorative road topology in the presentation layer.
-              const anchorRoadConnection = connectBuildingToRoad(buildings[0], roads, blocked);
-              if (!anchorRoadConnection.length) {
-                throw new Error('Unable to connect origin-village anchor building to authoritative road network.');
-              }
-
-              const paths = [];
-              for (let index = 1; index < buildings.length; index += 1) {
-          """.replaceAll('              ', '    ')
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected exactly one #235 road connector insertion point; found {text.count(old)}. Refusing unsafe patch.')
+          old = "    const paths = [];\n    for (let index = 1; index < buildings.length; index += 1) {\n"
+          new = (
+              "    // The anchor/well is building[0]. It is part of the same authoritative\n"
+              "    // Simulation-owned road network as every other required village structure.\n"
+              "    // Connect it before the remaining building connectors; do not create a\n"
+              "    // second/decorative road topology in the presentation layer.\n"
+              "    const anchorRoadConnection = connectBuildingToRoad(buildings[0], roads, blocked);\n"
+              "    if (!anchorRoadConnection.length) {\n"
+              "      throw new Error('Unable to connect origin-village anchor building to authoritative road network.');\n"
+              "    }\n\n"
+              "    const paths = [];\n"
+              "    for (let index = 1; index < buildings.length; index += 1) {\n"
+          )
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one #235 road connector insertion point; found {count}. Refusing unsafe patch.')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
 
@@ -57,4 +56,6 @@ jobs:
           git rm .github/workflows/r04-road-authority-repair.yml
           git add js/spatial_world.js
           git commit -m "Connect origin well to authoritative road network (#235 #277)"
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
