@@ -1,6 +1,6 @@
 'use strict';
 
-const REQUEST_MARKER = /^\s*TESTER REVISION REQUEST\b/im;
+const REQUEST_MARKER = /^\s*TESTER REVISION REQUEST(?=\s*(?:—|-|:|$))/im;
 const RESOLUTION_MARKER = /T-REV-RESOLVED\(request=(\d+),\s*tested_ref=([0-9a-f]{7,40})\)/gi;
 
 function normalizeComments(comments) {
