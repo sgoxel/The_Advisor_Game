@@ -3,7 +3,9 @@ import { test, expect } from '@playwright/test';
 async function waitForWorld(page) {
   await page.goto('./');
   await page.waitForFunction(() => Boolean(
-    window.Game?.State?.world?.terrain?.length &&
+    window.Game?.State?.world?.terrain?.length === 100 &&
+    window.Game?.State?.world?.rows === 100 &&
+    window.Game?.State?.world?.cols === 100 &&
     window.Game?.AuthoritativeState?.capture &&
     window.Game?.CampaignPersistence?.loadSave
   ));
@@ -12,15 +14,20 @@ async function waitForWorld(page) {
 async function regenerate(page, seed) {
   await page.getByRole('button', { name: /Settings/i }).click();
   await page.locator('#seedInput').fill(seed);
-  await page.locator('#mapWidthInput').fill('24');
-  await page.locator('#mapHeightInput').fill('24');
+  await expect(page.locator('#mapWidthInput')).toHaveValue('100');
+  await expect(page.locator('#mapHeightInput')).toHaveValue('100');
   await page.locator('#applySettingsBtn').click();
-  await page.waitForFunction((expectedSeed) => window.Game.State.world.seed === expectedSeed && window.Game.State.world.terrain?.length === 24, seed);
+  await page.waitForFunction((expectedSeed) => (
+    window.Game.State.world.seed === expectedSeed &&
+    window.Game.State.world.terrain?.length === 100 &&
+    window.Game.State.world.rows === 100 &&
+    window.Game.State.world.cols === 100
+  ), seed);
   return page.evaluate(() => window.Game.AuthoritativeState.canonicalStringify(window.Game.AuthoritativeState.capture(window.Game.State)));
 }
 
 for (const seed of ['SIMSOFT-001', 'R02-ROUNDTRIP-ALPHA', 'R02-ROUNDTRIP-OMEGA']) {
-  test(`seed ${seed} is canonical across fresh regeneration and save-load round trip`, async ({ page }) => {
+  test(`seed ${seed} is canonical across fresh 100x100 regeneration and save-load round trip`, async ({ page }) => {
     await waitForWorld(page);
     const first = await regenerate(page, seed);
     const save = await page.evaluate(() => window.Game.CampaignPersistence.serializeSave());
