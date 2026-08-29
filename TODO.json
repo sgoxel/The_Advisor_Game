@@ -21,7 +21,7 @@
     "completed_r03_exact_cumulative_candidate": "537311aabaa5e25786819d05eee471361d9f6b0a"
   },
   "tasks": [
-    {"id":"R04-T01","order":1,"title":"Define deterministic protagonist-driver intent contract","status":"ready","github_issue":170,"role_owner":"Coder role","issue_state":"open_ready_unclaimed","depends_on":[]},
+    {"id":"R04-T01","order":1,"title":"Define deterministic protagonist-driver intent contract","status":"in_progress","github_issue":170,"role_owner":"Coder role","issue_state":"open_claimed","depends_on":[],"active_claim":{"worker":"Worker #4","role":"Coder","comment":5460014113}},
     {"id":"R04-T02","order":2,"title":"Implement deterministic Local BOT goal and action selection","status":"blocked","github_issue":171,"role_owner":"Coder role","issue_state":"open_blocked","depends_on":["R04-T01"]},
     {"id":"R04-T03","order":3,"title":"Execute autonomous protagonist movement and interactions through Simulation","status":"blocked","github_issue":172,"role_owner":"Coder role","issue_state":"open_blocked","depends_on":["R04-T01","R04-T02"]},
     {"id":"R04-T04","order":4,"title":"Add time-aware autonomous decision loop and safe reconsideration","status":"blocked","github_issue":173,"role_owner":"Coder role","issue_state":"open_blocked","depends_on":["R04-T02","R04-T03"]},
