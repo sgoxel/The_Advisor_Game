@@ -1,0 +1,62 @@
+name: R04 Character World Icon Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/npc_world.js'
+      - 'assets/characters/world/**'
+      - 'design/R04_STATIC_CHARACTER_PNG_IDENTITY.md'
+      - 'tests/browser/r04-character-world-icons.spec.mjs'
+      - 'tests/browser/r02-npc-world-presence.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-character-world-icon-verification.yml'
+  pull_request:
+    paths:
+      - 'js/npc_world.js'
+      - 'assets/characters/world/**'
+      - 'design/R04_STATIC_CHARACTER_PNG_IDENTITY.md'
+      - 'tests/browser/r04-character-world-icons.spec.mjs'
+      - 'tests/browser/r02-npc-world-presence.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-character-world-icon-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-character-world-icons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04-T11 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R04 character world-icon regression
+        run: npx playwright test tests/browser/r04-character-world-icons.spec.mjs
+      - name: Preserve R02 simulation-owned NPC world presence
+        run: npx playwright test tests/browser/r02-npc-world-presence.spec.mjs
+      - name: Preserve R04 autonomous protagonist regression
+        run: npx playwright test tests/browser/r04-autonomous-protagonist-regression.spec.mjs
+      - name: Upload focused R04 character world-icon evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-character-world-icons-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
