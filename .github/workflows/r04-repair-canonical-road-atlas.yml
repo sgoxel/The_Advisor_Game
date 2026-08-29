@@ -1,0 +1,86 @@
+name: R04 Repair Canonical Road Atlas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/r04-repair-canonical-road-atlas.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair-canonical-road-atlas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebase repair trigger onto latest main
+        run: |
+          git fetch origin main
+          git rebase origin/main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install canonical Designer encoder dependency
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Regenerate approved canonical Designer atlas
+        run: |
+          set -euo pipefail
+          BEFORE_MAP="$(sha256sum design/source/road/road_canonical_1024.cells.json | awk '{print $1}')"
+          BEFORE_GENERATOR="$(sha256sum design/source/road/generate_road_atlas.py | awk '{print $1}')"
+          python design/source/road/generate_road_atlas.py
+          AFTER_MAP="$(sha256sum design/source/road/road_canonical_1024.cells.json | awk '{print $1}')"
+          AFTER_GENERATOR="$(sha256sum design/source/road/generate_road_atlas.py | awk '{print $1}')"
+          test "$BEFORE_MAP" = "$AFTER_MAP"
+          test "$BEFORE_GENERATOR" = "$AFTER_GENERATOR"
+          echo "Canonical semantic mapping and approved generator are unchanged."
+
+      - name: Verify regenerated binary through canonical splitter
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/canonical-road-export"
+          mkdir -p "$OUT"
+          node tools/split_tile_atlas.mjs \
+            --atlas design/source/road/road_canonical_1024.png \
+            --manifest design/source/road/road_canonical_1024.cells.json \
+            --output "$OUT"
+          PNG_COUNT="$(find "$OUT" -maxdepth 1 -type f -name 'road_*_256px.png' | wc -l | tr -d ' ')"
+          test "$PNG_COUNT" = "8"
+          test -f "$OUT/road_straight_vertical_256px.png"
+          test -f "$OUT/road_straight_horizontal_256px.png"
+          test -f "$OUT/road_cross_256px.png"
+          test -f "$OUT/road_turn_ne_256px.png"
+          test -f "$OUT/road_turn_es_256px.png"
+          test -f "$OUT/road_turn_sw_256px.png"
+          test -f "$OUT/road_turn_wn_256px.png"
+          test -f "$OUT/road_t_junction_256px.png"
+          find "$OUT" -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/export-before.sha256"
+          node tools/split_tile_atlas.mjs \
+            --atlas design/source/road/road_canonical_1024.png \
+            --manifest design/source/road/road_canonical_1024.cells.json \
+            --output "$OUT"
+          find "$OUT" -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/export-after.sha256"
+          diff -u "$RUNNER_TEMP/export-before.sha256" "$RUNNER_TEMP/export-after.sha256"
+          echo "Canonical splitter decoded the repaired PNG and deterministically emitted exactly eight semantic road PNGs."
+
+      - name: Commit repaired binary only and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git diff --exit-code -- design/source/road/generate_road_atlas.py design/source/road/road_canonical_1024.cells.json
+          git rm .github/workflows/r04-repair-canonical-road-atlas.yml
+          git add design/source/road/road_canonical_1024.png
+          git commit -m "Repair canonical road atlas binary (#283)"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
