@@ -20,7 +20,7 @@ on:
       - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
       - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
       - 'tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs'
-      - 'tests/browser/r03-cumulative-regression.spec.mjs'
+      - 'tests/browser/r03-*.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-autonomous-protagonist-regression.yml'
@@ -42,7 +42,7 @@ on:
       - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
       - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
       - 'tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs'
-      - 'tests/browser/r03-cumulative-regression.spec.mjs'
+      - 'tests/browser/r03-*.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-autonomous-protagonist-regression.yml'
@@ -76,8 +76,13 @@ jobs:
         run: npx playwright test tests/browser/r04-autonomous-decision-loop.spec.mjs
       - name: Verify presentation remains non-command autonomy feedback
         run: npx playwright test tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs
-      - name: Preserve R03 legality and interaction regression
-        run: npx playwright test tests/browser/r03-cumulative-regression.spec.mjs
+      - name: Preserve current R03 legality interaction feedback and accessibility regression
+        run: >-
+          npx playwright test
+          tests/browser/r03-cumulative-accessibility.spec.mjs
+          tests/browser/r03-spatial-action-resolution-regression.spec.mjs
+          tests/browser/r03-context-interaction-regression.spec.mjs
+          tests/browser/r03-legality-feedback-ui.spec.mjs
       - name: Upload R04 autonomous protagonist evidence
         if: always()
         uses: actions/upload-artifact@v4
