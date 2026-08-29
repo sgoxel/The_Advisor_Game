@@ -223,33 +223,42 @@
       </div>
     </div>
 
-    <!-- Main Menu -->
-    <div class="main-menu-dropdown hidden" id="mainMenuDropdown">
-      <button id="menuSaveBtn" class="menu-item" type="button">Save Campaign</button>
-      <button id="menuLoadBtn" class="menu-item" type="button">Load Campaign</button>
-      <button id="menuExportMasksBtn" class="menu-item" type="button">Export Masks</button>
-      <button id="menuGithubBtn" class="menu-item" type="button">GitHub Repository</button>
-    </div>
+    <!-- Top Ribbon -->
+    <header class="ribbon">
+      <div class="menu-scroll-arrow left hidden" id="topMenuScrollLeft" aria-hidden="true">◀</div>
+      <div class="top-left-scroll" id="topLeftScroll">
+        <div class="top-left">
+          <div class="menu-dropdown">
+            <button class="menu-btn" id="mainMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n="header.mainMenu">Main Menu</button>
+            <div id="mainMenuDropdown" class="dropdown-panel hidden" role="menu" aria-labelledby="mainMenuBtn">
+              <button class="dropdown-item" id="menuGithubBtn" type="button" role="menuitem" data-i18n="menu.githubPage">Github Page</button>
+              <button class="dropdown-item" id="menuSaveBtn" type="button" role="menuitem" data-i18n="menu.save">Export Map JS</button>
+              <button class="dropdown-item" id="menuExportMasksBtn" type="button" role="menuitem" data-i18n="menu.exportMasks">Export Tile Masks</button>
+              <button class="dropdown-item" id="menuLoadBtn" type="button" role="menuitem" data-i18n="menu.load">Load Map</button>
+            </div>
+          </div>
+          <button class="menu-btn" id="settingsBtn" type="button" data-i18n="header.settings">Settings</button>
+          <button class="menu-btn" id="logBtn" type="button" data-i18n="header.log">Log</button>
 
-    <!-- Top Header -->
-    <header class="top-header">
-      <button id="mainMenuBtn" class="main-menu-btn" type="button" aria-label="Open main menu">☰</button>
-
-      <div class="resource-bar">
-        <div class="resource-item">
-          <span class="resource-icon">💰</span>
-          <span class="resource-value" id="goldValue">120</span>
+          <label class="lang-select-wrap" for="languageSelect">
+            <span data-i18n="header.language">Language</span>
+            <select id="languageSelect" class="lang-select">
+              <option value="en">EN</option>
+              <option value="tr">TR</option>
+            </select>
+          </label>
         </div>
       </div>
+      <button class="menu-scroll-arrow right hidden" id="topMenuScrollRight" type="button" aria-label="Scroll menu right">▶</button>
 
-      <div class="top-title" data-i18n="app.title">THE ADVISOR GAME</div>
+      <div class="top-stats">
+        <div class="resource-box">
+          <div class="stat-line">
+            <span class="label" data-i18n="stats.gold">Gold</span>
+            <span class="resource-value" id="goldValue">120</span>
+          </div>
+        </div>
 
-      <div class="top-actions">
-        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">⚙</button>
-        <button id="logBtn" class="icon-btn" type="button" aria-label="Generation log">LOG</button>
-      </div>
-
-      <div class="stats-bar">
         <div class="stat-box">
           <div class="stat-line">
             <span class="label" data-i18n="stats.health">Health</span>
