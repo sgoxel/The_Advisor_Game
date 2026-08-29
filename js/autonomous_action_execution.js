@@ -1,11 +1,11 @@
 /*
-  R04-T03 / #172
+  R04-T03 / #172 + R04-T17 / #181
   Autonomous protagonist execution adapter.
 
   Local BOT selects; ProtagonistDriverIntent normalizes the character-owned intent;
   existing R03 Simulation validation/resolution remains the only authority that may
-  mutate world truth. Player/presentation input cannot directly invoke a movement or
-  interaction transition through this adapter.
+  mutate world truth. Optional Advisor influence is only forwarded into Local BOT
+  evaluation and cannot bypass the execution, validation, or resolution gates below.
 */
 
 window.Game = window.Game || {};
@@ -120,13 +120,13 @@ window.Game = window.Game || {};
     return result(STATUS.REJECTED, reasonCode, selection, intent, route, simulationResult, null);
   }
 
-  function execute(authoritativeContextInput, opportunitiesInput, executionContextInput) {
+  function execute(authoritativeContextInput, opportunitiesInput, executionContextInput, advisorInfluenceInput) {
     const localBot = Game.LocalBotDriver;
     if (!localBot || typeof localBot.buildIntent !== 'function') {
       return rejected(REASON.LOCAL_BOT_UNAVAILABLE, null, null);
     }
 
-    const built = localBot.buildIntent(authoritativeContextInput, opportunitiesInput);
+    const built = localBot.buildIntent(authoritativeContextInput, opportunitiesInput, advisorInfluenceInput);
     const selection = built.selection;
     const intent = built.intent;
 
