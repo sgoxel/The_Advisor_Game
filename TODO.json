@@ -6,10 +6,10 @@
   "phase_title": "Autonomous Protagonist and Local BOT Core",
   "phase_issue": 169,
   "status": "active",
-  "planning_epoch": "readme-2b57975b-r04-chat-p-rev-5461318031-2026-08-29",
-  "authority_note": "Current README remains product authority. Admin public-build P-REV 5461318031 is ACCEPTED by Planner decision 5461353196 to adapt the minimum free-text Advisor conversation slice into active R04 without activating full R05.",
+  "planning_epoch": "readme-f9062b85-r04-manual-workers-6-20-2026-08-29",
+  "authority_note": "Current README remains product authority. Admin public-build P-REV 5461318031 is ACCEPTED by Planner decision 5461353196 to adapt the minimum free-text Advisor conversation slice into active R04 without activating full R05. README commit f9062b85fb493c6c92a795552af4024ba54ea039 expands manual Admin-invoked persistent Worker identities to #6-#20 without changing R04 scope, dependencies, task status, or scheduled cursor behavior.",
   "readme_reconciliation": {
-    "readme_commit": "2b57975b9ceabba359714b4cc9909a2c7b221b1f",
+    "readme_commit": "f9062b85fb493c6c92a795552af4024ba54ea039",
     "admin_233_readme_sync_commit": "2b57975b9ceabba359714b4cc9909a2c7b221b1f",
     "planner_issues": [105, 118, 132, 137, 139, 143, 151, 154, 155, 169, 226, 234, 240],
     "admin_issues": [103, 106, 117, 131, 136, 138, 142, 150, 225, 233],
