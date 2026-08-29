@@ -1,5 +1,5 @@
 /*
-  R04 #267: deterministic SEED-backed character base identity.
+  R04 #267/#279: deterministic SEED-backed character base identity.
 
   This module owns only regenerable base identity. Current location, current profession,
   relationships, memories, injuries, emotional consequences, and other campaign history
@@ -10,8 +10,16 @@
   'use strict';
 
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-character-base-identity-v1';
+  const LEGACY_VERSION = 'r04-character-base-identity-v1';
+  const VERSION = 'r04-character-base-identity-v2';
+  const RNG_STREAM_VERSION = LEGACY_VERSION;
   const AUTHORITY = 'simulation';
+  const BIRTH_DATE_CALENDAR = 'campaign-calendar-civil-year-minus-2000';
+  const LEGACY_BIRTH_YEAR_MIN = 930;
+  const LEGACY_BIRTH_YEAR_MAX = 982;
+  const LEGACY_BIRTH_YEAR_OFFSET = 974;
+  const CANONICAL_BIRTH_YEAR_MIN = LEGACY_BIRTH_YEAR_MIN - LEGACY_BIRTH_YEAR_OFFSET;
+  const CANONICAL_BIRTH_YEAR_MAX = LEGACY_BIRTH_YEAR_MAX - LEGACY_BIRTH_YEAR_OFFSET;
 
   const GIVEN_NAMES = Object.freeze({
     female: Object.freeze(['Alda', 'Cera', 'Elin', 'Fara', 'Jora', 'Lysa', 'Mara', 'Pera', 'Sela', 'Vera', 'Yara', 'Mira']),
@@ -50,8 +58,10 @@
     return hash >>> 0;
   }
 
+  // Preserve the accepted v1 deterministic streams so #279 changes only the calendar-year
+  // domain. Names, gender, birthplace, personality and profession must not be re-rolled.
   function unit(seed, characterId, streamName) {
-    return hash32(`${VERSION}|${seed}|${characterId}|${streamName}`) / 0x100000000;
+    return hash32(`${RNG_STREAM_VERSION}|${seed}|${characterId}|${streamName}`) / 0x100000000;
   }
 
   function integer(seed, characterId, streamName, min, max) {
@@ -101,7 +111,7 @@
 
   function deterministicBirthDate(seed, characterId) {
     return {
-      year: integer(seed, characterId, 'birth-year', 930, 982),
+      year: integer(seed, characterId, 'birth-year', CANONICAL_BIRTH_YEAR_MIN, CANONICAL_BIRTH_YEAR_MAX),
       month: integer(seed, characterId, 'birth-month', 1, 12),
       day: integer(seed, characterId, 'birth-day', 1, 28)
     };
@@ -135,6 +145,37 @@
     return value;
   }
 
+  function validLegacyBirthDate(value) {
+    return Boolean(
+      value && typeof value === 'object' &&
+      Number.isInteger(value.year) && value.year >= LEGACY_BIRTH_YEAR_MIN && value.year <= LEGACY_BIRTH_YEAR_MAX &&
+      Number.isInteger(value.month) && value.month >= 1 && value.month <= 12 &&
+      Number.isInteger(value.day) && value.day >= 1 && value.day <= 28
+    );
+  }
+
+  function migrateBaseIdentity(candidate) {
+    if (!candidate || typeof candidate !== 'object' || candidate.authority !== AUTHORITY) {
+      throw new TypeError('A Simulation-owned CharacterIdentity base identity is required.');
+    }
+    if (candidate.generatorVersion === VERSION) return candidate;
+    if (candidate.generatorVersion !== LEGACY_VERSION || !validLegacyBirthDate(candidate.birthDate)) {
+      throw new TypeError('Unsupported CharacterIdentity generator version or legacy birth date.');
+    }
+
+    return deepFreeze({
+      ...candidate,
+      schemaVersion: 2,
+      generatorVersion: VERSION,
+      birthDateCalendar: BIRTH_DATE_CALENDAR,
+      birthDate: {
+        year: candidate.birthDate.year - LEGACY_BIRTH_YEAR_OFFSET,
+        month: candidate.birthDate.month,
+        day: candidate.birthDate.day
+      }
+    });
+  }
+
   function generateBaseIdentity(seedInput, characterIdInput, options) {
     const seed = canonicalSeed(seedInput);
     const characterId = canonicalString(characterIdInput, 'characterId');
@@ -150,7 +191,7 @@
       : pick(seed, characterId, 'base-profession', BASE_PROFESSIONS);
 
     return deepFreeze({
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatorVersion: VERSION,
       authority: AUTHORITY,
       seed,
@@ -158,6 +199,7 @@
       worldIdentity: `character:${encodeURIComponent(seed)}:${encodeURIComponent(characterId)}`,
       name: `${firstName} ${familyName}`,
       gender,
+      birthDateCalendar: BIRTH_DATE_CALENDAR,
       birthDate: deterministicBirthDate(seed, characterId),
       birthplace: deterministicBirthplace(seed, characterId, source.birthplace),
       baselinePersonality,
@@ -168,7 +210,7 @@
 
   function canonicalBaseFingerprint(identity) {
     if (!identity || identity.authority !== AUTHORITY || identity.generatorVersion !== VERSION) {
-      throw new TypeError('A CharacterIdentity base identity is required.');
+      throw new TypeError('A current CharacterIdentity base identity is required; migrate legacy identities first.');
     }
     return JSON.stringify({
       generatorVersion: identity.generatorVersion,
@@ -177,6 +219,7 @@
       worldIdentity: identity.worldIdentity,
       name: identity.name,
       gender: identity.gender,
+      birthDateCalendar: identity.birthDateCalendar,
       birthDate: identity.birthDate,
       birthplace: identity.birthplace,
       baselinePersonality: identity.baselinePersonality,
@@ -187,7 +230,7 @@
 
   function applyCampaignDeltas(baseIdentity, deltas) {
     if (!baseIdentity || baseIdentity.authority !== AUTHORITY || baseIdentity.generatorVersion !== VERSION) {
-      throw new TypeError('A CharacterIdentity base identity is required.');
+      throw new TypeError('A current CharacterIdentity base identity is required; migrate legacy identities first.');
     }
     const source = deltas && typeof deltas === 'object' ? deltas : {};
     const currentProfession = source.currentProfession === undefined || source.currentProfession === null
@@ -212,10 +255,16 @@
   }
 
   Game.CharacterIdentity = Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatorVersion: VERSION,
+    legacyGeneratorVersion: LEGACY_VERSION,
     authority: AUTHORITY,
+    birthDateCalendar: BIRTH_DATE_CALENDAR,
+    canonicalBirthYearRange: Object.freeze({ min: CANONICAL_BIRTH_YEAR_MIN, max: CANONICAL_BIRTH_YEAR_MAX }),
+    legacyBirthYearRange: Object.freeze({ min: LEGACY_BIRTH_YEAR_MIN, max: LEGACY_BIRTH_YEAR_MAX }),
+    legacyBirthYearOffset: LEGACY_BIRTH_YEAR_OFFSET,
     generateBaseIdentity,
+    migrateBaseIdentity,
     fingerprint: canonicalBaseFingerprint,
     applyCampaignDeltas
   });
