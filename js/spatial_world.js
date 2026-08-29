@@ -644,7 +644,12 @@
         }
         stampVillageOnRuntimeTerrain(world, base.village);
       }
-      return { ...(result || {}), originVillageBase: base, spatialRegion: base.theme };
+      return {
+        ...(result || {}),
+        playerStart: { row: base.protagonistOrigin.localRow, col: base.protagonistOrigin.localCol },
+        originVillageBase: base,
+        spatialRegion: base.theme
+      };
     };
     runtimeBound = true;
     return true;
