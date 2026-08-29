@@ -258,6 +258,22 @@
     for (const src of new Set(Object.values(WORLD_ICON_BY_OCCUPATION))) requestWorldIcon(src);
   }
 
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function resolveWorldIconScale(viewportWidth) {
+    const width = Math.max(1, Number(viewportWidth) || 1);
+    const zoomValue = Number(Game.State?.camera?.zoom);
+    const zoom = clamp(Number.isFinite(zoomValue) ? zoomValue : 5, 2, 5);
+    const viewportScale = clamp(width / 1440, 0.78, 1.18);
+    const iconSize = clamp((30 + zoom * 6.2) * viewportScale, 34, 64);
+    return {
+      iconSize,
+      fallbackRadius: clamp(iconSize / 6.8, 5, 9)
+    };
+  }
+
   function drawNeutralPersonFallback(ctx, npc, radius) {
     const accent = npc.activity === 'working' ? '#f1c75b' : '#d8e7ef';
     ctx.fillStyle = 'rgba(20, 28, 36, 0.38)';
@@ -281,12 +297,11 @@
     ctx.stroke();
   }
 
-  function drawNpcCharacter(ctx, npc, radius) {
+  function drawNpcCharacter(ctx, npc, radius, iconSize) {
     const asset = worldIconAssetFor(npc);
     const record = requestWorldIcon(asset);
     if (record?.status === 'ready' && record.image) {
-      const size = Math.max(18, Math.min(32, radius * 5.2));
-      ctx.drawImage(record.image, -size / 2, -size * 0.82, size, size);
+      ctx.drawImage(record.image, -iconSize / 2, -iconSize * 0.82, iconSize, iconSize);
       return 'png';
     }
     drawNeutralPersonFallback(ctx, npc, radius);
@@ -314,18 +329,18 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
+    const iconScale = resolveWorldIconScale(width);
     let visibleCount = 0;
     let pngCount = 0;
     let fallbackCount = 0;
     for (const npc of world.npcs) {
       const point = Renderer.gridToScreen(npc.row, npc.col, 0, 0);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
-      if (point.x < -20 || point.y < -30 || point.x > width + 20 || point.y > height + 30) continue;
+      if (point.x < -iconScale.iconSize || point.y < -iconScale.iconSize || point.x > width + iconScale.iconSize || point.y > height + iconScale.iconSize) continue;
 
-      const radius = Math.max(3, Math.min(6, width / 180));
       ctx.save();
       ctx.translate(point.x, point.y);
-      const renderKind = drawNpcCharacter(ctx, npc, radius);
+      const renderKind = drawNpcCharacter(ctx, npc, iconScale.fallbackRadius, iconScale.iconSize);
       if (renderKind === 'png') pngCount += 1;
       else fallbackCount += 1;
       ctx.restore();
@@ -335,6 +350,7 @@
     canvas.dataset.visibleNpcCount = String(visibleCount);
     canvas.dataset.pngNpcCount = String(pngCount);
     canvas.dataset.fallbackNpcCount = String(fallbackCount);
+    canvas.dataset.iconSizePx = iconScale.iconSize.toFixed(1);
     canvas.dataset.presentationAuthority = 'presentation-only';
   }
 
