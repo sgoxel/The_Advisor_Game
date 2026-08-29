@@ -107,7 +107,7 @@ jobs:
             printf '%s' "$COMMENTS" |
               jq --arg start "$STARTED_AT" \
                 '[.[] | select(.created_at >= $start)
-                  | select((.body // "") | contains("AI-HANDOFF: NVIDIA/OpenCode did not produce a complete verifiable"))
+                  | select((.body // "") | contains("AI-HANDOFF: NVIDIA/OpenCode did not produce a complete"))
                 ] | length'
           )"
 
@@ -172,6 +172,17 @@ jobs:
             *) EVIDENCE_VERDICT="unknown" ;;
           esac
 
+          if printf '%s\n' "$EVIDENCE_BODY" | grep -Fxq 'GROUNDING: VERIFIED'; then
+            GROUNDING_MARKED=true
+          else
+            GROUNDING_MARKED=false
+          fi
+          SOURCE_LINE_COUNT="$(printf '%s\n' "$EVIDENCE_BODY" | grep -c '^SOURCE: ' || true)"
+          GROUNDING_VERIFIED=false
+          if [ "$STATUS" = "success" ] && [ "$GROUNDING_MARKED" = true ] && [ "$SOURCE_LINE_COUNT" -gt 0 ]; then
+            GROUNDING_VERIFIED=true
+          fi
+
           HANDOFF_COUNT="$(
             printf '%s' "$COMMENTS" |
               jq --arg start "$STARTED_AT" '
@@ -234,7 +245,7 @@ jobs:
           SOURCE_ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}"
 
           METRIC="$(jq -cn \
-            --argjson schema_version 3 \
+            --argjson schema_version 4 \
             --arg timestamp "$ENDED_AT" \
             --argjson issue_number "$ISSUE_NUMBER" \
             --arg source_issue_url "$SOURCE_ISSUE_URL" \
@@ -258,13 +269,16 @@ jobs:
             --arg evidence_verdict "$EVIDENCE_VERDICT" \
             --argjson evidence_count "$EVIDENCE_COUNT" \
             --arg evidence_url "$EVIDENCE_URL" \
+            --argjson grounding_marked "$GROUNDING_MARKED" \
+            --argjson source_line_count "$SOURCE_LINE_COUNT" \
+            --argjson grounding_verified "$GROUNDING_VERIFIED" \
             --argjson handoff_count "$HANDOFF_COUNT" \
             --arg handoff_url "$HANDOFF_URL" \
             --argjson coder_pr_count "$PR_COUNT" \
             --arg coder_pr_url "$PR_URL" \
             --argjson coder_completed "$CODER_COMPLETED" \
             --argjson ledger_issue "$LEDGER_ISSUE" \
-            '{schema_version:$schema_version,timestamp:$timestamp,issue_number:$issue_number,source_issue_url:$source_issue_url,role:$role,model:$model,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,job_id:$job_id,job_url:$job_url,job_conclusion:$job_conclusion,head_sha:$head_sha,started_at:$started_at,ended_at:$ended_at,duration_seconds:$duration_seconds,retry_used:$retry_used,job_log_available:$job_log_available,provider_503_seen:$provider_503_seen,provider_503_count:$provider_503_count,status:$status,evidence_verdict:$evidence_verdict,evidence_count:$evidence_count,evidence_url:$evidence_url,handoff_count:$handoff_count,handoff_url:$handoff_url,coder_pr_count:$coder_pr_count,coder_pr_url:$coder_pr_url,coder_completed:$coder_completed,ledger_issue:$ledger_issue}')"
+            '{schema_version:$schema_version,timestamp:$timestamp,issue_number:$issue_number,source_issue_url:$source_issue_url,role:$role,model:$model,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,job_id:$job_id,job_url:$job_url,job_conclusion:$job_conclusion,head_sha:$head_sha,started_at:$started_at,ended_at:$ended_at,duration_seconds:$duration_seconds,retry_used:$retry_used,job_log_available:$job_log_available,provider_503_seen:$provider_503_seen,provider_503_count:$provider_503_count,status:$status,evidence_verdict:$evidence_verdict,evidence_count:$evidence_count,evidence_url:$evidence_url,grounding_marked:$grounding_marked,source_line_count:$source_line_count,grounding_verified:$grounding_verified,handoff_count:$handoff_count,handoff_url:$handoff_url,coder_pr_count:$coder_pr_count,coder_pr_url:$coder_pr_url,coder_completed:$coder_completed,ledger_issue:$ledger_issue}')"
 
           gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
           gh issue comment "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
@@ -324,6 +338,8 @@ jobs:
           CURRENT_DURATION_SUM="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | (.duration_seconds // 0)] | add // 0')"
           CURRENT_AVG_SECONDS="$(awk -v seconds="$CURRENT_DURATION_SUM" -v total="$CURRENT_RUNS" 'BEGIN { if (total == 0) printf "0"; else printf "%.0f", (seconds / total) }')"
           CURRENT_SUCCESS_RATE="$(awk -v success="$CURRENT_SUCCESS" -v total="$CURRENT_RUNS" 'BEGIN { if (total == 0) printf "0.0"; else printf "%.1f", (100 * success / total) }')"
+          CURRENT_GROUNDED="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | select(.grounding_verified == true)] | length')"
+          CURRENT_UNGROUNDED_SUCCESS="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | select(.status == "success" and (.grounding_verified // false) != true)] | length')"
 
           CURRENT_OPPORTUNITIES="$(printf '%s' "$OPPORTUNITIES" | jq --arg start "$CURRENT_POLICY_START" '[.[] | select((.timestamp // "") >= $start)]')"
           OPPORTUNITY_TOTAL="$(printf '%s' "$CURRENT_OPPORTUNITIES" | jq 'length')"
@@ -379,7 +395,7 @@ jobs:
           cat > /tmp/nvidia-ledger.md <<EOF2
           # NVIDIA Agent Metrics Ledger
 
-          Central observability dashboard for auxiliary NVIDIA Nemotron Reviewer/Tester runs, with historical Coder-era compatibility data retained for audit. Append-only `AI AUXILIARY METRIC`, `AI AUXILIARY OPPORTUNITY`, and `AI AUXILIARY FOLLOW-UP` comments are the machine-readable source records; this body is regenerated after every instrumented AI Developer completion.
+          Central observability dashboard for auxiliary NVIDIA Nemotron Reviewer/Tester runs, with historical Coder-era compatibility data retained for audit. Append-only \`AI AUXILIARY METRIC\`, \`AI AUXILIARY OPPORTUNITY\`, and \`AI AUXILIARY FOLLOW-UP\` comments are the machine-readable source records; this body is regenerated after every instrumented AI Developer completion.
 
           ## Aggregate historical statistics
 
@@ -406,7 +422,7 @@ jobs:
 
           ## Current Reviewer/Tester policy
 
-          Policy: **${CURRENT_POLICY_NAME}** since `${CURRENT_POLICY_START}` (exact policy verification commit `db2038af36e64f77f3712addc2b75fb1970808d8`).
+          Policy: **${CURRENT_POLICY_NAME}** since \`${CURRENT_POLICY_START}\` (exact policy verification commit \`db2038af36e64f77f3712addc2b75fb1970808d8\`).
 
           | Metric | Value |
           | --- | ---: |
@@ -418,6 +434,8 @@ jobs:
           | Current-policy success rate | ${CURRENT_SUCCESS_RATE}% |
           | Current-policy average duration seconds | ${CURRENT_AVG_SECONDS} |
           | Current-policy runs with provider 503 | ${CURRENT_503_RUNS} |
+          | Grounding-verified current-policy results | ${CURRENT_GROUNDED} |
+          | Historical/pre-gate current-policy successes without grounding verification | ${CURRENT_UNGROUNDED_SUCCESS} |
           | Latest current-policy run | ${CURRENT_LATEST} |
 
           ## Preflight routing opportunities
@@ -456,19 +474,20 @@ jobs:
 
           ## Definitions
 
-          - `success` means the AI Developer finalize gate routed the auxiliary result to `ai-awaiting-review`; it is not formal verification.
-          - `handoff` means the auxiliary result was routed to `ai-handoff` for formal Worker continuation.
-          - `evidence_verdict` is schema-v3 normalized evidence from the explicit `VERDICT:` line; historical records without it remain valid with unknown verdict.
-          - `retry_used` tracks only the explicit bounded outer retry in the composite action.
-          - `provider_503_count/provider_503_seen` are schema-v2+ fields derived from the exact completed role-job log and include OpenCode/NVIDIA internal overload events that do not trigger the outer retry.
+          - \`success\` means the AI Developer finalize gate routed the auxiliary result to \`ai-awaiting-review\`; it is not formal verification.
+          - \`handoff\` means the auxiliary result was routed to \`ai-handoff\` for formal Worker continuation.
+          - \`evidence_verdict\` is schema-v3+ normalized evidence from the explicit \`VERDICT:\` line; historical records without it remain valid with unknown verdict.
+          - \`grounding_verified\` is schema-v4 and true only for a terminal success that includes \`GROUNDING: VERIFIED\` plus at least one source line; the AI Developer finalizer independently validates literal source paths/tokens before success.
+          - \`retry_used\` tracks only the explicit bounded outer retry in the composite action.
+          - \`provider_503_count/provider_503_seen\` are schema-v2+ fields derived from the exact completed role-job log and include OpenCode/NVIDIA internal overload events that do not trigger the outer retry.
           - Historical schema-v1 metric comments remain append-only and are not rewritten; their provider 503 fields are unknown and therefore excluded from provider-503 totals.
           - Current-policy metrics intentionally exclude historical Coder execution and pre-policy runs.
-          - `AI AUXILIARY OPPORTUNITY` is recorded by Planner only when a suitable candidate actually exists; it is not a count of every Planner scan.
-          - `routed` means one supported role plus `ai-ready` was assigned; `deferred_busy` means the single NVIDIA slot was occupied; `skipped_formal_claim` avoids racing a formal Worker already testing the target.
-          - `AI AUXILIARY FOLLOW-UP` compares NVIDIA evidence with a later genuinely comparable formal verdict. `not_comparable` is required when the two roles answer different questions.
+          - \`AI AUXILIARY OPPORTUNITY\` is recorded by Planner only when a suitable candidate actually exists; it is not a count of every Planner scan.
+          - \`routed\` means one supported role plus \`ai-ready\` was assigned; \`deferred_busy\` means the single NVIDIA slot was occupied; \`skipped_formal_claim\` avoids racing a formal Worker already testing the target.
+          - \`AI AUXILIARY FOLLOW-UP\` compares NVIDIA evidence with a later genuinely comparable formal verdict. \`not_comparable\` is required when the two roles answer different questions.
           - Evidence matching tolerates harmless leading Markdown wrappers but still requires the normalized comment to begin with the exact role evidence marker.
-          - `coder_completed` is historical compatibility data only and cannot re-enable NVIDIA Coder routing.
-          - AI Developer runs that never invoke NVIDIA are intentionally excluded because they have no `AI AUXILIARY RUN` marker.
+          - \`coder_completed\` is historical compatibility data only and cannot re-enable NVIDIA Coder routing.
+          - AI Developer runs that never invoke NVIDIA are intentionally excluded because they have no \`AI AUXILIARY RUN\` marker.
 
           Last regenerated: ${ENDED_AT}
           EOF2
