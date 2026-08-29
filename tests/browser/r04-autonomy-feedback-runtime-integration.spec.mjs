@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const RESPONSIVE_TEST = 'responsive layouts preserve viewport bounds and no horizontal overflow on production-loaded feature';
+
 async function missingProductionApis(page) {
   return page.evaluate(() => {
     const checks = [
@@ -85,7 +87,9 @@ function execution(traversable = true) {
   };
 }
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
+  const responsiveCase = testInfo.title === RESPONSIVE_TEST;
+  test.skip(!responsiveCase && testInfo.project.name !== 'desktop', 'Functional integration semantics run once on desktop; responsive production loading is verified in every configured project.');
   await load(page);
   await resetSimulation(page);
 });
@@ -171,30 +175,21 @@ test('authoritative ready, validating, acting and stale snapshots retain explici
   }
 });
 
-test('responsive layouts preserve viewport bounds and no horizontal overflow on production-loaded feature', async ({ page }) => {
-  const viewports = [
-    { width: 1280, height: 720 }, { width: 768, height: 1024 },
-    { width: 390, height: 844 }, { width: 844, height: 390 }
-  ];
-  for (const viewport of viewports) {
-    await page.setViewportSize(viewport);
-    await page.reload();
-    await waitForProductionApis(page);
-    await page.evaluate(() => window.Game.AutonomyFeedbackRuntime.renderRuntime({
-      authority: 'simulation', status: 'ready', reasonCode: 'OK', locationRef: 'origin-village',
-      selectedOpportunityId: 'visit-inn'
-    }));
-    const layout = await page.locator('#autonomyFeedbackCard').evaluate((card) => {
-      const rect = card.getBoundingClientRect();
-      return {
-        left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom,
-        width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth
-      };
-    });
-    expect(layout.left).toBeGreaterThanOrEqual(0);
-    expect(layout.top).toBeGreaterThanOrEqual(48);
-    expect(layout.right).toBeLessThanOrEqual(layout.width + 0.5);
-    expect(layout.bottom).toBeLessThanOrEqual(layout.height + 0.5);
-    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width);
-  }
+test(RESPONSIVE_TEST, async ({ page }, testInfo) => {
+  await page.evaluate(() => window.Game.AutonomyFeedbackRuntime.renderRuntime({
+    authority: 'simulation', status: 'ready', reasonCode: 'OK', locationRef: 'origin-village',
+    selectedOpportunityId: 'visit-inn'
+  }));
+  const layout = await page.locator('#autonomyFeedbackCard').evaluate((card) => {
+    const rect = card.getBoundingClientRect();
+    return {
+      left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom,
+      width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth
+    };
+  });
+  expect(layout.left, `${testInfo.project.name} left bound`).toBeGreaterThanOrEqual(0);
+  expect(layout.top, `${testInfo.project.name} top bound`).toBeGreaterThanOrEqual(48);
+  expect(layout.right, `${testInfo.project.name} right bound`).toBeLessThanOrEqual(layout.width + 0.5);
+  expect(layout.bottom, `${testInfo.project.name} bottom bound`).toBeLessThanOrEqual(layout.height + 0.5);
+  expect(layout.scrollWidth, `${testInfo.project.name} horizontal overflow`).toBeLessThanOrEqual(layout.width);
 });
