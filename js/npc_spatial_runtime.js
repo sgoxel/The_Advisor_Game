@@ -183,13 +183,22 @@
     return candidates;
   }
 
-  function findDialoguePairTiles(village, roads, occupied) {
-    const center = point(village?.center || { row: 50, col: 50 });
+  function findDialoguePairTiles(village, roads, occupied, preferredPoints = []) {
+    const preferred = preferredPoints.map(point).filter(inBounds);
+    const structuralFallback = (village?.buildings || [])
+      .map((building) => building?.entrance)
+      .filter(Boolean)
+      .map(point)
+      .filter(inBounds);
+    const anchors = preferred.length ? preferred : structuralFallback;
     const all = Array.from(roads).map((text) => {
       const [r, c] = text.split(',');
       return { row: Number(r), col: Number(c) };
     });
-    all.sort((a, b) => distance(a, center) - distance(b, center) || a.row - b.row || a.col - b.col);
+    const nearestAnchorDistance = (candidate) => anchors.length
+      ? Math.min(...anchors.map((anchor) => distance(candidate, anchor)))
+      : 0;
+    all.sort((a, b) => nearestAnchorDistance(a) - nearestAnchorDistance(b) || a.row - b.row || a.col - b.col);
     const dirs = [[0,1],[1,0],[0,-1],[-1,0]];
     for (const first of all) {
       if (occupied.has(key(first.row, first.col))) continue;
@@ -212,7 +221,11 @@
     const first = hash32(`${seed}|${cycleIndex}|dialogue-speaker`) % npcs.length;
     let second = hash32(`${seed}|${cycleIndex}|dialogue-listener`) % npcs.length;
     if (second === first) second = (second + 1) % npcs.length;
-    const tiles = findDialoguePairTiles(village, roads, new Set());
+    const preferredDialogueContext = [
+      point(npcs[first]?.anchors?.social || npcs[first]),
+      point(npcs[second]?.anchors?.social || npcs[second])
+    ];
+    const tiles = findDialoguePairTiles(village, roads, new Set(), preferredDialogueContext);
     if (!tiles) return null;
     return { speakerId: npcs[first].id, listenerId: npcs[second].id, tiles, cycleIndex };
   }
