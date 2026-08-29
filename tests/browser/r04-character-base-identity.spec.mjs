@@ -17,8 +17,8 @@ test('normal product startup exposes the Simulation-owned character identity mod
   }));
   expect(startup.available).toBe(true);
   expect(startup.authority).toBe('simulation');
-  expect(startup.generatorVersion).toBe('r04-character-base-identity-v2');
-  expect(startup.birthDateCalendar).toBe('campaign-calendar-civil-year-minus-2000');
+  expect(startup.generatorVersion).toBe('r04-character-base-identity-v3');
+  expect(startup.birthDateCalendar).toBe('campaign-calendar-civil-year-minus-1900');
   expect(startup.scriptLoaded).toBe(true);
 });
 
@@ -45,16 +45,16 @@ test('same SEED and stable character id reproduce identical base identity in can
   expect(evidence.frozen).toBe(true);
   expect(evidence.a.name.length).toBeGreaterThan(3);
   expect(['female', 'male']).toContain(evidence.a.gender);
-  expect(evidence.range).toEqual({ min: -44, max: 8 });
+  expect(evidence.range).toEqual({ min: 56, max: 108 });
   expect(evidence.a.birthDate.year).toBeGreaterThanOrEqual(evidence.range.min);
   expect(evidence.a.birthDate.year).toBeLessThanOrEqual(evidence.range.max);
-  expect(evidence.a.birthDateCalendar).toBe('campaign-calendar-civil-year-minus-2000');
-  expect(26 - evidence.a.birthDate.year).toBeGreaterThanOrEqual(18);
-  expect(26 - evidence.a.birthDate.year).toBeLessThanOrEqual(70);
+  expect(evidence.a.birthDateCalendar).toBe('campaign-calendar-civil-year-minus-1900');
+  expect(126 - evidence.a.birthDate.year).toBeGreaterThanOrEqual(18);
+  expect(126 - evidence.a.birthDate.year).toBeLessThanOrEqual(70);
   expect(evidence.a.baseProfession.length).toBeGreaterThan(2);
 });
 
-test('v1 identity migration translates only the birth-year epoch and preserves the deterministic person', async ({ page }) => {
+test('v1 identity migration translates 930..982 into 56..108 without rerolling the person', async ({ page }) => {
   await loadIdentity(page);
   const evidence = await page.evaluate(() => {
     const api = window.Game.CharacterIdentity;
@@ -85,8 +85,8 @@ test('v1 identity migration translates only the birth-year epoch and preserves t
   expect(evidence.legacy.generatorVersion).toBe('r04-character-base-identity-v1');
   expect(evidence.legacy.birthDate.year).toBeGreaterThanOrEqual(930);
   expect(evidence.legacy.birthDate.year).toBeLessThanOrEqual(982);
-  expect(evidence.migrated.generatorVersion).toBe('r04-character-base-identity-v2');
-  expect(evidence.migrated.birthDate.year).toBe(evidence.legacy.birthDate.year - 974);
+  expect(evidence.migrated.generatorVersion).toBe('r04-character-base-identity-v3');
+  expect(evidence.migrated.birthDate.year).toBe(evidence.legacy.birthDate.year - 874);
   expect(evidence.migrated.birthDate.month).toBe(evidence.legacy.birthDate.month);
   expect(evidence.migrated.birthDate.day).toBe(evidence.legacy.birthDate.day);
   expect(evidence.migrated.name).toBe(evidence.legacy.name);
@@ -96,6 +96,31 @@ test('v1 identity migration translates only the birth-year epoch and preserves t
   expect(evidence.migrated.baseProfession).toBe(evidence.legacy.baseProfession);
   expect(evidence.migratedFingerprint).toBe(evidence.currentFingerprint);
   expect(evidence.frozen).toBe(true);
+});
+
+test('accepted minus-2000 v2 identity migrates +100 years without age or unrelated identity drift', async ({ page }) => {
+  await loadIdentity(page);
+  const evidence = await page.evaluate(() => {
+    const api = window.Game.CharacterIdentity;
+    const current = api.generateBaseIdentity('IDENTITY-SEED-V2-MIGRATE', 'npc:v2:01');
+    const previous = {
+      ...current,
+      schemaVersion: 2,
+      generatorVersion: api.previousGeneratorVersion,
+      birthDateCalendar: 'campaign-calendar-civil-year-minus-2000',
+      birthDate: { ...current.birthDate, year: current.birthDate.year - 100 }
+    };
+    const migrated = api.migrateBaseIdentity(previous);
+    return { current, previous, migrated, same: api.fingerprint(current) === api.fingerprint(migrated) };
+  });
+  expect(evidence.previous.birthDate.year).toBeGreaterThanOrEqual(-44);
+  expect(evidence.previous.birthDate.year).toBeLessThanOrEqual(8);
+  expect(evidence.migrated.birthDate.year).toBe(evidence.previous.birthDate.year + 100);
+  expect(evidence.migrated.name).toBe(evidence.previous.name);
+  expect(evidence.migrated.gender).toBe(evidence.previous.gender);
+  expect(evidence.migrated.birthplace).toEqual(evidence.previous.birthplace);
+  expect(evidence.migrated.baselinePersonality).toEqual(evidence.previous.baselinePersonality);
+  expect(evidence.same).toBe(true);
 });
 
 test('different stable character identities remain distinct under the same SEED', async ({ page }) => {
