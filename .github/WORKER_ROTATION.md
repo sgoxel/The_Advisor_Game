@@ -50,7 +50,7 @@ If a hard platform, tool, connector, or execution limit prevents further safe wo
 
 Critical obligations outrank ordinary backlog inside the relevant role:
 
-- Planner: README reconciliation, blocking Planner revisions, active-phase planning repair, then normal backlog and NVIDIA routing.
+- Planner: README reconciliation, blocking Planner revisions, active-phase planning repair, **NVIDIA utilization/preflight scan**, then normal backlog and work-inventory capacity.
 - Coder: accepted Tester revision correction, continuation, `ai-handoff`, then ordinary eligible coding.
 - Designer: accepted Designer revision correction or continuation, then required active/earlier visual work.
 - Tester: revision retest, blockers, `ai-awaiting-review` or Tester handoff, active untested work, earlier fixes, then release gates including any documented Tester-deadlock gate that has become executable.
@@ -60,11 +60,46 @@ Within those priorities, prefer the oldest/highest-priority eligible unclaimed t
 
 Workers must not invent work merely to keep a role busy.
 
+## NVIDIA preflight utilization
+
+NVIDIA Nemotron is an auxiliary read-only Reviewer/Tester preflight layer. It should be used when useful eligible evidence work exists, but it must never become the critical-path authority or replace a formal Worker.
+
+Whenever Planner is reached after the higher-priority reconciliation/revision obligations above, and again after a material state change that creates a new committed candidate, perform an NVIDIA utilization scan **before ordinary Planner backlog/capacity work**.
+
+The scan must:
+
+1. Re-fetch open `ai-ready`, `ai-running`, NVIDIA `work-claimed`, `ai-awaiting-review`, `ai-handoff`, and candidate issue state.
+2. Respect the maximum of one NVIDIA issue reserved/running at a time.
+3. Consider only open, dependency-ready, unclaimed, current/earlier-phase work that is suitable for read-only Reviewer or Tester evidence.
+4. Prefer one high-value target in this order:
+   - Reviewer preflight of a newly committed Coder/Designer/Reviewer candidate, especially gameplay/simulation/world logic, integration, regression risk, workflow/config/process or architecture evidence;
+   - Reviewer audit of game dynamics for rule consistency, internal causal logic and real-world plausibility where relevant;
+   - Reviewer read-only planning/process analysis that produces recommendations only;
+   - Tester preflight of objective exact-SHA tests/artifacts when that is more useful or Reviewer evidence already exists.
+5. Never route NVIDIA Coder work, Designer production, Planner-authoritative changes, README changes, formal phase/release approval, or a target already actively claimed by a formal Tester.
+6. If a target is routed, add exactly one supported `ai-role-reviewer` or `ai-role-tester` label and add `ai-ready` **last**.
+
+NVIDIA must not make Workers idle. If NVIDIA is already reserved/running, record the pending state and continue normal work-conserving execution. If a formal Worker can safely progress another task, do so. If a formal Tester has already claimed the same candidate, do not race that claim merely to increase NVIDIA utilization.
+
+When a suitable candidate is found, Planner records one deduplicated machine-readable opportunity on #79 before routing/deferring:
+
+`AI AUXILIARY OPPORTUNITY: {"schema_version":1,"timestamp":"<UTC ISO-8601>","source_issue":123,"target_ref":"<sha/pr/state>","role":"reviewer|tester","disposition":"routed|deferred_busy|skipped_formal_claim","reason":"<short machine-readable reason>"}`
+
+Do not repeat the same source issue + target ref + role + disposition unless material state changes.
+
+When a formal Worker later consumes `ai-awaiting-review` and has a genuinely comparable formal verdict, record one follow-up on #79:
+
+`AI AUXILIARY FOLLOW-UP: {"schema_version":1,"timestamp":"<UTC ISO-8601>","source_issue":123,"target_ref":"<sha/pr/state>","ai_run_id":123456789,"ai_role":"reviewer|tester","ai_verdict":"pass|changes_requested|fail|unknown","formal_verdict":"pass|changes_requested|fail|not_comparable","agreement":"agree|disagree|not_comparable"}`
+
+This follow-up measures usefulness only. It is not independent verification and must not fabricate comparability when NVIDIA Reviewer advice and a formal Tester decision answer different questions.
+
+For gameplay/world-system work, formal Workers should inspect NVIDIA Reviewer logic/plausibility findings rather than treating them as generic prose. Findings categorized as `RULE CONSISTENCY`, `GAMEPLAY LOGIC`, `REAL-WORLD PLAUSIBILITY`, and `INTENTIONAL ABSTRACTION` are advisory evidence. README/game rules and deliberate fantasy abstractions remain authoritative over realism assumptions.
+
 ## Planner work-inventory capacity
 
 Planner maintains a deep but legitimate issue inventory so scheduled and manual Workers have enough real work to consume without weakening phase priority or product authority.
 
-After README reconciliation, blocking P-REV work, and active-phase planning repairs, Planner counts usable open focused work issues. Pure phase trackers, ledgers, rotation/governance records, and similar non-executable bookkeeping do not count toward work-inventory capacity.
+After README reconciliation, blocking P-REV work, active-phase planning repairs, and the NVIDIA utilization/preflight scan, Planner counts usable open focused work issues. Pure phase trackers, ledgers, rotation/governance records, and similar non-executable bookkeeping do not count toward work-inventory capacity.
 
 When legitimate Admin/README/ROADMAP-approved scope supports it:
 
