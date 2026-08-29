@@ -15,7 +15,7 @@ async function ready(page) {
     window.Game?.WorldDeltaPersistence?.capture &&
     window.Game?.State?.world?.originVillage?.population?.length
   ), null, { timeout: 20_000 });
-  window.Game?.NPCResidency?.sync?.();
+  await page.evaluate(() => window.Game?.NPCResidency?.sync?.());
   return { pageErrors, consoleErrors };
 }
 
@@ -142,8 +142,15 @@ test('resident home reassignment persists through the existing world-delta save 
     const base = Game.NPCResidency.captureAt(Game.GameTime.capture().totalGameMinutes, world.seed, world.originVillage);
     const resident = base.residents[0];
     const housing = world.originVillage.buildings.filter((building) => building.role === 'housing' || building.type === 'home');
-    const target = housing.find((home) => home.id !== resident.homeBuildingId);
-    if (!target) throw new Error('Test requires a second authoritative home.');
+    const residentCounts = new Map();
+    for (const entry of base.residents) {
+      residentCounts.set(entry.homeBuildingId, (residentCounts.get(entry.homeBuildingId) || 0) + 1);
+    }
+    const target = housing.find((home) => {
+      const capacity = Math.max(2, (Array.isArray(home.rooms) ? home.rooms.length : 0) * 2);
+      return home.id !== resident.homeBuildingId && (residentCounts.get(home.id) || 0) < capacity;
+    });
+    if (!target) throw new Error('Test requires a second authoritative home with available capacity.');
 
     Game.NPCResidency.recordResidentHome(resident.id, target.id);
     const changed = Game.NPCResidency.capture();
