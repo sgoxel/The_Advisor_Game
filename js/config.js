@@ -136,6 +136,11 @@ window.Game.Config = {
 if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<link rel="stylesheet" href="css/legality-feedback.css" />');
   document.write('<link rel="stylesheet" href="css/autonomy-feedback.css" />');
+
+  // Optional same-origin map bundles are expected to be absent in generated-world
+  // startup. Preflight those probes before app.js can inject a missing script URL.
+  document.write('<script src="js/optional_map_script_guard.js"><\/script>');
+
   document.write('<script src="js/action_legality.js"><\/script>');
   document.write('<script src="js/interaction_target.js"><\/script>');
   document.write('<script src="js/spatial_action_legality.js"><\/script>');
