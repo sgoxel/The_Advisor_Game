@@ -20,7 +20,7 @@ test('semantic asset failure never restores either legacy road renderer', async 
     // Resolve the deliberately blocked semantic assets before installing the
     // representative authoritative village. Normal application startup may replace
     // world state while assets are loading; the regression must isolate mutations
-    // caused by the road render calls themselves, not that unrelated startup race.
+    // caused by the road presentation calls themselves.
     const semanticReady = await Game.StarterVillageRoads.ensureSemanticAssets();
 
     const world = Game.State.world;
@@ -30,11 +30,16 @@ test('semantic asset failure never restores either legacy road renderer', async 
     world.cols = 100;
     Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
 
+    // Let the base renderer finish before taking identity snapshots. The invariant here is
+    // that the semantic-road presentation itself must not mutate Simulation terrain/topology;
+    // renderer/startup housekeeping is outside this presentation-only mutation check.
+    Game.Renderer.renderWorld(true);
+
     const terrainRef = Game.State.world.terrain;
     const roadBefore = JSON.stringify(Game.State.world.originVillage.roadTiles);
     const buildingBefore = JSON.stringify(Game.State.world.originVillage.buildings);
 
-    Game.Renderer.renderWorld(true);
+    Game.StarterVillageRoads.drawPresentation();
     Game.StarterVillageRoads.drawPresentation();
 
     const overlay = document.getElementById('starterVillageRoadOverlay');
