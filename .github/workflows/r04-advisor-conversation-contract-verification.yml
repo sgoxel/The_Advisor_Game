@@ -1,0 +1,66 @@
+name: R04 Advisor Conversation Contract Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/advisor_conversation_contract.js'
+      - 'js/config.js'
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-protagonist-driver-intent.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-advisor-conversation-contract-verification.yml'
+  pull_request:
+    paths:
+      - 'js/advisor_conversation_contract.js'
+      - 'js/config.js'
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-protagonist-driver-intent.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-advisor-conversation-contract-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-advisor-conversation-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04 Advisor conversation contract candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused Advisor conversation contract regression
+        run: npx playwright test tests/browser/r04-advisor-conversation-contract.spec.mjs
+      - name: Preserve deterministic Local BOT selection boundary
+        run: npx playwright test tests/browser/r04-local-bot-selection.spec.mjs
+      - name: Preserve protagonist driver intent authority boundary
+        run: npx playwright test tests/browser/r04-protagonist-driver-intent.spec.mjs
+      - name: Upload focused R04 conversation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-advisor-conversation-contract-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
