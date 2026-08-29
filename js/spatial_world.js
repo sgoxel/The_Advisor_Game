@@ -295,31 +295,55 @@
     return { row: footprint.row - 1, col: centerCol };
   }
 
+  function finalizeBuilding(region, spec, index, reserved, footprint) {
+    const entrance = chooseEntrance(footprint);
+    if (!inside(entrance.row, entrance.col)) return null;
+    const id = `${region.id}:building:${index}:${spec.type}`;
+    reserveFootprint(reserved, footprint);
+    return {
+      id,
+      authority: 'simulation',
+      type: spec.type,
+      role: spec.role,
+      row: entrance.row,
+      col: entrance.col,
+      footprint,
+      entrance,
+      passable: spec.passable === true,
+      rooms: makeRooms(id, footprint, spec.type === 'home')
+    };
+  }
+
   function placeBuilding(seed, region, spec, index, reserved, roads) {
     const bounds = zoneBounds(spec, index);
-    for (let attempt = 0; attempt < 240; attempt += 1) {
-      const row = integer(seed, `building-${index}-row`, bounds.r0, Math.max(bounds.r0, bounds.r1), region.x, region.y, attempt);
-      const col = integer(seed, `building-${index}-col`, bounds.c0, Math.max(bounds.c0, bounds.c1), region.x, region.y, attempt);
+    const r1 = Math.max(bounds.r0, bounds.r1);
+    const c1 = Math.max(bounds.c0, bounds.c1);
+    const validAt = (row, col) => {
       const footprint = { row, col, width: spec.width, height: spec.height };
-      if (overlapsReserved(reserved, footprint, 2)) continue;
-      if (!spec.passable && overlapsRoad(roads, footprint, 1)) continue;
-      const entrance = chooseEntrance(footprint);
-      if (!inside(entrance.row, entrance.col)) continue;
-      const id = `${region.id}:building:${index}:${spec.type}`;
-      reserveFootprint(reserved, footprint);
-      return {
-        id,
-        authority: 'simulation',
-        type: spec.type,
-        role: spec.role,
-        row: entrance.row,
-        col: entrance.col,
-        footprint,
-        entrance,
-        passable: spec.passable === true,
-        rooms: makeRooms(id, footprint, spec.type === 'home')
-      };
+      if (overlapsReserved(reserved, footprint, 2)) return null;
+      if (!spec.passable && overlapsRoad(roads, footprint, 1)) return null;
+      return finalizeBuilding(region, spec, index, reserved, footprint);
+    };
+
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      const row = integer(seed, `building-${index}-row`, bounds.r0, r1, region.x, region.y, attempt);
+      const col = integer(seed, `building-${index}-col`, bounds.c0, c1, region.x, region.y, attempt);
+      const building = validAt(row, col);
+      if (building) return building;
     }
+
+    const rowCount = r1 - bounds.r0 + 1;
+    const colCount = c1 - bounds.c0 + 1;
+    const total = rowCount * colCount;
+    const offset = integer(seed, `building-${index}-fallback-offset`, 0, Math.max(0, total - 1), region.x, region.y);
+    for (let step = 0; step < total; step += 1) {
+      const candidate = (offset + step) % total;
+      const row = bounds.r0 + Math.floor(candidate / colCount);
+      const col = bounds.c0 + (candidate % colCount);
+      const building = validAt(row, col);
+      if (building) return building;
+    }
+
     throw new Error(`Unable to place deterministic building ${spec.type} in 100x100 origin village.`);
   }
 
