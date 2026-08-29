@@ -1536,72 +1536,12 @@
     };
   }
 
-  function drawRoadOverlay(ctx, cellWidth, cellHeight) {
-    const world = State.world;
-    const seed = world.seed || 'road';
-    const roadWidth = Math.max(3, Math.min(cellWidth, cellHeight) * 0.34);
-    const roadRadius = roadWidth * 0.5;
-    const edgeBandWidth = Math.max(0.75, roadWidth * 0.08);
-    const edgeRadius = roadRadius + edgeBandWidth;
-
-    const centers = [];
-    const segments = [];
-
-    for (let row = 0; row < world.rows; row++) {
-      for (let col = 0; col < world.cols; col++) {
-        if (getRawTileType(row, col) !== 'road') continue;
-
-        const centerX = (col + 0.5) * cellWidth;
-        const centerY = (row + 0.5) * cellHeight;
-        const appearance = getRoadShadedAppearance(row, col, seed);
-        centers.push({ x: centerX, y: centerY, appearance });
-
-        const connections = getRoadConnections(row, col);
-        for (let i = 0; i < connections.length; i++) {
-          const dir = connections[i];
-          const nr = row + dir.dr;
-          const nc = col + dir.dc;
-          if (nr < row || (nr === row && nc <= col)) continue;
-          const endX = (nc + 0.5) * cellWidth;
-          const endY = (nr + 0.5) * cellHeight;
-          const neighborAppearance = getRoadShadedAppearance(nr, nc, seed);
-          segments.push({
-            x1: centerX,
-            y1: centerY,
-            x2: endX,
-            y2: endY,
-            startAppearance: appearance,
-            endAppearance: neighborAppearance
-          });
-        }
-      }
-    }
-
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const edgeGradient = ctx.createLinearGradient(seg.x1, seg.y1, seg.x2, seg.y2);
-      edgeGradient.addColorStop(0, seg.startAppearance.edgeCss);
-      edgeGradient.addColorStop(1, seg.endAppearance.edgeCss);
-      drawRoadCapsule2D(ctx, seg.x1, seg.y1, seg.x2, seg.y2, edgeRadius, edgeGradient);
-    }
-    for (let i = 0; i < centers.length; i++) {
-      const c = centers[i];
-      drawRoadDisc2D(ctx, c.x, c.y, edgeRadius, c.appearance.edgeCss);
-    }
-
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const fillGradient = ctx.createLinearGradient(seg.x1, seg.y1, seg.x2, seg.y2);
-      fillGradient.addColorStop(0, seg.startAppearance.fillCss);
-      fillGradient.addColorStop(1, seg.endAppearance.fillCss);
-      drawRoadCapsule2D(ctx, seg.x1, seg.y1, seg.x2, seg.y2, roadRadius, fillGradient);
-    }
-    for (let i = 0; i < centers.length; i++) {
-      const c = centers[i];
-      drawRoadDisc2D(ctx, c.x, c.y, roadRadius, c.appearance.fillCss);
-    }
-  }
-
+  function drawRoadOverlay() {
+  // Admin #286: the legacy procedural road layer is disabled. The base terrain
+  // remains terrain-aware through getVisualTileAppearance()/getRoadBaseAppearance(),
+  // while js/starter_village_roads.js is the sole visible road-art renderer.
+  return;
+}
 
   function redrawElevatedTerrainOverRoads(ctx, baseImageData, cellWidth, cellHeight) {
     const world = State.world;

@@ -5,7 +5,7 @@
 (function installStarterVillageRoadPresentation() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-starter-village-roads-v2-semantic-png';
+  const VERSION = 'r04-starter-village-roads-v3-semantic-only-png';
   const MODE = 'authoritative-semantic-transparent-png';
   const CARDINAL = Object.freeze([
     { name: 'N', dr: -1, dc: 0 },
@@ -207,7 +207,7 @@
       })
       .catch((error) => {
         semanticAssetState = 'failed';
-        console.warn('Semantic road tiles unavailable; preserving vector road fallback.', error);
+        console.warn('Semantic road tiles unavailable; legacy road rendering remains disabled.', error);
         return false;
       });
     return semanticAssetPromise;
@@ -251,63 +251,6 @@
     return true;
   }
 
-  function drawLine(ctx, a, b, width, style) {
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.lineWidth = width;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = style;
-    ctx.stroke();
-  }
-
-  function drawDisc(ctx, point, radius, style) {
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = style;
-    ctx.fill();
-  }
-
-  function drawVectorFallback(ctx, topology, invalid) {
-    const span = projectedTileSpan(topology);
-    const roadWidth = clamp(span * 0.74, 5, 30);
-    const edgeWidth = clamp(roadWidth * 1.16, roadWidth + 1.5, 36);
-    const edgeStyle = 'rgba(83, 61, 39, 0.88)';
-    const fillStyle = 'rgba(151, 113, 72, 0.98)';
-    const wearStyle = 'rgba(185, 144, 91, 0.30)';
-    const byKey = new Map(topology.map((tile) => [key(tile.row, tile.col), tile]));
-    const centers = new Map();
-
-    for (const tile of topology) {
-      if (invalid.has(key(tile.row, tile.col))) continue;
-      const point = project(tile.row + 0.5, tile.col + 0.5);
-      if (point) centers.set(key(tile.row, tile.col), point);
-    }
-
-    const segments = [];
-    for (const tile of topology) {
-      const tileKey = key(tile.row, tile.col);
-      const from = centers.get(tileKey);
-      if (!from) continue;
-      for (const dir of [{ dr: 0, dc: 1 }, { dr: 1, dc: 0 }]) {
-        const neighborKey = key(tile.row + dir.dr, tile.col + dir.dc);
-        if (!byKey.has(neighborKey) || invalid.has(neighborKey)) continue;
-        const to = centers.get(neighborKey);
-        if (to) segments.push({ from, to });
-      }
-    }
-
-    for (const segment of segments) drawLine(ctx, segment.from, segment.to, edgeWidth, edgeStyle);
-    for (const point of centers.values()) drawDisc(ctx, point, edgeWidth / 2, edgeStyle);
-    for (const segment of segments) drawLine(ctx, segment.from, segment.to, roadWidth, fillStyle);
-    for (const point of centers.values()) drawDisc(ctx, point, roadWidth / 2, fillStyle);
-
-    const wearWidth = clamp(roadWidth * 0.18, 1, 4);
-    for (let i = 0; i < segments.length; i += 5) drawLine(ctx, segments[i].from, segments[i].to, wearWidth, wearStyle);
-
-    return { drawnCount: centers.size, segmentCount: segments.length, roadWidth };
-  }
 
   function drawPresentation() {
     const canvas = ensureOverlay();
@@ -334,9 +277,6 @@
     const invalid = invalidRoadTileSet(topology);
     let semanticDrawnCount = 0;
     let semanticUnsupportedCount = 0;
-    let vectorFallbackCount = 0;
-    let segmentCount = 0;
-    let roadWidth = 0;
 
     if (semanticAssetState === 'ready') {
       for (const tile of topology) {
@@ -349,38 +289,35 @@
         if (drawSemanticTile(ctx, tile, visual)) semanticDrawnCount += 1;
         else semanticUnsupportedCount += 1;
       }
-    } else {
-      const fallback = drawVectorFallback(ctx, topology, invalid);
-      vectorFallbackCount = fallback.drawnCount;
-      segmentCount = fallback.segmentCount;
-      roadWidth = fallback.roadWidth;
     }
 
     const intersectionCount = topology.filter((tile) => tile.degree >= 3 && !invalid.has(key(tile.row, tile.col))).length;
     const turnCount = topology.filter((tile) => tile.degree === 2 && /^(NE|ES|SW|NW|EN|SE|WS|WN)$/.test(tile.mask)).length;
     const deadEndCount = topology.filter((tile) => tile.degree <= 1 && !invalid.has(key(tile.row, tile.col))).length;
-    const drawnRoadTileCount = semanticAssetState === 'ready' ? semanticDrawnCount : vectorFallbackCount;
+    const drawnRoadTileCount = semanticDrawnCount;
 
     Object.assign(canvas.dataset, {
       roadTileCount: String(topology.length),
       drawnRoadTileCount: String(drawnRoadTileCount),
-      segmentCount: String(segmentCount),
+      segmentCount: '0',
       intersectionCount: String(intersectionCount),
       turnCount: String(turnCount),
       deadEndCount: String(deadEndCount),
       invalidTopologyCount: String(invalid.size),
       presentationAuthority: 'presentation-only',
       descriptorSource: 'originVillage.roadTiles',
-      presentationMode: semanticAssetState === 'ready' ? MODE : 'authoritative-continuous-packed-earth-fallback',
+      presentationMode: semanticAssetState === 'ready' ? MODE : (semanticAssetState === 'failed' ? 'semantic-road-assets-unavailable' : 'semantic-road-assets-loading'),
       connectivity: 'authoritative-cardinal-only',
       legacySquareHolePattern: 'masked',
       regionSize: String(Game.State?.world?.rows || 0),
-      roadWidthPx: roadWidth ? roadWidth.toFixed(2) : 'semantic-tile',
+      roadWidthPx: 'semantic-tile',
       semanticTileState: semanticAssetState,
       semanticAssetCount: String(semanticImages.size),
       semanticDrawnCount: String(semanticDrawnCount),
       semanticUnsupportedCount: String(semanticUnsupportedCount),
-      vectorFallbackCount: String(vectorFallbackCount),
+      vectorFallbackCount: '0',
+      legacyVectorRenderer: 'disabled',
+      legacyTerrainRoadOverlay: 'disabled',
       semanticRegistry: semanticRoadRegistry && semanticTileModule ? 'canonical-road-registry' : 'pending'
     });
     return true;
