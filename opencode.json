@@ -35,9 +35,9 @@
       "reasoningEffort": "high"
     },
     "plan": {
-      "temperature": 1.0,
-      "top_p": 0.95,
-      "max_tokens": 32000,
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "max_tokens": 16000,
       "reasoningEffort": "high",
       "permission": {
         "edit": "deny",
