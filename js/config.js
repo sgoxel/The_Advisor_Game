@@ -15,7 +15,8 @@ window.Game.Config = {
   DEFAULT_COLS: 100,
   DEFAULT_ROWS: 100,
 
-  MIN_MAP_SIZE: 12,
+  // The active logical region is canonical, not a variable-size gameplay map.
+  MIN_MAP_SIZE: 100,
   MAX_MAP_SIZE: 100,
 
   TILE_WIDTH: 100,
