@@ -58,32 +58,93 @@ window.Game = window.Game || {};
     if (status) status.textContent = message;
   }
 
+  function localBotEvaluation(result, context) {
+    const localBot = Game.LocalBotDriver;
+    if (!localBot || typeof localBot.normalizeAdvisorInfluence !== 'function') return null;
+    return localBot.normalizeAdvisorInfluence(result, context);
+  }
+
+  function pendingState() {
+    return Game.State?.advisor && typeof Game.State.advisor === 'object' ? Game.State.advisor : null;
+  }
+
+  function peekPendingInfluenceForDecision(contextInput) {
+    const state = pendingState();
+    if (!state || state.pending !== true || !state.latestInfluence) return null;
+    const serial = Math.max(0, Number(state.transcriptRevision) || 0);
+    const consumed = Math.max(0, Number(state.consumedTranscriptRevision) || 0);
+    if (serial <= consumed) return null;
+    const context = contextInput && typeof contextInput === 'object' ? contextInput : state.submissionContext;
+    const evaluation = localBotEvaluation(state.latestInfluence, context);
+    if (!evaluation) return null;
+    state.localBotEvaluation = evaluation;
+    if (evaluation.reasonCode === 'DELAY_PENDING') return null;
+    if (evaluation.status !== 'ready') {
+      state.pending = false;
+      state.consumedTranscriptRevision = serial;
+      return null;
+    }
+    return state.latestInfluence;
+  }
+
+  function markPendingInfluenceConsumed() {
+    const state = pendingState();
+    if (!state) return;
+    state.pending = false;
+    state.consumedTranscriptRevision = Math.max(0, Number(state.transcriptRevision) || 0);
+  }
+
+  function statusFor(result, evaluation) {
+    const label = dispositionLabel(result.disposition);
+    if (!evaluation) return `${label} · Local BOT influence boundary unavailable. Simulation unchanged.`;
+    if (evaluation.reasonCode === 'DELAY_PENDING') {
+      return `${label} · pending for a later autonomous Local BOT decision · Simulation remains authoritative.`;
+    }
+    if (evaluation.status === 'ready') {
+      return `${label} · queued for the next autonomous Local BOT decision · Simulation remains authoritative.`;
+    }
+    return `${label} · no Local BOT influence queued · Simulation remains authoritative.`;
+  }
+
   function submit() {
     if (busy) return;
     const input = node('advisorMessageInput');
     const message = text(input?.value);
     if (!message) { setStatus('Write a message before sending.'); input?.focus(); return; }
     const contract = Game.AdvisorConversationContract;
+    const localBot = Game.LocalBotDriver;
     if (!contract || typeof contract.normalize !== 'function') { setStatus('Local BOT conversation contract is unavailable. No world state changed.'); return; }
+    if (!localBot || typeof localBot.normalizeAdvisorInfluence !== 'function') { setStatus('Local BOT influence boundary is unavailable. No world state changed.'); return; }
     busy = true;
     const button = node('advisorSendBtn');
     if (button) button.disabled = true;
     try {
       revision += 1;
-      const result = contract.normalize(message, authoritativeContext());
+      const context = authoritativeContext();
+      const result = contract.normalize(message, context);
       appendTurn('advisor', 'Advisor', message);
       if (result.status !== 'ready' || !result.record) {
         appendTurn('protagonist', 'Protagonist', 'I could not interpret that advice safely. Please rephrase it.');
         setStatus(`Advice not applied · ${result.reasonCode || 'invalid context'}. Simulation unchanged.`);
         return;
       }
+
+      const evaluation = localBotEvaluation(result, context);
       appendTurn('protagonist', 'Protagonist', result.record.character.response);
       appendTurn('influence', dispositionLabel(result.disposition), result.record.character.interpretation);
-      setStatus(`${dispositionLabel(result.disposition)} · non-binding influence only · Simulation remains authoritative.`);
+      setStatus(statusFor(result, evaluation));
       if (input) input.value = '';
+
       Game.State.advisor = Game.State.advisor || {};
       Game.State.advisor.latestInfluence = result;
+      Game.State.advisor.localBotEvaluation = evaluation;
+      Game.State.advisor.submissionContext = Object.freeze({ ...context });
       Game.State.advisor.transcriptRevision = revision;
+      Game.State.advisor.consumedTranscriptRevision = Math.min(
+        Math.max(0, Number(Game.State.advisor.consumedTranscriptRevision) || 0),
+        Math.max(0, revision - 1)
+      );
+      Game.State.advisor.pending = evaluation?.status === 'ready' || evaluation?.reasonCode === 'DELAY_PENDING';
     } catch (error) {
       setStatus('Advice could not be processed. No world state changed.');
       if (Game.UI?.addLog) Game.UI.addLog('Advisor chat processing failed.', error?.message || String(error));
@@ -105,5 +166,11 @@ window.Game = window.Game || {};
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, { once:true }); else bind();
-  Game.AdvisorChatUI = Object.freeze({ bind, submit });
+  Game.AdvisorChatUI = Object.freeze({
+    bind,
+    submit,
+    authoritativeContext,
+    peekPendingInfluenceForDecision,
+    markPendingInfluenceConsumed
+  });
 })();
