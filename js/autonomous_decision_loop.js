@@ -1,11 +1,13 @@
 /*
-  R04-T04 / #173
+  R04-T04 / #173 + R04-T17 / #181
   Bounded, deterministic, time-aware autonomous protagonist decision loop.
 
   Campaign time and relevant local context are Simulation-owned inputs. Decision
   checkpoints are sparse world deltas so save/load resumes without replaying the
   same decision. Prepared work is revision/time/serial-bound; stale completion
-  cannot overwrite newer protagonist/world state.
+  cannot overwrite newer protagonist/world state. Optional Advisor influence is
+  forwarded only after these stale-work guards pass and remains non-binding input
+  to Local BOT evaluation.
 */
 window.Game = window.Game || {};
 
@@ -192,7 +194,7 @@ window.Game = window.Game || {};
     });
   }
 
-  function resolvePrepared(preparedInput, authoritativeContextInput, executionContextInput) {
+  function resolvePrepared(preparedInput, authoritativeContextInput, executionContextInput, advisorInfluenceInput) {
     const prepared = preparedInput && typeof preparedInput === 'object' ? preparedInput : null;
     const context = normalizeContext(authoritativeContextInput);
     if (!prepared || prepared.authority !== 'simulation' || context.authority !== 'simulation') {
@@ -215,7 +217,7 @@ window.Game = window.Game || {};
     const executionApi = Game.AutonomousActionExecution;
     if (!executionApi?.execute) return frozenResult(STATUS.REJECTED, REASON.EXECUTION_API_UNAVAILABLE, context, currentCheckpoint);
 
-    const result = executionApi.execute(authoritativeContextInput, prepared.opportunities, executionContextInput);
+    const result = executionApi.execute(authoritativeContextInput, prepared.opportunities, executionContextInput, advisorInfluenceInput);
     const status = result.status === 'resolved' ? STATUS.RESOLVED : result.status === 'idle' ? STATUS.IDLE : STATUS.REJECTED;
     const saved = writeCheckpoint(context, status, result.reasonCode || REASON.OK, result.selectedOpportunityId || null);
     return frozenResult(status, result.reasonCode || REASON.OK, context, saved, {
