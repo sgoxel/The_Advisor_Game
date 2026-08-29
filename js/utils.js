@@ -47,7 +47,11 @@ window.Game.Utils = {
   }
 };
 
-// R02 modules stay isolated from generic helpers; each preserves Simulation authority.
+// Admin #233 upgrades the coordinate-addressable world/origin settlement contract before
+// NPC runtime modules bind to generated state. It preserves Simulation authority.
+window.Game.Utils.loadScriptOnce("js/spatial_world.js", "admin100SpatialWorldModule");
+
+// R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
 window.Game.Utils.loadScriptOnce("js/game_time.js", "r02GameTimeModule");
@@ -60,3 +64,8 @@ window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeogr
 window.Game.Utils.loadScriptOnce("js/settlement_evolution.js", "r02SettlementEvolutionModule");
 window.Game.Utils.loadScriptOnce("js/relevance_bounded_compute.js", "r02RelevanceBoundedComputeModule");
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
+
+// Loaded after NPC life/presentation modules so it can add deterministic tile occupancy,
+// route-conflict resolution, adjacent dialogue and development bubbles without duplicating
+// the existing character-world-icon implementation.
+window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatialRuntimeModule");
