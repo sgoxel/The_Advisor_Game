@@ -26,6 +26,10 @@ on:
       - '.github/workflows/r01-organic-elevation-verification.yml'
   workflow_dispatch:
 
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
