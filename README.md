@@ -249,6 +249,30 @@ Other characters may have their own identity, personality, occupation, status, r
 
 The Advisor influences them indirectly through information, the protagonist, relationships, opportunities, and world consequences rather than directly controlling them.
 
+## 🧬 Deterministic Character Identity, Aging and Emotional Context
+
+The protagonist and procedurally generated world characters have a **stable deterministic base identity**. For compatible character-generation rules, the campaign SEED together with stable world/character identity inputs and birthplace must reproduce the same unchanged person whenever that character is materialized again. Base identity may include **name, gender, birth date, birthplace, baseline personality, baseline behavioral tendencies, and an original/base profession or social role where applicable**.
+
+A character's current region is not their identity. Traveling to another local map, settlement, region or realm must preserve the same person rather than generating a new personality from the destination. Returning to a previously known character must therefore reconstruct the same unchanged base identity before applying authoritative campaign history and current context.
+
+**Current age is derived from birth date and authoritative fantasy campaign date/time rather than treated as an immutable generated number.** Characters therefore age as campaign time advances. Life stage may influence physical capability, recovery, risk tolerance, patience, priorities and emotional dynamics where appropriate, but age must not erase the character's established personality or reduce every person of one age to the same stereotype.
+
+Birthplace and formative environment may create an enduring **baseline imprint** on personality and behavioral tendencies. Settlement culture, geography, danger, economy, social structure and similar SEED-derived origin conditions may influence traits such as courage, caution, sociability, resilience, ambition, familiarity with wilderness or military life, or other appropriate tendencies. This origin imprint remains part of who the character is even after migration.
+
+The character's **current location and circumstances create contextual effects rather than replacing baseline identity**. A courageous person born in a martial frontier village may still remain fundamentally courageous while suffering low morale, stress, grief or fear after traveling to a war-torn city. A different person with a more cautious baseline may react more strongly to the same city. Current-place effects may also change as familiarity, exposure, safety and campaign conditions change over time.
+
+The protagonist and NPCs may have a dynamic **emotional state and broader mood** that changes through authoritative game time. Events, needs, relationships, memories, safety, hunger, injury, work and social conditions, current location, conflict, loss, success, age/life stage and other simulation-backed circumstances may influence emotions such as fear, anger, sadness, joy, hope, confidence, anxiety, grief, affection, frustration or calm where relevant.
+
+Baseline personality, longer-lived mood and short-lived emotional reactions are related but not interchangeable. Emotional context may influence **decision preferences, willingness to take risks, social behavior, dialogue tone, interpretation of advice, relationship reactions, memory salience and later choices**, but it is never a forced-action authority. Emotion cannot make an impossible action legal, bypass walls or resources, fabricate facts, or override the Simulation's authority.
+
+Where character-specific emotional context is important, it may be general or directed toward a relevant person, group, place or remembered event. The system should preserve causes and meaningful consequences strongly enough that later behavior and dialogue can reflect important lived experience rather than presenting unrelated random moods.
+
+The **LLM Character Driver and deterministic Local BOT Driver consume the same Simulation-backed character identity, personality, age/life-stage, relationship, memory and emotional-context truth**. They may express that truth differently, but switching drivers must not silently replace the character with a different underlying person.
+
+Unchanged deterministic base identity does not need to be duplicated in campaign persistence merely because a character was visited or rendered. Campaign persistence instead preserves authoritative departures from that base and meaningful history where required, such as profession or residence changes, migration/current-location consequences, relationships, memories, injuries/status, important emotional consequences and other Simulation-backed changes. When a character becomes relevant again, their current state is reconstructed from the deterministic base plus authoritative campaign time, history and persistent deltas.
+
+Character simulation must remain relevance-bounded. Distant or irrelevant characters do not need continuous full-detail emotional ticking; compact state and meaningful history may be reconciled lazily when those characters become relevant, without changing authoritative causal results.
+
 ## 🏡 Starting Village and Living Local World
 
 Every new campaign begins with the autonomous protagonist as an ordinary low-rank character in a procedurally generated village at world coordinate **(0, 0)**. The initial playable view is centered on this campaign origin.
@@ -288,6 +312,14 @@ World characters should have time-aware daily life appropriate to their role, ho
 Representative routines may include sleeping or remaining at home, traveling to work, opening and operating shops or services, working at farms/workshops/markets, taking breaks, visiting social locations, closing for the day, returning home, guarding, traveling, or following other role-appropriate schedules.
 
 NPC schedules need not be identical. Profession, settlement type, geography, local conditions, relationships and events may alter normal routines.
+
+Persistent local residents should normally have an authoritative home compatible with the generated settlement. Genuine transient characters such as day-visiting traveling merchants, caravans or other temporary visitors may be explicitly non-resident: they may enter the local region, perform appropriate activity and leave again without receiving an invented local home.
+
+Working characters should have a profession-compatible **workplace or outdoor worksite** rather than an arbitrary destination. Multiple compatible NPCs may work in the same inn, shop, workshop, guard post, market, production building or other workplace when its function and capacity support that use; the world is not required to create one workplace building per worker.
+
+Some professions may work primarily outside buildings. Farmers may work suitable fields or agricultural areas; hunters may use accessible forest-edge or wilderness work areas; fishers may use valid reachable river, lake or coastal banks; and other occupations may use similarly terrain-appropriate worksite anchors. Outdoor work must remain compatible with authoritative terrain and walkability rather than placing workers on impossible blocked tiles.
+
+Settlement security may include guards at meaningful entrance/exit routes. Guard duty may rotate through authoritative day/night or other role-appropriate shifts, and off-duty guards may return to a home, guard post, barracks or other valid location. Shift handoff and duty positioning must remain compatible with exclusive tile occupancy and must not intentionally block the only legal settlement route.
 
 Active gameplay NPCs use exclusive logical-tile occupancy: **two NPCs must not occupy the same authoritative logical tile at the same movement state**. When routes conflict, movement must resolve coherently rather than allowing overlap. Depending on the situation, an NPC may yield, wait, give priority, use a valid neighboring tile, or otherwise continue through a collision-safe route; equivalent authoritative inputs must resolve such conflicts deterministically.
 
@@ -520,6 +552,8 @@ Terrain, biomes, vegetation, water, roads, bridges, settlements, landmarks, habi
 
 The deterministic SEED-generated world is the reproducible base state. Unchanged generated terrain, buildings, vegetation, objects, political geography and other deterministic base-world content do not need separate permanent campaign copies merely because they were visited or rendered.
 
+Deterministic unchanged character base identity follows the same principle: stable SEED-derived names, gender, birth data, birthplace and baseline personality/behavior do not need redundant per-character save copies when they can be reconstructed compatibly. Persistence must instead preserve authoritative changes and history that make the current campaign character differ from that base.
+
 Campaign persistence must preserve authoritative differences from that generated base world wherever persistent change is required.
 
 Objects, entities, locations, relationships, discoveries, damage, construction, ownership, territorial control, borders, settlement development, resource use, inventory-affecting world interactions, time-dependent consequences, or other meaningful simulation consequences caused or influenced by campaign events must not silently reset when their region leaves the active view or when the campaign is saved and loaded.
@@ -650,6 +684,15 @@ The size of the unbounded world must not force invisible-world computation to gr
 55. **Interior visibility must remain readable.** Roofs, ceilings or upper walls may cut away, hide, fade or become translucent when necessary so rooms, characters and interaction points can be understood in the local camera.
 56. **World-space sprite scale and building scale belong together.** Doors, walls, rooms, furniture and walkable space should be proportioned so Simulation-backed character sprites can move, stand, work, converse and interact plausibly inside buildings.
 57. **The approved visual reference is a composition guide, not an asset source.** The project should reproduce the intended tile/sprite/interior readability with original assets and must not copy protected artwork, layouts, logos, characters, textures or identifiable game content.
+58. **Character base identity is SEED-derived and regenerable.** Compatible character-generation inputs reproduce the same unchanged name, gender, birth data, birthplace and baseline personality/behavior instead of requiring duplicated save copies of immutable identity.
+59. **Characters age through campaign chronology.** Current age follows birth date plus authoritative fantasy campaign time, and life-stage effects may influence behavior or emotion without replacing established personality.
+60. **Birthplace shapes baseline; current location shapes context.** Formative culture/environment may leave enduring personality tendencies, while present danger, war, prosperity, safety and other local conditions create temporary or evolving contextual effects rather than redefining who the character is.
+61. **Emotion and mood influence behavior without becoming authority.** Simulation-backed emotional state may affect decisions, dialogue tone, risk preference, social behavior and memory salience, but may never force an illegal/impossible action or override Simulation truth.
+62. **Persist lived change; regenerate unchanged character foundations.** Profession/residence changes, migration, relationships, memories, injuries, important emotional consequences and other meaningful campaign deltas persist where required, while unchanged deterministic character foundations may be reconstructed.
+63. **Resident NPCs normally have homes; transient visitors are explicit exceptions.** Temporary travelers or visiting merchants may enter, work or trade and leave without receiving an invented local residence.
+64. **Work follows profession and place.** Multiple compatible NPCs may share one workplace, while outdoor professions may use suitable deterministic fields, forest-edge/wilderness sites, shorelines or other terrain-appropriate worksites instead of fake buildings.
+65. **Guard duty is spatial and time-aware.** Settlement entrance/exit guards may rotate through day/night or other suitable shifts, use valid guard-post/barracks/home relationships, and hand off duty without violating occupancy or route continuity.
+66. **LLM and Local BOT share one character truth.** Driver choice may change expression quality but must not replace deterministic identity, age, personality, relationships, memories or emotional context with a different underlying person.
 
 ---
 
