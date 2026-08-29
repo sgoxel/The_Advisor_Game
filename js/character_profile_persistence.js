@@ -56,8 +56,21 @@
     return deepFreeze({ ...coreEnvelope, characterProfile });
   }
 
+  function createStableCoreEnvelope(candidate, deltaCandidate) {
+    const calendar = Game.CampaignCalendar;
+    const calendarState = Game.State?.world?.campaignCalendar;
+    const acceptedRealTimestampMs = Number(calendarState?.acceptedRealTimestampMs);
+    if (calendar?.serializeSaveAt && Number.isFinite(acceptedRealTimestampMs)) {
+      const timezoneOffsetMinutes = Number.isFinite(Number(calendarState?.originTimezoneOffsetMinutes))
+        ? Number(calendarState.originTimezoneOffsetMinutes)
+        : 0;
+      return JSON.parse(calendar.serializeSaveAt(acceptedRealTimestampMs, candidate, deltaCandidate, timezoneOffsetMinutes));
+    }
+    return Core.createSaveEnvelope(candidate, deltaCandidate);
+  }
+
   function createSaveEnvelope(candidate, deltaCandidate, profileCandidate = undefined) {
-    return decorateEnvelope(Core.createSaveEnvelope(candidate, deltaCandidate), profileCandidate);
+    return decorateEnvelope(createStableCoreEnvelope(candidate, deltaCandidate), profileCandidate);
   }
 
   function serializeSave(candidate, deltaCandidate, profileCandidate = undefined) {
