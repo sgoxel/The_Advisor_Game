@@ -22,6 +22,20 @@ async function ready(page) {
   }, null, { timeout: 20_000 });
 }
 
+function objectComposition(evidence) {
+  return evidence.composition.filter((entry) => entry.kind === 'object');
+}
+
+function visibleObjectComposition(evidence) {
+  return objectComposition(evidence).filter((entry) => {
+    const margin = Math.max(entry.displayWidth, entry.displayHeight);
+    return entry.screenX >= -margin &&
+      entry.screenY >= -margin &&
+      entry.screenX <= evidence.overlay.width + margin &&
+      entry.screenY <= evidence.overlay.height + margin;
+  });
+}
+
 async function configureRepresentativeScene(page, includeMissing = false) {
   return page.evaluate(async ({ entries, includeMissing }) => {
     const Game = window.Game;
@@ -233,6 +247,8 @@ test.describe('R04 #294 generalized transparent world-object composition', () =>
   test('semantic transparent PNGs compose without mutating Simulation-owned object truth', async ({ page }) => {
     await ready(page);
     const evidence = await configureRepresentativeScene(page);
+    const objects = objectComposition(evidence);
+    const visibleObjects = visibleObjectComposition(evidence);
 
     expect(evidence.authorityAfter).toEqual(evidence.authorityBefore);
     expect(evidence.fingerprintsAfter).toEqual(evidence.fingerprintsBefore);
@@ -241,13 +257,15 @@ test.describe('R04 #294 generalized transparent world-object composition', () =>
       descriptorAuthority: 'simulation',
       source: 'r04-294-browser-fixture',
       objectCount: 7,
-      readyObjectCount: 7,
       missingObjectCount: 0,
       worldEntityCount: 1,
       registryEntryCount: 5,
       pointerEvents: 'none',
       depthOrder: 'authoritative-ground-baseline'
     });
+    expect(objects).toHaveLength(7);
+    expect(objects.every((entry) => entry.assetStatus === 'ready')).toBe(true);
+    expect(evidence.overlay.readyObjectCount).toBe(visibleObjects.length);
     expect(evidence.overlay.composedNpcCount).toBeGreaterThan(0);
     expect(evidence.assets).toHaveLength(5);
     expect(evidence.assets.every((asset) => asset.status === 'ready')).toBe(true);
@@ -311,10 +329,16 @@ test.describe('R04 #294 generalized transparent world-object composition', () =>
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await ready(page);
       const evidence = await configureRepresentativeScene(page);
+      const objects = objectComposition(evidence);
+      const visibleObjects = visibleObjectComposition(evidence);
       expect(evidence.overlay.objectCount).toBe(7);
-      expect(evidence.overlay.readyObjectCount).toBe(7);
+      expect(objects).toHaveLength(7);
+      expect(objects.every((entry) => entry.assetStatus === 'ready')).toBe(true);
+      expect(evidence.overlay.readyObjectCount).toBe(visibleObjects.length);
+      expect(evidence.overlay.missingObjectCount).toBe(0);
       expect(evidence.overlay.pointerEvents).toBe('none');
-      for (const entry of evidence.composition.filter((item) => item.kind === 'object')) {
+      expect(visibleObjects.length).toBeGreaterThan(0);
+      for (const entry of objects) {
         expect(entry.displayWidth).toBeGreaterThanOrEqual(18);
         expect(entry.displayHeight).toBeGreaterThanOrEqual(18);
         expect(entry.displayWidth).toBeLessThanOrEqual(Math.max(48, evidence.overlay.width * 0.28) + 0.5);
