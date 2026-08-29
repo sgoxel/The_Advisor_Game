@@ -1,5 +1,5 @@
 /*
-  R04 / #244 runtime bridge: apply the authoritative starter-village footprint stamp
+  R04 / #244 + #301 runtime bridge: bind the authoritative starter-village base state
   to the generated terrain grid that app.js actually installs as State.world.terrain.
 
   This is Simulation integration only. It does not draw presentation overlays and it does
@@ -15,21 +15,77 @@
     const Terrain = Game.Terrain;
     const SpatialWorld = Game.SpatialWorld;
     if (!Terrain || typeof Terrain.generateWorld !== 'function') return false;
-    if (!SpatialWorld || typeof SpatialWorld.bindRuntime !== 'function' || typeof SpatialWorld.stampVillageOnRuntimeTerrain !== 'function') return false;
+    if (
+      !SpatialWorld ||
+      typeof SpatialWorld.bindRuntime !== 'function' ||
+      typeof SpatialWorld.generateOriginVillage !== 'function' ||
+      typeof SpatialWorld.stampVillageOnRuntimeTerrain !== 'function'
+    ) return false;
 
     // Ensure the canonical spatial wrapper is installed first. bindRuntime() is idempotent.
     SpatialWorld.bindRuntime();
     if (Terrain.generateWorld && Terrain.generateWorld[MARKER]) return true;
 
+    function resolveCanonicalBase(generated, seedInput) {
+      const returned = generated && generated.originVillageBase;
+      if (
+        returned &&
+        returned.village &&
+        Array.isArray(returned.village.roadTiles) &&
+        returned.village.roadTiles.length > 0
+      ) {
+        return returned;
+      }
+      return SpatialWorld.generateOriginVillage(seedInput);
+    }
+
+    function bindCanonicalWorldState(base) {
+      const world = Game.State && Game.State.world;
+      if (!world || !base || !base.village) return;
+
+      // app.js owns the runtime world container; this bridge installs only the
+      // deterministic Simulation descriptor returned by the canonical generator.
+      world.originVillage = base.village;
+      world.originBaseState = base;
+      world.currentRegion = {
+        ...base.region,
+        theme: base.theme && base.theme.theme,
+        regionSize: SpatialWorld.regionSize
+      };
+      world.spatialRegion = {
+        version: SpatialWorld.version,
+        authority: 'simulation',
+        regionSize: SpatialWorld.regionSize,
+        theme: base.theme
+      };
+    }
+
     const generateWorld = Terrain.generateWorld.bind(Terrain);
     const wrappedGenerateWorld = function starterVillageRuntimeTerrainGenerateWorld(seedInput, colsInput, rowsInput) {
-      const generated = generateWorld(seedInput, colsInput, rowsInput);
-      const grid = generated && generated.grid;
-      const village = generated && generated.originVillageBase && generated.originVillageBase.village;
+      const generated = generateWorld(seedInput, colsInput, rowsInput) || {};
+      const grid = generated.grid;
+      const base = resolveCanonicalBase(generated, seedInput);
+      const village = base && base.village;
+
       if (Array.isArray(grid) && village) {
+        // Stamp the exact grid returned to app.js, not a stale pre-generation terrain array.
         SpatialWorld.stampVillageOnRuntimeTerrain({ terrain: grid }, village);
       }
-      return generated;
+      bindCanonicalWorldState(base);
+
+      const protagonistOrigin = base && base.protagonistOrigin;
+      const playerStart = generated.playerStart || (
+        protagonistOrigin
+          ? { row: protagonistOrigin.localRow, col: protagonistOrigin.localCol }
+          : undefined
+      );
+
+      return {
+        ...generated,
+        playerStart,
+        originVillageBase: base,
+        spatialRegion: generated.spatialRegion || (base && base.theme)
+      };
     };
 
     Object.defineProperty(wrappedGenerateWorld, MARKER, { value: true });
@@ -39,7 +95,7 @@
 
   Game.StarterVillageRuntimeTerrain = Object.freeze({
     authority: 'simulation',
-    version: 'r04-starter-village-runtime-terrain-v1',
+    version: 'r04-starter-village-runtime-terrain-v2-canonical-origin-binding',
     install
   });
 
