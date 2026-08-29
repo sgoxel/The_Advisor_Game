@@ -571,6 +571,15 @@
       for (const cell of footprintCells(building.footprint, 0)) blocked[cell.row][cell.col] = true;
     }
 
+    // The anchor/well is building[0]. It is part of the same authoritative
+    // Simulation-owned road network as every other required village structure.
+    // Connect it before the remaining building connectors; do not create a
+    // second/decorative road topology in the presentation layer.
+    const anchorRoadConnection = connectBuildingToRoad(buildings[0], roads, blocked);
+    if (!anchorRoadConnection.length) {
+      throw new Error('Unable to connect origin-village anchor building to authoritative road network.');
+    }
+
     const paths = [];
     for (let index = 1; index < buildings.length; index += 1) {
       const building = buildings[index];
