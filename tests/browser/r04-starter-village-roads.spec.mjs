@@ -5,6 +5,7 @@ async function ready(page) {
   await page.waitForFunction(() => Boolean(
     window.Game?.StarterVillageRoads?.drawPresentation &&
     window.Game?.StarterVillageRoads?.snapshotTopology &&
+    window.Game?.StarterVillageRoads?.ensureSemanticAssets &&
     window.Game?.SpatialWorld?.generateOriginVillage &&
     window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain
   ), null, { timeout: 20_000 });
@@ -30,18 +31,29 @@ function roadKey(point) {
   return `${point.row},${point.col}`;
 }
 
+function footprintContainsRoad(roadSet, footprint) {
+  for (let row = footprint.row; row < footprint.row + footprint.height; row += 1) {
+    for (let col = footprint.col; col < footprint.col + footprint.width; col += 1) {
+      if (roadSet.has(`${row},${col}`)) return true;
+    }
+  }
+  return false;
+}
+
 test('authoritative roads render as a continuous non-mutating cardinal surface', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await ready(page);
 
-  const evidence = await page.evaluate(() => {
+  const evidence = await page.evaluate(async () => {
+    const Game = window.Game;
     const village = window.__r04RepresentativeRoadVillage();
     const roadBefore = JSON.stringify(village.roadTiles);
     const buildingBefore = JSON.stringify(village.buildings);
-    const firstTopology = window.Game.StarterVillageRoads.snapshotTopology();
-    window.Game.StarterVillageRoads.drawPresentation();
-    const secondTopology = window.Game.StarterVillageRoads.snapshotTopology();
+    const firstTopology = Game.StarterVillageRoads.snapshotTopology();
+    const semanticReady = await Game.StarterVillageRoads.ensureSemanticAssets();
+    Game.StarterVillageRoads.drawPresentation();
+    const secondTopology = Game.StarterVillageRoads.snapshotTopology();
     const overlay = document.getElementById('starterVillageRoadOverlay');
     return {
       roadBefore,
@@ -50,8 +62,20 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
       buildingAfter: JSON.stringify(village.buildings),
       firstTopology,
       secondTopology,
+      semanticReady,
+      apiMode: Game.StarterVillageRoads.presentationMode,
       roadTiles: village.roadTiles.map((point) => ({ row: point.row, col: point.col })),
-      entrances: village.buildings.map((building) => ({ id: building.id, row: building.entrance.row, col: building.entrance.col })),
+      buildings: village.buildings.map((building) => ({
+        id: building.id,
+        passable: building.passable === true,
+        entrance: { row: building.entrance.row, col: building.entrance.col },
+        footprint: {
+          row: building.footprint.row,
+          col: building.footprint.col,
+          width: building.footprint.width,
+          height: building.footprint.height
+        }
+      })),
       overlay: {
         roadTileCount: Number(overlay?.dataset.roadTileCount || 0),
         drawnRoadTileCount: Number(overlay?.dataset.drawnRoadTileCount || 0),
@@ -64,7 +88,13 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
         connectivity: overlay?.dataset.connectivity,
         legacyPattern: overlay?.dataset.legacySquareHolePattern,
         regionSize: Number(overlay?.dataset.regionSize || 0),
-        roadWidthPx: Number(overlay?.dataset.roadWidthPx || 0),
+        roadWidth: overlay?.dataset.roadWidthPx,
+        semanticTileState: overlay?.dataset.semanticTileState,
+        semanticAssetCount: Number(overlay?.dataset.semanticAssetCount || 0),
+        semanticDrawnCount: Number(overlay?.dataset.semanticDrawnCount || 0),
+        semanticUnsupportedCount: Number(overlay?.dataset.semanticUnsupportedCount || 0),
+        vectorFallbackCount: Number(overlay?.dataset.vectorFallbackCount || 0),
+        semanticRegistry: overlay?.dataset.semanticRegistry,
         pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : null,
         zIndex: overlay ? getComputedStyle(overlay).zIndex : null
       }
@@ -74,26 +104,49 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
   expect(evidence.roadAfter).toBe(evidence.roadBefore);
   expect(evidence.buildingAfter).toBe(evidence.buildingBefore);
   expect(evidence.secondTopology).toEqual(evidence.firstTopology);
+  expect(evidence.semanticReady).toBe(true);
   expect(evidence.overlay.authority).toBe('presentation-only');
   expect(evidence.overlay.source).toBe('originVillage.roadTiles');
-  expect(evidence.overlay.mode).toBe('authoritative-continuous-packed-earth');
+  expect(evidence.apiMode).toBe('authoritative-semantic-transparent-png');
+  expect(evidence.overlay.mode).toBe(evidence.apiMode);
   expect(evidence.overlay.connectivity).toBe('authoritative-cardinal-only');
   expect(evidence.overlay.legacyPattern).toBe('masked');
   expect(evidence.overlay.pointerEvents).toBe('none');
   expect(evidence.overlay.zIndex).toBe('0');
   expect(evidence.overlay.regionSize).toBe(100);
-  expect(evidence.overlay.roadWidthPx).toBeGreaterThan(0);
+  expect(evidence.overlay.roadWidth).toBe('semantic-tile');
+  expect(evidence.overlay.semanticTileState).toBe('ready');
+  expect(evidence.overlay.semanticAssetCount).toBeGreaterThanOrEqual(8);
+  expect(evidence.overlay.semanticDrawnCount).toBe(evidence.firstTopology.length);
+  expect(evidence.overlay.semanticUnsupportedCount).toBe(0);
+  expect(evidence.overlay.vectorFallbackCount).toBe(0);
+  expect(evidence.overlay.semanticRegistry).toBe('canonical-road-registry');
   expect(evidence.overlay.roadTileCount).toBe(evidence.firstTopology.length);
   expect(evidence.overlay.drawnRoadTileCount).toBe(evidence.firstTopology.length);
-  expect(evidence.overlay.segmentCount).toBeGreaterThan(0);
   expect(evidence.overlay.intersectionCount).toBeGreaterThan(0);
   expect(evidence.overlay.invalidTopologyCount).toBe(0);
   expect(evidence.firstTopology.every((tile) => /^[NESW]*$/.test(tile.mask))).toBe(true);
 
   const roadSet = new Set(evidence.roadTiles.map(roadKey));
-  for (const entrance of evidence.entrances) {
-    expect(roadSet.has(`${entrance.row},${entrance.col}`), `entrance road missing for ${entrance.id}`).toBe(true);
+  let passableFootprintOnlyConnections = 0;
+  for (const building of evidence.buildings) {
+    const entranceOnRoad = roadSet.has(`${building.entrance.row},${building.entrance.col}`);
+    if (!building.passable) {
+      expect(entranceOnRoad, `entrance road missing for non-passable ${building.id}`).toBe(true);
+      continue;
+    }
+
+    const footprintOnRoad = footprintContainsRoad(roadSet, building.footprint);
+    expect(
+      entranceOnRoad || footprintOnRoad,
+      `authoritative route does not connect passable structure ${building.id}`
+    ).toBe(true);
+    if (!entranceOnRoad && footprintOnRoad) passableFootprintOnlyConnections += 1;
   }
+  // The representative village deliberately exercises the valid passable-structure edge case:
+  // a Simulation-owned route can cross a walkable footprint without requiring the nominal
+  // entrance coordinate itself to be a road tile. Keeping this proof prevents the old false FAIL.
+  expect(passableFootprintOnlyConnections).toBeGreaterThan(0);
   expect(pageErrors).toEqual([]);
 });
 
@@ -105,36 +158,48 @@ for (const viewport of [
   test(`road overlay remains bounded and passive on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await ready(page);
-    const evidence = await page.evaluate(() => {
+    const evidence = await page.evaluate(async () => {
+      const Game = window.Game;
       window.__r04RepresentativeRoadVillage();
-      window.Game.StarterVillageRoads.drawPresentation();
+      const semanticReady = await Game.StarterVillageRoads.ensureSemanticAssets();
+      Game.StarterVillageRoads.drawPresentation();
       const overlay = document.getElementById('starterVillageRoadOverlay');
       const rect = overlay?.getBoundingClientRect();
       return {
+        semanticReady,
+        apiMode: Game.StarterVillageRoads.presentationMode,
         rect: rect ? { width: rect.width, height: rect.height } : null,
         roadTileCount: Number(overlay?.dataset.roadTileCount || 0),
         drawnRoadTileCount: Number(overlay?.dataset.drawnRoadTileCount || 0),
-        segmentCount: Number(overlay?.dataset.segmentCount || 0),
+        intersectionCount: Number(overlay?.dataset.intersectionCount || 0),
         invalidTopologyCount: Number(overlay?.dataset.invalidTopologyCount || 0),
         authority: overlay?.dataset.presentationAuthority,
         mode: overlay?.dataset.presentationMode,
         legacyPattern: overlay?.dataset.legacySquareHolePattern,
-        roadWidthPx: Number(overlay?.dataset.roadWidthPx || 0),
+        roadWidth: overlay?.dataset.roadWidthPx,
+        semanticTileState: overlay?.dataset.semanticTileState,
+        semanticAssetCount: Number(overlay?.dataset.semanticAssetCount || 0),
+        semanticUnsupportedCount: Number(overlay?.dataset.semanticUnsupportedCount || 0),
         pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : null
       };
     });
 
+    expect(evidence.semanticReady).toBe(true);
     expect(evidence.rect).not.toBeNull();
     expect(evidence.rect.width).toBeGreaterThan(100);
     expect(evidence.rect.height).toBeGreaterThan(100);
     expect(evidence.roadTileCount).toBeGreaterThan(0);
     expect(evidence.drawnRoadTileCount).toBe(evidence.roadTileCount);
-    expect(evidence.segmentCount).toBeGreaterThan(0);
+    expect(evidence.intersectionCount).toBeGreaterThan(0);
     expect(evidence.invalidTopologyCount).toBe(0);
     expect(evidence.authority).toBe('presentation-only');
-    expect(evidence.mode).toBe('authoritative-continuous-packed-earth');
+    expect(evidence.apiMode).toBe('authoritative-semantic-transparent-png');
+    expect(evidence.mode).toBe(evidence.apiMode);
     expect(evidence.legacyPattern).toBe('masked');
-    expect(evidence.roadWidthPx).toBeGreaterThan(0);
+    expect(evidence.roadWidth).toBe('semantic-tile');
+    expect(evidence.semanticTileState).toBe('ready');
+    expect(evidence.semanticAssetCount).toBeGreaterThanOrEqual(8);
+    expect(evidence.semanticUnsupportedCount).toBe(0);
     expect(evidence.pointerEvents).toBe('none');
   });
 }
