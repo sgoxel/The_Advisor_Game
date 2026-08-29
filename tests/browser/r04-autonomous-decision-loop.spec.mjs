@@ -7,10 +7,17 @@ async function boot(page) {
     './js/interaction_validation.js', './js/world_action_resolution.js', './js/protagonist_driver_intent.js',
     './js/local_bot_driver.js', './js/autonomous_action_execution.js', './js/autonomous_decision_loop.js'
   ]) await page.addScriptTag({ url: src });
-  await page.waitForFunction(() => Boolean(window.Game?.AutonomousDecisionLoop?.prepare && window.Game?.AutonomousActionExecution?.execute));
+  await page.waitForFunction(() => Boolean(
+    window.Game?.AutonomousDecisionLoop?.prepare &&
+    window.Game?.AutonomousActionExecution?.execute &&
+    window.Game?.GameTime?.setForTest &&
+    window.Game?.CampaignPersistence?.serializeSave
+  ));
   await page.evaluate(() => {
     const game = window.Game;
     const tile = () => ({ type: 'grass', elevation: 0, tags: new Set(), blocked: false, obstacle: false });
+    game.GameTime.stop();
+    game.GameTime.setForTest(600);
     game.State.world.seed = 'seed-42'; game.State.world.rows = 3; game.State.world.cols = 3;
     game.State.world.terrain = [[tile(),tile(),tile()],[tile(),tile(),tile()],[tile(),tile(),tile()]];
     Object.assign(game.State.world.player, { row:0,col:0,moving:false,startRow:0,startCol:0,targetRow:0,targetCol:0,progress:1,pathQueue:[] });
@@ -40,6 +47,7 @@ test('authoritative campaign minute gates deterministic wait and avoids duplicat
     const prepared = loop.prepare(c, [opportunity]);
     const first = loop.resolvePrepared(prepared.prepared, c, route);
     const sameMinute = loop.prepare(c, [opportunity]);
+    game.GameTime.setForTest(c.campaignMinute + 5);
     const later = loop.prepare({ ...c, campaignMinute: c.campaignMinute + 5 }, [opportunity]);
     return { first, sameMinute, later, pos:{row:game.State.world.player.row,col:game.State.world.player.col}, checkpoint:loop.readCheckpoint(c) };
   }, { c:context(), opportunity:move(), route:execution() });
@@ -50,7 +58,7 @@ test('authoritative campaign minute gates deterministic wait and avoids duplicat
   expect(out.checkpoint).toMatchObject({ serial:1, campaignMinute:600, contextRevision:31, lastStatus:'resolved' });
 });
 
-test('prepared work becomes stale when authoritative revision/time advances and cannot mutate', async ({ page }) => {
+test('prepared work becomes stale when authoritative revision advances and cannot mutate', async ({ page }) => {
   const out = await page.evaluate(({ c, opportunity, route }) => {
     const game=window.Game, loop=game.AutonomousDecisionLoop;
     const prepared=loop.prepare(c,[opportunity]);
@@ -59,6 +67,20 @@ test('prepared work becomes stale when authoritative revision/time advances and 
     return {stale,before,after:game.AuthoritativeState.canonicalStringify(game.State),delta:game.WorldDeltaPersistence.capture(game.State.world.seed)};
   }, {c:context(),opportunity:move(),route:execution()});
   expect(out.stale).toMatchObject({status:'stale',reasonCode:'STALE_PREPARED_WORK'});
+  expect(out.after).toBe(out.before);
+  expect(out.delta.regions).toHaveLength(0);
+});
+
+test('prepared work becomes stale when authoritative campaign time advances', async ({ page }) => {
+  const out = await page.evaluate(({ c, opportunity, route }) => {
+    const game=window.Game, loop=game.AutonomousDecisionLoop;
+    const prepared=loop.prepare(c,[opportunity]);
+    const before=game.AuthoritativeState.canonicalStringify(game.State);
+    game.GameTime.setForTest(c.campaignMinute + 1);
+    const stale=loop.resolvePrepared(prepared.prepared,{...c,campaignMinute:c.campaignMinute+1},route);
+    return {stale,before,after:game.AuthoritativeState.canonicalStringify(game.State),delta:game.WorldDeltaPersistence.capture(game.State.world.seed)};
+  }, {c:context(),opportunity:move(),route:execution()});
+  expect(out.stale).toMatchObject({status:'stale',reasonCode:'STALE_PREPARED_WORK',authoritativeCampaignMinute:601});
   expect(out.after).toBe(out.before);
   expect(out.delta.regions).toHaveLength(0);
 });
@@ -85,6 +107,7 @@ test('rejected decision records deterministic short retry without world mutation
     const rejected=loop.resolvePrepared(prepared.prepared,c,route);
     const before=game.AuthoritativeState.capture(game.State);
     const retryNow=loop.prepare(c,[opportunity]);
+    game.GameTime.setForTest(c.campaignMinute+1);
     const retryLater=loop.prepare({...c,campaignMinute:c.campaignMinute+1},[opportunity]);
     return {rejected,retryNow,retryLater,before,after:game.AuthoritativeState.capture(game.State),checkpoint:loop.readCheckpoint(c)};
   },{c:context(),opportunity:move(),route:execution(31,false)});
@@ -95,23 +118,34 @@ test('rejected decision records deterministic short retry without world mutation
   expect(out.checkpoint.lastStatus).toBe('rejected');
 });
 
-test('save/load restores decision checkpoint so resume cannot replay the same campaign-minute decision', async ({ page }) => {
+test('save/load restores decision checkpoint and authoritative time so resume cannot replay the same decision', async ({ page }) => {
   const out=await page.evaluate(({c,opportunity,route})=>{
     const game=window.Game, loop=game.AutonomousDecisionLoop;
     const prepared=loop.prepare(c,[opportunity]); loop.resolvePrepared(prepared.prepared,c,route);
     const saved=game.CampaignPersistence.serializeSave();
-    game.WorldDeltaPersistence.clearAll(); Object.assign(game.State.world.player,{row:0,col:0});
+    game.WorldDeltaPersistence.clearAll(); game.GameTime.setForTest(700); Object.assign(game.State.world.player,{row:0,col:0});
     const loaded=game.CampaignPersistence.loadSave(saved);
-    const resumed=loop.prepare(c,[opportunity]);
-    return {loaded:loaded.ok,resumed,checkpoint:loop.readCheckpoint(c),pos:{row:game.State.world.player.row,col:game.State.world.player.col}};
+    const resumedMinute=Math.floor(game.GameTime.capture().totalGameMinutes);
+    const resumed=loop.prepare({...c,campaignMinute:resumedMinute},[opportunity]);
+    return {loaded:loaded.ok,resumed,resumedMinute,checkpoint:loop.readCheckpoint(c),pos:{row:game.State.world.player.row,col:game.State.world.player.col}};
   },{c:context(),opportunity:move(),route:execution()});
   expect(out.loaded).toBe(true);
+  expect(out.resumedMinute).toBe(600);
   expect(out.resumed).toMatchObject({status:'wait',reasonCode:'WAIT_INTERVAL'});
   expect(out.checkpoint).toMatchObject({serial:1,campaignMinute:600,lastStatus:'resolved'});
   expect(out.pos).toEqual({row:1,col:1});
 });
 
-test('non-Simulation context cannot schedule autonomous work', async ({ page }) => {
-  const out=await page.evaluate(({c,opportunity})=>window.Game.AutonomousDecisionLoop.prepare(c,[opportunity]),{c:context(600,31,{authority:'presentation'}),opportunity:move()});
-  expect(out).toMatchObject({status:'rejected',reasonCode:'NON_SIMULATION_CONTEXT'});
+test('mismatched or presentation-owned campaign time cannot schedule autonomous work', async ({ page }) => {
+  const out=await page.evaluate(({c,opportunity})=>{
+    const game=window.Game, loop=game.AutonomousDecisionLoop;
+    const before=game.WorldDeltaPersistence.capture(game.State.world.seed);
+    const mismatched=loop.prepare({...c,campaignMinute:c.campaignMinute+1},[opportunity]);
+    const presentation=loop.prepare({...c,authority:'presentation'},[opportunity]);
+    const after=game.WorldDeltaPersistence.capture(game.State.world.seed);
+    return {mismatched,presentation,before,after};
+  },{c:context(),opportunity:move()});
+  expect(out.mismatched).toMatchObject({status:'rejected',reasonCode:'CAMPAIGN_TIME_MISMATCH',authoritativeCampaignMinute:600});
+  expect(out.presentation).toMatchObject({status:'rejected',reasonCode:'NON_SIMULATION_CONTEXT'});
+  expect(out.after).toEqual(out.before);
 });
