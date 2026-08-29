@@ -255,6 +255,12 @@ Every new campaign begins with the autonomous protagonist as an ordinary low-ran
 
 When the player does not explicitly provide a SEED, the game generates one. The starting village is selected or generated deterministically from the campaign SEED, so a compatible SEED and generation rules reproduce the same starting settlement and generator-defined base-world structure around the origin.
 
+The starting village occupies the canonical **100 × 100 logical-tile origin region**. Its population and built environment should use that full region as a meaningful spatial area rather than being compressed into a tiny central cluster. Distribution does not need to be uniform: homes, workplaces, services, landmarks, roads, farms, gathering areas and NPC activity should be placed where terrain, settlement function and local relationships make sense.
+
+The generator-defined locations and spatial relationships of starter-village buildings, entrances, roads and paths, NPC homes, NPC workplaces and other base settlement features must derive reproducibly from the campaign **SEED, world coordinates and compatible generation rules**. Equivalent compatible inputs reproduce the same unchanged base layout.
+
+Buildings must occupy logical footprints appropriate to their represented use rather than existing as dimensionless points when local spatial detail matters. A representative ordinary starter-village home occupies **at least 10 × 10 logical tiles** and contains **at least two logical rooms**, with a usable relationship to an entrance and the local road/path network. Different building types may require larger or otherwise appropriate footprints.
+
 The player must begin inside a visibly inhabited medieval-fantasy environment rather than on an empty map, abstract dashboard, or isolated character screen.
 
 The starting village must contain a coherent village environment with appropriate homes, roads and paths, gathering areas, farms or fields where suitable, trees and surrounding terrain, shops, workshops, service buildings, food and lodging locations, storage or production locations, and settlement-specific landmarks.
@@ -274,6 +280,12 @@ World characters should have time-aware daily life appropriate to their role, ho
 Representative routines may include sleeping or remaining at home, traveling to work, opening and operating shops or services, working at farms/workshops/markets, taking breaks, visiting social locations, closing for the day, returning home, guarding, traveling, or following other role-appropriate schedules.
 
 NPC schedules need not be identical. Profession, settlement type, geography, local conditions, relationships and events may alter normal routines.
+
+Active gameplay NPCs use exclusive logical-tile occupancy: **two NPCs must not occupy the same authoritative logical tile at the same movement state**. When routes conflict, movement must resolve coherently rather than allowing overlap. Depending on the situation, an NPC may yield, wait, give priority, use a valid neighboring tile, or otherwise continue through a collision-safe route; equivalent authoritative inputs must resolve such conflicts deterministically.
+
+When two NPCs directly converse in the local world, they should stand on **two adjacent logical tiles**, not on the same tile, so the visible dialogue remains spatially consistent with simulation state.
+
+During development, active visible NPCs should expose a compact small-font activity message bubble above the character so developers can understand what each NPC is currently doing. When two NPCs are in a direct NPC-to-NPC conversation, the pair should use **one shared conversation/status bubble** rather than two unrelated bubbles. These bubbles are presentation/debug information only and never become simulation authority.
 
 NPCs may also exchange simple ambient dialogue with each other without requiring an external LLM. These conversations may use varied deterministic or Local-BOT dialogue pools and should reflect context such as profession, settlement type, current location, terrain/environment, time of day, local conditions and relevant world events.
 
@@ -298,6 +310,8 @@ The world must support multiple visually and functionally distinct settlement ar
 Settlement types may include small rural villages, farming villages, forest villages, mining or production villages, roadside and trade settlements, frontier villages, border villages, fortified villages, abandoned or ruined villages, towns, market towns, fortified towns, large cities, castle settlements, capitals, and other regionally appropriate settlement forms.
 
 Settlement appearance, layout, buildings, population, professions, resources, roads, defenses, prosperity, hazards, and surrounding environment should reflect settlement type, geography, region, history, and campaign state.
+
+A normal local/thematic region is exactly **100 × 100 logical tiles**. A region should have a coherent generated identity appropriate to its location and world context, such as an inhabited village, town, forest-dominated land, coast or another suitable thematic composition. A settlement is not required to fit inside one region when its scale demands more space. Large cities must be able to form one coherent settlement across a **2 × 2 group of four neighboring 100 × 100 regions**, retaining one continuous settlement identity rather than becoming four unrelated city maps.
 
 ### 🏗️ Settlement Evolution and Historical Change
 
@@ -442,9 +456,13 @@ The world is procedurally generated from a player-visible **SEED** and has no ga
 
 The complete world is not one finite displayed map. The strategic tile area currently shown to the player is only a local active region of a much larger continuous world.
 
+The canonical logical region size is **100 × 100 tiles**. Region coordinates identify these 100 × 100 parts of one continuous world; the fixed local region scale must not create a gameplay-defined outer boundary.
+
 A compatible SEED, world coordinates, and compatible world-generation rules must reproduce the same unmodified base world at the same coordinates.
 
-For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: settlement archetypes and layouts including villages, towns, cities and fortified/castle locations where appropriate; roads, paths and bridges; major buildings and landmarks; surrounding terrain and biomes; local population generation; habitat/ecology foundations; important world locations; and other deterministic base-world features.
+For a compatible campaign SEED, procedural generation includes not only terrain but the generator-defined base spatial identity of the playable world: thematic region composition; settlement archetypes and layouts including villages, towns, cities and fortified/castle locations where appropriate; roads, paths and bridges; major buildings and landmarks; surrounding terrain and biomes; local population generation and home/work spatial relationships; habitat/ecology foundations; important world locations; and other deterministic base-world features.
+
+A 100 × 100 region should form a coherent local thematic area appropriate to its SEED-derived geography and world context, such as a village, town, forest-dominated region, coast or another suitable composition. Multi-region places remain parts of the same coordinate space: where settlement scale requires it, a large city may occupy a coherent **2 × 2 set of four neighboring 100 × 100 regions** under one continuous settlement identity.
 
 ### 🏰 SEED-Derived Political Geography
 
@@ -597,6 +615,12 @@ The size of the unbounded world must not force invisible-world computation to gr
 44. **Direct dialogue favors full-body static character art.** When two characters converse directly, responsive dialogue presentation should show the relevant participants with full-body character PNGs where the layout permits it.
 45. **World-map characters should look like characters, not permanent rectangles.** Tile/world presentation should progressively replace generic rectangular NPC placeholders with character-derived PNG icons tied to Simulation-backed identities.
 46. **Animation is optional at the current stage.** Static PNG character presentation is sufficient for current playable development and animation must not block character-identity, dialogue or world-icon progress.
+47. **One canonical local region is 100 × 100 logical tiles.** The fixed region scale is a simulation/world-identity invariant, while the overall SEED world remains continuous and unbounded.
+48. **SEED determines coherent local spatial structure, not only terrain.** Region theme, starter-settlement layout, building footprints and locations, entrances, roads/paths, and NPC home/work relationships must be reproducible from compatible SEED, coordinates and generation rules.
+49. **Large settlements may span regions without losing identity.** Large cities must support one coherent settlement across a 2 × 2 group of four neighboring 100 × 100 regions when that scale is appropriate.
+50. **NPC tile occupancy is exclusive.** Active NPCs do not share one authoritative logical tile; deterministic movement conflict resolution must yield, wait or route around occupancy rather than overlap.
+51. **NPC conversations remain spatially grounded.** Two NPCs in direct local dialogue occupy adjacent logical tiles, while development activity/dialogue bubbles remain presentation-only diagnostics.
+52. **Local buildings have meaningful footprints.** A representative starter-village home is at least 10 × 10 logical tiles with at least two logical rooms, and local buildings should relate coherently to entrances, roads, occupants and uses.
 
 ---
 
