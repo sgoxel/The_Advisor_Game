@@ -1,0 +1,23 @@
+name: Tile Registry Verification
+
+on:
+  push:
+    paths:
+      - 'js/tile_registry.js'
+      - 'tests/node/tile-registry.test.mjs'
+      - '.github/workflows/tile-registry-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-tile-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify semantic tile registry
+        run: node --test tests/node/tile-registry.test.mjs
