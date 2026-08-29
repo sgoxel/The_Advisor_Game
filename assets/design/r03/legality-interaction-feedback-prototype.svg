@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1020" viewBox="0 0 1440 1020" role="img" aria-labelledby="title desc">
+  <title id="title">R03 legality and interaction feedback prototype</title>
+  <desc id="desc">Vector reference sheet showing Simulation-owned Candidate, Possible, Not possible, Checking and Result feedback plus desktop, tablet, phone portrait and phone landscape map-first layouts.</desc>
+  <defs>
+    <style>
+      .bg{fill:#17191B}.panel{fill:#242526;stroke:#7B756C;stroke-width:2}.paper{fill:#E5D8BE}.ink{fill:#17191B}.light{fill:#E5D8BE}.muted{fill:#AFA691}.iron{fill:#52616B}.moss{fill:#687258}.warn{fill:#8D4942}.gold{fill:#C89A4B}.line{stroke:#E5D8BE;stroke-width:2;fill:none}.focus{stroke:#C89A4B;stroke-width:3;fill:none}.small{font:16px system-ui,sans-serif}.body{font:19px system-ui,sans-serif}.head{font:700 24px system-ui,sans-serif}.title{font:700 34px system-ui,sans-serif}.tiny{font:14px system-ui,sans-serif}
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="1020"/>
+  <text x="50" y="55" class="title light">R03 • Legality &amp; Interaction Feedback</text>
+  <text x="50" y="87" class="body muted">Presentation only • Simulation validates • Advisor suggests • Character decides</text>
+
+  <!-- state grammar -->
+  <g transform="translate(50 120)">
+    <rect class="panel" width="1340" height="180" rx="10"/>
+    <text x="24" y="35" class="head light">Five-state grammar — icon + label + value, never color-only</text>
+    <g transform="translate(25 62)">
+      <rect x="0" y="0" width="240" height="92" rx="8" fill="#20272D" stroke="#52616B" stroke-width="2" stroke-dasharray="7 5"/>
+      <path d="M22 46 l14 -14 l14 14 l-14 14z" class="line"/>
+      <text x="62" y="38" class="head light">Considering</text><text x="62" y="65" class="small muted">Candidate, not validated</text>
+    </g>
+    <g transform="translate(285 62)">
+      <rect width="240" height="92" rx="8" fill="#252B23" stroke="#687258" stroke-width="2"/>
+      <circle cx="35" cy="46" r="16" class="line"/><path d="M26 46 l7 7 l13 -16" class="line"/>
+      <text x="62" y="38" class="head light">Possible</text><text x="62" y="65" class="small muted">Simulation permits now</text>
+    </g>
+    <g transform="translate(545 62)">
+      <rect width="240" height="92" rx="8" fill="#2D2323" stroke="#8D4942" stroke-width="2"/>
+      <circle cx="35" cy="46" r="16" class="line"/><path d="M24 35 l22 22" class="line"/>
+      <text x="62" y="38" class="head light">Not possible</text><text x="62" y="65" class="small muted">Reason always visible</text>
+    </g>
+    <g transform="translate(805 62)">
+      <rect width="240" height="92" rx="8" fill="#292827" stroke="#7B756C" stroke-width="2"/>
+      <circle cx="35" cy="46" r="16" fill="none" stroke="#E5D8BE" stroke-width="4" stroke-dasharray="12 8"/>
+      <text x="62" y="38" class="head light">Checking…</text><text x="62" y="65" class="small muted">No stale conclusion</text>
+    </g>
+    <g transform="translate(1065 62)">
+      <rect width="240" height="92" rx="8" fill="#302A20" stroke="#C89A4B" stroke-width="2"/>
+      <path d="M20 31 h30 v30 h-30z" fill="none" stroke="#E5D8BE" stroke-width="2"/><path d="M27 46 l6 7 l12 -17" class="line"/>
+      <text x="62" y="38" class="head light">Result</text><text x="62" y="65" class="small muted">Committed consequence</text>
+    </g>
+  </g>
+
+  <!-- desktop -->
+  <g transform="translate(50 325)">
+    <rect class="panel" width="820" height="340" rx="10"/>
+    <text x="20" y="34" class="head light">Desktop • 1280×720 reference</text>
+    <rect x="20" y="52" width="555" height="265" rx="6" fill="#3D453A" stroke="#7B756C" stroke-width="2"/>
+    <path d="M40 235 C160 170 250 250 360 170 S500 125 550 100" stroke="#A88A54" stroke-width="16" fill="none" opacity=".72"/>
+    <rect x="112" y="104" width="70" height="48" fill="#6E4F38" stroke="#E5D8BE"/><polygon points="105,104 147,76 190,104" fill="#7B756C"/>
+    <circle cx="350" cy="182" r="20" fill="#17191B" stroke="#C89A4B" stroke-width="3"/>
+    <path d="M230 222 Q290 185 330 187" stroke="#E5D8BE" stroke-width="3" stroke-dasharray="8 6" fill="none"/>
+    <rect x="282" y="128" width="215" height="44" rx="8" fill="#252B23" stroke="#687258" stroke-width="2"/>
+    <text x="300" y="156" class="small light">○ Possible • Mill Yard</text>
+    <rect x="595" y="52" width="205" height="265" rx="6" class="paper"/>
+    <text x="612" y="82" class="head ink">Possible</text>
+    <text x="612" y="112" class="small ink">Simulation permits</text><text x="612" y="134" class="small ink">this action now.</text>
+    <line x1="612" y1="150" x2="780" y2="150" stroke="#7B756C"/>
+    <text x="612" y="178" class="small ink">Considering travel</text><text x="612" y="200" class="small ink">to Mill Yard.</text>
+    <rect x="612" y="225" width="168" height="46" rx="6" fill="#52616B"/><text x="647" y="255" class="body light">Suggest this</text>
+    <rect x="609" y="222" width="174" height="52" rx="8" class="focus"/>
+    <text x="612" y="298" class="tiny ink">Focus visible • 44px+</text>
+  </g>
+
+  <!-- tablet -->
+  <g transform="translate(895 325)">
+    <rect class="panel" width="495" height="340" rx="10"/>
+    <text x="20" y="34" class="head light">Tablet • map + bottom sheet</text>
+    <rect x="20" y="52" width="455" height="170" rx="6" fill="#3D453A"/>
+    <path d="M45 175 C155 125 270 170 440 95" stroke="#A88A54" stroke-width="13" fill="none" opacity=".72"/>
+    <circle cx="300" cy="125" r="18" fill="#17191B" stroke="#8D4942" stroke-width="3"/><path d="M289 114 l22 22" class="line"/>
+    <rect x="20" y="234" width="455" height="83" rx="8" class="paper"/>
+    <text x="38" y="264" class="head ink">Not possible</text><text x="38" y="292" class="small ink">Path blocked by river • Details ▾</text>
+    <rect x="381" y="246" width="62" height="52" rx="8" fill="none" stroke="#17191B" stroke-width="2"/><text x="394" y="278" class="small ink">44+</text>
+  </g>
+
+  <!-- phone portrait -->
+  <g transform="translate(50 690)">
+    <rect class="panel" width="420" height="285" rx="10"/>
+    <text x="20" y="34" class="head light">Phone portrait • 390×844</text>
+    <rect x="20" y="50" width="380" height="135" rx="6" fill="#3D453A"/>
+    <circle cx="250" cy="113" r="17" fill="#17191B" stroke="#52616B" stroke-width="3" stroke-dasharray="6 4"/>
+    <rect x="20" y="194" width="380" height="70" rx="8" class="paper"/>
+    <text x="38" y="223" class="head ink">Checking…</text><text x="38" y="247" class="small ink">Simulation is validating this option.</text>
+    <text x="20" y="278" class="tiny muted">No hover dependency • reduced-motion static fallback</text>
+  </g>
+
+  <!-- phone landscape -->
+  <g transform="translate(490 690)">
+    <rect class="panel" width="900" height="285" rx="10"/>
+    <text x="20" y="34" class="head light">Phone landscape • 844×390 • world-first + compact rail</text>
+    <rect x="20" y="50" width="555" height="210" rx="6" fill="#3D453A"/>
+    <path d="M55 215 Q180 115 350 170 T550 90" stroke="#A88A54" stroke-width="14" fill="none" opacity=".72"/>
+    <rect x="595" y="50" width="285" height="210" rx="8" class="paper"/>
+    <text x="615" y="82" class="head ink">Result</text>
+    <text x="615" y="112" class="small ink">Arrived at Mill Yard.</text>
+    <text x="615" y="140" class="small ink">World state changed;</text><text x="615" y="162" class="small ink">history records outcome.</text>
+    <line x1="615" y1="178" x2="852" y2="178" stroke="#7B756C"/>
+    <text x="615" y="207" class="small ink">Source: Simulation</text>
+    <text x="615" y="236" class="tiny ink">Selected ≠ commanded</text>
+  </g>
+</svg>
