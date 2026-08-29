@@ -415,6 +415,18 @@ Terrain, buildings, interiors, props, vegetation and characters should converge 
 
 Readability, atmosphere, character emotion, clear interaction, responsive performance, and broad browser/device usability take priority over unnecessary visual complexity.
 
+## 🧩 Canonical Tile Atlas Production
+
+For tile-based visual asset families, the canonical Designer production sheet is a **transparent 1024 × 1024 PNG atlas** arranged as a fixed **4-column × 4-row grid** of sixteen **256 × 256 pixel cells**.
+
+A tile family may require fewer than sixteen variants. In that case the atlas size and grid do not shrink: unused cells remain fully transparent/empty so every tile family keeps the same production geometry.
+
+Each occupied cell represents one semantically identifiable tile variant compatible with the intended tile family and local-world scale. Production must support deterministic extraction of each occupied cell into an individual **256 × 256 PNG tile**, with a stable semantic identity that lets runtime systems request the intended tile by meaning/family instead of depending only on arbitrary manual crop coordinates.
+
+This atlas contract applies when roads, paths, terrain or transitions, building parts, walls, floors, interiors, furniture, props or other visual families are intentionally produced as reusable tiles. It does not require unrelated non-tile assets such as full-body character art to use an atlas.
+
+Exact manifest schemas, folder names, splitter implementation, validation tooling and runtime registration mechanics remain subordinate implementation decisions, but they must preserve the canonical **1024 × 1024 / 4 × 4 / 256px** contract, transparent unused cells, deterministic per-tile export and semantic tile identity.
+
 ## ⏱️ Real-Time World Clock and Day/Night
 
 The campaign runs in **real time, not turns**.
@@ -574,7 +586,7 @@ Character-focused and full-body dialogue art should feel mature, grounded and dr
 
 World-space character sprites deliberately operate at a smaller tile-readable scale and may simplify proportions, features and detail more strongly than full-body dialogue art. This simplification is allowed to achieve immediate world readability, but the sprite must remain recognizably connected to the same character identity through silhouette, palette, clothing, equipment, hair, role/status cues or other appropriate markers. The world sprite should not become an anonymous marker or unrelated generic avatar.
 
-The local world should evoke classic handcrafted tile RPG presentation through **readable tile floors and terrain, clearly bounded walls and rooms, obvious doors and entrances, compact world-space sprites, interior props and furniture, coherent vegetation and roads, restrained effects, strong environmental atmosphere, and a camera angle that keeps navigation and interiors legible**. Pixel-art or pixel-art-like raster treatment is suitable where it supports the approved direction, but exact pixel dimensions and production technique remain Designer decisions.
+The local world should evoke classic handcrafted tile RPG presentation through **readable tile floors and terrain, clearly bounded walls and rooms, obvious doors and entrances, compact world-space sprites, interior props and furniture, coherent vegetation and roads, restrained effects, strong environmental atmosphere, and a camera angle that keeps navigation and interiors legible**. Pixel-art or pixel-art-like raster treatment is suitable where it supports the approved direction, but exact pixel dimensions and production technique remain Designer decisions except where this README defines a canonical tile-production contract.
 
 Terrain, buildings, walls, floors, furniture, vegetation, creatures and character sprites should converge toward one original stylization family. Photorealistic terrain underneath unrelated sprite overlays is not the target final visual language. Nostalgia is a visual influence, not permission to recreate obsolete usability problems: text, controls, hierarchy, contrast, touch targets and responsive layouts must remain accessible on current desktop, tablet and phone screens.
 
@@ -605,7 +617,7 @@ PNG assets, sprites and dialogue art are presentation only. Character identity, 
 
 The full-body and world-space forms must remain readable and performant on desktop, tablet and phone; device-specific scaling or simplification may reduce visual detail but must preserve the same character identity and must not alter simulation truth.
 
-A Worker acting in the **Designer** role chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
+A Worker acting in the **Designer** role chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task, while tile-based visual production must preserve the canonical tile-atlas contract defined above.
 
 Visual assets never become simulation authority.
 
@@ -693,6 +705,7 @@ The size of the unbounded world must not force invisible-world computation to gr
 64. **Work follows profession and place.** Multiple compatible NPCs may share one workplace, while outdoor professions may use suitable deterministic fields, forest-edge/wilderness sites, shorelines or other terrain-appropriate worksites instead of fake buildings.
 65. **Guard duty is spatial and time-aware.** Settlement entrance/exit guards may rotate through day/night or other suitable shifts, use valid guard-post/barracks/home relationships, and hand off duty without violating occupancy or route continuity.
 66. **LLM and Local BOT share one character truth.** Driver choice may change expression quality but must not replace deterministic identity, age, personality, relationships, memories or emotional context with a different underlying person.
+67. **Canonical tile atlases are fixed and semantically exportable.** Tile-based production uses transparent 1024 × 1024 atlases divided into a 4 × 4 grid of 256 × 256 cells; unused cells remain transparent, while occupied cells are deterministically exportable as individual semantically identifiable tiles.
 
 ---
 
@@ -790,7 +803,7 @@ Coder does not redefine Planner-owned scope, acceptance criteria, dependencies, 
 
 Designer owns creation and refinement of the game's visual presentation, including 2D art, UI visuals, portraits, backgrounds, sprites, textures, icons, 3D scenes and objects, terrain, environments, buildings, vegetation, props, landmarks, isometric/map visuals, WebGL visuals, placeholder-to-final refinement, consistency, scale, perspective, materials, lighting, readability, responsiveness, accessibility, and visual-performance considerations.
 
-Designer chooses suitable tools, formats, workflows, and export methods for approved visual work.
+Designer chooses suitable tools, formats, workflows, and export methods for approved visual work. When the approved work produces reusable tile-based visual families, Designer must preserve the canonical 1024 × 1024 transparent atlas, 4 × 4 grid and 256 × 256 cell contract defined by README; unused atlas cells remain transparent.
 
 Gameplay and authoritative simulation logic remain Coder responsibility unless an approved task explicitly includes technical visual integration.
 
