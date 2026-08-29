@@ -1,0 +1,91 @@
+name: R04 Autonomous Action Execution Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/autonomous_action_execution.js'
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'js/world_action_resolution.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_validation.js'
+      - 'js/interaction_target.js'
+      - 'js/action_legality.js'
+      - 'js/campaign_persistence.js'
+      - 'js/region_navigation.js'
+      - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-protagonist-driver-intent.spec.mjs'
+      - 'tests/browser/r03-spatial-action-resolution-regression.spec.mjs'
+      - 'tests/browser/r03-context-interaction-regression.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomous-action-execution-verification.yml'
+  pull_request:
+    paths:
+      - 'js/autonomous_action_execution.js'
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'js/world_action_resolution.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_validation.js'
+      - 'js/interaction_target.js'
+      - 'js/action_legality.js'
+      - 'js/campaign_persistence.js'
+      - 'js/region_navigation.js'
+      - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-protagonist-driver-intent.spec.mjs'
+      - 'tests/browser/r03-spatial-action-resolution-regression.spec.mjs'
+      - 'tests/browser/r03-context-interaction-regression.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomous-action-execution-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-autonomous-execution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04-T03 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R04 autonomous action execution regression
+        run: npx playwright test tests/browser/r04-autonomous-action-execution.spec.mjs
+      - name: Preserve R04 Local BOT deterministic selection
+        run: npx playwright test tests/browser/r04-local-bot-selection.spec.mjs
+      - name: Preserve R04 protagonist driver intent contract
+        run: npx playwright test tests/browser/r04-protagonist-driver-intent.spec.mjs
+      - name: Preserve R03 Simulation resolution authority
+        run: >-
+          npx playwright test
+          tests/browser/r03-spatial-action-resolution-regression.spec.mjs
+          tests/browser/r03-context-interaction-regression.spec.mjs
+      - name: Preserve canonical R01 responsive browser baseline
+        run: npm run test:browser:r01
+      - name: Upload focused R04 Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-autonomous-action-execution-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
