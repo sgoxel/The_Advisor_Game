@@ -756,33 +756,39 @@ Worker roles use this ordered cycle:
 
 **Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
 
-A scheduled Worker invocation receives a **starting role** from the recurring rotation. Workers #6 through #20 have no automation, timer, recurrence, scheduled slot, or recurring cursor. A direct Admin instruction may define any manual Worker's role, target, scope, or starting point; a broad invocation of any Worker #6 through #20 uses the same role boundaries and work-conserving cycle without consuming the scheduled cursor.
+A scheduled Worker invocation receives only a **starting role** from the recurring rotation. The starting role or rotation cursor is routing information only: it does not reserve, lock, claim, or own an invocation, full role cycle, cursor, backlog, project, or future eligible work.
+
+**There is no invocation-wide, full-cycle, cursor-wide, project-wide, or backlog-wide Worker claim.** No Worker may create or rely on such a claim, and another Worker's active invocation must never be treated as a global reason to stop, wait, or avoid unrelated eligible work.
+
+Workers #6 through #20 have no automation, timer, recurrence, scheduled slot, or recurring cursor. A direct Admin instruction may define any manual Worker's role, target, scope, or starting point; a broad invocation of any Worker #6 through #20 uses the same role boundaries and work-conserving cycle without consuming the scheduled cursor.
 
 Worker runs are **work-conserving**. Starting from the applicable role, a Worker continues through the role cycle and should perform all currently eligible work it can safely complete within each role, in project-priority order, rather than stopping after one task merely because a role already produced useful work.
 
-After a material issue, commit, verification, claim, dependency, or planning-state change, the Worker should re-evaluate current eligibility before selecting further work. Completing one task may unblock or create legitimate work for another role.
+After a material issue, commit, verification, target claim, dependency, or planning-state change, the Worker should re-evaluate current eligibility before selecting further work. Completing one task may unblock or create legitimate work for another role.
 
 After all five roles have been visited, the Worker begins another pass when the preceding pass performed work or materially changed eligibility. The Worker continues until a complete five-role pass produces **no eligible progress**. A blocked or unchanged target must not be retried indefinitely in the same invocation unless relevant external state materially changes.
 
 Blocking corrections, revisions, handoffs, verification obligations, continuations, and release-critical work take priority over ordinary backlog appropriate to their owning role. Workers must not invent work merely to keep themselves busy.
 
+Ownership and collision protection are **target-scoped only**. A valid live `WORK-CLAIM` may protect the specific issue/task it names, and an allowed NVIDIA reservation may protect only its specific target. If another Worker already owns a conflicting target, the later Worker skips or clears only that target conflict and continues with other eligible work. Dependencies, exact committed-state requirements, revision state, Worker independence, and NVIDIA target ownership remain additional target-specific safety controls.
+
 Worker identity and independence restrictions normally remain in force throughout multi-role and multi-pass runs. A Worker must not independently verify or approve its own earlier implementation, design, revision, bug fix, workflow fix, or process fix. When another independent Worker identity is available, self-authored work remains for that different Worker.
 
-A **Tester deadlock exception** prevents permanent governance lock when all of the following are true: a cumulative phase or release gate is otherwise ready; all required implementation/design/revision dependencies are complete; no unresolved valid T-REV, P-REV, claim collision, or higher-authority blocker remains; and every currently authorized Worker identity that could act as Tester is disqualified only because each has accepted authorship inside the cumulative gate scope. In that specific condition, the gate must not remain indefinitely blocked solely by Worker-identity independence.
+A **Tester deadlock exception** prevents permanent governance lock when all of the following are true: a cumulative phase or release gate is otherwise ready; all required implementation/design/revision dependencies are complete; no unresolved valid T-REV, P-REV, target-claim collision, or higher-authority blocker remains; and every currently authorized Worker identity that could act as Tester is disqualified only because each has accepted authorship inside the cumulative gate scope. In that specific condition, the gate must not remain indefinitely blocked solely by Worker-identity independence.
 
-When a Tester deadlock is documented, the **first Worker whose normal authorized execution order reaches that Tester gate** may claim it and perform the complete gate verification even if that Worker has accepted work inside the cumulative scope. For scheduled Workers #1–#5, normal authorized execution order is the canonical recurring rotation. Any Worker #6 through #20 may use the exception only when directly invoked by Admin while the deadlock remains unresolved and before another Worker has claimed the gate.
+When a Tester deadlock is documented, the **first Worker whose normal authorized execution order reaches that Tester gate** may claim the gate target and perform the complete gate verification even if that Worker has accepted work inside the cumulative scope. This is a target-scoped gate claim only and never reserves the Worker's remaining role cycle or unrelated work. For scheduled Workers #1–#5, normal authorized execution order is the canonical recurring rotation. Any Worker #6 through #20 may use the exception only when directly invoked by Admin while the deadlock remains unresolved and before another Worker has claimed the gate target.
 
-The deadlock Worker must still perform every required exact-state check, regression, browser/responsive/accessibility/performance/public verification and evidence collection required by the gate. A successful exception approval must be recorded explicitly as **`DEADLOCK TESTER PASS`**, identify the deadlock record and exact tested state, and accurately disclose the Worker's own included authorship. It is a valid phase/release PASS and may advance the project, but it must not be described as independent verification of that Worker's own included work. If a genuinely independent eligible Worker becomes available before the gate is claimed, the normal independent path takes priority.
+The deadlock Worker must still perform every required exact-state check, regression, browser/responsive/accessibility/performance/public verification and evidence collection required by the gate. A successful exception approval must be recorded explicitly as **`DEADLOCK TESTER PASS`**, identify the deadlock record and exact tested state, and accurately disclose the Worker's own included authorship. It is a valid phase/release PASS and may advance the project, but it must not be described as independent verification of that Worker's own included work. If a genuinely independent eligible Worker becomes available before the gate target is claimed, the normal independent path takes priority.
 
-For recurring Workers #1–#5, the next scheduled starting point should follow the **last role in which useful work was actually performed** during the preceding completed run. If the preceding Worker made no eligible progress in any role, the unresolved starting point is preserved rather than falsely consuming empty roles.
+For recurring Workers #1–#5, the next scheduled starting point should follow the **last role in which useful work was actually performed** during the preceding completed run. If the preceding Worker made no eligible progress in any role, the unresolved starting point is preserved rather than falsely consuming empty roles. This scheduling cursor still carries no ownership semantics.
 
-When any Worker #6 through #20 performs project work, it uses normal claims and audit records but never consumes, advances, reserves, or rewrites the recurring schedule cursor. Their changes are discovered by scheduled and manual Workers through normal GitHub state re-fetch and claim/dependency checks.
+When any Worker #6 through #20 performs project work, it uses normal target claims and audit records but never consumes, advances, reserves, or rewrites the recurring schedule cursor. Their changes are discovered by scheduled and manual Workers through normal GitHub state re-fetch and target-claim/dependency checks.
 
 Workers #6 through #20 are persistent independent identities from one another. Any may independently verify another Worker's prior work when acting as Tester and when all normal verification requirements are satisfied, but no Worker may independently verify or approve its own prior work outside the documented Tester deadlock exception.
 
-Multiple Workers may overlap in time. Claims, dependency rules, committed-state checks, NVIDIA ownership, independent-verification rules, and the narrowly scoped Tester deadlock exception remain responsible for preventing duplicate work, false independence claims, and unsafe concurrency.
+Multiple Workers may overlap in time and should continue independently whenever they have non-conflicting eligible targets. Only target-scoped claims/reservations and the normal dependency, committed-state, revision, independence, and verification rules may block a particular target. No invocation-wide ownership marker, full-cycle claim, cursor reservation, or active-Worker presence may block unrelated work.
 
-README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, claim syntax, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records.
+README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, target-claim syntax, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records, but subordinate records may not reintroduce invocation-wide or full-cycle ownership.
 
 ## Planner
 
@@ -834,7 +840,7 @@ This does not limit Admin authority. Admin may explicitly authorize publication 
 
 Reviewer owns development-process control, defect analysis, bottleneck detection, corrective maintenance, and continuous improvement.
 
-Reviewer examines project execution health across issues, claims, revisions, CI/Actions, automation, auxiliary AI evidence and metrics, recurring failures, stale state, excessive latency, missing checks, fragile workflows, bug patterns, process defects, and avoidable development friction.
+Reviewer examines project execution health across issues, target claims, revisions, CI/Actions, automation, auxiliary AI evidence and metrics, recurring failures, stale state, excessive latency, missing checks, fragile workflows, bug patterns, process defects, and avoidable development friction.
 
 When evidence supports a concrete improvement, Reviewer may create a focused bug/infrastructure task and implement a scoped bug fix, workflow/configuration correction, reliability improvement, or process optimization without inventing product scope or overriding Planner-owned phase, dependency, or acceptance-criteria authority.
 
@@ -904,6 +910,8 @@ An Admin-authorized exception does not automatically convert unverified work int
 **README is the highest persistent project authority below Admin.**
 
 **Workers operate under README unless Admin explicitly instructs otherwise.**
+
+**Worker ownership is target-scoped only. No full-cycle, invocation-wide, cursor-wide, project-wide, or backlog-wide claim has authority, and one active Worker may not block another Worker from unrelated eligible work.**
 
 **Independent Tester verification is the normal verification path. If every authorized Tester identity is conflicted by accepted authorship in an otherwise-ready cumulative phase/release gate, the first Worker whose authorized turn reaches that gate may perform all required checks and issue an accurately labeled `DEADLOCK TESTER PASS`; that PASS is sufficient to advance the phase/release without falsely claiming independence for the Worker's own included work.**
 
