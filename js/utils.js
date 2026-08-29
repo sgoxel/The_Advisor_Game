@@ -51,6 +51,16 @@ window.Game.Utils = {
 // That explicit order guarantees its RNG/WorldCoordinates/RegionTerrain dependencies exist
 // before the Admin #233 100x100 compatibility contract installs.
 
+// #244 requires the deterministic starter-village footprint stamp to affect the exact
+// generated grid that app.js later installs as State.world.terrain. Parser-load this small
+// Simulation bridge now; it waits until document.readyState becomes interactive, after the
+// later static spatial/terrain scripts exist but before app.js' DOMContentLoaded rebuild.
+if (typeof document !== "undefined" && document.readyState === "loading") {
+  document.write('<script src="js/starter_village_runtime_terrain.js"><\/script>');
+} else {
+  window.Game.Utils.loadScriptOnce("js/starter_village_runtime_terrain.js", "r04StarterVillageRuntimeTerrainModule");
+}
+
 // R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
