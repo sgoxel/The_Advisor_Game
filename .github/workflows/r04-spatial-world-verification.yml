@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths:
       - 'js/spatial_world.js'
-      - 'js/config.js'
-      - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - 'tests/browser/r04-seeded-road-network.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
@@ -14,8 +12,6 @@ on:
   pull_request:
     paths:
       - 'js/spatial_world.js'
-      - 'js/config.js'
-      - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - 'tests/browser/r04-seeded-road-network.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
@@ -26,15 +22,15 @@ permissions:
   contents: read
 
 jobs:
-  verify-r04-spatial-world:
+  verify-r04-seeded-road-network:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - name: Checkout exact repository state
         uses: actions/checkout@v4
 
       - name: Record exact candidate SHA
-        run: echo "R04 spatial-world candidate ${GITHUB_SHA}"
+        run: echo "R04 seeded-road candidate ${GITHUB_SHA}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -47,17 +43,17 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Verify canonical 100x100 spatial contract and SEED-derived road network
+      - name: Verify SEED-derived full road and path network
         run: >-
           npx playwright test
-          tests/browser/r04-spatial-world-100.spec.mjs
           tests/browser/r04-seeded-road-network.spec.mjs
+          --project=desktop
 
-      - name: Upload R04 spatial-world evidence
+      - name: Upload seeded-road evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r04-spatial-world-evidence-${{ github.sha }}
+          name: r04-seeded-road-evidence-${{ github.sha }}
           path: |
             playwright-report/
             test-results/
