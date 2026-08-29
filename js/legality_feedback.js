@@ -74,7 +74,7 @@ window.Game = window.Game || {};
         state: STATES.RESOLVED,
         label: LABELS.resolved,
         summary: resolvedSummary(resolution),
-        reason: readableReason(resolution.reasonCode),
+        reason: readableReason(resolution.reasonCode) || 'Simulation resolved and committed this result.',
         reasonCode: clean(resolution.reasonCode),
         authority: 'Simulation',
         candidate,
