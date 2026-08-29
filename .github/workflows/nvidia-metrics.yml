@@ -21,6 +21,8 @@ jobs:
       pull-requests: read
     env:
       LEDGER_ISSUE: "79"
+      CURRENT_POLICY_START: "2026-08-28T18:10:19Z"
+      CURRENT_POLICY_NAME: "Nemotron Super Reviewer/Tester-only"
     steps:
       - name: Record and aggregate NVIDIA auxiliary metric
         env:
@@ -154,6 +156,22 @@ jobs:
                   | select(((.body // "") | normalized) | startswith($prefix))
                 ] | last | .html_url // ""'
           )"
+          EVIDENCE_BODY="$(
+            printf '%s' "$COMMENTS" |
+              jq -r --arg start "$STARTED_AT" --arg prefix "$REQUIRED_PREFIX" '
+                def normalized: gsub("^[[:space:]*_`#>-]+"; "");
+                [.[] | select(.created_at >= $start)
+                  | select(((.body // "") | normalized) | startswith($prefix))
+                ] | last | .body // ""'
+          )"
+          EVIDENCE_VERDICT_RAW="$(printf '%s\n' "$EVIDENCE_BODY" | sed -n 's/^[[:space:]]*VERDICT:[[:space:]]*//p' | head -n 1 | tr '[:lower:]' '[:upper:]' | xargs || true)"
+          case "$EVIDENCE_VERDICT_RAW" in
+            PASS) EVIDENCE_VERDICT="pass" ;;
+            "CHANGES REQUESTED") EVIDENCE_VERDICT="changes_requested" ;;
+            FAIL) EVIDENCE_VERDICT="fail" ;;
+            *) EVIDENCE_VERDICT="unknown" ;;
+          esac
+
           HANDOFF_COUNT="$(
             printf '%s' "$COMMENTS" |
               jq --arg start "$STARTED_AT" '
@@ -216,7 +234,7 @@ jobs:
           SOURCE_ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}"
 
           METRIC="$(jq -cn \
-            --argjson schema_version 2 \
+            --argjson schema_version 3 \
             --arg timestamp "$ENDED_AT" \
             --argjson issue_number "$ISSUE_NUMBER" \
             --arg source_issue_url "$SOURCE_ISSUE_URL" \
@@ -237,6 +255,7 @@ jobs:
             --argjson provider_503_seen "$PROVIDER_503_SEEN" \
             --argjson provider_503_count "$PROVIDER_503_COUNT" \
             --arg status "$STATUS" \
+            --arg evidence_verdict "$EVIDENCE_VERDICT" \
             --argjson evidence_count "$EVIDENCE_COUNT" \
             --arg evidence_url "$EVIDENCE_URL" \
             --argjson handoff_count "$HANDOFF_COUNT" \
@@ -245,7 +264,7 @@ jobs:
             --arg coder_pr_url "$PR_URL" \
             --argjson coder_completed "$CODER_COMPLETED" \
             --argjson ledger_issue "$LEDGER_ISSUE" \
-            '{schema_version:$schema_version,timestamp:$timestamp,issue_number:$issue_number,source_issue_url:$source_issue_url,role:$role,model:$model,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,job_id:$job_id,job_url:$job_url,job_conclusion:$job_conclusion,head_sha:$head_sha,started_at:$started_at,ended_at:$ended_at,duration_seconds:$duration_seconds,retry_used:$retry_used,job_log_available:$job_log_available,provider_503_seen:$provider_503_seen,provider_503_count:$provider_503_count,status:$status,evidence_count:$evidence_count,evidence_url:$evidence_url,handoff_count:$handoff_count,handoff_url:$handoff_url,coder_pr_count:$coder_pr_count,coder_pr_url:$coder_pr_url,coder_completed:$coder_completed,ledger_issue:$ledger_issue}')"
+            '{schema_version:$schema_version,timestamp:$timestamp,issue_number:$issue_number,source_issue_url:$source_issue_url,role:$role,model:$model,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,job_id:$job_id,job_url:$job_url,job_conclusion:$job_conclusion,head_sha:$head_sha,started_at:$started_at,ended_at:$ended_at,duration_seconds:$duration_seconds,retry_used:$retry_used,job_log_available:$job_log_available,provider_503_seen:$provider_503_seen,provider_503_count:$provider_503_count,status:$status,evidence_verdict:$evidence_verdict,evidence_count:$evidence_count,evidence_url:$evidence_url,handoff_count:$handoff_count,handoff_url:$handoff_url,coder_pr_count:$coder_pr_count,coder_pr_url:$coder_pr_url,coder_completed:$coder_completed,ledger_issue:$ledger_issue}')"
 
           gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
           gh issue comment "$LEDGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body "AI AUXILIARY METRIC: ${METRIC}" >/dev/null
@@ -259,6 +278,20 @@ jobs:
               jq '[.[]
                 | select((.body // "") | startswith("AI AUXILIARY METRIC: "))
                 | (.body | sub("^AI AUXILIARY METRIC: "; "") | fromjson?)
+              ] | map(select(. != null))'
+          )"
+          OPPORTUNITIES="$(
+            printf '%s' "$LEDGER_COMMENTS" |
+              jq '[.[]
+                | select((.body // "") | startswith("AI AUXILIARY OPPORTUNITY: "))
+                | (.body | sub("^AI AUXILIARY OPPORTUNITY: "; "") | fromjson?)
+              ] | map(select(. != null))'
+          )"
+          FOLLOWUPS="$(
+            printf '%s' "$LEDGER_COMMENTS" |
+              jq '[.[]
+                | select((.body // "") | startswith("AI AUXILIARY FOLLOW-UP: "))
+                | (.body | sub("^AI AUXILIARY FOLLOW-UP: "; "") | fromjson?)
               ] | map(select(. != null))'
           )"
 
@@ -280,6 +313,32 @@ jobs:
           TESTER_SUCCESS="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "tester" and .status == "success")] | length')"
           TESTER_HANDOFF="$(printf '%s' "$METRICS" | jq '[.[] | select(.role == "tester" and .status == "handoff")] | length')"
           SUCCESS_RATE="$(awk -v success="$SUCCESS" -v total="$TOTAL" 'BEGIN { if (total == 0) printf "0.0"; else printf "%.1f", (100 * success / total) }')"
+
+          CURRENT_METRICS="$(printf '%s' "$METRICS" | jq --arg start "$CURRENT_POLICY_START" '[.[] | select((.timestamp // "") >= $start) | select(.role == "reviewer" or .role == "tester")]')"
+          CURRENT_RUNS="$(printf '%s' "$CURRENT_METRICS" | jq 'length')"
+          CURRENT_SUCCESS="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | select(.status == "success")] | length')"
+          CURRENT_HANDOFF="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | select(.status == "handoff")] | length')"
+          CURRENT_REVIEWER="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | select(.role == "reviewer")] | length')"
+          CURRENT_TESTER="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | select(.role == "tester")] | length')"
+          CURRENT_503_RUNS="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | select((.provider_503_count // 0) > 0)] | length')"
+          CURRENT_DURATION_SUM="$(printf '%s' "$CURRENT_METRICS" | jq '[.[] | (.duration_seconds // 0)] | add // 0')"
+          CURRENT_AVG_SECONDS="$(awk -v seconds="$CURRENT_DURATION_SUM" -v total="$CURRENT_RUNS" 'BEGIN { if (total == 0) printf "0"; else printf "%.0f", (seconds / total) }')"
+          CURRENT_SUCCESS_RATE="$(awk -v success="$CURRENT_SUCCESS" -v total="$CURRENT_RUNS" 'BEGIN { if (total == 0) printf "0.0"; else printf "%.1f", (100 * success / total) }')"
+
+          CURRENT_OPPORTUNITIES="$(printf '%s' "$OPPORTUNITIES" | jq --arg start "$CURRENT_POLICY_START" '[.[] | select((.timestamp // "") >= $start)]')"
+          OPPORTUNITY_TOTAL="$(printf '%s' "$CURRENT_OPPORTUNITIES" | jq 'length')"
+          OPPORTUNITY_ROUTED="$(printf '%s' "$CURRENT_OPPORTUNITIES" | jq '[.[] | select(.disposition == "routed")] | length')"
+          OPPORTUNITY_BUSY="$(printf '%s' "$CURRENT_OPPORTUNITIES" | jq '[.[] | select(.disposition == "deferred_busy")] | length')"
+          OPPORTUNITY_FORMAL="$(printf '%s' "$CURRENT_OPPORTUNITIES" | jq '[.[] | select(.disposition == "skipped_formal_claim")] | length')"
+          OPPORTUNITY_RATE="$(awk -v routed="$OPPORTUNITY_ROUTED" -v total="$OPPORTUNITY_TOTAL" 'BEGIN { if (total == 0) printf "0.0"; else printf "%.1f", (100 * routed / total) }')"
+
+          CURRENT_FOLLOWUPS="$(printf '%s' "$FOLLOWUPS" | jq --arg start "$CURRENT_POLICY_START" '[.[] | select((.timestamp // "") >= $start)]')"
+          FOLLOWUP_TOTAL="$(printf '%s' "$CURRENT_FOLLOWUPS" | jq 'length')"
+          FOLLOWUP_AGREE="$(printf '%s' "$CURRENT_FOLLOWUPS" | jq '[.[] | select(.agreement == "agree")] | length')"
+          FOLLOWUP_DISAGREE="$(printf '%s' "$CURRENT_FOLLOWUPS" | jq '[.[] | select(.agreement == "disagree")] | length')"
+          FOLLOWUP_NOT_COMPARABLE="$(printf '%s' "$CURRENT_FOLLOWUPS" | jq '[.[] | select(.agreement == "not_comparable")] | length')"
+          FOLLOWUP_COMPARABLE="$((FOLLOWUP_AGREE + FOLLOWUP_DISAGREE))"
+          AGREEMENT_RATE="$(awk -v agree="$FOLLOWUP_AGREE" -v total="$FOLLOWUP_COMPARABLE" 'BEGIN { if (total == 0) printf "0.0"; else printf "%.1f", (100 * agree / total) }')"
 
           MODEL_ROWS="$(
             printf '%s' "$METRICS" |
@@ -309,13 +368,20 @@ jobs:
                   else (last | "#" + (.issue_number|tostring) + " / " + .role + " / " + .status + " / run " + (.run_id|tostring) + " / " + .timestamp)
                   end'
           )"
+          CURRENT_LATEST="$(
+            printf '%s' "$CURRENT_METRICS" |
+              jq -r 'sort_by(.timestamp)
+                | if length == 0 then "None yet"
+                  else (last | "#" + (.issue_number|tostring) + " / " + .role + " / " + .status + " / run " + (.run_id|tostring) + " / " + .timestamp)
+                  end'
+          )"
 
           cat > /tmp/nvidia-ledger.md <<EOF2
           # NVIDIA Agent Metrics Ledger
 
-          Central observability dashboard for auxiliary NVIDIA Nemotron Coder/Reviewer/Tester runs. The append-only AI AUXILIARY METRIC comments on this issue are the machine-readable source records; this body is regenerated from those records after every instrumented AI Developer completion.
+          Central observability dashboard for auxiliary NVIDIA Nemotron Reviewer/Tester runs, with historical Coder-era compatibility data retained for audit. Append-only `AI AUXILIARY METRIC`, `AI AUXILIARY OPPORTUNITY`, and `AI AUXILIARY FOLLOW-UP` comments are the machine-readable source records; this body is regenerated after every instrumented AI Developer completion.
 
-          ## Aggregate statistics
+          ## Aggregate historical statistics
 
           | Metric | Value |
           | --- | ---: |
@@ -324,13 +390,13 @@ jobs:
           | Handoffs to formal Workers | ${HANDOFF} |
           | Overall auxiliary success rate | ${SUCCESS_RATE}% |
           | Runs using the bounded outer NVIDIA HTTP 503 retry | ${RETRIES} |
-          | Runs with provider/OpenCode 503 observed in schema-v2 logs | ${PROVIDER_503_RUNS} |
-          | Provider/OpenCode 503 events observed in schema-v2 logs | ${PROVIDER_503_EVENTS} |
-          | NVIDIA Coder attempts | ${CODER_RUNS} |
-          | NVIDIA Coder successful/verifiable runs | ${CODER_SUCCESS} |
-          | NVIDIA Coder handoffs | ${CODER_HANDOFF} |
-          | NVIDIA Coder completed-run records | ${CODER_COMPLETED_RUNS} |
-          | Distinct real issues completed by NVIDIA Coder gate | ${CODER_COMPLETED_ISSUES} |
+          | Runs with provider/OpenCode 503 observed in schema-v2+ logs | ${PROVIDER_503_RUNS} |
+          | Provider/OpenCode 503 events observed in schema-v2+ logs | ${PROVIDER_503_EVENTS} |
+          | Historical NVIDIA Coder attempts | ${CODER_RUNS} |
+          | Historical NVIDIA Coder successful/verifiable runs | ${CODER_SUCCESS} |
+          | Historical NVIDIA Coder handoffs | ${CODER_HANDOFF} |
+          | Historical NVIDIA Coder completed-run records | ${CODER_COMPLETED_RUNS} |
+          | Distinct historical Coder issues completed by old gate | ${CODER_COMPLETED_ISSUES} |
           | NVIDIA Reviewer attempts | ${REVIEWER_RUNS} |
           | NVIDIA Reviewer successes | ${REVIEWER_SUCCESS} |
           | NVIDIA Reviewer handoffs | ${REVIEWER_HANDOFF} |
@@ -338,7 +404,43 @@ jobs:
           | NVIDIA Tester successes | ${TESTER_SUCCESS} |
           | NVIDIA Tester handoffs | ${TESTER_HANDOFF} |
 
-          ## Model-specific performance
+          ## Current Reviewer/Tester policy
+
+          Policy: **${CURRENT_POLICY_NAME}** since `${CURRENT_POLICY_START}` (exact policy verification commit `db2038af36e64f77f3712addc2b75fb1970808d8`).
+
+          | Metric | Value |
+          | --- | ---: |
+          | Current-policy instrumented runs | ${CURRENT_RUNS} |
+          | Current-policy Reviewer runs | ${CURRENT_REVIEWER} |
+          | Current-policy Tester runs | ${CURRENT_TESTER} |
+          | Current-policy successes | ${CURRENT_SUCCESS} |
+          | Current-policy handoffs | ${CURRENT_HANDOFF} |
+          | Current-policy success rate | ${CURRENT_SUCCESS_RATE}% |
+          | Current-policy average duration seconds | ${CURRENT_AVG_SECONDS} |
+          | Current-policy runs with provider 503 | ${CURRENT_503_RUNS} |
+          | Latest current-policy run | ${CURRENT_LATEST} |
+
+          ## Preflight routing opportunities
+
+          | Metric | Value |
+          | --- | ---: |
+          | Recorded current-policy suitable opportunities | ${OPPORTUNITY_TOTAL} |
+          | Routed to NVIDIA | ${OPPORTUNITY_ROUTED} |
+          | Deferred because NVIDIA slot was busy | ${OPPORTUNITY_BUSY} |
+          | Skipped because formal Worker already claimed target | ${OPPORTUNITY_FORMAL} |
+          | Opportunity routing conversion | ${OPPORTUNITY_RATE}% |
+
+          ## Formal follow-up agreement
+
+          | Metric | Value |
+          | --- | ---: |
+          | Current-policy follow-up records | ${FOLLOWUP_TOTAL} |
+          | Comparable agreements | ${FOLLOWUP_AGREE} |
+          | Comparable disagreements | ${FOLLOWUP_DISAGREE} |
+          | Not comparable | ${FOLLOWUP_NOT_COMPARABLE} |
+          | Agreement rate on comparable verdicts | ${AGREEMENT_RATE}% |
+
+          ## Model-specific historical performance
 
           | Model | Attempts | Success | Handoff | Success rate | Runs with provider 503 | Provider 503 events | Coder issues completed |
           | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -354,15 +456,19 @@ jobs:
 
           ## Definitions
 
-          - success means the AI Developer finalize gate routed the auxiliary result to ai-awaiting-review.
-          - handoff means the auxiliary result was routed to ai-handoff for formal Worker continuation.
-          - retry_used tracks only the explicit bounded outer retry in the composite action.
-          - provider_503_count/provider_503_seen are schema-v2 fields derived from the exact completed role-job log and include OpenCode/NVIDIA internal overload events that do not trigger the outer retry.
+          - `success` means the AI Developer finalize gate routed the auxiliary result to `ai-awaiting-review`; it is not formal verification.
+          - `handoff` means the auxiliary result was routed to `ai-handoff` for formal Worker continuation.
+          - `evidence_verdict` is schema-v3 normalized evidence from the explicit `VERDICT:` line; historical records without it remain valid with unknown verdict.
+          - `retry_used` tracks only the explicit bounded outer retry in the composite action.
+          - `provider_503_count/provider_503_seen` are schema-v2+ fields derived from the exact completed role-job log and include OpenCode/NVIDIA internal overload events that do not trigger the outer retry.
           - Historical schema-v1 metric comments remain append-only and are not rewritten; their provider 503 fields are unknown and therefore excluded from provider-503 totals.
+          - Current-policy metrics intentionally exclude historical Coder execution and pre-policy runs.
+          - `AI AUXILIARY OPPORTUNITY` is recorded by Planner only when a suitable candidate actually exists; it is not a count of every Planner scan.
+          - `routed` means one supported role plus `ai-ready` was assigned; `deferred_busy` means the single NVIDIA slot was occupied; `skipped_formal_claim` avoids racing a formal Worker already testing the target.
+          - `AI AUXILIARY FOLLOW-UP` compares NVIDIA evidence with a later genuinely comparable formal verdict. `not_comparable` is required when the two roles answer different questions.
           - Evidence matching tolerates harmless leading Markdown wrappers but still requires the normalized comment to begin with the exact role evidence marker.
-          - coder_completed is true only for role=coder when terminal status is success, required AI CODER EVIDENCE exists, no direct AI-HANDOFF exists for that run, and at least one open PR references the source issue.
-          - coder_completed is auxiliary completion evidence only. It is not independent Tester PASS, merge approval, phase approval, or release approval.
-          - AI Developer runs that never invoke NVIDIA are intentionally excluded because they have no AI AUXILIARY RUN marker.
+          - `coder_completed` is historical compatibility data only and cannot re-enable NVIDIA Coder routing.
+          - AI Developer runs that never invoke NVIDIA are intentionally excluded because they have no `AI AUXILIARY RUN` marker.
 
           Last regenerated: ${ENDED_AT}
           EOF2
