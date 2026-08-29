@@ -1,5 +1,5 @@
 /*
-  R02-T16 / #111: local NPC world-presence and routine foundation.
+  R02-T16 / #111 + R04 / #228: local NPC world presence and character-derived presentation.
 
   Simulation owns NPC identity, location, activity and routine state. Rendering is a
   derived 2D overlay projected onto the existing strategic world; it never becomes
@@ -8,7 +8,7 @@
 (function installNpcWorldFoundation() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r02-npc-world-v2';
+  const VERSION = 'r04-character-world-icons-v1';
   const CYCLE_MS = 24000;
   const MAX_VISIBLE_NPCS = 16;
 
@@ -28,9 +28,28 @@
     villager: 'trade'
   });
 
+  // #227 identity families are presentation mappings only. The occupation key comes
+  // from authoritative NPC state; loading success/failure cannot alter that state.
+  const WORLD_ICON_BY_OCCUPATION = Object.freeze({
+    guard: 'assets/characters/world/guard.png',
+    healer: 'assets/characters/world/healer.png',
+    innkeeper: 'assets/characters/world/merchant.png',
+    trader: 'assets/characters/world/merchant.png',
+    baker: 'assets/characters/world/worker.png',
+    blacksmith: 'assets/characters/world/worker.png',
+    carpenter: 'assets/characters/world/worker.png',
+    laborer: 'assets/characters/world/worker.png',
+    farmer: 'assets/characters/world/worker.png',
+    herder: 'assets/characters/world/worker.png',
+    miller: 'assets/characters/world/worker.png',
+    woodcutter: 'assets/characters/world/worker.png',
+    villager: 'assets/characters/world/villager.png'
+  });
+
   let overlayCanvas = null;
   let renderHookInstalled = false;
   let terrainHookInstalled = false;
+  const worldIconCache = new Map();
 
   function stableOffset(id) {
     const text = String(id || 'npc');
@@ -208,6 +227,72 @@
     return overlayCanvas;
   }
 
+  function worldIconAssetFor(npc) {
+    if (!npc || npc.authority !== 'simulation') return '';
+    return WORLD_ICON_BY_OCCUPATION[String(npc.occupation || '').toLowerCase()] || '';
+  }
+
+  function requestWorldIcon(src) {
+    if (!src || typeof Image === 'undefined') return null;
+    if (worldIconCache.has(src)) return worldIconCache.get(src);
+    const record = { status: 'loading', image: null };
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => {
+      record.status = 'ready';
+      record.image = image;
+      // Loading is presentation-only. Redrawing does not mutate Simulation state.
+      drawPresentation();
+    };
+    image.onerror = () => {
+      record.status = 'failed';
+      record.image = null;
+      drawPresentation();
+    };
+    image.src = src;
+    worldIconCache.set(src, record);
+    return record;
+  }
+
+  function preloadWorldIcons() {
+    for (const src of new Set(Object.values(WORLD_ICON_BY_OCCUPATION))) requestWorldIcon(src);
+  }
+
+  function drawNeutralPersonFallback(ctx, npc, radius) {
+    const accent = npc.activity === 'working' ? '#f1c75b' : '#d8e7ef';
+    ctx.fillStyle = 'rgba(20, 28, 36, 0.38)';
+    ctx.beginPath();
+    ctx.ellipse(radius * 0.5, radius * 1.1, radius * 1.25, radius * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.strokeStyle = '#26343d';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(0, -radius * 1.8, radius * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.7, -radius * 1.05);
+    ctx.lineTo(radius * 0.7, -radius * 1.05);
+    ctx.lineTo(radius * 0.95, radius * 0.9);
+    ctx.lineTo(-radius * 0.95, radius * 0.9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawNpcCharacter(ctx, npc, radius) {
+    const asset = worldIconAssetFor(npc);
+    const record = requestWorldIcon(asset);
+    if (record?.status === 'ready' && record.image) {
+      const size = Math.max(18, Math.min(32, radius * 5.2));
+      ctx.drawImage(record.image, -size / 2, -size * 0.82, size, size);
+      return 'png';
+    }
+    drawNeutralPersonFallback(ctx, npc, radius);
+    return asset ? 'fallback-loading-or-failed' : 'fallback-unmapped';
+  }
+
   function drawPresentation() {
     const canvas = ensureOverlay();
     const Renderer = Game.Renderer;
@@ -230,6 +315,8 @@
     ctx.clearRect(0, 0, width, height);
 
     let visibleCount = 0;
+    let pngCount = 0;
+    let fallbackCount = 0;
     for (const npc of world.npcs) {
       const point = Renderer.gridToScreen(npc.row, npc.col, 0, 0);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
@@ -238,24 +325,17 @@
       const radius = Math.max(3, Math.min(6, width / 180));
       ctx.save();
       ctx.translate(point.x, point.y);
-      ctx.fillStyle = 'rgba(20, 28, 36, 0.38)';
-      ctx.beginPath();
-      ctx.ellipse(radius * 0.5, radius * 1.1, radius * 1.25, radius * 0.55, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = npc.activity === 'working' ? '#f1c75b' : '#d8e7ef';
-      ctx.strokeStyle = '#26343d';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(0, -radius * 1.8, radius * 0.72, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillRect(-radius * 0.62, -radius * 1.05, radius * 1.24, radius * 1.8);
-      ctx.strokeRect(-radius * 0.62, -radius * 1.05, radius * 1.24, radius * 1.8);
+      const renderKind = drawNpcCharacter(ctx, npc, radius);
+      if (renderKind === 'png') pngCount += 1;
+      else fallbackCount += 1;
       ctx.restore();
       visibleCount += 1;
     }
     canvas.dataset.npcCount = String(world.npcs.length);
     canvas.dataset.visibleNpcCount = String(visibleCount);
+    canvas.dataset.pngNpcCount = String(pngCount);
+    canvas.dataset.fallbackNpcCount = String(fallbackCount);
+    canvas.dataset.presentationAuthority = 'presentation-only';
   }
 
   function installTerrainHook() {
@@ -300,6 +380,7 @@
     bindFromOriginVillage();
     installTerrainHook();
     installRenderHook();
+    preloadWorldIcons();
     ensureOverlay();
     drawPresentation();
   }
@@ -307,7 +388,9 @@
   Game.NPCWorld = Object.freeze({
     version: VERSION,
     authority: 'simulation',
+    presentationAuthority: 'presentation-only',
     maxVisibleNpcs: MAX_VISIBLE_NPCS,
+    worldIconAssetFor,
     bindFromOriginVillage,
     updateAt,
     capture,
