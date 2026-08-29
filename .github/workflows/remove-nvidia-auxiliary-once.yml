@@ -1,0 +1,183 @@
+name: Remove NVIDIA Auxiliary Pipeline Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-nvidia-auxiliary-once.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact trigger state
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Remove auxiliary pipeline and persist Admin policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ChatGPT Admin Maintenance"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          remove_paths = [
+              "opencode.json",
+              ".github/AI_AUXILIARY_RULES.md",
+              ".github/NVIDIA_RELIABILITY_POLICY.md",
+              ".github/actions/opencode-nvidia/action.yml",
+              ".github/workflows/ai-developer.yml",
+              ".github/workflows/ai-developer-static-verification.yml",
+              ".github/workflows/nvidia-evidence-repair-static.yml",
+              ".github/workflows/nvidia-metrics.yml",
+          ]
+          for raw in remove_paths:
+              path = Path(raw)
+              if path.exists():
+                  path.unlink()
+
+          readme_path = Path("README.md")
+          readme = readme_path.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  "Ownership and collision protection are **target-scoped only**. A valid live `WORK-CLAIM` may protect the specific issue/task it names, and an allowed NVIDIA reservation may protect only its specific target. If another Worker already owns a conflicting target, the later Worker skips or clears only that target conflict and continues with other eligible work. Dependencies, exact committed-state requirements, revision state, Worker independence, and NVIDIA target ownership remain additional target-specific safety controls.",
+                  "Ownership and collision protection are **target-scoped only**. A valid live `WORK-CLAIM` may protect the specific issue/task it names. If another Worker already owns a conflicting target, the later Worker skips or clears only that target conflict and continues with other eligible work. Dependencies, exact committed-state requirements, revision state, and Worker independence remain additional target-specific safety controls."
+              ),
+              (
+                  "it is not protected by another live target claim or target-specific auxiliary reservation, it has no blocking unresolved revision or required external wait",
+                  "it is not protected by another live target claim, it has no blocking unresolved revision or required external wait"
+              ),
+              (
+                  "Reviewer examines project execution health across issues, target claims, revisions, CI/Actions, automation, auxiliary AI evidence and metrics, recurring failures, stale state, excessive latency, missing checks, fragile workflows, bug patterns, process defects, and avoidable development friction.",
+                  "Reviewer examines project execution health across issues, target claims, revisions, CI/Actions, automation, recurring failures, stale state, excessive latency, missing checks, fragile workflows, bug patterns, process defects, and avoidable development friction."
+              ),
+          ]
+          for old, new in replacements:
+              if old not in readme:
+                  raise SystemExit(f"Expected README text not found: {old[:100]}")
+              readme = readme.replace(old, new, 1)
+          for forbidden in ("NVIDIA", "Nemotron", "auxiliary AI", "auxiliary reservation"):
+              if forbidden in readme:
+                  raise SystemExit(f"README still contains removed process term: {forbidden}")
+          readme_path.write_text(readme, encoding="utf-8")
+
+          rotation = r'''# Worker Rotation Protocol
+
+This file defines operational HOW below explicit Admin instructions and `README.md`.
+
+## Authority
+
+- Read current `main/README.md` before project work.
+- Authority order: Admin explicit instruction -> README -> ROADMAP -> TODO -> issues -> code/assets -> tests.
+- Never modify README without explicit Admin authorization.
+- GitHub is the sole project workspace and durable audit record.
+
+## Worker identities
+
+Scheduled Workers are persistent identities `Worker #1` through `Worker #5`.
+Workers `#6` through `#20` are manual-only Admin-invoked persistent identities and never consume or alter the scheduled cursor.
+
+## Role cycle
+
+`Planner -> Coder -> Designer -> Tester -> Reviewer -> Planner`
+
+The latest valid `WORKER ROTATION STATE:` on issue #97 supplies only the starting role for the next scheduled Worker. A cursor is routing information, never ownership.
+
+## Maximum work-conserving execution
+
+Starting at the assigned role, traverse the cycle and perform all safely eligible work in project-priority order.
+
+Within each role, process as many eligible targets sequentially as possible. After every material issue/commit/check/revision/dependency change, re-fetch relevant GitHub state and re-evaluate eligibility. Continue passes while useful progress or eligibility changes occur. Stop normally only after one complete five-role pass produces no eligible progress.
+
+Never invent work, retry an unchanged blocker indefinitely, or idle on an external wait when another unrelated eligible target exists.
+
+## Target-scoped claim invariant
+
+A Worker may hold at most one live formal `WORK-CLAIM`, and only for the single concrete issue/task actively being worked.
+
+Before moving to another issue or role target, clear/yield the current target claim. A claim on issue A has zero ownership effect on issue B. Parent/child, sibling, same-feature, dependency, role, pass, cursor, phase, backlog, chain, batch, queue, or invocation relationships never create broader ownership.
+
+Use a two-phase safety check before writes: inspect target state, claim the exact target when collision protection is needed, then immediately re-fetch and abandon the claim if an earlier conflicting claim exists.
+
+If a target becomes blocked or waits on CI/another Worker and the Worker moves elsewhere, record the pending state, clear/yield that target claim, and continue.
+
+## Role authority
+
+### Planner
+Owns planning below README: phase/order/dependencies/architecture/organization/decomposition/scope/acceptance criteria/routing/release prerequisites and ROADMAP/TODO consistency. Maintains legitimate deep and executable work inventory without filler or false dependencies. Does not implement product code/design or approve release work.
+
+### Coder
+Owns approved technical implementation, integration, configuration and implementation-focused tests. Does not redefine Planner scope/AC/dependencies/phase order. Planning changes require a Planner revision request.
+
+### Designer
+Owns approved UI/UX, 2D/2.5D/3D visual production, assets, terrain/world/map presentation, responsiveness, accessibility and visual performance. Runtime/gameplay/simulation logic remains Coder-owned unless explicitly approved as integration work.
+
+### Tester
+Independent committed-state verification authority. Verifies exact SHA/files/assets/CI/browser/responsive/accessibility/performance/public behavior as applicable. Tester does not repair product/design code while verifying. Defects return through the same issue as a Tester revision request. Normal phase/release approval requires an independent Worker identity unless the README-defined cumulative Tester-deadlock exception truly applies.
+
+### Reviewer
+Owns process control, defect/root-cause analysis, CI/workflow reliability, bottleneck correction and continuous improvement. Reviewer may implement focused evidenced process/workflow/config fixes but cannot override Planner scope/AC/dependencies/phase authority and cannot independently approve its own changes.
+
+## Independence
+
+No Worker independently PASSes or approves its own prior implementation, design, revision, bug fix, workflow/process fix, or other authored change except the narrowly defined README cumulative Tester-deadlock gate. Coder/Designer/Reviewer changes normally require Tester verification by a different Worker identity.
+
+## Revisions
+
+- Planning changes required by Coder/Designer/Reviewer -> `PLANNER REVISION REQUEST` on the same issue; Planner records ACCEPTED or REJECTED with evidence.
+- Tester defects -> reopen/use the same issue and record `TESTER REVISION REQUEST` with repro, evidence, expected behavior, affected refs and required correction. The responsible role accepts/fixes or rejects with evidence; a different eligible Tester retests.
+
+## Audit and completion
+
+Every change maps to an issue/task and records English audit evidence: purpose, change, refs/files, checks, result, risks/blockers and next action.
+
+Close work only after required commits/assets, checks, resolved revisions and required verification are complete. Do not claim independent PASS without eligible independent Tester evidence.
+
+## Scheduled run result
+
+Each scheduled Worker posts one `WORKER ROTATION RESULT:` on #97 containing starting role, roles/passes, targets, commits/PRs, checks, revisions/blockers, continuation state, `claims_acquired_this_run`, `claims_cleared_this_run`, and `live_claims_at_end`.
+
+Normally `live_claims_at_end=0`. If no target was acquired, also record `eligible_targets_found` and brief exclusion reasons.
+
+The next scheduled starting role is the successor of the last role that performed useful work; if no useful progress occurred, preserve the original starting role.
+'''
+          Path(".github/WORKER_ROTATION.md").write_text(rotation, encoding="utf-8")
+
+          Path(".github/workflows/remove-nvidia-auxiliary-once.yml").unlink()
+          PY
+
+          if git grep -n -E 'NVIDIA|Nemotron|AI_AUXILIARY|ai-ready|ai-running|ai-awaiting-review|ai-handoff|ai-role-(coder|reviewer|tester)|opencode-nvidia|target-specific auxiliary reservation|auxiliary AI evidence' -- ':!backup/**'; then
+            echo "Removed process markers still exist in tracked repository content." >&2
+            exit 1
+          fi
+
+          remote_head="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "$remote_head" != "$GITHUB_SHA" ]; then
+            echo "Collision: main advanced from trigger SHA $GITHUB_SHA to $remote_head; refusing to overwrite newer work." >&2
+            exit 1
+          fi
+
+          git add -A
+          git diff --cached --check
+          git diff --cached --name-status
+          git commit -m "Admin #310: remove NVIDIA/Nemotron auxiliary pipeline"
+          git push origin HEAD:main
+
+      - name: Remove obsolete routing labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for label in ai-ready ai-role-coder ai-role-reviewer ai-role-tester ai-running work-claimed ai-awaiting-review ai-handoff; do
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/labels/${label}" >/dev/null 2>&1 || true
+          done
