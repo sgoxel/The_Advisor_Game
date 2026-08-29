@@ -46,10 +46,12 @@ test('normal startup resolves the full active NPC population without occupancy e
       populationCount: world.originVillage.population.length,
       npcCount: npcs.length,
       positions: npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col })),
-      regionSize: window.Game.NPCSpatial.regionSize
+      regionSize: window.Game.NPCSpatial.regionSize,
+      spatialVersion: window.Game.NPCSpatial.version
     };
   });
 
+  expect(snapshot.spatialVersion).toBe('admin-100x100-npc-spatial-v1');
   expect(snapshot.npcCount).toBe(snapshot.populationCount);
   expect(snapshot.npcCount).toBeGreaterThanOrEqual(20);
   expect(snapshot.positions.every(({ row, col }) => Number.isInteger(row) && Number.isInteger(col))).toBe(true);
