@@ -5,7 +5,8 @@ async function waitForOriginVillage(page) {
   await page.waitForFunction(() => Boolean(
     window.Game?.OriginVillage?.generate &&
     window.Game?.State?.world?.originVillage?.inhabited &&
-    window.Game?.State?.world?.terrain?.length
+    window.Game?.State?.world?.terrain?.length === 100 &&
+    window.Game?.RegionTerrain?.regionSize === 100
   ));
 }
 
@@ -28,6 +29,7 @@ test('same compatible seed reproduces equivalent inhabited origin base state', a
   expect(evidence.first.region.y).toBe(0);
   expect(evidence.first.protagonistOrigin).toMatchObject({ regionX: 0, regionY: 0, worldX: 0, worldY: 0 });
   expect(evidence.first.village.inhabited).toBe(true);
+  expect(evidence.first.village.regionSize).toBe(100);
   expect(evidence.first.village.buildings.length).toBeGreaterThanOrEqual(10);
   expect(evidence.first.village.population.length).toBeGreaterThanOrEqual(12);
   expect(evidence.first.village.paths.length).toBe(evidence.first.village.buildings.length - 1);
@@ -54,21 +56,30 @@ test('origin village covers required settlement functions with stable simulation
     expect(person.regionX).toBe(0);
     expect(person.regionY).toBe(0);
     expect(base.village.buildings.some((building) => building.id === person.homeBuildingId)).toBe(true);
+    expect(base.village.buildings.some((building) => building.id === person.workBuildingId)).toBe(true);
   }
 });
 
-test('new campaign generation binds runtime to origin region without direct player control', async ({ page }) => {
+test('new campaign generation binds runtime to canonical 100x100 origin region without direct player control', async ({ page }) => {
   await waitForOriginVillage(page);
   await page.getByRole('button', { name: /Settings/i }).click();
   await page.locator('#seedInput').fill('R02-ORIGIN-RUNTIME');
-  await page.locator('#mapWidthInput').fill('24');
-  await page.locator('#mapHeightInput').fill('24');
+  await expect(page.locator('#mapWidthInput')).toHaveValue('100');
+  await expect(page.locator('#mapHeightInput')).toHaveValue('100');
+  await expect(page.locator('#mapWidthInput')).toHaveAttribute('readonly', '');
+  await expect(page.locator('#mapHeightInput')).toHaveAttribute('readonly', '');
   await page.locator('#applySettingsBtn').click();
-  await page.waitForFunction(() => window.Game.State.world.seed === 'R02-ORIGIN-RUNTIME' && window.Game.State.world.originVillage?.inhabited);
+  await page.waitForFunction(() => (
+    window.Game.State.world.seed === 'R02-ORIGIN-RUNTIME' &&
+    window.Game.State.world.originVillage?.inhabited &&
+    window.Game.State.world.rows === 100 &&
+    window.Game.State.world.cols === 100
+  ));
 
   const runtime = await page.evaluate(() => ({
     region: window.Game.State.world.currentRegion,
     village: window.Game.State.world.originVillage,
+    dimensions: { rows: window.Game.State.world.rows, cols: window.Game.State.world.cols },
     player: {
       row: window.Game.State.world.player.row,
       col: window.Game.State.world.player.col,
@@ -83,6 +94,7 @@ test('new campaign generation binds runtime to origin region without direct play
 
   expect(runtime.region.x).toBe(0);
   expect(runtime.region.y).toBe(0);
-  expect(runtime.player).toMatchObject({ moving: false, regionX: 0, regionY: 0, worldX: 0, worldY: 0 });
+  expect(runtime.dimensions).toEqual({ rows: 100, cols: 100 });
+  expect(runtime.player).toMatchObject({ moving: false, regionX: 0, regionY: 0, worldX: 0, worldY: 0, row: 50, col: 50 });
   expect(stable(runtime.village)).toBe(stable(runtime.expected.village));
 });
