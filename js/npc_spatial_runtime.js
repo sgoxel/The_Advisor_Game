@@ -273,8 +273,11 @@
         break;
       }
       if (!chosen) {
-        // Emergency deterministic free-tile search; preserves no-overlap invariant.
-        outer: for (let radius = 1; radius <= 4; radius += 1) {
+        // Emergency deterministic free-tile search across the complete bounded region.
+        // A 100x100 region has a maximum in-bounds Manhattan separation of 198 tiles;
+        // searching 2 * REGION_SIZE guarantees that legal remaining capacity is found
+        // without relaxing no-overlap, building or road/path legality.
+        outer: for (let radius = 1; radius <= REGION_SIZE * 2; radius += 1) {
           for (let dr = -radius; dr <= radius; dr += 1) {
             for (let dc = -radius; dc <= radius; dc += 1) {
               if (Math.abs(dr) + Math.abs(dc) !== radius) continue;
