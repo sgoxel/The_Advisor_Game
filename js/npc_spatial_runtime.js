@@ -342,15 +342,24 @@
   }
 
   function updateAt(_legacyElapsedMs = null) {
+    const worldBefore = Game.State?.world;
+    const totalGameMinutes = authoritativeGameMinutes();
+    const step = Math.floor(totalGameMinutes);
+    const priorRuntime = worldBefore?.npcRuntime;
+    const priorStateKey = `${String(worldBefore?.seed || '')}|${String(priorRuntime?.bindingKey || '')}|${step}`;
+    if (Array.isArray(worldBefore?.npcs) && worldBefore.npcs.length > 0 && priorRuntime?.lastRoutineStateKey === priorStateKey) {
+      priorRuntime.lastSpatialGameMinutes = totalGameMinutes;
+      return true;
+    }
+
     if (!ensureSpatialNpcs()) return false;
     const world = Game.State.world;
     const village = world.originVillage;
     const roads = roadSet(village);
-    const totalGameMinutes = authoritativeGameMinutes();
+    const stateKey = `${String(world.seed || '')}|${String(world.npcRuntime?.bindingKey || '')}|${step}`;
     const desiredMap = new Map();
     for (const npc of world.npcs) desiredMap.set(npc.id, desiredFor(npc, totalGameMinutes));
     const dialoguePlan = chooseDialoguePlan(world.npcs, totalGameMinutes, village, roads);
-    const step = Math.floor(totalGameMinutes);
     const resolution = resolveOccupancy(world.npcs, desiredMap, { village, roads, seed: world.seed, step, dialoguePlan });
 
     for (const npc of world.npcs) {
@@ -389,6 +398,7 @@
       }
     }
 
+    world.npcRuntime.lastRoutineStateKey = stateKey;
     world.npcRuntime.lastSpatialGameMinutes = totalGameMinutes;
     world.npcRuntime.collisionCount = resolution.collisionCount;
     world.npcRuntime.sideStepCount = resolution.sideStepCount;
