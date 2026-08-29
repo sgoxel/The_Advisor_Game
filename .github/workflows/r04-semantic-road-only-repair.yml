@@ -1,0 +1,203 @@
+name: R04 Semantic Road Only Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/r04-semantic-road-only-repair.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout triggering main state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebase onto latest main before patching
+        run: |
+          git pull --rebase origin main
+          git rev-parse HEAD
+
+      - name: Apply semantic-road-only correction
+        shell: python
+        run: |
+          from pathlib import Path
+
+          renderer_path = Path('js/renderer.js')
+          renderer = renderer_path.read_text(encoding='utf-8')
+          start_marker = '  function drawRoadOverlay(ctx, cellWidth, cellHeight) {'
+          end_marker = '\n\n  function redrawElevatedTerrainOverRoads(ctx, baseImageData, cellWidth, cellHeight) {'
+          start = renderer.find(start_marker)
+          end = renderer.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('Expected legacy drawRoadOverlay block was not found; refusing unsafe patch.')
+          replacement = '''  function drawRoadOverlay() {
+            // Admin #286: the legacy procedural road layer is disabled. The base terrain
+            // remains terrain-aware through getVisualTileAppearance()/getRoadBaseAppearance(),
+            // while js/starter_village_roads.js is the sole visible road-art renderer.
+            return;
+          }'''
+          renderer = renderer[:start] + replacement + renderer[end:]
+          renderer_path.write_text(renderer, encoding='utf-8')
+
+          roads_path = Path('js/starter_village_roads.js')
+          roads = roads_path.read_text(encoding='utf-8')
+          replacements = [
+              ("const VERSION = 'r04-starter-village-roads-v2-semantic-png';", "const VERSION = 'r04-starter-village-roads-v3-semantic-only-png';"),
+              ("console.warn('Semantic road tiles unavailable; preserving vector road fallback.', error);", "console.warn('Semantic road tiles unavailable; legacy road rendering remains disabled.', error);"),
+              ("    const drawnRoadTileCount = semanticAssetState === 'ready' ? semanticDrawnCount : vectorFallbackCount;", "    const drawnRoadTileCount = semanticDrawnCount;"),
+              ("      presentationMode: semanticAssetState === 'ready' ? MODE : 'authoritative-continuous-packed-earth-fallback',", "      presentationMode: semanticAssetState === 'ready'\n        ? MODE\n        : (semanticAssetState === 'failed' ? 'semantic-road-assets-unavailable' : 'semantic-road-assets-loading'),"),
+              ("      legacySquareHolePattern: 'masked',", "      legacySquareHolePattern: 'disabled',"),
+              ("      roadWidthPx: roadWidth ? roadWidth.toFixed(2) : 'semantic-tile',", "      roadWidthPx: 'semantic-tile',"),
+              ("      vectorFallbackCount: String(vectorFallbackCount),", "      vectorFallbackCount: '0',\n      legacyVectorRenderer: 'disabled',\n      legacyTerrainRoadOverlay: 'disabled',")
+          ]
+          for old, new in replacements:
+              if old not in roads:
+                  raise SystemExit(f'Expected starter-road text not found: {old}')
+              roads = roads.replace(old, new, 1)
+
+          legacy_start = roads.find('\n  function drawLine(ctx, a, b, width, style) {')
+          presentation_start = roads.find('\n\n  function drawPresentation() {', legacy_start)
+          if legacy_start < 0 or presentation_start < 0:
+              raise SystemExit('Expected legacy vector helper block was not found; refusing unsafe patch.')
+          roads = roads[:legacy_start] + roads[presentation_start:]
+
+          old_state = '''    let semanticDrawnCount = 0;
+              let semanticUnsupportedCount = 0;
+              let vectorFallbackCount = 0;
+              let segmentCount = 0;
+              let roadWidth = 0;'''.replace('              ', '    ')
+          new_state = '''    let semanticDrawnCount = 0;
+              let semanticUnsupportedCount = 0;'''.replace('              ', '    ')
+          if old_state not in roads:
+              raise SystemExit('Expected legacy fallback counters were not found.')
+          roads = roads.replace(old_state, new_state, 1)
+
+          old_else = '''    } else {
+              const fallback = drawVectorFallback(ctx, topology, invalid);
+              vectorFallbackCount = fallback.drawnCount;
+              segmentCount = fallback.segmentCount;
+              roadWidth = fallback.roadWidth;
+            }'''.replace('              ', '      ')
+          if old_else not in roads:
+              raise SystemExit('Expected legacy fallback branch was not found.')
+          roads = roads.replace(old_else, '    }', 1)
+          roads = roads.replace("      segmentCount: String(segmentCount),", "      segmentCount: '0',", 1)
+          roads_path.write_text(roads, encoding='utf-8')
+
+          test_path = Path('tests/browser/r04-starter-village-roads.spec.mjs')
+          spec = test_path.read_text(encoding='utf-8')
+          spec = spec.replace("        vectorFallbackCount: Number(overlay?.dataset.vectorFallbackCount || 0),\n        semanticRegistry:", "        vectorFallbackCount: Number(overlay?.dataset.vectorFallbackCount || 0),\n        legacyVectorRenderer: overlay?.dataset.legacyVectorRenderer,\n        legacyTerrainRoadOverlay: overlay?.dataset.legacyTerrainRoadOverlay,\n        semanticRegistry:", 1)
+          spec = spec.replace("  expect(evidence.overlay.legacyPattern).toBe('masked');", "  expect(evidence.overlay.legacyPattern).toBe('disabled');", 1)
+          spec = spec.replace("  expect(evidence.overlay.vectorFallbackCount).toBe(0);", "  expect(evidence.overlay.vectorFallbackCount).toBe(0);\n  expect(evidence.overlay.legacyVectorRenderer).toBe('disabled');\n  expect(evidence.overlay.legacyTerrainRoadOverlay).toBe('disabled');", 1)
+          spec = spec.replace("    expect(evidence.legacyPattern).toBe('masked');", "    expect(evidence.legacyPattern).toBe('disabled');")
+
+          semantic_only_test = r'''
+
+test('semantic asset failure never restores either legacy road renderer', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.route('**/textures/tiles/road/*.png', (route) => route.abort());
+  await ready(page);
+
+  const evidence = await page.evaluate(async () => {
+    const Game = window.Game;
+    const village = window.__r04RepresentativeRoadVillage();
+    const terrainRef = Game.State.world.terrain;
+    const roadBefore = JSON.stringify(village.roadTiles);
+    const semanticReady = await Game.StarterVillageRoads.ensureSemanticAssets();
+    Game.Renderer.renderWorld(true);
+    Game.StarterVillageRoads.drawPresentation();
+    const overlay = document.getElementById('starterVillageRoadOverlay');
+    const rendererSource = await (await fetch('js/renderer.js')).text();
+    const roadSource = await (await fetch('js/starter_village_roads.js')).text();
+    return {
+      semanticReady,
+      terrainReferencePreserved: Game.State.world.terrain === terrainRef,
+      roadUnchanged: JSON.stringify(Game.State.world.originVillage.roadTiles) === roadBefore,
+      presentationMode: overlay?.dataset.presentationMode,
+      drawnRoadTileCount: Number(overlay?.dataset.drawnRoadTileCount || 0),
+      vectorFallbackCount: Number(overlay?.dataset.vectorFallbackCount || 0),
+      legacyVectorRenderer: overlay?.dataset.legacyVectorRenderer,
+      legacyTerrainRoadOverlay: overlay?.dataset.legacyTerrainRoadOverlay,
+      legacyFallbackSourceRemoved: !roadSource.includes('drawVectorFallback('),
+      legacyRendererIsNoOp:
+        rendererSource.includes('function drawRoadOverlay() {') &&
+        rendererSource.includes('the legacy procedural road layer is disabled')
+    };
+  });
+
+  expect(evidence.semanticReady).toBe(false);
+  expect(evidence.terrainReferencePreserved).toBe(true);
+  expect(evidence.roadUnchanged).toBe(true);
+  expect(evidence.presentationMode).toBe('semantic-road-assets-unavailable');
+  expect(evidence.drawnRoadTileCount).toBe(0);
+  expect(evidence.vectorFallbackCount).toBe(0);
+  expect(evidence.legacyVectorRenderer).toBe('disabled');
+  expect(evidence.legacyTerrainRoadOverlay).toBe('disabled');
+  expect(evidence.legacyFallbackSourceRemoved).toBe(true);
+  expect(evidence.legacyRendererIsNoOp).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+'''
+          if "semantic asset failure never restores either legacy road renderer" not in spec:
+              spec += semantic_only_test
+          test_path.write_text(spec, encoding='utf-8')
+
+          # Static safety checks before committing.
+          final_renderer = renderer_path.read_text(encoding='utf-8')
+          final_roads = roads_path.read_text(encoding='utf-8')
+          if 'function drawVectorFallback(' in final_roads:
+              raise SystemExit('Legacy starter-village vector fallback still exists.')
+          if 'function drawRoadOverlay(ctx, cellWidth, cellHeight)' in final_renderer:
+              raise SystemExit('Legacy renderer road overlay implementation still exists.')
+          if 'function drawRoadOverlay() {' not in final_renderer:
+              raise SystemExit('Expected no-op road overlay guard missing.')
+
+      - name: Remove one-shot repair workflow from resulting tree
+        run: rm .github/workflows/r04-semantic-road-only-repair.yml
+
+      - name: Commit correction on latest compatible main
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add js/renderer.js js/starter_village_roads.js tests/browser/r04-starter-village-roads.spec.mjs .github/workflows/r04-semantic-road-only-repair.yml
+          git diff --cached --check
+          git commit -m 'Disable legacy road rendering beneath semantic tiles (#286)'
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "CORRECTED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run exact committed semantic-road-only regression
+        run: |
+          echo "Testing committed SHA: $(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$CORRECTED_SHA"
+          npx playwright test tests/browser/r04-starter-village-roads.spec.mjs --project=desktop
+
+      - name: Upload exact correction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-semantic-road-only-${{ env.CORRECTED_SHA }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
