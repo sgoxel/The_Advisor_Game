@@ -19,8 +19,8 @@
     "completed_r02_gate_worker": "Worker #5"
   },
   "tasks": [
-    {"id":"R03-T01","order":1,"title":"Define authoritative action-intent and legality contract","status":"ready","github_issue":156,"role_owner":"Coder role","issue_state":"open_ready_unclaimed"},
-    {"id":"R03-T02","order":2,"title":"Define authoritative interaction-target identity and context contract","status":"ready","github_issue":157,"role_owner":"Coder role","issue_state":"open_ready_unclaimed"},
+    {"id":"R03-T01","order":1,"title":"Define authoritative action-intent and legality contract","status":"awaiting_independent_test","github_issue":156,"role_owner":"Coder role","issue_state":"open_awaiting_independent_test","implementation":{"worker":"Worker #7","candidate_ref":"b89840046b736eaf48e8d1815ed3e893a1de61c3","audit_comment":5459301923}},
+    {"id":"R03-T02","order":2,"title":"Define authoritative interaction-target identity and context contract","status":"awaiting_independent_test","github_issue":157,"role_owner":"Coder role","issue_state":"open_awaiting_independent_test","implementation":{"worker":"Worker #7","candidate_ref":"c0812684d390a49beb6cdaefc3c2b799cb6497aa","audit_comment":5459316939}},
     {"id":"R03-T03","order":3,"title":"Design legality and interaction feedback on the living map","status":"blocked","depends_on":["R03-T01","R03-T02"],"github_issue":158,"role_owner":"Designer role","issue_state":"open_blocked_dependencies"},
     {"id":"R03-T04","order":4,"title":"Implement deterministic spatial action legality validation","status":"blocked","depends_on":["R03-T01","R03-T02"],"github_issue":159,"role_owner":"Coder role","issue_state":"open_blocked_dependencies"},
     {"id":"R03-T05","order":5,"title":"Implement NPC, location, animal and creature interaction validation","status":"blocked","depends_on":["R03-T02","R03-T04"],"github_issue":160,"role_owner":"Coder role","issue_state":"open_blocked_dependencies"},
