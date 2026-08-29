@@ -26,7 +26,6 @@ jobs:
           set -euo pipefail
           git config user.name "ChatGPT Admin Maintenance"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-
           python - <<'PY'
           from pathlib import Path
 
@@ -63,14 +62,14 @@ jobs:
           ]
           for old, new in replacements:
               if old not in readme:
-                  raise SystemExit(f"Expected README text not found: {old[:100]}")
+                  raise SystemExit("Expected README process text not found: " + old[:100])
               readme = readme.replace(old, new, 1)
           for forbidden in ("NVIDIA", "Nemotron", "auxiliary AI", "auxiliary reservation"):
               if forbidden in readme:
-                  raise SystemExit(f"README still contains removed process term: {forbidden}")
+                  raise SystemExit("README still contains retired process term: " + forbidden)
           readme_path.write_text(readme, encoding="utf-8")
 
-          rotation = r'''# Worker Rotation Protocol
+          rotation = '''# Worker Rotation Protocol
 
 This file defines operational HOW below explicit Admin instructions and `README.md`.
 
@@ -96,7 +95,7 @@ The latest valid `WORKER ROTATION STATE:` on issue #97 supplies only the startin
 
 Starting at the assigned role, traverse the cycle and perform all safely eligible work in project-priority order.
 
-Within each role, process as many eligible targets sequentially as possible. After every material issue/commit/check/revision/dependency change, re-fetch relevant GitHub state and re-evaluate eligibility. Continue passes while useful progress or eligibility changes occur. Stop normally only after one complete five-role pass produces no eligible progress.
+Within each role, process as many eligible targets sequentially as possible. After every material issue, commit, check, revision, dependency, or planning change, re-fetch relevant GitHub state and re-evaluate eligibility. Continue passes while useful progress or eligibility changes occur. Stop normally only after one complete five-role pass produces no eligible progress.
 
 Never invent work, retry an unchanged blocker indefinitely, or idle on an external wait when another unrelated eligible target exists.
 
@@ -151,12 +150,11 @@ Normally `live_claims_at_end=0`. If no target was acquired, also record `eligibl
 The next scheduled starting role is the successor of the last role that performed useful work; if no useful progress occurred, preserve the original starting role.
 '''
           Path(".github/WORKER_ROTATION.md").write_text(rotation, encoding="utf-8")
-
           Path(".github/workflows/remove-nvidia-auxiliary-once.yml").unlink()
           PY
 
           if git grep -n -E 'NVIDIA|Nemotron|AI_AUXILIARY|ai-ready|ai-running|ai-awaiting-review|ai-handoff|ai-role-(coder|reviewer|tester)|opencode-nvidia|target-specific auxiliary reservation|auxiliary AI evidence' -- ':!backup/**'; then
-            echo "Removed process markers still exist in tracked repository content." >&2
+            echo "Retired process markers still exist in tracked repository content." >&2
             exit 1
           fi
 
@@ -172,7 +170,7 @@ The next scheduled starting role is the successor of the last role that performe
           git commit -m "Admin #310: remove NVIDIA/Nemotron auxiliary pipeline"
           git push origin HEAD:main
 
-      - name: Remove obsolete routing labels
+      - name: Remove obsolete auxiliary routing labels
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
