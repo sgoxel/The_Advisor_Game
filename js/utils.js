@@ -88,3 +88,8 @@ window.Game.Utils.loadScriptOnce("js/starter_village_exteriors.js", "r04StarterV
 // route-conflict resolution, adjacent dialogue and development bubbles without duplicating
 // the existing character-world-icon implementation.
 window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatialRuntimeModule");
+
+// Final production-startup integration bridge. It waits until page load before wrapping
+// Renderer, so semantic roads remain visible even when later compatibility modules add
+// their own render wrappers.
+window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
