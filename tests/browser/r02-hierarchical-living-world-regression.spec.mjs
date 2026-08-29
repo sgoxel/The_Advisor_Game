@@ -76,7 +76,7 @@ test('real-world-origin chronology drives bounded relevance-scaled lazy material
 
   expect(evidence.initialized.ok).toBe(true);
   expect(evidence.before.authority).toBe('simulation');
-  expect(evidence.before.calendar).toMatchObject({ year: 26, month: 8, dayOfMonth: 28, hour: 14, minute: 30 });
+  expect(evidence.before.calendar).toMatchObject({ year: 126, month: 8, dayOfMonth: 28, hour: 14, minute: 30 });
   expect(evidence.resumed.ok).toBe(true);
   expect(evidence.resumed.elapsedGameDays).toBe(240);
   expect(evidence.resumed.operations).toBe(1);
