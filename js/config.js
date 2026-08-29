@@ -123,8 +123,19 @@ window.Game.Config = {
   CAMERA_DRAG_TOUCH_MULTIPLIER: 1.15,
 };
 
-// Load the terrain-boundary patch while HTML parsing is still in progress so
-// its DOMContentLoaded hook is registered before the application initializer.
+// Load parser-safe early integration modules while HTML parsing is still in
+// progress. These modules expose Simulation-owned validation/resolution facts
+// and a presentation-only status card; no module runs an authoritative action
+// merely because it was loaded by the UI shell.
 if (typeof document !== "undefined" && document.readyState === "loading") {
+  document.write('<link rel="stylesheet" href="css/legality-feedback.css" />');
+  document.write('<script src="js/action_legality.js"><\/script>');
+  document.write('<script src="js/interaction_target.js"><\/script>');
+  document.write('<script src="js/spatial_action_legality.js"><\/script>');
+  document.write('<script src="js/interaction_validation.js"><\/script>');
+  document.write('<script src="js/world_action_resolution.js"><\/script>');
+  document.write('<script src="js/legality_feedback.js"><\/script>');
+
+  // Load the terrain-boundary patch before the application initializer.
   document.write('<script src="js/organic_elevation.js"><\/script>');
 }
