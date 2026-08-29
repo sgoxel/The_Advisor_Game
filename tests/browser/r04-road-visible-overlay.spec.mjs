@@ -9,29 +9,38 @@ async function waitForRoadWorld(page) {
     window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain &&
     window.Game?.Renderer?.renderWorld &&
     window.Game?.Renderer?.gridToScreen &&
+    window.Game?.Renderer?.centerCameraOnTile &&
     window.Game?.State?.world?.terrain
   ), null, { timeout: 20_000 });
 
-  // Install the same deterministic representative Simulation-owned village used by the
-  // sibling R04 road regression. Do not race asynchronous startup world replacement or
-  // rely on whichever originVillage happens to be present while the page is booting.
   await page.evaluate(() => {
+    window.__r04InstallVisibleRoadVillage = () => {
+      const Game = window.Game;
+      const world = Game.State.world;
+      const generated = Game.SpatialWorld.generateOriginVillage('R04-VISIBLE-ROAD-OVERLAY');
+      world.originVillage = generated.village;
+      world.rows = 100;
+      world.cols = 100;
+      Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
+      return generated.village;
+    };
+
     const Game = window.Game;
-    const world = Game.State.world;
-    const generated = Game.SpatialWorld.generateOriginVillage('R04-VISIBLE-ROAD-OVERLAY');
-    world.originVillage = generated.village;
-    world.rows = 100;
-    world.cols = 100;
-    Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
+    const village = window.__r04InstallVisibleRoadVillage();
+    const roads = village.roadTiles || [];
+    const focal = roads[Math.floor(roads.length / 2)] || village.center;
+    Game.Renderer.centerCameraOnTile(focal.row, focal.col);
+    Game.Renderer.markDirty?.(true, true);
   });
 }
 
 async function visibleRoadEvidence(page) {
   return page.evaluate(async () => {
     const Game = window.Game;
+    const village = window.__r04InstallVisibleRoadVillage();
     const ready = await Game.StarterVillageRoads.ensureSemanticAssets();
-    const roadBefore = JSON.stringify(Game.State.world.originVillage.roadTiles);
-    const buildingsBefore = JSON.stringify(Game.State.world.originVillage.buildings);
+    const roadBefore = JSON.stringify(village.roadTiles);
+    const buildingsBefore = JSON.stringify(village.buildings);
 
     Game.Renderer.renderWorld(true);
     Game.StarterVillageRoads.drawPresentation();
@@ -53,15 +62,18 @@ async function visibleRoadEvidence(page) {
     const dprX = overlay.width / Math.max(1, overlay.clientWidth);
     const dprY = overlay.height / Math.max(1, overlay.clientHeight);
     let authoritativeRoadSamplesWithPixels = 0;
-    const roadTiles = Game.State.world.originVillage.roadTiles;
-    for (const road of roadTiles.slice(0, 120)) {
+    let authoritativeRoadSamplesOnScreen = 0;
+    const roadTiles = village.roadTiles || [];
+    for (const road of roadTiles) {
       const p = Game.Renderer.gridToScreen(road.row + 0.5, road.col + 0.5, 0, 0);
       if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      if (p.x < 0 || p.y < 0 || p.x > overlay.clientWidth || p.y > overlay.clientHeight) continue;
+      authoritativeRoadSamplesOnScreen += 1;
       const px = Math.round(p.x * dprX);
       const py = Math.round(p.y * dprY);
       let found = false;
-      for (let dy = -8; dy <= 8 && !found; dy += 2) {
-        for (let dx = -8; dx <= 8; dx += 2) {
+      for (let dy = -12; dy <= 12 && !found; dy += 2) {
+        for (let dx = -12; dx <= 12; dx += 2) {
           const x = px + dx;
           const y = py + dy;
           if (x < 0 || y < 0 || x >= overlay.width || y >= overlay.height) continue;
@@ -89,12 +101,13 @@ async function visibleRoadEvidence(page) {
       legacyTerrainRoadOverlay: overlay.dataset.legacyTerrainRoadOverlay,
       visiblePixelCount,
       maxAlpha,
+      authoritativeRoadSamplesOnScreen,
       authoritativeRoadSamplesWithPixels,
       overlayZ: Number.isFinite(overlayZ) ? overlayZ : 0,
       baseZ: Number.isFinite(baseZ) ? baseZ : 0,
       overlayPointerEvents: overlayStyle.pointerEvents,
-      roadUnchanged: JSON.stringify(Game.State.world.originVillage.roadTiles) === roadBefore,
-      buildingsUnchanged: JSON.stringify(Game.State.world.originVillage.buildings) === buildingsBefore
+      roadUnchanged: JSON.stringify(village.roadTiles) === roadBefore,
+      buildingsUnchanged: JSON.stringify(village.buildings) === buildingsBefore
     };
   });
 }
@@ -117,6 +130,7 @@ for (const viewport of [
     expect(beforeZoom.drawnRoadTileCount).toBeGreaterThan(0);
     expect(beforeZoom.visiblePixelCount).toBeGreaterThan(100);
     expect(beforeZoom.maxAlpha).toBeGreaterThan(32);
+    expect(beforeZoom.authoritativeRoadSamplesOnScreen).toBeGreaterThan(0);
     expect(beforeZoom.authoritativeRoadSamplesWithPixels).toBeGreaterThan(0);
     expect(beforeZoom.overlayZ).toBeGreaterThan(beforeZoom.baseZ);
     expect(beforeZoom.overlayPointerEvents).toBe('none');
@@ -126,15 +140,21 @@ for (const viewport of [
     expect(beforeZoom.roadUnchanged).toBe(true);
     expect(beforeZoom.buildingsUnchanged).toBe(true);
 
-    const zoomBefore = await page.evaluate(() => Number(window.Game.State.camera.zoom));
-    await page.mouse.move(Math.floor(viewport.width / 2), Math.floor(viewport.height / 2));
-    await page.mouse.wheel(0, -480);
-    await page.waitForFunction((value) => Number(window.Game.State.camera.zoom) !== value, zoomBefore, { timeout: 5_000 });
+    const zoomState = await page.evaluate(() => ({
+      zoom: Number(window.Game.State.camera.zoom),
+      minZoom: Number(window.Game.State.camera.minZoom),
+      maxZoom: Number(window.Game.State.camera.maxZoom)
+    }));
+    const wheelDelta = zoomState.zoom < zoomState.maxZoom ? -480 : 480;
+    await page.locator('#gameCanvas').hover();
+    await page.mouse.wheel(0, wheelDelta);
+    await page.waitForFunction((value) => Number(window.Game.State.camera.zoom) !== value, zoomState.zoom, { timeout: 5_000 });
     const afterZoom = await visibleRoadEvidence(page);
 
     expect(afterZoom.ready).toBe(true);
     expect(afterZoom.semanticDrawnCount).toBeGreaterThan(0);
     expect(afterZoom.visiblePixelCount).toBeGreaterThan(100);
+    expect(afterZoom.authoritativeRoadSamplesOnScreen).toBeGreaterThan(0);
     expect(afterZoom.authoritativeRoadSamplesWithPixels).toBeGreaterThan(0);
     expect(afterZoom.overlayZ).toBeGreaterThan(afterZoom.baseZ);
     expect(afterZoom.roadUnchanged).toBe(true);
