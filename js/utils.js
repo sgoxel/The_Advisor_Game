@@ -72,6 +72,8 @@ window.Game.Utils.loadScriptOnce("js/character_identity.js", "r04CharacterIdenti
 window.Game.Utils.loadScriptOnce("js/character_age.js", "r04CharacterAgeModule");
 window.Game.Utils.loadScriptOnce("js/character_location_context.js", "r04CharacterLocationContextModule");
 window.Game.Utils.loadScriptOnce("js/character_emotion.js", "r04CharacterEmotionModule");
+window.Game.Utils.loadScriptOnce("js/character_driver_context.js", "r04CharacterDriverContextModule");
+window.Game.Utils.loadScriptOnce("js/local_bot_character_context_bridge.js", "r04LocalBotCharacterContextBridgeModule");
 window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
 window.Game.Utils.loadScriptOnce("js/npc_residency.js", "r04NpcResidencyModule");
 window.Game.Utils.loadScriptOnce("js/npc_workplaces.js", "r04NpcWorkplacesModule");
