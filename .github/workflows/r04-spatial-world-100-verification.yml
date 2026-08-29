@@ -6,6 +6,7 @@ on:
     paths:
       - 'index.html'
       - 'js/config.js'
+      - 'js/optional_map_script_guard.js'
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
       - 'js/npc_spatial_runtime.js'
@@ -22,6 +23,7 @@ on:
     paths:
       - 'index.html'
       - 'js/config.js'
+      - 'js/optional_map_script_guard.js'
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
       - 'js/npc_spatial_runtime.js'
