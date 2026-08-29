@@ -1,11 +1,11 @@
-/* R04 / #268: derive character age and life-stage from authoritative campaign chronology. */
+/* R04 / #268/#282: derive character age and life-stage from authoritative campaign chronology. */
 (function installCharacterAge(global) {
   'use strict';
 
   const Game = global.Game = global.Game || {};
   const VERSION = 'r04-character-age-v1';
   const AUTHORITY = 'simulation';
-  const BIRTH_DATE_CALENDAR = 'campaign-calendar-civil-year-minus-2000';
+  const BIRTH_DATE_CALENDAR = 'campaign-calendar-civil-year-minus-1900';
 
   const LIFE_STAGES = Object.freeze([
     Object.freeze({ minAge: 0, maxAge: 12, id: 'child' }),
