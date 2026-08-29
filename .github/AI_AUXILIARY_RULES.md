@@ -92,6 +92,33 @@ Where relevant, Reviewer should examine:
 
 Each concern should include a severity such as `BLOCKING`, `MAJOR`, `MINOR`, or `OBSERVATION`, with a concise rationale. Reviewer must not invent new product requirements while doing this analysis.
 
+## Evidence Grounding
+
+All NVIDIA factual findings must be grounded in the exact repository state actually inspected. A plausible-sounding statement is not evidence.
+
+Before asserting that README, code, tests, issues, or game rules contain a mechanic/fact, NVIDIA must open or search the exact source and verify the premise. Never invent section numbers, appendices, lore, resources, mechanics, numeric values, code behavior, test coverage, or implementation state.
+
+For every repository-grounded finding, include at least one machine-checkable line directly beneath the finding:
+
+`SOURCE: relative/path :: exact literal token copied from that file`
+
+Rules for `SOURCE:`:
+- `relative/path` must exist in the checked-out exact run state.
+- The text after `::` must be a short literal token/phrase that occurs verbatim in that file; use a heading, symbol/function name, test title, constant, or short rule fragment rather than a paraphrase.
+- Do not cite a README section number or named appendix unless that exact heading/identifier exists in the file.
+- If a dimension has no implemented or documented repository evidence, state `NO EVIDENCE / NOT IMPLEMENTED` rather than guessing.
+- General real-world plausibility may use broad domain knowledge only as advisory context. It must be clearly separated from repository facts, must not fabricate precise percentages/speeds/costs, and cannot alone justify `CHANGES REQUESTED`.
+
+Evidence must include exactly one line:
+
+`GROUNDING: VERIFIED`
+
+Use that line only after checking every `SOURCE:` path/token against the exact repository state. If grounding cannot be completed, use `AI-HANDOFF:` rather than presenting speculative findings as verified evidence.
+
+`VERDICT: CHANGES REQUESTED` is permitted only when at least one `BLOCKING` or `MAJOR` concern is supported by valid `SOURCE:` evidence. An unverified hypothesis, realism preference, missing implementation dimension, or unsupported model recollection cannot trigger a change request.
+
+The workflow finalization gate validates the grounding marker and at least one literal `SOURCE:` path/token before routing evidence to `ai-awaiting-review`. Grounding validation is a minimum safety gate; formal Workers must still independently inspect important NVIDIA claims.
+
 ## Independence
 
 NVIDIA Reviewer and NVIDIA Tester are read-only for production implementation. Their evidence can reduce duplicate work, but formal Workers retain all implementation, planning, merge, phase, and release authority.
@@ -133,7 +160,7 @@ Formal Worker priority should treat `ai-handoff` above ordinary unclaimed work, 
 
 Successful auxiliary execution releases `ai-running` and `work-claimed` and adds `ai-awaiting-review`.
 
-- Reviewer success requires `AI REVIEW EVIDENCE:` and should include `VERDICT: PASS` or `VERDICT: CHANGES REQUESTED`.
-- Tester success requires `AI TEST EVIDENCE:` and should include `VERDICT: PASS` or `VERDICT: FAIL`.
+- Reviewer success requires `AI REVIEW EVIDENCE:`, `GROUNDING: VERIFIED`, at least one valid literal `SOURCE:` line, and `VERDICT: PASS` or `VERDICT: CHANGES REQUESTED`.
+- Tester success requires `AI TEST EVIDENCE:`, `GROUNDING: VERIFIED`, at least one valid literal `SOURCE:` line, and `VERDICT: PASS` or `VERDICT: FAIL`.
 
 No auxiliary success is a Planner decision, merge approval, phase approval, or release approval.
