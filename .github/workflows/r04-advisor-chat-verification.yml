@@ -6,6 +6,7 @@ on:
     paths:
       - 'index.html'
       - 'css/styles.css'
+      - 'js/input.js'
       - 'js/advisor_chat_ui.js'
       - 'js/advisor_influence_bridge.js'
       - 'js/advisor_conversation_contract.js'
@@ -20,6 +21,7 @@ on:
     paths:
       - 'index.html'
       - 'css/styles.css'
+      - 'js/input.js'
       - 'js/advisor_chat_ui.js'
       - 'js/advisor_influence_bridge.js'
       - 'js/advisor_conversation_contract.js'
