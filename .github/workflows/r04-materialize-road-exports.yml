@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/r04-materialize-road-exports.yml'
+      - 'design/source/road/generate_admin_road_atlas.mjs'
   workflow_dispatch:
 
 permissions:
@@ -29,21 +30,24 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Materialize canonical road exports
+      - name: Generate Admin-priority canonical road atlas
+        run: node design/source/road/generate_admin_road_atlas.mjs
+
+      - name: Materialize semantic road exports
         run: >-
           node tools/split_tile_atlas.mjs
-          --atlas design/source/road/road_canonical_1024.png
-          --manifest design/source/road/road_canonical_1024.cells.json
+          --atlas design/source/road/road_admin_generated_1024.png
+          --manifest design/source/road/road_admin_generated_1024.cells.json
           --output textures/tiles/road
 
-      - name: Verify production exports and idempotence
+      - name: Verify canonical source, exports and idempotence
         shell: bash
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/road-export-check"
           node tools/split_tile_atlas.mjs \
-            --atlas design/source/road/road_canonical_1024.png \
-            --manifest design/source/road/road_canonical_1024.cells.json \
+            --atlas design/source/road/road_admin_generated_1024.png \
+            --manifest design/source/road/road_admin_generated_1024.cells.json \
             --output "$RUNNER_TEMP/road-export-check"
 
           node --input-type=module <<'NODE'
@@ -52,18 +56,22 @@ jobs:
           import crypto from 'node:crypto';
           import { decodeRgbaPng } from './tools/split_tile_atlas.mjs';
 
+          const source = decodeRgbaPng(fs.readFileSync('design/source/road/road_admin_generated_1024.png'));
+          if (source.width !== 1024 || source.height !== 1024 || source.rgba.length !== 1024 * 1024 * 4) {
+            throw new Error('Admin road source is not canonical 1024x1024 RGBA.');
+          }
+          for (let row = 512; row < 1024; row += 1) {
+            for (let col = 0; col < 1024; col += 1) {
+              if (source.rgba[(row * 1024 + col) * 4 + 3] !== 0) throw new Error('Canonical unused atlas rows are not fully transparent.');
+            }
+          }
+
           const production = 'textures/tiles/road';
           const comparison = process.env.RUNNER_TEMP + '/road-export-check';
           const manifestName = 'road_tiles.manifest.json';
           const expectedTypes = new Set([
-            'straight_vertical',
-            'straight_horizontal',
-            'cross',
-            'turn_ne',
-            'turn_es',
-            'turn_sw',
-            'turn_wn',
-            't_junction'
+            'straight_vertical', 'straight_horizontal', 'cross', 'turn_ne',
+            'turn_es', 'turn_sw', 'turn_wn', 't_junction'
           ]);
           const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
           const listPng = (dir) => fs.readdirSync(dir).filter((name) => name.endsWith('_256px.png')).sort();
@@ -71,47 +79,44 @@ jobs:
           const productionPng = listPng(production);
           const comparisonPng = listPng(comparison);
           if (productionPng.length !== 8) throw new Error(`Expected exactly 8 production road PNGs; found ${productionPng.length}.`);
-          if (JSON.stringify(productionPng) !== JSON.stringify(comparisonPng)) throw new Error('Repeated export changed the output filename set.');
+          if (JSON.stringify(productionPng) !== JSON.stringify(comparisonPng)) throw new Error('Repeated export changed output filenames.');
 
           const manifest = JSON.parse(fs.readFileSync(path.join(production, manifestName), 'utf8'));
-          if (manifest.family !== 'road' || manifest.tiles?.length !== 8) throw new Error('Production road manifest must describe exactly 8 road tiles.');
+          if (manifest.family !== 'road' || manifest.tiles?.length !== 8) throw new Error('Road manifest must describe exactly 8 tiles.');
           const actualTypes = new Set(manifest.tiles.map((tile) => tile.type));
           if (actualTypes.size !== expectedTypes.size || [...expectedTypes].some((type) => !actualTypes.has(type))) {
-            throw new Error('Production road manifest semantic set does not match the verified eight-tile road family.');
+            throw new Error('Road manifest semantic set is incomplete.');
           }
 
           for (const tile of manifest.tiles) {
             const expectedName = `road_${tile.type}_256px.png`;
-            if (tile.filename !== expectedName || !productionPng.includes(expectedName)) {
-              throw new Error(`Unexpected production filename for ${tile.type}: ${tile.filename}`);
-            }
+            if (tile.filename !== expectedName || !productionPng.includes(expectedName)) throw new Error(`Unexpected filename for ${tile.type}.`);
             const prod = fs.readFileSync(path.join(production, expectedName));
             const repeat = fs.readFileSync(path.join(comparison, expectedName));
             const decoded = decodeRgbaPng(prod);
             if (decoded.width !== 256 || decoded.height !== 256 || decoded.rgba.length !== 256 * 256 * 4) {
-              throw new Error(`${expectedName} is not a 256x256 RGBA export.`);
+              throw new Error(`${expectedName} is not 256x256 RGBA.`);
             }
             const digest = sha256(prod);
-            if (digest !== tile.sha256) throw new Error(`${expectedName} does not match its manifest SHA-256.`);
-            if (digest !== sha256(repeat)) throw new Error(`${expectedName} is not byte-deterministic across repeated export.`);
+            if (digest !== tile.sha256 || digest !== sha256(repeat)) throw new Error(`${expectedName} is not deterministic.`);
           }
-
-          const prodManifest = fs.readFileSync(path.join(production, manifestName));
-          const repeatManifest = fs.readFileSync(path.join(comparison, manifestName));
-          if (sha256(prodManifest) !== sha256(repeatManifest)) throw new Error('Road export manifest is not byte-deterministic.');
-          console.log('Verified exactly eight deterministic 256x256 RGBA semantic road exports plus manifest.');
+          console.log('Verified canonical transparent source and exactly eight deterministic semantic road PNG exports.');
           NODE
 
-      - name: Commit production road tile exports
+      - name: Commit generated source and production road tiles
         shell: bash
         run: |
           set -euo pipefail
-          git add textures/tiles/road
+          git add design/source/road/road_admin_generated_1024.png \
+                  design/source/road/road_admin_generated_1024.cells.json \
+                  textures/tiles/road
           if git diff --cached --quiet; then
-            echo 'Production road exports already match the verified atlas/splitter output.'
+            echo 'Admin road source and production exports already match.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Commit canonical road tile exports (#296)'
-          git push
+          git commit -m 'Materialize Admin semantic road tiles (#296)'
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main

@@ -1,12 +1,12 @@
 /*
-  R04 / #277: authoritative starter-village road/path presentation.
+  R04 / #277 + Admin-priority #286: authoritative starter-village road/path presentation.
   Route existence/connectivity remains Simulation authority; this module only renders it.
 */
 (function installStarterVillageRoadPresentation() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-starter-village-roads-v1-continuous-surface';
-  const MODE = 'authoritative-continuous-packed-earth';
+  const VERSION = 'r04-starter-village-roads-v2-semantic-png';
+  const MODE = 'authoritative-semantic-transparent-png';
   const CARDINAL = Object.freeze([
     { name: 'N', dr: -1, dc: 0 },
     { name: 'E', dr: 0, dc: 1 },
@@ -17,6 +17,11 @@
 
   let overlayCanvas = null;
   let renderHookInstalled = false;
+  let semanticAssetState = 'idle';
+  let semanticAssetPromise = null;
+  let semanticTileModule = null;
+  let semanticRoadRegistry = null;
+  const semanticImages = new Map();
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const key = (row, col) => `${row},${col}`;
@@ -134,6 +139,118 @@
     return invalid;
   }
 
+  function semanticVisualForTopology(tile) {
+    if (!tile || tile.degree <= 0) return null;
+    const linked = new Set(String(tile.mask || '').split(''));
+
+    if (tile.degree >= 4) return { type: 'cross', quarterTurns: 0 };
+
+    if (tile.degree === 3) {
+      const missing = CARDINAL.find((dir) => !linked.has(dir.name))?.name;
+      const quarterTurns = { N: 0, E: 1, S: 2, W: 3 }[missing];
+      if (quarterTurns === undefined) return null;
+      return { type: 't_junction', quarterTurns };
+    }
+
+    if (tile.degree === 2) {
+      if (linked.has('N') && linked.has('S')) return { type: 'straight_vertical', quarterTurns: 0 };
+      if (linked.has('E') && linked.has('W')) return { type: 'straight_horizontal', quarterTurns: 0 };
+      if (linked.has('N') && linked.has('E')) return { type: 'turn_ne', quarterTurns: 0 };
+      if (linked.has('E') && linked.has('S')) return { type: 'turn_es', quarterTurns: 0 };
+      if (linked.has('S') && linked.has('W')) return { type: 'turn_sw', quarterTurns: 0 };
+      if (linked.has('W') && linked.has('N')) return { type: 'turn_wn', quarterTurns: 0 };
+      return null;
+    }
+
+    const direction = CARDINAL.find((dir) => linked.has(dir.name))?.name;
+    if (direction === 'N') return { type: 'straight_vertical', quarterTurns: 0, clip: [0, 0, 256, 128] };
+    if (direction === 'S') return { type: 'straight_vertical', quarterTurns: 0, clip: [0, 128, 256, 128] };
+    if (direction === 'W') return { type: 'straight_horizontal', quarterTurns: 0, clip: [0, 0, 128, 256] };
+    if (direction === 'E') return { type: 'straight_horizontal', quarterTurns: 0, clip: [128, 0, 128, 256] };
+    return null;
+  }
+
+  function semanticImage(type) {
+    return semanticImages.get(type) || null;
+  }
+
+  function ensureSemanticAssets() {
+    if (semanticAssetState === 'ready') return Promise.resolve(true);
+    if (semanticAssetState === 'loading' && semanticAssetPromise) return semanticAssetPromise;
+    if (semanticAssetState === 'failed') return Promise.resolve(false);
+
+    semanticAssetState = 'loading';
+    const moduleUrl = new URL('js/tile_registry.js', document.baseURI).href;
+    semanticAssetPromise = import(moduleUrl)
+      .then((module) => {
+        semanticTileModule = module;
+        semanticRoadRegistry = module.createCanonicalRoadTileRegistry();
+        const entries = semanticRoadRegistry.entries().filter((entry) => entry.family === 'road' && entry.size === 256);
+        return Promise.all(entries.map((entry) => new Promise((resolve, reject) => {
+          const image = new Image();
+          image.decoding = 'async';
+          image.onload = () => {
+            semanticImages.set(entry.type, image);
+            resolve(entry.type);
+          };
+          image.onerror = () => reject(new Error(`Failed to load semantic road tile: ${entry.type}`));
+          image.src = module.resolveTileUrl(entry, document.baseURI);
+        })));
+      })
+      .then(() => {
+        semanticAssetState = semanticImages.size >= 8 ? 'ready' : 'failed';
+        if (semanticAssetState === 'ready') {
+          requestAnimationFrame(() => drawPresentation());
+          return true;
+        }
+        return false;
+      })
+      .catch((error) => {
+        semanticAssetState = 'failed';
+        console.warn('Semantic road tiles unavailable; preserving vector road fallback.', error);
+        return false;
+      });
+    return semanticAssetPromise;
+  }
+
+  function drawSemanticTile(ctx, tile, visual) {
+    const image = semanticImage(visual?.type);
+    if (!image) return false;
+
+    const center = project(tile.row + 0.5, tile.col + 0.5);
+    const east = project(tile.row + 0.5, tile.col + 1.5);
+    const south = project(tile.row + 1.5, tile.col + 0.5);
+    if (!center || !east || !south) return false;
+
+    const vx = { x: east.x - center.x, y: east.y - center.y };
+    const vy = { x: south.x - center.x, y: south.y - center.y };
+    const origin = {
+      x: center.x - (vx.x + vy.x) * 0.5,
+      y: center.y - (vx.y + vy.y) * 0.5
+    };
+    if (![vx.x, vx.y, vy.x, vy.y, origin.x, origin.y].every(Number.isFinite)) return false;
+
+    ctx.save();
+    ctx.transform(vx.x / 256, vx.y / 256, vy.x / 256, vy.y / 256, origin.x, origin.y);
+
+    if (visual.clip) {
+      const [x, y, width, height] = visual.clip;
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.clip();
+    }
+
+    if (visual.quarterTurns) {
+      ctx.translate(128, 128);
+      ctx.rotate(visual.quarterTurns * Math.PI * 0.5);
+      ctx.translate(-128, -128);
+    }
+
+    ctx.drawImage(image, 0, 0, 256, 256);
+    ctx.restore();
+    return true;
+  }
+
   function drawLine(ctx, a, b, width, style) {
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
@@ -152,33 +269,13 @@
     ctx.fill();
   }
 
-  function drawPresentation() {
-    const canvas = ensureOverlay();
-    const topology = roadTopology();
-    if (!canvas || !Game.Renderer || !topology.length) return false;
-
-    const width = Math.max(1, canvas.clientWidth || Game.State?.dom?.canvas?.clientWidth || 1);
-    const height = Math.max(1, canvas.clientHeight || Game.State?.dom?.canvas?.clientHeight || 1);
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const targetWidth = Math.round(width * dpr);
-    const targetHeight = Math.round(height * dpr);
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return false;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
+  function drawVectorFallback(ctx, topology, invalid) {
     const span = projectedTileSpan(topology);
     const roadWidth = clamp(span * 0.74, 5, 30);
     const edgeWidth = clamp(roadWidth * 1.16, roadWidth + 1.5, 36);
     const edgeStyle = 'rgba(83, 61, 39, 0.88)';
     const fillStyle = 'rgba(151, 113, 72, 0.98)';
     const wearStyle = 'rgba(185, 144, 91, 0.30)';
-    const invalid = invalidRoadTileSet(topology);
     const byKey = new Map(topology.map((tile) => [key(tile.row, tile.col), tile]));
     const centers = new Map();
 
@@ -201,39 +298,90 @@
       }
     }
 
-    // A broad low-contrast edge band fully masks the legacy square/ladder road treatment.
     for (const segment of segments) drawLine(ctx, segment.from, segment.to, edgeWidth, edgeStyle);
     for (const point of centers.values()) drawDisc(ctx, point, edgeWidth / 2, edgeStyle);
-
-    // Continuous packed-earth traveled surface. Round joins keep turns/T/crossroads filled.
     for (const segment of segments) drawLine(ctx, segment.from, segment.to, roadWidth, fillStyle);
     for (const point of centers.values()) drawDisc(ctx, point, roadWidth / 2, fillStyle);
 
-    // Restrained low-frequency wear, deliberately not a repeating rung/square motif.
     const wearWidth = clamp(roadWidth * 0.18, 1, 4);
-    for (let i = 0; i < segments.length; i += 5) {
-      const segment = segments[i];
-      drawLine(ctx, segment.from, segment.to, wearWidth, wearStyle);
+    for (let i = 0; i < segments.length; i += 5) drawLine(ctx, segments[i].from, segments[i].to, wearWidth, wearStyle);
+
+    return { drawnCount: centers.size, segmentCount: segments.length, roadWidth };
+  }
+
+  function drawPresentation() {
+    const canvas = ensureOverlay();
+    const topology = roadTopology();
+    if (!canvas || !Game.Renderer || !topology.length) return false;
+
+    ensureSemanticAssets();
+
+    const width = Math.max(1, canvas.clientWidth || Game.State?.dom?.canvas?.clientWidth || 1);
+    const height = Math.max(1, canvas.clientHeight || Game.State?.dom?.canvas?.clientHeight || 1);
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const targetWidth = Math.round(width * dpr);
+    const targetHeight = Math.round(height * dpr);
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const invalid = invalidRoadTileSet(topology);
+    let semanticDrawnCount = 0;
+    let semanticUnsupportedCount = 0;
+    let vectorFallbackCount = 0;
+    let segmentCount = 0;
+    let roadWidth = 0;
+
+    if (semanticAssetState === 'ready') {
+      for (const tile of topology) {
+        if (invalid.has(key(tile.row, tile.col))) continue;
+        const visual = semanticVisualForTopology(tile);
+        if (!visual) {
+          semanticUnsupportedCount += 1;
+          continue;
+        }
+        if (drawSemanticTile(ctx, tile, visual)) semanticDrawnCount += 1;
+        else semanticUnsupportedCount += 1;
+      }
+    } else {
+      const fallback = drawVectorFallback(ctx, topology, invalid);
+      vectorFallbackCount = fallback.drawnCount;
+      segmentCount = fallback.segmentCount;
+      roadWidth = fallback.roadWidth;
     }
 
     const intersectionCount = topology.filter((tile) => tile.degree >= 3 && !invalid.has(key(tile.row, tile.col))).length;
     const turnCount = topology.filter((tile) => tile.degree === 2 && /^(NE|ES|SW|NW|EN|SE|WS|WN)$/.test(tile.mask)).length;
     const deadEndCount = topology.filter((tile) => tile.degree <= 1 && !invalid.has(key(tile.row, tile.col))).length;
+    const drawnRoadTileCount = semanticAssetState === 'ready' ? semanticDrawnCount : vectorFallbackCount;
+
     Object.assign(canvas.dataset, {
       roadTileCount: String(topology.length),
-      drawnRoadTileCount: String(centers.size),
-      segmentCount: String(segments.length),
+      drawnRoadTileCount: String(drawnRoadTileCount),
+      segmentCount: String(segmentCount),
       intersectionCount: String(intersectionCount),
       turnCount: String(turnCount),
       deadEndCount: String(deadEndCount),
       invalidTopologyCount: String(invalid.size),
       presentationAuthority: 'presentation-only',
       descriptorSource: 'originVillage.roadTiles',
-      presentationMode: MODE,
+      presentationMode: semanticAssetState === 'ready' ? MODE : 'authoritative-continuous-packed-earth-fallback',
       connectivity: 'authoritative-cardinal-only',
       legacySquareHolePattern: 'masked',
       regionSize: String(Game.State?.world?.rows || 0),
-      roadWidthPx: roadWidth.toFixed(2)
+      roadWidthPx: roadWidth ? roadWidth.toFixed(2) : 'semantic-tile',
+      semanticTileState: semanticAssetState,
+      semanticAssetCount: String(semanticImages.size),
+      semanticDrawnCount: String(semanticDrawnCount),
+      semanticUnsupportedCount: String(semanticUnsupportedCount),
+      vectorFallbackCount: String(vectorFallbackCount),
+      semanticRegistry: semanticRoadRegistry && semanticTileModule ? 'canonical-road-registry' : 'pending'
     });
     return true;
   }
@@ -259,6 +407,7 @@
   function initialize() {
     ensureOverlay();
     installRenderHook();
+    ensureSemanticAssets();
     drawPresentation();
   }
 
@@ -268,6 +417,8 @@
     descriptorSource: 'originVillage.roadTiles',
     presentationMode: MODE,
     snapshotTopology: roadTopology,
+    semanticVisualForTopology,
+    ensureSemanticAssets,
     ensureOverlay,
     drawPresentation,
     detachPresentation
