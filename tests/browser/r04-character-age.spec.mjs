@@ -34,7 +34,7 @@ test('normal product startup exposes Simulation-owned derived character age', as
   expect(evidence.available).toBe(true);
   expect(evidence.authority).toBe('simulation');
   expect(evidence.version).toBe('r04-character-age-v1');
-  expect(evidence.calendarBasis).toBe('campaign-calendar-civil-year-minus-2000');
+  expect(evidence.calendarBasis).toBe('campaign-calendar-civil-year-minus-1900');
   expect(evidence.scriptLoaded).toBe(true);
 });
 
@@ -49,9 +49,6 @@ test('age is derived mechanically from stable birth date and authoritative fanta
     const base = identity.generateBaseIdentity('AGE-SEED-A', 'npc:age:01');
     const beforeFingerprint = identity.fingerprint(base);
     const result = age.derive(base, calendar.capture());
-    const expected = 26 - base.birthDate.year - (
-      8 < base.birthDate.month || (8 === base.birthDate.month && 28 < base.birthDate.day) ? 1 : 0
-    );
     return {
       base,
       beforeFingerprint,
@@ -64,7 +61,7 @@ test('age is derived mechanically from stable birth date and authoritative fanta
   expect(evidence.result.ok).toBe(true);
   expect(evidence.result.ageYears).toBeGreaterThanOrEqual(18);
   expect(evidence.result.ageYears).toBeLessThanOrEqual(70);
-  expect(evidence.result.ageYears).toBe(26 - evidence.base.birthDate.year - (
+  expect(evidence.result.ageYears).toBe(126 - evidence.base.birthDate.year - (
     8 < evidence.base.birthDate.month || (8 === evidence.base.birthDate.month && 28 < evidence.base.birthDate.day) ? 1 : 0
   ));
   expect(evidence.result.birthDate).toEqual(evidence.base.birthDate);
@@ -84,7 +81,7 @@ test('campaign chronology crossing a birthday advances derived age exactly once'
     time.stop();
     const base = identity.generateBaseIdentity('AGE-SEED-BIRTHDAY', 'npc:age:birthday');
 
-    const birthdayCivilYear = base.birthDate.year + 2000 + 40;
+    const birthdayCivilYear = base.birthDate.year + 1900 + 40;
     const birthday = Date.UTC(birthdayCivilYear, base.birthDate.month - 1, base.birthDate.day, 12, 0);
     const dayBefore = birthday - 86_400_000;
     delete window.Game.State.world.campaignCalendar;
@@ -207,10 +204,10 @@ test('lazy/off-screen derivation is deterministic across presentation state and 
     const identity = window.Game.CharacterIdentity;
     const age = window.Game.CharacterAge;
     const base = identity.generateBaseIdentity('AGE-SEED-LAZY', 'npc:age:lazy');
-    const snapshot = { authority: 'simulation', calendar: { year: 26, month: 8, dayOfMonth: 28, hour: 14, minute: 30 } };
+    const snapshot = { authority: 'simulation', calendar: { year: 126, month: 8, dayOfMonth: 28, hour: 14, minute: 30 } };
     return {
       result: age.derive(base, snapshot),
-      preBirth: age.calculateAge({ year: 30, month: 1, day: 1 }, snapshot),
+      preBirth: age.calculateAge({ year: 130, month: 1, day: 1 }, snapshot),
       baseFingerprint: identity.fingerprint(base)
     };
   });
@@ -225,7 +222,7 @@ test('lazy/off-screen derivation is deterministic across presentation state and 
     const identity = window.Game.CharacterIdentity;
     const age = window.Game.CharacterAge;
     const base = identity.generateBaseIdentity('AGE-SEED-LAZY', 'npc:age:lazy');
-    const snapshot = { authority: 'simulation', calendar: { year: 26, month: 8, dayOfMonth: 28, hour: 14, minute: 30 } };
+    const snapshot = { authority: 'simulation', calendar: { year: 126, month: 8, dayOfMonth: 28, hour: 14, minute: 30 } };
     return { result: age.derive(base, snapshot), baseFingerprint: identity.fingerprint(base) };
   });
 
