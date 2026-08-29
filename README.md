@@ -508,6 +508,27 @@ Visual effects should support atmosphere and readability rather than spectacle f
 
 Early releases may continue to use placeholders, simplified geometry or temporary assets when required for development. Those assets do not define the final style; replacement and final production should progressively converge toward the original seinen-inspired character direction and old-school PC RPG visual language.
 
+### 🧍 Static Character PNG Identity and Presentation
+
+At the current development stage, static **PNG character assets** are an approved primary presentation model for the protagonist and other gameplay-relevant characters. Animation is not required for this model to be considered valid or playable; later animation may extend the same character identity without redefining it.
+
+A gameplay-relevant character should maintain one recognizable visual identity across at least two related presentation forms when those surfaces are available:
+
+1. **Full-body character PNG** — used for direct dialogue, character-focused interaction, inspection and other close presentation where the character is a primary subject.
+2. **Tile/world icon PNG** — a simplified small-scale representation derived from the same character identity for the living strategic map.
+
+The tile/world representation should be character-based rather than a generic rectangular NPC block or anonymous token. Simplification for map scale is expected, but silhouette, clothing cues, role/status cues or other identity markers should make the world icon recognizably related to the same full-body character.
+
+During direct two-character dialogue, the dialogue presentation should show the relevant characters as full-body character art where the available responsive layout permits it. Dialogue presentation may adapt composition on smaller screens, but it should preserve character identity rather than replacing the participants with unrelated generic markers.
+
+Character variants should reflect authoritative context where visually meaningful, including **rank/progression, profession or duty, social status, culture/faction, equipment, environment/region and current circumstances**, while remaining coherent with the original seinen-inspired character family. Visual variation must not invent rank, equipment, profession or other authoritative facts that the Simulation does not support.
+
+Static PNGs may be progressively produced and replaced as the character roster grows. Temporary placeholders may remain for characters whose approved art is not yet available, but new/final gameplay-relevant character presentation should converge toward the full-body + matching world-icon identity model rather than permanent generic rectangles.
+
+PNG assets, icons and dialogue art are presentation only. Character identity, location, profession, rank, equipment, relationships and other authoritative state continue to come from Simulation-backed data.
+
+The full-body and tile/world forms must remain readable and performant on desktop, tablet and phone; device-specific scaling or simplification may reduce visual detail but must preserve the same character identity and must not alter simulation truth.
+
 A Worker acting in the **Designer** role chooses the appropriate tools, asset formats, modeling methods, export settings, optimization methods, and production pipeline for each approved task.
 
 Visual assets never become simulation authority.
@@ -572,6 +593,10 @@ The size of the unbounded world must not force invisible-world computation to gr
 40. **Phones and tablets are first-class gameplay targets.** Device-specific quality or fidelity scaling may protect responsiveness and performance, but must never alter simulation truth, chronology, legal outcomes or persistent world history.
 41. **Character art follows an original seinen-anime-inspired visual language.** Mature proportions, grounded silhouettes, expressive but restrained emotion, age/status/profession distinction and believable medieval-fantasy costume/material treatment should define the character family without copying a specific existing artist, series or protected character design.
 42. **The game evokes old-school PC RPG presentation without inheriting old usability limits.** Isometric/near-isometric composition, painterly or pre-rendered-feeling depth, restrained effects, grounded atmosphere and classic RPG interface framing should remain coherent with modern accessibility, responsive layouts and mobile/tablet performance.
+43. **Gameplay-relevant characters preserve visual identity across world and dialogue presentation.** A character's full-body PNG and simplified tile/world icon should clearly represent the same person while allowing scale-appropriate detail.
+44. **Direct dialogue favors full-body static character art.** When two characters converse directly, responsive dialogue presentation should show the relevant participants with full-body character PNGs where the layout permits it.
+45. **World-map characters should look like characters, not permanent rectangles.** Tile/world presentation should progressively replace generic rectangular NPC placeholders with character-derived PNG icons tied to Simulation-backed identities.
+46. **Animation is optional at the current stage.** Static PNG character presentation is sufficient for current playable development and animation must not block character-identity, dialogue or world-icon progress.
 
 ---
 
