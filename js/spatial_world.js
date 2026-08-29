@@ -249,6 +249,10 @@
     for (const cell of footprintCells(footprint, 0)) reserved[cell.row][cell.col] = true;
   }
 
+  function releaseFootprint(reserved, footprint) {
+    for (const cell of footprintCells(footprint, 0)) reserved[cell.row][cell.col] = false;
+  }
+
   function housingBounds(index, width, height) {
     const quadrant = index % 4;
     if (quadrant === 0) return { r0: 5, r1: 38 - height, c0: 5, c1: 38 - width };
@@ -345,6 +349,84 @@
     }
 
     throw new Error(`Unable to place deterministic building ${spec.type} in 100x100 origin village.`);
+  }
+
+  function buildingFootprintCandidates(seed, region, spec, index) {
+    const bounds = zoneBounds(spec, index);
+    const r1 = Math.max(bounds.r0, bounds.r1);
+    const c1 = Math.max(bounds.c0, bounds.c1);
+    const candidates = [];
+    const seen = new Set();
+    const addCandidate = (row, col) => {
+      const candidateKey = key(row, col);
+      if (seen.has(candidateKey)) return;
+      seen.add(candidateKey);
+      candidates.push({ row, col, width: spec.width, height: spec.height });
+    };
+
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      addCandidate(
+        integer(seed, `building-${index}-row`, bounds.r0, r1, region.x, region.y, attempt),
+        integer(seed, `building-${index}-col`, bounds.c0, c1, region.x, region.y, attempt)
+      );
+    }
+
+    const rowCount = r1 - bounds.r0 + 1;
+    const colCount = c1 - bounds.c0 + 1;
+    const total = rowCount * colCount;
+    const offset = integer(seed, `building-${index}-fallback-offset`, 0, Math.max(0, total - 1), region.x, region.y);
+    for (let step = 0; step < total; step += 1) {
+      const candidate = (offset + step) % total;
+      addCandidate(bounds.r0 + Math.floor(candidate / colCount), bounds.c0 + (candidate % colCount));
+    }
+    return candidates;
+  }
+
+  function placeHousingBuildings(seed, region, reserved, roads) {
+    const homeIndexes = BUILDING_SPECS
+      .map((spec, index) => ({ spec, index }))
+      .filter(({ spec }) => spec.zone === 'housing')
+      .map(({ index }) => index);
+    const placements = new Map();
+
+    for (let quadrant = 0; quadrant < 4; quadrant += 1) {
+      const indexes = homeIndexes.filter((index) => ((BUILDING_SPECS[index].housingIndex ?? index) % 4) === quadrant);
+      const candidatesByIndex = new Map(indexes.map((index) => [
+        index,
+        buildingFootprintCandidates(seed, region, BUILDING_SPECS[index], index)
+      ]));
+
+      const solve = (position) => {
+        if (position >= indexes.length) return true;
+        const index = indexes[position];
+        const spec = BUILDING_SPECS[index];
+        for (const footprint of candidatesByIndex.get(index) || []) {
+          if (overlapsReserved(reserved, footprint, 2)) continue;
+          if (!spec.passable && overlapsRoad(roads, footprint, 1)) continue;
+          const entrance = chooseEntrance(footprint);
+          if (!inside(entrance.row, entrance.col)) continue;
+
+          reserveFootprint(reserved, footprint);
+          placements.set(index, footprint);
+          if (solve(position + 1)) return true;
+          placements.delete(index);
+          releaseFootprint(reserved, footprint);
+        }
+        return false;
+      };
+
+      if (!solve(0)) {
+        throw new Error(`Unable to place deterministic housing quadrant ${quadrant} in 100x100 origin village.`);
+      }
+    }
+
+    return homeIndexes.map((index) => {
+      const spec = BUILDING_SPECS[index];
+      const footprint = placements.get(index);
+      const building = footprint ? finalizeBuilding(region, spec, index, reserved, footprint) : null;
+      if (!building) throw new Error(`Unable to finalize deterministic building ${spec.type} in 100x100 origin village.`);
+      return building;
+    });
   }
 
   function nearestRoadTarget(roads, start) {
@@ -478,7 +560,11 @@
     const roads = new Set();
     seedMainRoads(roads);
 
-    const buildings = BUILDING_SPECS.map((spec, index) => placeBuilding(seed, region, spec, index, reserved, roads));
+    const buildings = BUILDING_SPECS
+      .map((spec, index) => ({ spec, index }))
+      .filter(({ spec }) => spec.zone !== 'housing')
+      .map(({ spec, index }) => placeBuilding(seed, region, spec, index, reserved, roads));
+    buildings.push(...placeHousingBuildings(seed, region, reserved, roads));
     const blocked = makeMatrix(false);
     for (const building of buildings) {
       if (building.passable) continue;
