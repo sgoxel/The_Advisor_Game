@@ -31,16 +31,14 @@
               <input id="depthStrengthInput" type="number" min="0.6" max="1.8" step="0.1" value="1.0" />
             </label>
 
-            
-
             <label class="form-field">
               <span data-i18n="settings.mapWidth">Map Width</span>
-              <input id="mapWidthInput" type="number" min="12" max="80" step="1" value="24" />
+              <input id="mapWidthInput" type="number" min="100" max="100" step="1" value="100" readonly aria-readonly="true" />
             </label>
 
             <label class="form-field">
               <span data-i18n="settings.mapHeight">Map Height</span>
-              <input id="mapHeightInput" type="number" min="12" max="80" step="1" value="24" />
+              <input id="mapHeightInput" type="number" min="100" max="100" step="1" value="100" readonly aria-readonly="true" />
             </label>
 
             <label class="form-field">
@@ -169,126 +167,96 @@
 
           <div class="params-grid">
             <div class="params-group">
-              <div class="params-title">Texture Source</div>
+              <div class="params-title" data-i18n="settings.groups.camera">Camera and Presentation</div>
 
               <label class="form-field">
-                <span>Texture Directory</span>
-                <input id="textureDirectoryInput" type="text" readonly />
+                <span data-i18n="settings.zoom">Start Zoom</span>
+                <input id="paramStartZoom" type="text" readonly />
               </label>
 
               <label class="form-field">
-                <span>Grass Filename</span>
-                <input id="textureGrassInput" type="text" readonly />
+                <span data-i18n="settings.cameraPitch">Camera Pitch Angle</span>
+                <input id="paramCameraPitch" type="text" readonly />
               </label>
 
               <label class="form-field">
-                <span>Dirt Filename</span>
-                <input id="textureDirtInput" type="text" readonly />
-              </label>
-
-              <label class="form-field">
-                <span>Forest Filename</span>
-                <input id="textureForestInput" type="text" readonly />
-              </label>
-
-              <label class="form-field">
-                <span>Lake Filename</span>
-                <input id="textureLakeInput" type="text" readonly />
-              </label>
-
-              <label class="form-field">
-                <span>River Filename</span>
-                <input id="textureRiverInput" type="text" readonly />
-              </label>
-
-              <label class="form-field">
-                <span>Road Filename</span>
-                <input id="textureRoadInput" type="text" readonly />
-              </label>
-
-              <label class="form-field">
-                <span>Mountain Filename</span>
-                <input id="textureMountainInput" type="text" readonly />
-              </label>
-
-              <label class="form-field">
-                <span>Settlement Filename</span>
-                <input id="textureSettlementInput" type="text" readonly />
+                <span data-i18n="settings.depthStrength">Depth Strength</span>
+                <input id="paramDepthStrength" type="text" readonly />
               </label>
             </div>
           </div>
-
-          <div class="modal-note" data-i18n="settings.note">
-            These fields are derived only from the SEED and map size.
-            Manual editing is disabled. When the same SEED and dimensions
-            are entered, the application regenerates the same topology and terrain distribution.
-          </div>
         </div>
 
-        <div class="modal-actions">
-          <button id="cancelSettingsBtn" class="menu-btn secondary-btn" type="button" data-i18n="common.cancel">Cancel</button>
-          <button id="applySettingsBtn" class="menu-btn" type="button" data-i18n="common.apply">Apply</button>
+        <div class="modal-footer">
+          <button id="cancelSettingsBtn" class="secondary-btn" type="button" data-i18n="common.cancel">Cancel</button>
+          <button id="applySettingsBtn" class="primary-btn" type="button" data-i18n="common.apply">Apply</button>
         </div>
       </div>
     </div>
 
     <!-- Log Modal -->
     <div id="logModal" class="modal-overlay hidden">
-      <div class="modal-card log-card">
-        <div class="modal-header modal-header-row">
-          <span data-i18n="logs.title">Application Logs</span>
-          <button id="closeLogBtn" class="icon-btn" type="button" aria-label="Close log window" data-i18n-attr="aria-label:logs.closeAria">×</button>
+      <div class="modal-card log-modal-card">
+        <div class="modal-header" data-i18n="log.title">Generation Log</div>
+        <div class="modal-body">
+          <pre id="logText" class="log-text"></pre>
         </div>
-
-        <div class="modal-body log-body">
-          <textarea id="logText" class="log-text" readonly spellcheck="false"></textarea>
+        <div class="modal-footer">
+          <button id="closeLogBtn" class="secondary-btn" type="button" data-i18n="common.close">Close</button>
         </div>
       </div>
     </div>
 
-    <!-- Top Ribbon -->
-    <header class="ribbon">
-      <div class="menu-scroll-arrow left hidden" id="topMenuScrollLeft" aria-hidden="true">◀</div>
-      <div class="top-left-scroll" id="topLeftScroll">
-        <div class="top-left">
-        <div class="menu-dropdown">
-          <button class="menu-btn" id="mainMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n="header.mainMenu">Main Menu</button>
-          <div id="mainMenuDropdown" class="dropdown-panel hidden" role="menu" aria-labelledby="mainMenuBtn">
-            <button class="dropdown-item" id="menuGithubBtn" type="button" role="menuitem" data-i18n="menu.githubPage">Github Page</button>
-            <button class="dropdown-item" id="menuSaveBtn" type="button" role="menuitem" data-i18n="menu.save">Export Map JS</button>
-            <button class="dropdown-item" id="menuExportMasksBtn" type="button" role="menuitem" data-i18n="menu.exportMasks">Export Tile Masks</button>
-            <button class="dropdown-item" id="menuLoadBtn" type="button" role="menuitem" data-i18n="menu.load">Load Map</button>
-          </div>
+    <!-- Local Map Folder Modal -->
+    <div id="localMapFolderModal" class="modal-overlay hidden">
+      <div class="modal-card local-map-folder-card">
+        <div class="modal-header">Open local map folder</div>
+        <div class="modal-body">
+          <p>Select an unpacked local map folder containing <strong>index.html</strong> and its referenced assets.</p>
+          <p>This development helper lets you inspect a compatible local map build in the current browser session.</p>
+          <div id="localMapFolderStatus" class="folder-status" role="status" aria-live="polite"></div>
         </div>
-        <button class="menu-btn" id="settingsBtn" type="button" data-i18n="header.settings">Settings</button>
-        <button class="menu-btn" id="logBtn" type="button" data-i18n="header.log">Log</button>
-
-        <label class="lang-select-wrap" for="languageSelect">
-          <span data-i18n="header.language">Language</span>
-          <select id="languageSelect" class="lang-select">
-            <option value="en">EN</option>
-            <option value="tr">TR</option>
-          </select>
-        </label>
+        <div class="modal-footer">
+          <button id="cancelLocalMapFolderBtn" class="secondary-btn" type="button">Cancel</button>
+          <button id="chooseLocalMapFolderBtn" class="primary-btn" type="button">Choose Folder</button>
         </div>
       </div>
-      <button class="menu-scroll-arrow right hidden" id="topMenuScrollRight" type="button" aria-label="Scroll menu right">▶</button>
+    </div>
 
-      <div class="top-stats">
-        <div class="resource-box">
-          <div class="stat-line">
-            <span class="label" data-i18n="stats.gold">Gold</span>
-            <span class="resource-value" id="goldValue">245</span>
-          </div>
+    <!-- Main Menu -->
+    <div class="main-menu-dropdown hidden" id="mainMenuDropdown">
+      <button id="menuSaveBtn" class="menu-item" type="button">Save Campaign</button>
+      <button id="menuLoadBtn" class="menu-item" type="button">Load Campaign</button>
+      <button id="menuExportMasksBtn" class="menu-item" type="button">Export Masks</button>
+      <button id="menuGithubBtn" class="menu-item" type="button">GitHub Repository</button>
+    </div>
+
+    <!-- Top Header -->
+    <header class="top-header">
+      <button id="mainMenuBtn" class="main-menu-btn" type="button" aria-label="Open main menu">☰</button>
+
+      <div class="resource-bar">
+        <div class="resource-item">
+          <span class="resource-icon">💰</span>
+          <span class="resource-value" id="goldValue">120</span>
         </div>
+      </div>
 
+      <div class="top-title" data-i18n="app.title">THE ADVISOR GAME</div>
+
+      <div class="top-actions">
+        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">⚙</button>
+        <button id="logBtn" class="icon-btn" type="button" aria-label="Generation log">LOG</button>
+      </div>
+
+      <div class="stats-bar">
         <div class="stat-box">
           <div class="stat-line">
             <span class="label" data-i18n="stats.health">Health</span>
-            <span class="stat-value" id="healthText">82</span>
+            <span class="stat-value" id="healthText">86</span>
           </div>
           <div class="bar">
-            <div class="fill health" id="healthBar" style="width: 82%;"></div>
+            <div class="fill health" id="healthBar" style="width: 86%;"></div>
           </div>
         </div>
 
