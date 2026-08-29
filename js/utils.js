@@ -71,6 +71,7 @@ window.Game.Utils.loadScriptOnce("js/region_navigation.js", "r02RegionNavigation
 window.Game.Utils.loadScriptOnce("js/character_identity.js", "r04CharacterIdentityModule");
 window.Game.Utils.loadScriptOnce("js/character_age.js", "r04CharacterAgeModule");
 window.Game.Utils.loadScriptOnce("js/character_location_context.js", "r04CharacterLocationContextModule");
+window.Game.Utils.loadScriptOnce("js/character_emotion.js", "r04CharacterEmotionModule");
 window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
 window.Game.Utils.loadScriptOnce("js/npc_residency.js", "r04NpcResidencyModule");
 window.Game.Utils.loadScriptOnce("js/npc_workplaces.js", "r04NpcWorkplacesModule");
