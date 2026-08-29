@@ -21,6 +21,7 @@ test('production startup automatically establishes the real-world-origin fantasy
     const fantasy = new Date(snapshot.fantasyOriginUtcMs);
     return {
       snapshot,
+      yearBasis: calendar.yearBasis,
       civil: {
         year: civil.getUTCFullYear(),
         month: civil.getUTCMonth() + 1,
@@ -40,12 +41,13 @@ test('production startup automatically establishes the real-world-origin fantasy
   });
 
   expect(evidence.snapshot.authority).toBe('simulation');
+  expect(evidence.yearBasis).toBe('civil-year-minus-1900');
   expect(evidence.snapshot.originRealTimestampMs).not.toBeNull();
   expect(evidence.snapshot.originTimezoneOffsetMinutes).not.toBeNull();
   expect(evidence.snapshot.fantasyOriginUtcMs).not.toBeNull();
   expect(evidence.snapshot.originGameMinutes).not.toBeNull();
   expect(evidence.fantasy).toEqual({
-    year: evidence.civil.year - 2000,
+    year: evidence.civil.year - 1900,
     month: evidence.civil.month,
     dayOfMonth: evidence.civil.dayOfMonth,
     hour: evidence.civil.hour,
@@ -197,7 +199,7 @@ test('legacy saves without calendar metadata remain loadable without fabricated 
   expect(evidence.snapshot.acceptedRealTimestampMs).toBe(1_860_000_000_000);
 });
 
-test('new campaign fantasy origin mirrors accepted civil day month time and year minus 2000', async ({ page }) => {
+test('new campaign fantasy origin mirrors accepted civil day month time and year minus 1900', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(() => {
     const time = window.Game.GameTime;
@@ -211,8 +213,36 @@ test('new campaign fantasy origin mirrors accepted civil day month time and year
   });
   expect(evidence.initialized.ok).toBe(true);
   expect(evidence.initialized.initialized).toBe(true);
-  expect(evidence.snapshot.calendar).toMatchObject({ year: 26, month: 8, dayOfMonth: 28, hour: 14, minute: 30 });
+  expect(evidence.snapshot.calendar).toMatchObject({ year: 126, month: 8, dayOfMonth: 28, hour: 14, minute: 30 });
   expect(evidence.snapshot.originRealTimestampMs).toBe(Date.UTC(2026, 7, 28, 14, 30));
+});
+
+test('minus-2000 calendar save migrates +100 fantasy years without elapsed-time drift', async ({ page }) => {
+  await ready(page);
+  const evidence = await page.evaluate(() => {
+    const time = window.Game.GameTime;
+    const calendar = window.Game.CampaignCalendar;
+    time.stop();
+    delete window.Game.State.world.campaignCalendar;
+    time.setForTest(480);
+    const origin = Date.UTC(2026, 7, 28, 14, 30);
+    calendar.initializeOrigin(origin, 0);
+    const current = JSON.parse(calendar.serializeSaveAt(origin));
+    const legacy = current.campaignCalendarState;
+    legacy.version = calendar.legacyVersion;
+    const priorDate = new Date(legacy.fantasyOriginUtcMs);
+    priorDate.setUTCFullYear(priorDate.getUTCFullYear() - 100);
+    legacy.fantasyOriginUtcMs = priorDate.getTime();
+    const beforeMinutes = legacy.totalGameMinutes;
+    const beforeAccepted = legacy.acceptedRealTimestampMs;
+    const loaded = calendar.loadSaveAt(JSON.stringify(current), origin, 0);
+    return { loaded, snapshot: calendar.capture(), beforeMinutes, beforeAccepted };
+  });
+  expect(evidence.loaded.ok).toBe(true);
+  expect(evidence.loaded.calendarMigrated).toBe(true);
+  expect(evidence.snapshot.calendar).toMatchObject({ year: 126, month: 8, dayOfMonth: 28, hour: 14, minute: 30 });
+  expect(evidence.snapshot.totalGameMinutes).toBe(evidence.beforeMinutes);
+  expect(evidence.snapshot.acceptedRealTimestampMs).toBe(evidence.beforeAccepted);
 });
 
 test('resume advances established fantasy chronology and does not remap to civil date', async ({ page }) => {
@@ -231,6 +261,6 @@ test('resume advances established fantasy chronology and does not remap to civil
   });
   expect(evidence.resumed.ok).toBe(true);
   expect(evidence.resumed.elapsedGameDays).toBe(240);
-  expect(evidence.snapshot.calendar).toMatchObject({ year: 27, month: 4, dayOfMonth: 25, hour: 14, minute: 30 });
+  expect(evidence.snapshot.calendar).toMatchObject({ year: 127, month: 4, dayOfMonth: 25, hour: 14, minute: 30 });
   expect(evidence.snapshot.calendar.year).not.toBe(2026);
 });
