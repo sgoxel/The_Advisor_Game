@@ -1,0 +1,46 @@
+name: R04 Protagonist Driver Intent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/protagonist_driver_intent.js'
+      - 'tests/browser/r04-protagonist-driver-intent.spec.mjs'
+      - '.github/workflows/r04-protagonist-driver-intent.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-r04-driver-intent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "candidate_sha=${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned browser test dependency
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R04 protagonist driver intent regression
+        run: npx playwright test tests/browser/r04-protagonist-driver-intent.spec.mjs --project=desktop-chromium
+      - name: Preserve canonical R01 responsive browser baseline
+        run: npx playwright test tests/browser/r01-baseline.spec.mjs
+      - name: Upload focused R04 Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-t01-driver-intent-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
