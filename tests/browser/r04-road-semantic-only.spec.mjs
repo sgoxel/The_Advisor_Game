@@ -30,12 +30,23 @@ test('semantic asset failure never restores either legacy road renderer', async 
     world.cols = 100;
     Game.SpatialWorld.stampVillageOnRuntimeTerrain(world, generated.village);
 
-    // Let the base renderer finish before taking identity snapshots. The invariant here is
-    // that the semantic-road presentation itself must not mutate Simulation terrain/topology;
-    // renderer/startup housekeeping is outside this presentation-only mutation check.
+    // Let the base renderer finish first. The invariant below compares normalized
+    // Simulation terrain values immediately around only the road-presentation calls,
+    // so equivalent container replacement cannot hide or manufacture a mutation.
     Game.Renderer.renderWorld(true);
 
-    const terrainRef = Game.State.world.terrain;
+    const terrainSnapshot = () => JSON.stringify((Game.State.world.terrain || []).map((row) =>
+      (row || []).map((tile) => ({
+        type: tile?.type ?? null,
+        elevation: Number(tile?.elevation ?? 0),
+        road: Boolean(tile?.road),
+        water: Boolean(tile?.water),
+        tags: tile?.tags instanceof Set
+          ? Array.from(tile.tags).sort()
+          : Array.isArray(tile?.tags) ? [...tile.tags].sort() : []
+      }))
+    ));
+    const terrainBefore = terrainSnapshot();
     const roadBefore = JSON.stringify(Game.State.world.originVillage.roadTiles);
     const buildingBefore = JSON.stringify(Game.State.world.originVillage.buildings);
 
@@ -48,7 +59,7 @@ test('semantic asset failure never restores either legacy road renderer', async 
 
     return {
       semanticReady,
-      terrainReferencePreserved: Game.State.world.terrain === terrainRef,
+      terrainUnchanged: terrainSnapshot() === terrainBefore,
       roadUnchanged: JSON.stringify(Game.State.world.originVillage.roadTiles) === roadBefore,
       buildingsUnchanged: JSON.stringify(Game.State.world.originVillage.buildings) === buildingBefore,
       presentationMode: overlay?.dataset.presentationMode,
@@ -71,7 +82,7 @@ test('semantic asset failure never restores either legacy road renderer', async 
   });
 
   expect(evidence.semanticReady).toBe(false);
-  expect(evidence.terrainReferencePreserved).toBe(true);
+  expect(evidence.terrainUnchanged).toBe(true);
   expect(evidence.roadUnchanged).toBe(true);
   expect(evidence.buildingsUnchanged).toBe(true);
   expect(evidence.presentationMode).toBe('semantic-road-assets-unavailable');
