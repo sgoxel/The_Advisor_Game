@@ -281,18 +281,19 @@ for (const viewport of [
   test(`100x100 NPC world and development bubbles remain bounded on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     const errors = await ready(page);
-    await page.evaluate(() => {
+    const overlay = await page.evaluate(() => {
       window.Game.NPCSpatial.updateAt(16_800);
       window.Game.NPCWorld.drawPresentation();
+      const element = document.getElementById('npcWorldOverlay');
+      return {
+        rect: element?.getBoundingClientRect().toJSON(),
+        npcCount: Number(element?.dataset.npcCount || 0),
+        activityBubbleCount: Number(element?.dataset.activityBubbleCount || 0),
+        dialoguePairCount: Number(element?.dataset.dialoguePairCount || 0),
+        spatialRegionSize: Number(element?.dataset.spatialRegionSize || 0),
+        pointerEvents: element ? getComputedStyle(element).pointerEvents : null
+      };
     });
-    const overlay = await page.locator('#npcWorldOverlay').evaluate((element) => ({
-      rect: element.getBoundingClientRect().toJSON(),
-      npcCount: Number(element.dataset.npcCount || 0),
-      activityBubbleCount: Number(element.dataset.activityBubbleCount || 0),
-      dialoguePairCount: Number(element.dataset.dialoguePairCount || 0),
-      spatialRegionSize: Number(element.dataset.spatialRegionSize || 0),
-      pointerEvents: getComputedStyle(element).pointerEvents
-    }));
     expect(overlay.rect.width).toBeGreaterThan(100);
     expect(overlay.rect.height).toBeGreaterThan(100);
     expect(overlay.npcCount).toBeGreaterThanOrEqual(20);
