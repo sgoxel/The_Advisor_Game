@@ -12,8 +12,8 @@
     "readme_commit": "92b79d9f5f153fb5f1eabc5ca43eb771e921a505",
     "admin_233_readme_sync_commit": "2b57975b9ceabba359714b4cc9909a2c7b221b1f",
     "admin_249_visual_spatial_commit": "92b79d9f5f153fb5f1eabc5ca43eb771e921a505",
-    "planner_issues": [105, 118, 132, 137, 139, 143, 151, 154, 155, 169, 226, 234, 240, 250],
-    "admin_issues": [103, 106, 117, 131, 136, 138, 142, 150, 225, 233, 249],
+    "planner_issues": [105,118,132,137,139,143,151,154,155,169,226,234,240,250],
+    "admin_issues": [103,106,117,131,136,138,142,150,225,233,249],
     "pending_readme_sync_authorization": null,
     "governance_issue": 97,
     "completed_r03_phase_issue": 155,
@@ -28,7 +28,7 @@
     "target_open_focused_work_issues": "45-55 when legitimate approved scope supports it",
     "replenish_when_usable_inventory_below": 40,
     "target_immediately_eligible_unclaimed": ">=10 when legitimate dependencies and scope permit",
-    "exclude_from_capacity_count": ["pure phase trackers", "ledgers", "rotation/governance records"],
+    "exclude_from_capacity_count": ["pure phase trackers","ledgers","rotation/governance records"],
     "future_work_rule": "Near-future README/ROADMAP-defined work may be pre-decomposed but remains explicitly blocked until its phase/dependencies become eligible.",
     "anti_filler": "Never create filler, duplicate, speculative, invented-gameplay or artificial micro-task issues merely to satisfy capacity counts."
   },
@@ -92,8 +92,6 @@
     {"github_issue":244,"title":"R04 Coder integration — Materialize authoritative starter-village structures on the living map","status":"blocked","issue_state":"open_blocked_by_235_and_current_spatial_chain","role_owner":"Coder role","release_blocking":true,"reconciliation":"Exterior/readable structure integration remains required and becomes a prerequisite for #253."},
     {"github_issue":245,"title":"R04 Coder bug — Align NPC movement and daily routines with authoritative game time","status":"blocked","issue_state":"open_blocked_by_r04_t14_claim","role_owner":"Coder role","release_blocking":true},
     {"github_issue":246,"title":"R04 Tester regression — Verify real startup preserves protagonist world origin","status":"blocked","issue_state":"open_blocked_by_r04_t14_startup_defect","role_owner":"Tester role","release_blocking":true,"last_result_comment":5461367633},
-    {"github_issue":247,"title":"R04 Tester regression — Verify NPC world-icon readability across zoom and form factors","status":"blocked","issue_state":"open_blocked_pending_focused_scale_evidence_and_237_resolution","role_owner":"Tester role","release_blocking":true,"last_result_comment":5461373888,"reconciliation":"Still required for compatible #228 transitional foundation; final world-space target is #252/#254."},
-    {"github_issue":249,"title":"Admin — Define seamless enterable tile buildings and world-space PNG character sprites","status":"completed_readme_pending_audit_close","role_owner":"Admin authority","release_blocking":false},
-    {"github_issue":250,"title":"Planner — Reconcile R04/R05 with enterable interiors and world-space character sprites","status":"in_progress","issue_state":"open_planner_reconciliation","role_owner":"Planner role","release_blocking":true}
+    {"github_issue":247,"title":"R04 Tester regression — Verify NPC world-icon readability across zoom and form factors","status":"blocked","issue_state":"open_blocked_pending_focused_scale_evidence_and_237_resolution","role_owner":"Tester role","release_blocking":true,"last_result_comment":5461373888,"reconciliation":"Still required for compatible #228 transitional foundation; final world-space target is #252/#254."}
   ]
 }
