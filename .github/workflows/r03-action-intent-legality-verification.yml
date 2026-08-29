@@ -1,0 +1,68 @@
+name: R03 Action Intent Legality Contract Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/action_legality.js'
+      - 'tests/browser/r03-action-intent-legality.spec.mjs'
+      - 'js/state.js'
+      - 'tests/browser/r02-authoritative-state.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-action-intent-legality-verification.yml'
+  pull_request:
+    paths:
+      - 'js/action_legality.js'
+      - 'tests/browser/r03-action-intent-legality.spec.mjs'
+      - 'js/state.js'
+      - 'tests/browser/r02-authoritative-state.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-action-intent-legality-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  action-intent-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+
+      - name: Record exact candidate SHA
+        run: echo "R03-T01 candidate ${GITHUB_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run focused R03 action-intent legality checks
+        run: npx playwright test tests/browser/r03-action-intent-legality.spec.mjs
+
+      - name: Preserve authoritative-state boundary regression
+        run: npx playwright test tests/browser/r02-authoritative-state.spec.mjs
+
+      - name: Preserve stabilized R01 cumulative regression
+        run: npx playwright test tests/browser/r01-cumulative.spec.mjs
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r03-t01-action-intent-legality-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
