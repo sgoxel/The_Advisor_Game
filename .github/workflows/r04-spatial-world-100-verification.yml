@@ -10,12 +10,14 @@ on:
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
       - 'js/npc_spatial_runtime.js'
+      - 'js/npc_runtime_bridge.js'
       - 'js/npc_world.js'
       - 'js/npc_life.js'
       - 'js/utils.js'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - 'tests/browser/r04-npc-distribution.spec.mjs'
       - 'tests/browser/r04-npc-authoritative-game-time.spec.mjs'
+      - 'tests/browser/r04-npc-public-startup.spec.mjs'
       - 'tests/browser/r02-origin-village.spec.mjs'
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
@@ -29,12 +31,14 @@ on:
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
       - 'js/npc_spatial_runtime.js'
+      - 'js/npc_runtime_bridge.js'
       - 'js/npc_world.js'
       - 'js/npc_life.js'
       - 'js/utils.js'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - 'tests/browser/r04-npc-distribution.spec.mjs'
       - 'tests/browser/r04-npc-authoritative-game-time.spec.mjs'
+      - 'tests/browser/r04-npc-public-startup.spec.mjs'
       - 'tests/browser/r02-origin-village.spec.mjs'
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
@@ -56,6 +60,11 @@ jobs:
       - name: Record exact candidate SHA
         run: git rev-parse HEAD
 
+      - name: Validate NPC integration source syntax
+        run: |
+          node --check js/npc_spatial_runtime.js
+          node --check js/npc_runtime_bridge.js
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -66,6 +75,9 @@ jobs:
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+
+      - name: Verify untouched production NPC startup persistence
+        run: npx playwright test tests/browser/r04-npc-public-startup.spec.mjs --project=desktop
 
       - name: Run focused 100x100 spatial-world and NPC occupancy regression
         run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs --project=desktop
