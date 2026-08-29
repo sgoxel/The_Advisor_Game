@@ -124,17 +124,27 @@ window.Game.Config = {
 };
 
 // Load parser-safe early integration modules while HTML parsing is still in
-// progress. These modules expose Simulation-owned validation/resolution facts
-// and a presentation-only status card; no module runs an authoritative action
-// merely because it was loaded by the UI shell.
+// progress. These modules expose Simulation-owned validation/resolution facts,
+// deterministic autonomous-driver APIs, and presentation-only status cards.
+// Loading them never executes an authoritative protagonist action by itself.
 if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<link rel="stylesheet" href="css/legality-feedback.css" />');
+  document.write('<link rel="stylesheet" href="css/autonomy-feedback.css" />');
   document.write('<script src="js/action_legality.js"><\/script>');
   document.write('<script src="js/interaction_target.js"><\/script>');
   document.write('<script src="js/spatial_action_legality.js"><\/script>');
   document.write('<script src="js/interaction_validation.js"><\/script>');
   document.write('<script src="js/world_action_resolution.js"><\/script>');
   document.write('<script src="js/legality_feedback.js"><\/script>');
+
+  // R04 runtime APIs remain character/Simulation-owned. The feedback modules
+  // below only observe their persisted results and never select/validate/resolve.
+  document.write('<script src="js/protagonist_driver_intent.js"><\/script>');
+  document.write('<script src="js/local_bot_driver.js"><\/script>');
+  document.write('<script src="js/autonomous_action_execution.js"><\/script>');
+  document.write('<script src="js/autonomous_decision_loop.js"><\/script>');
+  document.write('<script src="js/autonomy_feedback_presentation.js"><\/script>');
+  document.write('<script src="js/autonomy_feedback_runtime.js"><\/script>');
 
   // Load the terrain-boundary patch before the application initializer.
   document.write('<script src="js/organic_elevation.js"><\/script>');
