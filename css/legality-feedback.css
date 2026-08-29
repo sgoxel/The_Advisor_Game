@@ -1,11 +1,12 @@
 /* R03-T09 / #164 — presentation-only legality and interaction feedback. */
 .legality-feedback-card {
-  position: absolute;
+  position: fixed;
   right: 16px;
   top: 16px;
   z-index: 24;
-  width: min(320px, calc(100% - 32px));
-  max-height: calc(100% - 32px);
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
   overflow: auto;
   border: 1px solid rgba(200, 154, 75, 0.72);
   border-radius: 10px;
@@ -98,7 +99,7 @@
 .legality-feedback-action:hover { background: #36362f; }
 .legality-feedback-action:disabled { opacity: 0.52; cursor: not-allowed; }
 .legality-feedback-action:focus-visible,
-.legality-feedback-details:focus-visible {
+.legality-feedback-details summary:focus-visible {
   outline: 3px solid #e5d8be;
   outline-offset: 2px;
 }
@@ -143,5 +144,5 @@
   .legality-feedback-header { margin-bottom: 6px; }
   .legality-feedback-reason { margin-top: 5px; }
   .legality-feedback-actions { margin-top: 7px; }
-  .legality-feedback-details { display: none; }
+  .legality-feedback-details { margin-top: 6px; }
 }
