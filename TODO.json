@@ -51,7 +51,7 @@
     {"id":"R04-T18","order":16,"title":"Design free-text Advisor chat and interpretation feedback","status":"blocked","github_issue":182,"role_owner":"Designer role","issue_state":"open_blocked","depends_on":["R04-T16"]},
     {"id":"R04-T19","order":17,"title":"Implement free-text Advisor chat surface and transcript binding","status":"blocked","github_issue":248,"role_owner":"Coder role","issue_state":"open_blocked","depends_on":["R04-T16","R04-T17","R04-T18"]},
     {"id":"R04-T20","order":18,"title":"Add cumulative Advisor chat and influence regression","status":"blocked","github_issue":183,"role_owner":"Coder role","issue_state":"open_blocked","depends_on":["R04-T16","R04-T17","R04-T18","R04-T19"]},
-    {"id":"R04-T21","order":19,"title":"Define enterable tile-building and interior visual foundation","status":"ready","github_issue":251,"role_owner":"Designer role","issue_state":"open_ready_unclaimed","depends_on":[],"reuses":[243,235],"authority":"README.md@92b79d9f5f153fb5f1eabc5ca43eb771e921a505 / Admin #249 / Planner #250","note":"#243 is already independently verified and is reused as exterior/readability guidance; #251 adds the newly required interior visual contract."},
+    {"id":"R04-T21","order":19,"title":"Define enterable tile-building and interior visual foundation","status":"awaiting_independent_test","github_issue":251,"role_owner":"Designer role","issue_state":"open_designer_handoff_ai_reviewer_running","depends_on":[],"reuses":[243,235],"authority":"README.md@92b79d9f5f153fb5f1eabc5ca43eb771e921a505 / Admin #249 / Planner #250","note":"#243 remains REUSE. Worker #2 Designer handoff is ready for an independent Tester; NVIDIA Reviewer evidence cannot phase-PASS this Designer work.","implementation":{"worker":"Worker #2","candidate_ref":"984c4ebd9a0b74958a8a4905a933587200acb0a8","contract_ref":"83841a1d410de52d5e8a88cf80b1e96da43b87ce","handoff_comment":5461539480,"artifacts":["design/R04_ENTERABLE_BUILDING_INTERIOR_FOUNDATION.md","design/prototypes/R04_ENTERABLE_BUILDING_INTERIOR_FOUNDATION.svg"]},"auxiliary_state":{"role":"reviewer","status":"ai_running","run_id":33245493583,"claim_comment":5461544994}},
     {"id":"R04-T22","order":20,"title":"Define world-space PNG character sprite foundation","status":"blocked","github_issue":252,"role_owner":"Designer role","issue_state":"open_blocked","depends_on":["R04-T10","R04-T21"],"reuses":[227]},
     {"id":"R04-T23","order":21,"title":"Implement seamless enterable building interiors","status":"blocked","github_issue":253,"role_owner":"Coder role","issue_state":"open_blocked","depends_on":["R04-T12","R04-T14","R04-T21"],"external_issue_dependencies":[244],"note":"#244 remains the exterior authoritative-structure materialization prerequisite; #253 adds seamless interior continuity rather than duplicating #244."},
     {"id":"R04-T24","order":22,"title":"Integrate world-space PNG character sprites into local world and interiors","status":"blocked","github_issue":254,"role_owner":"Coder role","issue_state":"open_blocked","depends_on":["R04-T11","R04-T14","R04-T22","R04-T23"],"note":"Compatible #228 identity/asset-resolution behavior is reused, but detached icon/marker presentation is superseded as the final target."},
@@ -59,29 +59,11 @@
     {"id":"R04-T09","order":24,"title":"Autonomous protagonist and Local BOT phase gate","status":"blocked","github_issue":178,"role_owner":"Tester role","issue_state":"open_blocked","depends_on":["R04-T01","R04-T02","R04-T03","R04-T04","R04-T05","R04-T06","R04-T07","R04-T10","R04-T11","R04-T12","R04-T13","R04-T14","R04-T15","R04-T16","R04-T17","R04-T18","R04-T19","R04-T20","R04-T21","R04-T22","R04-T23","R04-T24","R04-T08"],"deadlock_pass_policy":"README-defined cumulative Tester deadlock exception may apply only if all conditions are met at gate time"}
   ],
   "canonicalization": {
-    "canonical_character_identity_issue": 227,
-    "transitional_r04_icon_identity_integration_issue": 228,
-    "canonical_r04_world_sprite_design_issue": 252,
-    "canonical_r04_world_sprite_integration_issue": 254,
-    "canonical_r04_spatial_foundation_issue": 235,
-    "canonical_r04_starter_village_exterior_design_issue": 243,
-    "canonical_r04_starter_village_exterior_integration_issue": 244,
-    "canonical_r04_enterable_interior_design_issue": 251,
-    "canonical_r04_enterable_interior_integration_issue": 253,
-    "canonical_r04_activity_bubble_design_issue": 236,
-    "canonical_r04_npc_occupancy_issue": 237,
-    "canonical_r04_spatial_regression_issue": 238,
-    "canonical_r04_conversation_contract_issue": 180,
-    "canonical_r04_advice_influence_issue": 181,
-    "canonical_r04_chat_design_issue": 182,
-    "canonical_r04_chat_ui_issue": 248,
-    "canonical_r04_chat_regression_issue": 183,
-    "closed_duplicate_spatial_issue": 239,
-    "canonical_r05_dialogue_issue": 229
+    "canonical_character_identity_issue":227,"transitional_r04_icon_identity_integration_issue":228,"canonical_r04_world_sprite_design_issue":252,"canonical_r04_world_sprite_integration_issue":254,"canonical_r04_spatial_foundation_issue":235,"canonical_r04_starter_village_exterior_design_issue":243,"canonical_r04_starter_village_exterior_integration_issue":244,"canonical_r04_enterable_interior_design_issue":251,"canonical_r04_enterable_interior_integration_issue":253,"canonical_r04_activity_bubble_design_issue":236,"canonical_r04_npc_occupancy_issue":237,"canonical_r04_spatial_regression_issue":238,"canonical_r04_conversation_contract_issue":180,"canonical_r04_advice_influence_issue":181,"canonical_r04_chat_design_issue":182,"canonical_r04_chat_ui_issue":248,"canonical_r04_chat_regression_issue":183,"closed_duplicate_spatial_issue":239,"canonical_r05_dialogue_issue":229
   },
   "future_phase_predecomposition": {
-    "R05": {"status":"planned_blocked_until_R04_gate_178","existing_issues":[229],"migrated_to_r04_by_admin_p_rev":[180,181,182,183,248],"character_identity_rule":"Full-body static PNG dialogue presentation preserves the same recognizable identity as the R04 world-space PNG sprite; presentation is never Simulation authority."},
-    "R15": {"status":"planned","final_visual_gate_rule":"Verify coherent original tile-world art, enterable building/interior readability, world-space sprite identity and full-body dialogue identity continuity across supported devices."}
+    "R05":{"status":"planned_blocked_until_R04_gate_178","existing_issues":[229],"migrated_to_r04_by_admin_p_rev":[180,181,182,183,248],"character_identity_rule":"Full-body static PNG dialogue presentation preserves the same recognizable identity as the R04 world-space PNG sprite; presentation is never Simulation authority."},
+    "R15":{"status":"planned","final_visual_gate_rule":"Verify coherent original tile-world art, enterable building/interior readability, world-space sprite identity and full-body dialogue identity continuity across supported devices."}
   },
   "supporting_work": [
     {"github_issue":116,"title":"Infrastructure — Guard Playwright workflow project selectors","status":"completed","issue_state":"closed_completed","role_owner":"Reviewer role","release_blocking":false},
