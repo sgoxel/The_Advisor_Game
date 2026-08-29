@@ -2,10 +2,10 @@ import { test, expect } from '@playwright/test';
 
 async function loadGame(page) {
   await page.goto('/');
-  await page.waitForFunction(() => window.Game?.RegionTerrain && window.Game?.WorldCoordinates);
+  await page.waitForFunction(() => window.Game?.RegionTerrain && window.Game?.WorldCoordinates && window.Game.RegionTerrain.regionSize === 100);
 }
 
-test.describe('R02-T14 deterministic multi-region terrain', () => {
+test.describe('R02-T14 deterministic multi-region terrain (Admin #233 compatible)', () => {
   test('same seed and coordinates are reproducible independent of visit order', async ({ page }) => {
     await loadGame(page);
     const result = await page.evaluate(() => {
@@ -18,13 +18,15 @@ test.describe('R02-T14 deterministic multi-region terrain', () => {
         first: T.fingerprint(first),
         second: T.fingerprint(second),
         region: first.region,
-        boundary: first.hasGameplayFiniteBoundary
+        boundary: first.hasGameplayFiniteBoundary,
+        regionSize: T.regionSize
       };
     });
     expect(result.first).toBe(result.second);
     expect(result.region.x).toBe(3);
     expect(result.region.y).toBe(-2);
     expect(result.boundary).toBe(false);
+    expect(result.regionSize).toBe(100);
   });
 
   test('positive and negative neighboring regions use consecutive global coordinates with coherent fields', async ({ page }) => {
@@ -52,7 +54,7 @@ test.describe('R02-T14 deterministic multi-region terrain', () => {
         maxMoistureDelta: Math.max(...pairs.map((pair) => pair.moistureDelta))
       };
     });
-    expect(result.westOrigin).toEqual([-24, 0]);
+    expect(result.westOrigin).toEqual([-100, 0]);
     expect(result.eastOrigin).toEqual([0, 0]);
     expect(result.allConsecutive).toBe(true);
     expect(result.maxElevationDelta).toBeLessThan(0.2);
@@ -79,14 +81,16 @@ test.describe('R02-T14 deterministic multi-region terrain', () => {
         stable: T.fingerprint(before) === T.fingerprint(after),
         counts: before.counts,
         authority: before.authority,
-        finite: T.hasGameplayFiniteBoundary
+        finite: T.hasGameplayFiniteBoundary,
+        regionSize: T.regionSize
       };
     });
     expect(result.unique).toBeGreaterThanOrEqual(3);
     expect(result.stable).toBe(true);
     expect(result.authority).toBe('simulation');
     expect(result.finite).toBe(false);
-    expect(Object.values(result.counts).reduce((sum, value) => sum + value, 0)).toBe(24 * 24);
+    expect(result.regionSize).toBe(100);
+    expect(Object.values(result.counts).reduce((sum, value) => sum + value, 0)).toBe(100 * 100);
   });
 
   test('region data exposes terrain, elevation, biome, water and road attributes', async ({ page }) => {
