@@ -1,8 +1,9 @@
-/* R02 / #133: authoritative campaign calendar and real-world resume catch-up. */
+/* R02 / #133 / R04 #282: authoritative campaign calendar and real-world resume catch-up. */
 (function installCampaignCalendar() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r02-campaign-calendar-v1';
+  const LEGACY_VERSION = 'r02-campaign-calendar-v1';
+  const VERSION = 'r02-campaign-calendar-v2';
   const AUTHORITY = 'simulation';
   const REAL_MS_PER_GAME_MINUTE = 2500;
   const GAME_MINUTES_PER_DAY = 1440;
@@ -43,8 +44,15 @@
   function fantasyOriginMs(realTimestampMs, timezoneOffsetMinutes) {
     const civil = civilParts(realTimestampMs, timezoneOffsetMinutes);
     const date = new Date(0);
-    date.setUTCFullYear(civil.year - 2000, civil.month - 1, civil.dayOfMonth);
+    date.setUTCFullYear(civil.year - 1900, civil.month - 1, civil.dayOfMonth);
     date.setUTCHours(civil.hour, civil.minute, 0, 0);
+    return date.getTime();
+  }
+
+  function shiftFantasyYear(fantasyOriginUtcMs, years) {
+    const date = new Date(fantasyOriginUtcMs);
+    if (!Number.isFinite(date.getTime())) return null;
+    date.setUTCFullYear(date.getUTCFullYear() + years);
     return date.getTime();
   }
 
@@ -136,9 +144,9 @@
   }
 
   function validateCalendarState(candidate) {
-    if (candidate === undefined || candidate === null) return deepFreeze({ ok: true, legacy: true, state: null });
+    if (candidate === undefined || candidate === null) return deepFreeze({ ok: true, legacy: true, migrated: false, state: null });
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return deepFreeze({ ok: false, code: 'INVALID_CAMPAIGN_CALENDAR' });
-    if (candidate.version !== VERSION || candidate.authority !== AUTHORITY) return deepFreeze({ ok: false, code: 'INVALID_CAMPAIGN_CALENDAR' });
+    if ((candidate.version !== VERSION && candidate.version !== LEGACY_VERSION) || candidate.authority !== AUTHORITY) return deepFreeze({ ok: false, code: 'INVALID_CAMPAIGN_CALENDAR' });
     const accepted = candidate.acceptedRealTimestampMs === null ? null : validTimestamp(candidate.acceptedRealTimestampMs);
     if (candidate.acceptedRealTimestampMs !== null && accepted === null) return deepFreeze({ ok: false, code: 'INVALID_REAL_TIMESTAMP' });
     const total = Number(candidate.totalGameMinutes);
@@ -147,12 +155,17 @@
     if (!Number.isSafeInteger(operations) || operations < 0) return deepFreeze({ ok: false, code: 'INVALID_CATCHUP_OPERATIONS' });
     const originReal = candidate.originRealTimestampMs === undefined || candidate.originRealTimestampMs === null ? null : validTimestamp(candidate.originRealTimestampMs);
     const originOffset = candidate.originTimezoneOffsetMinutes === undefined || candidate.originTimezoneOffsetMinutes === null ? null : validTimezoneOffset(candidate.originTimezoneOffsetMinutes);
-    const fantasyOrigin = candidate.fantasyOriginUtcMs === undefined || candidate.fantasyOriginUtcMs === null ? null : Number(candidate.fantasyOriginUtcMs);
+    let fantasyOrigin = candidate.fantasyOriginUtcMs === undefined || candidate.fantasyOriginUtcMs === null ? null : Number(candidate.fantasyOriginUtcMs);
     const originGameMinutes = candidate.originGameMinutes === undefined || candidate.originGameMinutes === null ? null : Number(candidate.originGameMinutes);
     const anyOrigin = originReal !== null || originOffset !== null || fantasyOrigin !== null || originGameMinutes !== null;
     const completeOrigin = originReal !== null && originOffset !== null && Number.isFinite(fantasyOrigin) && Number.isFinite(originGameMinutes) && originGameMinutes >= 0;
     if (anyOrigin && !completeOrigin) return deepFreeze({ ok: false, code: 'INVALID_CAMPAIGN_ORIGIN' });
-    return deepFreeze({ ok: true, legacy: false, state: { version: VERSION, authority: AUTHORITY, acceptedRealTimestampMs: accepted, originRealTimestampMs: completeOrigin ? originReal : null, originTimezoneOffsetMinutes: completeOrigin ? originOffset : null, fantasyOriginUtcMs: completeOrigin ? fantasyOrigin : null, originGameMinutes: completeOrigin ? originGameMinutes : null, totalGameMinutes: total, catchUpOperations: operations } });
+    const migrated = candidate.version === LEGACY_VERSION;
+    if (migrated && completeOrigin) {
+      fantasyOrigin = shiftFantasyYear(fantasyOrigin, 100);
+      if (!Number.isFinite(fantasyOrigin)) return deepFreeze({ ok: false, code: 'INVALID_CAMPAIGN_ORIGIN' });
+    }
+    return deepFreeze({ ok: true, legacy: false, migrated, state: { version: VERSION, authority: AUTHORITY, acceptedRealTimestampMs: accepted, originRealTimestampMs: completeOrigin ? originReal : null, originTimezoneOffsetMinutes: completeOrigin ? originOffset : null, fantasyOriginUtcMs: completeOrigin ? fantasyOrigin : null, originGameMinutes: completeOrigin ? originGameMinutes : null, totalGameMinutes: total, catchUpOperations: operations } });
   }
 
   function installCalendarState(candidate) {
@@ -161,12 +174,12 @@
     const state = ensureState();
     if (checked.legacy) {
       Object.assign(state, { acceptedRealTimestampMs: null, originRealTimestampMs: null, originTimezoneOffsetMinutes: null, fantasyOriginUtcMs: null, originGameMinutes: null, totalGameMinutes: currentGameMinutes(), catchUpOperations: 0 });
-      return deepFreeze({ ok: true, legacy: true, state: capture() });
+      return deepFreeze({ ok: true, legacy: true, migrated: false, state: capture() });
     }
     const restoredTime = Game.GameTime.restore({ authority: AUTHORITY, totalGameMinutes: checked.state.totalGameMinutes });
     if (!restoredTime.ok) return deepFreeze({ ok: false, code: 'INVALID_CAMPAIGN_TIME' });
     Object.assign(state, checked.state);
-    return deepFreeze({ ok: true, legacy: checked.state.fantasyOriginUtcMs === null, state: capture() });
+    return deepFreeze({ ok: true, legacy: checked.state.fantasyOriginUtcMs === null, migrated: checked.migrated, state: capture() });
   }
 
   function withCalendarEnvelope(baseEnvelope) { return deepFreeze({ ...baseEnvelope, campaignCalendarState: capture() }); }
@@ -178,7 +191,7 @@
     if (!baseChecked.ok) return baseChecked;
     const calendarChecked = validateCalendarState(envelope?.campaignCalendarState);
     if (!calendarChecked.ok) return calendarChecked;
-    return deepFreeze({ ...baseChecked, campaignCalendarState: calendarChecked.state, legacyCalendar: calendarChecked.legacy });
+    return deepFreeze({ ...baseChecked, campaignCalendarState: calendarChecked.state, legacyCalendar: calendarChecked.legacy, migratedCalendar: calendarChecked.migrated });
   }
 
   function createWrappedEnvelope(candidate, deltaCandidate, observedRealTimestampMs = Date.now(), timezoneOffsetMinutes = new Date(observedRealTimestampMs).getTimezoneOffset()) {
@@ -198,7 +211,7 @@
     if (!calendarInstalled.ok) return calendarInstalled;
     const resumed = reconcileResume(observedRealTimestampMs, timezoneOffsetMinutes);
     if (!resumed.ok && resumed.code !== 'BACKWARD_REAL_CLOCK') return resumed;
-    return deepFreeze({ ...loaded, campaignCalendarState: capture(), resumeCatchUp: resumed });
+    return deepFreeze({ ...loaded, campaignCalendarState: capture(), calendarMigrated: calendarInstalled.migrated, resumeCatchUp: resumed });
   }
 
   function bootstrapNewCampaign(observedRealTimestampMs = Date.now(), timezoneOffsetMinutes = new Date(observedRealTimestampMs).getTimezoneOffset()) {
@@ -208,7 +221,7 @@
   }
 
   Game.CampaignPersistence = Object.freeze({ ...basePersistence, createSaveEnvelope(candidate, deltaCandidate) { return createWrappedEnvelope(candidate, deltaCandidate, Date.now()); }, serializeSave(candidate, deltaCandidate) { return JSON.stringify(createWrappedEnvelope(candidate, deltaCandidate, Date.now())); }, validateSave: validateWrappedSave, loadSave(input) { return loadSaveAt(input, Date.now()); } });
-  Game.CampaignCalendar = Object.freeze({ version: VERSION, authority: AUTHORITY, realMillisecondsPerGameDay: 3600000, gameMinutesPerDay: GAME_MINUTES_PER_DAY, capture, initializeOrigin, bootstrapNewCampaign, checkpointRealTime, reconcileResume, validate: validateCalendarState, install: installCalendarState, serializeSaveAt, loadSaveAt });
+  Game.CampaignCalendar = Object.freeze({ version: VERSION, legacyVersion: LEGACY_VERSION, authority: AUTHORITY, yearBasis: 'civil-year-minus-1900', realMillisecondsPerGameDay: 3600000, gameMinutesPerDay: GAME_MINUTES_PER_DAY, capture, initializeOrigin, bootstrapNewCampaign, checkpointRealTime, reconcileResume, validate: validateCalendarState, install: installCalendarState, serializeSaveAt, loadSaveAt });
 
   function bootstrapInstalledNewCampaign() {
     if (!Game.GameTime?.capture || !Game.State?.world) return;
