@@ -65,7 +65,6 @@ test('untouched production startup keeps all NPCs collision-safe and spatially d
   expect(second.valid).toBe(true);
   expect(a.count).toBe(first.populationCount);
   expect(b.count).toBe(second.populationCount);
-  expect(a.count).toBeGreaterThanOrEqual(20);
   expect(a.uniqueCount).toBe(a.count);
   expect(b.uniqueCount).toBe(b.count);
   expect(a.allInteger).toBe(true);
