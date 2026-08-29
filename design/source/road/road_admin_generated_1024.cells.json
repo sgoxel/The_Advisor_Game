@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "family": "road",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "source": "Admin-priority terrain-neutral dirt-road production redraw for #286/#296.",
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "straight_vertical"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "straight_horizontal"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "cross"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "turn_ne"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "turn_es"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "turn_sw"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "turn_wn"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "t_junction"
+    }
+  ],
+  "unusedCells": [
+    {
+      "row": 2,
+      "col": 0
+    },
+    {
+      "row": 2,
+      "col": 1
+    },
+    {
+      "row": 2,
+      "col": 2
+    },
+    {
+      "row": 2,
+      "col": 3
+    },
+    {
+      "row": 3,
+      "col": 0
+    },
+    {
+      "row": 3,
+      "col": 1
+    },
+    {
+      "row": 3,
+      "col": 2
+    },
+    {
+      "row": 3,
+      "col": 3
+    }
+  ]
+}

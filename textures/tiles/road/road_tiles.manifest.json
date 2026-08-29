@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "family": "road",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "straight_vertical",
+      "filename": "road_straight_vertical_256px.png",
+      "sha256": "65617df39db765bce18f81fe1e1670806fe52f3ba075e4c3cf746dbec39edcfe"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "straight_horizontal",
+      "filename": "road_straight_horizontal_256px.png",
+      "sha256": "b962e98c15f4ba2d756281ce6e1b05324cc32ff849744b5c67cf804e96cbbf7b"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "cross",
+      "filename": "road_cross_256px.png",
+      "sha256": "1073b0436ad0ad8870c139706f827f29b02e563c83f90eedbd937b9f7f78cc9f"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "turn_ne",
+      "filename": "road_turn_ne_256px.png",
+      "sha256": "65d312843b253be3be6729fb2e1a93a0ba0bdfd9a51ed12ad4c2869af9e9761d"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "turn_es",
+      "filename": "road_turn_es_256px.png",
+      "sha256": "4f015aa4fe55528d8e3c1825fa329bdce21ce61fb00e79d630bce5fe0a8355c6"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "turn_sw",
+      "filename": "road_turn_sw_256px.png",
+      "sha256": "27208e0e6d0f5f2d05993890c6e1e7207116e8a951e156bdb469ab18945e3c9e"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "turn_wn",
+      "filename": "road_turn_wn_256px.png",
+      "sha256": "52726a95be5f4323fd62ddf691c46c7c19e3cfb29d6ee6ae178444374ff29aff"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "t_junction",
+      "filename": "road_t_junction_256px.png",
+      "sha256": "02b3c607f41fb3e5f5cd5ec2fdc7d1a02dbf722818386aaa78d090c30e0b1b50"
+    }
+  ]
+}
