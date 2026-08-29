@@ -22,6 +22,41 @@ window.Game = window.Game || {};
     return locales[normalized] || locales.en || null;
   }
 
+  function ensureLanguageSelect() {
+    let select = document.getElementById("languageSelect");
+    if (select) return select;
+
+    const host = document.querySelector(".top-actions");
+    if (!host) return null;
+
+    const wrapper = document.createElement("label");
+    wrapper.className = "lang-select-wrap";
+    wrapper.setAttribute("aria-label", "Language");
+
+    const label = document.createElement("span");
+    label.textContent = "LANG";
+
+    select = document.createElement("select");
+    select.id = "languageSelect";
+    select.className = "lang-select";
+    select.setAttribute("aria-label", "Language");
+
+    const english = document.createElement("option");
+    english.value = "en";
+    english.textContent = "EN";
+    select.appendChild(english);
+
+    const turkish = document.createElement("option");
+    turkish.value = "tr";
+    turkish.textContent = "TR";
+    select.appendChild(turkish);
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(select);
+    host.insertBefore(wrapper, host.firstChild);
+    return select;
+  }
+
   async function loadLanguage(lang) {
     const normalized = lang === "tr" ? "tr" : "en";
     const localeData = getLocaleData(normalized);
@@ -29,6 +64,8 @@ window.Game = window.Game || {};
     if (!localeData) {
       throw new Error(`Locale data is not available for language: ${normalized}`);
     }
+
+    const languageSelect = ensureLanguageSelect();
 
     State.i18n.current = normalized;
     State.i18n.messages = localeData;
@@ -40,7 +77,9 @@ window.Game = window.Game || {};
       // Ignore localStorage access errors.
     }
 
-    if (State.dom && State.dom.languageSelect) {
+    if (languageSelect) {
+      languageSelect.value = normalized;
+    } else if (State.dom && State.dom.languageSelect) {
       State.dom.languageSelect.value = normalized;
     }
 
