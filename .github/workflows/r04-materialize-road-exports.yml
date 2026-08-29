@@ -58,11 +58,11 @@ jobs:
           const expectedTypes = new Set([
             'straight_vertical',
             'straight_horizontal',
+            'cross',
             'turn_ne',
-            'turn_nw',
-            'turn_se',
+            'turn_es',
             'turn_sw',
-            'crossroad',
+            'turn_wn',
             't_junction'
           ]);
           const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
