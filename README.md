@@ -625,15 +625,21 @@ After all five roles have been visited, the Worker begins another pass when the 
 
 Blocking corrections, revisions, handoffs, verification obligations, continuations, and release-critical work take priority over ordinary backlog appropriate to their owning role. Workers must not invent work merely to keep themselves busy.
 
-Worker identity and independence restrictions remain in force throughout multi-role and multi-pass runs. A Worker must not independently verify or approve its own earlier implementation, design, revision, bug fix, workflow fix, or process fix. When no independent target exists for Tester or Reviewer, that target remains for another Worker identity while the current Worker continues with other eligible work.
+Worker identity and independence restrictions normally remain in force throughout multi-role and multi-pass runs. A Worker must not independently verify or approve its own earlier implementation, design, revision, bug fix, workflow fix, or process fix. When another independent Worker identity is available, self-authored work remains for that different Worker.
+
+A **Tester deadlock exception** prevents permanent governance lock when all of the following are true: a cumulative phase or release gate is otherwise ready; all required implementation/design/revision dependencies are complete; no unresolved valid T-REV, P-REV, claim collision, or higher-authority blocker remains; and every currently authorized Worker identity that could act as Tester is disqualified only because each has accepted authorship inside the cumulative gate scope. In that specific condition, the gate must not remain indefinitely blocked solely by Worker-identity independence.
+
+When a Tester deadlock is documented, the **first Worker whose normal authorized execution order reaches that Tester gate** may claim it and perform the complete gate verification even if that Worker has accepted work inside the cumulative scope. For scheduled Workers #1–#5, normal authorized execution order is the canonical recurring rotation. Worker #6 or Worker #7 may use the exception only when directly invoked by Admin while the deadlock remains unresolved and before another Worker has claimed the gate.
+
+The deadlock Worker must still perform every required exact-state check, regression, browser/responsive/accessibility/performance/public verification and evidence collection required by the gate. A successful exception approval must be recorded explicitly as **`DEADLOCK TESTER PASS`**, identify the deadlock record and exact tested state, and accurately disclose the Worker's own included authorship. It is a valid phase/release PASS and may advance the project, but it must not be described as independent verification of that Worker's own included work. If a genuinely independent eligible Worker becomes available before the gate is claimed, the normal independent path takes priority.
 
 For recurring Workers #1–#5, the next scheduled starting point should follow the **last role in which useful work was actually performed** during the preceding completed run. If the preceding Worker made no eligible progress in any role, the unresolved starting point is preserved rather than falsely consuming empty roles.
 
 When Worker #6 or Worker #7 performs project work, it uses normal claims and audit records but never consumes, advances, reserves, or rewrites the recurring schedule cursor. Their changes are discovered by scheduled and manual Workers through normal GitHub state re-fetch and claim/dependency checks.
 
-Worker #6 and Worker #7 are independent identities from each other. Either may independently verify the other's prior work when acting as Tester and when all normal verification requirements are satisfied, but neither may independently verify or approve its own prior work.
+Worker #6 and Worker #7 are independent identities from each other. Either may independently verify the other's prior work when acting as Tester and when all normal verification requirements are satisfied, but neither may independently verify or approve its own prior work outside the documented Tester deadlock exception.
 
-Multiple Workers may overlap in time. Claims, dependency rules, committed-state checks, NVIDIA ownership, and independent-verification rules remain responsible for preventing duplicate work, self-approval, and unsafe concurrency.
+Multiple Workers may overlap in time. Claims, dependency rules, committed-state checks, NVIDIA ownership, independent-verification rules, and the narrowly scoped Tester deadlock exception remain responsible for preventing duplicate work, false independence claims, and unsafe concurrency.
 
 README defines this high-level role model and its responsibility boundaries. Detailed scheduling, rotation-state storage, task-selection mechanics, claim syntax, branching, file handling, commands, tools, automation implementation, and other execution details belong to Worker instructions and subordinate operational records.
 
@@ -641,7 +647,7 @@ README defines this high-level role model and its responsibility boundaries. Det
 
 Planner converts README goals and principles into practical project planning.
 
-Planner decides phases and sequencing, dependencies, architecture and project organization, technical decomposition, task scope and acceptance criteria, assignment of work to the appropriate role, and normal prerequisites for an independently verified phase release.
+Planner decides phases and sequencing, dependencies, architecture and project organization, technical decomposition, task scope and acceptance criteria, assignment of work to the appropriate role, and normal prerequisites for an independently verified phase release or a valid Tester deadlock PASS.
 
 Planner keeps planning state consistent with Admin instructions and README, maintains enough focused work for implementation and design, and does not move planning detail into README.
 
@@ -667,7 +673,7 @@ Designer does not redefine Planner-owned scope, acceptance criteria, dependencie
 
 ## Tester
 
-Tester independently verifies actual committed project state rather than relying only on implementation or review claims.
+Tester verifies actual committed project state rather than relying only on implementation or review claims.
 
 Tester verifies relevant functionality, visual work, integration, regression, usability, performance, accessibility, public behavior, revisions, and release candidates against exact committed evidence.
 
@@ -675,7 +681,9 @@ Under normal autonomous development, only an **independent Worker acting in the 
 
 A Worker acting as Tester must not independently PASS or approve implementation, design, revision, bug fix, process fix, or other change previously produced by the same Worker identity.
 
-This does not limit Admin authority. Admin may explicitly authorize publication or use of a build without Tester verification; such a build is Admin-authorized but remains **unverified** until independent Tester verification actually occurs.
+The sole standing exception is the documented **Tester deadlock exception** above. When every authorized Tester identity is conflicted by accepted authorship in an otherwise-ready cumulative phase/release gate, the first Worker whose authorized turn reaches the gate may perform the full required verification and issue `DEADLOCK TESTER PASS`. That PASS is sufficient to advance the phase/release but is not represented as independent verification of the Worker's own included work.
+
+This does not limit Admin authority. Admin may explicitly authorize publication or use of a build without Tester verification; such a build is Admin-authorized but remains **unverified** until normal independent verification or a valid documented deadlock gate PASS occurs, with the verification label stated accurately.
 
 ## Reviewer
 
@@ -685,7 +693,7 @@ Reviewer examines project execution health across issues, claims, revisions, CI/
 
 When evidence supports a concrete improvement, Reviewer may create a focused bug/infrastructure task and implement a scoped bug fix, workflow/configuration correction, reliability improvement, or process optimization without inventing product scope or overriding Planner-owned phase, dependency, or acceptance-criteria authority.
 
-Reviewer-produced code, configuration, assets, or process fixes remain implementation work and require independent Tester verification by a different Worker identity before being treated as independently verified.
+Reviewer-produced code, configuration, assets, or process fixes remain implementation work and require independent Tester verification by a different Worker identity before being treated as independently verified, unless that work is only one part of a cumulative gate that later qualifies for and receives a valid Tester deadlock PASS.
 
 Reviewer may assess quality and process health but is not phase or release approval authority.
 
@@ -698,6 +706,8 @@ A Worker must not independently verify or approve its own prior implementation, 
 If a Tester or Reviewer stage would require evaluating the same Worker's own prior change, the Worker must select another eligible independent target for that role or leave that target for another Worker identity while continuing other eligible work.
 
 Implementation, design, and Reviewer-produced changes require independent Tester verification by a different Worker identity before they are called independently verified.
+
+The documented Tester deadlock exception does not erase Worker identity or retroactively make self-authored work independent. It only allows the first Worker whose authorized turn reaches an otherwise-ready cumulative phase/release gate to perform the complete gate verification and issue a valid, explicitly labeled `DEADLOCK TESTER PASS` when no authorized independent Tester identity exists.
 
 These Worker restrictions govern autonomous Worker behavior and do not restrict explicit Admin authority.
 
@@ -715,11 +725,11 @@ Revision decisions and evidence should remain traceable in the project's operati
 
 No Worker independently declares its own implementation, visual work, process fix, or requested revision independently verified.
 
-Independent verification is normally required before work is called a **verified release**.
+Independent verification is normally required before work is called a **verified release**. When a cumulative phase/release gate meets the documented Tester deadlock conditions, a full-evidence `DEADLOCK TESTER PASS` is also valid release/phase authority and must be labeled accurately rather than falsely described as independent verification of the passing Worker's own included work.
 
 Independent verification is **not mandatory for publication, deployment, import, replacement, rollback, or other repository/public actions when the Admin explicitly instructs otherwise**.
 
-An Admin-authorized exception does not automatically convert unverified work into verified work; it only authorizes the requested action.
+An Admin-authorized exception does not automatically convert unverified work into independently verified work; it only authorizes the requested action. A documented Tester deadlock PASS is different: it is a standing governance-approved phase/release verification path with full checks, while preserving accurate independence attribution.
 
 ---
 
@@ -750,7 +760,7 @@ An Admin-authorized exception does not automatically convert unverified work int
 
 **Workers operate under README unless Admin explicitly instructs otherwise.**
 
-**Independent Tester verification determines whether a build may be called independently verified; it does not limit Admin's authority to publish an unverified build.**
+**Independent Tester verification is the normal verification path. If every authorized Tester identity is conflicted by accepted authorship in an otherwise-ready cumulative phase/release gate, the first Worker whose authorized turn reaches that gate may perform all required checks and issue an accurately labeled `DEADLOCK TESTER PASS`; that PASS is sufficient to advance the phase/release without falsely claiming independence for the Worker's own included work.**
 
 **Reviewer improves process health and fixes evidenced development defects, but Reviewer is not phase/release approval authority.**
 
