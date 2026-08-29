@@ -71,16 +71,50 @@ jobs:
             fi
           }
 
-          assert_count 1 $'AI TEST EVIDENCE:\nVERDICT: PASS' 'AI TEST EVIDENCE:'
-          assert_count 1 $'**AI TEST EVIDENCE:**\nVERDICT: FAIL' 'AI TEST EVIDENCE:'
-          assert_count 1 $'AI REVIEW EVIDENCE:\nVERDICT: PASS' 'AI REVIEW EVIDENCE:'
-          assert_count 1 $'**AI REVIEW EVIDENCE:**\nVERDICT: CHANGES REQUESTED' 'AI REVIEW EVIDENCE:'
+          assert_count 1 $'AI TEST EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: PASS' 'AI TEST EVIDENCE:'
+          assert_count 1 $'**AI TEST EVIDENCE:**\nGROUNDING: VERIFIED\nVERDICT: FAIL' 'AI TEST EVIDENCE:'
+          assert_count 1 $'AI REVIEW EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: PASS' 'AI REVIEW EVIDENCE:'
+          assert_count 1 $'**AI REVIEW EVIDENCE:**\nGROUNDING: VERIFIED\nVERDICT: CHANGES REQUESTED' 'AI REVIEW EVIDENCE:'
           assert_count 0 'Unrelated note mentioning AI TEST EVIDENCE: PASS' 'AI TEST EVIDENCE:'
           assert_count 0 '**NOT AI TEST EVIDENCE: PASS**' 'AI TEST EVIDENCE:'
 
-          [ "$(verdict_value $'AI REVIEW EVIDENCE:\nVERDICT: PASS')" = "PASS" ]
-          [ "$(verdict_value $'AI REVIEW EVIDENCE:\nVERDICT: CHANGES REQUESTED')" = "CHANGES REQUESTED" ]
-          [ "$(verdict_value $'AI TEST EVIDENCE:\nVERDICT: FAIL')" = "FAIL" ]
+          [ "$(verdict_value $'AI REVIEW EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: PASS')" = "PASS" ]
+          [ "$(verdict_value $'AI REVIEW EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: CHANGES REQUESTED')" = "CHANGES REQUESTED" ]
+          [ "$(verdict_value $'AI TEST EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: FAIL')" = "FAIL" ]
+
+      - name: Verify literal repository grounding validation cases
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          validate_grounding() {
+            local body="$1"
+            printf '%s\n' "$body" | grep -Fxq 'GROUNDING: VERIFIED' || return 1
+            local count=0
+            while IFS= read -r source_line; do
+              [ -n "$source_line" ] || continue
+              count=$((count + 1))
+              local entry path needle
+              entry="${source_line#SOURCE: }"
+              path="${entry%% :: *}"
+              needle="${entry#* :: }"
+              [ "$path" != "$entry" ] || return 1
+              [ -n "$path" ] && [ -n "$needle" ] || return 1
+              [ -f "$path" ] || return 1
+              grep -Fq -- "$needle" "$path" || return 1
+            done < <(printf '%s\n' "$body" | sed -n 's/^SOURCE: /SOURCE: /p')
+            [ "$count" -gt 0 ]
+          }
+
+          VALID=$'AI REVIEW EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: PASS\nSOURCE: .github/AI_AUXILIARY_RULES.md :: ## Evidence Grounding'
+          BAD_FILE=$'AI REVIEW EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: PASS\nSOURCE: does-not-exist.md :: impossible'
+          BAD_TOKEN=$'AI REVIEW EVIDENCE:\nGROUNDING: VERIFIED\nVERDICT: PASS\nSOURCE: .github/AI_AUXILIARY_RULES.md :: wisdom crystals invented token'
+          NO_GROUNDING=$'AI REVIEW EVIDENCE:\nVERDICT: PASS\nSOURCE: .github/AI_AUXILIARY_RULES.md :: ## Evidence Grounding'
+
+          validate_grounding "$VALID"
+          if validate_grounding "$BAD_FILE"; then echo 'Bad file unexpectedly passed grounding.' >&2; exit 1; fi
+          if validate_grounding "$BAD_TOKEN"; then echo 'Bad token unexpectedly passed grounding.' >&2; exit 1; fi
+          if validate_grounding "$NO_GROUNDING"; then echo 'Missing grounding marker unexpectedly passed.' >&2; exit 1; fi
 
       - name: Guard Super Reviewer/Tester-only preflight policy
         shell: bash
@@ -102,6 +136,11 @@ jobs:
               'NVIDIA Coder routing is disabled by Admin policy',
               'reviewer|tester)',
               'gameplay/game-world logic or plausibility review',
+              'STRICT GROUNDING:',
+              'SOURCE: relative/path :: exact literal token copied from that file',
+              'GROUNDING: VERIFIED',
+              'Invalid NVIDIA grounding source',
+              'Grounding gate verified',
               'RULE CONSISTENCY, GAMEPLAY LOGIC, REAL-WORLD PLAUSIBILITY, INTENTIONAL ABSTRACTION',
               '`VERDICT: PASS` or `VERDICT: CHANGES REQUESTED`',
               '`VERDICT: PASS` or `VERDICT: FAIL`',
@@ -144,6 +183,10 @@ jobs:
               'recommendations are advisory evidence only',
               '## Proactive Utilization and Preflight',
               '## Gameplay Logic and Plausibility Review',
+              '## Evidence Grounding',
+              'SOURCE: relative/path :: exact literal token copied from that file',
+              'GROUNDING: VERIFIED',
+              '`VERDICT: CHANGES REQUESTED` is permitted only',
               'RULE CONSISTENCY',
               'GAMEPLAY LOGIC',
               'REAL-WORLD PLAUSIBILITY',
