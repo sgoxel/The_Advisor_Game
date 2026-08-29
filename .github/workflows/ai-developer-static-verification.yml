@@ -6,15 +6,19 @@ on:
     paths:
       - 'opencode.json'
       - '.github/AI_AUXILIARY_RULES.md'
+      - '.github/WORKER_ROTATION.md'
       - '.github/actions/opencode-nvidia/action.yml'
       - '.github/workflows/ai-developer.yml'
+      - '.github/workflows/nvidia-metrics.yml'
       - '.github/workflows/ai-developer-static-verification.yml'
   pull_request:
     paths:
       - 'opencode.json'
       - '.github/AI_AUXILIARY_RULES.md'
+      - '.github/WORKER_ROTATION.md'
       - '.github/actions/opencode-nvidia/action.yml'
       - '.github/workflows/ai-developer.yml'
+      - '.github/workflows/nvidia-metrics.yml'
       - '.github/workflows/ai-developer-static-verification.yml'
   workflow_dispatch:
 
@@ -33,10 +37,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ruby -e 'require "yaml"; YAML.load_file(".github/actions/opencode-nvidia/action.yml"); YAML.load_file(".github/workflows/ai-developer.yml"); YAML.load_file(".github/workflows/ai-developer-static-verification.yml")'
+          ruby -e 'require "yaml"; YAML.load_file(".github/actions/opencode-nvidia/action.yml"); YAML.load_file(".github/workflows/ai-developer.yml"); YAML.load_file(".github/workflows/nvidia-metrics.yml"); YAML.load_file(".github/workflows/ai-developer-static-verification.yml")'
           python -m json.tool opencode.json >/dev/null
 
-      - name: Verify exact evidence-prefix parsing cases
+      - name: Verify exact evidence-prefix and verdict parsing cases
         shell: bash
         run: |
           set -euo pipefail
@@ -48,6 +52,11 @@ jobs:
             jq -cn --arg body "$body" '[{created_at:"2026-08-28T00:00:01Z",body:$body}]' |
               jq --arg start "$START" --arg prefix "$prefix" \
                 '[.[] | select(.created_at >= $start) | select(((.body // "") | startswith($prefix)) or ((.body // "") | startswith("**" + $prefix)))] | length'
+          }
+
+          verdict_value() {
+            local body="$1"
+            printf '%s\n' "$body" | sed -n 's/^[[:space:]]*VERDICT:[[:space:]]*//p' | head -n 1 | tr '[:lower:]' '[:upper:]' | xargs || true
           }
 
           assert_count() {
@@ -62,14 +71,18 @@ jobs:
             fi
           }
 
-          assert_count 1 'AI TEST EVIDENCE: PASS' 'AI TEST EVIDENCE:'
-          assert_count 1 '**AI TEST EVIDENCE: PASS**' 'AI TEST EVIDENCE:'
-          assert_count 1 'AI REVIEW EVIDENCE: PASS' 'AI REVIEW EVIDENCE:'
-          assert_count 1 '**AI REVIEW EVIDENCE: PASS**' 'AI REVIEW EVIDENCE:'
+          assert_count 1 $'AI TEST EVIDENCE:\nVERDICT: PASS' 'AI TEST EVIDENCE:'
+          assert_count 1 $'**AI TEST EVIDENCE:**\nVERDICT: FAIL' 'AI TEST EVIDENCE:'
+          assert_count 1 $'AI REVIEW EVIDENCE:\nVERDICT: PASS' 'AI REVIEW EVIDENCE:'
+          assert_count 1 $'**AI REVIEW EVIDENCE:**\nVERDICT: CHANGES REQUESTED' 'AI REVIEW EVIDENCE:'
           assert_count 0 'Unrelated note mentioning AI TEST EVIDENCE: PASS' 'AI TEST EVIDENCE:'
           assert_count 0 '**NOT AI TEST EVIDENCE: PASS**' 'AI TEST EVIDENCE:'
 
-      - name: Guard Super Reviewer/Tester-only policy
+          [ "$(verdict_value $'AI REVIEW EVIDENCE:\nVERDICT: PASS')" = "PASS" ]
+          [ "$(verdict_value $'AI REVIEW EVIDENCE:\nVERDICT: CHANGES REQUESTED')" = "CHANGES REQUESTED" ]
+          [ "$(verdict_value $'AI TEST EVIDENCE:\nVERDICT: FAIL')" = "FAIL" ]
+
+      - name: Guard Super Reviewer/Tester-only preflight policy
         shell: bash
         run: |
           set -euo pipefail
@@ -78,6 +91,8 @@ jobs:
           import json
 
           workflow = Path('.github/workflows/ai-developer.yml').read_text(encoding='utf-8')
+          metrics = Path('.github/workflows/nvidia-metrics.yml').read_text(encoding='utf-8')
+          rotation = Path('.github/WORKER_ROTATION.md').read_text(encoding='utf-8')
           action = Path('.github/actions/opencode-nvidia/action.yml').read_text(encoding='utf-8')
           rules = Path('.github/AI_AUXILIARY_RULES.md').read_text(encoding='utf-8')
           config = json.loads(Path('opencode.json').read_text(encoding='utf-8'))
@@ -86,6 +101,10 @@ jobs:
               'nvidia/nemotron-3-super-120b-a12b',
               'NVIDIA Coder routing is disabled by Admin policy',
               'reviewer|tester)',
+              'gameplay/game-world logic or plausibility review',
+              'RULE CONSISTENCY, GAMEPLAY LOGIC, REAL-WORLD PLAUSIBILITY, INTENTIONAL ABSTRACTION',
+              '`VERDICT: PASS` or `VERDICT: CHANGES REQUESTED`',
+              '`VERDICT: PASS` or `VERDICT: FAIL`',
               'REQUIRED_PREFIX="AI REVIEW EVIDENCE:"',
               'REQUIRED_PREFIX="AI TEST EVIDENCE:"',
               'startswith("AI-HANDOFF:")',
@@ -94,7 +113,7 @@ jobs:
           ]
           missing = [item for item in required_workflow if item not in workflow]
           if missing:
-              raise SystemExit(f'Missing expected Reviewer/Tester-only workflow guard(s): {missing}')
+              raise SystemExit(f'Missing expected Reviewer/Tester preflight workflow guard(s): {missing}')
 
           forbidden_workflow = [
               '\n  coder:\n',
@@ -123,8 +142,40 @@ jobs:
               'never acts as Coder',
               'Formal Planner Workers alone may change',
               'recommendations are advisory evidence only',
+              '## Proactive Utilization and Preflight',
+              '## Gameplay Logic and Plausibility Review',
+              'RULE CONSISTENCY',
+              'GAMEPLAY LOGIC',
+              'REAL-WORLD PLAUSIBILITY',
+              'INTENTIONAL ABSTRACTION',
+              'AI AUXILIARY OPPORTUNITY:',
+              'AI AUXILIARY FOLLOW-UP:',
           ]
           missing_rules = [item for item in required_rules if item not in rules]
           if missing_rules:
               raise SystemExit(f'Missing subordinate routing guidance: {missing_rules}')
+
+          required_rotation = [
+              'NVIDIA utilization/preflight scan',
+              '## NVIDIA preflight utilization',
+              'AI AUXILIARY OPPORTUNITY:',
+              'AI AUXILIARY FOLLOW-UP:',
+              'ai-ready` **last**',
+          ]
+          missing_rotation = [item for item in required_rotation if item not in rotation]
+          if missing_rotation:
+              raise SystemExit(f'Missing Worker NVIDIA utilization protocol: {missing_rotation}')
+
+          required_metrics = [
+              'CURRENT_POLICY_START:',
+              'AI AUXILIARY OPPORTUNITY: ',
+              'AI AUXILIARY FOLLOW-UP: ',
+              'evidence_verdict',
+              'Current Reviewer/Tester policy',
+              'Preflight routing opportunities',
+              'Formal follow-up agreement',
+          ]
+          missing_metrics = [item for item in required_metrics if item not in metrics]
+          if missing_metrics:
+              raise SystemExit(f'Missing NVIDIA metrics/utilization guard(s): {missing_metrics}')
           PY
