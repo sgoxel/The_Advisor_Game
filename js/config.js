@@ -143,10 +143,11 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<script src="js/world_action_resolution.js"><\/script>');
   document.write('<script src="js/legality_feedback.js"><\/script>');
 
-  // R04 runtime APIs remain character/Simulation-owned. The feedback modules
-  // below only observe their persisted results and never select/validate/resolve.
+  // R04 runtime APIs remain character/Simulation-owned. Conversation/advice is
+  // normalized as non-binding character context; it never selects/validates/resolves.
   document.write('<script src="js/protagonist_driver_intent.js"><\/script>');
   document.write('<script src="js/local_bot_driver.js"><\/script>');
+  document.write('<script src="js/advisor_conversation_contract.js"><\/script>');
   document.write('<script src="js/autonomous_action_execution.js"><\/script>');
   document.write('<script src="js/autonomous_decision_loop.js"><\/script>');
   document.write('<script src="js/autonomy_feedback_presentation.js"><\/script>');
