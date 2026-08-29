@@ -7,12 +7,14 @@ async function ready(page) {
     window.Game?.StarterVillageRoads?.snapshotTopology &&
     window.Game?.StarterVillageRoads?.ensureSemanticAssets &&
     window.Game?.SpatialWorld?.generateOriginVillage &&
-    window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain
+    window.Game?.SpatialWorld?.stampVillageOnRuntimeTerrain &&
+    window.Game?.Minimap?.renderMinimap &&
+    window.Game?.Renderer?.centerCameraOnTile
   ), null, { timeout: 20_000 });
 
   // Keep the representative authoritative village creation in the browser realm and invoke it
   // immediately before each assertion block. This avoids racing the normal asynchronous startup
-  // world replacement while still exercising only production Simulation APIs and #277 rendering.
+  // world replacement while still exercising only production Simulation APIs and road rendering.
   await page.evaluate(() => {
     window.__r04RepresentativeRoadVillage = () => {
       const Game = window.Game;
@@ -147,6 +149,101 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
   // must occur. A passable structure may connect at its nominal entrance or through its walkable
   // footprint; the per-structure assertion above enforces connectivity for either authoritative form.
   expect(passableConnectionChecks).toBeGreaterThan(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test('semantic roads share the minimap terrain source and remain aligned after real camera zoom', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await ready(page);
+
+  const before = await page.evaluate(async () => {
+    const Game = window.Game;
+    const village = window.__r04RepresentativeRoadVillage();
+    const semanticReady = await Game.StarterVillageRoads.ensureSemanticAssets();
+    const roads = village.roadTiles;
+    const focal = roads[Math.floor(roads.length / 2)];
+    Game.Renderer.centerCameraOnTile(focal.row, focal.col);
+    Game.Renderer.markDirty(true, true);
+    Game.Minimap.renderMinimap(true);
+    Game.StarterVillageRoads.drawPresentation();
+
+    const terrainRoadMatches = roads.filter((point) => {
+      const tile = Game.State.world.terrain?.[point.row]?.[point.col];
+      return tile?.type === 'road' && (tile.tags?.has?.('road') || Array.isArray(tile.tags) && tile.tags.includes('road'));
+    }).length;
+    const center = Game.Renderer.gridToScreen(focal.row + 0.5, focal.col + 0.5);
+    const east = Game.Renderer.gridToScreen(focal.row + 0.5, focal.col + 1.5);
+    const minimap = Game.State.dom.minimap;
+    const miniCtx = Game.State.dom.miniCtx;
+    const miniPixels = miniCtx.getImageData(0, 0, minimap.width, minimap.height).data;
+    let minimapHasPixels = false;
+    for (let i = 3; i < miniPixels.length; i += 4) {
+      if (miniPixels[i] !== 0) {
+        minimapHasPixels = true;
+        break;
+      }
+    }
+    const overlay = document.getElementById('starterVillageRoadOverlay');
+    return {
+      semanticReady,
+      roadBefore: JSON.stringify(roads),
+      roadCount: roads.length,
+      terrainRoadMatches,
+      focal,
+      zoom: Game.State.camera.zoom,
+      minZoom: Game.State.camera.minZoom,
+      maxZoom: Game.State.camera.maxZoom,
+      span: Math.hypot(east.x - center.x, east.y - center.y),
+      minimapHasPixels,
+      overlayRoadCount: Number(overlay?.dataset.roadTileCount || 0),
+      overlaySemanticCount: Number(overlay?.dataset.semanticDrawnCount || 0)
+    };
+  });
+
+  expect(before.semanticReady).toBe(true);
+  expect(before.roadCount).toBeGreaterThan(0);
+  expect(before.terrainRoadMatches).toBe(before.roadCount);
+  expect(before.minimapHasPixels).toBe(true);
+  expect(before.overlayRoadCount).toBe(before.roadCount);
+  expect(before.overlaySemanticCount).toBe(before.roadCount);
+
+  const wheelDelta = before.zoom < before.maxZoom ? -320 : 320;
+  await page.locator('#gameCanvas').hover();
+  await page.mouse.wheel(0, wheelDelta);
+  await page.waitForFunction((oldZoom) => window.Game.State.camera.zoom !== oldZoom, before.zoom);
+
+  const after = await page.evaluate(({ roadBefore, focal }) => {
+    const Game = window.Game;
+    Game.StarterVillageRoads.drawPresentation();
+    Game.Minimap.renderMinimap(true);
+    const center = Game.Renderer.gridToScreen(focal.row + 0.5, focal.col + 0.5);
+    const east = Game.Renderer.gridToScreen(focal.row + 0.5, focal.col + 1.5);
+    const canvas = Game.State.dom.canvas;
+    const overlay = document.getElementById('starterVillageRoadOverlay');
+    return {
+      roadUnchanged: JSON.stringify(Game.State.world.originVillage.roadTiles) === roadBefore,
+      zoom: Game.State.camera.zoom,
+      span: Math.hypot(east.x - center.x, east.y - center.y),
+      focalOnScreen: center.x >= 0 && center.x <= canvas.clientWidth && center.y >= 0 && center.y <= canvas.clientHeight,
+      roadTileCount: Number(overlay?.dataset.roadTileCount || 0),
+      semanticDrawnCount: Number(overlay?.dataset.semanticDrawnCount || 0),
+      invalidTopologyCount: Number(overlay?.dataset.invalidTopologyCount || 0),
+      semanticUnsupportedCount: Number(overlay?.dataset.semanticUnsupportedCount || 0),
+      vectorFallbackCount: Number(overlay?.dataset.vectorFallbackCount || 0)
+    };
+  }, { roadBefore: before.roadBefore, focal: before.focal });
+
+  expect(after.zoom).not.toBe(before.zoom);
+  expect(Math.abs(after.span - before.span)).toBeGreaterThan(0.5);
+  expect(after.roadUnchanged).toBe(true);
+  expect(after.focalOnScreen).toBe(true);
+  expect(after.roadTileCount).toBe(before.roadCount);
+  expect(after.semanticDrawnCount).toBe(before.roadCount);
+  expect(after.invalidTopologyCount).toBe(0);
+  expect(after.semanticUnsupportedCount).toBe(0);
+  expect(after.vectorFallbackCount).toBe(0);
   expect(pageErrors).toEqual([]);
 });
 
