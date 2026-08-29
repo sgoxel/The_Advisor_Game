@@ -78,6 +78,7 @@ window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeogr
 window.Game.Utils.loadScriptOnce("js/settlement_evolution.js", "r02SettlementEvolutionModule");
 window.Game.Utils.loadScriptOnce("js/relevance_bounded_compute.js", "r02RelevanceBoundedComputeModule");
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
+window.Game.Utils.loadScriptOnce("js/starter_village_roads.js", "r04StarterVillageRoadsModule");
 window.Game.Utils.loadScriptOnce("js/starter_village_exteriors.js", "r04StarterVillageExteriorsModule");
 
 // Loaded after NPC life/presentation modules so it can add deterministic tile occupancy,
