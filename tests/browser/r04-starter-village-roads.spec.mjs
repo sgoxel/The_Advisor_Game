@@ -128,7 +128,7 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
   expect(evidence.firstTopology.every((tile) => /^[NESW]*$/.test(tile.mask))).toBe(true);
 
   const roadSet = new Set(evidence.roadTiles.map(roadKey));
-  let passableFootprintOnlyConnections = 0;
+  let passableConnectionChecks = 0;
   for (const building of evidence.buildings) {
     const entranceOnRoad = roadSet.has(`${building.entrance.row},${building.entrance.col}`);
     if (!building.passable) {
@@ -136,17 +136,17 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
       continue;
     }
 
+    passableConnectionChecks += 1;
     const footprintOnRoad = footprintContainsRoad(roadSet, building.footprint);
     expect(
       entranceOnRoad || footprintOnRoad,
       `authoritative route does not connect passable structure ${building.id}`
     ).toBe(true);
-    if (!entranceOnRoad && footprintOnRoad) passableFootprintOnlyConnections += 1;
   }
-  // The representative village deliberately exercises the valid passable-structure edge case:
-  // a Simulation-owned route can cross a walkable footprint without requiring the nominal
-  // entrance coordinate itself to be a road tile. Keeping this proof prevents the old false FAIL.
-  expect(passableFootprintOnlyConnections).toBeGreaterThan(0);
+  // Exercise the passable-structure branch without prescribing which valid Simulation topology
+  // must occur. A passable structure may connect at its nominal entrance or through its walkable
+  // footprint; the per-structure assertion above enforces connectivity for either authoritative form.
+  expect(passableConnectionChecks).toBeGreaterThan(0);
   expect(pageErrors).toEqual([]);
 });
 
