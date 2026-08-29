@@ -1,0 +1,90 @@
+name: R04 Autonomous Protagonist Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'js/autonomous_action_execution.js'
+      - 'js/autonomous_decision_loop.js'
+      - 'js/autonomy_feedback_runtime.js'
+      - 'js/action_legality.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/interaction_validation.js'
+      - 'js/world_action_resolution.js'
+      - 'js/game_time.js'
+      - 'js/campaign_persistence.js'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
+      - 'tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs'
+      - 'tests/browser/r03-cumulative-regression.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomous-protagonist-regression.yml'
+  pull_request:
+    paths:
+      - 'js/local_bot_driver.js'
+      - 'js/protagonist_driver_intent.js'
+      - 'js/autonomous_action_execution.js'
+      - 'js/autonomous_decision_loop.js'
+      - 'js/autonomy_feedback_runtime.js'
+      - 'js/action_legality.js'
+      - 'js/spatial_action_legality.js'
+      - 'js/interaction_target.js'
+      - 'js/interaction_validation.js'
+      - 'js/world_action_resolution.js'
+      - 'js/game_time.js'
+      - 'js/campaign_persistence.js'
+      - 'tests/browser/r04-local-bot-selection.spec.mjs'
+      - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
+      - 'tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs'
+      - 'tests/browser/r03-cumulative-regression.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomous-protagonist-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-autonomous-protagonist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04-T07 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify deterministic Local BOT selection
+        run: npx playwright test tests/browser/r04-local-bot-selection.spec.mjs
+      - name: Verify Simulation-only autonomous execution and non-mutation rejects
+        run: npx playwright test tests/browser/r04-autonomous-action-execution.spec.mjs
+      - name: Verify time-aware decision, stale protection, bounded work and resume
+        run: npx playwright test tests/browser/r04-autonomous-decision-loop.spec.mjs
+      - name: Verify presentation remains non-command autonomy feedback
+        run: npx playwright test tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs
+      - name: Preserve R03 legality and interaction regression
+        run: npx playwright test tests/browser/r03-cumulative-regression.spec.mjs
+      - name: Upload R04 autonomous protagonist evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-autonomous-protagonist-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
