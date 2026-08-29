@@ -69,6 +69,8 @@ window.Game.Utils.loadScriptOnce("js/game_time.js", "r02GameTimeModule");
 window.Game.Utils.loadScriptOnce("js/campaign_calendar.js", "r02CampaignCalendarModule");
 window.Game.Utils.loadScriptOnce("js/region_navigation.js", "r02RegionNavigationModule");
 window.Game.Utils.loadScriptOnce("js/character_identity.js", "r04CharacterIdentityModule");
+window.Game.Utils.loadScriptOnce("js/character_progression_profile.js", "r04CharacterProgressionProfileModule");
+window.Game.Utils.loadScriptOnce("js/character_profile_persistence.js", "r04CharacterProfilePersistenceModule");
 window.Game.Utils.loadScriptOnce("js/character_age.js", "r04CharacterAgeModule");
 window.Game.Utils.loadScriptOnce("js/character_location_context.js", "r04CharacterLocationContextModule");
 window.Game.Utils.loadScriptOnce("js/character_emotion.js", "r04CharacterEmotionModule");
