@@ -27,7 +27,7 @@ async function waitForProductionApis(page) {
 async function load(page) {
   await page.goto('./');
   await waitForProductionApis(page);
-  await page.waitForSelector('#autonomyFeedbackCard');
+  await page.waitForSelector('#autonomyFeedbackCard', { state: 'attached' });
 }
 
 async function resetSimulation(page) {
