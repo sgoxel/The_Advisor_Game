@@ -21,12 +21,17 @@ on:
       - 'js/game_time.js'
       - 'js/campaign_persistence.js'
       - 'js/input.js'
+      - 'js/npc_world.js'
+      - 'assets/characters/world/**'
+      - 'design/R04_STATIC_CHARACTER_PNG_IDENTITY.md'
       - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
       - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
       - 'tests/browser/r04-advisor-influence-local-bot.spec.mjs'
       - 'tests/browser/r04-local-bot-selection.spec.mjs'
       - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
       - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
+      - 'tests/browser/r04-character-world-icons.spec.mjs'
+      - 'tests/browser/r02-npc-world-presence.spec.mjs'
       - 'tests/browser/r03-*.spec.mjs'
       - 'tests/browser/r02-hierarchical-living-world-regression.spec.mjs'
       - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
@@ -53,12 +58,17 @@ on:
       - 'js/game_time.js'
       - 'js/campaign_persistence.js'
       - 'js/input.js'
+      - 'js/npc_world.js'
+      - 'assets/characters/world/**'
+      - 'design/R04_STATIC_CHARACTER_PNG_IDENTITY.md'
       - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
       - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
       - 'tests/browser/r04-advisor-influence-local-bot.spec.mjs'
       - 'tests/browser/r04-local-bot-selection.spec.mjs'
       - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
       - 'tests/browser/r04-autonomous-decision-loop.spec.mjs'
+      - 'tests/browser/r04-character-world-icons.spec.mjs'
+      - 'tests/browser/r02-npc-world-presence.spec.mjs'
       - 'tests/browser/r03-*.spec.mjs'
       - 'tests/browser/r02-hierarchical-living-world-regression.spec.mjs'
       - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
@@ -100,6 +110,12 @@ jobs:
           tests/browser/r04-local-bot-selection.spec.mjs
           tests/browser/r04-autonomous-action-execution.spec.mjs
           tests/browser/r04-autonomous-decision-loop.spec.mjs
+          --project=desktop
+      - name: Preserve protagonist identity and presentation-only world-icon authority
+        run: >-
+          npx playwright test
+          tests/browser/r04-character-world-icons.spec.mjs
+          tests/browser/r02-npc-world-presence.spec.mjs
           --project=desktop
       - name: Preserve R03 legality and interaction authority seams
         run: >-
