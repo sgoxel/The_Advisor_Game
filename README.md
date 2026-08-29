@@ -425,7 +425,13 @@ Each occupied cell represents one semantically identifiable tile variant compati
 
 This atlas contract applies when roads, paths, terrain or transitions, building parts, walls, floors, interiors, furniture, props or other visual families are intentionally produced as reusable tiles. It does not require unrelated non-tile assets such as full-body character art to use an atlas.
 
-Exact manifest schemas, folder names, splitter implementation, validation tooling and runtime registration mechanics remain subordinate implementation decisions, but they must preserve the canonical **1024 × 1024 / 4 × 4 / 256px** contract, transparent unused cells, deterministic per-tile export and semantic tile identity.
+Reusable transparent tile families may be **composed over the authoritative underlying terrain** rather than replacing it. Transparent pixels reveal the terrain or lower presentation layer beneath them. This allows terrain-neutral road/path pieces and reusable world-object families such as fences and gates, rock clusters, wells, flagpoles, carts or wagons, signs, field rows, rubble, walls, floors, furniture and similar local-world props to share one semantic production model without baking an unrelated grass, forest, beach, snow or other biome background into an asset that is intended to work across multiple terrain types.
+
+A reusable visual object is not required to occupy exactly one logical tile merely because one exported source cell is 256 × 256 pixels. Small/static props may use a one-tile footprint where appropriate, while larger structures or props may use **multi-tile authoritative footprints**. Visible art may extend beyond the occupied footprint when anchoring, occlusion and depth ordering remain coherent with the local tile camera. Objects that move or require richer authoritative behavior, such as a moving wagon, may be represented as world-space entities using compatible transparent visual assets instead of being reduced to static decorative tiles.
+
+Visual pixels never define gameplay authority by themselves. Collision, blocking, walkability, interaction, ownership, movement, inventory/state, damage and other gameplay facts come from Simulation-backed world/object data. The tile or sprite is the presentation of that state, and runtime composition must preserve the distinction between semantic visual identity and authoritative footprint/interaction/entity state.
+
+Exact manifest schemas, folder names, splitter implementation, validation tooling and runtime registration mechanics remain subordinate implementation decisions, but they must preserve the canonical **1024 × 1024 / 4 × 4 / 256px** contract, transparent unused cells, deterministic per-tile export, semantic tile identity, terrain-layer composition where applicable, and separation between visual assets and Simulation authority.
 
 ## ⏱️ Real-Time World Clock and Day/Night
 
@@ -706,6 +712,7 @@ The size of the unbounded world must not force invisible-world computation to gr
 65. **Guard duty is spatial and time-aware.** Settlement entrance/exit guards may rotate through day/night or other suitable shifts, use valid guard-post/barracks/home relationships, and hand off duty without violating occupancy or route continuity.
 66. **LLM and Local BOT share one character truth.** Driver choice may change expression quality but must not replace deterministic identity, age, personality, relationships, memories or emotional context with a different underlying person.
 67. **Canonical tile atlases are fixed and semantically exportable.** Tile-based production uses transparent 1024 × 1024 atlases divided into a 4 × 4 grid of 256 × 256 cells; unused cells remain transparent, while occupied cells are deterministically exportable as individual semantically identifiable tiles.
+68. **Transparent world-object tiles compose over authoritative world state.** Reusable overlay/object art may reveal underlying terrain, larger props may use multi-tile footprints, and moving or interactive objects may materialize as world-space entities; pixels never replace Simulation-owned collision, interaction, movement or object state.
 
 ---
 
@@ -803,7 +810,7 @@ Coder does not redefine Planner-owned scope, acceptance criteria, dependencies, 
 
 Designer owns creation and refinement of the game's visual presentation, including 2D art, UI visuals, portraits, backgrounds, sprites, textures, icons, 3D scenes and objects, terrain, environments, buildings, vegetation, props, landmarks, isometric/map visuals, WebGL visuals, placeholder-to-final refinement, consistency, scale, perspective, materials, lighting, readability, responsiveness, accessibility, and visual-performance considerations.
 
-Designer chooses suitable tools, formats, workflows, and export methods for approved visual work. When the approved work produces reusable tile-based visual families, Designer must preserve the canonical 1024 × 1024 transparent atlas, 4 × 4 grid and 256 × 256 cell contract defined by README; unused atlas cells remain transparent.
+Designer chooses suitable tools, formats, workflows, and export methods for approved visual work. When the approved work produces reusable tile-based visual families, Designer must preserve the canonical 1024 × 1024 transparent atlas, 4 × 4 grid and 256 × 256 cell contract defined by README; unused atlas cells remain transparent. For transparent overlay/object families, Designer must also preserve terrain-neutral transparency where the asset is intended to compose across multiple terrain types and must not treat painted pixels as collision, interaction or other Simulation authority.
 
 Gameplay and authoritative simulation logic remain Coder responsibility unless an approved task explicitly includes technical visual integration.
 
