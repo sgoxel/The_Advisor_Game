@@ -3,18 +3,22 @@
   "product": "The Advisor Game",
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
-  "planning_epoch": "post-r02-deadlock-pass-r03-activation-2026-08-29",
-  "planning_basis": "Planner-owned decomposition reconciled through #154 and R03 tracker #155 after the Admin-authorized Tester-deadlock governance update reflected in README commit 3b5c38e9df9c0d54c13c85fe423f04cad6588eb7. R02 received valid DEADLOCK TESTER PASS on #93 from Worker #5 with accurate non-independent attribution for Worker #5's included #124 work. R02 is therefore completed and R03 is the single active phase. Compatible verified work remains preserved; completed world, chronology, persistence, relevance-bounded performance and visual foundations are reused rather than reopened.",
+  "planning_epoch": "post-r03-independent-pass-r04-activation-2026-08-29",
+  "planning_basis": "R03 completed through normal independent Worker #4 Tester PASS on gate #167 comment 5459994413 after all #156-#166 dependencies had independent verification. R04 tracker #169 is now the single active phase with tasks #170-#178. Compatible verified R01-R03 world, chronology, persistence, legality, interaction, relevance-bounded performance and visual foundations remain preserved and are reused rather than reopened.",
   "readme_reconciliation": {
     "readme_commit": "3b5c38e9df9c0d54c13c85fe423f04cad6588eb7",
     "admin_issues": [103,106,117,131,136,138,142,150],
-    "planner_issues": [105,118,132,137,139,143,151,154,155],
+    "planner_issues": [105,118,132,137,139,143,151,154,155,169],
     "governance_issue": 97,
     "deadlock_policy_issue": 154,
     "completed_r02_gate_issue": 93,
     "completed_r02_gate_result": "DEADLOCK TESTER PASS",
     "completed_r02_gate_comment": 5459185389,
-    "completed_r02_gate_worker": "Worker #5"
+    "completed_r02_gate_worker": "Worker #5",
+    "completed_r03_gate_issue": 167,
+    "completed_r03_gate_result": "TESTER PASS",
+    "completed_r03_gate_comment": 5459994413,
+    "completed_r03_gate_worker": "Worker #4"
   },
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "baseline": {
@@ -23,10 +27,11 @@
     "baseline_issue": 56,
     "completed_r01_phase_issue": 69,
     "completed_r02_phase_issue": 82,
-    "active_phase_issue": 155,
+    "completed_r03_phase_issue": 155,
+    "active_phase_issue": 169,
     "public_policy": "The stable public URL may serve an Admin-directed unverified development build when explicitly authorized. Normal independently verified status requires an independent Tester; an otherwise-ready cumulative phase/release gate may instead advance through an accurately labeled DEADLOCK TESTER PASS when the README-defined all-identities Tester deadlock conditions are satisfied."
   },
-  "active_phase_id": "R03",
+  "active_phase_id": "R04",
   "phase_policy": {
     "single_active_phase": true,
     "oldest_unfinished_first": true,
@@ -79,27 +84,31 @@
       "completed corrected #141 compact settlement-evolution foundation with independent T-REV retest",
       "completed #144 relevance-bounded lazy/asynchronous computation foundation",
       "completed #124 active/off-screen integration and #130 cumulative regression",
-      "completed #152 visual-direction foundation and R02 phase-gate evidence"
+      "completed #152 visual-direction foundation and R02 phase-gate evidence",
+      "completed R03 Simulation-owned action-legality, interaction-target, world-resolution, responsive feedback and cumulative regression foundations through independent gate #167"
     ],
     "ADAPT": [
-      "existing verified R02 world, persistence, target identity and presentation foundations into R03 Simulation-owned legality and interaction validation",
-      "existing living-map interaction/picking surfaces into non-authoritative candidate/feedback presentation",
-      "existing responsive visual language toward explicit allowed/rejected/pending/resolved interaction feedback without direct-control affordances"
+      "verified R03 action-intent, legality, interaction-target and world-resolution contracts into deterministic protagonist-driver candidate selection and execution",
+      "existing living-map inspection and legality-feedback surfaces into autonomous intent/activity presentation without direct-command affordances",
+      "existing chronology, schedules, hierarchy, persistence and relevance-bounded execution into the R04 deterministic Local BOT decision loop"
     ],
     "DEFER": [
-      "autonomous protagonist Local BOT decisions until R04",
-      "natural Advisor conversation and persistent Advisor influence until later phases",
+      "natural Advisor conversation and persistent Advisor influence until R05 and later phases",
+      "deep memory/trust/relationship effects until R06",
+      "persistent plain-text Advisor Instructions until R07",
+      "optional LLM adapter until R08",
       "deep settlement morphology/economy and mutable realm/faction politics until later phases",
       "full region/realm/world strategic UI production until later gameplay phases",
-      "rank progression, realm administration, military and imperial gameplay beyond R03"
+      "rank progression, realm administration, military and imperial gameplay beyond R04"
     ],
     "REJECT": [
       "player or UI directly declaring an action legal or resolved",
       "binding direct player control of the autonomous protagonist or ordinary NPCs",
       "presentation objects acting as authoritative interaction targets without Simulation-backed identity",
-      "invalid or stale validation results mutating authoritative state",
-      "device/render/order-specific legality outcomes",
-      "world interaction validation that requires continuous full-detail ticking/materialization of unrelated unbounded world state",
+      "Local BOT or presentation directly mutating world truth without Simulation validation/resolution",
+      "invalid or stale validation or decision results mutating authoritative state",
+      "device/render/order-specific legality or deterministic Local BOT outcomes",
+      "autonomous protagonist processing that requires continuous full-detail ticking/materialization of unrelated unbounded world state",
       "NVIDIA auxiliary evidence acting as phase/release authority"
     ]
   },
@@ -123,12 +132,12 @@
     {
       "id": "R03",
       "title": "Legal Action and World Interaction Validation",
-      "status": "active",
+      "status": "completed",
       "phase_issue": 155,
       "phase_gate_issue": 167,
-      "release_gate": "Add deterministic Simulation-owned legality and interaction validation for spatial world actions and NPC/location/animal/creature interactions using authoritative fantasy campaign date/time, local context and hierarchical world state without player result injection or direct execution; preserve living-map, persistence, relevance-bounded and visual foundations. Complete #156-#166 with required independent task verification and pass #167 through normal independent Tester verification or, only when README deadlock conditions hold, accurately labeled DEADLOCK TESTER PASS before R04."
+      "completion": "Worker #4 issued normal independent TESTER PASS on #167 comment 5459994413, verifying current compatible descendant ae989b4c9c30a89970ed55b6670980dca9956a5a against exact cumulative candidate 537311aabaa5e25786819d05eee471361d9f6b0a with green R03 cumulative, workflow-integrity and Pages evidence. #167 closed completed."
     },
-    {"id":"R04","title":"Autonomous Protagonist and Local BOT Core","status":"planned","release_gate":"Add the deterministic local character driver so the protagonist chooses valid goals/actions and travels through the continuous real-time world under Simulation authority, respecting fantasy campaign chronology, locations, schedules, hierarchical state and region transitions. Protagonist/NPC presentation introduced or replaced in this phase should converge toward the established mature seinen-inspired character family; obtain Tester-role phase verification before R05 through normal independence or the documented deadlock exception."},
+    {"id":"R04","title":"Autonomous Protagonist and Local BOT Core","status":"active","phase_issue":169,"phase_gate_issue":178,"release_gate":"Add the deterministic local character driver so the protagonist chooses valid goals/actions and travels through the continuous real-time world under Simulation authority, respecting fantasy campaign chronology, locations, schedules, hierarchical state and region transitions. Complete #170-#177 with required independent verification including Designer checkpoint #174, then pass #178 through normal independent Tester verification or the documented cumulative deadlock exception before R05. Protagonist/NPC presentation introduced or replaced in this phase should converge toward the established mature seinen-inspired character family."},
     {"id":"R05","title":"Conversation and Advisor Influence","status":"planned","release_gate":"Add natural advisor-character interaction so advice can influence observable protagonist decisions, travel and interactions in the same living chronological world without becoming binding direct control. Dialogue/portrait presentation should remain coherent with the established character-art direction; obtain Tester-role phase verification before R06 through normal independence or the documented deadlock exception."},
     {"id":"R06","title":"Memory, Trust and Relationships","status":"planned","release_gate":"Add persistent character memory, trust and relationship effects that influence autonomous decisions/interactions and remain coherent across offline elapsed fantasy campaign time, NPC life and cumulative hierarchical world state; obtain Tester-role phase verification before R07 through normal independence or the documented deadlock exception."},
     {"id":"R07","title":"Advisor Instruction Plain-Text System","status":"planned","release_gate":"Add structured human-readable persistent Advisor Instructions as an influence system, never as direct authority over simulation truth; obtain Tester-role phase verification before R08 through normal independence or the documented deadlock exception."},
