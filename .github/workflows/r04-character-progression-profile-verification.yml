@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'js/character_progression_profile.js'
+      - 'js/character_profile_persistence.js'
       - 'js/character_identity.js'
       - 'js/utils.js'
       - 'locales/en.js'
@@ -14,6 +15,7 @@ on:
   pull_request:
     paths:
       - 'js/character_progression_profile.js'
+      - 'js/character_profile_persistence.js'
       - 'js/character_identity.js'
       - 'js/utils.js'
       - 'locales/en.js'
@@ -27,7 +29,7 @@ permissions:
 jobs:
   character-profile-and-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Record exact candidate SHA
@@ -41,6 +43,10 @@ jobs:
         run: npx playwright test tests/browser/r04-character-progression-profile.spec.mjs
       - name: Re-run deterministic character identity regression
         run: npx playwright test tests/browser/r04-character-base-identity.spec.mjs --project=desktop
+      - name: Re-run R02 deterministic save serialization regression
+        run: npx playwright test tests/browser/r02-save-export-serialization.spec.mjs --project=desktop
+      - name: Re-run R02 save/load validation regression
+        run: npx playwright test tests/browser/r02-save-load-validation.spec.mjs --project=desktop
       - name: Run stabilized R01 browser regression
         run: npm run test:browser:r01
       - name: Upload Playwright evidence
