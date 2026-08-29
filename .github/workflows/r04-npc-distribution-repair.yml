@@ -1,5 +1,4 @@
-name: R04 NPC Distribution Repair
-# Triggered after workflow registration so GitHub can execute it.
+name: R04 NPC Distribution Implementation
 
 on:
   push:
@@ -11,23 +10,24 @@ permissions:
   contents: write
 
 jobs:
-  repair:
+  implement:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout repository
+      - name: Checkout and sync current main
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Sync exact main
+      - name: Sync current main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout main
           git pull --rebase origin main
+          git rev-parse HEAD
 
-      - name: Patch center-biased NPC destinations
+      - name: Apply guarded #302 product patch
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -48,10 +48,9 @@ jobs:
 """
           new = """    const usedWorkTiles = new Set();
     const usedSocialTiles = new Set();
-    // Social/public destinations must come from generated world structure, not the
-    // protagonist/village-center coordinate. Rotate through every seeded building
-    // entrance with a seed-derived offset so the population naturally uses the full
-    // settlement footprint while remaining deterministic and road-connected.
+    // Social/public destinations come from generated settlement structure rather
+    // than the protagonist/village-center coordinate. A seed-derived rotation
+    // spreads residents across valid building-adjacent road destinations.
     const socialDestinations = buildings.filter((building) => building && building.entrance);
     const socialOffset = socialDestinations.length
       ? integer(seed, 'social-destination-offset', 0, socialDestinations.length - 1)
@@ -70,7 +69,7 @@ jobs:
       const socialTile = nearestAvailableRoadTile(roads, socialDestination.entrance, usedSocialTiles);
 """
           if old not in text:
-              raise SystemExit('spatial_world social destination block did not match current main')
+              raise SystemExit('spatial_world center-biased social block no longer matches expected pre-#302 state')
           spatial.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           runtime = Path('js/npc_spatial_runtime.js')
@@ -103,54 +102,53 @@ jobs:
     const dirs = [[0,1],[1,0],[0,-1],[-1,0]];
 """
           if old not in text:
-              raise SystemExit('npc_spatial dialogue tile block did not match current main')
+              raise SystemExit('npc_spatial center-biased dialogue selector no longer matches expected pre-#302 state')
           text = text.replace(old, new, 1)
-          old = """    const tiles = findDialoguePairTiles(village, roads, new Set());
+
+          old_call = """    const tiles = findDialoguePairTiles(village, roads, new Set());
     if (!tiles) return null;
 """
-          new = """    const preferredDialogueContext = [
+          new_call = """    const preferredDialogueContext = [
       point(npcs[first]?.anchors?.social || npcs[first]),
       point(npcs[second]?.anchors?.social || npcs[second])
     ];
     const tiles = findDialoguePairTiles(village, roads, new Set(), preferredDialogueContext);
     if (!tiles) return null;
 """
-          if old not in text:
-              raise SystemExit('npc_spatial dialogue plan call did not match current main')
-          runtime.write_text(text.replace(old, new, 1), encoding='utf-8')
+          if old_call not in text:
+              raise SystemExit('npc_spatial dialogue call no longer matches expected pre-#302 state')
+          runtime.write_text(text.replace(old_call, new_call, 1), encoding='utf-8')
           PY
 
-      - name: Verify source invariants and syntax
-        run: |
           node --check js/spatial_world.js
           node --check js/npc_spatial_runtime.js
-          python - <<'PY'
-          from pathlib import Path
-          spatial = Path('js/spatial_world.js').read_text(encoding='utf-8')
-          runtime = Path('js/npc_spatial_runtime.js').read_text(encoding='utf-8')
-          assert "nearestAvailableRoadTile(roads, CENTER, usedSocialTiles)" not in spatial
-          assert "social-destination-offset" in spatial
-          assert "preferredDialogueContext" in runtime
-          assert "distance(a, center) - distance(b, center)" not in runtime
-          PY
+          git diff --check
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Install browser test dependencies
+      - name: Install browser test dependency
         run: npm install --ignore-scripts
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run focused 100x100 NPC spatial regression
+      - name: Coder self-check distributed destinations
+        run: npx playwright test tests/browser/r04-npc-distribution.spec.mjs --project=desktop
+
+      - name: Coder self-check occupancy and dialogue regression
         run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs --project=desktop
 
-      - name: Commit product correction
+      - name: Coder self-check R01 browser regression
+        run: npm run test:browser:r01
+
+      - name: Commit product correction and remove one-shot implementation workflow
         run: |
+          git rm .github/workflows/r04-npc-distribution-repair.yml
           git add js/spatial_world.js js/npc_spatial_runtime.js
           git diff --cached --check
           git commit -m "Distribute NPC daily-life destinations (#302)"
-          git push origin main
+          git pull --rebase origin main
+          git push origin HEAD:main
