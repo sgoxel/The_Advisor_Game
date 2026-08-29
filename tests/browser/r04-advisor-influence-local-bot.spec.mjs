@@ -6,7 +6,8 @@ async function ready(page) {
     window.Game?.AdvisorConversationContract?.normalize &&
     window.Game?.LocalBotDriver?.select &&
     window.Game?.AutonomousActionExecution?.execute &&
-    window.Game?.ProtagonistDriverIntent?.build
+    window.Game?.ProtagonistDriverIntent?.build &&
+    window.Game?.AuthoritativeState?.canonicalStringify
   ), null, { timeout: 20_000 });
 }
 
@@ -154,19 +155,14 @@ test('an advised candidate still cannot bypass character intent and Simulation e
   const accepted = await advisor(page, 'I suggest you consider the market.', 'receptive');
   const out = await page.evaluate(({ ctx, ops, advice }) => {
     const game = window.Game;
-    const snapshot = () => JSON.stringify({
-      player: game.State?.player ?? null,
-      settings: game.State?.settings ?? null,
-      seed: game.State?.seed ?? null
-    });
-    const before = snapshot();
+    const before = game.AuthoritativeState.canonicalStringify(game.State);
     const result = game.AutonomousActionExecution.execute(
       ctx,
       ops,
       { authority: 'ui', revision: ctx.contextRevision, routes: [] },
       advice
     );
-    return { result, before, after: snapshot() };
+    return { result, before, after: game.AuthoritativeState.canonicalStringify(game.State) };
   }, { ctx: context(), ops: opportunities, advice: accepted });
 
   expect(out.result).toMatchObject({
