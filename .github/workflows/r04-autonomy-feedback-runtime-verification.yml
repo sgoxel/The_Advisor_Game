@@ -1,0 +1,64 @@
+name: R04 Autonomy Feedback Runtime Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/autonomy_feedback_runtime.js'
+      - 'js/autonomy_feedback_presentation.js'
+      - 'css/autonomy-feedback.css'
+      - 'tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs'
+      - 'tests/browser/r04-autonomy-feedback-design.spec.mjs'
+      - 'tests/browser/r03-legality-feedback-ui.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomy-feedback-runtime-verification.yml'
+  pull_request:
+    paths:
+      - 'js/autonomy_feedback_runtime.js'
+      - 'js/autonomy_feedback_presentation.js'
+      - 'css/autonomy-feedback.css'
+      - 'tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs'
+      - 'tests/browser/r04-autonomy-feedback-design.spec.mjs'
+      - 'tests/browser/r03-legality-feedback-ui.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-autonomy-feedback-runtime-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-autonomy-feedback-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04-T06 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused R04 runtime presentation integration regression
+        run: npx playwright test tests/browser/r04-autonomy-feedback-runtime-integration.spec.mjs
+      - name: Preserve approved R04 Designer presentation regression
+        run: npx playwright test tests/browser/r04-autonomy-feedback-design.spec.mjs
+      - name: Preserve R03 legality feedback presentation
+        run: npx playwright test tests/browser/r03-legality-feedback-ui.spec.mjs
+      - name: Upload focused R04 runtime presentation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-autonomy-feedback-runtime-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
