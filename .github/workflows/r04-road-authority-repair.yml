@@ -18,32 +18,31 @@ jobs:
           fetch-depth: 0
 
       - name: Patch canonical origin-village anchor road connection
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           path = Path('js/spatial_world.js')
           text = path.read_text(encoding='utf-8')
           old = """    const paths = [];
-    for (let index = 1; index < buildings.length; index += 1) {
-"""
+              for (let index = 1; index < buildings.length; index += 1) {
+          """.replace('              for', '    for')
           new = """    // The anchor/well is building[0]. It is part of the same authoritative
-    // Simulation-owned road network as every other required village structure.
-    // Connect it before the remaining building connectors; do not create a
-    // second/decorative road topology in the presentation layer.
-    const anchorRoadConnection = connectBuildingToRoad(buildings[0], roads, blocked);
-    if (!anchorRoadConnection.length) {
-      throw new Error('Unable to connect origin-village anchor building to authoritative road network.');
-    }
+              // Simulation-owned road network as every other required village structure.
+              // Connect it before the remaining building connectors; do not create a
+              // second/decorative road topology in the presentation layer.
+              const anchorRoadConnection = connectBuildingToRoad(buildings[0], roads, blocked);
+              if (!anchorRoadConnection.length) {
+                throw new Error('Unable to connect origin-village anchor building to authoritative road network.');
+              }
 
-    const paths = [];
-    for (let index = 1; index < buildings.length; index += 1) {
-"""
-          if old not in text:
-              raise SystemExit('Expected #235 road connector insertion point not found; refusing unsafe patch.')
+              const paths = [];
+              for (let index = 1; index < buildings.length; index += 1) {
+          """.replaceAll('              ', '    ')
           if text.count(old) != 1:
-              raise SystemExit('Expected exactly one #235 road connector insertion point; refusing unsafe patch.')
+              raise SystemExit(f'Expected exactly one #235 road connector insertion point; found {text.count(old)}. Refusing unsafe patch.')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
 
       - name: Verify patch syntax and contract location
         run: |
