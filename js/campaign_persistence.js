@@ -21,7 +21,7 @@ window.Game = window.Game || {};
   const SAVE_FORMAT = 'the-advisor-game/campaign-save';
   const SAVE_VERSION = 1;
   const MIME_TYPE = 'application/json;charset=utf-8';
-  const MAX_DIMENSION = 80;
+  const MAX_DIMENSION = 100;
 
   function deepFreeze(value) {
     if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
