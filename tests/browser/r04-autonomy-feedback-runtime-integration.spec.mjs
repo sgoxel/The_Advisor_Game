@@ -1,16 +1,30 @@
 import { test, expect } from '@playwright/test';
 
+async function missingProductionApis(page) {
+  return page.evaluate(() => {
+    const checks = [
+      ['AutonomyFeedbackRuntime.renderRuntime', Boolean(window.Game?.AutonomyFeedbackRuntime?.renderRuntime)],
+      ['AutonomyFeedbackPresentation.renderPreview', Boolean(window.Game?.AutonomyFeedbackPresentation?.renderPreview)],
+      ['AutonomousDecisionLoop.resolvePrepared', Boolean(window.Game?.AutonomousDecisionLoop?.resolvePrepared)],
+      ['AutonomousActionExecution.execute', Boolean(window.Game?.AutonomousActionExecution?.execute)],
+      ['GameTime.setForTest', Boolean(window.Game?.GameTime?.setForTest)],
+      ['WorldDeltaPersistence.clearAll', Boolean(window.Game?.WorldDeltaPersistence?.clearAll)],
+      ['AuthoritativeState.canonicalStringify', Boolean(window.Game?.AuthoritativeState?.canonicalStringify)]
+    ];
+    return checks.filter(([, ready]) => !ready).map(([name]) => name);
+  });
+}
+
+async function waitForProductionApis(page) {
+  await expect.poll(
+    () => missingProductionApis(page),
+    { timeout: 10_000, intervals: [100, 250, 500, 1000], message: 'Normal application shell must expose all R04 integration dependencies.' }
+  ).toEqual([]);
+}
+
 async function load(page) {
   await page.goto('./');
-  await page.waitForFunction(() => Boolean(
-    window.Game?.AutonomyFeedbackRuntime?.renderRuntime &&
-    window.Game?.AutonomyFeedbackPresentation?.renderPreview &&
-    window.Game?.AutonomousDecisionLoop?.resolvePrepared &&
-    window.Game?.AutonomousActionExecution?.execute &&
-    window.Game?.GameTime?.setForTest &&
-    window.Game?.WorldDeltaPersistence?.clearAll &&
-    window.Game?.AuthoritativeState?.canonicalStringify
-  ));
+  await waitForProductionApis(page);
   await page.waitForSelector('#autonomyFeedbackCard');
 }
 
@@ -165,7 +179,7 @@ test('responsive layouts preserve viewport bounds and no horizontal overflow on 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.reload();
-    await page.waitForFunction(() => Boolean(window.Game?.AutonomyFeedbackRuntime?.renderRuntime));
+    await waitForProductionApis(page);
     await page.evaluate(() => window.Game.AutonomyFeedbackRuntime.renderRuntime({
       authority: 'simulation', status: 'ready', reasonCode: 'OK', locationRef: 'origin-village',
       selectedOpportunityId: 'visit-inn'
