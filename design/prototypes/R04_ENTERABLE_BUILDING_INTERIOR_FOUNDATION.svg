@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">R04 enterable building and interior visual foundation</title>
+  <desc id="desc">Original schematic prototype showing a ten by ten two-room starter home and a service building with authoritative entrance continuity, walkable circulation, lower wall boundaries, furniture zones, world-space character anchors, and roof reveal guidance.</desc>
+  <defs>
+    <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <rect width="34" height="34" fill="#d9c79e"/>
+      <path d="M34 0H0V34" fill="none" stroke="#b59a6b" stroke-width="1"/>
+    </pattern>
+    <pattern id="planks" width="12" height="12" patternUnits="userSpaceOnUse">
+      <rect width="12" height="12" fill="#b78552"/>
+      <path d="M0 6H12M6 0V6M3 6V12" stroke="#8b5f38" stroke-width="1" opacity=".7"/>
+    </pattern>
+    <pattern id="stone" width="16" height="12" patternUnits="userSpaceOnUse">
+      <rect width="16" height="12" fill="#918979"/>
+      <path d="M0 6H16M8 0V6M4 6V12M12 6V12" stroke="#655f55" stroke-width="1" opacity=".75"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#1b1712" flood-opacity=".22"/>
+    </filter>
+    <style>
+      text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#2f2a22}.h1{font-size:28px;font-weight:700}.h2{font-size:20px;font-weight:700}.label{font-size:14px;font-weight:650}.small{font-size:12px}.tiny{font-size:10px}.wall{fill:#514332}.wallTop{fill:#6f5a43}.door{fill:#6f3f24;stroke:#3c2417;stroke-width:2}.route{fill:none;stroke:#f3e8bf;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:7 5}.routeEdge{fill:none;stroke:#6d5b3c;stroke-width:14;stroke-linecap:round;stroke-linejoin:round}.prop{stroke:#4a3827;stroke-width:2}.anchor{fill:#315d68;stroke:#15333b;stroke-width:2}.npc{fill:#7f2d3c;stroke:#431722;stroke-width:2}.roof{fill:#6f5140;stroke:#3c2e25;stroke-width:3}.roofFade{fill:#6f5140;fill-opacity:.18;stroke:#6f5140;stroke-width:3;stroke-dasharray:8 6}.note{fill:#fff8e7;stroke:#a68f68;stroke-width:1.5}.arrow{fill:none;stroke:#705b3b;stroke-width:2.5;marker-end:url(#arrowHead)}
+    </style>
+    <marker id="arrowHead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0 0L10 3.5 0 7Z" fill="#705b3b"/></marker>
+  </defs>
+
+  <rect width="1200" height="720" fill="#f4efe3"/>
+  <text x="42" y="48" class="h1">R04 · Enterable Building / Interior Foundation</text>
+  <text x="42" y="76" class="small">Presentation prototype only · authoritative footprint, entrance, occupancy, SEED and movement remain Simulation-owned</text>
+
+  <!-- STARTER HOME PANEL -->
+  <g transform="translate(42 110)">
+    <rect width="535" height="540" rx="16" fill="#fbf8ef" stroke="#b9a98b" stroke-width="2"/>
+    <text x="22" y="34" class="h2">Starter home · 10 × 10 logical tiles · 2 rooms</text>
+    <text x="22" y="56" class="small">Exterior → same door → same footprint → revealed interior</text>
+
+    <!-- road and threshold -->
+    <path d="M190 505V454" class="routeEdge"/><path d="M190 505V454" class="route"/>
+    <text x="215" y="499" class="small">authoritative exterior path</text>
+
+    <!-- 10x10 grid 340x340 -->
+    <rect x="20" y="84" width="340" height="340" fill="url(#grid)" stroke="#3e3428" stroke-width="3"/>
+
+    <!-- perimeter walls, with south door gap -->
+    <rect x="20" y="84" width="340" height="12" class="wall"/>
+    <rect x="20" y="84" width="12" height="340" class="wall"/>
+    <rect x="348" y="84" width="12" height="340" class="wall"/>
+    <rect x="20" y="412" width="153" height="12" class="wall"/>
+    <rect x="207" y="412" width="153" height="12" class="wall"/>
+    <rect x="190" y="405" width="34" height="19" class="door"/>
+
+    <!-- room divider with opening -->
+    <rect x="224" y="96" width="10" height="130" class="wallTop"/>
+    <rect x="224" y="260" width="10" height="152" class="wallTop"/>
+    <text x="245" y="236" class="tiny">room opening</text>
+
+    <!-- clear walk route -->
+    <path d="M190 405V330H200V244H275" class="routeEdge" opacity=".55"/>
+    <path d="M190 405V330H200V244H275" class="route"/>
+
+    <!-- living room props -->
+    <rect x="70" y="145" width="68" height="42" rx="7" fill="#875d36" class="prop"/>
+    <rect x="54" y="154" width="14" height="24" rx="4" fill="#9a774e" class="prop"/>
+    <rect x="140" y="154" width="14" height="24" rx="4" fill="#9a774e" class="prop"/>
+    <text x="78" y="170" class="tiny" fill="#fff">table</text>
+    <rect x="40" y="300" width="54" height="64" rx="5" fill="url(#stone)" class="prop"/>
+    <text x="49" y="334" class="tiny">hearth</text>
+    <rect x="112" y="318" width="56" height="32" rx="5" fill="#795333" class="prop"/>
+    <text x="122" y="338" class="tiny">chest</text>
+
+    <!-- bedroom props -->
+    <rect x="258" y="124" width="72" height="106" rx="8" fill="#6f5a43" class="prop"/>
+    <rect x="266" y="134" width="56" height="34" rx="6" fill="#d4c7ad" class="prop"/>
+    <text x="279" y="190" class="tiny" fill="#fff">bed</text>
+    <rect x="278" y="298" width="50" height="58" rx="5" fill="#765436" class="prop"/>
+    <text x="287" y="331" class="tiny" fill="#fff">store</text>
+
+    <!-- character -->
+    <circle cx="188" cy="292" r="13" class="npc"/><path d="M178 305L168 334H208L198 305Z" class="npc"/>
+    <line x1="188" y1="334" x2="188" y2="352" stroke="#431722" stroke-width="5" stroke-linecap="round"/>
+    <text x="132" y="372" class="small">world-space resident anchor</text>
+
+    <!-- roof reveal inset -->
+    <g transform="translate(382 102)">
+      <text x="0" y="0" class="label">Reveal states</text>
+      <path d="M2 26L64 4 126 26 112 70H16Z" class="roof" filter="url(#shadow)"/>
+      <text x="18" y="91" class="tiny">outside · opaque roof</text>
+      <path d="M2 132L64 110 126 132 112 176H16Z" class="roofFade"/>
+      <path d="M19 154H109" stroke="#514332" stroke-width="8"/>
+      <text x="12" y="197" class="tiny">inside · roof faded</text>
+      <text x="7" y="212" class="tiny">lower walls retained</text>
+    </g>
+
+    <rect x="382" y="340" width="132" height="142" rx="8" class="note"/>
+    <text x="394" y="362" class="label">Must remain readable</text>
+    <text x="394" y="386" class="tiny">• entrance threshold</text>
+    <text x="394" y="404" class="tiny">• room boundary/opening</text>
+    <text x="394" y="422" class="tiny">• clear circulation</text>
+    <text x="394" y="440" class="tiny">• resident position</text>
+    <text x="394" y="458" class="tiny">• exit route</text>
+  </g>
+
+  <!-- SERVICE BUILDING PANEL -->
+  <g transform="translate(610 110)">
+    <rect width="548" height="540" rx="16" fill="#fbf8ef" stroke="#b9a98b" stroke-width="2"/>
+    <text x="22" y="34" class="h2">Service building · inn / shop composition</text>
+    <text x="22" y="56" class="small">Role cues support authoritative type; props never invent stock or state</text>
+
+    <!-- road -->
+    <path d="M272 505V454" class="routeEdge"/><path d="M272 505V454" class="route"/>
+
+    <!-- building -->
+    <rect x="22" y="84" width="374" height="340" fill="url(#planks)" stroke="#3e3428" stroke-width="3"/>
+    <rect x="22" y="84" width="374" height="12" class="wall"/>
+    <rect x="22" y="84" width="12" height="340" class="wall"/>
+    <rect x="384" y="84" width="12" height="340" class="wall"/>
+    <rect x="22" y="412" width="230" height="12" class="wall"/>
+    <rect x="286" y="412" width="110" height="12" class="wall"/>
+    <rect x="269" y="405" width="34" height="19" class="door"/>
+
+    <!-- back room divider -->
+    <rect x="260" y="96" width="10" height="135" class="wallTop"/>
+    <rect x="260" y="265" width="10" height="147" class="wallTop"/>
+    <text x="277" y="250" class="tiny">staff opening</text>
+
+    <!-- counter -->
+    <rect x="202" y="126" width="42" height="160" rx="4" fill="#765436" class="prop"/>
+    <text x="207" y="208" class="tiny" fill="#fff" transform="rotate(-90 207 208)">counter / service line</text>
+
+    <!-- tables -->
+    <g fill="#865d39" class="prop"><circle cx="96" cy="162" r="26"/><circle cx="112" cy="267" r="26"/><circle cx="100" cy="355" r="24"/></g>
+    <g fill="#aa875e" class="prop"><rect x="62" y="132" width="13" height="18" rx="3"/><rect x="117" y="132" width="13" height="18" rx="3"/><rect x="78" y="189" width="13" height="18" rx="3"/><rect x="78" y="237" width="13" height="18" rx="3"/><rect x="133" y="237" width="13" height="18" rx="3"/><rect x="81" y="294" width="13" height="18" rx="3"/></g>
+
+    <!-- back room -->
+    <rect x="296" y="126" width="62" height="54" rx="5" fill="#7b5939" class="prop"/>
+    <text x="306" y="157" class="tiny" fill="#fff">storage</text>
+    <rect x="296" y="218" width="62" height="62" rx="5" fill="url(#stone)" class="prop"/>
+    <text x="304" y="252" class="tiny">work</text>
+    <rect x="304" y="316" width="46" height="50" rx="5" fill="#765436" class="prop"/>
+    <text x="310" y="345" class="tiny" fill="#fff">shelf</text>
+
+    <!-- circulation route -->
+    <path d="M272 405V344H184V323H172V220H187M235 248H282V246H314" class="routeEdge" opacity=".5"/>
+    <path d="M272 405V344H184V323H172V220H187M235 248H282V246H314" class="route"/>
+
+    <!-- NPCs -->
+    <circle cx="184" cy="188" r="12" class="npc"/><path d="M175 200L166 227H202L193 200Z" class="npc"/>
+    <circle cx="304" cy="246" r="12" class="anchor"/><path d="M295 258L286 285H322L313 258Z" class="anchor"/>
+    <text x="139" y="118" class="tiny">visitor</text>
+    <text x="284" y="303" class="tiny">service NPC</text>
+
+    <!-- labels / callouts -->
+    <rect x="414" y="92" width="112" height="228" rx="8" class="note"/>
+    <text x="426" y="116" class="label">Spatial cues</text>
+    <text x="426" y="142" class="tiny">public floor</text>
+    <path d="M426 147H500" stroke="#a68f68"/>
+    <text x="426" y="170" class="tiny">service boundary</text>
+    <text x="426" y="192" class="tiny">staff opening</text>
+    <text x="426" y="214" class="tiny">back work/storage</text>
+    <text x="426" y="236" class="tiny">door-to-road link</text>
+    <text x="426" y="258" class="tiny">clear circulation</text>
+    <text x="426" y="280" class="tiny">same world anchors</text>
+
+    <rect x="414" y="342" width="112" height="140" rx="8" class="note"/>
+    <text x="426" y="366" class="label">Phone simplification</text>
+    <text x="426" y="390" class="tiny">keep walls + doors</text>
+    <text x="426" y="410" class="tiny">keep major props</text>
+    <text x="426" y="430" class="tiny">stronger roof fade</text>
+    <text x="426" y="450" class="tiny">drop minor decor first</text>
+  </g>
+
+  <g transform="translate(42 676)">
+    <rect x="0" y="-13" width="12" height="12" class="wall"/><text x="18" y="-3" class="tiny">solid boundary</text>
+    <rect x="124" y="-13" width="12" height="12" class="door"/><text x="142" y="-3" class="tiny">authoritative entrance</text>
+    <circle cx="288" cy="-7" r="7" class="npc"/><text x="301" y="-3" class="tiny">world-space character</text>
+    <path d="M445 -7H485" class="route"/><text x="495" y="-3" class="tiny">clear walk route</text>
+    <rect x="625" y="-13" width="12" height="12" class="roofFade"/><text x="643" y="-3" class="tiny">presentation-only roof reveal</text>
+    <text x="902" y="-3" class="tiny">Original schematic · not final art · no protected reference assets copied</text>
+  </g>
+</svg>
