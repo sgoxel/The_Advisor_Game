@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "family": "road",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256,
+    "format": "RGBA"
+  },
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "straight_vertical",
+      "semanticId": "road_straight_vertical"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "straight_horizontal",
+      "semanticId": "road_straight_horizontal"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "cross",
+      "semanticId": "road_cross"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "turn_ne",
+      "semanticId": "road_turn_ne"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "turn_es",
+      "semanticId": "road_turn_es"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "turn_sw",
+      "semanticId": "road_turn_sw"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "turn_wn",
+      "semanticId": "road_turn_wn"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "t_junction",
+      "semanticId": "road_t_junction"
+    }
+  ],
+  "unusedCells": [
+    {
+      "row": 2,
+      "col": 0,
+      "transparent": true
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "transparent": true
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "transparent": true
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "transparent": true
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "transparent": true
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "transparent": true
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "transparent": true
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "transparent": true
+    }
+  ],
+  "notes": "Terrain-neutral original road art. Unused cells are fully transparent. Edge connections meet at each cell edge midpoint."
+}
