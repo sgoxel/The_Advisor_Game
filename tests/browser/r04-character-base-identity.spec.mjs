@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 
 async function loadIdentity(page) {
   await page.goto('./');
-  await page.addScriptTag({ url: './js/character_identity.js' });
   await page.waitForFunction(() => Boolean(window.Game?.CharacterIdentity?.generateBaseIdentity));
 }
 
