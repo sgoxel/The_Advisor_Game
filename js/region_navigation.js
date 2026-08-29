@@ -1,8 +1,8 @@
-/* R02-T18 / #113: Simulation-callable adjacent-region living-map activation. */
+/* R02-T18 / #113 + Admin #233: Simulation-callable adjacent-region living-map activation. */
 (function installRegionNavigation() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r02-region-navigation-v1';
+  const VERSION = 'admin-100x100-region-navigation-v2';
   const RADIUS = 1;
 
   function mutableTile(tile) {
@@ -29,6 +29,17 @@
       : Game.RegionTerrain.generateRegion(seed, x, y);
   }
 
+  function regionMeta(region, x, y) {
+    return {
+      x,
+      y,
+      fingerprint: Game.RegionTerrain.fingerprint(region),
+      theme: region.theme?.theme || null,
+      settlementId: region.theme?.settlementId || null,
+      regionFootprint: region.theme?.regionFootprint || null
+    };
+  }
+
   function buildWindow(seedInput, regionXInput, regionYInput) {
     const seed = String(seedInput ?? Game.State?.world?.seed ?? '');
     const centerX = Number(regionXInput);
@@ -37,12 +48,23 @@
     const size = Game.RegionTerrain.regionSize;
     const regions = [];
     const terrain = [];
+    let centerTerrain = null;
+    let centerTheme = null;
 
+    // Neighboring regions may be materialized as a deterministic prefetch/cache window for
+    // continuity checks, but Admin #233 keeps the active logical gameplay region exactly
+    // 100x100. buildWindow therefore exposes both the 3x3 cache mosaic and the center region.
     for (let dy = -RADIUS; dy <= RADIUS; dy += 1) {
       const regionRow = Array.from({ length: size }, () => []);
       for (let dx = -RADIUS; dx <= RADIUS; dx += 1) {
-        const region = reconstruct(seed, centerX + dx, centerY + dy);
-        regions.push({ x: centerX + dx, y: centerY + dy, fingerprint: Game.RegionTerrain.fingerprint(region) });
+        const regionX = centerX + dx;
+        const regionY = centerY + dy;
+        const region = reconstruct(seed, regionX, regionY);
+        regions.push(regionMeta(region, regionX, regionY));
+        if (dx === 0 && dy === 0) {
+          centerTerrain = region.tiles.map((row) => row.map(mutableTile));
+          centerTheme = region.theme || null;
+        }
         for (let row = 0; row < size; row += 1) {
           for (let col = 0; col < size; col += 1) regionRow[row].push(mutableTile(region.tiles[row][col]));
         }
@@ -55,12 +77,16 @@
       authority: 'simulation',
       seed,
       centerRegion: Game.WorldCoordinates.describeRegion(seed, centerX, centerY),
+      centerTheme,
       radius: RADIUS,
       regionSize: size,
       rows: terrain.length,
       cols: terrain[0]?.length || 0,
+      activeRows: size,
+      activeCols: size,
       regions,
-      terrain
+      terrain,
+      centerTerrain
     };
   }
 
@@ -69,8 +95,14 @@
     if (!world) throw new Error('World state is unavailable.');
     const windowState = buildWindow(world.seed, regionX, regionY);
     const size = windowState.regionSize;
-    const localCenter = size * RADIUS + Math.floor(size / 2);
-    const center = windowState.centerRegion;
+    const localCenter = Math.floor(size / 2);
+    const center = {
+      ...windowState.centerRegion,
+      theme: windowState.centerTheme?.theme || null,
+      settlementId: windowState.centerTheme?.settlementId || null,
+      regionFootprint: windowState.centerTheme?.regionFootprint || null,
+      regionSize: size
+    };
 
     world.currentRegion = center;
     world.activeRegionWindow = {
@@ -80,18 +112,28 @@
       centerRegion: center,
       radius: RADIUS,
       regionSize: size,
-      regions: windowState.regions
+      // This metadata describes deterministic neighbor prefetch only. It does not enlarge
+      // the active logical gameplay area beyond the canonical center 100x100 region.
+      regions: windowState.regions,
+      cachedRows: windowState.rows,
+      cachedCols: windowState.cols,
+      activeRows: size,
+      activeCols: size
     };
-    world.rows = windowState.rows;
-    world.cols = windowState.cols;
-    world.terrain = windowState.terrain;
+    world.rows = size;
+    world.cols = size;
+    world.terrain = windowState.centerTerrain;
     if (world.player) {
       world.player.regionX = center.x;
       world.player.regionY = center.y;
       world.player.row = localCenter;
       world.player.col = localCenter;
-      world.player.worldX = center.x * size + Math.floor(size / 2);
-      world.player.worldY = center.y * size + Math.floor(size / 2);
+      world.player.startRow = localCenter;
+      world.player.startCol = localCenter;
+      world.player.targetRow = localCenter;
+      world.player.targetCol = localCenter;
+      world.player.worldX = center.x * size + localCenter;
+      world.player.worldY = center.y * size + localCenter;
     }
 
     if (Game.State.camera) {
@@ -118,6 +160,8 @@
     return JSON.parse(JSON.stringify({
       currentRegion: world?.currentRegion || null,
       activeRegionWindow: world?.activeRegionWindow || null,
+      activeRows: world?.rows,
+      activeCols: world?.cols,
       player: world?.player ? {
         regionX: world.player.regionX,
         regionY: world.player.regionY,
