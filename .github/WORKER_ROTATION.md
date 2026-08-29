@@ -22,7 +22,9 @@ Workers #1–#5 use the recurring schedule and canonical rotation cursor. Worker
 
 The canonical cursor provides the starting role for scheduled Workers #1–#5.
 
-The scheduled cursor is a continuity pointer only. It does not reserve an invocation, pass, role cycle, or cursor sequence for one Worker. No Worker may create or honor whole-run/cycle reservation ownership. Historical reservation comments are superseded and have no operational blocking effect. Safe overlap is controlled only by target-level `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership.
+The scheduled cursor is a continuity pointer only. It does not reserve an invocation, pass, role cycle, role, issue chain, dependency chain, or cursor sequence for one Worker. No Worker may create or honor whole-run/cycle reservation ownership. Historical reservation comments are superseded and have no operational blocking effect. Safe overlap is controlled only by target-level `WORK-CLAIM`, dependency checks, exact committed-state checks, revision state, independence, and NVIDIA ownership.
+
+A role is a temporary responsibility profile, not ownership. A Worker may traverse multiple role profiles during one invocation, while other Workers simultaneously traverse their own cycles on different eligible targets.
 
 Workers #6 through #20 are cursor-independent. A direct Admin instruction may define any manual Worker's role, target, scope, or starting point. When the Admin invokes any manual Worker broadly without narrowing the role, that Worker reads README first, performs a project-priority scan, and then uses the same role boundaries and work-conserving cycle as the scheduled Workers.
 
@@ -32,7 +34,9 @@ A Worker should maximize useful work in the current invocation without inventing
 
 Starting from the applicable role, the Worker traverses the role cycle. In each role it processes eligible work sequentially in role-specific priority order rather than stopping after one task.
 
-There is no artificial one-task, one-role, or one-pass work cap. A run may complete multiple eligible targets in the same role and may repeat the full five-role cycle as long as useful eligible progress continues and project safety/authority rules remain satisfied.
+There is no artificial one-task, one-role, or one-pass work cap. A run may complete multiple eligible targets in the same role and may repeat the full five-role cycle as long as useful eligible progress continues and project safety/authority rules remain satisfied. **Full-cycle execution is a throughput strategy only; it never creates full-cycle ownership.**
+
+For each concrete issue: select -> perform the two-phase target claim -> work/check/audit -> clear/yield the target claim -> immediately select the next eligible target. A Worker must never keep one target claim merely to reserve future continuation while actively working a different target.
 
 After every material state change — including a commit, issue transition, revision outcome, claim change, dependency change, test result, NVIDIA handoff, or planning update — re-fetch the relevant GitHub state before selecting the next target.
 
@@ -42,9 +46,9 @@ When one role has no further eligible work, continue to the next role. After all
 
 Stop normally only when one complete five-role pass produces no eligible progress.
 
-A blocked or unchanged target must not be retried indefinitely in the same invocation. Record the blocker, clear or preserve ownership according to project rules, and skip that unchanged target until external state materially changes.
+A blocked or unchanged target must not be retried indefinitely in the same invocation. Record the blocker, clear/yield its claim before moving elsewhere, and skip that unchanged target until external state materially changes.
 
-Do not wait idly for CI, GitHub Actions, NVIDIA/OpenCode, another Worker, or another external result when other eligible work exists. Record the pending external state, continue through other roles and eligible targets, and revisit the waiting target only if its state materially changes during the same invocation.
+Do not wait idly for CI, GitHub Actions, NVIDIA/OpenCode, another Worker, or another external result when other eligible work exists. Record the pending external state, clear/yield the waiting target claim before selecting different work, continue through other roles and eligible targets, and revisit the waiting target only if its state materially changes during the same invocation.
 
 If a hard platform, tool, connector, or execution limit prevents further safe work before the normal no-progress stopping condition is reached, checkpoint safely: preserve or clear claims accurately, record exact completed work and pending continuations, and report `continuation required`. A limit-interrupted run must not be reported as a full no-progress pass or as completed work that was not actually completed.
 
@@ -165,11 +169,21 @@ Before closing an issue, re-fetch its comments and confirm every `TESTER REVISIO
 
 ## Claims and overlap
 
-Workers may overlap in time. `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership are the collision controls.
+Workers are expected to overlap in time. Parallel execution is a primary pipeline requirement.
 
-Only a concrete target may be reserved. Never reserve an entire invocation, pass, role cycle, or scheduled cursor. A whole-run reservation must not block another Worker from independently selecting and claiming a different eligible target.
+`WORK-CLAIM` is strictly target-scoped and temporary:
 
-Before modifying a target, claim it with the current Worker identity and role. Claim acquisition is a two-phase pre-write safety check: **(1)** immediately before posting `WORK-CLAIM`, re-fetch the target issue comments/state and confirm there is no earlier live conflicting claim or NVIDIA ownership; **(2)** immediately after posting the claim, re-fetch the target issue comments/state again before the first repository, product, planning, design, test, or workflow write. If that second read reveals an earlier conflicting live claim, the earlier claim wins deterministically; the later claimant must treat its claim as superseded, post a claim-clear/collision audit, make no target write, and continue the work-conserving cycle. Re-fetch again before other important writes. Never duplicate a live claim or break live NVIDIA ownership merely because a run is old.
+- A Worker may hold **at most one live formal `WORK-CLAIM` at a time**.
+- The claim may cover only the one concrete issue/task that Worker is actively working on at that moment.
+- Before selecting another issue or another role target, the Worker must clear/yield the existing target claim first.
+- Never pre-claim, queue-claim, batch-claim, sibling-claim, chain-claim, dependency-claim, phase-claim, role-claim, pass-claim, cycle-claim, cursor-claim, invocation-claim, or reserve future continuation work.
+- If the target becomes blocked or waits on CI/NVIDIA/another Worker and the Worker moves to different work, record the pending state and clear/yield the target claim first.
+- A claim on issue A has **zero ownership effect** on issue B.
+- Linked, parent/child, sibling, same-feature, same-chain, or dependency relationships do not create ownership of related issues.
+- A real unsatisfied dependency may make an issue ineligible, but it does not claim or reserve that issue. Another Worker may work any related issue whenever that issue is independently eligible under its own dependencies and role rules.
+- A target collision blocks only that exact target; it never blocks the Worker invocation or the wider Worker pipeline.
+
+Before modifying a target, claim it with the current Worker identity and role. Claim acquisition is a two-phase pre-write safety check: **(1)** immediately before posting `WORK-CLAIM`, re-fetch the target issue comments/state and confirm there is no earlier live conflicting claim or NVIDIA ownership; **(2)** immediately after posting the claim, re-fetch the target issue comments/state again before the first repository, product, planning, design, test, or workflow write. If that second read reveals an earlier conflicting live claim, the earlier claim wins deterministically; the later claimant must treat its claim as superseded, post a claim-clear/collision audit, make no target write, and immediately continue the work-conserving cycle on another eligible target. Re-fetch again before other important writes. Never duplicate a live claim or break live NVIDIA ownership merely because a run is old.
 
 A Worker must not treat NVIDIA Coder self-test as independent PASS. NVIDIA is not phase/release authority and cannot consume the Tester deadlock exception.
 
@@ -177,13 +191,13 @@ A Worker must not treat NVIDIA Coder self-test as independent PASS. NVIDIA is no
 
 The canonical recurring cursor is the latest valid `WORKER ROTATION STATE:` JSON comment on GitHub issue #97. It applies only to scheduled Workers #1–#5. Scheduled Workers append state comments; they do not rewrite history.
 
-The cursor never grants exclusive ownership of the run. Multiple Workers may execute concurrently from GitHub's current state provided they claim only concrete targets and obey target collision, dependency, independence, and NVIDIA rules.
+The cursor never grants exclusive ownership of the run. Multiple Workers may execute concurrently from GitHub's current state, may use different role profiles at the same time, and may work related issue chains in parallel when each selected target is independently eligible. They must claim only the single concrete target currently being worked and obey target collision, actual dependency eligibility, independence, revision, exact-state, and NVIDIA rules.
 
-At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, claim-clear state, pending external work, and whether continuation is required.
+At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, claim-clear state, pending external work, and whether continuation is required. Normally the Worker must end with zero live formal target claims.
 
 The next scheduled cursor uses the successor of the last role in which useful work was actually performed. If the run produced no eligible progress in any role, preserve the original starting role. If the run was interrupted by a hard execution limit while eligible work remained, preserve continuity from the last useful role and explicitly record the pending continuation so the next Worker can resume from current GitHub state rather than repeating completed work.
 
-A documented Tester deadlock does not itself rewrite or fast-forward the scheduled cursor. The first scheduled Worker that reaches the gate through normal rotation may use the exception; once that Worker claims the gate, later Workers must respect the live claim.
+A documented Tester deadlock does not itself rewrite or fast-forward the scheduled cursor. The first scheduled Worker that reaches the gate through normal rotation may use the exception; once that Worker claims the exact gate target, later Workers must respect that target claim only; unrelated work remains parallel.
 
 ## Manual Worker #6 through #20 instruction profiles
 
@@ -197,7 +211,7 @@ A manual Worker #6 through #20 invocation must:
 4. Use the same Planner/Coder/Designer/Tester/Reviewer authority boundaries and critical priorities unless the Admin explicitly narrows or overrides the normal workflow.
 5. When the Admin gives a broad instruction rather than a single-role/task instruction, run work-conservingly across roles with no artificial task/pass cap and stop normally only after a complete five-role pass makes no eligible progress.
 6. Respect its own persistent Worker identity independence across all current and future manual invocations, except that it may use the documented cumulative Tester deadlock exception when directly Admin-invoked and all exception conditions are satisfied.
-7. Use normal `WORK-CLAIM` collision protection and never interfere with live scheduled Workers, another manual Worker, or NVIDIA ownership.
+7. Use the same strict single-target claim rule: at most one live formal `WORK-CLAIM`, only for the exact issue currently being worked; clear/yield it before changing targets. Never treat linked/dependent issues, another Worker invocation, or the scheduled cursor as owned.
 8. Never edit README without explicit Admin authorization.
 9. Never consume, advance, rewrite, or reserve the scheduled `WORKER ROTATION STATE:` cursor.
 10. If project work is performed, post a `MANUAL WORKER #<n> RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, claim-clear state, and any deadlock-exception use.
