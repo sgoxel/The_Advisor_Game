@@ -70,6 +70,7 @@ window.Game.Utils.loadScriptOnce("js/region_navigation.js", "r02RegionNavigation
 window.Game.Utils.loadScriptOnce("js/character_identity.js", "r04CharacterIdentityModule");
 window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
 window.Game.Utils.loadScriptOnce("js/npc_residency.js", "r04NpcResidencyModule");
+window.Game.Utils.loadScriptOnce("js/npc_workplaces.js", "r04NpcWorkplacesModule");
 window.Game.Utils.loadScriptOnce("js/ecology.js", "r02EcologyModule");
 window.Game.Utils.loadScriptOnce("js/world_hierarchy.js", "r02WorldHierarchyModule");
 window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeographyModule");
