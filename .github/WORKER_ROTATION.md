@@ -111,7 +111,7 @@ Before closing an issue, re-fetch its comments and confirm every `TESTER REVISIO
 
 Workers may overlap in time. `WORK-CLAIM`, dependency checks, exact committed-state checks, and NVIDIA ownership are the collision controls.
 
-Before modifying a target, claim it with the current Worker identity and role. Re-fetch before important writes. Never duplicate a live claim or break live NVIDIA ownership merely because a run is old.
+Before modifying a target, claim it with the current Worker identity and role. Claim acquisition is a two-phase pre-write safety check: **(1)** immediately before posting `WORK-CLAIM`, re-fetch the target issue comments/state and confirm there is no earlier live conflicting claim or NVIDIA ownership; **(2)** immediately after posting the claim, re-fetch the target issue comments/state again before the first repository, product, planning, design, test, or workflow write. If that second read reveals an earlier conflicting live claim, the earlier claim wins deterministically; the later claimant must treat its claim as superseded, post a claim-clear/collision audit, make no target write, and continue the work-conserving cycle. Re-fetch again before other important writes. Never duplicate a live claim or break live NVIDIA ownership merely because a run is old.
 
 A Worker must not treat NVIDIA Coder self-test as independent PASS. NVIDIA is not phase/release authority and cannot consume the Tester deadlock exception.
 
