@@ -254,6 +254,12 @@ window.Game = window.Game || {};
     UI.addLog(`Tile seçildi; rota yalnızca önizlemedir: satır=${picked.row}, sütun=${picked.col}`);
   }
 
+  function isEditableKeyboardTarget(target) {
+    if (!(target instanceof Element)) return false;
+    if (target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) return true;
+    return target instanceof HTMLElement && target.isContentEditable;
+  }
+
   function bindInputEvents() {
     const dom = State.dom;
     const camera = State.camera;
@@ -379,6 +385,7 @@ window.Game = window.Game || {};
         if (event.key === 'Escape') UI.closeLogModal();
         return;
       }
+      if (isEditableKeyboardTarget(event.target)) return;
       const key = event.key.toLowerCase();
       if (['w', 'a', 's', 'd'].includes(key)) event.preventDefault();
       input.keys.add(key);
