@@ -154,7 +154,7 @@ test('validation is immutable, canonical and relevance-bounded without world mat
   const target = TARGETS.location;
   const request = requestFor(target, 'inspect_location');
   const context = contextFor(target, 'inspect_location');
-  const evidence = await page.evaluate(({ request, context }) => {
+  const evidence = await page.evaluate(({ request, context, target }) => {
     const api = window.Game.InteractionValidation;
     let materializeCalls = 0;
     window.Game.WorldHierarchy = { materializeRegion: () => { materializeCalls += 1; throw new Error('must not materialize'); } };
