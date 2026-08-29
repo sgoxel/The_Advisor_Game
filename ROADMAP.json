@@ -3,14 +3,18 @@
   "product": "The Advisor Game",
   "authority": "README.md",
   "planning_owner": "Planner role (rotating Worker)",
-  "planning_epoch": "post-admin-reset-2026-08-27-readme-reconciled-2026-08-29-tester-deadlock-pass-policy",
-  "planning_basis": "Planner-owned decomposition reconciled through #105, #118, #132, #137, #139, #143, #151 and #154 after Admin README updates #103, #106, #117, #131, #136, #138, #142, #150 and the Admin-authorized Tester-deadlock governance update reflected in README commit 3b5c38e9df9c0d54c13c85fe423f04cad6588eb7. Compatible verified work remains preserved; completed simulation, world, chronology, relevance-bounded performance and Designer foundations are reused rather than reopened. README defines product requirements and high-level governance; roadmap phases, order, architecture, decomposition and release prerequisites remain Planner-owned below Admin and README authority.",
+  "planning_epoch": "post-r02-deadlock-pass-r03-activation-2026-08-29",
+  "planning_basis": "Planner-owned decomposition reconciled through #154 and R03 tracker #155 after the Admin-authorized Tester-deadlock governance update reflected in README commit 3b5c38e9df9c0d54c13c85fe423f04cad6588eb7. R02 received valid DEADLOCK TESTER PASS on #93 from Worker #5 with accurate non-independent attribution for Worker #5's included #124 work. R02 is therefore completed and R03 is the single active phase. Compatible verified work remains preserved; completed world, chronology, persistence, relevance-bounded performance and visual foundations are reused rather than reopened.",
   "readme_reconciliation": {
     "readme_commit": "3b5c38e9df9c0d54c13c85fe423f04cad6588eb7",
-    "admin_issues": [103, 106, 117, 131, 136, 138, 142, 150],
-    "planner_issues": [105, 118, 132, 137, 139, 143, 151, 154],
+    "admin_issues": [103,106,117,131,136,138,142,150],
+    "planner_issues": [105,118,132,137,139,143,151,154,155],
     "governance_issue": 97,
-    "deadlock_policy_issue": 154
+    "deadlock_policy_issue": 154,
+    "completed_r02_gate_issue": 93,
+    "completed_r02_gate_result": "DEADLOCK TESTER PASS",
+    "completed_r02_gate_comment": 5459185389,
+    "completed_r02_gate_worker": "Worker #5"
   },
   "core_rule": "Player advises -> AI Character decides -> Simulation validates -> World reacts.",
   "baseline": {
@@ -18,10 +22,11 @@
     "v155_import_commit": "e2472ae0e14b246b5e326189d41eddb6f6f757ed",
     "baseline_issue": 56,
     "completed_r01_phase_issue": 69,
-    "active_phase_issue": 82,
+    "completed_r02_phase_issue": 82,
+    "active_phase_issue": 155,
     "public_policy": "The stable public URL may serve an Admin-directed unverified development build when explicitly authorized. Normal independently verified status requires an independent Tester; an otherwise-ready cumulative phase/release gate may instead advance through an accurately labeled DEADLOCK TESTER PASS when the README-defined all-identities Tester deadlock conditions are satisfied."
   },
-  "active_phase_id": "R02",
+  "active_phase_id": "R03",
   "phase_policy": {
     "single_active_phase": true,
     "oldest_unfinished_first": true,
@@ -73,53 +78,29 @@
       "completed #140 compact SEED-derived political-geography foundation",
       "completed corrected #141 compact settlement-evolution foundation with independent T-REV retest",
       "completed #144 relevance-bounded lazy/asynchronous computation foundation",
-      "completed #124 active/off-screen integration and #130 cumulative regression"
+      "completed #124 active/off-screen integration and #130 cumulative regression",
+      "completed #152 visual-direction foundation and R02 phase-gate evidence"
     ],
     "ADAPT": [
-      "existing verified R02 visual/placeholder work toward the new original seinen-inspired and old-school-PC-RPG convergence direction without reopening unrelated functional verification",
-      "future protagonist/NPC portrait and in-world presentation so multiple detail levels share one mature character family",
-      "later strategic presentation so region/realm/world views read evolving aggregate authority while retaining the same old-school PC RPG visual family",
-      "future UI framing toward classic computer-RPG information density while preserving modern accessibility, touch targets and responsive behavior"
+      "existing verified R02 world, persistence, target identity and presentation foundations into R03 Simulation-owned legality and interaction validation",
+      "existing living-map interaction/picking surfaces into non-authoritative candidate/feedback presentation",
+      "existing responsive visual language toward explicit allowed/rejected/pending/resolved interaction feedback without direct-control affordances"
     ],
     "DEFER": [
-      "wholesale replacement of every R02 placeholder asset after the art-direction foundation; final production replacement belongs to later content/presentation work",
-      "deep settlement morphology, building-by-building growth/decline, settlement management and profession economy beyond the compact #141 R02 foundation",
-      "deep mutable realm/country borders, ownership dynamics, faction diplomacy, war, population and political economy beyond the compact #140 R02 base-geography foundation",
-      "full region/realm/world strategic UI production until the appropriate later gameplay phase",
-      "device-specific render pipelines and exact quality presets beyond current product-performance requirements",
-      "deep creature combat/faction AI beyond ecology foundation behavior",
-      "natural Advisor conversation and persistent Advisor influence beyond current R02 world foundations",
-      "future protagonist Local BOT and optional LLM character decision systems",
-      "rank progression, realm administration, military and imperial gameplay beyond the active phase"
+      "autonomous protagonist Local BOT decisions until R04",
+      "natural Advisor conversation and persistent Advisor influence until later phases",
+      "deep settlement morphology/economy and mutable realm/faction politics until later phases",
+      "full region/realm/world strategic UI production until later gameplay phases",
+      "rank progression, realm administration, military and imperial gameplay beyond R03"
     ],
     "REJECT": [
-      "legacy rules that override Admin or README authority",
-      "runtime behavior that gives the player binding direct control over the autonomous protagonist",
-      "visual assets or presentation state acting as authoritative simulation truth by themselves",
-      "copying or closely imitating a specific existing manga/anime artist, series, protected character, costume, composition, signature visual identity or existing game's exact art identity",
-      "chibi, super-deformed or toy-like character presentation as the default character language when it conflicts with the mature grounded README direction",
-      "using old-school nostalgia to justify unreadable text, tiny controls, inaccessible contrast, hover-only interaction or non-responsive layouts",
-      "unrelated art-pack styles that make portraits, in-world characters, environments, creatures and UI feel like separate products",
-      "hidden nondeterministic inputs controlling authoritative outcomes",
-      "a gameplay-defined finite outer world edge or disconnected random maps masquerading as one continuous world",
-      "turn-based world authority that freezes normal world progression until player turns",
-      "permanently frozen inactive regions when campaign time advances",
-      "continuous entity-level ticking/materialization of irrelevant unbounded invisible detail merely because time passes",
-      "invisible-world continuous work that grows linearly with total discovered/generated world size rather than relevance",
-      "resume or lazy catch-up that replays every missed local tick/day/micro-action instead of bounded reconciliation",
-      "asynchronous scheduling or completion order changing authoritative outcomes",
-      "late or stale asynchronous work overwriting newer authoritative campaign state",
-      "device-specific quality scaling changing simulation truth, chronology, legal outcomes or persistent history",
-      "a fixed historical fantasy epoch that ignores the accepted real-world campaign creation date/time",
-      "a fixed 06:00 campaign start instead of using the accepted real-world creation time-of-day",
-      "launch/resume logic that directly remaps an established fantasy campaign date to the current civil date rather than applying elapsed-time advancement",
-      "backward/invalid real-world clock input silently rewinding established campaign chronology",
-      "higher-detail materialization replacing or contradicting established aggregate history",
-      "materializing an evolved or damaged settlement as its untouched original SEED template",
-      "presentation-only or randomly disconnected political borders/affiliations that contradict authoritative geography",
-      "treating SEED-generated base borders, ownership or realm composition as immutable after authoritative campaign changes",
-      "ambient dialogue inventing authoritative world facts without simulation support",
-      "save behavior that silently loses meaningful persistent, calendar, settlement-development, political or hierarchical world changes"
+      "player or UI directly declaring an action legal or resolved",
+      "binding direct player control of the autonomous protagonist or ordinary NPCs",
+      "presentation objects acting as authoritative interaction targets without Simulation-backed identity",
+      "invalid or stale validation results mutating authoritative state",
+      "device/render/order-specific legality outcomes",
+      "world interaction validation that requires continuous full-detail ticking/materialization of unrelated unbounded world state",
+      "NVIDIA auxiliary evidence acting as phase/release authority"
     ]
   },
   "phases": [
@@ -134,88 +115,30 @@
     {
       "id": "R02",
       "title": "Authoritative Unbounded Hierarchical Living World and Campaign State",
-      "status": "active",
+      "status": "completed",
       "phase_issue": 82,
       "phase_gate_issue": 93,
-      "release_gate": "Preserve verified seed/save/world/navigation/time/composition/NPC/ecology/hierarchy/political/settlement/performance foundations while establishing the README-defined original seinen-inspired character and old-school PC RPG visual-direction foundation before phase closure. #152 must define and demonstrate the coherent character/portrait/world/UI convergence direction across representative desktop/tablet/phone views without requiring wholesale placeholder replacement. All prior relevance-bounded simulation, deterministic asynchronous catch-up and living-map requirements remain preserved. Tester-role phase verification is required before R03 through normal independent verification or, when all README deadlock conditions hold, DEADLOCK TESTER PASS."
+      "completion": "Worker #5 issued valid DEADLOCK TESTER PASS on #93 comment 5459185389 under README commit 3b5c38e9df9c0d54c13c85fe423f04cad6588eb7 after full R02 evidence review. PASS explicitly disclosed Worker #5's own included #124 authorship and did not label that work independently verified. #93 closed completed."
     },
     {
       "id": "R03",
       "title": "Legal Action and World Interaction Validation",
-      "status": "planned",
-      "release_gate": "Add deterministic simulation-owned legality and interaction validation for spatial world actions and NPC/location/animal/creature interactions using authoritative fantasy campaign date/time, local context and hierarchical world state without player result injection or direct execution; preserve the established visual-direction foundation; obtain Tester-role phase verification before R04 through normal independence or the documented deadlock exception."
+      "status": "active",
+      "phase_issue": 155,
+      "phase_gate_issue": 167,
+      "release_gate": "Add deterministic Simulation-owned legality and interaction validation for spatial world actions and NPC/location/animal/creature interactions using authoritative fantasy campaign date/time, local context and hierarchical world state without player result injection or direct execution; preserve living-map, persistence, relevance-bounded and visual foundations. Complete #156-#166 with required independent task verification and pass #167 through normal independent Tester verification or, only when README deadlock conditions hold, accurately labeled DEADLOCK TESTER PASS before R04."
     },
-    {
-      "id": "R04",
-      "title": "Autonomous Protagonist and Local BOT Core",
-      "status": "planned",
-      "release_gate": "Add the deterministic local character driver so the protagonist chooses valid goals/actions and travels through the continuous real-time world under Simulation authority, respecting fantasy campaign chronology, locations, schedules, hierarchical state and region transitions. Protagonist/NPC presentation introduced or replaced in this phase should converge toward the established mature seinen-inspired character family; obtain Tester-role phase verification before R05 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R05",
-      "title": "Conversation and Advisor Influence",
-      "status": "planned",
-      "release_gate": "Add natural advisor-character interaction so advice can influence observable protagonist decisions, travel and interactions in the same living chronological world without becoming binding direct control. Dialogue/portrait presentation should remain coherent with the established character-art direction; obtain Tester-role phase verification before R06 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R06",
-      "title": "Memory, Trust and Relationships",
-      "status": "planned",
-      "release_gate": "Add persistent character memory, trust and relationship effects that influence autonomous decisions/interactions and remain coherent across offline elapsed fantasy campaign time, NPC life and cumulative hierarchical world state; obtain Tester-role phase verification before R07 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R07",
-      "title": "Advisor Instruction Plain-Text System",
-      "status": "planned",
-      "release_gate": "Add structured human-readable persistent Advisor Instructions as an influence system, never as direct authority over simulation truth; obtain Tester-role phase verification before R08 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R08",
-      "title": "Optional LLM Adapter and Deterministic Fallback",
-      "status": "planned",
-      "release_gate": "Add an optional LLM driver for the same protagonist with privacy-conscious context boundaries and deterministic Local BOT fallback; authoritative chronological and hierarchical simulation remains intact; obtain Tester-role phase verification before R09 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R09",
-      "title": "Peasant Survival, Jobs and Local Economy",
-      "status": "planned",
-      "release_gate": "Make the inhabited local world meaningfully playable through survival, work, resources, shops/services and profession-based NPC interactions whose availability/routines respond to authoritative fantasy campaign time and local/settlement conditions; new/replaced character/world/UI assets should converge toward the established visual family; obtain Tester-role phase verification before R10 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R10",
-      "title": "Squire and Knight Progression",
-      "status": "planned",
-      "release_gate": "Add rank-appropriate training, patronage, duties, missions and progression while maintaining autonomous character choice, real-time schedules, fantasy campaign chronology and continuous spatial world travel; rank/costume presentation should remain consistent with the mature medieval-fantasy character direction; obtain Tester-role phase verification before R11 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R11",
-      "title": "Evolving Settlements, Political Geography, Region and Realm Views; Ecology, Factions, Trade and Diplomacy",
-      "status": "planned",
-      "release_gate": "Deepen SEED-derived settlements into authoritative historical growth/decline and material morphology; deepen SEED-derived realm/country and region/province geography, borders and settlement affiliations; activate mutable ownership/territorial relationships, factions, trade, diplomacy, prosperity, security, population trends and major events. Higher-level/off-screen simulation must preserve relevance-bounded lazy computation rather than reintroduce world-size-proportional local ticking. Provide readable local/region/realm strategic views derived from the same hierarchy and consistent with the old-school PC RPG visual family; obtain Tester-role phase verification before R12 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R12",
-      "title": "Court, Realm Economy, Military and Succession",
-      "status": "planned",
-      "release_gate": "Add higher-rank court, realm economy, strategic military and succession systems that operate on compact authoritative realm/region aggregates, settlement development, ownership and territorial/border state; propagate meaningful outcomes through relevance-scaled hierarchy and offline fantasy time without direct unit-by-unit player control or continuous full-world local ticking; court/noble character presentation remains in the established mature character family; obtain Tester-role phase verification before R13 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R13",
-      "title": "King, Multi-Kingdom and Emperor Endgame",
-      "status": "planned",
-      "release_gate": "Extend hierarchical simulation and strategic views to sovereign, multi-kingdom and imperial/world scale with evolving realm composition, borders, ownership and settlement history while preserving character autonomy, accelerated fantasy chronology, compact large-scale state, relevance-bounded lazy local materialization and deterministic asynchronous-capable computation; world-scale presentation remains coherent with the established visual direction; obtain Tester-role phase verification before R14 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R14",
-      "title": "Advanced Advisor Tools and Mini-Games",
-      "status": "planned",
-      "release_gate": "Add direct Advisor tools and mini-games that improve information or influence across local and strategic scales without bypassing character autonomy, campaign time or simulation authority; UI framing should preserve modern usability while fitting the established old-school PC RPG product family; obtain Tester-role phase verification before R15 through normal independence or the documented deadlock exception."
-    },
-    {
-      "id": "R15",
-      "title": "Presentation, Accessibility, Balance and Campaign Release",
-      "status": "planned",
-      "release_gate": "Complete cumulative local/region/realm/world presentation, fantasy calendar/day-night readability, evolving-settlement and political-geography readability, ecology/settlement coherence, accessibility, responsiveness, balance and performance across the unbounded hierarchical real-time living world. Final visual verification must confirm an original mature seinen-anime-inspired character family across portraits and in-world figures, an old-school PC RPG world/UI language across local and strategic views, coherent assets rather than unrelated art packs, and no copying of a specific existing artist/series/game identity. Representative current desktop, phone and tablet gameplay conditions must preserve readability, touch usability and the same art identity under device-quality scaling; obtain Tester-role verification for the final release through normal independent verification or, only when README deadlock conditions hold, DEADLOCK TESTER PASS."
-    }
+    {"id":"R04","title":"Autonomous Protagonist and Local BOT Core","status":"planned","release_gate":"Add the deterministic local character driver so the protagonist chooses valid goals/actions and travels through the continuous real-time world under Simulation authority, respecting fantasy campaign chronology, locations, schedules, hierarchical state and region transitions. Protagonist/NPC presentation introduced or replaced in this phase should converge toward the established mature seinen-inspired character family; obtain Tester-role phase verification before R05 through normal independence or the documented deadlock exception."},
+    {"id":"R05","title":"Conversation and Advisor Influence","status":"planned","release_gate":"Add natural advisor-character interaction so advice can influence observable protagonist decisions, travel and interactions in the same living chronological world without becoming binding direct control. Dialogue/portrait presentation should remain coherent with the established character-art direction; obtain Tester-role phase verification before R06 through normal independence or the documented deadlock exception."},
+    {"id":"R06","title":"Memory, Trust and Relationships","status":"planned","release_gate":"Add persistent character memory, trust and relationship effects that influence autonomous decisions/interactions and remain coherent across offline elapsed fantasy campaign time, NPC life and cumulative hierarchical world state; obtain Tester-role phase verification before R07 through normal independence or the documented deadlock exception."},
+    {"id":"R07","title":"Advisor Instruction Plain-Text System","status":"planned","release_gate":"Add structured human-readable persistent Advisor Instructions as an influence system, never as direct authority over simulation truth; obtain Tester-role phase verification before R08 through normal independence or the documented deadlock exception."},
+    {"id":"R08","title":"Optional LLM Adapter and Deterministic Fallback","status":"planned","release_gate":"Add an optional LLM driver for the same protagonist with privacy-conscious context boundaries and deterministic Local BOT fallback; authoritative chronological and hierarchical simulation remains intact; obtain Tester-role phase verification before R09 through normal independence or the documented deadlock exception."},
+    {"id":"R09","title":"Peasant Survival, Jobs and Local Economy","status":"planned","release_gate":"Make the inhabited local world meaningfully playable through survival, work, resources, shops/services and profession-based NPC interactions whose availability/routines respond to authoritative fantasy campaign time and local/settlement conditions; new/replaced character/world/UI assets should converge toward the established visual family; obtain Tester-role phase verification before R10 through normal independence or the documented deadlock exception."},
+    {"id":"R10","title":"Squire and Knight Progression","status":"planned","release_gate":"Add rank-appropriate training, patronage, duties, missions and progression while maintaining autonomous character choice, real-time schedules, fantasy campaign chronology and continuous spatial world travel; rank/costume presentation should remain consistent with the mature medieval-fantasy character direction; obtain Tester-role phase verification before R11 through normal independence or the documented deadlock exception."},
+    {"id":"R11","title":"Evolving Settlements, Political Geography, Region and Realm Views; Ecology, Factions, Trade and Diplomacy","status":"planned","release_gate":"Deepen SEED-derived settlements into authoritative historical growth/decline and material morphology; deepen SEED-derived realm/country and region/province geography, borders and settlement affiliations; activate mutable ownership/territorial relationships, factions, trade, diplomacy, prosperity, security, population trends and major events. Higher-level/off-screen simulation must preserve relevance-bounded lazy computation rather than reintroduce world-size-proportional local ticking. Provide readable local/region/realm strategic views derived from the same hierarchy and consistent with the old-school PC RPG visual family; obtain Tester-role phase verification before R12 through normal independence or the documented deadlock exception."},
+    {"id":"R12","title":"Court, Realm Economy, Military and Succession","status":"planned","release_gate":"Add higher-rank court, realm economy, strategic military and succession systems that operate on compact authoritative realm/region aggregates, settlement development, ownership and territorial/border state; propagate meaningful outcomes through relevance-scaled hierarchy and offline fantasy time without direct unit-by-unit player control or continuous full-world local ticking; court/noble character presentation remains in the established mature character family; obtain Tester-role phase verification before R13 through normal independence or the documented deadlock exception."},
+    {"id":"R13","title":"King, Multi-Kingdom and Emperor Endgame","status":"planned","release_gate":"Extend hierarchical simulation and strategic views to sovereign, multi-kingdom and imperial/world scale with evolving realm composition, borders, ownership and settlement history while preserving character autonomy, accelerated fantasy chronology, compact large-scale state, relevance-bounded lazy local materialization and deterministic asynchronous-capable computation; world-scale presentation remains coherent with the established visual direction; obtain Tester-role phase verification before R14 through normal independence or the documented deadlock exception."},
+    {"id":"R14","title":"Advanced Advisor Tools and Mini-Games","status":"planned","release_gate":"Add direct Advisor tools and mini-games that improve information or influence across local and strategic scales without bypassing character autonomy, campaign time or simulation authority; UI framing should preserve modern usability while fitting the established old-school PC RPG product family; obtain Tester-role phase verification before R15 through normal independence or the documented deadlock exception."},
+    {"id":"R15","title":"Presentation, Accessibility, Balance and Campaign Release","status":"planned","release_gate":"Complete cumulative local/region/realm/world presentation, fantasy calendar/day-night readability, evolving-settlement and political-geography readability, ecology/settlement coherence, accessibility, responsiveness, balance and performance across the unbounded hierarchical real-time living world. Final visual verification must confirm an original mature seinen-anime-inspired character family across portraits and in-world figures, an old-school PC RPG world/UI language across local and strategic views, coherent assets rather than unrelated art packs, and no copying of a specific existing artist/series/game identity. Representative current desktop, phone and tablet gameplay conditions must preserve readability, touch usability and the same art identity under device-quality scaling; obtain Tester-role verification for the final release through normal independent verification or, only when README deadlock conditions hold, DEADLOCK TESTER PASS."}
   ]
 }
