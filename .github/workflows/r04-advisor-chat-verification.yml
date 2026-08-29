@@ -1,0 +1,70 @@
+name: R04 Advisor Chat Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'css/styles.css'
+      - 'js/advisor_chat_ui.js'
+      - 'js/advisor_influence_bridge.js'
+      - 'js/advisor_conversation_contract.js'
+      - 'js/local_bot_driver.js'
+      - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
+      - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
+      - 'tests/browser/r04-advisor-influence-local-bot.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-advisor-chat-verification.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'css/styles.css'
+      - 'js/advisor_chat_ui.js'
+      - 'js/advisor_influence_bridge.js'
+      - 'js/advisor_conversation_contract.js'
+      - 'js/local_bot_driver.js'
+      - 'tests/browser/r04-advisor-chat-surface.spec.mjs'
+      - 'tests/browser/r04-advisor-conversation-contract.spec.mjs'
+      - 'tests/browser/r04-advisor-influence-local-bot.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-advisor-chat-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-advisor-chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R04 Advisor chat candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused free-text Advisor chat regression
+        run: npx playwright test tests/browser/r04-advisor-chat-surface.spec.mjs --project=desktop
+      - name: Preserve Advisor conversation contract
+        run: npx playwright test tests/browser/r04-advisor-conversation-contract.spec.mjs --project=desktop
+      - name: Preserve bounded Advisor influence in Local BOT
+        run: npx playwright test tests/browser/r04-advisor-influence-local-bot.spec.mjs --project=desktop
+      - name: Upload focused R04 Advisor chat evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-advisor-chat-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
