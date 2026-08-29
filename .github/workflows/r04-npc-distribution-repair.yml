@@ -1,4 +1,5 @@
 name: R04 NPC Distribution Repair
+# Triggered after workflow registration so GitHub can execute it.
 
 on:
   push:
