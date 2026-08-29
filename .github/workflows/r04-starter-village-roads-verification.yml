@@ -1,0 +1,66 @@
+name: R04 Starter Village Roads Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/starter_village_roads.js'
+      - 'js/utils.js'
+      - 'js/renderer.js'
+      - 'js/spatial_world.js'
+      - 'js/starter_village_exteriors.js'
+      - 'tests/browser/r04-starter-village-roads.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-starter-village-roads-verification.yml'
+  pull_request:
+    paths:
+      - 'js/starter_village_roads.js'
+      - 'js/utils.js'
+      - 'js/renderer.js'
+      - 'js/spatial_world.js'
+      - 'js/starter_village_exteriors.js'
+      - 'tests/browser/r04-starter-village-roads.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-starter-village-roads-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  starter-village-roads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run focused starter-village road regression
+        run: npx playwright test tests/browser/r04-starter-village-roads.spec.mjs
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-starter-village-roads-evidence-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
