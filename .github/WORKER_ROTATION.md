@@ -53,7 +53,7 @@ Critical obligations outrank ordinary backlog inside the relevant role:
 - Planner: README reconciliation, blocking Planner revisions, active-phase planning repair, then normal backlog and NVIDIA routing.
 - Coder: accepted Tester revision correction, continuation, `ai-handoff`, then ordinary eligible coding.
 - Designer: accepted Designer revision correction or continuation, then required active/earlier visual work.
-- Tester: revision retest, blockers, `ai-awaiting-review` or Tester handoff, active untested work, earlier fixes, then release gates.
+- Tester: revision retest, blockers, `ai-awaiting-review` or Tester handoff, active untested work, earlier fixes, then release gates including any documented Tester-deadlock gate that has become executable.
 - Reviewer: evidenced blocking process/workflow/CI/automation defects, stale-state risks, and reliability problems before ordinary process improvement.
 
 Within those priorities, prefer the oldest/highest-priority eligible unclaimed target whose dependencies are satisfied.
@@ -62,13 +62,36 @@ Workers must not invent work merely to keep a role busy.
 
 ## Independence
 
-A Worker must never independently approve its own implementation, design, revision, bug fix, workflow fix, process fix, or other prior change from the same or an earlier run.
+A Worker must never **independently** approve its own implementation, design, revision, bug fix, workflow fix, process fix, or other prior change from the same or an earlier run.
 
-When reaching Tester or Reviewer, the Worker first seeks another eligible independent target. If none exists, that self-authored target remains for another Worker identity while the current Worker continues with other eligible work.
+When reaching Tester or Reviewer, the Worker first seeks another eligible independent target. If another authorized independent Worker can verify the target, normal independent verification remains required.
 
 Coder, Designer, and Reviewer changes still require independent Tester verification by a different Worker identity before being called independently verified.
 
 Worker #6 and Worker #7 are separate persistent identities for this rule even though neither has a recurring routine. Work produced manually as Worker #6 cannot later be independently approved by Worker #6, and the same applies to Worker #7. Worker #6 may independently verify Worker #7 work, and Worker #7 may independently verify Worker #6 work, when all normal Tester requirements are satisfied.
+
+### Tester deadlock exception
+
+A cumulative phase or release gate enters **Tester deadlock** only when all of these conditions are true:
+
+- the gate is otherwise dependency-ready;
+- required implementation/design/revision work is complete;
+- no unresolved valid T-REV, P-REV, claim collision, NVIDIA ownership conflict, or higher-authority blocker remains;
+- every currently authorized Worker identity that could act as Tester is disqualified solely because each has accepted authorship inside the cumulative gate scope.
+
+When this exact condition is documented, Worker-identity independence must not leave the project permanently blocked.
+
+For scheduled Workers #1–#5, the **first Worker whose normal canonical rotation/run reaches the Tester gate after the deadlock is documented** may claim and execute that gate. The Worker must not skip ahead in the scheduled cursor merely to obtain the exception. Worker #6 or Worker #7 may execute the deadlock gate only when directly invoked by Admin while the deadlock is still unresolved and no other Worker already owns the gate.
+
+The deadlock Worker must perform the same complete exact-state gate verification that an independent Tester would perform. No test, browser, responsive, accessibility, performance, regression, public-state, CI, artifact, exact-SHA, or unresolved-revision requirement is waived by this exception.
+
+A successful exception result must use the explicit marker:
+
+`DEADLOCK TESTER PASS`
+
+The same PASS record must identify the exact tested SHA/state, the deadlock issue/record, required evidence, and the passing Worker's own accepted authorship inside the cumulative scope. The PASS is valid phase/release authority and may activate the next phase or release workflow. It must **not** be described as independent verification of the passing Worker's own included work.
+
+If a genuinely independent authorized Tester becomes available before the deadlock gate is claimed, the normal independent Tester path takes priority and the exception is not used.
 
 ## Tester revision resolution
 
@@ -80,6 +103,8 @@ A successful independent revision retest must include this machine-readable line
 
 `request` is the GitHub issue-comment id of the specific `TESTER REVISION REQUEST`. `tested_ref` is the exact corrected commit SHA independently tested. A generic `TESTER PASS`, a Coder/Designer/Reviewer self-check, or a marker posted before the referenced request does not resolve that revision.
 
+The Tester deadlock exception applies to cumulative phase/release gates, not to ordinary issue-level T-REV retesting when another independent identity can perform that retest. An issue-level revision may use a deadlock exception only if Admin/README governance explicitly recognizes an equivalent documented all-identities deadlock for that verification boundary.
+
 Before closing an issue, re-fetch its comments and confirm every `TESTER REVISION REQUEST` has a later matching `T-REV-RESOLVED(...)` marker. The repository T-REV closure guard performs the same deterministic check on issue-close events and reopens an issue if an unresolved Tester revision remains. The guard is a process safety net only; it never creates Tester PASS, phase approval, or release approval.
 
 ## Claims and overlap
@@ -88,7 +113,7 @@ Workers may overlap in time. `WORK-CLAIM`, dependency checks, exact committed-st
 
 Before modifying a target, claim it with the current Worker identity and role. Re-fetch before important writes. Never duplicate a live claim or break live NVIDIA ownership merely because a run is old.
 
-A Worker must not treat NVIDIA Coder self-test as independent PASS.
+A Worker must not treat NVIDIA Coder self-test as independent PASS. NVIDIA is not phase/release authority and cannot consume the Tester deadlock exception.
 
 ## Scheduled rotation state
 
@@ -97,6 +122,8 @@ The canonical recurring cursor is the latest valid `WORKER ROTATION STATE:` JSON
 At the end of a scheduled work-conserving run, the Worker records one `WORKER ROTATION RESULT:` summarizing the starting role, roles/passes attempted, targets completed or blocked, commits/PRs, checks/results, revisions, claim-clear state, pending external work, and whether continuation is required.
 
 The next scheduled cursor uses the successor of the last role in which useful work was actually performed. If the run produced no eligible progress in any role, preserve the original starting role. If the run was interrupted by a hard execution limit while eligible work remained, preserve continuity from the last useful role and explicitly record the pending continuation so the next Worker can resume from current GitHub state rather than repeating completed work.
+
+A documented Tester deadlock does not itself rewrite or fast-forward the scheduled cursor. The first scheduled Worker that reaches the gate through normal rotation may use the exception; once that Worker claims the gate, later Workers must respect the live claim.
 
 ## Manual Worker #6 and Worker #7 instruction profiles
 
@@ -109,12 +136,12 @@ A manual Worker #6 or Worker #7 invocation must:
 3. Inspect relevant active/earlier state, dependencies, revisions, claims, NVIDIA state, CI/Actions, and task eligibility.
 4. Use the same Planner/Coder/Designer/Tester/Reviewer authority boundaries and critical priorities unless the Admin explicitly narrows or overrides the normal workflow.
 5. When the Admin gives a broad instruction rather than a single-role/task instruction, run work-conservingly across roles with no artificial task/pass cap and stop normally only after a complete five-role pass makes no eligible progress.
-6. Respect its own persistent Worker identity independence across all current and future manual invocations.
+6. Respect its own persistent Worker identity independence across all current and future manual invocations, except that it may use the documented cumulative Tester deadlock exception when directly Admin-invoked and all exception conditions are satisfied.
 7. Use normal `WORK-CLAIM` collision protection and never interfere with live scheduled Worker, the other manual Worker, or NVIDIA ownership.
 8. Never edit README without explicit Admin authorization.
 9. Never consume, advance, rewrite, or reserve the scheduled `WORKER ROTATION STATE:` cursor.
-10. If project work is performed, post a `MANUAL WORKER #6 RESULT:` or `MANUAL WORKER #7 RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, and claim-clear state.
+10. If project work is performed, post a `MANUAL WORKER #6 RESULT:` or `MANUAL WORKER #7 RESULT:` audit on issue #97, matching the invoked identity, with roles/passes attempted, targets, commits/PRs, checks/results, blockers/revisions, pending external work, continuation state, claim-clear state, and any deadlock-exception use.
 
-Because Worker #6 and Worker #7 do not participate in the recurring cursor, their repository changes are discovered by scheduled Workers #1–#5 and by each other through normal state re-fetch and claim/dependency checks.
+Because Worker #6 and Worker #7 do not participate in the recurring cursor, their repository changes are discovered by scheduled Workers #1–#5 and by each other through normal GitHub state re-fetch and claim/dependency checks.
 
 Detailed scheduling times and automation implementation remain outside this file.
