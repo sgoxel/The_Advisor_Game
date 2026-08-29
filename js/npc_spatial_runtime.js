@@ -8,7 +8,7 @@
   window.Game = window.Game || {};
   const Game = window.Game;
   const VERSION = 'admin-100x100-npc-spatial-v1';
-  const CYCLE_MS = 24000;
+  const MINUTES_PER_DAY = 24 * 60;
   const DIALOGUE_START = 0.65;
   const DIALOGUE_END = 0.80;
   const REGION_SIZE = Number(Game.SpatialWorld?.regionSize || Game.Config?.LOGICAL_REGION_TILES || 100);
@@ -30,6 +30,18 @@
   function inBounds(p) { return p.row >= 0 && p.row < REGION_SIZE && p.col >= 0 && p.col < REGION_SIZE; }
   function distance(a, b) { return Math.abs(a.row - b.row) + Math.abs(a.col - b.col); }
   function same(a, b) { return a && b && a.row === b.row && a.col === b.col; }
+
+  function authoritativeGameMinutes() {
+    const captured = Game.GameTime?.capture?.();
+    const value = Number(captured?.totalGameMinutes ?? Game.State?.world?.gameTime?.totalGameMinutes ?? 0);
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  }
+
+  function dayPosition(totalGameMinutes, offsetMinutes = 0) {
+    const shifted = Number(totalGameMinutes || 0) + Number(offsetMinutes || 0);
+    const minuteOfDay = ((shifted % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+    return minuteOfDay / MINUTES_PER_DAY;
+  }
 
   function originBinding(world, village) {
     const local = world.originBaseState?.protagonistOrigin || { localRow: village.center?.row || 50, localCol: village.center?.col || 50 };
@@ -86,7 +98,10 @@
         activity: prior.activity || 'home',
         controlledBy: 'simulation',
         playerControllable: false,
-        routineOffsetMs: hash32(`${person.id}|${index}`) % CYCLE_MS,
+        // Small deterministic schedule offsets prevent synchronized crowds while
+        // keeping every resident on the same authoritative 24-hour world clock.
+        routineOffsetMs: undefined,
+        routineOffsetGameMinutes: (hash32(`${person.id}|${index}`) % 121) - 60,
         movementDecision: prior.movementDecision || 'hold',
         dialogueWith: null,
         dialogueLine: null,
@@ -114,8 +129,8 @@
       originBinding: binding,
       spatialVersion: VERSION,
       spatialRegionSize: REGION_SIZE,
-      spatialStartedAtMs: Number(world.npcRuntime?.spatialStartedAtMs || (typeof performance !== 'undefined' ? performance.now() : 0)),
-      lastSpatialElapsedMs: Number(world.npcRuntime?.lastSpatialElapsedMs || 0),
+      routineClockAuthority: 'Game.GameTime',
+      lastSpatialGameMinutes: Number(world.npcRuntime?.lastSpatialGameMinutes ?? authoritativeGameMinutes()),
       collisionCount: 0,
       sideStepCount: 0,
       yieldWaitCount: 0
@@ -130,8 +145,8 @@
     return point(route[Math.min(route.length - 1, Math.floor(t * route.length))]);
   }
 
-  function desiredFor(npc, elapsedMs) {
-    const position = ((Math.max(0, Number(elapsedMs) || 0) + Number(npc.routineOffsetMs || 0)) % CYCLE_MS) / CYCLE_MS;
+  function desiredFor(npc, totalGameMinutes) {
+    const position = dayPosition(totalGameMinutes, npc.routineOffsetGameMinutes);
     if (position < 0.25) {
       return { point: routePoint(npc.spatialRoutes.homeToWork, position / 0.25) || point(npc.anchors.work), activity: 'commuting-to-work' };
     }
@@ -212,11 +227,11 @@
     return null;
   }
 
-  function chooseDialoguePlan(npcs, elapsedMs, village, roads) {
+  function chooseDialoguePlan(npcs, totalGameMinutes, village, roads) {
     if (npcs.length < 2) return null;
-    const globalPosition = (Math.max(0, Number(elapsedMs) || 0) % CYCLE_MS) / CYCLE_MS;
+    const globalPosition = dayPosition(totalGameMinutes);
     if (globalPosition < DIALOGUE_START || globalPosition >= DIALOGUE_END) return null;
-    const cycleIndex = Math.floor(Math.max(0, Number(elapsedMs) || 0) / CYCLE_MS);
+    const cycleIndex = Math.floor(Math.max(0, Number(totalGameMinutes) || 0) / MINUTES_PER_DAY);
     const seed = String(Game.State?.world?.seed || '');
     const first = hash32(`${seed}|${cycleIndex}|dialogue-speaker`) % npcs.length;
     let second = hash32(`${seed}|${cycleIndex}|dialogue-listener`) % npcs.length;
@@ -326,15 +341,16 @@
     }
   }
 
-  function updateAt(elapsedMs) {
+  function updateAt(_legacyElapsedMs = null) {
     if (!ensureSpatialNpcs()) return false;
     const world = Game.State.world;
     const village = world.originVillage;
     const roads = roadSet(village);
+    const totalGameMinutes = authoritativeGameMinutes();
     const desiredMap = new Map();
-    for (const npc of world.npcs) desiredMap.set(npc.id, desiredFor(npc, elapsedMs));
-    const dialoguePlan = chooseDialoguePlan(world.npcs, elapsedMs, village, roads);
-    const step = Math.floor(Math.max(0, Number(elapsedMs) || 0) / 250);
+    for (const npc of world.npcs) desiredMap.set(npc.id, desiredFor(npc, totalGameMinutes));
+    const dialoguePlan = chooseDialoguePlan(world.npcs, totalGameMinutes, village, roads);
+    const step = Math.floor(totalGameMinutes);
     const resolution = resolveOccupancy(world.npcs, desiredMap, { village, roads, seed: world.seed, step, dialoguePlan });
 
     for (const npc of world.npcs) {
@@ -373,7 +389,7 @@
       }
     }
 
-    world.npcRuntime.lastSpatialElapsedMs = Math.max(0, Number(elapsedMs) || 0);
+    world.npcRuntime.lastSpatialGameMinutes = totalGameMinutes;
     world.npcRuntime.collisionCount = resolution.collisionCount;
     world.npcRuntime.sideStepCount = resolution.sideStepCount;
     world.npcRuntime.yieldWaitCount = resolution.yieldWaitCount;
@@ -503,10 +519,7 @@
     renderer.renderWorld = function spatialNpcRenderWorld(force) {
       const result = renderWorld(force);
       ensureSpatialNpcs();
-      const runtime = Game.State?.world?.npcRuntime;
-      const now = typeof performance !== 'undefined' ? performance.now() : 0;
-      const started = Number(runtime?.spatialStartedAtMs || now);
-      updateAt(Math.max(0, now - started));
+      updateAt();
       oldNpcWorld?.drawPresentation?.();
       drawDevelopmentBubbles();
       return result;
@@ -531,7 +544,7 @@
       drawPresentation,
       drawDevelopmentBubbles
     });
-    updateAt(0);
+    updateAt();
     drawPresentation();
     return true;
   }
@@ -540,6 +553,7 @@
     version: VERSION,
     authority: 'simulation',
     presentationAuthority: 'presentation-only',
+    routineClockAuthority: 'Game.GameTime',
     regionSize: REGION_SIZE,
     ensureSpatialNpcs,
     resolveOccupancy,
