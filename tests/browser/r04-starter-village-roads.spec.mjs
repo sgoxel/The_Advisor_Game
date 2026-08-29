@@ -114,7 +114,7 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
   expect(evidence.overlay.connectivity).toBe('authoritative-cardinal-only');
   expect(evidence.overlay.legacyPattern).toBe('masked');
   expect(evidence.overlay.pointerEvents).toBe('none');
-  expect(evidence.overlay.zIndex).toBe('0');
+  expect(evidence.overlay.zIndex).toBe('1');
   expect(evidence.overlay.regionSize).toBe(100);
   expect(evidence.overlay.roadWidth).toBe('semantic-tile');
   expect(evidence.overlay.semanticTileState).toBe('ready');
@@ -137,7 +137,6 @@ test('authoritative roads render as a continuous non-mutating cardinal surface',
       expect(entranceOnRoad, `entrance road missing for non-passable ${building.id}`).toBe(true);
       continue;
     }
-
     passableConnectionChecks += 1;
     const footprintOnRoad = footprintContainsRoad(roadSet, building.footprint);
     expect(
