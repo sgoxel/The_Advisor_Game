@@ -651,6 +651,10 @@ Planner decides phases and sequencing, dependencies, architecture and project or
 
 Planner keeps planning state consistent with Admin instructions and README, maintains enough focused work for implementation and design, and does not move planning detail into README.
 
+Planner should maintain a **deep, legitimate work inventory** so available Workers can remain productive across implementation, design, testing, integration and supporting development work. When the approved product scope naturally supports it, planning should normally expose roughly **fifty open focused work issues** across current work and clearly dependency-blocked near-future work. This is a capacity target, not a quota: every issue must trace to Admin instructions, README, ROADMAP, an evidenced defect, a necessary prerequisite, integration, verification, or a justified decomposition of already approved scope.
+
+Planner must never create filler, duplicate work, speculative features, invented gameplay, or artificial micro-tasks merely to increase issue count. If the legitimate approved scope does not support the nominal inventory size, the truthful smaller backlog is correct. Current and earlier unresolved work remains higher priority, and pre-decomposed future work must remain explicitly blocked until its phase and dependencies legitimately become eligible.
+
 Planner does not normally implement product code or visual production and does not approve releases.
 
 ## Coder
