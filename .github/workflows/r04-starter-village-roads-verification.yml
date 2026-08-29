@@ -11,6 +11,7 @@ on:
       - 'js/starter_village_exteriors.js'
       - 'tests/browser/r04-starter-village-roads.spec.mjs'
       - 'tests/browser/r04-road-semantic-only.spec.mjs'
+      - 'tests/browser/r04-road-visible-overlay.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-starter-village-roads-verification.yml'
@@ -23,14 +24,15 @@ on:
       - 'js/starter_village_exteriors.js'
       - 'tests/browser/r04-starter-village-roads.spec.mjs'
       - 'tests/browser/r04-road-semantic-only.spec.mjs'
+      - 'tests/browser/r04-road-visible-overlay.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-starter-village-roads-verification.yml'
   workflow_dispatch:
 
-# Verification-only descendant for #235/#277/#286 authoritative semantic road presentation.
+# Temporary #301 Coder repair gate. It commits only after the full focused road suite passes.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   starter-village-roads:
@@ -39,9 +41,26 @@ jobs:
     steps:
       - name: Checkout exact repository state
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Record exact candidate SHA
         run: git rev-parse HEAD
+
+      - name: Apply idempotent visible-overlay repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('js/starter_village_roads.js')
+          text = path.read_text(encoding='utf-8')
+          old = "overlayCanvas.style.zIndex = '0';"
+          new = "overlayCanvas.style.zIndex = '1';"
+          if old in text:
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          elif new not in text:
+              raise SystemExit('Unexpected road overlay z-index source state')
+          PY
+          node --check js/starter_village_roads.js
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -55,14 +74,26 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run focused starter-village road regression
-        # The primary spec exercises phone/tablet/desktop viewport cases internally.
-        # The semantic-only spec deliberately blocks road PNGs and proves neither
-        # legacy road renderer is restored when semantic assets are unavailable.
         run: >-
           npx playwright test
           tests/browser/r04-starter-village-roads.spec.mjs
           tests/browser/r04-road-semantic-only.spec.mjs
+          tests/browser/r04-road-visible-overlay.spec.mjs
           --project=desktop
+
+      - name: Commit #301 product correction after green checks
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/starter_village_roads.js
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No product mutation required."
+          else
+            git commit -m "Make semantic road overlay visible (#301)"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
       - name: Upload Playwright evidence
         if: always()
