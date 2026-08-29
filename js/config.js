@@ -8,11 +8,15 @@ window.Game = window.Game || {};
 
 window.Game.Config = {
   DEFAULT_SEED: "ISOMETRIC_MAP_30032026",
-  DEFAULT_COLS: 80,
-  DEFAULT_ROWS: 80,
+
+  // Admin #233 canonical logical region contract.
+  // One normal/thematic region is exactly 100 x 100 logical tiles.
+  LOGICAL_REGION_TILES: 100,
+  DEFAULT_COLS: 100,
+  DEFAULT_ROWS: 100,
 
   MIN_MAP_SIZE: 12,
-  MAX_MAP_SIZE: 80,
+  MAX_MAP_SIZE: 100,
 
   TILE_WIDTH: 100,
   TILE_HEIGHT: 100,
@@ -38,6 +42,7 @@ window.Game.Config = {
   MAX_NOISE_GRID_DIVISIONS: 40,
 
   DEFAULT_SHOW_GRID: false,
+  DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES: true,
   // Toggle visibility of the terrain overlay shapes (named TERRAIN_SHAPE)
   DEFAULT_SHOW_TERRAIN_SHAPE: true,
   DEFAULT_SHOW_TERRAIN_WALLS: true,
