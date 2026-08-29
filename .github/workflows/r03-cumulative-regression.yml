@@ -1,0 +1,78 @@
+name: R03 Cumulative Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/**'
+      - 'css/**'
+      - 'index.html'
+      - 'locales/**'
+      - 'tests/browser/r03-*.spec.mjs'
+      - 'tests/browser/r02-hierarchical-living-world-regression.spec.mjs'
+      - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-cumulative-regression.yml'
+  pull_request:
+    paths:
+      - 'js/**'
+      - 'css/**'
+      - 'index.html'
+      - 'locales/**'
+      - 'tests/browser/r03-*.spec.mjs'
+      - 'tests/browser/r02-hierarchical-living-world-regression.spec.mjs'
+      - 'tests/browser/r02-cumulative-persistence-regression.spec.mjs'
+      - 'tests/browser/r01-baseline.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r03-cumulative-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cumulative-r03:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: echo "R03-T11 candidate ${GITHUB_SHA}"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run cumulative R03 accessibility and authority seam
+        run: npx playwright test tests/browser/r03-cumulative-accessibility.spec.mjs
+      - name: Run cumulative R03 legal rejected stale action and interaction flows
+        run: >-
+          npx playwright test
+          tests/browser/r03-spatial-action-resolution-regression.spec.mjs
+          tests/browser/r03-context-interaction-regression.spec.mjs
+      - name: Preserve integrated R03 feedback across responsive projects
+        run: npx playwright test tests/browser/r03-legality-feedback-ui.spec.mjs
+      - name: Preserve R02 chronology hierarchy relevance persistence and runtime health
+        run: >-
+          npx playwright test
+          tests/browser/r02-hierarchical-living-world-regression.spec.mjs
+          tests/browser/r02-cumulative-persistence-regression.spec.mjs
+      - name: Preserve canonical R01 responsive browser baseline
+        run: npm run test:browser:r01
+      - name: Upload cumulative R03 Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r03-t11-cumulative-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
