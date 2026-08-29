@@ -210,7 +210,7 @@ window.Game = window.Game || {};
       prepared.regionRef !== context.regionRef ||
       prepared.locationRef !== context.locationRef ||
       prepared.checkpointSerial !== (currentCheckpoint?.serial || 0);
-    if (stale) return frozenResult(STATUS.STALE, REASON.STALE_PREPARED_WORK, context, currentCheckpoint);
+    if (stale) return frozenResult(STATUS.STALE, REASON.STALE_PREPARED_WORK, context, currentCheckpoint, { authoritativeCampaignMinute: authoritativeMinute });
 
     const executionApi = Game.AutonomousActionExecution;
     if (!executionApi?.execute) return frozenResult(STATUS.REJECTED, REASON.EXECUTION_API_UNAVAILABLE, context, currentCheckpoint);
