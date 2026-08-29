@@ -46,7 +46,8 @@ test('structured activity log is meaningful, bounded, localized and presentation
   const retained = await page.evaluate(() => window.Game.ActivityLog.snapshot());
   expect(retained.length).toBeLessThanOrEqual(200);
 
-  // Add visible entries after the retention probe so the DOM checks below are deterministic.
+  // Add stable named events after the retention probe. Natural NPC activity may be emitted
+  // concurrently, so assertions target these entries instead of assuming a fixed card count.
   await page.evaluate(() => {
     window.Game.ActivityLog.add({ category: 'world', severity: 'success', title: 'World state ready', outcome: 'ready', timeKind: 'game' });
     window.Game.ActivityLog.add({ category: 'system', severity: 'error', title: 'Actionable test error', details: 'file.js:7', timeKind: 'session' });
@@ -54,22 +55,25 @@ test('structured activity log is meaningful, bounded, localized and presentation
 
   await page.click('#logBtn');
   await expect(page.locator('#activityLogTitle')).toHaveText('Activity Log');
-  await expect(page.locator('#activityLogEntries .activity-event')).toHaveCount(2);
-  await expect(page.locator('.activity-event[data-severity="error"] .activity-event-severity')).toHaveText('Error');
-  await expect(page.locator('.activity-event[data-severity="error"] details')).toHaveCount(1);
+  await expect(page.locator('#activityLogEntries .activity-event-title', { hasText: 'World state ready' })).toHaveCount(1);
+  const errorEvent = page.locator('.activity-event', { has: page.locator('.activity-event-title', { hasText: 'Actionable test error' }) });
+  await expect(errorEvent).toHaveCount(1);
+  await expect(errorEvent.locator('.activity-event-severity')).toHaveText('Error');
+  await expect(errorEvent.locator('details')).toHaveCount(1);
 
-  const afterOpenCount = await page.evaluate(() => window.Game.ActivityLog.snapshot().length);
   await page.click('#closeLogBtn');
   await page.click('#settingsBtn');
   await page.click('#cancelSettingsBtn');
-  const afterUiNoiseCount = await page.evaluate(() => window.Game.ActivityLog.snapshot().length);
-  expect(afterUiNoiseCount).toBe(afterOpenCount);
+  const visibleSelfNoise = await page.evaluate(() => window.Game.ActivityLog.snapshot().filter((entry) =>
+    !entry.diagnosticOnly && /^(log|settings) (opened|closed)$/i.test(entry.title)
+  ).map((entry) => entry.title));
+  expect(visibleSelfNoise).toEqual([]);
 
   await page.selectOption('#languageSelect', 'tr');
   await page.waitForFunction(() => document.getElementById('activityLogTitle')?.textContent === 'Etkinlik Günlüğü');
   await page.click('#logBtn');
   await expect(page.locator('#activityLogTitle')).toHaveText('Etkinlik Günlüğü');
-  await expect(page.locator('.activity-event[data-severity="error"] .activity-event-severity')).toHaveText('Hata');
+  await expect(errorEvent.locator('.activity-event-severity')).toHaveText('Hata');
 
   for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
@@ -113,12 +117,14 @@ test('activity log records Advisor submission and stable NPC summaries without f
   expect(first.some((entry) => entry.category === 'character')).toBe(true);
   expect(first.some((entry) => entry.category === 'npc')).toBe(true);
 
-  const countBeforeRepeat = first.length;
+  const routineCountBeforeRepeat = first.filter((entry) => entry.source === 'npc-routine').length;
+  const dialogueCountBeforeRepeat = first.filter((entry) => entry.source === 'npc-dialogue').length;
   await page.evaluate(() => {
     window.Game.ActivityLog.npcSummary();
     window.Game.ActivityLog.npcSummary();
     window.Game.ActivityLog.npcSummary();
   });
-  const countAfterRepeat = await page.evaluate(() => window.Game.ActivityLog.snapshot().length);
-  expect(countAfterRepeat).toBe(countBeforeRepeat);
+  const afterRepeat = await page.evaluate(() => window.Game.ActivityLog.snapshot());
+  expect(afterRepeat.filter((entry) => entry.source === 'npc-routine').length).toBe(routineCountBeforeRepeat);
+  expect(afterRepeat.filter((entry) => entry.source === 'npc-dialogue').length).toBe(dialogueCountBeforeRepeat);
 });
