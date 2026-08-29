@@ -25,6 +25,14 @@ test('Tester revision request remains unresolved without an explicit resolution 
   ]), [10]);
 });
 
+test('a Tester revision acceptance comment is not a new revision request', () => {
+  assert.deepEqual(unresolvedIds([
+    comment(60, 'TESTER REVISION REQUEST — Worker #7\nRepro: production path missing.'),
+    comment(61, 'TESTER REVISION REQUEST ACCEPTED — R04-T06 / #175 — Worker #6 as Coder\nAccepted Tester defect 60.'),
+    comment(62, 'CODER FIX — corrected candidate deadbee')
+  ]), [60]);
+});
+
 test('a later exact resolution marker resolves the referenced Tester revision', () => {
   assert.deepEqual(unresolvedIds([
     comment(20, 'TESTER REVISION REQUEST — Worker #2'),
