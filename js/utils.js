@@ -136,3 +136,4 @@ window.Game.Utils.loadScriptOnce("js/npc_runtime_bridge.js", "r04NpcRuntimeBridg
 // retries installation until UI/state are ready, then converts legacy addLog calls into a
 // bounded structured activity stream without changing Simulation authority.
 window.Game.Utils.loadScriptOnce("js/activity_log_runtime.js", "r04ActivityLogRuntimeModule");
+window.Game.Utils.loadScriptOnce("js/debug_log_export.js", "r04DebugLogExportModule");
