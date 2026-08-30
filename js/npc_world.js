@@ -1,7 +1,7 @@
 /*
-  R02-T16 / #111 + R04 / #228: local NPC world presence and character-derived presentation.
+  R02-T16 / #111 + R04 / #228 + #324: local NPC world presence and character-derived presentation.
 
-  Simulation owns NPC identity, location, activity and routine state. Rendering is a
+  Simulation owns protagonist/NPC identity, location, activity and routine state. Rendering is a
   derived 2D overlay projected onto the existing strategic world; it never becomes
   gameplay authority and exposes no player-control surface.
 */
@@ -9,6 +9,7 @@
   window.Game = window.Game || {};
   const Game = window.Game;
   const VERSION = 'r04-character-world-icons-v1';
+  const PRESENTATION_VERSION = 'r04-exterior-world-space-sprites-v1';
   const CYCLE_MS = 24000;
   const MAX_VISIBLE_NPCS = 16;
 
@@ -28,8 +29,8 @@
     villager: 'trade'
   });
 
-  // #227 identity families are presentation mappings only. The occupation key comes
-  // from authoritative NPC state; loading success/failure cannot alter that state.
+  // #227 identity families remain available as the compatibility mapping API from #228.
+  // Runtime drawing below prefers the approved #252 world-space sprite families.
   const WORLD_ICON_BY_OCCUPATION = Object.freeze({
     guard: 'assets/characters/world/guard.png',
     healer: 'assets/characters/world/healer.png',
@@ -44,6 +45,14 @@
     miller: 'assets/characters/world/worker.png',
     woodcutter: 'assets/characters/world/worker.png',
     villager: 'assets/characters/world/villager.png'
+  });
+
+  const PROTAGONIST_WORLD_SPACE_ASSET = 'assets/characters/world-space/protagonist.png';
+  const WORLD_SPACE_ASSET_BY_OCCUPATION = Object.freeze({
+    guard: 'assets/characters/world-space/guard.png',
+    innkeeper: 'assets/characters/world-space/merchant.png',
+    trader: 'assets/characters/world-space/merchant.png',
+    merchant: 'assets/characters/world-space/merchant.png'
   });
 
   let overlayCanvas = null;
@@ -232,6 +241,16 @@
     return WORLD_ICON_BY_OCCUPATION[String(npc.occupation || '').toLowerCase()] || '';
   }
 
+  function worldSpaceAssetFor(npc) {
+    if (!npc || npc.authority !== 'simulation') return '';
+    return WORLD_SPACE_ASSET_BY_OCCUPATION[String(npc.occupation || '').toLowerCase()] || '';
+  }
+
+  function protagonistWorldSpaceAssetFor(player) {
+    if (!player || !Number.isFinite(Number(player.row)) || !Number.isFinite(Number(player.col))) return '';
+    return PROTAGONIST_WORLD_SPACE_ASSET;
+  }
+
   function requestWorldIcon(src) {
     if (!src || typeof Image === 'undefined') return null;
     if (worldIconCache.has(src)) return worldIconCache.get(src);
@@ -255,7 +274,12 @@
   }
 
   function preloadWorldIcons() {
-    for (const src of new Set(Object.values(WORLD_ICON_BY_OCCUPATION))) requestWorldIcon(src);
+    const assets = new Set([
+      ...Object.values(WORLD_ICON_BY_OCCUPATION),
+      ...Object.values(WORLD_SPACE_ASSET_BY_OCCUPATION),
+      PROTAGONIST_WORLD_SPACE_ASSET
+    ]);
+    for (const src of assets) requestWorldIcon(src);
   }
 
   function clamp(value, min, max) {
@@ -274,37 +298,66 @@
     };
   }
 
+  function resolveWorldSpaceScale(viewportWidth) {
+    const width = Math.max(1, Number(viewportWidth) || 1);
+    const legacyScale = resolveWorldIconScale(width);
+    const minHeight = width <= 480 ? 34 : width <= 900 ? 38 : 42;
+    const maxHeight = width <= 480 ? 52 : width <= 900 ? 58 : 64;
+    const height = clamp(legacyScale.iconSize, minHeight, maxHeight);
+    return {
+      height,
+      width: height * 0.8,
+      fallbackRadius: clamp(height / 7.2, 5, 9),
+      compatibilityIconSize: legacyScale.iconSize
+    };
+  }
+
   function drawNeutralPersonFallback(ctx, npc, radius) {
     const accent = npc.activity === 'working' ? '#f1c75b' : '#d8e7ef';
     ctx.fillStyle = 'rgba(20, 28, 36, 0.38)';
     ctx.beginPath();
-    ctx.ellipse(radius * 0.5, radius * 1.1, radius * 1.25, radius * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(radius * 0.5, -radius * 0.35, radius * 1.25, radius * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = accent;
     ctx.strokeStyle = '#26343d';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.arc(0, -radius * 1.8, radius * 0.72, 0, Math.PI * 2);
+    ctx.arc(0, -radius * 3.25, radius * 0.72, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(-radius * 0.7, -radius * 1.05);
-    ctx.lineTo(radius * 0.7, -radius * 1.05);
-    ctx.lineTo(radius * 0.95, radius * 0.9);
-    ctx.lineTo(-radius * 0.95, radius * 0.9);
+    ctx.moveTo(-radius * 0.7, -radius * 2.5);
+    ctx.lineTo(radius * 0.7, -radius * 2.5);
+    ctx.lineTo(radius * 0.95, -radius * 0.55);
+    ctx.lineTo(-radius * 0.95, -radius * 0.55);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
   }
 
-  function drawNpcCharacter(ctx, npc, radius, iconSize) {
-    const asset = worldIconAssetFor(npc);
+  function drawWorldSpaceImage(ctx, image, scale) {
+    ctx.drawImage(image, -scale.width / 2, -scale.height, scale.width, scale.height);
+  }
+
+  function drawNpcCharacter(ctx, npc, scale) {
+    const asset = worldSpaceAssetFor(npc);
     const record = requestWorldIcon(asset);
     if (record?.status === 'ready' && record.image) {
-      ctx.drawImage(record.image, -iconSize / 2, -iconSize * 0.82, iconSize, iconSize);
-      return 'png';
+      drawWorldSpaceImage(ctx, record.image, scale);
+      return 'world-space-png';
     }
-    drawNeutralPersonFallback(ctx, npc, radius);
+    drawNeutralPersonFallback(ctx, npc, scale.fallbackRadius);
+    return asset ? 'fallback-loading-or-failed' : 'fallback-unmapped';
+  }
+
+  function drawProtagonistCharacter(ctx, player, scale) {
+    const asset = protagonistWorldSpaceAssetFor(player);
+    const record = requestWorldIcon(asset);
+    if (record?.status === 'ready' && record.image) {
+      drawWorldSpaceImage(ctx, record.image, scale);
+      return 'world-space-png';
+    }
+    drawNeutralPersonFallback(ctx, { activity: 'protagonist' }, scale.fallbackRadius);
     return asset ? 'fallback-loading-or-failed' : 'fallback-unmapped';
   }
 
@@ -329,28 +382,53 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const iconScale = resolveWorldIconScale(width);
+    const scale = resolveWorldSpaceScale(width);
     let visibleCount = 0;
     let pngCount = 0;
     let fallbackCount = 0;
     for (const npc of world.npcs) {
       const point = Renderer.gridToScreen(npc.row, npc.col, 0, 0);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
-      if (point.x < -iconScale.iconSize || point.y < -iconScale.iconSize || point.x > width + iconScale.iconSize || point.y > height + iconScale.iconSize) continue;
+      if (point.x < -scale.width || point.y < -scale.height || point.x > width + scale.width || point.y > height + scale.height) continue;
 
       ctx.save();
       ctx.translate(point.x, point.y);
-      const renderKind = drawNpcCharacter(ctx, npc, iconScale.fallbackRadius, iconScale.iconSize);
-      if (renderKind === 'png') pngCount += 1;
+      const renderKind = drawNpcCharacter(ctx, npc, scale);
+      if (renderKind === 'world-space-png') pngCount += 1;
       else fallbackCount += 1;
       ctx.restore();
       visibleCount += 1;
     }
+
+    let protagonistVisible = false;
+    let protagonistRenderKind = 'unavailable';
+    const player = world.player;
+    if (player && Number.isFinite(Number(player.row)) && Number.isFinite(Number(player.col))) {
+      const point = Renderer.gridToScreen(Number(player.row), Number(player.col), 0, 0);
+      if (
+        Number.isFinite(point.x) && Number.isFinite(point.y) &&
+        point.x >= -scale.width && point.y >= -scale.height &&
+        point.x <= width + scale.width && point.y <= height + scale.height
+      ) {
+        ctx.save();
+        ctx.translate(point.x, point.y);
+        protagonistRenderKind = drawProtagonistCharacter(ctx, player, scale);
+        ctx.restore();
+        protagonistVisible = true;
+      }
+    }
+
     canvas.dataset.npcCount = String(world.npcs.length);
     canvas.dataset.visibleNpcCount = String(visibleCount);
     canvas.dataset.pngNpcCount = String(pngCount);
     canvas.dataset.fallbackNpcCount = String(fallbackCount);
-    canvas.dataset.iconSizePx = iconScale.iconSize.toFixed(1);
+    canvas.dataset.iconSizePx = scale.compatibilityIconSize.toFixed(1);
+    canvas.dataset.spriteWidthPx = scale.width.toFixed(1);
+    canvas.dataset.spriteHeightPx = scale.height.toFixed(1);
+    canvas.dataset.spriteAnchor = 'bottom-center-feet';
+    canvas.dataset.protagonistVisible = String(protagonistVisible);
+    canvas.dataset.protagonistRenderKind = protagonistRenderKind;
+    canvas.dataset.presentationVersion = PRESENTATION_VERSION;
     canvas.dataset.presentationAuthority = 'presentation-only';
   }
 
@@ -403,10 +481,14 @@
 
   Game.NPCWorld = Object.freeze({
     version: VERSION,
+    presentationVersion: PRESENTATION_VERSION,
     authority: 'simulation',
     presentationAuthority: 'presentation-only',
     maxVisibleNpcs: MAX_VISIBLE_NPCS,
     worldIconAssetFor,
+    worldSpaceAssetFor,
+    protagonistWorldSpaceAssetFor,
+    resolveWorldSpaceScale,
     bindFromOriginVillage,
     updateAt,
     capture,
