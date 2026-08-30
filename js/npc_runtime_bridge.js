@@ -105,3 +105,7 @@
   if (document.readyState === 'complete') start();
   else window.addEventListener('load', start, { once: true });
 })();
+
+// #275 is a presentation-only companion. Loading it after the final NPC runtime bridge
+// lets it wrap the settled render boundary without changing occupancy or Simulation state.
+window.Game?.Utils?.loadScriptOnce?.('js/npc_activity_bubble_layout.js', 'r04NpcActivityBubbleLayoutModule');
