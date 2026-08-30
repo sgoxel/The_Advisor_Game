@@ -12,20 +12,39 @@
     };
   }
 
-  function strategicPath(localPath, binding) {
+  function strategicPoint(local, binding) {
     const rowOffset = Number(binding?.rowOffset || 0);
     const colOffset = Number(binding?.colOffset || 0);
-    return (localPath || []).map((p) => ({
-      localRow: p.row,
-      localCol: p.col,
-      row: p.row + rowOffset,
-      col: p.col + colOffset
-    }));
+    return { localRow: local.row, localCol: local.col, row: local.row + rowOffset, col: local.col + colOffset };
   }
 
-  function route(terrain, from, to, occupied, binding) {
-    const path = Game.TerrainRouting?.findPath?.(terrain, localPoint(from), localPoint(to), { occupied, allowGoalOccupied: true }) || [];
-    return strategicPath(path, binding);
+  function tileAt(terrain, point) { return terrain?.[point.row]?.[point.col] || null; }
+
+  function exteriorSegment(existingRoute, terrain, occupied, binding) {
+    const route = Array.isArray(existingRoute) ? existingRoute.map(localPoint) : [];
+    if (route.length < 2) return existingRoute || [];
+    let first = -1;
+    let last = -1;
+    for (let index = 0; index < route.length; index += 1) {
+      if (Game.TerrainRouting.isWalkableTile(tileAt(terrain, route[index]))) { first = index; break; }
+    }
+    for (let index = route.length - 1; index >= 0; index -= 1) {
+      if (Game.TerrainRouting.isWalkableTile(tileAt(terrain, route[index]))) { last = index; break; }
+    }
+    if (first < 0 || last < first) return existingRoute;
+    const middle = Game.TerrainRouting.findPath(terrain, route[first], route[last], { occupied, allowGoalOccupied: true });
+    if (!middle.length) return existingRoute;
+    const composed = [
+      ...route.slice(0, first),
+      ...middle,
+      ...route.slice(last + 1)
+    ];
+    const deduped = [];
+    for (const value of composed) {
+      const previous = deduped[deduped.length - 1];
+      if (!previous || previous.row !== value.row || previous.col !== value.col) deduped.push(value);
+    }
+    return deduped.map((value) => strategicPoint(value, binding));
   }
 
   function refreshRoutes() {
@@ -38,17 +57,14 @@
     let routed = 0;
 
     for (const npc of npcs) {
-      const home = npc.anchors?.home;
-      const work = npc.anchors?.work;
-      const social = npc.anchors?.social;
-      if (!home || !work || !social) continue;
+      const routes = npc.spatialRoutes;
+      if (!routes?.homeToWork || !routes?.workToSocial || !routes?.socialToHome) continue;
       const ownKey = `${localPoint(npc).row},${localPoint(npc).col}`;
       occupied.delete(ownKey);
-      const homeToWork = route(terrain, home, work, occupied, binding);
-      const workToSocial = route(terrain, work, social, occupied, binding);
-      const socialToHome = route(terrain, social, home, occupied, binding);
+      const homeToWork = exteriorSegment(routes.homeToWork, terrain, occupied, binding);
+      const workToSocial = exteriorSegment(routes.workToSocial, terrain, occupied, binding);
+      const socialToHome = exteriorSegment(routes.socialToHome, terrain, occupied, binding);
       occupied.add(ownKey);
-      if (!homeToWork.length || !workToSocial.length || !socialToHome.length) continue;
       npc.spatialRoutes = { homeToWork, workToSocial, socialToHome };
       routed += 1;
     }
@@ -59,7 +75,8 @@
       terrainRoutingVersion: Game.TerrainRouting.version,
       routedNpcCount: routed,
       totalNpcCount: npcs.length,
-      routeSource: 'authoritative-terrain+occupancy'
+      routeSource: 'authoritative-terrain+occupancy',
+      interiorEdgesPreserved: true
     };
     return routed > 0;
   }
@@ -83,12 +100,7 @@
     return true;
   }
 
-  Game.NPCTerrainRouting = Object.freeze({
-    version: VERSION,
-    authority: 'simulation',
-    refreshRoutes,
-    initialize
-  });
+  Game.NPCTerrainRouting = Object.freeze({ version: VERSION, authority: 'simulation', refreshRoutes, initialize });
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize);
