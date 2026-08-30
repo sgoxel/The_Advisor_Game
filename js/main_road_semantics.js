@@ -37,6 +37,26 @@ window.Game = window.Game || {};
     return runs;
   }
 
+  function sustainedRoadAcrossColumns(grid, row, start, end) {
+    if (row < 0 || row >= grid.length) return false;
+    let streak = 0;
+    for (let col = start; col <= end; col += 1) {
+      streak = hasRoad(grid, row, col) ? streak + 1 : 0;
+      if (streak >= MIN_CONTINUATION) return true;
+    }
+    return false;
+  }
+
+  function sustainedRoadAcrossRows(grid, col, start, end) {
+    if (col < 0) return false;
+    let streak = 0;
+    for (let row = start; row <= end; row += 1) {
+      streak = hasRoad(grid, row, col) ? streak + 1 : 0;
+      if (streak >= MIN_CONTINUATION) return true;
+    }
+    return false;
+  }
+
   function addMembership(memberships, row, col, membership) {
     const cellKey = key(row, col);
     const list = memberships.get(cellKey) || [];
@@ -48,14 +68,12 @@ window.Game = window.Game || {};
     const rows = grid.length;
     const cols = Math.max(0, ...grid.map((row) => Array.isArray(row) ? row.length : 0));
     for (let row = 0; row < rows - 1; row += 1) {
-      const eligible = Array.from({ length: cols }, (_, col) => {
-        if (!hasRoad(grid, row, col) || !hasRoad(grid, row + 1, col)) return false;
-        // Three-or-more adjacent parallel lanes are ambiguous presentation input;
-        // keep them ordinary rather than inventing which two form the main road.
-        if (hasRoad(grid, row - 1, col) || hasRoad(grid, row + 2, col)) return false;
-        return true;
-      });
+      const eligible = Array.from({ length: cols }, (_, col) => hasRoad(grid, row, col) && hasRoad(grid, row + 1, col));
       for (const run of contiguousRuns(eligible)) {
+        // Reject a true sustained third parallel lane, but allow short perpendicular
+        // crossing cells so a supported two-lane intersection remains classifiable.
+        if (sustainedRoadAcrossColumns(grid, row - 1, run.start, run.end)
+          || sustainedRoadAcrossColumns(grid, row + 2, run.start, run.end)) continue;
         const id = `h:${row}:${run.start}-${run.end}`;
         segments.push(Object.freeze({ id, orientation: 'horizontal', laneA: row, laneB: row + 1, start: run.start, end: run.end, length: run.length }));
         for (let col = run.start; col <= run.end; col += 1) {
@@ -71,12 +89,10 @@ window.Game = window.Game || {};
     const rows = grid.length;
     const cols = Math.max(0, ...grid.map((row) => Array.isArray(row) ? row.length : 0));
     for (let col = 0; col < cols - 1; col += 1) {
-      const eligible = Array.from({ length: rows }, (_, row) => {
-        if (!hasRoad(grid, row, col) || !hasRoad(grid, row, col + 1)) return false;
-        if (hasRoad(grid, row, col - 1) || hasRoad(grid, row, col + 2)) return false;
-        return true;
-      });
+      const eligible = Array.from({ length: rows }, (_, row) => hasRoad(grid, row, col) && hasRoad(grid, row, col + 1));
       for (const run of contiguousRuns(eligible)) {
+        if (sustainedRoadAcrossRows(grid, col - 1, run.start, run.end)
+          || sustainedRoadAcrossRows(grid, col + 2, run.start, run.end)) continue;
         const id = `v:${col}:${run.start}-${run.end}`;
         segments.push(Object.freeze({ id, orientation: 'vertical', laneA: col, laneB: col + 1, start: run.start, end: run.end, length: run.length }));
         for (let row = run.start; row <= run.end; row += 1) {
