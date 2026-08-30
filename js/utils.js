@@ -61,6 +61,26 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   window.Game.Utils.loadScriptOnce("js/starter_village_runtime_terrain.js", "r04StarterVillageRuntimeTerrainModule");
 }
 
+// #302 startup authority ordering: the legacy R02 OriginVillage listener is registered
+// before the canonical 100x100 SpatialWorld listener. The terrain bridge intentionally
+// installs once at `interactive`, but that early install causes the later legacy
+// DOMContentLoaded wrapper to become outermost and restore the old 16-person center village.
+// Register this final bridge install only after parsing has completed, so its DOMContentLoaded
+// listener is ordered after all parser-time compatibility listeners. app.js awaits language
+// initialization before generating the world, therefore this synchronous late re-install
+// becomes the final Terrain wrapper before the untouched production rebuild. The bridge itself
+// rejects legacy schema-v1 bases (no roadTiles) and rebinds the canonical 100x100 base state.
+if (typeof document !== "undefined" && document.readyState === "loading") {
+  const armCanonicalStarterVillageBinding = () => {
+    if (document.readyState === "loading") return;
+    document.removeEventListener("readystatechange", armCanonicalStarterVillageBinding);
+    document.addEventListener("DOMContentLoaded", () => {
+      window.Game?.StarterVillageRuntimeTerrain?.install?.();
+    }, { once: true });
+  };
+  document.addEventListener("readystatechange", armCanonicalStarterVillageBinding);
+}
+
 // #301: the semantic Road presentation and its final render-chain bridge are startup-critical.
 // Loading them with the compatibility queue made their execution race the statically parsed
 // Renderer/app scripts in the real public startup path. Parser-load them deterministically;
