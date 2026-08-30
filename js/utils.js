@@ -110,6 +110,7 @@ window.Game.Utils.loadScriptOnce("js/character_emotion.js", "r04CharacterEmotion
 window.Game.Utils.loadScriptOnce("js/character_driver_context.js", "r04CharacterDriverContextModule");
 window.Game.Utils.loadScriptOnce("js/local_bot_character_context_bridge.js", "r04LocalBotCharacterContextBridgeModule");
 window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
+window.Game.Utils.loadScriptOnce("js/protagonist_routine.js", "r04ProtagonistRoutineModule");
 window.Game.Utils.loadScriptOnce("js/npc_residency.js", "r04NpcResidencyModule");
 window.Game.Utils.loadScriptOnce("js/npc_workplaces.js", "r04NpcWorkplacesModule");
 window.Game.Utils.loadScriptOnce("js/ecology.js", "r02EcologyModule");
@@ -119,6 +120,7 @@ window.Game.Utils.loadScriptOnce("js/settlement_evolution.js", "r02SettlementEvo
 window.Game.Utils.loadScriptOnce("js/relevance_bounded_compute.js", "r02RelevanceBoundedComputeModule");
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
 window.Game.Utils.loadScriptOnce("js/starter_village_exteriors.js", "r04StarterVillageExteriorsModule");
+window.Game.Utils.loadScriptOnce("js/starter_village_dev_overlay.js", "r04StarterVillageDevOverlayModule");
 
 // Loaded after NPC life/presentation modules so it can add deterministic tile occupancy,
 // route-conflict resolution, adjacent dialogue and development bubbles without duplicating
