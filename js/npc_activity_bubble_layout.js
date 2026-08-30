@@ -115,12 +115,17 @@
     ];
   }
 
-  function protectedIconRects(basePoints) {
+  function protectedIconRects(basePoints, viewportWidth) {
+    const worldSpaceScale = typeof Game.NPCWorld?.resolveWorldSpaceScale === 'function'
+      ? Game.NPCWorld.resolveWorldSpaceScale(viewportWidth)
+      : null;
+    const halfWidth = Math.max(12, Number(worldSpaceScale?.width || 0) / 2 || 12);
+    const height = Math.max(34, Number(worldSpaceScale?.height || 0) || 34);
     return Array.from(basePoints.values()).map((entry) => ({
       id: entry.id,
-      left: entry.x - 12,
-      right: entry.x + 12,
-      top: entry.y - 26,
+      left: entry.x - halfWidth,
+      right: entry.x + halfWidth,
+      top: entry.y - height,
       bottom: entry.y + 8
     }));
   }
@@ -131,7 +136,7 @@
       const anchor = clampAnchor(candidate.baseX + dx, candidate.baseAnchorY + dy, candidate.width, viewportWidth, viewportHeight);
       const rect = rectFromAnchor(anchor.x, anchor.y, candidate.width);
       if (occupied.some((other) => intersects(rect, other.rect))) continue;
-      if (protectedIcons.some((icon) => icon.id !== candidate.id && intersects(rect, icon, 1))) continue;
+      if (protectedIcons.some((icon) => intersects(rect, icon, 1))) continue;
       return { anchor, rect };
     }
     return null;
@@ -156,7 +161,7 @@
       });
     }
 
-    const protectedIcons = protectedIconRects(basePoints).filter((entry) => Number.isFinite(entry.left) && Number.isFinite(entry.top));
+    const protectedIcons = protectedIconRects(basePoints, viewportWidth).filter((entry) => Number.isFinite(entry.left) && Number.isFinite(entry.top));
     const adjustments = new Map();
     const occupied = [];
     const boxes = [];
