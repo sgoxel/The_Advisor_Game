@@ -5,17 +5,23 @@ on:
     branches: [main]
     paths:
       - 'js/npc_activity_bubble_layout.js'
+      - 'js/npc_contextual_activity.js'
       - 'js/npc_runtime_bridge.js'
       - 'js/npc_spatial_runtime.js'
+      - 'js/utils.js'
       - 'tests/browser/r04-npc-bubble-layout.spec.mjs'
+      - 'tests/browser/r04-npc-contextual-activity.spec.mjs'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - '.github/workflows/r04-npc-bubble-layout-verification.yml'
   pull_request:
     paths:
       - 'js/npc_activity_bubble_layout.js'
+      - 'js/npc_contextual_activity.js'
       - 'js/npc_runtime_bridge.js'
       - 'js/npc_spatial_runtime.js'
+      - 'js/utils.js'
       - 'tests/browser/r04-npc-bubble-layout.spec.mjs'
+      - 'tests/browser/r04-npc-contextual-activity.spec.mjs'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - '.github/workflows/r04-npc-bubble-layout-verification.yml'
   workflow_dispatch:
@@ -37,8 +43,10 @@ jobs:
       - name: Validate presentation integration syntax
         run: |
           node --check js/npc_activity_bubble_layout.js
+          node --check js/npc_contextual_activity.js
           node --check js/npc_runtime_bridge.js
           node --check tests/browser/r04-npc-bubble-layout.spec.mjs
+          node --check tests/browser/r04-npc-contextual-activity.spec.mjs
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -51,8 +59,8 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run dense NPC bubble layout regression
-        run: npx playwright test tests/browser/r04-npc-bubble-layout.spec.mjs --project=desktop
+      - name: Run dense NPC bubble and contextual activity regression
+        run: npx playwright test tests/browser/r04-npc-bubble-layout.spec.mjs tests/browser/r04-npc-contextual-activity.spec.mjs --project=desktop
 
       - name: Preserve collision-safe NPC occupancy and shared dialogue regression
         run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs --project=desktop
