@@ -29,14 +29,20 @@ test('generated villagers become stable simulation-owned NPC state with role anc
   expect(evidence.npc.every((npc) => evidence.populationIds.includes(npc.id))).toBe(true);
   expect(evidence.npc.every((npc) => npc.authority === 'simulation')).toBe(true);
   expect(evidence.npc.every((npc) => npc.controlledBy === 'simulation' && npc.playerControllable === false)).toBe(true);
-  expect(evidence.npc.every((npc) => npc.anchors?.home?.buildingId && npc.anchors?.work?.buildingId && npc.anchors?.social?.buildingId)).toBe(true);
+  expect(evidence.npc.every((npc) =>
+    npc.anchors?.home?.buildingId &&
+    npc.anchors?.work?.buildingId &&
+    Number.isFinite(Number(npc.anchors?.social?.row)) &&
+    Number.isFinite(Number(npc.anchors?.social?.col))
+  )).toBe(true);
   expect(evidence.runtime.authority).toBe('simulation');
 });
 
-test('local routines move multiple villagers deterministically between role-appropriate anchors', async ({ page }) => {
+test('local routines remain deterministic under authoritative GameTime rather than legacy elapsed milliseconds', async ({ page }) => {
   await waitForNpcWorld(page);
   const evidence = await page.evaluate(() => {
     const api = window.Game.NPCWorld;
+    const gameMinutes = window.Game.GameTime.capture().totalGameMinutes;
     api.updateAt(0);
     const first = api.capture();
     api.updateAt(7000);
@@ -46,16 +52,22 @@ test('local routines move multiple villagers deterministically between role-appr
     const roleByBuildingId = Object.fromEntries(
       window.Game.State.world.originVillage.buildings.map((building) => [building.id, building.role])
     );
-    return { first, second, repeated, roleByBuildingId };
+    return {
+      first,
+      second,
+      repeated,
+      gameMinutes,
+      gameMinutesAfter: window.Game.GameTime.capture().totalGameMinutes,
+      routineClockAuthority: window.Game.State.world.npcRuntime?.routineClockAuthority,
+      roleByBuildingId
+    };
   });
 
-  const moved = evidence.first.filter((npc, index) => {
-    const later = evidence.second[index];
-    return Math.abs(npc.row - later.row) > 0.001 || Math.abs(npc.col - later.col) > 0.001;
-  });
-  expect(moved.length).toBeGreaterThanOrEqual(4);
+  expect(evidence.routineClockAuthority).toBe('Game.GameTime');
+  expect(evidence.gameMinutesAfter).toBe(evidence.gameMinutes);
   expect(evidence.second).toEqual(evidence.repeated);
-  expect(new Set(evidence.second.map((npc) => npc.activity)).size).toBeGreaterThanOrEqual(2);
+  expect(evidence.second.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, activity: npc.activity })))
+    .toEqual(evidence.first.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, activity: npc.activity })));
 
   const roleEvidence = new Map(evidence.second.map((npc) => [npc.occupation, npc]));
   expect(evidence.roleByBuildingId[roleEvidence.get('innkeeper')?.anchors.work.buildingId]).toBe('lodging');
