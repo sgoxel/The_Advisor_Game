@@ -33,23 +33,11 @@ window.Game = window.Game || {};
     const mapHeight = sum * halfH;
     const centerX = width / 2;
     const originY = (height - mapHeight) / 2;
-    return {
-      width,
-      height,
-      centerX,
-      originY,
-      miniHalfW: halfW,
-      miniHalfH: halfH,
-      mapWidth,
-      mapHeight
-    };
+    return { width, height, centerX, originY, miniHalfW: halfW, miniHalfH: halfH, mapWidth, mapHeight };
   }
 
   function gridToMinimap(row, col, layout) {
-    return {
-      x: layout.centerX + (col - row) * layout.miniHalfW,
-      y: layout.originY + (row + col + 1) * layout.miniHalfH
-    };
+    return { x: layout.centerX + (col - row) * layout.miniHalfW, y: layout.originY + (row + col + 1) * layout.miniHalfH };
   }
 
   function screenToGridOnMinimap(x, y, layout) {
@@ -83,13 +71,7 @@ window.Game = window.Game || {};
       Renderer.screenToGridFloat(canvas.clientWidth, canvas.clientHeight),
       Renderer.screenToGridFloat(0, canvas.clientHeight)
     ];
-
-    const corners = worldCorners.map((p) => {
-      const clampedRow = clamp(p.row, 0, State.world.rows - 1);
-      const clampedCol = clamp(p.col, 0, State.world.cols - 1);
-      return gridToMinimap(clampedRow, clampedCol, layout);
-    });
-
+    const corners = worldCorners.map((p) => gridToMinimap(clamp(p.row, 0, State.world.rows - 1), clamp(p.col, 0, State.world.cols - 1), layout));
     ctx.save();
     ctx.fillStyle = 'rgba(10, 14, 20, 0.08)';
     ctx.beginPath();
@@ -97,9 +79,6 @@ window.Game = window.Game || {};
     for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y);
     ctx.closePath();
     ctx.fill();
-
-    // Designer #65 viewport language: dark outer edge + light inner edge so the
-    // frame survives mixed terrain colors without depending on hue alone.
     ctx.strokeStyle = 'rgba(10, 14, 20, 0.92)';
     ctx.lineWidth = 4;
     ctx.stroke();
@@ -113,7 +92,6 @@ window.Game = window.Game || {};
     const radius = Math.max(5, Math.min(10, layout.miniHalfW * 1.6));
     const diamondW = Math.max(3, radius * 0.62);
     const diamondH = Math.max(2, radius * 0.42);
-
     ctx.save();
     ctx.strokeStyle = 'rgba(10, 14, 20, 0.96)';
     ctx.lineWidth = 4;
@@ -123,7 +101,6 @@ window.Game = window.Game || {};
     ctx.strokeStyle = 'rgba(244, 247, 251, 0.98)';
     ctx.lineWidth = 2;
     ctx.stroke();
-
     drawDiamond(ctx, playerPos.x, playerPos.y, diamondW, diamondH, '#f4f7fb');
     ctx.beginPath();
     ctx.moveTo(playerPos.x, playerPos.y - diamondH);
@@ -134,7 +111,6 @@ window.Game = window.Game || {};
     ctx.strokeStyle = '#11151c';
     ctx.lineWidth = 1;
     ctx.stroke();
-
     ctx.beginPath();
     ctx.arc(playerPos.x, playerPos.y, Math.max(1.5, radius * 0.18), 0, Math.PI * 2);
     ctx.fillStyle = '#11151c';
@@ -143,32 +119,23 @@ window.Game = window.Game || {};
   }
 
   function renderMinimap(force) {
-    // Keep non-interactive #66 readability cues synchronized with the same
-    // animation-frame presentation path even when the WebGL world is clean.
-    // This does not mutate authoritative world/input/movement state.
     renderReadabilityCues();
-
     const dom = State.dom;
     const world = State.world;
     if (!dom.minimap || !dom.miniCtx || !world.terrain.length) return;
     if (!force && !State.render.needsMinimapRedraw) return;
-
     const layout = getMinimapLayout();
     const ctx = dom.miniCtx;
     ctx.clearRect(0, 0, layout.width, layout.height);
-
     for (let row = 0; row < world.rows; row++) {
       for (let col = 0; col < world.cols; col++) {
         const p = gridToMinimap(row, col, layout);
         drawDiamond(ctx, p.x, p.y, layout.miniHalfW, layout.miniHalfH, Renderer.terrainColor(world.terrain[row][col]));
       }
     }
-
     drawViewportFrame(layout);
-
     const playerPos = gridToMinimap(world.player.row, world.player.col, layout);
     drawCurrentLocationCue(ctx, playerPos, layout);
-
     State.render.needsMinimapRedraw = false;
   }
 
@@ -182,7 +149,10 @@ window.Game = window.Game || {};
       if (!picked) return;
       Renderer.centerCameraOnTile(picked.row, picked.col);
       Renderer.markDirty();
-      UI.addLog(`Minimap tıklandı: satır=${picked.row}, sütun=${picked.col}. Kamera ilgili noktaya ortalandı.`);
+      const logger = window.Game && window.Game.UI;
+      if (logger && typeof logger.addLog === 'function') {
+        logger.addLog(`Minimap tıklandı: satır=${picked.row}, sütun=${picked.col}. Kamera ilgili noktaya ortalandı.`);
+      }
     });
   }
 
@@ -225,11 +195,9 @@ window.Game = window.Game || {};
     ensureReadabilityStyle();
     let layer = document.getElementById('r01-map-cues');
     if (layer) return layer;
-
     layer = document.createElement('div');
     layer.id = 'r01-map-cues';
     layer.setAttribute('aria-live', 'polite');
-
     const current = createSpriteCue('r01-current-location', '0 0 64 64', 'current-location', 'Current protagonist location');
     current.id = 'r01-current-location';
     const inspection = createSpriteCue('r01-inspection', '64 0 64 64', 'inspection', 'Inspected map location');
@@ -238,7 +206,6 @@ window.Game = window.Game || {};
     preview.id = 'r01-route-preview';
     preview.className = 'r01-route-preview';
     preview.hidden = true;
-
     layer.appendChild(current);
     layer.appendChild(inspection);
     layer.appendChild(preview);
@@ -251,10 +218,7 @@ window.Game = window.Game || {};
     if (!player) return null;
     if (!player.moving) return { row: player.row, col: player.col };
     const t = clamp(Number(player.progress) || 0, 0, 1);
-    return {
-      row: player.startRow + (player.targetRow - player.startRow) * t,
-      col: player.startCol + (player.targetCol - player.startCol) * t
-    };
+    return { row: player.startRow + (player.targetRow - player.startRow) * t, col: player.startCol + (player.targetCol - player.startCol) * t };
   }
 
   function positionCue(element, gridPosition) {
@@ -275,25 +239,20 @@ window.Game = window.Game || {};
 
   function getPreviewLabel() {
     const language = document.getElementById('languageSelect');
-    return language && language.value === 'tr'
-      ? 'Rota önizlemesi · bağlayıcı değil'
-      : 'Route preview · non-binding';
+    return language && language.value === 'tr' ? 'Rota önizlemesi · bağlayıcı değil' : 'Route preview · non-binding';
   }
 
   function renderReadabilityCues() {
     const canvas = State && State.dom && State.dom.canvas;
     if (!canvas || !canvas.isConnected || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) return;
-
     const layer = ensureMapCueLayer();
     if (!layer) return;
     const world = State.world || {};
     const current = document.getElementById('r01-current-location');
     const inspection = document.getElementById('r01-inspection');
     const preview = document.getElementById('r01-route-preview');
-
     positionCue(current, getPlayerGridPosition(world));
     positionCue(inspection, world.selected || null);
-
     const hasPreview = world.selected && Array.isArray(world.previewPath) && world.previewPath.length > 1;
     if (preview) {
       preview.hidden = !hasPreview;
@@ -304,9 +263,6 @@ window.Game = window.Game || {};
     }
   }
 
-  // Integrate the Designer #65 sprite/spec into the real map without changing
-  // authoritative world state. Renderer remains the source of map geometry;
-  // this wrapper only refreshes non-interactive presentation cues.
   const baseRenderWorld = Renderer.renderWorld;
   if (typeof baseRenderWorld === 'function' && !Renderer.__r01ReadabilityWrapped) {
     Renderer.renderWorld = function (force) {
@@ -319,6 +275,5 @@ window.Game = window.Game || {};
 
   window.addEventListener('resize', renderReadabilityCues);
   document.addEventListener('DOMContentLoaded', renderReadabilityCues);
-
   window.Game.Minimap = { resizeMinimap, renderMinimap, bindMinimapEvents };
 })();
