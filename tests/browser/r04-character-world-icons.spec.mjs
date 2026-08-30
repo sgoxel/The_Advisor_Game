@@ -106,20 +106,76 @@ for (const viewport of [
   { name: 'tablet', width: 820, height: 1180 },
   { name: 'desktop', width: 1440, height: 900 }
 ]) {
-  test(`character PNG overlay remains bounded and non-interactive on ${viewport.name}`, async ({ page }) => {
+  test(`character PNG overlay scale responds to zoom without mutating NPC state on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await waitForNpcWorld(page);
     await page.waitForFunction(() => Number(document.getElementById('npcWorldOverlay')?.dataset.pngNpcCount || 0) > 0);
-    const evidence = await page.locator('#npcWorldOverlay').evaluate((overlay) => ({
-      rect: overlay.getBoundingClientRect().toJSON(),
-      png: Number(overlay.dataset.pngNpcCount || 0),
-      visible: Number(overlay.dataset.visibleNpcCount || 0),
-      pointerEvents: getComputedStyle(overlay).pointerEvents
-    }));
+
+    const evidence = await page.evaluate(() => {
+      const Game = window.Game;
+      const overlay = document.getElementById('npcWorldOverlay');
+      const snapshot = () => Game.State.world.npcs.map((npc) => ({
+        id: npc.id,
+        authority: npc.authority,
+        occupation: npc.occupation,
+        row: npc.row,
+        col: npc.col,
+        localRow: npc.localRow,
+        localCol: npc.localCol,
+        activity: npc.activity,
+        movementDecision: npc.movementDecision,
+        dialogueWith: npc.dialogueWith,
+        asset: Game.NPCWorld.worldIconAssetFor(npc)
+      }));
+      const before = snapshot();
+      const originalZoom = Number(Game.State.camera.zoom);
+
+      Game.State.camera.zoom = 2;
+      Game.NPCWorld.drawPresentation();
+      const lowZoomSize = Number(overlay.dataset.iconSizePx || 0);
+
+      Game.State.camera.zoom = 5;
+      Game.NPCWorld.drawPresentation();
+      const highZoomSize = Number(overlay.dataset.iconSizePx || 0);
+
+      const after = snapshot();
+      const presentationAuthority = overlay.dataset.presentationAuthority;
+      const pointerEvents = getComputedStyle(overlay).pointerEvents;
+      const ariaHidden = overlay.getAttribute('aria-hidden');
+      const rect = overlay.getBoundingClientRect().toJSON();
+      const visible = Number(overlay.dataset.visibleNpcCount || 0);
+      const png = Number(overlay.dataset.pngNpcCount || 0);
+
+      Game.State.camera.zoom = originalZoom;
+      Game.NPCWorld.drawPresentation();
+
+      return {
+        before,
+        after,
+        lowZoomSize,
+        highZoomSize,
+        presentationAuthority,
+        pointerEvents,
+        ariaHidden,
+        rect,
+        visible,
+        png
+      };
+    });
+
     expect(evidence.rect.width).toBeGreaterThan(100);
     expect(evidence.rect.height).toBeGreaterThan(100);
+    expect(evidence.visible).toBeGreaterThan(0);
     expect(evidence.png).toBeGreaterThan(0);
-    expect(evidence.png).toBeLessThanOrEqual(evidence.visible);
+    expect(evidence.lowZoomSize).toBeGreaterThanOrEqual(34);
+    expect(evidence.lowZoomSize).toBeLessThanOrEqual(64);
+    expect(evidence.highZoomSize).toBeGreaterThanOrEqual(34);
+    expect(evidence.highZoomSize).toBeLessThanOrEqual(64);
+    expect(evidence.highZoomSize).toBeGreaterThan(evidence.lowZoomSize);
+    expect(evidence.presentationAuthority).toBe('presentation-only');
     expect(evidence.pointerEvents).toBe('none');
+    expect(evidence.ariaHidden).toBe('true');
+    expect(evidence.after).toEqual(evidence.before);
+    expect(evidence.after.every((npc) => npc.authority === 'simulation')).toBe(true);
   });
 }
