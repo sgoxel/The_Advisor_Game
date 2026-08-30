@@ -24,9 +24,51 @@ The latest valid `WORKER ROTATION STATE:` on issue #97 supplies only the startin
 
 Starting at the assigned role, traverse the cycle and perform all safely eligible work in project-priority order.
 
-Within each role, process as many eligible targets sequentially as possible. After every material issue, commit, check, revision, dependency, or planning change, re-fetch relevant GitHub state and re-evaluate eligibility. Continue passes while useful progress or eligibility changes occur. Stop normally only after one complete five-role pass produces no eligible progress.
+Within **each role**, process as many eligible targets sequentially as possible. Completing, closing, PASSing, blocking, yielding, handing off, or clearing one target is never by itself a reason to end the run.
+
+After every material issue, commit, check, revision, dependency, claim, handoff, or planning change:
+
+1. clear/yield any finished or waiting target claim;
+2. re-fetch relevant GitHub state;
+3. re-scan the **same role** for another eligible target;
+4. continue that role while eligible work remains;
+5. advance to the next role only when the current role is exhausted.
+
+Useful work or any eligibility-changing event resets the empty-pass stop gate. Continue passes until the stop conditions below are satisfied.
 
 Never invent work, retry an unchanged blocker indefinitely, or idle on an external wait when another unrelated eligible target exists.
+
+## Actionable-capacity recovery
+
+Planner measures two different values:
+
+- total usable focused open inventory;
+- immediately executable unclaimed **current/earlier** work.
+
+The normal executable target is **12-15** when legitimate approved scope permits. If executable depth is **below 10**, that Planner visit must perform a **capacity-recovery sweep** after any higher-priority README reconciliation, blocking P-REV, or active planning repair.
+
+The sweep must examine **all approved current/earlier scope and current open issue state**, not merely targets already mentioned earlier in the run.
+
+Immediately executable means the target is current/earlier, open, has all real dependencies satisfied, can be acted on now by an authorized role, has no live conflicting target claim, has no unresolved blocking revision, and requires no external wait before safe action. Future-phase and dependency-blocked work never counts.
+
+If legitimate independent work can be exposed from approved scope, Planner must create, adapt, reopen, or split focused outcomes as appropriate, preserving real dependencies, acceptance criteria, phase boundaries, Designer coverage, independence, and non-duplication. Then re-fetch state and continue the role cycle so newly executable work can be consumed in the same run when safe.
+
+Planner must never create filler, duplicate scope, speculative/invented gameplay, fake eligibility, false dependencies, weakened acceptance criteria, or artificial micro-tasks merely to satisfy a metric.
+
+If executable depth remains below 10, the result must record the exact lower count and **issue/area-specific blocker evidence**. Statements such as `open inventory is substantial` are not sufficient because total open inventory is not executable capacity.
+
+## Normal stop gate
+
+Normal STOP is permitted only when:
+
+1. any required capacity-recovery sweep has completed;
+2. state has been re-fetched after that sweep;
+3. a subsequent complete Planner -> Coder -> Designer -> Tester -> Reviewer pass produces zero useful progress and creates no new eligibility; and
+4. `remaining_eligible_targets` is an exact integer from the final scan.
+
+`remaining_eligible_targets=unknown` is not valid for a normal stop. It is allowed only when a real connector/platform/hard execution failure prevents the final count; then record the failure/checkpoint and set `continuation_required=true`.
+
+A safe hard-limit cutoff may end a run before this gate only after the current target reaches an atomic checkpoint, all live claims are cleared/yielded, exact continuation state is recorded, and `continuation_required=true`.
 
 ## Target-scoped claim invariant
 
@@ -41,7 +83,7 @@ If a target becomes blocked or waits on CI/another Worker and the Worker moves e
 ## Role authority
 
 ### Planner
-Owns planning below README: phase/order/dependencies/architecture/organization/decomposition/scope/acceptance criteria/routing/release prerequisites and ROADMAP/TODO consistency. Maintains legitimate deep and executable work inventory without filler or false dependencies. Does not implement product code/design or approve release work.
+Owns planning below README: phase/order/dependencies/architecture/organization/decomposition/scope/acceptance criteria/routing/release prerequisites and ROADMAP/TODO consistency. Maintains legitimate deep and executable work inventory, performs mandatory capacity recovery when the executable pool is shallow, and never pads capacity with filler or false dependencies. Does not implement product code/design or approve release work.
 
 ### Coder
 Owns approved technical implementation, integration, configuration and implementation-focused tests. Does not redefine Planner scope/AC/dependencies/phase order. Planning changes require a Planner revision request.
@@ -57,7 +99,7 @@ Owns process control, defect/root-cause analysis, CI/workflow reliability, bottl
 
 ## Independence
 
-No Worker independenly PASSes or approves its own prior implementation, design, revision, bug fix, workflow/process fix, or other authored change except the narrowly defined README cumulative Tester-deadlock gate. Coder/Designer/Reviewer changes normally require Tester verification by a different Worker identity.
+No Worker independently PASSes or approves its own prior implementation, design, revision, bug fix, workflow/process fix, or other authored change except the narrowly defined README cumulative Tester-deadlock gate. Coder/Designer/Reviewer changes normally require Tester verification by a different Worker identity.
 
 ## Revisions
 
@@ -72,8 +114,22 @@ Close work only after required commits/assets, checks, resolved revisions and re
 
 ## Scheduled run result
 
-Each scheduled Worker posts one `WORKER ROTATION RESULT:` on #97 containing starting role, roles/passes, targets, commits/PRs, checks, revisions/blockers, continuation state, `claims_acquired_this_run`, `claims_cleared_this_run`, and `live_claims_at_end`.
+Each scheduled Worker posts one `WORKER ROTATION RESULT:` on #97 containing starting role, roles/passes, targets, commits/PRs, checks, revisions/blockers and continuation state.
 
-Normally `live_claims_at_end=0`. If no target was acquired, also record `eligible_targets_found` and brief exclusion reasons.
+Always report:
+
+- `claims_acquired_this_run`
+- `claims_cleared_this_run`
+- `live_claims_at_end`
+- `executable_depth_before`
+- `capacity_recovery_required`
+- `capacity_recovery_performed`
+- `capacity_actions_taken`
+- `executable_depth_after`
+- `remaining_eligible_targets`
+
+Normally `live_claims_at_end=0`; that means cleanup, not zero work.
+
+If no target was acquired, also record `eligible_targets_found` and concise exclusion counts/reasons. If executable depth remains below 10, include representative issue numbers/areas and concrete blocker categories showing why legitimate approved work cannot safely replenish the pool further.
 
 The next scheduled starting role is the successor of the last role that performed useful work; if no useful progress occurred, preserve the original starting role.
