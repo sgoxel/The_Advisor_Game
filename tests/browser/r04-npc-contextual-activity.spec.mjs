@@ -54,8 +54,9 @@ test('contextual bubble pass preserves authoritative NPC objects and replaces ge
 
   const evidence = await page.evaluate(() => {
     const Game = window.Game;
-    // Settle the normal authoritative GameTime update first, then verify the next
-    // same-minute presentation pass cannot rewrite any Simulation-owned NPC record.
+    // Settle the normal authoritative GameTime update first. Then invoke only the
+    // presentation pass so this assertion measures #317 rather than a second
+    // authoritative renderer/GameTime refresh that may legitimately replace records.
     Game.Renderer.renderWorld(true);
     const npcs = Game.State.world.npcs;
     const references = npcs.slice();
@@ -69,7 +70,7 @@ test('contextual bubble pass preserves authoritative NPC objects and replaces ge
       dialogueWith: npc.dialogueWith
     })));
 
-    Game.Renderer.renderWorld(true);
+    Game.NPCContextualActivity.draw();
 
     const afterNpcs = Game.State.world.npcs;
     const after = JSON.stringify(afterNpcs.map((npc) => ({
