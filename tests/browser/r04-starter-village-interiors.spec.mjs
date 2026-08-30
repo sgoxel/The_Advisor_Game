@@ -56,7 +56,7 @@ test('authoritative buildings materialize seamless same-world rooms, walls and d
 test('same SEED rebuild preserves interior identity and room geometry', async ({ page }) => {
   await ready(page);
   const evidence=await page.evaluate(() => {
-    const G=window.Game, seed=G.State.settings.seed;
+    const G=window.Game, seed=G.State.world.seed;
     const before=G.StarterVillageInteriors.snapshot().interiors.map(i=>({buildingId:i.buildingId,footprint:i.footprint,entrance:i.entrance,door:i.door,rooms:i.rooms}));
     const generated=G.Terrain.generateWorld(seed,100,100);
     if (Array.isArray(generated.grid)) G.State.world.terrain=generated.grid;
