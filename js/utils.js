@@ -121,6 +121,7 @@ window.Game.Utils.loadScriptOnce("js/relevance_bounded_compute.js", "r02Relevanc
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
 window.Game.Utils.loadScriptOnce("js/starter_village_exteriors.js", "r04StarterVillageExteriorsModule");
 window.Game.Utils.loadScriptOnce("js/starter_village_dev_overlay.js", "r04StarterVillageDevOverlayModule");
+window.Game.Utils.loadScriptOnce("js/background_quad_guard.js", "r04BackgroundQuadGuardModule");
 
 // Loaded after NPC life/presentation modules so it can add deterministic tile occupancy,
 // route-conflict resolution, adjacent dialogue and development bubbles without duplicating
