@@ -8,8 +8,11 @@ on:
       - 'js/config.js'
       - 'js/spatial_world.js'
       - 'js/starter_village_exteriors.js'
+      - 'js/starter_village_dev_overlay.js'
+      - 'js/protagonist_routine.js'
       - 'js/utils.js'
       - 'tests/browser/r04-starter-village-exteriors.spec.mjs'
+      - 'tests/browser/r04-village-dev-protagonist-routine.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-starter-village-exteriors-verification.yml'
@@ -19,8 +22,11 @@ on:
       - 'js/config.js'
       - 'js/spatial_world.js'
       - 'js/starter_village_exteriors.js'
+      - 'js/starter_village_dev_overlay.js'
+      - 'js/protagonist_routine.js'
       - 'js/utils.js'
       - 'tests/browser/r04-starter-village-exteriors.spec.mjs'
+      - 'tests/browser/r04-village-dev-protagonist-routine.spec.mjs'
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r04-starter-village-exteriors-verification.yml'
@@ -52,7 +58,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run focused starter-village exterior regression
-        run: npx playwright test tests/browser/r04-starter-village-exteriors.spec.mjs
+        run: npx playwright test tests/browser/r04-starter-village-exteriors.spec.mjs tests/browser/r04-village-dev-protagonist-routine.spec.mjs
 
       - name: Upload Playwright evidence
         if: always()
