@@ -44,7 +44,7 @@ test.beforeEach(async ({ page }) => boot(page));
 test('authoritative campaign minute gates deterministic wait and avoids duplicate execution', async ({ page }) => {
   const out = await page.evaluate(({ c, opportunity, route }) => {
     const game = window.Game, loop = game.AutonomousDecisionLoop;
-    const prepared = loop.prepare(c, [opportunity]);
+    const prepared=loop.prepare(c,[opportunity]);
     const first = loop.resolvePrepared(prepared.prepared, c, route);
     const sameMinute = loop.prepare(c, [opportunity]);
     game.GameTime.setForTest(c.campaignMinute + 5);
@@ -101,7 +101,7 @@ test('schedule, location and relevance filtering are bounded and deterministic',
 });
 
 test('rejected decision records deterministic short retry without world mutation', async ({ page }) => {
-  const out = await page.evaluate(({c,opportunity,route})=>{
+  const out=await page.evaluate(({c,opportunity,route})=>{
     const game=window.Game, loop=game.AutonomousDecisionLoop;
     const prepared=loop.prepare(c,[opportunity]);
     const rejected=loop.resolvePrepared(prepared.prepared,c,route);
@@ -122,9 +122,10 @@ test('save/load restores decision checkpoint and authoritative time so resume ca
   const out=await page.evaluate(({c,opportunity,route})=>{
     const game=window.Game, loop=game.AutonomousDecisionLoop;
     const prepared=loop.prepare(c,[opportunity]); loop.resolvePrepared(prepared.prepared,c,route);
-    const saved=game.CampaignPersistence.serializeSave();
+    const observedRealTimestampMs=Date.now();
+    const saved=game.CampaignCalendar.serializeSaveAt(observedRealTimestampMs);
     game.WorldDeltaPersistence.clearAll(); game.GameTime.setForTest(700); Object.assign(game.State.world.player,{row:0,col:0});
-    const loaded=game.CampaignPersistence.loadSave(saved);
+    const loaded=game.CampaignCalendar.loadSaveAt(saved,observedRealTimestampMs,new Date(observedRealTimestampMs).getTimezoneOffset());
     const resumedMinute=Math.floor(game.GameTime.capture().totalGameMinutes);
     const resumed=loop.prepare({...c,campaignMinute:resumedMinute},[opportunity]);
     return {loaded:loaded.ok,resumed,resumedMinute,checkpoint:loop.readCheckpoint(c),pos:{row:game.State.world.player.row,col:game.State.world.player.col}};
