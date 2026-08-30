@@ -103,13 +103,19 @@ jobs:
       - name: Run stabilized R01 browser regression
         run: npm run test:browser:r01
 
+      - name: Prepare stable exact-SHA evidence payload
+        if: always()
+        run: |
+          mkdir -p r04-spatial-world-100-evidence
+          printf 'candidate_sha=%s\nrun_id=%s\nrun_attempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > r04-spatial-world-100-evidence/candidate.txt
+          if [ -d playwright-report ]; then cp -R playwright-report r04-spatial-world-100-evidence/; fi
+          if [ -d test-results ]; then cp -R test-results r04-spatial-world-100-evidence/; fi
+
       - name: Upload Playwright evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: r04-spatial-world-100-evidence-${{ github.sha }}
-          path: |
-            playwright-report
-            test-results
-          if-no-files-found: ignore
+          path: r04-spatial-world-100-evidence/
+          if-no-files-found: error
           retention-days: 14
