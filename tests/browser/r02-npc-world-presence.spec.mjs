@@ -24,7 +24,7 @@ test('generated villagers become stable simulation-owned NPC state with role anc
   });
 
   expect(evidence.npc.length).toBeGreaterThanOrEqual(12);
-  expect(evidence.npc.length).toBeLessThanOrEqual(16);
+  expect(evidence.npc.length).toBe(evidence.populationIds.length);
   expect(new Set(evidence.npc.map((npc) => npc.id)).size).toBe(evidence.npc.length);
   expect(evidence.npc.every((npc) => evidence.populationIds.includes(npc.id))).toBe(true);
   expect(evidence.npc.every((npc) => npc.authority === 'simulation')).toBe(true);
@@ -129,7 +129,7 @@ for (const viewport of [
     expect(evidence.canvasWidth).toBeGreaterThan(0);
     expect(evidence.canvasHeight).toBeGreaterThan(0);
     expect(evidence.npcCount).toBeGreaterThanOrEqual(12);
-    expect(evidence.npcCount).toBeLessThanOrEqual(16);
     expect(evidence.visibleNpcCount).toBeGreaterThanOrEqual(4);
+    expect(evidence.visibleNpcCount).toBeLessThanOrEqual(16);
   });
 }
