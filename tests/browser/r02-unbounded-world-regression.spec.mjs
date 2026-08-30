@@ -86,26 +86,27 @@ test('multiple seeds and positive/negative coordinates remain deterministic, div
   expect(failures).toEqual([]);
 });
 
-test('origin remains inhabited and multiple simulation-owned NPCs visibly progress without direct player control', async ({ page }) => {
+test('origin remains inhabited and simulation-owned NPC routines remain governed by authoritative GameTime', async ({ page }) => {
   const failures = collectRuntimeFailures(page);
   await ready(page);
 
   const evidence = await page.evaluate(() => {
     const origin = window.Game.OriginVillage.generate('R02-CUMULATIVE-ORIGIN');
     const npc = window.Game.NPCWorld;
+    const gameMinutes = window.Game.GameTime.capture().totalGameMinutes;
     npc.updateAt(0);
     const before = npc.capture();
     npc.updateAt(7000);
     const after = npc.capture();
-    const moved = before.filter((entry, index) => {
-      const later = after[index];
-      return later && (Math.abs(entry.row - later.row) > 0.001 || Math.abs(entry.col - later.col) > 0.001);
-    }).length;
     const overlay = document.getElementById('npcWorldOverlay');
     return {
       origin,
+      before,
+      after,
       npcCount: after.length,
-      moved,
+      gameMinutes,
+      gameMinutesAfter: window.Game.GameTime.capture().totalGameMinutes,
+      routineClockAuthority: window.Game.State.world.npcRuntime?.routineClockAuthority,
       allSimulationOwned: after.every((entry) => entry.authority === 'simulation' && entry.controlledBy === 'simulation' && entry.playerControllable === false),
       npcApiKeys: Object.keys(npc),
       navigationApiKeys: Object.keys(window.Game.RegionNavigation),
@@ -121,7 +122,10 @@ test('origin remains inhabited and multiple simulation-owned NPCs visibly progre
   expect(evidence.origin.village.buildings.length).toBeGreaterThanOrEqual(10);
   expect(evidence.origin.village.population.length).toBeGreaterThanOrEqual(12);
   expect(evidence.npcCount).toBeGreaterThanOrEqual(12);
-  expect(evidence.moved).toBeGreaterThanOrEqual(4);
+  expect(evidence.routineClockAuthority).toBe('Game.GameTime');
+  expect(evidence.gameMinutesAfter).toBe(evidence.gameMinutes);
+  expect(evidence.after.map((entry) => ({ id: entry.id, row: entry.row, col: entry.col, activity: entry.activity })))
+    .toEqual(evidence.before.map((entry) => ({ id: entry.id, row: entry.row, col: entry.col, activity: entry.activity })));
   expect(evidence.allSimulationOwned).toBe(true);
   expect(evidence.npcApiKeys).not.toContain('movePlayer');
   expect(evidence.npcApiKeys).not.toContain('moveProtagonist');
