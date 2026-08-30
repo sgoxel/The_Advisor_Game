@@ -1,0 +1,70 @@
+import { test, expect } from '@playwright/test';
+
+async function waitForMinimap(page) {
+  await page.goto('./');
+  await page.waitForFunction(() => {
+    const game = window.Game;
+    const minimap = game?.State?.dom?.minimap;
+    return Boolean(game?.State?.world?.terrain?.length && minimap?.isConnected && minimap.clientWidth > 0 && minimap.clientHeight > 0);
+  });
+  await expect(page.locator('#minimap')).toBeVisible();
+}
+
+function collectRuntimeFailures(page) {
+  const failures = [];
+  page.on('pageerror', (error) => failures.push(`pageerror: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') failures.push(`console.error: ${message.text()}`);
+  });
+  return failures;
+}
+
+test('minimap navigation survives unavailable and late logger dependencies', async ({ page }) => {
+  const failures = collectRuntimeFailures(page);
+  await waitForMinimap(page);
+
+  const setup = await page.evaluate(() => {
+    const game = window.Game;
+    const previousUI = game.UI;
+    const originalCenter = game.Renderer.centerCameraOnTile;
+    let centered = 0;
+    game.Renderer.centerCameraOnTile = function (...args) {
+      centered += 1;
+      return originalCenter.apply(this, args);
+    };
+    game.__minimap330 = { previousUI, getCentered: () => centered };
+    game.UI = undefined;
+    return true;
+  });
+  expect(setup).toBe(true);
+
+  const minimap = page.locator('#minimap');
+  const box = await minimap.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(100);
+
+  const unavailableResult = await page.evaluate(() => window.Game.__minimap330.getCentered());
+  expect(unavailableResult).toBeGreaterThan(0);
+  expect(failures).toEqual([]);
+
+  const lateLogger = await page.evaluate(() => {
+    const game = window.Game;
+    let calls = 0;
+    game.UI = { addLog: () => { calls += 1; } };
+    game.__minimap330.getLogCalls = () => calls;
+    return true;
+  });
+  expect(lateLogger).toBe(true);
+
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(100);
+
+  const result = await page.evaluate(() => ({
+    centered: window.Game.__minimap330.getCentered(),
+    logged: window.Game.__minimap330.getLogCalls()
+  }));
+  expect(result.centered).toBeGreaterThan(1);
+  expect(result.logged).toBe(1);
+  expect(failures).toEqual([]);
+});
