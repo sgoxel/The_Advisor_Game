@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "family": "main_road",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256,
+    "format": "RGBA"
+  },
+  "cells": [
+    {"row":0,"col":0,"type":"main_straight_vertical_left","semanticId":"main_road_straight_vertical_left"},
+    {"row":0,"col":1,"type":"main_straight_vertical_right","semanticId":"main_road_straight_vertical_right"},
+    {"row":0,"col":2,"type":"main_straight_horizontal_top","semanticId":"main_road_straight_horizontal_top"},
+    {"row":0,"col":3,"type":"main_straight_horizontal_bottom","semanticId":"main_road_straight_horizontal_bottom"},
+    {"row":1,"col":0,"type":"main_turn_ne_inner","semanticId":"main_road_turn_ne_inner"},
+    {"row":1,"col":1,"type":"main_turn_ne_outer","semanticId":"main_road_turn_ne_outer"},
+    {"row":1,"col":2,"type":"main_turn_es_inner","semanticId":"main_road_turn_es_inner"},
+    {"row":1,"col":3,"type":"main_turn_es_outer","semanticId":"main_road_turn_es_outer"},
+    {"row":2,"col":0,"type":"main_turn_sw_inner","semanticId":"main_road_turn_sw_inner"},
+    {"row":2,"col":1,"type":"main_turn_sw_outer","semanticId":"main_road_turn_sw_outer"},
+    {"row":2,"col":2,"type":"main_turn_wn_inner","semanticId":"main_road_turn_wn_inner"},
+    {"row":2,"col":3,"type":"main_turn_wn_outer","semanticId":"main_road_turn_wn_outer"},
+    {"row":3,"col":0,"type":"main_transition_vertical_left","semanticId":"main_road_transition_vertical_left"},
+    {"row":3,"col":1,"type":"main_transition_vertical_right","semanticId":"main_road_transition_vertical_right"},
+    {"row":3,"col":2,"type":"main_transition_horizontal_top","semanticId":"main_road_transition_horizontal_top"},
+    {"row":3,"col":3,"type":"main_transition_horizontal_bottom","semanticId":"main_road_transition_horizontal_bottom"}
+  ],
+  "unusedCells": [],
+  "pairingNotes": {
+    "vertical": "left/right semantic halves align across the shared logical-tile boundary and read as one broad north-south road",
+    "horizontal": "top/bottom semantic halves align across the shared logical-tile boundary and read as one broad east-west road",
+    "turns": "inner/outer quarter-turn pieces remain presentation-only and require authoritative topology classification from #337",
+    "transitions": "transition halves narrow toward ordinary-road connection without adding or deleting route connectivity"
+  },
+  "notes": "Original terrain-neutral main-road art for #338. Transparent RGBA background. All 16 cells are occupied; no biome pixels are baked into reusable cells."
+}
