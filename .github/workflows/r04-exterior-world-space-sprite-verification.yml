@@ -37,7 +37,7 @@ jobs:
       - name: Checkout exact repository state
         uses: actions/checkout@v4
       - name: Record exact candidate SHA
-        run: echo "R04 #324 candidate ${GITHUB_SHA}"
+        run: 'echo "R04 #324 candidate ${GITHUB_SHA}"'
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
