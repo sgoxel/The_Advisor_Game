@@ -1,0 +1,57 @@
+name: R04 Guard Duty Anchors Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/guard_duty_anchors.js'
+      - 'js/utils.js'
+      - 'tests/browser/r04-guard-duty-anchors.spec.mjs'
+      - '.github/workflows/r04-guard-duty-anchors-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r04-guard-duty-anchors-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate
+        run: |
+          echo "candidate=${GITHUB_SHA}"
+          git rev-parse HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify deterministic guard-duty anchors
+        run: npx playwright test tests/browser/r04-guard-duty-anchors.spec.mjs --project=desktop
+      - name: Preserve R01 browser compatibility
+        run: npx playwright test tests/browser/r01-cumulative.spec.mjs --project=desktop
+      - name: Prepare exact-SHA evidence
+        if: always()
+        run: |
+          mkdir -p r04-guard-duty-anchors-evidence
+          printf 'candidate=%s\nrun=%s\nattempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > r04-guard-duty-anchors-evidence/candidate.txt
+          if [ -d playwright-report ]; then cp -R playwright-report r04-guard-duty-anchors-evidence/; fi
+          if [ -d test-results ]; then cp -R test-results r04-guard-duty-anchors-evidence/; fi
+      - name: Upload exact-SHA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-guard-duty-anchors-${{ github.sha }}
+          path: r04-guard-duty-anchors-evidence
+          if-no-files-found: error
+          retention-days: 14
