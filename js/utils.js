@@ -115,6 +115,7 @@ window.Game.Utils.loadScriptOnce("js/npc_residency.js", "r04NpcResidencyModule")
 window.Game.Utils.loadScriptOnce("js/npc_workplaces.js", "r04NpcWorkplacesModule");
 window.Game.Utils.loadScriptOnce("js/outdoor_worksites.js", "r04OutdoorWorksitesModule");
 window.Game.Utils.loadScriptOnce("js/guard_duty_anchors.js", "r04GuardDutyAnchorsModule");
+window.Game.Utils.loadScriptOnce("js/terrain_routing.js", "r04TerrainRoutingModule");
 window.Game.Utils.loadScriptOnce("js/ecology.js", "r02EcologyModule");
 window.Game.Utils.loadScriptOnce("js/world_hierarchy.js", "r02WorldHierarchyModule");
 window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeographyModule");
@@ -134,6 +135,7 @@ window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatia
 // wrappers and restores NPCSpatial authority if an older renderer wrapper drifts coordinates
 // inside the same authoritative game minute.
 window.Game.Utils.loadScriptOnce("js/npc_runtime_bridge.js", "r04NpcRuntimeBridgeModule");
+window.Game.Utils.loadScriptOnce("js/npc_terrain_routing_bridge.js", "r04NpcTerrainRoutingBridgeModule");
 window.Game.Utils.loadScriptOnce("js/npc_contextual_activity.js", "r04NpcContextualActivityModule");
 
 // #309 presentation-only compatibility bridge. It may load before UI exists; the module
