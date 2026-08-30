@@ -106,6 +106,12 @@
   else window.addEventListener('load', start, { once: true });
 })();
 
-// #275 is a presentation-only companion. Loading it after the final NPC runtime bridge
-// lets it wrap the settled render boundary without changing occupancy or Simulation state.
-window.Game?.Utils?.loadScriptOnce?.('js/npc_activity_bubble_layout.js', 'r04NpcActivityBubbleLayoutModule');
+// #275 is a presentation-only companion. Queue it one frame after the final runtime bridge
+// has attached so the bubble layout wrapper becomes the outermost presentation boundary.
+function loadNpcActivityBubbleLayout() {
+  requestAnimationFrame(() => {
+    window.Game?.Utils?.loadScriptOnce?.('js/npc_activity_bubble_layout.js', 'r04NpcActivityBubbleLayoutModule');
+  });
+}
+if (document.readyState === 'complete') loadNpcActivityBubbleLayout();
+else window.addEventListener('load', loadNpcActivityBubbleLayout, { once: true });
