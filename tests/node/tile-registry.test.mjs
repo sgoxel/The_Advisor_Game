@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { SemanticTileRegistry, ROAD_TILE_TYPES, createCanonicalRoadTileRegistry, loadSemanticTile, resolveTileUrl } from '../../js/tile_registry.js';
+import { SemanticTileRegistry, ROAD_TILE_TYPES, MAIN_ROAD_TILE_TYPES, createCanonicalRoadTileRegistry, createCanonicalMainRoadTileRegistry, loadSemanticTile, resolveTileUrl } from '../../js/tile_registry.js';
 
 test('canonical road registry exposes eight deterministic 256px semantic assets', () => {
   const registry = createCanonicalRoadTileRegistry();
@@ -10,6 +10,18 @@ test('canonical road registry exposes eight deterministic 256px semantic assets'
       family: 'road', type, size: 256, source: `textures/tiles/road/road_${type}_256px.png`,
     });
   }
+});
+
+test('canonical main-road registry exposes the fifteen occupied atlas cells only', () => {
+  const registry = createCanonicalMainRoadTileRegistry();
+  assert.equal(registry.entries().length, 15);
+  assert.equal(MAIN_ROAD_TILE_TYPES.length, 15);
+  for (const type of MAIN_ROAD_TILE_TYPES) {
+    assert.deepEqual(registry.resolve('main_road', type, 256), {
+      family: 'main_road', type, size: 256, source: `textures/tiles/main_road/main_road_${type}_256px.png`,
+    });
+  }
+  assert.equal(registry.has('main_road', 'transparent_reserve', 256), false);
 });
 
 test('equivalent input resolves identically regardless of registration order', () => {
@@ -30,6 +42,8 @@ test('missing, duplicate and malformed entries fail safely', () => {
 test('same-origin URL resolution never needs atlas coordinates', () => {
   const entry = createCanonicalRoadTileRegistry().resolve('road', 'turn_ne');
   assert.equal(resolveTileUrl(entry, 'https://game.example/app/index.html'), 'https://game.example/app/textures/tiles/road/road_turn_ne_256px.png');
+  const mainEntry = createCanonicalMainRoadTileRegistry().resolve('main_road', 'main_intersection_cross');
+  assert.equal(resolveTileUrl(mainEntry, 'https://game.example/app/index.html'), 'https://game.example/app/textures/tiles/main_road/main_road_main_intersection_cross_256px.png');
 });
 
 test('loader uses semantic lookup and same-origin credentials', async () => {
