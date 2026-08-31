@@ -82,11 +82,23 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
       let alphaPixels = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) alphaPixels += 1;
 
+      // DOMStringMap is a host object. Capture the exact renderer contract fields
+      // explicitly so Playwright receives stable serializable evidence rather than
+      // relying on object-spread enumeration semantics for canvas.dataset.
+      const dataset = {
+        mainRoadDrawnCount: canvas.dataset.mainRoadDrawnCount,
+        mainRoadTransitionCount: canvas.dataset.mainRoadTransitionCount,
+        mainRoadAuthority: canvas.dataset.mainRoadAuthority,
+        mainRoadClassificationSource: canvas.dataset.mainRoadClassificationSource,
+        mainRoadRegistry: canvas.dataset.mainRoadRegistry,
+        mainRoadAssetCount: canvas.dataset.mainRoadAssetCount
+      };
+
       evidence = {
         drawn,
         segmentCount: classification.segments.length,
         classifiedCells: Object.keys(classification.cells).length,
-        dataset: { ...canvas.dataset },
+        dataset,
         alphaPixels,
         fixtureRoadsUnchanged: beforeRoads === afterRoads
       };
