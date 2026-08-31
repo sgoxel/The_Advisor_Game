@@ -71,12 +71,39 @@ export const ROAD_TILE_TYPES = Object.freeze([
   't_junction',
 ]);
 
+export const MAIN_ROAD_TILE_TYPES = Object.freeze([
+  'main_straight_vertical_left',
+  'main_straight_vertical_right',
+  'main_straight_horizontal_top',
+  'main_straight_horizontal_bottom',
+  'main_turn_ne_inner',
+  'main_turn_ne_outer',
+  'main_turn_es_inner',
+  'main_turn_es_outer',
+  'main_turn_sw_inner',
+  'main_turn_sw_outer',
+  'main_turn_wn_inner',
+  'main_turn_wn_outer',
+  'main_transition_vertical',
+  'main_transition_horizontal',
+  'main_intersection_cross',
+]);
+
 export function createCanonicalRoadTileRegistry() {
   return new SemanticTileRegistry(ROAD_TILE_TYPES.map((type) => ({
     family: 'road',
     type,
     size: 256,
     source: `textures/tiles/road/road_${type}_256px.png`,
+  })));
+}
+
+export function createCanonicalMainRoadTileRegistry() {
+  return new SemanticTileRegistry(MAIN_ROAD_TILE_TYPES.map((type) => ({
+    family: 'main_road',
+    type,
+    size: 256,
+    source: `textures/tiles/main_road/main_road_${type}_256px.png`,
   })));
 }
 
