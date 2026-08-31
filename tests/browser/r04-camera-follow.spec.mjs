@@ -24,6 +24,31 @@ async function cameraDistanceFromProtagonistCenter(page) {
   });
 }
 
+async function activateCharacterAndMeasureSynchronously(characterActivation) {
+  return characterActivation.evaluate((element) => {
+    const { State, Renderer, CameraFollow } = window.Game;
+    const distanceFromTarget = () => {
+      const beforeX = State.camera.x;
+      const beforeY = State.camera.y;
+      Renderer.centerCamera();
+      const targetX = State.camera.x;
+      const targetY = State.camera.y;
+      State.camera.x = beforeX;
+      State.camera.y = beforeY;
+      return Math.hypot(targetX - beforeX, targetY - beforeY);
+    };
+
+    const beforeDistance = distanceFromTarget();
+    element.click();
+    const afterDistance = distanceFromTarget();
+    return {
+      beforeDistance,
+      afterDistance,
+      following: CameraFollow.isFollowing()
+    };
+  });
+}
+
 test('smooth follow suspends on manual pan and resumes from accessible Character panel without Simulation mutation', async ({ page }) => {
   test.setTimeout(75_000);
   const pageErrors = [];
@@ -74,18 +99,17 @@ test('smooth follow suspends on manual pan and resumes from accessible Character
   const stillSuspended = await page.evaluate(() => ({ x: window.Game.State.camera.x, y: window.Game.State.camera.y }));
   expect(Math.hypot(stillSuspended.x - suspendedPosition.x, stillSuspended.y - suspendedPosition.y)).toBeLessThan(10);
 
-  const beforeResumeDistance = await cameraDistanceFromProtagonistCenter(page);
-  await characterActivation.click();
-  expect(await page.evaluate(() => window.Game.CameraFollow.isFollowing())).toBe(true);
-  const immediatelyAfterResumeDistance = await cameraDistanceFromProtagonistCenter(page);
-  expect(immediatelyAfterResumeDistance).toBeGreaterThan(beforeResumeDistance * 0.7);
+  const resumeProbe = await activateCharacterAndMeasureSynchronously(characterActivation);
+  expect(resumeProbe.following).toBe(true);
+  expect(resumeProbe.beforeDistance).toBeGreaterThan(0.5);
+  expect(resumeProbe.afterDistance).toBeGreaterThan(resumeProbe.beforeDistance * 0.7);
 
   for (let i = 0; i < 10; i += 1) {
     await page.waitForTimeout(16);
     await page.evaluate(() => window.Game.CameraFollow.update());
   }
   const resumedDistance = await cameraDistanceFromProtagonistCenter(page);
-  expect(resumedDistance).toBeLessThan(immediatelyAfterResumeDistance);
+  expect(resumedDistance).toBeLessThan(resumeProbe.afterDistance);
 
   const zoomBefore = await page.evaluate(() => window.Game.State.camera.zoom);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
