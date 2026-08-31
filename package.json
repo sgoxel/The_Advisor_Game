@@ -2,7 +2,7 @@
   "name": "the-advisor-game-browser-verification",
   "private": true,
   "scripts": {
-    "test:browser:r01": "playwright test tests/browser/r01-baseline.spec.mjs tests/browser/r04-minimap-optional-log.spec.mjs tests/browser/r04-camera-follow.spec.mjs tests/browser/r04-main-road-semantics.spec.mjs tests/browser/r04-protagonist-status-bubble.spec.mjs tests/browser/r04-development-mode.spec.mjs"
+    "test:browser:r01": "playwright test tests/browser/r01-baseline.spec.mjs tests/browser/r04-minimap-optional-log.spec.mjs tests/browser/r04-camera-follow.spec.mjs tests/browser/r04-main-road-semantics.spec.mjs tests/browser/r04-main-road-renderer.spec.mjs tests/browser/r04-protagonist-status-bubble.spec.mjs tests/browser/r04-development-mode.spec.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.55.1"
