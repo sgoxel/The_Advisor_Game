@@ -137,6 +137,10 @@ window.Game.Utils.loadScriptOnce("js/background_quad_guard.js", "r04BackgroundQu
 // the existing character-world-icon implementation.
 window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatialRuntimeModule");
 
+// #331 keeps Simulation-owned integer occupancy untouched and adds only a final presentation
+// interpolation layer after the spatial runtime is available.
+window.Game.Utils.loadScriptOnce("js/npc_motion_presentation.js", "r04NpcMotionPresentationModule");
+
 // Final Simulation-integration bridge for NPC positions. It attaches after the compatibility
 // wrappers and restores NPCSpatial authority if an older renderer wrapper drifts coordinates
 // inside the same authoritative game minute.
