@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/r04-materialize-road-exports.yml'
       - 'design/source/road/generate_admin_road_atlas.mjs'
+      - 'design/source/main_road/main_road_canonical_1024.png'
+      - 'design/source/main_road/main_road_canonical_1024.cells.json'
+      - 'tools/split_tile_atlas.mjs'
   workflow_dispatch:
 
 permissions:
@@ -40,15 +43,26 @@ jobs:
           --manifest design/source/road/road_admin_generated_1024.cells.json
           --output textures/tiles/road
 
-      - name: Verify canonical source, exports and idempotence
+      - name: Materialize semantic main-road exports
+        run: >-
+          node tools/split_tile_atlas.mjs
+          --atlas design/source/main_road/main_road_canonical_1024.png
+          --manifest design/source/main_road/main_road_canonical_1024.cells.json
+          --output textures/tiles/main_road
+
+      - name: Verify canonical sources, exports and idempotence
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$RUNNER_TEMP/road-export-check"
+          rm -rf "$RUNNER_TEMP/road-export-check" "$RUNNER_TEMP/main-road-export-check"
           node tools/split_tile_atlas.mjs \
             --atlas design/source/road/road_admin_generated_1024.png \
             --manifest design/source/road/road_admin_generated_1024.cells.json \
             --output "$RUNNER_TEMP/road-export-check"
+          node tools/split_tile_atlas.mjs \
+            --atlas design/source/main_road/main_road_canonical_1024.png \
+            --manifest design/source/main_road/main_road_canonical_1024.cells.json \
+            --output "$RUNNER_TEMP/main-road-export-check"
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -56,51 +70,70 @@ jobs:
           import crypto from 'node:crypto';
           import { decodeRgbaPng } from './tools/split_tile_atlas.mjs';
 
-          const source = decodeRgbaPng(fs.readFileSync('design/source/road/road_admin_generated_1024.png'));
-          if (source.width !== 1024 || source.height !== 1024 || source.rgba.length !== 1024 * 1024 * 4) {
-            throw new Error('Admin road source is not canonical 1024x1024 RGBA.');
-          }
-          for (let row = 512; row < 1024; row += 1) {
-            for (let col = 0; col < 1024; col += 1) {
-              if (source.rgba[(row * 1024 + col) * 4 + 3] !== 0) throw new Error('Canonical unused atlas rows are not fully transparent.');
-            }
-          }
-
-          const production = 'textures/tiles/road';
-          const comparison = process.env.RUNNER_TEMP + '/road-export-check';
-          const manifestName = 'road_tiles.manifest.json';
-          const expectedTypes = new Set([
-            'straight_vertical', 'straight_horizontal', 'cross', 'turn_ne',
-            'turn_es', 'turn_sw', 'turn_wn', 't_junction'
-          ]);
           const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
           const listPng = (dir) => fs.readdirSync(dir).filter((name) => name.endsWith('_256px.png')).sort();
 
-          const productionPng = listPng(production);
-          const comparisonPng = listPng(comparison);
-          if (productionPng.length !== 8) throw new Error(`Expected exactly 8 production road PNGs; found ${productionPng.length}.`);
-          if (JSON.stringify(productionPng) !== JSON.stringify(comparisonPng)) throw new Error('Repeated export changed output filenames.');
-
-          const manifest = JSON.parse(fs.readFileSync(path.join(production, manifestName), 'utf8'));
-          if (manifest.family !== 'road' || manifest.tiles?.length !== 8) throw new Error('Road manifest must describe exactly 8 tiles.');
-          const actualTypes = new Set(manifest.tiles.map((tile) => tile.type));
-          if (actualTypes.size !== expectedTypes.size || [...expectedTypes].some((type) => !actualTypes.has(type))) {
-            throw new Error('Road manifest semantic set is incomplete.');
-          }
-
-          for (const tile of manifest.tiles) {
-            const expectedName = `road_${tile.type}_256px.png`;
-            if (tile.filename !== expectedName || !productionPng.includes(expectedName)) throw new Error(`Unexpected filename for ${tile.type}.`);
-            const prod = fs.readFileSync(path.join(production, expectedName));
-            const repeat = fs.readFileSync(path.join(comparison, expectedName));
-            const decoded = decodeRgbaPng(prod);
-            if (decoded.width !== 256 || decoded.height !== 256 || decoded.rgba.length !== 256 * 256 * 4) {
-              throw new Error(`${expectedName} is not 256x256 RGBA.`);
+          function verifyFamily({ sourcePath, production, comparison, manifestName, family, expectedTypes }) {
+            const source = decodeRgbaPng(fs.readFileSync(sourcePath));
+            if (source.width !== 1024 || source.height !== 1024 || source.rgba.length !== 1024 * 1024 * 4) {
+              throw new Error(`${family} source is not canonical 1024x1024 RGBA.`);
             }
-            const digest = sha256(prod);
-            if (digest !== tile.sha256 || digest !== sha256(repeat)) throw new Error(`${expectedName} is not deterministic.`);
+            const productionPng = listPng(production);
+            const comparisonPng = listPng(comparison);
+            if (productionPng.length !== expectedTypes.size) {
+              throw new Error(`Expected exactly ${expectedTypes.size} ${family} PNGs; found ${productionPng.length}.`);
+            }
+            if (JSON.stringify(productionPng) !== JSON.stringify(comparisonPng)) {
+              throw new Error(`${family} repeated export changed output filenames.`);
+            }
+            const manifest = JSON.parse(fs.readFileSync(path.join(production, manifestName), 'utf8'));
+            if (manifest.family !== family || manifest.tiles?.length !== expectedTypes.size) {
+              throw new Error(`${family} manifest has unexpected family/count.`);
+            }
+            const actualTypes = new Set(manifest.tiles.map((tile) => tile.type));
+            if (actualTypes.size !== expectedTypes.size || [...expectedTypes].some((type) => !actualTypes.has(type))) {
+              throw new Error(`${family} manifest semantic set is incomplete.`);
+            }
+            for (const tile of manifest.tiles) {
+              const expectedName = `${family}_${tile.type}_256px.png`;
+              if (tile.filename !== expectedName || !productionPng.includes(expectedName)) {
+                throw new Error(`Unexpected ${family} filename for ${tile.type}.`);
+              }
+              const prod = fs.readFileSync(path.join(production, expectedName));
+              const repeat = fs.readFileSync(path.join(comparison, expectedName));
+              const decoded = decodeRgbaPng(prod);
+              if (decoded.width !== 256 || decoded.height !== 256 || decoded.rgba.length !== 256 * 256 * 4) {
+                throw new Error(`${expectedName} is not 256x256 RGBA.`);
+              }
+              const digest = sha256(prod);
+              if (digest !== tile.sha256 || digest !== sha256(repeat)) throw new Error(`${expectedName} is not deterministic.`);
+            }
           }
-          console.log('Verified canonical transparent source and exactly eight deterministic semantic road PNG exports.');
+
+          verifyFamily({
+            sourcePath: 'design/source/road/road_admin_generated_1024.png',
+            production: 'textures/tiles/road',
+            comparison: process.env.RUNNER_TEMP + '/road-export-check',
+            manifestName: 'road_tiles.manifest.json',
+            family: 'road',
+            expectedTypes: new Set(['straight_vertical','straight_horizontal','cross','turn_ne','turn_es','turn_sw','turn_wn','t_junction'])
+          });
+
+          verifyFamily({
+            sourcePath: 'design/source/main_road/main_road_canonical_1024.png',
+            production: 'textures/tiles/main_road',
+            comparison: process.env.RUNNER_TEMP + '/main-road-export-check',
+            manifestName: 'main_road_tiles.manifest.json',
+            family: 'main_road',
+            expectedTypes: new Set([
+              'main_straight_vertical_left','main_straight_vertical_right',
+              'main_straight_horizontal_top','main_straight_horizontal_bottom',
+              'main_turn_ne_inner','main_turn_ne_outer','main_turn_es_inner','main_turn_es_outer',
+              'main_turn_sw_inner','main_turn_sw_outer','main_turn_wn_inner','main_turn_wn_outer',
+              'main_transition_vertical','main_transition_horizontal','main_intersection_cross'
+            ])
+          });
+          console.log('Verified deterministic ordinary-road and main-road semantic exports.');
           NODE
 
       - name: Commit generated source and production road tiles
@@ -109,14 +142,15 @@ jobs:
           set -euo pipefail
           git add design/source/road/road_admin_generated_1024.png \
                   design/source/road/road_admin_generated_1024.cells.json \
-                  textures/tiles/road
+                  textures/tiles/road \
+                  textures/tiles/main_road
           if git diff --cached --quiet; then
-            echo 'Admin road source and production exports already match.'
+            echo 'Road and main-road production exports already match.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Materialize Admin semantic road tiles (#296)'
+          git commit -m 'Materialize semantic road tile exports (#339)'
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
