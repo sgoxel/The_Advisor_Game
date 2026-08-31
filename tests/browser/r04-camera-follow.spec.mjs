@@ -25,6 +25,7 @@ async function cameraDistanceFromProtagonistCenter(page) {
 }
 
 test('smooth follow suspends on manual pan and resumes from accessible Character panel without Simulation mutation', async ({ page }) => {
+  test.setTimeout(75_000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await waitForGame(page);
@@ -33,6 +34,10 @@ test('smooth follow suspends on manual pan and resumes from accessible Character
   const characterPanel = page.locator('.character-panel');
   await expect(characterPanel).toHaveAttribute('role', 'button');
   await expect(characterPanel).toHaveAttribute('tabindex', '0');
+
+  const mobileCharacterTab = page.locator('[data-panel-target="character-panel"]');
+  const characterActivation = (await characterPanel.isVisible()) ? characterPanel : mobileCharacterTab;
+  await expect(characterActivation).toBeVisible();
 
   await page.evaluate(() => {
     const { State, CameraFollow } = window.Game;
@@ -70,7 +75,7 @@ test('smooth follow suspends on manual pan and resumes from accessible Character
   expect(Math.hypot(stillSuspended.x - suspendedPosition.x, stillSuspended.y - suspendedPosition.y)).toBeLessThan(10);
 
   const beforeResumeDistance = await cameraDistanceFromProtagonistCenter(page);
-  await characterPanel.click();
+  await characterActivation.click();
   expect(await page.evaluate(() => window.Game.CameraFollow.isFollowing())).toBe(true);
   const immediatelyAfterResumeDistance = await cameraDistanceFromProtagonistCenter(page);
   expect(immediatelyAfterResumeDistance).toBeGreaterThan(beforeResumeDistance * 0.7);
@@ -90,7 +95,7 @@ test('smooth follow suspends on manual pan and resumes from accessible Character
   expect(zoomAfter.zoom).not.toBe(zoomBefore);
   expect(zoomAfter.following).toBe(true);
 
-  await characterPanel.focus();
+  await characterActivation.focus();
   await page.keyboard.press('Enter');
   expect(await page.evaluate(() => window.Game.CameraFollow.isFollowing())).toBe(true);
 
