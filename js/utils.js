@@ -94,6 +94,12 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
 }
 
+// #339 consumes the independently verified #337 classification and #338 semantic atlas only
+// for presentation. The renderer retries until both the classifier and ordinary road overlay
+// are ready, so these compatibility loads do not create a second topology authority.
+window.Game.Utils.loadScriptOnce("js/main_road_semantics.js", "r04MainRoadSemanticsModule");
+window.Game.Utils.loadScriptOnce("js/main_road_renderer.js", "r04MainRoadRendererModule");
+
 // R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 window.Game.Utils.loadScriptOnce("js/world_object_renderer.js", "r04WorldObjectRendererModule");
