@@ -20,6 +20,17 @@ async function waitForMinimap(page) {
   });
 }
 
+async function clickMinimapCenter(minimap) {
+  const box = await minimap.boundingBox();
+  expect(box).not.toBeNull();
+  await minimap.click({
+    position: {
+      x: box.width / 2,
+      y: box.height / 2
+    }
+  });
+}
+
 function collectRuntimeFailures(page) {
   const failures = [];
   page.on('pageerror', (error) => failures.push(`pageerror: ${error.message}`));
@@ -49,10 +60,8 @@ test('minimap navigation survives unavailable and late logger dependencies', asy
   expect(setup).toBe(true);
 
   const minimap = page.locator('#minimap');
-  const box = await minimap.boundingBox();
-  expect(box).not.toBeNull();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await page.waitForTimeout(100);
+  await clickMinimapCenter(minimap);
+  await page.waitForFunction(() => window.Game.__minimap330.getCentered() > 0);
 
   const unavailableResult = await page.evaluate(() => window.Game.__minimap330.getCentered());
   expect(unavailableResult).toBeGreaterThan(0);
@@ -67,8 +76,11 @@ test('minimap navigation survives unavailable and late logger dependencies', asy
   });
   expect(lateLogger).toBe(true);
 
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await page.waitForTimeout(100);
+  await clickMinimapCenter(minimap);
+  await page.waitForFunction(() => (
+    window.Game.__minimap330.getCentered() > 1 &&
+    window.Game.__minimap330.getLogCalls() > 0
+  ));
 
   const result = await page.evaluate(() => ({
     centered: window.Game.__minimap330.getCentered(),
