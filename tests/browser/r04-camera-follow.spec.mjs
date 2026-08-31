@@ -111,12 +111,19 @@ test('smooth follow suspends on manual pan and resumes from accessible Character
   const resumedDistance = await cameraDistanceFromProtagonistCenter(page);
   expect(resumedDistance).toBeLessThan(resumeProbe.afterDistance);
 
-  const zoomBefore = await page.evaluate(() => window.Game.State.camera.zoom);
+  const zoomBefore = await page.evaluate(() => ({
+    zoom: window.Game.State.camera.zoom,
+    minZoom: window.Game.State.camera.minZoom,
+    maxZoom: window.Game.State.camera.maxZoom
+  }));
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.wheel(0, -120);
+  const zoomWheelDelta = zoomBefore.zoom >= zoomBefore.maxZoom ? 120 : -120;
+  await page.mouse.wheel(0, zoomWheelDelta);
   await page.waitForTimeout(50);
   const zoomAfter = await page.evaluate(() => ({ zoom: window.Game.State.camera.zoom, following: window.Game.CameraFollow.isFollowing() }));
-  expect(zoomAfter.zoom).not.toBe(zoomBefore);
+  expect(zoomAfter.zoom).not.toBe(zoomBefore.zoom);
+  expect(zoomAfter.zoom).toBeGreaterThanOrEqual(zoomBefore.minZoom);
+  expect(zoomAfter.zoom).toBeLessThanOrEqual(zoomBefore.maxZoom);
   expect(zoomAfter.following).toBe(true);
 
   await characterActivation.focus();
