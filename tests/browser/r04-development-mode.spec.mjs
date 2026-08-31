@@ -38,7 +38,7 @@ test('Development Mode exposes bounded read-only Simulation and presentation dia
   expect(snapshot.simulation.world.rows).toBe(100);
   expect(snapshot.simulation.world.cols).toBe(100);
   expect(snapshot.presentation.camera.zoom).toBeGreaterThan(0);
-  expect(window.Number?.isFinite?.(snapshot.simulation.gameTime?.totalGameMinutes)).not.toBe(false);
+  expect(Number.isFinite(snapshot.simulation.gameTime?.totalGameMinutes)).toBe(true);
 
   const firstTimeText = await page.locator('#devGameTime').textContent();
   await page.waitForTimeout(650);
