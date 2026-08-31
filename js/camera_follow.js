@@ -226,6 +226,8 @@ window.Game = window.Game || {};
 
   document.addEventListener('click', (event) => {
     if (isCharacterActivationTarget(event.target)) {
+      const directPanelActivation = event.target instanceof Element && Boolean(event.target.closest('.character-panel'));
+      if (directPanelActivation) event.stopPropagation();
       resume();
       return;
     }
