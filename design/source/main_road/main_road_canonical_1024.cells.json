@@ -10,24 +10,103 @@
     "format": "RGBA"
   },
   "cells": [
-    {"row": 0, "col": 0, "type": "main_straight_vertical_left", "semanticId": "main_road_straight_vertical_left"},
-    {"row": 0, "col": 1, "type": "main_straight_vertical_right", "semanticId": "main_road_straight_vertical_right"},
-    {"row": 0, "col": 2, "type": "main_straight_horizontal_top", "semanticId": "main_road_straight_horizontal_top"},
-    {"row": 0, "col": 3, "type": "main_straight_horizontal_bottom", "semanticId": "main_road_straight_horizontal_bottom"},
-    {"row": 1, "col": 0, "type": "main_turn_ne_inner", "semanticId": "main_road_turn_ne_inner"},
-    {"row": 1, "col": 1, "type": "main_turn_ne_outer", "semanticId": "main_road_turn_ne_outer"},
-    {"row": 1, "col": 2, "type": "main_turn_es_inner", "semanticId": "main_road_turn_es_inner"},
-    {"row": 1, "col": 3, "type": "main_turn_es_outer", "semanticId": "main_road_turn_es_outer"},
-    {"row": 2, "col": 0, "type": "main_turn_sw_inner", "semanticId": "main_road_turn_sw_inner"},
-    {"row": 2, "col": 1, "type": "main_turn_sw_outer", "semanticId": "main_road_turn_sw_outer"},
-    {"row": 2, "col": 2, "type": "main_turn_wn_inner", "semanticId": "main_road_turn_wn_inner"},
-    {"row": 2, "col": 3, "type": "main_turn_wn_outer", "semanticId": "main_road_turn_wn_outer"},
-    {"row": 3, "col": 0, "type": "main_transition_vertical", "semanticId": "main_road_transition_vertical"},
-    {"row": 3, "col": 1, "type": "main_transition_horizontal", "semanticId": "main_road_transition_horizontal"},
-    {"row": 3, "col": 2, "type": "main_intersection_cross", "semanticId": "main_road_intersection_cross"}
+    {
+      "row": 0,
+      "col": 0,
+      "type": "main_straight_vertical_left",
+      "semanticId": "main_road_straight_vertical_left"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "main_straight_vertical_right",
+      "semanticId": "main_road_straight_vertical_right"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "main_straight_horizontal_top",
+      "semanticId": "main_road_straight_horizontal_top"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "main_straight_horizontal_bottom",
+      "semanticId": "main_road_straight_horizontal_bottom"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "main_turn_ne_inner",
+      "semanticId": "main_road_turn_ne_inner"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "main_turn_ne_outer",
+      "semanticId": "main_road_turn_ne_outer"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "main_turn_es_inner",
+      "semanticId": "main_road_turn_es_inner"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "main_turn_es_outer",
+      "semanticId": "main_road_turn_es_outer"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "main_turn_sw_inner",
+      "semanticId": "main_road_turn_sw_inner"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "main_turn_sw_outer",
+      "semanticId": "main_road_turn_sw_outer"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "main_turn_wn_inner",
+      "semanticId": "main_road_turn_wn_inner"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "main_turn_wn_outer",
+      "semanticId": "main_road_turn_wn_outer"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "type": "main_transition_vertical",
+      "semanticId": "main_road_transition_vertical"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "type": "main_transition_horizontal",
+      "semanticId": "main_road_transition_horizontal"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "type": "main_intersection_cross",
+      "semanticId": "main_road_intersection_cross"
+    }
   ],
   "unusedCells": [
-    {"row": 3, "col": 3, "reason": "transparent reserve"}
+    {
+      "row": 3,
+      "col": 3,
+      "reason": "transparent reserve"
+    }
   ],
   "pairingNotes": {
     "vertical": "left/right straight halves deliberately carry road surface to the shared cell seam so the two logical lanes read as one broad north-south road",
@@ -38,12 +117,33 @@
   },
   "readabilityEvidence": {
     "viewports": [
-      {"name": "desktop", "width": 1440, "height": 900},
-      {"name": "tablet", "width": 1024, "height": 768},
-      {"name": "phonePortrait", "width": 390, "height": 844},
-      {"name": "phoneLandscape", "width": 844, "height": 390}
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      {
+        "name": "tablet",
+        "width": 1024,
+        "height": 768
+      },
+      {
+        "name": "phonePortrait",
+        "width": 390,
+        "height": 844
+      },
+      {
+        "name": "phoneLandscape",
+        "width": 844,
+        "height": 390
+      }
     ],
-    "representativeCameraZooms": [1.0, 2.0, 2.6, 3.0],
+    "representativeCameraZooms": [
+      1.0,
+      2.0,
+      2.6,
+      3.0
+    ],
     "designAssessment": "The source remains a fixed 256px semantic cell family with high-contrast outer edge/core separation and no baked biome rectangle. Paired straight seams are core-to-core, the crossing reaches all four edges, and the broad road remains legible when runtime scales the semantic cells across representative desktop/tablet/phone viewports. Runtime projection and 2.6x-neighbor stability remain #339/#329 integration verification, not Designer authority."
   },
   "notes": "Original terrain-neutral main-road art for #338 T-REV resolution. Transparent RGBA background; 15 occupied cells and one fully transparent reserve cell. Presentation only; no topology/pathfinding authority."

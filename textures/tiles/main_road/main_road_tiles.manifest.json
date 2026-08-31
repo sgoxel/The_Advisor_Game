@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "family": "main_road",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "main_straight_vertical_left",
+      "filename": "main_road_main_straight_vertical_left_256px.png",
+      "sha256": "7cf4aa394b1232061885da8ee382c9c2a172cbb5544b6c49d3dfa8977e89b59a"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "main_straight_vertical_right",
+      "filename": "main_road_main_straight_vertical_right_256px.png",
+      "sha256": "3a2a0703d8a31274534f53017169a091af91850026e63631a757ada0973f98d5"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "main_straight_horizontal_top",
+      "filename": "main_road_main_straight_horizontal_top_256px.png",
+      "sha256": "295a959e6783c0c00480c3d6489e651f4f7418ec5ed254536d74ffc03b3aee89"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "main_straight_horizontal_bottom",
+      "filename": "main_road_main_straight_horizontal_bottom_256px.png",
+      "sha256": "68244791257bee076730ff91d21e7b79490bbb0990f5bdd4cac3c06cb352f2d7"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "main_turn_ne_inner",
+      "filename": "main_road_main_turn_ne_inner_256px.png",
+      "sha256": "f1452ea2a8c1c1ac4b3b656aa18306f0603a07b5d811b9964ed3ee701d1ff2d5"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "main_turn_ne_outer",
+      "filename": "main_road_main_turn_ne_outer_256px.png",
+      "sha256": "d1d6f3aa85bde0702c9ecbaa37727e73646aa95af0086d008e8af93276ebc1b5"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "main_turn_es_inner",
+      "filename": "main_road_main_turn_es_inner_256px.png",
+      "sha256": "8c6c7811226571624074716e07994bda14e76e01aff554a2eebf2d31ca2628b1"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "main_turn_es_outer",
+      "filename": "main_road_main_turn_es_outer_256px.png",
+      "sha256": "e24ac8e7f72b143d9dccbca265315176ab8402d9759a742c92292163635c3775"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "main_turn_sw_inner",
+      "filename": "main_road_main_turn_sw_inner_256px.png",
+      "sha256": "c27271138aebd2674ce2b369c054ead76c000e232ff13e5d1eacc89fa7c5bbbc"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "main_turn_sw_outer",
+      "filename": "main_road_main_turn_sw_outer_256px.png",
+      "sha256": "81b818172769bb3921908df1e09dd1039ba08a0d1befc72444de76715703db34"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "main_turn_wn_inner",
+      "filename": "main_road_main_turn_wn_inner_256px.png",
+      "sha256": "c05fb478e6a1b9427fb66c1e7fddd8181a5b7fd987a04ad1a41378f41c599842"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "main_turn_wn_outer",
+      "filename": "main_road_main_turn_wn_outer_256px.png",
+      "sha256": "d6c23f471b0c9a27539ecda74975d57d5e58685ecfd6971cb7303917e7297737"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "type": "main_transition_vertical",
+      "filename": "main_road_main_transition_vertical_256px.png",
+      "sha256": "3e2ec7e23d864e0a7b861f2093ad4793fbe3e2482fcde4be387940f0f26d2b2c"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "type": "main_transition_horizontal",
+      "filename": "main_road_main_transition_horizontal_256px.png",
+      "sha256": "6ca7c4956a851ad2be0ed3269de2cac878f3034821d03517fe1ab7e292bb9a52"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "type": "main_intersection_cross",
+      "filename": "main_road_main_intersection_cross_256px.png",
+      "sha256": "fc3d6bf22221a009e721d0fda10fe92b57ec6988436f7258067f60cd739b073f"
+    }
+  ]
+}
