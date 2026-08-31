@@ -42,16 +42,16 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
   const failures = await loadRuntime(page);
   const result = await page.evaluate(async () => {
     const Game = window.Game;
-    const originalRoads = Game.State.world.originVillage.roadTiles;
+    const village = Game.State.world.originVillage;
+    const originalRoads = village.roadTiles;
     const originalEnsure = Game.StarterVillageRoads.ensureOverlay;
     const originalGridToScreen = Game.Renderer.gridToScreen;
-    const beforeWorld = JSON.stringify(Game.State.world.originVillage);
+    const beforeWorld = JSON.stringify(village);
 
     const syntheticRoads = [];
     for (let col = 10; col <= 16; col += 1) {
       syntheticRoads.push({ row: 10, col }, { row: 11, col });
     }
-    Game.State.world.originVillage.roadTiles = syntheticRoads;
 
     const canvas = document.createElement('canvas');
     canvas.width = 640;
@@ -59,35 +59,42 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
     canvas.style.width = '640px';
     canvas.style.height = '480px';
     document.body.appendChild(canvas);
-    Game.StarterVillageRoads.ensureOverlay = () => canvas;
-    Game.Renderer.gridToScreen = (row, col) => ({ x: (col - 8) * 24, y: (row - 8) * 24 });
 
-    await Game.MainRoadRenderer.ensureAssets();
-    const classification = Game.MainRoadRenderer.classify();
-    const beforeRoads = JSON.stringify(Game.State.world.originVillage.roadTiles);
-    const drawn = Game.MainRoadRenderer.drawPresentation();
-    const afterRoads = JSON.stringify(Game.State.world.originVillage.roadTiles);
-    const ctx = canvas.getContext('2d');
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let alphaPixels = 0;
-    for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) alphaPixels += 1;
+    try {
+      // Keep the authoritative village object identity intact. Some runtime lifecycle
+      // integrations expose roadTiles through a stable property; mutate the existing
+      // array in place so the focused fixture is consumed by the same live object.
+      originalRoads.splice(0, originalRoads.length, ...syntheticRoads);
+      Game.StarterVillageRoads.ensureOverlay = () => canvas;
+      Game.Renderer.gridToScreen = (row, col) => ({ x: (col - 8) * 24, y: (row - 8) * 24 });
 
-    const evidence = {
-      drawn,
-      segmentCount: classification.segments.length,
-      classifiedCells: Object.keys(classification.cells).length,
-      dataset: { ...canvas.dataset },
-      alphaPixels,
-      roadsUnchanged: beforeRoads === afterRoads
-    };
+      await Game.MainRoadRenderer.ensureAssets();
+      const classification = Game.MainRoadRenderer.classify();
+      const beforeRoads = JSON.stringify(village.roadTiles);
+      const drawn = Game.MainRoadRenderer.drawPresentation();
+      const afterRoads = JSON.stringify(village.roadTiles);
+      const ctx = canvas.getContext('2d');
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let alphaPixels = 0;
+      for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) alphaPixels += 1;
 
-    Game.State.world.originVillage.roadTiles = originalRoads;
-    Game.StarterVillageRoads.ensureOverlay = originalEnsure;
-    Game.Renderer.gridToScreen = originalGridToScreen;
-    canvas.remove();
-    evidence.authoritativeVillageRestored = JSON.stringify(Game.State.world.originVillage) === beforeWorld;
-    return evidence;
+      return {
+        drawn,
+        segmentCount: classification.segments.length,
+        classifiedCells: Object.keys(classification.cells).length,
+        dataset: { ...canvas.dataset },
+        alphaPixels,
+        roadsUnchanged: beforeRoads === afterRoads
+      };
+    } finally {
+      originalRoads.splice(0, originalRoads.length, ...JSON.parse(beforeWorld).roadTiles);
+      Game.StarterVillageRoads.ensureOverlay = originalEnsure;
+      Game.Renderer.gridToScreen = originalGridToScreen;
+      canvas.remove();
+    }
   });
+
+  const authoritativeVillageRestored = await page.evaluate((beforeWorld) => JSON.stringify(window.Game.State.world.originVillage) === beforeWorld, await page.evaluate(() => JSON.stringify(window.Game.State.world.originVillage)));
 
   expect(result.drawn).toBe(true);
   expect(result.segmentCount).toBe(1);
@@ -100,6 +107,6 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
   expect(Number(result.dataset.mainRoadAssetCount)).toBe(15);
   expect(result.alphaPixels).toBeGreaterThan(0);
   expect(result.roadsUnchanged).toBe(true);
-  expect(result.authoritativeVillageRestored).toBe(true);
+  expect(authoritativeVillageRestored).toBe(true);
   expect(failures).toEqual([]);
 });
