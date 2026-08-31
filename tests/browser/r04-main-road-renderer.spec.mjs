@@ -42,17 +42,22 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
   const failures = await loadRuntime(page);
   const result = await page.evaluate(async () => {
     const Game = window.Game;
-    const village = Game.State.world.originVillage;
-    const originalRoads = village.roadTiles;
-    const originalRoadSnapshot = originalRoads.map((point) => ({ ...point }));
+    const authoritativeVillage = Game.State.world.originVillage;
+    const authoritativeRoads = authoritativeVillage.roadTiles;
+    const beforeWorld = JSON.stringify(authoritativeVillage);
+    const originalWorld = Game.State.world;
     const originalEnsure = Game.StarterVillageRoads.ensureOverlay;
     const originalGridToScreen = Game.Renderer.gridToScreen;
-    const beforeWorld = JSON.stringify(village);
 
     const syntheticRoads = [];
     for (let col = 10; col <= 16; col += 1) {
       syntheticRoads.push({ row: 10, col }, { row: 11, col });
     }
+
+    // Production state is intentionally immutable. Exercise the renderer against an
+    // isolated fixture world rather than mutating the frozen authoritative road array.
+    const fixtureVillage = { ...authoritativeVillage, roadTiles: syntheticRoads };
+    const fixtureWorld = { ...originalWorld, originVillage: fixtureVillage };
 
     const canvas = document.createElement('canvas');
     canvas.width = 640;
@@ -63,17 +68,15 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
     let evidence = null;
 
     try {
-      // Preserve the live village/road-array identity so lifecycle integrations and
-      // the renderer observe the same authoritative object while the fixture is active.
-      originalRoads.splice(0, originalRoads.length, ...syntheticRoads);
+      Game.State.world = fixtureWorld;
       Game.StarterVillageRoads.ensureOverlay = () => canvas;
       Game.Renderer.gridToScreen = (row, col) => ({ x: (col - 8) * 24, y: (row - 8) * 24 });
 
       await Game.MainRoadRenderer.ensureAssets();
       const classification = Game.MainRoadRenderer.classify();
-      const beforeRoads = JSON.stringify(village.roadTiles);
+      const beforeRoads = JSON.stringify(fixtureVillage.roadTiles);
       const drawn = Game.MainRoadRenderer.drawPresentation();
-      const afterRoads = JSON.stringify(village.roadTiles);
+      const afterRoads = JSON.stringify(fixtureVillage.roadTiles);
       const ctx = canvas.getContext('2d');
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let alphaPixels = 0;
@@ -85,17 +88,18 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
         classifiedCells: Object.keys(classification.cells).length,
         dataset: { ...canvas.dataset },
         alphaPixels,
-        roadsUnchanged: beforeRoads === afterRoads
+        fixtureRoadsUnchanged: beforeRoads === afterRoads
       };
     } finally {
-      originalRoads.splice(0, originalRoads.length, ...originalRoadSnapshot);
+      Game.State.world = originalWorld;
       Game.StarterVillageRoads.ensureOverlay = originalEnsure;
       Game.Renderer.gridToScreen = originalGridToScreen;
       canvas.remove();
     }
 
-    evidence.authoritativeVillageRestored = JSON.stringify(village) === beforeWorld;
-    evidence.roadArrayIdentityRestored = village.roadTiles === originalRoads;
+    evidence.authoritativeVillageRestored = Game.State.world.originVillage === authoritativeVillage
+      && JSON.stringify(authoritativeVillage) === beforeWorld;
+    evidence.authoritativeRoadArrayIdentityRestored = Game.State.world.originVillage.roadTiles === authoritativeRoads;
     return evidence;
   });
 
@@ -109,8 +113,8 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
   expect(result.dataset.mainRoadRegistry).toBe('canonical-main-road-registry');
   expect(Number(result.dataset.mainRoadAssetCount)).toBe(15);
   expect(result.alphaPixels).toBeGreaterThan(0);
-  expect(result.roadsUnchanged).toBe(true);
+  expect(result.fixtureRoadsUnchanged).toBe(true);
   expect(result.authoritativeVillageRestored).toBe(true);
-  expect(result.roadArrayIdentityRestored).toBe(true);
+  expect(result.authoritativeRoadArrayIdentityRestored).toBe(true);
   expect(failures).toEqual([]);
 });
