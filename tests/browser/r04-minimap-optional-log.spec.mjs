@@ -2,12 +2,22 @@ import { test, expect } from '@playwright/test';
 
 async function waitForMinimap(page) {
   await page.goto('./');
+  await page.waitForFunction(() => Boolean(
+    window.Game?.State?.world?.terrain?.length &&
+    window.Game?.State?.dom?.minimap?.isConnected
+  ));
+
+  const minimap = page.locator('#minimap');
+  if (!(await minimap.isVisible())) {
+    const mobileMinimapTab = page.locator('[data-panel-target="minimap-panel"]');
+    if (await mobileMinimapTab.isVisible()) await mobileMinimapTab.click();
+  }
+
+  await expect(minimap).toBeVisible();
   await page.waitForFunction(() => {
-    const game = window.Game;
-    const minimap = game?.State?.dom?.minimap;
-    return Boolean(game?.State?.world?.terrain?.length && minimap?.isConnected && minimap.clientWidth > 0 && minimap.clientHeight > 0);
+    const minimap = window.Game?.State?.dom?.minimap;
+    return Boolean(minimap && minimap.clientWidth > 0 && minimap.clientHeight > 0);
   });
-  await expect(page.locator('#minimap')).toBeVisible();
 }
 
 function collectRuntimeFailures(page) {
