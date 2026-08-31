@@ -44,6 +44,7 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
     const Game = window.Game;
     const village = Game.State.world.originVillage;
     const originalRoads = village.roadTiles;
+    const originalRoadSnapshot = originalRoads.map((point) => ({ ...point }));
     const originalEnsure = Game.StarterVillageRoads.ensureOverlay;
     const originalGridToScreen = Game.Renderer.gridToScreen;
     const beforeWorld = JSON.stringify(village);
@@ -59,11 +60,11 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
     canvas.style.width = '640px';
     canvas.style.height = '480px';
     document.body.appendChild(canvas);
+    let evidence = null;
 
     try {
-      // Keep the authoritative village object identity intact. Some runtime lifecycle
-      // integrations expose roadTiles through a stable property; mutate the existing
-      // array in place so the focused fixture is consumed by the same live object.
+      // Preserve the live village/road-array identity so lifecycle integrations and
+      // the renderer observe the same authoritative object while the fixture is active.
       originalRoads.splice(0, originalRoads.length, ...syntheticRoads);
       Game.StarterVillageRoads.ensureOverlay = () => canvas;
       Game.Renderer.gridToScreen = (row, col) => ({ x: (col - 8) * 24, y: (row - 8) * 24 });
@@ -78,7 +79,7 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
       let alphaPixels = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) alphaPixels += 1;
 
-      return {
+      evidence = {
         drawn,
         segmentCount: classification.segments.length,
         classifiedCells: Object.keys(classification.cells).length,
@@ -87,14 +88,16 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
         roadsUnchanged: beforeRoads === afterRoads
       };
     } finally {
-      originalRoads.splice(0, originalRoads.length, ...JSON.parse(beforeWorld).roadTiles);
+      originalRoads.splice(0, originalRoads.length, ...originalRoadSnapshot);
       Game.StarterVillageRoads.ensureOverlay = originalEnsure;
       Game.Renderer.gridToScreen = originalGridToScreen;
       canvas.remove();
     }
-  });
 
-  const authoritativeVillageRestored = await page.evaluate((beforeWorld) => JSON.stringify(window.Game.State.world.originVillage) === beforeWorld, await page.evaluate(() => JSON.stringify(window.Game.State.world.originVillage)));
+    evidence.authoritativeVillageRestored = JSON.stringify(village) === beforeWorld;
+    evidence.roadArrayIdentityRestored = village.roadTiles === originalRoads;
+    return evidence;
+  });
 
   expect(result.drawn).toBe(true);
   expect(result.segmentCount).toBe(1);
@@ -107,6 +110,7 @@ test('draws a two-tile-wide classified road without mutating authoritative road 
   expect(Number(result.dataset.mainRoadAssetCount)).toBe(15);
   expect(result.alphaPixels).toBeGreaterThan(0);
   expect(result.roadsUnchanged).toBe(true);
-  expect(authoritativeVillageRestored).toBe(true);
+  expect(result.authoritativeVillageRestored).toBe(true);
+  expect(result.roadArrayIdentityRestored).toBe(true);
   expect(failures).toEqual([]);
 });
