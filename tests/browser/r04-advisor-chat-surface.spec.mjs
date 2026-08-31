@@ -120,7 +120,8 @@ test('rejected advice is not queued and delayed advice waits for later campaign 
   await page.evaluate(() => { window.Game.State.world.protagonist.adviceDispositionBias = 'neutral'; });
   await send(page, 'Perhaps consider the market later.');
   const delayed = await page.evaluate((ops) => {
-    const base = window.Game.AdvisorChatUI.authoritativeContext();
+    const base = window.Game.State.advisor?.submissionContext;
+    if (!base) throw new Error('Advisor submission context is required for delayed influence verification.');
     const localized = ops.map((item) => ({ ...item, locationRef: base.locationRef }));
     const now = window.Game.LocalBotDriver.select(base, localized);
     const stillPending = window.Game.State.advisor?.pending;
@@ -142,6 +143,9 @@ test('rejected advice is not queued and delayed advice waits for later campaign 
 });
 
 test('empty input, Enter send, Shift+Enter newline and unavailable contract fail safely', async ({ page }) => {
+  // This scenario intentionally exercises several real keyboard/UI interactions plus state restoration.
+  // Exact CI trace evidence showed the 45 s budget expiring only during final restoration, after assertions.
+  test.setTimeout(75_000);
   await ready(page);
   const before = await snapshot(page);
   const input = page.locator('#advisorMessageInput');
