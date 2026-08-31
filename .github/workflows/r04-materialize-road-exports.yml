@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/r04-materialize-road-exports.yml'
       - 'design/source/road/generate_admin_road_atlas.mjs'
+      - 'design/source/main_road/generate_main_road_atlas.py'
       - 'design/source/main_road/main_road_canonical_1024.png'
       - 'design/source/main_road/main_road_canonical_1024.cells.json'
       - 'tools/split_tile_atlas.mjs'
@@ -34,8 +35,20 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install canonical atlas generator dependency
+        run: python -m pip install 'Pillow==11.3.0'
+
       - name: Generate Admin-priority canonical road atlas
         run: node design/source/road/generate_admin_road_atlas.mjs
+
+      - name: Regenerate verified canonical main-road atlas
+        run: python design/source/main_road/generate_main_road_atlas.py
 
       - name: Materialize semantic road exports
         run: >-
@@ -143,6 +156,8 @@ jobs:
           set -euo pipefail
           git add design/source/road/road_admin_generated_1024.png \
                   design/source/road/road_admin_generated_1024.cells.json \
+                  design/source/main_road/main_road_canonical_1024.png \
+                  design/source/main_road/main_road_canonical_1024.cells.json \
                   textures/tiles/road \
                   textures/tiles/main_road
           if git diff --cached --quiet; then
