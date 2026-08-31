@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: r04-materialize-road-exports
@@ -161,11 +162,21 @@ jobs:
                   textures/tiles/main_road
           if git diff --cached --quiet; then
             echo 'Road and main-road production exports already match.'
-            exit 0
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Materialize semantic road tile exports (#339)'
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
           fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Materialize semantic road tile exports (#339)'
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+
+      - name: Dispatch preservation verification on current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run r01-browser-verification.yml --ref main
+          gh workflow run r01-cumulative-regression.yml --ref main
