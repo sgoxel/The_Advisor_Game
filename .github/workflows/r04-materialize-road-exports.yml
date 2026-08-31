@@ -1,5 +1,6 @@
 name: R04 Materialize Road Tile Exports
 
+# #339: this workflow is the canonical materialization path for committed semantic road assets.
 on:
   push:
     branches: [main]
