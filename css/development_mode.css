@@ -1,40 +1,28 @@
 .development-mode-toggle[aria-pressed="true"] { font-weight: 700; }
-
-.development-mode-panel {
-  position: fixed;
-  z-index: 75;
-  top: 4.25rem;
-  right: 0.75rem;
-  width: min(28rem, calc(100vw - 1.5rem));
-  max-height: calc(100vh - 9rem);
-  overflow: auto;
-  border: 1px solid rgba(255,255,255,0.24);
-  border-radius: 0.5rem;
-  background: rgba(15, 20, 27, 0.96);
-  color: #f4f0e5;
-  box-shadow: 0 0.75rem 2rem rgba(0,0,0,0.38);
-  padding: 0.75rem;
-  font-size: 0.82rem;
-  line-height: 1.35;
-}
-
+.development-mode-panel { position: fixed; z-index: 75; top: 4.25rem; right: 0.75rem; width: min(28rem, calc(100vw - 1.5rem)); max-height: calc(100vh - 9rem); overflow: auto; border: 1px solid rgba(255,255,255,0.24); border-radius: 0.5rem; background: rgba(15, 20, 27, 0.96); color: #f4f0e5; box-shadow: 0 0.75rem 2rem rgba(0,0,0,0.38); padding: 0.75rem; font-size: 0.82rem; line-height: 1.35; }
 .development-mode-panel.hidden { display: none; }
 .development-mode-header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.65rem; }
-.development-mode-header strong { font-size: 1rem; }
-.development-mode-header span { opacity: 0.78; font-size: 0.75rem; }
+.development-mode-header strong { font-size: 1rem; } .development-mode-header span { opacity: 0.78; font-size: 0.75rem; }
 .development-mode-panel section + section { margin-top: 0.8rem; padding-top: 0.7rem; border-top: 1px solid rgba(255,255,255,0.14); }
 .development-mode-panel h3 { margin: 0 0 0.45rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.development-mode-panel dl { display: grid; gap: 0.38rem; margin: 0; }
-.development-mode-panel dl > div { display: grid; grid-template-columns: minmax(6.5rem, 0.7fr) minmax(0, 1.6fr); gap: 0.55rem; align-items: start; }
-.development-mode-panel dt { font-weight: 700; }
-.development-mode-panel dd { margin: 0; overflow-wrap: anywhere; }
-
-@media (max-width: 720px) {
-  .development-mode-panel {
-    top: 3.75rem;
-    right: 0.5rem;
-    width: calc(100vw - 1rem);
-    max-height: calc(100vh - 7.5rem);
-  }
-  .development-mode-panel dl > div { grid-template-columns: 1fr; gap: 0.1rem; }
-}
+.development-mode-panel dl { display: grid; gap: 0.38rem; margin: 0; } .development-mode-panel dl > div { display: grid; grid-template-columns: minmax(6.5rem, 0.7fr) minmax(0, 1.6fr); gap: 0.55rem; align-items: start; }
+.development-mode-panel dt { font-weight: 700; } .development-mode-panel dd { margin: 0; overflow-wrap: anywhere; }
+.development-inspect-button { min-height: 44px; width: 100%; margin-bottom: 0.7rem; }
+.development-dialog { width: min(44rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; border: 1px solid rgba(255,255,255,0.25); border-radius: 0.65rem; background: #151b23; color: #f4f0e5; padding: 1rem; }
+.development-dialog::backdrop { background: rgba(0,0,0,0.62); }
+.development-dialog header { display: flex; align-items: center; gap: 0.75rem; justify-content: space-between; }
+.development-dialog h2 { margin: 0; font-size: 1.1rem; } .development-dialog h3 { font-size: 0.9rem; }
+.development-dialog button { min-height: 44px; }
+#devNpcList { display: grid; gap: 0.4rem; }
+.development-npc-row { display: grid; text-align: left; gap: 0.15rem; padding: 0.55rem 0.7rem; }
+.development-npc-row[aria-selected="true"]::before { content: 'SELECTED'; font-size: 0.68rem; font-weight: 700; }
+.development-npc-row span { opacity: 0.8; }
+.development-readonly-status { font-weight: 700; }
+.development-routine-flow { display: grid; gap: 0.35rem; max-height: min(56vh, 34rem); overflow: auto; padding: 0.35rem; }
+.development-routine-node { border: 1px solid rgba(255,255,255,0.3); border-radius: 0.55rem; padding: 0.65rem; min-width: 0; }
+.development-routine-node.current { border-width: 3px; }
+.development-routine-node > div { display: flex; justify-content: space-between; gap: 0.6rem; align-items: center; }
+.development-current-badge { border: 1px solid currentColor; border-radius: 0.3rem; padding: 0.1rem 0.3rem; font-size: 0.68rem; font-weight: 800; }
+.development-routine-edge { text-align: center; font-size: 0.75rem; opacity: 0.82; }
+@media (max-width: 720px) { .development-mode-panel { top: 3.75rem; right: 0.5rem; width: calc(100vw - 1rem); max-height: calc(100vh - 7.5rem); } .development-mode-panel dl > div { grid-template-columns: 1fr; gap: 0.1rem; } .development-dialog { width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); padding: 0.7rem; } .development-dialog header { flex-wrap: wrap; } }
+@media (prefers-reduced-motion: reduce) { .development-dialog *, .development-mode-panel * { scroll-behavior: auto !important; transition: none !important; } }
