@@ -7,6 +7,7 @@
   const MAX_PREFETCH_CACHE = 24;
   const prefetchCache = new Map();
   const pendingKeys = new Set();
+  const pendingMeta = new Map();
   const sliceSamples = [];
   let queuedJobs = 0;
   let completedJobs = 0;
@@ -141,12 +142,21 @@
     for (const key of [...pendingKeys]) {
       scheduler?.cancel?.(key);
       pendingKeys.delete(key);
+      pendingMeta.delete(key);
       discardedJobs += 1;
     }
   }
 
   function scheduleNeighborPrefetch(seed, centerX, centerY, requestGeneration) {
     const scheduler = Game.FrameBudgetScheduler;
+    if (!scheduler?.enqueue) {
+      Game.Utils?.loadScriptOnce?.('js/frame_budget_scheduler.js', 'r04FrameBudgetSchedulerModule');
+      window.requestAnimationFrame?.(() => {
+        if (requestGeneration === generation) scheduleNeighborPrefetch(seed, centerX, centerY, requestGeneration);
+      });
+      return;
+    }
+
     const jobs = [];
     for (let dy = -RADIUS; dy <= RADIUS; dy += 1) {
       for (let dx = -RADIUS; dx <= RADIUS; dx += 1) {
@@ -156,6 +166,7 @@
         const resultKey = cacheKey(seed, x, y);
         if (prefetchCache.has(resultKey)) continue;
         const jobKey = `environment-prefetch:${resultKey}`;
+        if (pendingKeys.has(jobKey)) continue;
         jobs.push({ x, y, resultKey, jobKey });
       }
     }
@@ -166,6 +177,7 @@
         const started = nowMs();
         if (requestGeneration !== generation) {
           pendingKeys.delete(job.jobKey);
+          pendingMeta.delete(job.jobKey);
           discardedJobs += 1;
           return true;
         }
@@ -177,23 +189,20 @@
         }));
         completedJobs += 1;
         pendingKeys.delete(job.jobKey);
+        pendingMeta.delete(job.jobKey);
         sliceSamples.push(Math.max(0, nowMs() - started));
         if (sliceSamples.length > 120) sliceSamples.shift();
         return true;
       };
 
       pendingKeys.add(job.jobKey);
+      pendingMeta.set(job.jobKey, Object.freeze({ enqueuedAt, requestGeneration }));
       queuedJobs += 1;
-      if (scheduler?.enqueue) {
-        scheduler.enqueue(job.jobKey, step, {
-          priority: -10,
-          version: String(requestGeneration),
-          label: `environment neighbor ${job.x},${job.y}`
-        });
-      } else {
-        window.setTimeout(step, 0);
-      }
-      putPrefetch(`${job.resultKey}|pending`, Object.freeze({ enqueuedAt, requestGeneration, pending: true }));
+      scheduler.enqueue(job.jobKey, step, {
+        priority: -10,
+        version: String(requestGeneration),
+        label: `environment neighbor ${job.x},${job.y}`
+      });
     }
   }
 
@@ -271,12 +280,8 @@
 
   function lazyMetrics() {
     const schedulerMetrics = Game.FrameBudgetScheduler?.metrics?.() || {};
-    const pendingAges = [];
     const time = nowMs();
-    for (const [key, entry] of prefetchCache.entries()) {
-      if (!key.endsWith('|pending') || !entry?.pending) continue;
-      pendingAges.push(Math.max(0, time - Number(entry.enqueuedAt || time)));
-    }
+    const pendingAges = [...pendingMeta.values()].map((entry) => Math.max(0, time - Number(entry.enqueuedAt || time)));
     return Object.freeze({
       authority: 'scheduling-only',
       generation,
@@ -284,7 +289,7 @@
       completedJobs,
       discardedJobs,
       pendingJobs: pendingKeys.size,
-      cacheEntries: [...prefetchCache.keys()].filter((key) => !key.endsWith('|pending')).length,
+      cacheEntries: prefetchCache.size,
       maxCacheEntries: MAX_PREFETCH_CACHE,
       oldestQueueAgeMs: pendingAges.length ? Math.max(...pendingAges) : 0,
       jobP95Ms: percentile(sliceSamples, 0.95),
