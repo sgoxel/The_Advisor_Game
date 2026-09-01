@@ -6,11 +6,25 @@ async function ready(page) {
     window.Game?.NPCWorld?.drawPresentation &&
     window.Game?.WorldSpaceCharacterContinuity?.installed &&
     window.Game?.StarterVillageInteriors?.snapshot &&
-    window.Game?.State?.world?.buildingInteriors?.interiors?.length &&
+    window.Game?.StarterVillageInteriors?.materialize &&
+    Array.isArray(window.Game?.State?.world?.originVillage?.buildings) &&
     Array.isArray(window.Game?.State?.world?.npcs) &&
     document.getElementById('npcWorldOverlay') &&
     document.getElementById('starterVillageInteriorOverlay')
   ), null, { timeout: 20_000 });
+
+  // #254 verifies composition with the already-authoritative #253 interior model. The
+  // interior cache is lazily materialized, so make the representative state explicit
+  // instead of treating cache timing as a product requirement.
+  await page.evaluate(() => {
+    const G = window.Game;
+    if (!G.State.world.buildingInteriors?.interiors?.length) {
+      G.StarterVillageInteriors.materialize(G.State.world);
+    }
+    G.NPCWorld.drawPresentation();
+    G.WorldSpaceCharacterContinuity.synchronize();
+  });
+  await page.waitForFunction(() => Boolean(window.Game?.State?.world?.buildingInteriors?.interiors?.length));
 }
 
 function locationState(character) {
@@ -30,9 +44,10 @@ test('same authoritative protagonist and NPC sprite identity follows exterior ->
     const G = window.Game;
     const world = G.State.world;
     const interior = G.StarterVillageInteriors.snapshot().interiors.find((entry) => entry.floors.length >= 3);
+    if (!interior) throw new Error('Representative interior evidence unavailable');
     const floors = interior.floors.filter((point) => point.row !== interior.door.row || point.col !== interior.door.col);
     const npc = world.npcs.find((entry) => Boolean(G.NPCWorld.worldSpaceAssetFor(entry)));
-    if (!interior || floors.length < 2 || !npc) throw new Error('Representative interior/NPC evidence unavailable');
+    if (floors.length < 2 || !npc) throw new Error('Representative interior/NPC evidence unavailable');
 
     const player = world.player;
     const playerBefore = locationState(player);
