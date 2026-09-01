@@ -27,16 +27,6 @@ async function ready(page) {
   await page.waitForFunction(() => Boolean(window.Game?.State?.world?.buildingInteriors?.interiors?.length));
 }
 
-function locationState(character) {
-  return {
-    row: character.row,
-    col: character.col,
-    targetRow: character.targetRow,
-    targetCol: character.targetCol,
-    moving: character.moving
-  };
-}
-
 test('same authoritative protagonist and NPC sprite identity follows exterior -> interior -> exit', async ({ page }) => {
   await ready(page);
 
@@ -49,6 +39,13 @@ test('same authoritative protagonist and NPC sprite identity follows exterior ->
     const npc = world.npcs.find((entry) => Boolean(G.NPCWorld.worldSpaceAssetFor(entry)));
     if (floors.length < 2 || !npc) throw new Error('Representative interior/NPC evidence unavailable');
 
+    const locationState = (character) => ({
+      row: character.row,
+      col: character.col,
+      targetRow: character.targetRow,
+      targetCol: character.targetCol,
+      moving: character.moving
+    });
     const player = world.player;
     const playerBefore = locationState(player);
     const npcBefore = { ...locationState(npc), id: npc.id, authority: npc.authority, occupation: npc.occupation };
