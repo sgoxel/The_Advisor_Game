@@ -34,8 +34,9 @@ test('region activation keeps center synchronous while neighbor prefetch yields 
     const scheduler = window.Game.FrameBudgetScheduler;
     const world = window.Game.State.world;
     const start = world.currentRegion || { x: 0, y: 0 };
+    const interactionHoldMs = 5_000;
 
-    scheduler.noteInteraction('environment-prefetch-test', 300);
+    scheduler.noteInteraction('environment-prefetch-test', interactionHoldMs);
     const beforeCompleted = nav.lazyMetrics().completedJobs;
     nav.activate(Number(start.x || 0) + 1, Number(start.y || 0));
     window.Game.Renderer?.renderWorld?.(true);
@@ -45,7 +46,7 @@ test('region activation keeps center synchronous while neighbor prefetch yields 
       scheduler: scheduler.metrics()
     };
 
-    await new Promise((resolve) => setTimeout(resolve, 340));
+    await new Promise((resolve) => setTimeout(resolve, interactionHoldMs + 40));
     for (let attempt = 0; attempt < 20 && nav.lazyMetrics().pendingJobs > 0; attempt += 1) {
       scheduler.runBackgroundSlice(performance.now());
       await new Promise((resolve) => setTimeout(resolve, 8));
@@ -87,14 +88,15 @@ test('superseded region requests cancel stale prefetch and deterministic fingerp
     const world = window.Game.State.world;
     const seed = world.seed;
     const start = world.currentRegion || { x: 0, y: 0 };
+    const interactionHoldMs = 5_000;
 
-    scheduler.noteInteraction('hold-first-generation', 320);
+    scheduler.noteInteraction('hold-first-generation', interactionHoldMs);
     nav.activate(Number(start.x || 0) + 1, Number(start.y || 0));
     const firstPending = nav.lazyMetrics().pendingJobs;
     nav.activate(Number(start.x || 0) + 2, Number(start.y || 0));
     const afterSupersede = nav.lazyMetrics();
 
-    await new Promise((resolve) => setTimeout(resolve, 360));
+    await new Promise((resolve) => setTimeout(resolve, interactionHoldMs + 40));
     for (let attempt = 0; attempt < 20 && nav.lazyMetrics().pendingJobs > 0; attempt += 1) {
       scheduler.runBackgroundSlice(performance.now());
       await new Promise((resolve) => setTimeout(resolve, 8));
