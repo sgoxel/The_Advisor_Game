@@ -57,10 +57,12 @@ test('Vector Layer Debug enumerates the world contributor registry and toggles e
   for (const layer of initial) {
     const button = section.locator(`[data-vector-layer-id="${layer.id}"]`);
     await expect(button).toHaveAttribute('aria-pressed', 'true');
-    await button.click();
+    await button.focus();
+    await page.keyboard.press('Enter');
     await expect(button).toHaveAttribute('aria-pressed', 'false');
     await page.evaluate(() => window.Game.Renderer?.renderWorld?.(true));
-    await button.click();
+    await button.focus();
+    await page.keyboard.press('Enter');
     await expect(button).toHaveAttribute('aria-pressed', 'true');
   }
 
