@@ -2,7 +2,7 @@
 (function installNpcTerrainRoutingBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-terrain-routing-bridge-v3';
+  const VERSION = 'r04-npc-terrain-routing-bridge-v4';
   let renderHookInstalled = false;
 
   function key(point) { return `${point.row},${point.col}`; }
@@ -87,7 +87,7 @@
     return true;
   }
 
-  function repairGoalTransitionFromExisting(existing, goalTransition, terrain, occupied) {
+  function repairGoalTransitionFromExisting(existing, goalTransition, terrain) {
     if (!Array.isArray(existing) || !existing.length || !Array.isArray(goalTransition) || goalTransition.length < 2) return [];
     const entrance = goalTransition[0];
     const entranceIndex = existing.findIndex((point) => same(point, entrance));
@@ -95,7 +95,11 @@
 
     const approach = existing.slice(0, entranceIndex + 1);
     if (!validateRoute(approach, terrain)) return [];
-    const transition = routeBetween(terrain, goalTransition, occupied);
+
+    // The entrance -> door -> interior-anchor segment is structural building topology.
+    // Live NPC occupancy is transient and must not erase this mandatory route template in
+    // narrow/shared workplaces; runtime movement remains responsible for collision handling.
+    const transition = routeBetween(terrain, goalTransition, new Set());
     if (!transition.length || !validateRoute(transition, terrain)) return [];
 
     const repaired = dedupe([...approach, ...transition.slice(1)]);
@@ -117,7 +121,7 @@
     let repairedGoalTransition = false;
 
     if ((!routed.length || !validateRoute(routed, terrain)) && goalTransition.length > 1) {
-      routed = repairGoalTransitionFromExisting(existing, goalTransition, terrain, occupied);
+      routed = repairGoalTransitionFromExisting(existing, goalTransition, terrain);
       repairedGoalTransition = routed.length > 0;
     }
 
