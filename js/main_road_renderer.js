@@ -16,8 +16,6 @@
   let renderHookInstalled = false;
   let retryTimer = null;
 
-  const key = (row, col) => `${row},${col}`;
-
   function roadGrid() {
     const world = Game.State?.world;
     const rows = Number(world?.rows) || 100;
@@ -41,29 +39,15 @@
 
   function visualForSemantic(semantic) {
     if (!semantic || !Array.isArray(semantic.memberships) || !semantic.memberships.length) return null;
-    if (semantic.kind === 'main-road-intersection' || semantic.orientation === 'cross') {
-      return { type: 'main_intersection_cross', reason: 'intersection' };
-    }
-
+    if (semantic.kind === 'main-road-intersection' || semantic.orientation === 'cross') return { type: 'main_intersection_cross', reason: 'intersection' };
     const membership = semantic.memberships[0];
     if (semantic.orientation === 'vertical') {
-      if (membership.longitudinalRole === 'start' || membership.longitudinalRole === 'end') {
-        return { type: 'main_transition_vertical', reason: 'transition' };
-      }
-      return {
-        type: membership.lane === 'a' ? 'main_straight_vertical_left' : 'main_straight_vertical_right',
-        reason: 'paired-straight'
-      };
+      if (membership.longitudinalRole === 'start' || membership.longitudinalRole === 'end') return { type: 'main_transition_vertical', reason: 'transition' };
+      return { type: membership.lane === 'a' ? 'main_straight_vertical_left' : 'main_straight_vertical_right', reason: 'paired-straight' };
     }
-
     if (semantic.orientation === 'horizontal') {
-      if (membership.longitudinalRole === 'start' || membership.longitudinalRole === 'end') {
-        return { type: 'main_transition_horizontal', reason: 'transition' };
-      }
-      return {
-        type: membership.lane === 'a' ? 'main_straight_horizontal_top' : 'main_straight_horizontal_bottom',
-        reason: 'paired-straight'
-      };
+      if (membership.longitudinalRole === 'start' || membership.longitudinalRole === 'end') return { type: 'main_transition_horizontal', reason: 'transition' };
+      return { type: membership.lane === 'a' ? 'main_straight_horizontal_top' : 'main_straight_horizontal_bottom', reason: 'paired-straight' };
     }
     return null;
   }
@@ -72,7 +56,6 @@
     if (assetState === 'ready') return Promise.resolve(true);
     if (assetState === 'loading' && assetPromise) return assetPromise;
     if (assetState === 'failed') return Promise.resolve(false);
-
     assetState = 'loading';
     assetPromise = import(new URL('js/tile_registry.js', document.baseURI).href)
       .then((module) => {
@@ -81,10 +64,7 @@
         return Promise.all(entries.map((entry) => new Promise((resolve, reject) => {
           const image = new Image();
           image.decoding = 'async';
-          image.onload = () => {
-            images.set(entry.type, image);
-            resolve(entry.type);
-          };
+          image.onload = () => { images.set(entry.type, image); resolve(entry.type); };
           image.onerror = () => reject(new Error(`Failed to load main-road tile: ${entry.type}`));
           image.src = module.resolveTileUrl(entry, document.baseURI);
         })));
@@ -107,19 +87,17 @@
     return point && Number.isFinite(point.x) && Number.isFinite(point.y) ? point : null;
   }
 
-  function drawTile(ctx, row, col, type) {
+  function drawTile(ctx, row, col, type, projectFn = project) {
     const image = images.get(type);
     if (!image) return false;
-    const center = project(row + 0.5, col + 0.5);
-    const east = project(row + 0.5, col + 1.5);
-    const south = project(row + 1.5, col + 0.5);
+    const center = projectFn(row + 0.5, col + 0.5);
+    const east = projectFn(row + 0.5, col + 1.5);
+    const south = projectFn(row + 1.5, col + 0.5);
     if (!center || !east || !south) return false;
-
     const vx = { x: east.x - center.x, y: east.y - center.y };
     const vy = { x: south.x - center.x, y: south.y - center.y };
     const origin = { x: center.x - (vx.x + vy.x) * 0.5, y: center.y - (vx.y + vy.y) * 0.5 };
     if (![vx.x, vx.y, vy.x, vy.y, origin.x, origin.y].every(Number.isFinite)) return false;
-
     ctx.save();
     ctx.transform(vx.x / SIZE, vx.y / SIZE, vy.x / SIZE, vy.y / SIZE, origin.x, origin.y);
     ctx.drawImage(image, 0, 0, SIZE, SIZE);
@@ -127,42 +105,31 @@
     return true;
   }
 
-  function drawPresentation() {
-    const canvas = Game.StarterVillageRoads?.ensureOverlay?.();
-    const classification = classify();
+  function drawPresentation(options = {}) {
+    const canvas = options.canvas || Game.StarterVillageRoads?.ensureOverlay?.();
+    const classification = options.classification || classify();
+    const projectFn = options.project || project;
     if (!canvas || !classification || !Game.Renderer) return false;
     ensureAssets();
     if (assetState !== 'ready') return false;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return false;
     const dpr = Math.max(1, global.devicePixelRatio || 1);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    let drawn = 0;
-    let transitions = 0;
-    let intersections = 0;
-    let unsupported = 0;
+    let drawn = 0, transitions = 0, intersections = 0, unsupported = 0;
     const rendered = [];
-
     const cells = Object.entries(classification.cells || {}).sort(([a], [b]) => a.localeCompare(b));
     for (const [cellKey, semantic] of cells) {
       const [row, col] = cellKey.split(',').map(Number);
       const visual = visualForSemantic(semantic);
-      if (!visual) {
-        unsupported += 1;
-        continue;
-      }
-      if (drawTile(ctx, row, col, visual.type)) {
+      if (!visual) { unsupported += 1; continue; }
+      if (drawTile(ctx, row, col, visual.type, projectFn)) {
         drawn += 1;
         rendered.push(`${cellKey}:${visual.type}`);
         if (visual.reason === 'transition') transitions += 1;
         if (visual.reason === 'intersection') intersections += 1;
-      } else {
-        unsupported += 1;
-      }
+      } else unsupported += 1;
     }
-
     Object.assign(canvas.dataset, {
       mainRoadRendererVersion: VERSION,
       mainRoadAuthority: 'presentation-only',
@@ -184,24 +151,15 @@
   function installRenderHook() {
     if (renderHookInstalled || !Game.Renderer || typeof Game.Renderer.renderWorld !== 'function') return false;
     const prior = Game.Renderer.renderWorld.bind(Game.Renderer);
-    Game.Renderer.renderWorld = function mainRoadAwareRenderWorld(force) {
-      const result = prior(force);
-      drawPresentation();
-      return result;
-    };
+    Game.Renderer.renderWorld = function mainRoadAwareRenderWorld(force) { const result = prior(force); drawPresentation(); return result; };
     renderHookInstalled = true;
     return true;
   }
 
   function initialize(attempt = 0) {
-    if (!Game.MainRoadSemantics && Game.Utils?.loadScriptOnce) {
-      Game.Utils.loadScriptOnce('js/main_road_semantics.js', 'r04MainRoadSemanticsModule');
-    }
+    if (!Game.MainRoadSemantics && Game.Utils?.loadScriptOnce) Game.Utils.loadScriptOnce('js/main_road_semantics.js', 'r04MainRoadSemanticsModule');
     const ready = Boolean(Game.MainRoadSemantics?.classify && Game.StarterVillageRoads && Game.Renderer?.renderWorld);
-    if (!ready) {
-      if (attempt < 80) retryTimer = global.setTimeout(() => initialize(attempt + 1), 50);
-      return false;
-    }
+    if (!ready) { if (attempt < 80) retryTimer = global.setTimeout(() => initialize(attempt + 1), 50); return false; }
     if (retryTimer) global.clearTimeout(retryTimer);
     ensureAssets();
     installRenderHook();
@@ -209,17 +167,7 @@
     return true;
   }
 
-  Game.MainRoadRenderer = Object.freeze({
-    version: VERSION,
-    authority: 'presentation-only',
-    roadGrid,
-    classify,
-    visualForSemantic,
-    ensureAssets,
-    drawPresentation,
-    initialize
-  });
-
+  Game.MainRoadRenderer = Object.freeze({ version: VERSION, authority: 'presentation-only', roadGrid, classify, visualForSemantic, ensureAssets, drawPresentation, initialize });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => initialize(), { once: true });
   else initialize();
 })(typeof window !== 'undefined' ? window : globalThis);
