@@ -261,4 +261,8 @@ window.Game = window.Game || {};
     semantic: currentStatusSemantic,
     update: updateStatusBubble
   });
+
+  if (window.Game.Utils && typeof window.Game.Utils.loadScriptOnce === 'function') {
+    window.Game.Utils.loadScriptOnce('js/frame_budget_scheduler.js', 'r04FrameBudgetSchedulerModule');
+  }
 })();
