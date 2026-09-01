@@ -1,9 +1,27 @@
-/* R02-T18 / #113 + Admin #233: Simulation-callable adjacent-region living-map activation. */
+/* R02-T18 / #113 + Admin #233 + R04 #352: Simulation-callable adjacent-region activation with lazy neighbor prefetch. */
 (function installRegionNavigation() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'admin-100x100-region-navigation-v2';
+  const VERSION = 'admin-100x100-region-navigation-v3-lazy-prefetch';
   const RADIUS = 1;
+  const MAX_PREFETCH_CACHE = 24;
+  const prefetchCache = new Map();
+  const pendingKeys = new Set();
+  const sliceSamples = [];
+  let queuedJobs = 0;
+  let completedJobs = 0;
+  let discardedJobs = 0;
+  let generation = 0;
+
+  function nowMs() {
+    return window.performance?.now ? window.performance.now() : Date.now();
+  }
+
+  function percentile(list, ratio) {
+    if (!list.length) return 0;
+    const sorted = list.slice().sort((a, b) => a - b);
+    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1))];
+  }
 
   function mutableTile(tile) {
     const tags = new Set();
@@ -40,6 +58,20 @@
     };
   }
 
+  function cacheKey(seed, x, y) {
+    return `${String(seed)}|${Number(x)},${Number(y)}|${Game.RegionTerrain?.generatorVersion || 'terrain'}`;
+  }
+
+  function putPrefetch(key, value) {
+    if (prefetchCache.has(key)) prefetchCache.delete(key);
+    prefetchCache.set(key, value);
+    while (prefetchCache.size > MAX_PREFETCH_CACHE) {
+      prefetchCache.delete(prefetchCache.keys().next().value);
+    }
+  }
+
+  // Compatibility path: callers/tests that explicitly request a full deterministic 3x3
+  // mosaic still get it synchronously. Normal activate() no longer pays this cost.
   function buildWindow(seedInput, regionXInput, regionYInput) {
     const seed = String(seedInput ?? Game.State?.world?.seed ?? '');
     const centerX = Number(regionXInput);
@@ -51,9 +83,6 @@
     let centerTerrain = null;
     let centerTheme = null;
 
-    // Neighboring regions may be materialized as a deterministic prefetch/cache window for
-    // continuity checks, but Admin #233 keeps the active logical gameplay region exactly
-    // 100x100. buildWindow therefore exposes both the 3x3 cache mosaic and the center region.
     for (let dy = -RADIUS; dy <= RADIUS; dy += 1) {
       const regionRow = Array.from({ length: size }, () => []);
       for (let dx = -RADIUS; dx <= RADIUS; dx += 1) {
@@ -90,17 +119,99 @@
     };
   }
 
+  function buildActiveRegion(seedInput, regionXInput, regionYInput) {
+    const seed = String(seedInput ?? Game.State?.world?.seed ?? '');
+    const x = Number(regionXInput);
+    const y = Number(regionYInput);
+    if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y)) throw new TypeError('Region coordinates must be safe integers.');
+    const region = reconstruct(seed, x, y);
+    return {
+      seed,
+      x,
+      y,
+      region,
+      meta: regionMeta(region, x, y),
+      centerTerrain: region.tiles.map((row) => row.map(mutableTile)),
+      centerTheme: region.theme || null
+    };
+  }
+
+  function cancelSupersededPrefetch() {
+    const scheduler = Game.FrameBudgetScheduler;
+    for (const key of [...pendingKeys]) {
+      scheduler?.cancel?.(key);
+      pendingKeys.delete(key);
+      discardedJobs += 1;
+    }
+  }
+
+  function scheduleNeighborPrefetch(seed, centerX, centerY, requestGeneration) {
+    const scheduler = Game.FrameBudgetScheduler;
+    const jobs = [];
+    for (let dy = -RADIUS; dy <= RADIUS; dy += 1) {
+      for (let dx = -RADIUS; dx <= RADIUS; dx += 1) {
+        if (dx === 0 && dy === 0) continue;
+        const x = centerX + dx;
+        const y = centerY + dy;
+        const resultKey = cacheKey(seed, x, y);
+        if (prefetchCache.has(resultKey)) continue;
+        const jobKey = `environment-prefetch:${resultKey}`;
+        jobs.push({ x, y, resultKey, jobKey });
+      }
+    }
+
+    for (const job of jobs) {
+      const enqueuedAt = nowMs();
+      const step = () => {
+        const started = nowMs();
+        if (requestGeneration !== generation) {
+          pendingKeys.delete(job.jobKey);
+          discardedJobs += 1;
+          return true;
+        }
+        const region = reconstruct(seed, job.x, job.y);
+        putPrefetch(job.resultKey, Object.freeze({
+          ...regionMeta(region, job.x, job.y),
+          cachedAtGeneration: requestGeneration,
+          authority: 'deterministic-prefetch'
+        }));
+        completedJobs += 1;
+        pendingKeys.delete(job.jobKey);
+        sliceSamples.push(Math.max(0, nowMs() - started));
+        if (sliceSamples.length > 120) sliceSamples.shift();
+        return true;
+      };
+
+      pendingKeys.add(job.jobKey);
+      queuedJobs += 1;
+      if (scheduler?.enqueue) {
+        scheduler.enqueue(job.jobKey, step, {
+          priority: -10,
+          version: String(requestGeneration),
+          label: `environment neighbor ${job.x},${job.y}`
+        });
+      } else {
+        window.setTimeout(step, 0);
+      }
+      putPrefetch(`${job.resultKey}|pending`, Object.freeze({ enqueuedAt, requestGeneration, pending: true }));
+    }
+  }
+
   function activate(regionX, regionY) {
     const world = Game.State?.world;
     if (!world) throw new Error('World state is unavailable.');
-    const windowState = buildWindow(world.seed, regionX, regionY);
-    const size = windowState.regionSize;
+    generation += 1;
+    cancelSupersededPrefetch();
+
+    // Only the current authoritative 100x100 region is required synchronously.
+    const active = buildActiveRegion(world.seed, regionX, regionY);
+    const size = Game.RegionTerrain.regionSize;
     const localCenter = Math.floor(size / 2);
     const center = {
-      ...windowState.centerRegion,
-      theme: windowState.centerTheme?.theme || null,
-      settlementId: windowState.centerTheme?.settlementId || null,
-      regionFootprint: windowState.centerTheme?.regionFootprint || null,
+      ...Game.WorldCoordinates.describeRegion(active.seed, active.x, active.y),
+      theme: active.centerTheme?.theme || null,
+      settlementId: active.centerTheme?.settlementId || null,
+      regionFootprint: active.centerTheme?.regionFootprint || null,
       regionSize: size
     };
 
@@ -108,21 +219,20 @@
     world.activeRegionWindow = {
       version: VERSION,
       authority: 'simulation',
-      seed: windowState.seed,
+      seed: active.seed,
       centerRegion: center,
       radius: RADIUS,
       regionSize: size,
-      // This metadata describes deterministic neighbor prefetch only. It does not enlarge
-      // the active logical gameplay area beyond the canonical center 100x100 region.
-      regions: windowState.regions,
-      cachedRows: windowState.rows,
-      cachedCols: windowState.cols,
+      regions: [active.meta],
+      cachedRows: size,
+      cachedCols: size,
       activeRows: size,
-      activeCols: size
+      activeCols: size,
+      lazyNeighborPrefetch: true
     };
     world.rows = size;
     world.cols = size;
-    world.terrain = windowState.centerTerrain;
+    world.terrain = active.centerTerrain;
     if (world.player) {
       world.player.regionX = center.x;
       world.player.regionY = center.y;
@@ -145,6 +255,10 @@
     Game.Renderer?.invalidateAll?.();
     Game.Renderer?.renderWorld?.(true);
     Game.Minimap?.render?.();
+
+    // Neighbor metadata is continuity/performance prefetch only. It is deterministic and
+    // recomputable, so it consumes frame slack and yields entirely during interaction.
+    scheduleNeighborPrefetch(active.seed, active.x, active.y, generation);
     return capture();
   }
 
@@ -153,6 +267,31 @@
     const delta = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] }[direction];
     if (!delta) throw new TypeError('Direction must be north, east, south, or west.');
     return activate(Number(current.x || 0) + delta[0], Number(current.y || 0) + delta[1]);
+  }
+
+  function lazyMetrics() {
+    const schedulerMetrics = Game.FrameBudgetScheduler?.metrics?.() || {};
+    const pendingAges = [];
+    const time = nowMs();
+    for (const [key, entry] of prefetchCache.entries()) {
+      if (!key.endsWith('|pending') || !entry?.pending) continue;
+      pendingAges.push(Math.max(0, time - Number(entry.enqueuedAt || time)));
+    }
+    return Object.freeze({
+      authority: 'scheduling-only',
+      generation,
+      queuedJobs,
+      completedJobs,
+      discardedJobs,
+      pendingJobs: pendingKeys.size,
+      cacheEntries: [...prefetchCache.keys()].filter((key) => !key.endsWith('|pending')).length,
+      maxCacheEntries: MAX_PREFETCH_CACHE,
+      oldestQueueAgeMs: pendingAges.length ? Math.max(...pendingAges) : 0,
+      jobP95Ms: percentile(sliceSamples, 0.95),
+      jobWorstMs: sliceSamples.length ? Math.max(...sliceSamples) : 0,
+      schedulerInteractionActive: Boolean(schedulerMetrics.interactionActive),
+      schedulerQueueDepth: Number(schedulerMetrics.queueDepth || 0)
+    });
   }
 
   function capture() {
@@ -177,8 +316,10 @@
     version: VERSION,
     authority: 'simulation',
     buildWindow,
+    buildActiveRegion,
     activate,
     activateNeighbor,
-    capture
+    capture,
+    lazyMetrics
   });
 })();
