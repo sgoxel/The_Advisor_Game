@@ -1,14 +1,20 @@
-/* R04 / #325: bind NPC exterior routine routes to shared authoritative terrain routing. */
+/* R04 / #325 + #257: bind NPC routine routes to shared authoritative terrain routing and building transitions. */
 (function installNpcTerrainRoutingBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-terrain-routing-bridge-v1';
+  const VERSION = 'r04-npc-terrain-routing-bridge-v2';
   let renderHookInstalled = false;
 
-  function localPoint(value) {
+  function key(point) { return `${point.row},${point.col}`; }
+
+  function localPoint(value, binding = null) {
+    const rowOffset = Number(binding?.rowOffset || 0);
+    const colOffset = Number(binding?.colOffset || 0);
+    const hasLocalRow = Number.isFinite(Number(value?.localRow));
+    const hasLocalCol = Number.isFinite(Number(value?.localCol));
     return {
-      row: Math.trunc(Number(value?.localRow ?? value?.row) || 0),
-      col: Math.trunc(Number(value?.localCol ?? value?.col) || 0)
+      row: Math.trunc(hasLocalRow ? Number(value.localRow) : (Number(value?.row) || 0) - rowOffset),
+      col: Math.trunc(hasLocalCol ? Number(value.localCol) : (Number(value?.col) || 0) - colOffset)
     };
   }
 
@@ -18,54 +24,126 @@
     return { localRow: local.row, localCol: local.col, row: local.row + rowOffset, col: local.col + colOffset };
   }
 
+  function same(a, b) { return Boolean(a && b && a.row === b.row && a.col === b.col); }
+  function adjacent(a, b) { return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1; }
   function tileAt(terrain, point) { return terrain?.[point.row]?.[point.col] || null; }
 
-  function exteriorSegment(existingRoute, terrain, occupied, binding) {
-    const route = Array.isArray(existingRoute) ? existingRoute.map(localPoint) : [];
-    if (route.length < 2) return existingRoute || [];
-    let first = -1;
-    let last = -1;
+  function dedupe(points) {
+    const result = [];
+    for (const value of points || []) {
+      if (!value) continue;
+      const next = { row: Math.trunc(Number(value.row) || 0), col: Math.trunc(Number(value.col) || 0) };
+      if (!same(result[result.length - 1], next)) result.push(next);
+    }
+    return result;
+  }
+
+  function interiorForBuilding(world, buildingId) {
+    if (!buildingId) return null;
+    return world?.buildingInteriors?.interiors?.find?.((item) => String(item.buildingId) === String(buildingId)) || null;
+  }
+
+  function pointInsideFootprint(point, footprint) {
+    if (!point || !footprint) return false;
+    const row = Number(footprint.row), col = Number(footprint.col);
+    const height = Number(footprint.height), width = Number(footprint.width);
+    return point.row >= row && point.row < row + height && point.col >= col && point.col < col + width;
+  }
+
+  function transitionWaypoints(world, anchor, binding, direction) {
+    if (!anchor) return [];
+    const endpoint = localPoint(anchor, binding);
+    const interior = interiorForBuilding(world, anchor.buildingId);
+    if (!interior || !pointInsideFootprint(endpoint, interior.footprint)) return [endpoint];
+
+    const entrance = localPoint(interior.entrance, null);
+    const door = localPoint(interior.door, null);
+    if (direction === 'exit') return dedupe([endpoint, door, entrance]);
+    return dedupe([entrance, door, endpoint]);
+  }
+
+  function routeBetween(terrain, points, occupied) {
+    const waypoints = dedupe(points);
+    if (waypoints.length < 2) return waypoints;
+    const result = [waypoints[0]];
+    for (let index = 1; index < waypoints.length; index += 1) {
+      const start = result[result.length - 1];
+      const goal = waypoints[index];
+      if (same(start, goal)) continue;
+      const segment = Game.TerrainRouting.findPath(terrain, start, goal, { occupied, allowGoalOccupied: true });
+      if (!segment.length) return [];
+      for (const point of segment.slice(1)) result.push(point);
+    }
+    return dedupe(result);
+  }
+
+  function validateRoute(route, terrain) {
+    if (!Array.isArray(route) || !route.length) return false;
     for (let index = 0; index < route.length; index += 1) {
-      if (Game.TerrainRouting.isWalkableTile(tileAt(terrain, route[index]))) { first = index; break; }
+      const point = route[index];
+      if (!Game.TerrainRouting.isWalkableTile(tileAt(terrain, point))) return false;
+      if (index > 0 && !adjacent(route[index - 1], point)) return false;
     }
-    for (let index = route.length - 1; index >= 0; index -= 1) {
-      if (Game.TerrainRouting.isWalkableTile(tileAt(terrain, route[index]))) { last = index; break; }
+    return true;
+  }
+
+  function routeLeg(existingRoute, startAnchor, goalAnchor, terrain, occupied, binding, world) {
+    const existing = Array.isArray(existingRoute) ? existingRoute.map((value) => localPoint(value, binding)) : [];
+    const fallbackStart = existing[0];
+    const fallbackGoal = existing[existing.length - 1];
+    const start = startAnchor ? localPoint(startAnchor, binding) : fallbackStart;
+    const goal = goalAnchor ? localPoint(goalAnchor, binding) : fallbackGoal;
+    if (!start || !goal) return { route: existingRoute || [], valid: false, resolved: false };
+
+    const startTransition = startAnchor ? transitionWaypoints(world, startAnchor, binding, 'exit') : [start];
+    const goalTransition = goalAnchor ? transitionWaypoints(world, goalAnchor, binding, 'enter') : [goal];
+    const waypoints = dedupe([...startTransition, ...goalTransition]);
+    const routed = routeBetween(terrain, waypoints, occupied);
+    if (!routed.length || !validateRoute(routed, terrain)) {
+      return { route: existingRoute || [], valid: false, resolved: false };
     }
-    if (first < 0 || last < first) return existingRoute;
-    const middle = Game.TerrainRouting.findPath(terrain, route[first], route[last], { occupied, allowGoalOccupied: true });
-    if (!middle.length) return existingRoute;
-    const composed = [
-      ...route.slice(0, first),
-      ...middle,
-      ...route.slice(last + 1)
-    ];
-    const deduped = [];
-    for (const value of composed) {
-      const previous = deduped[deduped.length - 1];
-      if (!previous || previous.row !== value.row || previous.col !== value.col) deduped.push(value);
-    }
-    return deduped.map((value) => strategicPoint(value, binding));
+    return {
+      route: routed.map((value) => strategicPoint(value, binding)),
+      valid: true,
+      resolved: true,
+      usesStartTransition: startTransition.length > 1,
+      usesGoalTransition: goalTransition.length > 1
+    };
   }
 
   function refreshRoutes() {
     const world = Game.State?.world;
+    Game.StarterVillageInteriors?.materialize?.(world);
     const terrain = world?.terrain;
     const npcs = world?.npcs;
     if (!Array.isArray(terrain) || !Array.isArray(npcs) || !npcs.length || !Game.TerrainRouting) return false;
     const binding = world.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 };
-    const occupied = new Set(npcs.map((npc) => `${localPoint(npc).row},${localPoint(npc).col}`));
+    const occupied = new Set(npcs.map((npc) => key(localPoint(npc, binding))));
     let routed = 0;
+    let routeLegCount = 0;
+    let invalidRouteCount = 0;
+    let buildingTransitionCount = 0;
 
     for (const npc of npcs) {
       const routes = npc.spatialRoutes;
       if (!routes?.homeToWork || !routes?.workToSocial || !routes?.socialToHome) continue;
-      const ownKey = `${localPoint(npc).row},${localPoint(npc).col}`;
+      const ownKey = key(localPoint(npc, binding));
       occupied.delete(ownKey);
-      const homeToWork = exteriorSegment(routes.homeToWork, terrain, occupied, binding);
-      const workToSocial = exteriorSegment(routes.workToSocial, terrain, occupied, binding);
-      const socialToHome = exteriorSegment(routes.socialToHome, terrain, occupied, binding);
+
+      const homeToWork = routeLeg(routes.homeToWork, npc.anchors?.home, npc.anchors?.work, terrain, occupied, binding, world);
+      const workToSocial = routeLeg(routes.workToSocial, npc.anchors?.work, npc.anchors?.social, terrain, occupied, binding, world);
+      const socialToHome = routeLeg(routes.socialToHome, npc.anchors?.social, npc.anchors?.home, terrain, occupied, binding, world);
+      const results = [homeToWork, workToSocial, socialToHome];
+      routeLegCount += results.length;
+      invalidRouteCount += results.filter((result) => !result.valid).length;
+      buildingTransitionCount += results.reduce((sum, result) => sum + Number(Boolean(result.usesStartTransition)) + Number(Boolean(result.usesGoalTransition)), 0);
+
+      npc.spatialRoutes = {
+        homeToWork: homeToWork.route,
+        workToSocial: workToSocial.route,
+        socialToHome: socialToHome.route
+      };
       occupied.add(ownKey);
-      npc.spatialRoutes = { homeToWork, workToSocial, socialToHome };
       routed += 1;
     }
 
@@ -73,9 +151,14 @@
       version: VERSION,
       authority: 'simulation',
       terrainRoutingVersion: Game.TerrainRouting.version,
+      interiorRoutingVersion: world.buildingInteriors?.version || null,
       routedNpcCount: routed,
       totalNpcCount: npcs.length,
-      routeSource: 'authoritative-terrain+occupancy',
+      routeLegCount,
+      invalidRouteCount,
+      buildingTransitionCount,
+      routeSource: 'authoritative-terrain+occupancy+building-transitions',
+      buildingEntranceIntegrated: true,
       interiorEdgesPreserved: true
     };
     return routed > 0;
