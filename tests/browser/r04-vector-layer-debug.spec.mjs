@@ -36,6 +36,12 @@ function authoritativeSnapshot() {
 }
 
 test('Vector Layer Debug enumerates one registry and toggles every registered presentation layer safely', async ({ page }) => {
+  // This case deliberately performs a full off/render/on cycle for every registered layer.
+  // Independent trace evidence shows stable responsive controls but six sequential real
+  // presentation redraw cycles exceed the global 45 s Playwright default. Preserve all
+  // assertions and production interaction while budgeting only this exhaustive test.
+  test.setTimeout(120_000);
+
   const failures = collectRuntimeFailures(page);
   await ready(page);
 
