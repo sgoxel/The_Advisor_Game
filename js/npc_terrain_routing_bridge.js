@@ -2,7 +2,7 @@
 (function installNpcTerrainRoutingBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-terrain-routing-bridge-v2';
+  const VERSION = 'r04-npc-terrain-routing-bridge-v3';
   let renderHookInstalled = false;
 
   function key(point) { return `${point.row},${point.col}`; }
@@ -87,6 +87,21 @@
     return true;
   }
 
+  function repairGoalTransitionFromExisting(existing, goalTransition, terrain, occupied) {
+    if (!Array.isArray(existing) || !existing.length || !Array.isArray(goalTransition) || goalTransition.length < 2) return [];
+    const entrance = goalTransition[0];
+    const entranceIndex = existing.findIndex((point) => same(point, entrance));
+    if (entranceIndex < 0) return [];
+
+    const approach = existing.slice(0, entranceIndex + 1);
+    if (!validateRoute(approach, terrain)) return [];
+    const transition = routeBetween(terrain, goalTransition, occupied);
+    if (!transition.length || !validateRoute(transition, terrain)) return [];
+
+    const repaired = dedupe([...approach, ...transition.slice(1)]);
+    return validateRoute(repaired, terrain) ? repaired : [];
+  }
+
   function routeLeg(existingRoute, startAnchor, goalAnchor, terrain, occupied, binding, world) {
     const existing = Array.isArray(existingRoute) ? existingRoute.map((value) => localPoint(value, binding)) : [];
     const fallbackStart = existing[0];
@@ -98,7 +113,14 @@
     const startTransition = startAnchor ? transitionWaypoints(world, startAnchor, binding, 'exit') : [start];
     const goalTransition = goalAnchor ? transitionWaypoints(world, goalAnchor, binding, 'enter') : [goal];
     const waypoints = dedupe([...startTransition, ...goalTransition]);
-    const routed = routeBetween(terrain, waypoints, occupied);
+    let routed = routeBetween(terrain, waypoints, occupied);
+    let repairedGoalTransition = false;
+
+    if ((!routed.length || !validateRoute(routed, terrain)) && goalTransition.length > 1) {
+      routed = repairGoalTransitionFromExisting(existing, goalTransition, terrain, occupied);
+      repairedGoalTransition = routed.length > 0;
+    }
+
     if (!routed.length || !validateRoute(routed, terrain)) {
       return { route: existingRoute || [], valid: false, resolved: false };
     }
@@ -107,7 +129,8 @@
       valid: true,
       resolved: true,
       usesStartTransition: startTransition.length > 1,
-      usesGoalTransition: goalTransition.length > 1
+      usesGoalTransition: goalTransition.length > 1,
+      repairedGoalTransition
     };
   }
 
@@ -123,6 +146,7 @@
     let routeLegCount = 0;
     let invalidRouteCount = 0;
     let buildingTransitionCount = 0;
+    let repairedGoalTransitionCount = 0;
 
     for (const npc of npcs) {
       const routes = npc.spatialRoutes;
@@ -137,6 +161,7 @@
       routeLegCount += results.length;
       invalidRouteCount += results.filter((result) => !result.valid).length;
       buildingTransitionCount += results.reduce((sum, result) => sum + Number(Boolean(result.usesStartTransition)) + Number(Boolean(result.usesGoalTransition)), 0);
+      repairedGoalTransitionCount += results.filter((result) => result.repairedGoalTransition).length;
 
       npc.spatialRoutes = {
         homeToWork: homeToWork.route,
@@ -157,6 +182,7 @@
       routeLegCount,
       invalidRouteCount,
       buildingTransitionCount,
+      repairedGoalTransitionCount,
       routeSource: 'authoritative-terrain+occupancy+building-transitions',
       buildingEntranceIntegrated: true,
       interiorEdgesPreserved: true
