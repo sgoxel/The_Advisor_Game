@@ -83,9 +83,27 @@
   }
   function closeDialog(id, restore = true) { const dialog = document.getElementById(id); if (dialog?.open) dialog.close(); if (restore && dialogInvoker?.focus) dialogInvoker.focus(); }
   function renderNpcList() {
-    const list = document.getElementById('devNpcList'); if (!list) return; const npcs = npcProjections(); list.replaceChildren();
-    if (!npcs.length) { const empty = document.createElement('p'); empty.textContent = 'No active NPCs are available for inspection.'; list.appendChild(empty); return; }
-    npcs.forEach((npc) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'development-npc-row'; button.setAttribute('role', 'option'); button.setAttribute('aria-selected', String(npc.id === selectedNpcId)); button.dataset.npcId = npc.id; button.innerHTML = `<strong>${npc.name}</strong><span>${npc.profession} · ${npc.activity}</span>`; button.addEventListener('click', () => openRoutine(npc.id, button)); list.appendChild(button); });
+    const list = document.getElementById('devNpcList'); if (!list) return; const npcs = npcProjections();
+    const liveIds = new Set(npcs.map((npc) => npc.id));
+    list.querySelectorAll('.development-npc-row').forEach((row) => { if (!liveIds.has(row.dataset.npcId)) row.remove(); });
+    const empty = list.querySelector('[data-development-empty]');
+    if (!npcs.length) {
+      if (!empty) { const message = document.createElement('p'); message.dataset.developmentEmpty = 'true'; message.textContent = 'No active NPCs are available for inspection.'; list.appendChild(message); }
+      return;
+    }
+    empty?.remove();
+    npcs.forEach((npc) => {
+      let button = Array.from(list.querySelectorAll('.development-npc-row')).find((row) => row.dataset.npcId === npc.id);
+      if (!button) {
+        button = document.createElement('button'); button.type = 'button'; button.className = 'development-npc-row'; button.setAttribute('role', 'option'); button.dataset.npcId = npc.id;
+        const strong = document.createElement('strong'); const detail = document.createElement('span'); button.append(strong, detail);
+        button.addEventListener('click', () => openRoutine(button.dataset.npcId, button)); list.appendChild(button);
+      }
+      button.setAttribute('aria-selected', String(npc.id === selectedNpcId));
+      const strong = button.querySelector('strong'); const detail = button.querySelector('span');
+      if (strong && strong.textContent !== npc.name) strong.textContent = npc.name;
+      const detailText = `${npc.profession} · ${npc.activity}`; if (detail && detail.textContent !== detailText) detail.textContent = detailText;
+    });
   }
   function openNpcList(invoker) { dialogInvoker = invoker || document.activeElement; renderNpcList(); const dialog = document.getElementById('devNpcListDialog'); if (!dialog) return; dialog.showModal(); dialog.querySelector('button, [tabindex]')?.focus(); }
   function renderRoutine(npc) {
