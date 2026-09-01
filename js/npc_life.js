@@ -2,7 +2,7 @@
 (function installNpcLife() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r02-npc-life-v1';
+  const VERSION = 'r02-npc-life-v2-location-gated';
 
   const ROLE_PROFILES = Object.freeze({
     guard: Object.freeze({ wake: 300, work: 360, break: 720, social: 1080, home: 1260, sleep: 1380 }),
@@ -83,6 +83,110 @@
     });
   }
 
+  function normalized(value) {
+    return String(value ?? '').trim().toLowerCase().replace(/[ _]+/g, '-');
+  }
+
+  function finitePoint(value) {
+    const row = Number(value?.row);
+    const col = Number(value?.col);
+    return Number.isFinite(row) && Number.isFinite(col) ? { row, col } : null;
+  }
+
+  function samePoint(a, b) {
+    const pa = finitePoint(a);
+    const pb = finitePoint(b);
+    return Boolean(pa && pb && pa.row === pb.row && pa.col === pb.col);
+  }
+
+  function strategicOutdoorTarget(world, actorId) {
+    const entry = world?.outdoorWorksites?.assignments?.find?.((item) => String(item.id) === String(actorId));
+    if (!entry || entry.status !== 'assigned') return null;
+    const local = finitePoint(entry);
+    if (!local) return null;
+    const binding = world?.npcRuntime?.originBinding || {};
+    return {
+      row: local.row + Number(binding.rowOffset || 0),
+      col: local.col + Number(binding.colOffset || 0),
+      localRow: local.row,
+      localCol: local.col,
+      source: 'authoritative-outdoor-worksite',
+      worksiteId: entry.worksiteId || null
+    };
+  }
+
+  function requirementFor(scheduleInput) {
+    const activity = normalized(scheduleInput?.activity);
+    const anchor = normalized(scheduleInput?.anchor);
+    if (['prepare-and-travel', 'return-home', 'commuting-to-work', 'returning-home', 'walking', 'travel', 'traveling', 'approach'].includes(activity)) {
+      return { kind: anchor || null, terminal: false, intendedActivity: activity };
+    }
+    if (activity === 'sleep' || activity === 'sleeping' || anchor === 'home' && ['home', 'rest', 'resting'].includes(activity)) {
+      return { kind: 'home', terminal: true, intendedActivity: 'sleeping' };
+    }
+    if (activity === 'work' || activity === 'working') return { kind: 'work', terminal: true, intendedActivity: 'working' };
+    if (activity === 'social' || activity === 'socializing') return { kind: 'social', terminal: true, intendedActivity: 'social' };
+    if (activity === 'break-or-errand' || activity === 'local-errand' || activity === 'errand') {
+      return { kind: 'social', terminal: true, intendedActivity: 'local-errand' };
+    }
+    return { kind: anchor || null, terminal: false, intendedActivity: activity || 'idle' };
+  }
+
+  function targetFor(actor, scheduleInput, worldInput = Game.State?.world, options = {}) {
+    const requirement = requirementFor(scheduleInput);
+    if (options.target) return finitePoint(options.target);
+    if (requirement.kind === 'work') {
+      return strategicOutdoorTarget(worldInput, actor?.id) || finitePoint(actor?.indoorWorkAnchor) || finitePoint(actor?.anchors?.work);
+    }
+    if (requirement.kind === 'home') return finitePoint(actor?.anchors?.home);
+    if (requirement.kind === 'social') return finitePoint(actor?.anchors?.social);
+    return finitePoint(actor?.anchors?.[requirement.kind]);
+  }
+
+  function travelActivity(kind) {
+    if (kind === 'work') return 'commuting-to-work';
+    if (kind === 'home') return 'returning-home';
+    if (kind === 'social') return 'local-errand';
+    return 'traveling';
+  }
+
+  function activityLocationState(actor, scheduleInput, options = {}) {
+    const world = options.world || Game.State?.world;
+    const requirement = requirementFor(scheduleInput);
+    const target = targetFor(actor, scheduleInput, world, options);
+    const current = finitePoint(options.current || actor);
+    if (!requirement.terminal) {
+      return Object.freeze({
+        version: 'r04-activity-location-gate-v1', authority: 'simulation', legal: true,
+        requiredLocation: requirement.kind, intendedActivity: requirement.intendedActivity,
+        activeActivity: requirement.intendedActivity, target, current, reason: 'travel-or-nonterminal-state'
+      });
+    }
+    if (!target) {
+      return Object.freeze({
+        version: 'r04-activity-location-gate-v1', authority: 'simulation', legal: false,
+        requiredLocation: requirement.kind, intendedActivity: requirement.intendedActivity,
+        activeActivity: 'waiting', target: null, current, reason: 'required-authoritative-location-unavailable'
+      });
+    }
+    const legal = samePoint(current, target);
+    return Object.freeze({
+      version: 'r04-activity-location-gate-v1', authority: 'simulation', legal,
+      requiredLocation: requirement.kind, intendedActivity: requirement.intendedActivity,
+      activeActivity: legal ? requirement.intendedActivity : travelActivity(requirement.kind),
+      target, current, reason: legal ? 'actor-at-required-authoritative-location' : 'travel-required-before-activity'
+    });
+  }
+
+  function applyActivityLocationGate(actor, scheduleInput, options = {}) {
+    if (!actor) return null;
+    const state = activityLocationState(actor, scheduleInput, options);
+    actor.intendedActivity = state.intendedActivity;
+    actor.activity = state.activeActivity;
+    actor.activityLocationState = state;
+    return state;
+  }
+
   function applySchedules(totalGameMinutesInput = null) {
     const world = Game.State?.world;
     if (!world || !Array.isArray(world.npcs)) return [];
@@ -91,14 +195,10 @@
     for (const npc of world.npcs) {
       const state = scheduleState(npc, time);
       npc.dailySchedule = state;
-      npc.activity = state.activity;
-      const target = npc.anchors?.[state.anchor];
-      if (target) {
-        npc.row = Number(target.row);
-        npc.col = Number(target.col);
-        if (Number.isFinite(Number(target.localRow))) npc.localRow = Number(target.localRow);
-        if (Number.isFinite(Number(target.localCol))) npc.localCol = Number(target.localCol);
-      }
+      // #346: schedules express intent. They never teleport an actor into compliance.
+      // The authoritative location gate exposes travel/wait until the actor reaches
+      // its existing home/work/worksite/social anchor.
+      applyActivityLocationGate(npc, state, { world });
       results.push(state);
     }
     return results;
@@ -154,6 +254,10 @@
     version: VERSION,
     authority: 'simulation',
     scheduleState,
+    requirementFor,
+    targetFor,
+    activityLocationState,
+    applyActivityLocationGate,
     applySchedules,
     ambientDialogue,
     contextualConversation
