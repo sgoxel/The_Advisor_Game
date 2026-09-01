@@ -145,10 +145,11 @@ window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatia
 // interpolation layer after the spatial runtime is available.
 window.Game.Utils.loadScriptOnce("js/npc_motion_presentation.js", "r04NpcMotionPresentationModule");
 
-// Final Simulation-integration bridge for NPC positions. It attaches after the compatibility
-// wrappers and restores NPCSpatial authority if an older renderer wrapper drifts coordinates
-// inside the same authoritative game minute.
+// Final Simulation-integration bridges for NPC positions. The indoor-work bridge derives a
+// stable interior target from #259 workplaces + #253 same-world interiors before #257 routing
+// composes the authoritative entrance/door path to that target.
 window.Game.Utils.loadScriptOnce("js/npc_runtime_bridge.js", "r04NpcRuntimeBridgeModule");
+window.Game.Utils.loadScriptOnce("js/npc_indoor_work_anchors.js", "r04NpcIndoorWorkAnchorsModule");
 window.Game.Utils.loadScriptOnce("js/npc_terrain_routing_bridge.js", "r04NpcTerrainRoutingBridgeModule");
 window.Game.Utils.loadScriptOnce("js/npc_contextual_activity.js", "r04NpcContextualActivityModule");
 
