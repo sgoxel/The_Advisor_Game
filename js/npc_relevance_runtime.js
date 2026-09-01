@@ -8,7 +8,7 @@
   const Game = global.Game = global.Game || {};
   if (Game.NPCRelevanceRuntime) return;
 
-  const VERSION = 'r04-npc-relevance-v1';
+  const VERSION = 'r04-npc-relevance-v2-authoritative-gating';
   const TIER = Object.freeze({ CRITICAL: 'critical', NEARBY: 'nearby', LOCAL: 'local', DISTANT: 'distant' });
   const CADENCE_MINUTES = Object.freeze({ critical: 1, nearby: 2, local: 5, distant: 15 });
   const NEAR_DISTANCE = 14;
@@ -85,17 +85,20 @@
     let entry = compact.get(id);
     if (!entry) {
       const tier = classify(npc);
+      const cadence = cadenceFor(tier);
       entry = {
         id,
         tier,
         previousTier: tier,
         bucket: stableBucket(npc, tier),
         lastObservedMinute: minute,
-        lastDetailedMinute: minute - cadenceFor(tier),
+        lastDetailedMinute: minute - cadence,
+        lastAuthoritativeMinute: minute - cadence,
         lastRow: Number(npc.row),
         lastCol: Number(npc.col),
         lastActivity: String(npc.activity || 'idle'),
-        detailLoaded: tier !== TIER.DISTANT
+        detailLoaded: tier !== TIER.DISTANT,
+        authoritativePromotionPending: false
       };
       compact.set(id, entry);
     }
@@ -103,11 +106,43 @@
   }
 
   function isDue(entry, tier, minute, promoted) {
-    const cadence = cadenceFor(tier);
     if (promoted) return true;
+    if (tier === TIER.DISTANT) return false;
+    const cadence = cadenceFor(tier);
     if (tier === TIER.CRITICAL) return entry.lastDetailedMinute < minute;
     if (entry.lastDetailedMinute >= minute) return false;
     return (minute % cadence) === stableBucket({ id: entry.id }, tier);
+  }
+
+  function authoritativeDue(npc, minuteInput = gameMinute()) {
+    const minute = Math.max(0, Math.floor(Number(minuteInput) || 0));
+    const entry = ensureCompact(npc, minute);
+    if (!entry) return true;
+    const tier = classify(npc);
+    const promoted = rank(tier) < rank(entry.tier) || entry.authoritativePromotionPending === true;
+    if (promoted) return true;
+    if (tier === TIER.DISTANT) return false;
+    if (entry.lastAuthoritativeMinute >= minute) return false;
+    const cadence = cadenceFor(tier);
+    return tier === TIER.CRITICAL || (minute % cadence) === stableBucket(npc, tier);
+  }
+
+  function markAuthoritativeUpdated(npc, minuteInput = gameMinute()) {
+    const minute = Math.max(0, Math.floor(Number(minuteInput) || 0));
+    const entry = ensureCompact(npc, minute);
+    if (!entry) return false;
+    const tier = classify(npc);
+    entry.previousTier = entry.tier;
+    entry.tier = tier;
+    entry.bucket = stableBucket(npc, tier);
+    entry.lastAuthoritativeMinute = minute;
+    entry.lastObservedMinute = minute;
+    entry.lastRow = Number(npc.row);
+    entry.lastCol = Number(npc.col);
+    entry.lastActivity = String(npc.activity || 'idle');
+    entry.detailLoaded = tier !== TIER.DISTANT;
+    entry.authoritativePromotionPending = false;
+    return true;
   }
 
   function updateRateCounter() {
@@ -122,11 +157,10 @@
 
   function materialize(npc, entry, tier, minute, promoted) {
     const started = performance.now();
-    // Existing authoritative state/history remains the source of truth. The lazy detail
-    // layer only derives already-supported schedule detail; it does not invent actions.
     if (Game.NPCLife?.scheduleState) {
       try { npc.dailySchedule = Game.NPCLife.scheduleState(npc, minute); } catch (_) {}
     }
+    if (promoted) entry.authoritativePromotionPending = true;
     entry.previousTier = entry.tier;
     entry.tier = tier;
     entry.bucket = stableBucket(npc, tier);
@@ -150,6 +184,7 @@
     if (!entry) return false;
     const tier = classify(npc);
     const promoted = rank(tier) < rank(entry.tier);
+    if (promoted) entry.authoritativePromotionPending = true;
     entry.lastObservedMinute = minute;
     entry.lastRow = Number(npc.row);
     entry.lastCol = Number(npc.col);
@@ -219,6 +254,8 @@
     cadenceMinutes: CADENCE_MINUTES,
     classify,
     stableBucket,
+    authoritativeDue,
+    markAuthoritativeUpdated,
     scheduleFrame,
     detailEligible,
     snapshot
