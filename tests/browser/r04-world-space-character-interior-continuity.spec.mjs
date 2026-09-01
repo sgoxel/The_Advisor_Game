@@ -26,7 +26,7 @@ function locationState(character) {
 test('same authoritative protagonist and NPC sprite identity follows exterior -> interior -> exit', async ({ page }) => {
   await ready(page);
 
-  const evidence = await page.evaluate(async () => {
+  const evidence = await page.evaluate(() => {
     const G = window.Game;
     const world = G.State.world;
     const interior = G.StarterVillageInteriors.snapshot().interiors.find((entry) => entry.floors.length >= 3);
@@ -53,7 +53,6 @@ test('same authoritative protagonist and NPC sprite identity follows exterior ->
       moveExact(npc, floors[1]);
       G.NPCWorld.drawPresentation();
       G.WorldSpaceCharacterContinuity.synchronize();
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
       const inside = G.WorldSpaceCharacterContinuity.snapshot();
       const insideNpc = inside.npcs.find((entry) => entry.id === npc.id);
