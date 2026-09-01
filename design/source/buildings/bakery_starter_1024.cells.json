@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "family": "bakery",
+  "visualFamily": "food-shop",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "authority": "presentation-only",
+  "source": "Original deterministic starter-village building tile art generated for #348.",
+  "composition": {
+    "logicalCellOwnership": "building-only",
+    "entranceSemantic": "entrance",
+    "repeatable": [
+      "roof_edge_n",
+      "wall_center"
+    ],
+    "overhang": "none; pixels never redefine collision/footprint/occupancy"
+  },
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature"
+    }
+  ],
+  "unusedCells": [
+    {
+      "row": 3,
+      "col": 0
+    },
+    {
+      "row": 3,
+      "col": 1
+    },
+    {
+      "row": 3,
+      "col": 2
+    },
+    {
+      "row": 3,
+      "col": 3
+    }
+  ]
+}

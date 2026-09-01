@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "authority": "presentation-only",
+  "canonicalTypes": [
+    "home",
+    "inn",
+    "village_hall",
+    "bakery",
+    "market",
+    "smithy",
+    "workshop",
+    "guard_post",
+    "mill",
+    "farmstead",
+    "storage",
+    "well"
+  ],
+  "aliases": {
+    "dwelling": "home",
+    "house": "home",
+    "tavern": "inn",
+    "lodging": "inn",
+    "hall": "village_hall",
+    "civic": "village_hall",
+    "shop": "market",
+    "food": "bakery",
+    "production": "workshop",
+    "guard": "guard_post",
+    "service": "guard_post",
+    "farm": "farmstead",
+    "agricultural": "farmstead",
+    "storehouse": "storage",
+    "barn": "storage"
+  }
+}
