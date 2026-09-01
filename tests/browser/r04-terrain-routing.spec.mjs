@@ -2,7 +2,11 @@ import { test, expect } from '@playwright/test';
 
 async function ready(page) {
   await page.goto('./');
-  await page.waitForFunction(() => Boolean(window.Game?.TerrainRouting?.findPath && window.Game?.NPCTerrainRouting?.refreshRoutes));
+  await page.waitForFunction(() => Boolean(
+    window.Game?.TerrainRouting?.findPath &&
+    window.Game?.NPCTerrainRouting?.refreshRoutes &&
+    window.Game?.StarterVillageInteriors?.materialize
+  ));
 }
 
 function gridFixture() {
@@ -57,6 +61,7 @@ test('NPC exterior route bridge consumes authoritative terrain while preserving 
   await ready(page);
   const output = await page.evaluate(() => {
     Game.NPCSpatial?.ensureSpatialNpcs?.();
+    Game.StarterVillageInteriors?.materialize?.(Game.State.world);
     const beforeIds = (Game.State.world.npcs || []).map((npc) => npc.id);
     const refreshed = Game.NPCTerrainRouting.refreshRoutes();
     const routing = Game.State.world.npcTerrainRouting;
@@ -69,8 +74,66 @@ test('NPC exterior route bridge consumes authoritative terrain while preserving 
   });
   expect(output.refreshed).toBe(true);
   expect(output.afterIds).toEqual(output.beforeIds);
-  expect(output.routing).toMatchObject({ authority: 'simulation', routeSource: 'authoritative-terrain+occupancy', interiorEdgesPreserved: true });
+  expect(output.routing).toMatchObject({
+    authority: 'simulation',
+    routeSource: 'authoritative-terrain+occupancy+building-transitions',
+    buildingEntranceIntegrated: true,
+    interiorEdgesPreserved: true
+  });
   expect(output.routing.routedNpcCount).toBeGreaterThan(0);
+  expect(output.routing.routeLegCount).toBeGreaterThan(0);
   expect(output.sample.every((npc) => npc.authority === 'simulation')).toBe(true);
   expect(output.sample.every((npc) => npc.routes.homeToWork.length && npc.routes.workToSocial.length && npc.routes.socialToHome.length)).toBe(true);
+});
+
+test('NPC commute integration reaches an interior anchor only through the authoritative entrance and door', async ({ page }) => {
+  await ready(page);
+  const output = await page.evaluate(() => {
+    Game.NPCSpatial.ensureSpatialNpcs();
+    Game.StarterVillageInteriors.materialize(Game.State.world);
+    const world = Game.State.world;
+    const interior = world.buildingInteriors?.interiors?.find((item) => item.floors?.some((point) => point.row !== item.door.row || point.col !== item.door.col));
+    const npc = world.npcs?.[0];
+    if (!interior || !npc) return { available: false };
+
+    const target = interior.floors.find((point) => point.row !== interior.door.row || point.col !== interior.door.col) || interior.door;
+    const binding = world.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 };
+    npc.anchors.work = {
+      ...(npc.anchors.work || {}),
+      buildingId: interior.buildingId,
+      localRow: target.row,
+      localCol: target.col,
+      row: target.row + Number(binding.rowOffset || 0),
+      col: target.col + Number(binding.colOffset || 0)
+    };
+
+    const refreshed = Game.NPCTerrainRouting.refreshRoutes();
+    const localRoute = npc.spatialRoutes.homeToWork.map((point) => ({ row: point.localRow, col: point.localCol }));
+    const has = (point) => localRoute.some((candidate) => candidate.row === point.row && candidate.col === point.col);
+    const last = localRoute[localRoute.length - 1];
+    const walkable = localRoute.every((point) => Game.TerrainRouting.isWalkableTile(world.terrain?.[point.row]?.[point.col]));
+    const contiguous = localRoute.every((point, index) => index === 0 || Math.abs(point.row - localRoute[index - 1].row) + Math.abs(point.col - localRoute[index - 1].col) === 1);
+    return {
+      available: true,
+      refreshed,
+      entrance: interior.entrance,
+      door: interior.door,
+      target,
+      hasEntrance: has(interior.entrance),
+      hasDoor: has(interior.door),
+      last,
+      walkable,
+      contiguous,
+      routing: world.npcTerrainRouting
+    };
+  });
+
+  expect(output.available).toBe(true);
+  expect(output.refreshed).toBe(true);
+  expect(output.hasEntrance).toBe(true);
+  expect(output.hasDoor).toBe(true);
+  expect(output.last).toEqual(output.target);
+  expect(output.walkable).toBe(true);
+  expect(output.contiguous).toBe(true);
+  expect(output.routing.buildingTransitionCount).toBeGreaterThan(0);
 });
