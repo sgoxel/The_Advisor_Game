@@ -12,6 +12,7 @@
   const patched = new Map();
   let renderHookInstalled = false;
   let uiInstalled = false;
+  let renderPending = false;
 
   function cameraSnapshot() {
     const camera = Game.State?.camera || {};
@@ -35,7 +36,15 @@
   }
 
   function requestRender() {
-    try { Game.Renderer?.renderWorld?.(true); } catch (_) {}
+    if (renderPending) return;
+    renderPending = true;
+    const render = () => {
+      renderPending = false;
+      try { Game.Renderer?.renderWorld?.(true); } catch (_) {}
+    };
+    if (typeof global.requestAnimationFrame === 'function') global.requestAnimationFrame(render);
+    else if (typeof global.setTimeout === 'function') global.setTimeout(render, 0);
+    else render();
   }
 
   function register(definition) {
