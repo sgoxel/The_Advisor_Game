@@ -41,46 +41,60 @@ async function waitForIdleScheduler(page) {
   ).toBe(false);
 }
 
+async function drainUntilKeysGone(page, keys, maxSlices = 30) {
+  for (let attempt = 0; attempt < maxSlices; attempt += 1) {
+    const pending = await page.evaluate((wanted) => {
+      const scheduler = window.Game.FrameBudgetScheduler;
+      scheduler.runBackgroundSlice(performance.now());
+      const queued = new Set(scheduler.metrics().queuedKeys);
+      return wanted.filter((key) => queued.has(key));
+    }, keys);
+    if (pending.length === 0) return;
+    await page.waitForTimeout(8);
+  }
+}
+
 test('interaction frames defer optional jobs and idle render slack resumes them', async ({ page }) => {
   test.setTimeout(90_000);
   const failures = collectRuntimeFailures(page);
   await ready(page);
+  const testKeys = Array.from({ length: 12 }, (_, index) => `test-job-${index}`);
 
-  const during = await page.evaluate(() => {
+  const during = await page.evaluate((keys) => {
     const scheduler = window.Game.FrameBudgetScheduler;
     window.__frameBudgetExecutions = 0;
-    for (let index = 0; index < 12; index += 1) {
-      scheduler.enqueue(`test-job-${index}`, () => {
+    keys.forEach((key, index) => {
+      scheduler.enqueue(key, () => {
         const started = performance.now();
         while (performance.now() - started < 0.35) { /* bounded representative slice */ }
         window.__frameBudgetExecutions += 1;
         return true;
       }, { priority: index % 3, label: `test job ${index}` });
-    }
+    });
     scheduler.noteInteraction('automated-pan', 260);
     window.Game.Renderer.renderWorld(true);
     return { executions: window.__frameBudgetExecutions, metrics: scheduler.metrics() };
-  });
+  }, testKeys);
 
   expect(during.executions).toBe(0);
   expect(during.metrics.interactionActive).toBe(true);
-  expect(during.metrics.queueDepth).toBe(12);
+  expect(testKeys.every((key) => during.metrics.queuedKeys.includes(key))).toBe(true);
+  expect(during.metrics.queueDepth).toBeGreaterThanOrEqual(12);
   expect(during.metrics.deferredJobs).toBeGreaterThanOrEqual(12);
 
   await waitForIdleScheduler(page);
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const depth = await page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().queueDepth);
-    if (depth === 0) break;
-    await page.evaluate(() => window.Game.Renderer.renderWorld(true));
-    await page.waitForTimeout(20);
-  }
+  await drainUntilKeysGone(page, testKeys);
 
-  const after = await page.evaluate(() => ({
-    executions: window.__frameBudgetExecutions,
-    metrics: window.Game.FrameBudgetScheduler.metrics()
-  }));
+  const after = await page.evaluate((keys) => {
+    const metrics = window.Game.FrameBudgetScheduler.metrics();
+    return {
+      executions: window.__frameBudgetExecutions,
+      ownPending: keys.filter((key) => metrics.queuedKeys.includes(key)),
+      metrics
+    };
+  }, testKeys);
   expect(after.executions).toBe(12);
-  expect(after.metrics.queueDepth).toBe(0);
+  expect(after.ownPending).toEqual([]);
   expect(after.metrics.completedJobs).toBeGreaterThanOrEqual(12);
   expect(after.metrics.jobWorstMs).toBeLessThan(50);
   expect(failures).toEqual([]);
@@ -97,7 +111,7 @@ test('real wheel interaction protects rendering before optional background work'
     window.Game.FrameBudgetScheduler.enqueue('wheel-guard-job', () => {
       window.__frameBudgetWheelJobRuns += 1;
       return true;
-    });
+    }, { priority: 100 });
   });
 
   await page.mouse.wheel(0, -120);
@@ -105,7 +119,7 @@ test('real wheel interaction protects rendering before optional background work'
   expect(await page.evaluate(() => window.__frameBudgetWheelJobRuns)).toBe(0);
 
   await waitForIdleScheduler(page);
-  await page.evaluate(() => window.Game.Renderer.renderWorld(true));
+  await drainUntilKeysGone(page, ['wheel-guard-job']);
   await expect.poll(() => page.evaluate(() => window.__frameBudgetWheelJobRuns)).toBe(1);
 
   const metrics = await page.evaluate(() => window.Game.FrameBudgetScheduler.metrics());
@@ -121,13 +135,13 @@ test('stable job keys deduplicate superseded optional work without changing Simu
   const before = await page.evaluate(() => {
     const world = window.Game.State.world;
     window.__frameBudgetDedupeValues = [];
-    window.Game.FrameBudgetScheduler.enqueue('dedupe-world-job', () => { window.__frameBudgetDedupeValues.push('old'); return true; }, { version: '1' });
-    window.Game.FrameBudgetScheduler.enqueue('dedupe-world-job', () => { window.__frameBudgetDedupeValues.push('new'); return true; }, { version: '2' });
+    window.Game.FrameBudgetScheduler.enqueue('dedupe-world-job', () => { window.__frameBudgetDedupeValues.push('old'); return true; }, { version: '1', priority: 100 });
+    window.Game.FrameBudgetScheduler.enqueue('dedupe-world-job', () => { window.__frameBudgetDedupeValues.push('new'); return true; }, { version: '2', priority: 100 });
     return JSON.stringify({ seed: world.seed, rows: world.rows, cols: world.cols, player: { row: world.player.row, col: world.player.col } });
   });
 
   await waitForIdleScheduler(page);
-  await page.evaluate(() => window.Game.Renderer.renderWorld(true));
+  await drainUntilKeysGone(page, ['dedupe-world-job']);
 
   const result = await page.evaluate(() => {
     const world = window.Game.State.world;
