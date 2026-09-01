@@ -4,7 +4,7 @@ function collectRuntimeFailures(page) {
   const failures = [];
   page.on('pageerror', (error) => failures.push(`pageerror:${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') failures.push(`console:${message.text()}`);
+    if (message.type() === 'error') failures.push(`console:${message.text()}`));
   });
   return failures;
 }
@@ -17,19 +17,17 @@ async function ready(page) {
     window.Game?.State?.world?.terrain?.length
   ), null, { timeout: 30_000 });
   await page.evaluate(() => {
-    // This suite verifies environment scheduling/region determinism, not contextual NPC
-    // bubble invariants. Suppress that presentation-only wrapper so unrelated live NPC
-    // schedule ticks cannot abort region activation/render calls used by this fixture.
     if (window.Game.Config) window.Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
     window.Game.Utils?.loadScriptOnce?.('js/frame_budget_scheduler.js', 'r04FrameBudgetSchedulerModule');
   });
   await page.waitForFunction(() => Boolean(window.Game?.FrameBudgetScheduler?.metrics), null, { timeout: 10_000 });
+  await page.evaluate(() => window.Game.FrameBudgetScheduler.wrapRenderer?.());
 }
 
 test('region activation keeps center synchronous while neighbor prefetch yields during interaction', async ({ page }) => {
   test.setTimeout(90_000);
-  const failures = collectRuntimeFailures(page);
   await ready(page);
+  const failures = collectRuntimeFailures(page);
 
   const evidence = await page.evaluate(async () => {
     const nav = window.Game.RegionNavigation;
@@ -80,8 +78,8 @@ test('region activation keeps center synchronous while neighbor prefetch yields 
 
 test('superseded region requests cancel stale prefetch and deterministic fingerprints survive lazy timing', async ({ page }) => {
   test.setTimeout(90_000);
-  const failures = collectRuntimeFailures(page);
   await ready(page);
+  const failures = collectRuntimeFailures(page);
 
   const evidence = await page.evaluate(async () => {
     const nav = window.Game.RegionNavigation;
@@ -125,8 +123,8 @@ test('superseded region requests cancel stale prefetch and deterministic fingerp
 });
 
 test('explicit legacy buildWindow remains deterministic and 3x3-compatible', async ({ page }) => {
-  const failures = collectRuntimeFailures(page);
   await ready(page);
+  const failures = collectRuntimeFailures(page);
   const result = await page.evaluate(() => {
     const seed = window.Game.State.world.seed;
     const first = window.Game.RegionNavigation.buildWindow(seed, 0, 0);
