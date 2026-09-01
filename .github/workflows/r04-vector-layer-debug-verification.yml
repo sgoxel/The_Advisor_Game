@@ -1,0 +1,80 @@
+name: R04 Vector Layer Debug Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/renderer.js'
+      - 'js/road_runtime_bridge.js'
+      - 'js/starter_village_exteriors.js'
+      - 'js/starter_village_road_connections.js'
+      - 'js/npc_runtime_bridge.js'
+      - 'js/npc_world.js'
+      - 'js/npc_life.js'
+      - 'js/vector_layer_debug.js'
+      - 'tests/browser/r04-vector-layer-debug.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-vector-layer-debug-verification.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/renderer.js'
+      - 'js/road_runtime_bridge.js'
+      - 'js/starter_village_exteriors.js'
+      - 'js/starter_village_road_connections.js'
+      - 'js/npc_runtime_bridge.js'
+      - 'js/npc_world.js'
+      - 'js/npc_life.js'
+      - 'js/vector_layer_debug.js'
+      - 'tests/browser/r04-vector-layer-debug.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/r04-vector-layer-debug-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vector-layer-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run focused vector-layer debug regression
+        run: npx playwright test tests/browser/r04-vector-layer-debug.spec.mjs --project=desktop
+
+      - name: Prepare exact-SHA evidence payload
+        if: always()
+        run: |
+          mkdir -p r04-vector-layer-debug-evidence
+          printf 'candidate_sha=%s\nrun_id=%s\nrun_attempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > r04-vector-layer-debug-evidence/candidate.txt
+          if [ -d playwright-report ]; then cp -R playwright-report r04-vector-layer-debug-evidence/; fi
+          if [ -d test-results ]; then cp -R test-results r04-vector-layer-debug-evidence/; fi
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-vector-layer-debug-evidence-${{ github.sha }}
+          path: r04-vector-layer-debug-evidence/
+          if-no-files-found: error
+          retention-days: 14
