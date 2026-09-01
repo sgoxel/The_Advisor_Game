@@ -1,0 +1,59 @@
+name: R04 Generate Starter Building Atlases
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'design/source/buildings/generate_starter_village_building_atlases.mjs'
+      - '.github/workflows/r04-generate-starter-building-atlases.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Generate canonical starter-village building atlases
+        run: node design/source/buildings/generate_starter_village_building_atlases.mjs
+
+      - name: Validate canonical atlas and semantic manifest set
+        shell: bash
+        run: |
+          set -euo pipefail
+          types=(home inn village_hall bakery market smithy workshop guard_post mill farmstead storage well)
+          for type in "${types[@]}"; do
+            atlas="design/source/buildings/${type}_starter_1024.png"
+            manifest="design/source/buildings/${type}_starter_1024.cells.json"
+            test -s "$atlas"
+            test -s "$manifest"
+            node tools/split_tile_atlas.mjs --atlas "$atlas" --manifest "$manifest" --output "/tmp/starter-building-${type}"
+            test "$(find "/tmp/starter-building-${type}" -type f -name '*.png' | wc -l)" -eq 12
+          done
+          node -e "const fs=require('fs'); const p='design/source/buildings/starter_village_building_aliases.json'; const x=JSON.parse(fs.readFileSync(p)); if(x.canonicalTypes.length!==12) process.exit(1);"
+
+      - name: Commit deterministic generated production assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add design/source/buildings/*_starter_1024.png design/source/buildings/*_starter_1024.cells.json design/source/buildings/starter_village_building_aliases.json
+          if git diff --cached --quiet; then
+            echo "Generated assets already match committed production sources."
+            exit 0
+          fi
+          git commit -m "design(r04): materialize starter building atlases (#348)"
+          git push origin HEAD:main
