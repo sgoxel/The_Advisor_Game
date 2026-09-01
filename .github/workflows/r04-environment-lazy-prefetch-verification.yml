@@ -1,0 +1,58 @@
+name: R04 Environment Lazy Prefetch Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/region_navigation.js'
+      - 'js/frame_budget_scheduler.js'
+      - 'tests/browser/r04-environment-lazy-prefetch.spec.mjs'
+      - '.github/workflows/r04-environment-lazy-prefetch-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r04-environment-lazy-prefetch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate
+        run: |
+          echo "candidate=${GITHUB_SHA}"
+          git rev-parse HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify lazy environment prefetch
+        run: npx playwright test tests/browser/r04-environment-lazy-prefetch.spec.mjs --project=desktop
+      - name: Preserve canonical region-navigation compatibility
+        run: npx playwright test tests/browser/r02-region-navigation.spec.mjs --project=desktop
+      - name: Preserve R01 cumulative browser compatibility
+        run: npx playwright test tests/browser/r01-cumulative.spec.mjs --project=desktop
+      - name: Prepare exact-SHA evidence
+        if: always()
+        run: |
+          mkdir -p r04-environment-lazy-prefetch-evidence
+          printf 'candidate=%s\nrun=%s\nattempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > r04-environment-lazy-prefetch-evidence/candidate.txt
+          if [ -d playwright-report ]; then cp -R playwright-report r04-environment-lazy-prefetch-evidence/; fi
+          if [ -d test-results ]; then cp -R test-results r04-environment-lazy-prefetch-evidence/; fi
+      - name: Upload exact-SHA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-environment-lazy-prefetch-${{ github.sha }}
+          path: r04-environment-lazy-prefetch-evidence
+          if-no-files-found: error
+          retention-days: 14
