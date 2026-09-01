@@ -150,7 +150,7 @@
   function prefetchSnapshot() { return Object.freeze([...prefetchCache.values()].map((entry) => Object.freeze({ ...entry }))); }
   function capture() {
     const world = Game.State?.world;
-    return JSON.parse(JSON.stringify({ currentRegion: world?.currentRegion || null, activeRegionWindow: world?.activeRegionWindow || null, activeRows: world?.rows, activeCols: world?.cols, player: world?.player ? { regionX: world.player.regionX, regionY: world.player.regionY, worldX: world.player.worldX, world.playerworldY: world.player.worldY, row: world.player.row, col: world.player.col } : null }));
+    return JSON.parse(JSON.stringify({ currentRegion: world?.currentRegion || null, activeRegionWindow: world?.activeRegionWindow || null, activeRows: world?.rows, activeCols: world?.cols, player: world?.player ? { regionX: world.player.regionX, regionY: world.player.regionY, worldX: world.player.worldX, worldY: world.player.worldY, row: world.player.row, col: world.player.col } : null }));
   }
 
   Game.RegionNavigation = Object.freeze({ version: VERSION, authority: 'simulation', buildWindow, buildActiveRegion, activate, activateNeighbor, capture, lazyMetrics, prefetchSnapshot });
