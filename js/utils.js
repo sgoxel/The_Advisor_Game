@@ -94,6 +94,10 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
 }
 
+// #329 presentation safety: reject ground points that approach/cross the camera near plane
+// before any canvas/DOM overlay can amplify them into viewport-spanning transforms.
+window.Game.Utils.loadScriptOnce("js/projection_safety_guard.js", "r04ProjectionSafetyGuardModule");
+
 // #339 consumes the independently verified #337 classification and #338 semantic atlas only
 // for presentation. The renderer retries until both the classifier and ordinary road overlay
 // are ready, so these compatibility loads do not create a second topology authority.
