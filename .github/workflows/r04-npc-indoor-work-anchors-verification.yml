@@ -1,0 +1,57 @@
+name: R04 NPC Indoor Work Anchors Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'js/npc_indoor_work_anchors.js'
+      - 'js/npc_workplaces.js'
+      - 'js/starter_village_interiors.js'
+      - 'js/npc_spatial_runtime.js'
+      - 'js/npc_terrain_routing_bridge.js'
+      - 'js/utils.js'
+      - 'tests/browser/r04-npc-indoor-work-anchors.spec.mjs'
+      - '.github/workflows/r04-npc-indoor-work-anchors-verification.yml'
+  pull_request:
+    paths:
+      - 'js/npc_indoor_work_anchors.js'
+      - 'js/npc_workplaces.js'
+      - 'js/starter_village_interiors.js'
+      - 'js/npc_spatial_runtime.js'
+      - 'js/npc_terrain_routing_bridge.js'
+      - 'js/utils.js'
+      - 'tests/browser/r04-npc-indoor-work-anchors.spec.mjs'
+      - '.github/workflows/r04-npc-indoor-work-anchors-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  indoor-work-anchor-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@v4
+      - name: Record exact candidate SHA
+        run: git rev-parse HEAD
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run indoor NPC work-anchor regression
+        run: npx playwright test tests/browser/r04-npc-indoor-work-anchors.spec.mjs
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-npc-indoor-work-anchors-evidence-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
