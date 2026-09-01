@@ -117,4 +117,6 @@
   // The interior module derives floors/walls/door from the canonical originVillage and
   // materializes only presentation/pathfinding integration on the same runtime world.
   Game.Utils?.loadScriptOnce?.('js/starter_village_interiors.js', 'r04StarterVillageInteriorsModule');
+  // #254 composes the already verified #324 character layer with the same #253 interior.
+  Game.Utils?.loadScriptOnce?.('js/world_space_character_interior_bridge.js', 'r04WorldSpaceCharacterInteriorBridgeModule');
 })();
