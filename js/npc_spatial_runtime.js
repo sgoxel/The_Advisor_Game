@@ -482,6 +482,7 @@
     let activityBubbleCount = 0;
     world.npcs.forEach((npc, index) => {
       if (paired.has(npc.id)) return;
+      if (Game.NPCRelevanceRuntime?.detailEligible && !Game.NPCRelevanceRuntime.detailEligible(npc)) return;
       const p = renderer.gridToScreen(npc.row, npc.col, 0, 0);
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
       const laneOffset = (index % 3) * 4;
@@ -528,7 +529,9 @@
     const renderWorld = renderer.renderWorld.bind(renderer);
     renderer.renderWorld = function spatialNpcRenderWorld(force) {
       const result = renderWorld(force);
-      ensureSpatialNpcs();
+      // updateAt() performs the authoritative same-minute state-key guard before it
+      // calls ensureSpatialNpcs(). Do not remap the complete population on every
+      // presentation frame only to have updateAt() immediately return.
       updateAt();
       oldNpcWorld?.drawPresentation?.();
       drawDevelopmentBubbles();
