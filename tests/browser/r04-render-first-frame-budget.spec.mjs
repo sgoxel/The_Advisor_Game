@@ -16,6 +16,14 @@ async function ready(page) {
     window.Game?.State?.world?.terrain?.length &&
     window.Game?.Renderer?.renderWorld
   ), null, { timeout: 30_000 });
+  await page.evaluate(() => {
+    const camera = window.Game.State.camera;
+    camera.followPlayer = false;
+    camera.dragActive = false;
+    camera.inertiaVelocityX = 0;
+    camera.inertiaVelocityY = 0;
+    window.Game.State.input?.keys?.clear?.();
+  });
 }
 
 test('interaction frames defer optional jobs and idle render slack resumes them', async ({ page }) => {
