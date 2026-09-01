@@ -98,8 +98,6 @@
         activity: prior.activity || 'home',
         controlledBy: 'simulation',
         playerControllable: false,
-        // Small deterministic schedule offsets prevent synchronized crowds while
-        // keeping every resident on the same authoritative 24-hour world clock.
         routineOffsetMs: undefined,
         routineOffsetGameMinutes: (hash32(`${person.id}|${index}`) % 121) - 60,
         movementDecision: prior.movementDecision || 'hold',
@@ -120,8 +118,6 @@
 
     world.npcRuntime = {
       ...(world.npcRuntime || {}),
-      // Keep the legacy version/binding fields so the older render wrapper does not
-      // rebuild/slice the population before this compatibility layer runs.
       version: world.npcRuntime?.version || 'r04-character-world-icons-v1',
       authority: 'simulation',
       seed: String(world.seed || ''),
@@ -236,10 +232,7 @@
     const first = hash32(`${seed}|${cycleIndex}|dialogue-speaker`) % npcs.length;
     let second = hash32(`${seed}|${cycleIndex}|dialogue-listener`) % npcs.length;
     if (second === first) second = (second + 1) % npcs.length;
-    const preferredDialogueContext = [
-      point(npcs[first]?.anchors?.social || npcs[first]),
-      point(npcs[second]?.anchors?.social || npcs[second])
-    ];
+    const preferredDialogueContext = [point(npcs[first]?.anchors?.social || npcs[first]), point(npcs[second]?.anchors?.social || npcs[second])];
     const tiles = findDialoguePairTiles(village, roads, new Set(), preferredDialogueContext);
     if (!tiles) return null;
     return { speakerId: npcs[first].id, listenerId: npcs[second].id, tiles, cycleIndex };
@@ -251,19 +244,34 @@
     const seed = String(context.seed ?? Game.State?.world?.seed ?? '');
     const step = Math.max(0, Math.floor(Number(context.step) || 0));
     const dialoguePlan = context.dialoguePlan || null;
+    const fixedNpcIds = context.fixedNpcIds instanceof Set ? context.fixedNpcIds : new Set(context.fixedNpcIds || []);
     const occupied = new Map();
     const resolved = new Map();
     let collisionCount = 0;
     let sideStepCount = 0;
     let yieldWaitCount = 0;
 
+    // Lazy/non-due NPCs keep their authoritative compact position. Reserve them before
+    // active NPCs move so throttling cannot create overlap or silently relocate them.
+    for (const npc of npcs) {
+      if (!fixedNpcIds.has(npc.id)) continue;
+      const fixedPoint = point(npc);
+      const fixedKey = key(fixedPoint.row, fixedPoint.col);
+      if (!inBounds(fixedPoint) || occupied.has(fixedKey)) continue;
+      occupied.set(fixedKey, npc.id);
+      resolved.set(npc.id, { point: fixedPoint, decision: 'hold', collided: false });
+    }
+
     if (dialoguePlan) {
       const pair = [dialoguePlan.speakerId, dialoguePlan.listenerId];
       pair.forEach((id, index) => {
+        if (resolved.has(id)) return;
         const npc = npcs.find((candidate) => candidate.id === id);
         if (!npc) return;
         const target = point(dialoguePlan.tiles[index]);
-        occupied.set(key(target.row, target.col), id);
+        const targetKey = key(target.row, target.col);
+        if (occupied.has(targetKey)) return;
+        occupied.set(targetKey, id);
         resolved.set(id, { point: target, decision: 'dialogue-position', collided: false });
       });
     }
@@ -301,10 +309,6 @@
         break;
       }
       if (!chosen) {
-        // Emergency deterministic free-tile search across the complete bounded region.
-        // A 100x100 region has a maximum in-bounds Manhattan separation of 198 tiles;
-        // searching 2 * REGION_SIZE guarantees that legal remaining capacity is found
-        // without relaxing no-overlap, building or road/path legality.
         outer: for (let radius = 1; radius <= REGION_SIZE * 2; radius += 1) {
           for (let dr = -radius; dr <= radius; dr += 1) {
             for (let dc = -radius; dc <= radius; dc += 1) {
@@ -352,15 +356,32 @@
       return true;
     }
 
-    if (!ensureSpatialNpcs()) return false;
+    const population = worldBefore?.originVillage?.population;
+    if (!Array.isArray(worldBefore?.npcs) || !Array.isArray(population) || worldBefore.npcs.length !== population.length) {
+      if (!ensureSpatialNpcs()) return false;
+    }
     const world = Game.State.world;
     const village = world.originVillage;
     const roads = roadSet(village);
     const stateKey = `${String(world.seed || '')}|${String(world.npcRuntime?.bindingKey || '')}|${step}`;
+    const relevance = Game.NPCRelevanceRuntime;
     const desiredMap = new Map();
-    for (const npc of world.npcs) desiredMap.set(npc.id, desiredFor(npc, totalGameMinutes));
-    const dialoguePlan = chooseDialoguePlan(world.npcs, totalGameMinutes, village, roads);
-    const resolution = resolveOccupancy(world.npcs, desiredMap, { village, roads, seed: world.seed, step, dialoguePlan });
+    const fixedNpcIds = new Set();
+    const activeNpcs = [];
+
+    for (const npc of world.npcs) {
+      const due = typeof relevance?.authoritativeDue === 'function' ? relevance.authoritativeDue(npc, totalGameMinutes) : true;
+      if (due) {
+        desiredMap.set(npc.id, desiredFor(npc, totalGameMinutes));
+        activeNpcs.push(npc);
+      } else {
+        fixedNpcIds.add(npc.id);
+        desiredMap.set(npc.id, { point: point(npc), activity: npc.activity || 'idle' });
+      }
+    }
+
+    const dialoguePlan = chooseDialoguePlan(activeNpcs, totalGameMinutes, village, roads);
+    const resolution = resolveOccupancy(world.npcs, desiredMap, { village, roads, seed: world.seed, step, dialoguePlan, fixedNpcIds });
 
     for (const npc of world.npcs) {
       const resolved = resolution.resolved.get(npc.id);
@@ -373,6 +394,7 @@
       npc.movementDecision = resolved.decision;
       npc.dialogueWith = null;
       npc.dialogueLine = null;
+      if (!fixedNpcIds.has(npc.id)) relevance?.markAuthoritativeUpdated?.(npc, totalGameMinutes);
     }
 
     world.npcDialogues = [];
@@ -403,6 +425,8 @@
     world.npcRuntime.collisionCount = resolution.collisionCount;
     world.npcRuntime.sideStepCount = resolution.sideStepCount;
     world.npcRuntime.yieldWaitCount = resolution.yieldWaitCount;
+    world.npcRuntime.relevanceActiveCount = activeNpcs.length;
+    world.npcRuntime.relevanceFixedCount = fixedNpcIds.size;
     return true;
   }
 
@@ -529,9 +553,6 @@
     const renderWorld = renderer.renderWorld.bind(renderer);
     renderer.renderWorld = function spatialNpcRenderWorld(force) {
       const result = renderWorld(force);
-      // updateAt() performs the authoritative same-minute state-key guard before it
-      // calls ensureSpatialNpcs(). Do not remap the complete population on every
-      // presentation frame only to have updateAt() immediately return.
       updateAt();
       oldNpcWorld?.drawPresentation?.();
       drawDevelopmentBubbles();
