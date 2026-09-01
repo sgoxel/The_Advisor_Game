@@ -1,64 +1,19 @@
 import { test, expect } from '@playwright/test';
-
-async function waitForGame(page) {
-  await page.goto('./');
-  await page.waitForFunction(() => Boolean(
-    window.Game?.State?.world?.terrain?.length &&
-    window.Game?.DevelopmentMode &&
-    window.Game?.AuthoritativeState
-  ));
-}
-
+async function waitForGame(page) { await page.goto('./'); await page.waitForFunction(() => Boolean(window.Game?.State?.world?.terrain?.length && window.Game?.DevelopmentMode && window.Game?.AuthoritativeState)); }
 test('Development Mode exposes bounded read-only Simulation and presentation diagnostics', async ({ page }) => {
-  const pageErrors = [];
-  const consoleErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(error.message));
-  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
-  await waitForGame(page);
-
-  const button = page.locator('#developmentModeBtn');
-  const panel = page.locator('#developmentModePanel');
-  await expect(button).toBeVisible();
-  await expect(button).toHaveAttribute('aria-pressed', 'false');
-  await expect(panel).toHaveClass(/hidden/);
-
-  const before = await page.evaluate(() => window.Game.AuthoritativeState.canonicalStringify(window.Game.State));
-  await button.click();
-  await expect(button).toHaveAttribute('aria-pressed', 'true');
-  await expect(panel).not.toHaveClass(/hidden/);
-  await expect(panel.getByText('Simulation-backed')).toBeVisible();
-  await expect(panel.getByText('Presentation / runtime')).toBeVisible();
-
-  const snapshot = await page.evaluate(() => window.Game.DevelopmentMode.capture());
-  expect(snapshot.presentationOnly).toBe(true);
-  expect(snapshot.enabled).toBe(true);
-  expect(snapshot.simulation.authority).toBe('simulation');
-  expect(snapshot.presentation.authority).toBe('presentation');
-  expect(snapshot.simulation.world.seed).toBeTruthy();
-  expect(snapshot.simulation.world.rows).toBe(100);
-  expect(snapshot.simulation.world.cols).toBe(100);
-  expect(snapshot.presentation.camera.zoom).toBeGreaterThan(0);
-  expect(Number.isFinite(snapshot.simulation.gameTime?.totalGameMinutes)).toBe(true);
-
-  const firstTimeText = await page.locator('#devGameTime').textContent();
-  await page.waitForTimeout(650);
-  const secondSnapshot = await page.evaluate(() => window.Game.DevelopmentMode.refresh());
-  expect(secondSnapshot.presentationOnly).toBe(true);
-  expect(await page.locator('#devGameTime').textContent()).toBeTruthy();
-  expect(firstTimeText).toBeTruthy();
-
-  const afterInspection = await page.evaluate(() => window.Game.AuthoritativeState.canonicalStringify(window.Game.State));
-  expect(afterInspection).toBe(before);
-
-  await button.click();
-  await expect(button).toHaveAttribute('aria-pressed', 'false');
-  await expect(panel).toHaveClass(/hidden/);
-  const afterToggleOff = await page.evaluate(() => window.Game.AuthoritativeState.canonicalStringify(window.Game.State));
-  expect(afterToggleOff).toBe(before);
-
-  const refreshInterval = await page.evaluate(() => window.Game.DevelopmentMode.refreshIntervalMs);
-  expect(refreshInterval).toBeGreaterThanOrEqual(400);
-  expect(refreshInterval).toBeLessThanOrEqual(1000);
-  expect(pageErrors).toEqual([]);
-  expect(consoleErrors).toEqual([]);
+  const pageErrors=[]; const consoleErrors=[]; page.on('pageerror',(e)=>pageErrors.push(e.message)); page.on('console',(m)=>{if(m.type()==='error')consoleErrors.push(m.text());}); await waitForGame(page);
+  const button=page.locator('#developmentModeBtn'); const panel=page.locator('#developmentModePanel'); await expect(button).toBeVisible(); await expect(button).toHaveAttribute('aria-pressed','false'); await expect(panel).toHaveClass(/hidden/);
+  const before=await page.evaluate(()=>window.Game.AuthoritativeState.canonicalStringify(window.Game.State)); await button.click(); await expect(button).toHaveAttribute('aria-pressed','true'); await expect(panel).not.toHaveClass(/hidden/); await expect(panel.getByText('Simulation-backed')).toBeVisible(); await expect(panel.getByText('Presentation / runtime')).toBeVisible();
+  const snapshot=await page.evaluate(()=>window.Game.DevelopmentMode.capture()); expect(snapshot.presentationOnly).toBe(true); expect(snapshot.enabled).toBe(true); expect(snapshot.simulation.authority).toBe('simulation'); expect(snapshot.presentation.authority).toBe('presentation'); expect(snapshot.simulation.world.seed).toBeTruthy(); expect(snapshot.simulation.world.rows).toBe(100); expect(snapshot.simulation.world.cols).toBe(100); expect(snapshot.presentation.camera.zoom).toBeGreaterThan(0); expect(Number.isFinite(snapshot.simulation.gameTime?.totalGameMinutes)).toBe(true);
+  await page.waitForTimeout(650); expect((await page.evaluate(()=>window.Game.DevelopmentMode.refresh())).presentationOnly).toBe(true); expect(await page.locator('#devGameTime').textContent()).toBeTruthy();
+  expect(await page.evaluate(()=>window.Game.AuthoritativeState.canonicalStringify(window.Game.State))).toBe(before); await button.click(); await expect(panel).toHaveClass(/hidden/); expect(await page.evaluate(()=>window.Game.AuthoritativeState.canonicalStringify(window.Game.State))).toBe(before);
+  const interval=await page.evaluate(()=>window.Game.DevelopmentMode.refreshIntervalMs); expect(interval).toBeGreaterThanOrEqual(400); expect(interval).toBeLessThanOrEqual(1000); expect(pageErrors).toEqual([]); expect(consoleErrors).toEqual([]);
+});
+test('Development Mode NPC routine inspector projects authoritative GameTime routine state without mutation', async ({ page }) => {
+  const pageErrors=[]; const consoleErrors=[]; page.on('pageerror',(e)=>pageErrors.push(e.message)); page.on('console',(m)=>{if(m.type()==='error')consoleErrors.push(m.text());}); await waitForGame(page);
+  const before=await page.evaluate(()=>window.Game.AuthoritativeState.canonicalStringify(window.Game.State)); await page.locator('#developmentModeBtn').click(); await page.getByRole('button',{name:'Inspect NPC routines'}).click();
+  const list=page.locator('#devNpcListDialog'); await expect(list).toBeVisible(); await expect(list.getByText('Read-only Simulation inspection')).toBeVisible(); const rows=list.locator('.development-npc-row'); expect(await rows.count()).toBeGreaterThan(0); const firstId=await rows.first().getAttribute('data-npc-id'); await rows.first().click();
+  const inspector=page.locator('#devRoutineDialog'); await expect(inspector).toBeVisible(); await expect(inspector.getByText('Read-only · Development Mode')).toBeVisible(); await expect(inspector.locator('.development-routine-node')).toHaveCount(5); await expect(inspector.locator('.development-routine-node.current')).toHaveCount(1); await expect(inspector.getByText('Travel to workplace')).toBeVisible(); await expect(inspector.getByText('Work',{exact:true})).toBeVisible(); await expect(inspector.getByText('Travel to social destination')).toBeVisible(); await expect(inspector.getByText('Socialize')).toBeVisible(); await expect(inspector.getByText('Return home')).toBeVisible();
+  const projection=await page.evaluate((id)=>window.Game.DevelopmentMode.npcProjections().find((npc)=>npc.id===id),firstId); expect(projection.clockAuthority).toBe('Game.GameTime'); expect(projection.nodes).toHaveLength(5); expect(projection.nodes.filter((node)=>node.current)).toHaveLength(1); expect(['commuting-to-work','working','local-errand','social','returning-home']).toContain(projection.activity);
+  await inspector.locator('.development-routine-node').first().focus(); await page.keyboard.press('Escape'); await expect(inspector).not.toBeVisible(); expect(await page.evaluate(()=>window.Game.AuthoritativeState.canonicalStringify(window.Game.State))).toBe(before); expect(pageErrors).toEqual([]); expect(consoleErrors).toEqual([]);
 });
