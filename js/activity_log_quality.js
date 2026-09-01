@@ -30,8 +30,8 @@
     const recent = new Map();
 
     function prune(now) {
-      for (const [key, timestamp] of recent.entries()) {
-        if (now - timestamp > RECENT_TTL_MS) recent.delete(key);
+      for (const [key, entry] of recent.entries()) {
+        if (now - entry.timestamp > RECENT_TTL_MS) recent.delete(key);
       }
     }
 
@@ -65,14 +65,34 @@
         ? `error:${detailText}`
         : `event:${lower}|${detailText}`;
       const previous = recent.get(duplicateKey);
-      if (previous !== undefined && now - previous <= RECENT_TTL_MS) {
-        nextMeta.diagnosticOnly = true;
-        nextMeta.source = nextMeta.source || (isErrorLike ? 'duplicate-error-capture' : 'duplicate-event');
+      let suppressAdditionalStructuredDuplicate = false;
+      if (previous && now - previous.timestamp <= RECENT_TTL_MS) {
+        previous.timestamp = now;
+        if (previous.duplicateRecorded) {
+          // Keep the legacy/raw diagnostic line, but do not keep adding structured
+          // duplicate cards after the single diagnostic duplicate already recorded.
+          suppressAdditionalStructuredDuplicate = true;
+        } else {
+          previous.duplicateRecorded = true;
+          nextMeta.diagnosticOnly = true;
+          nextMeta.source = nextMeta.source || (isErrorLike ? 'duplicate-error-capture' : 'duplicate-event');
+        }
       } else {
-        recent.set(duplicateKey, now);
+        recent.set(duplicateKey, { timestamp: now, duplicateRecorded: false });
       }
 
-      return original(title, details, nextMeta);
+      const store = Game.State?.log;
+      const structuredLengthBefore = Array.isArray(store?.events) ? store.events.length : null;
+      const result = original(title, details, nextMeta);
+
+      if (suppressAdditionalStructuredDuplicate && structuredLengthBefore !== null && Array.isArray(store.events)) {
+        if (store.events.length > structuredLengthBefore) {
+          store.events.splice(structuredLengthBefore, store.events.length - structuredLengthBefore);
+          if (typeof ActivityLog.render === 'function') ActivityLog.render();
+        }
+      }
+
+      return result;
     };
 
     Object.defineProperty(UI.addLog, '__r04ActivityLogQualityBridge', {
