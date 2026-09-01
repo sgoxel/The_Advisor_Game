@@ -50,10 +50,48 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add design/source/buildings/*_starter_1024.png design/source/buildings/*_starter_1024.cells.json design/source/buildings/starter_village_building_aliases.json
-          if git diff --cached --quiet; then
-            echo "Generated assets already match committed production sources."
-            exit 0
-          fi
-          git commit -m "design(r04): materialize starter building atlases (#348)"
-          git push origin HEAD:main
+
+          types=(home inn village_hall bakery market smithy workshop guard_post mill farmstead storage well)
+
+          validate_generated() {
+            rm -rf /tmp/starter-building-*
+            for type in "${types[@]}"; do
+              atlas="design/source/buildings/${type}_starter_1024.png"
+              manifest="design/source/buildings/${type}_starter_1024.cells.json"
+              test -s "$atlas"
+              test -s "$manifest"
+              node tools/split_tile_atlas.mjs --atlas "$atlas" --manifest "$manifest" --output "/tmp/starter-building-${type}"
+              test "$(find "/tmp/starter-building-${type}" -type f -name '*.png' | wc -l)" -eq 12
+            done
+            node -e "const fs=require('fs'); const p='design/source/buildings/starter_village_building_aliases.json'; const x=JSON.parse(fs.readFileSync(p)); if(x.canonicalTypes.length!==12) process.exit(1);"
+          }
+
+          # main may advance while this workflow is generating/validating assets. Never
+          # force-push or publish assets generated from a stale tree. Instead, refresh
+          # to the latest main, regenerate deterministically, validate, and retry a
+          # bounded number of times if another concurrent writer wins the push race.
+          for attempt in 1 2 3 4; do
+            echo "Publication attempt ${attempt}/4"
+            git fetch origin main
+            git reset --hard origin/main
+
+            node design/source/buildings/generate_starter_village_building_atlases.mjs
+            validate_generated
+
+            git add design/source/buildings/*_starter_1024.png design/source/buildings/*_starter_1024.cells.json design/source/buildings/starter_village_building_aliases.json
+            if git diff --cached --quiet; then
+              echo "Generated assets already match committed production sources on latest main."
+              exit 0
+            fi
+
+            git commit -m "design(r04): materialize starter building atlases (#348)"
+            if git push origin HEAD:main; then
+              echo "Generated assets published without overwriting intervening main commits."
+              exit 0
+            fi
+
+            echo "main advanced during publication; regenerating from the new main head."
+          done
+
+          echo "Unable to publish generated assets after 4 concurrency-safe attempts." >&2
+          exit 1
