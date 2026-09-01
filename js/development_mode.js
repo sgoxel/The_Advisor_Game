@@ -109,8 +109,29 @@
   function renderRoutine(npc) {
     setValue('devRoutineTitle', `${npc.name} — routine`); setValue('devRoutineIdentity', `${npc.profession} · ${npc.id}`); setValue('devRoutineCurrent', `${npc.activity} · ${npc.currentNodeId || 'Unavailable'} · ${npc.movement} · tile ${npc.row ?? '?'},${npc.col ?? '?'}`);
     setValue('devRoutineContext', `Clock: ${npc.clockAuthority} · Home: ${npc.anchors.home} · Work: ${npc.anchors.work} · Social: ${npc.anchors.social} · Dialogue: ${npc.dialogueWith}`);
-    const flow = document.getElementById('devRoutineFlow'); if (!flow) return; flow.replaceChildren();
-    npc.nodes.forEach((node, index) => { const item = document.createElement('div'); item.className = `development-routine-node${node.current ? ' current' : ''}`; item.tabIndex = 0; item.setAttribute('aria-label', `${node.label}. ${node.timeWindow}. Destination ${node.destinationLabel}.${node.current ? ' CURRENT.' : ''} Next when time window advances: ${node.nextId}.`); item.innerHTML = `<div><strong>${node.label}</strong>${node.current ? '<span class="development-current-badge">CURRENT</span>' : ''}</div><small>${node.timeWindow} · ${node.destinationLabel}</small>`; flow.appendChild(item); if (index < npc.nodes.length - 1) { const edge = document.createElement('div'); edge.className = 'development-routine-edge'; edge.textContent = '↓ Time window advances'; flow.appendChild(edge); } });
+    const flow = document.getElementById('devRoutineFlow'); if (!flow) return;
+    const liveIds = new Set(npc.nodes.map((node) => node.id));
+    flow.querySelectorAll('.development-routine-node').forEach((item) => { if (!liveIds.has(item.dataset.routineNodeId)) item.remove(); });
+    flow.querySelectorAll('.development-routine-edge').forEach((edge) => { if (!liveIds.has(edge.dataset.afterNodeId)) edge.remove(); });
+    npc.nodes.forEach((node, index) => {
+      let item = Array.from(flow.querySelectorAll('.development-routine-node')).find((candidate) => candidate.dataset.routineNodeId === node.id);
+      if (!item) {
+        item = document.createElement('div'); item.className = 'development-routine-node'; item.tabIndex = 0; item.dataset.routineNodeId = node.id;
+        const heading = document.createElement('div'); const strong = document.createElement('strong'); const badge = document.createElement('span'); badge.className = 'development-current-badge'; badge.textContent = 'CURRENT'; const detail = document.createElement('small'); heading.append(strong, badge); item.append(heading, detail);
+      }
+      item.classList.toggle('current', node.current);
+      const badge = item.querySelector('.development-current-badge'); if (badge) badge.hidden = !node.current;
+      const strong = item.querySelector('strong'); if (strong && strong.textContent !== node.label) strong.textContent = node.label;
+      const detail = item.querySelector('small'); const detailText = `${node.timeWindow} · ${node.destinationLabel}`; if (detail && detail.textContent !== detailText) detail.textContent = detailText;
+      item.setAttribute('aria-label', `${node.label}. ${node.timeWindow}. Destination ${node.destinationLabel}.${node.current ? ' CURRENT.' : ''} Next when time window advances: ${node.nextId}.`);
+      const expectedNode = Array.from(flow.children).find((child) => child.classList?.contains('development-routine-node') && child.dataset.routineNodeId === node.id);
+      if (!expectedNode) flow.appendChild(item);
+      if (index < npc.nodes.length - 1) {
+        let edge = Array.from(flow.querySelectorAll('.development-routine-edge')).find((candidate) => candidate.dataset.afterNodeId === node.id);
+        if (!edge) { edge = document.createElement('div'); edge.className = 'development-routine-edge'; edge.dataset.afterNodeId = node.id; edge.textContent = '↓ Time window advances'; }
+        if (item.nextElementSibling !== edge) item.after(edge);
+      }
+    });
   }
   function openRoutine(id, invoker) { const npc = npcProjections().find((candidate) => candidate.id === String(id)); if (!npc) return; selectedNpcId = npc.id; renderNpcList(); renderRoutine(npc); closeDialog('devNpcListDialog', false); dialogInvoker = invoker || dialogInvoker; const dialog = document.getElementById('devRoutineDialog'); dialog?.showModal(); dialog?.querySelector('.development-dialog-back')?.focus(); }
   function backToList() { closeDialog('devRoutineDialog', false); openNpcList(document.getElementById('devNpcRoutinesBtn')); }
