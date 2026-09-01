@@ -30,7 +30,7 @@ Immediately after reading README and before normal role/capacity scanning, every
 
 The Worker must find:
 
-- every exact-target live `WORK-CLAIM` issued by that same Worker and not subsequently cleared or closed;
+- every exact-target `WORK-CLAIM` issued by that same Worker, whether it is still valid under the three-hour stale rule, and whether it was subsequently cleared or closed;
 - every unresolved `WORK-CLAIM WAIT` / retained-responsibility record previously created by that same Worker;
 - whether each such issue is closed, still waiting, or executable again.
 
@@ -42,6 +42,7 @@ Priority rules:
 4. A Worker must not acquire a new unrelated `WORK-CLAIM` while any own unresolved issue has an executable safe action.
 5. Difficulty, size, uncertainty, investigation cost, number of files, expected test duration, or preference for another role is never permission to abandon an executable owned issue.
 6. After every material state change, and before every new unrelated claim, re-check own waiting responsibilities. If a resume trigger has become true, return to that older owned issue at the next atomic checkpoint before claiming further work.
+7. If an own historical claim has expired under the three-hour rule, it is no longer exclusive. Before resuming it, inspect whether another Worker validly took over or completed the issue; reacquire normally only when the target remains available.
 
 This rule applies equally to scheduled Workers #1-#5 and manual Workers #6-#20.
 
@@ -77,6 +78,41 @@ When a genuine mandatory wait is reached and the Worker needs to do unrelated wo
 
 When the resume trigger becomes true, the original responsible Worker must preferentially reclaim and continue the issue before taking further unrelated work, unless the issue was already validly completed/closed by the required handoff role.
 
+## Three-hour stale exclusive-claim expiry
+
+Exclusive claim protection has a sliding maximum inactivity window of **3 hours**.
+
+### Clock and qualifying action
+
+- The initial `WORK-CLAIM` comment starts the clock for that exact Worker + exact issue.
+- The clock is refreshed only by a **qualifying action from the same Worker on the same issue**.
+- A qualifying action must contain concrete target progress or a material target-state decision/evidence update, such as a target-linked commit/PR/handoff, implementation/design/test/review evidence, a revision decision/correction, or an exact continuation checkpoint that records newly completed work/evidence and the next safe action.
+- Empty heartbeat/status comments (`still working`, `claim refresh`, etc.), repeated unchanged blocker text, re-fetch-only activity, activity on another issue, cursor/rotation comments, or unrelated commits do **not** refresh the clock.
+- Mandatory external/independent waits must use the non-exclusive parking protocol above; they must not keep an exclusive claim alive merely by periodic comments.
+
+### Expiry
+
+If **more than 3 hours** have elapsed since the most recent qualifying same-Worker/same-issue action, the exclusive claim is automatically **STALE / INVALID** and has zero collision-blocking effect.
+
+Before ignoring or taking over a claim as stale, the acting Worker must:
+
+1. fetch the full exact-target issue history;
+2. identify the original claim and the most recent qualifying action by that Worker on that issue;
+3. verify from timestamps that more than 3 hours have elapsed;
+4. confirm no later qualifying action renewed the claim;
+5. record `STALE WORK-CLAIM INVALIDATED(worker=..., issue=..., claim_comment=..., last_qualifying_action=..., inactive_for=..., checked_at=...)` on the issue;
+6. only then use the normal two-phase exact-target claim -> immediate re-fetch check before writing.
+
+A stale claim does not need consent from the inactive Worker to expire. A later invocation of the original Worker must treat the stale claim as non-exclusive historical responsibility, inspect whether another Worker has validly taken over/completed the target, and reacquire normally only if the target is still available.
+
+### Hard-limit continuation
+
+A hard execution/context/tool cutoff may keep an executable exclusive claim only while the three-hour validity window remains satisfied. The Worker records an exact continuation checkpoint and must resume on its next invocation. If no qualifying same-target action occurs for more than three hours, that preserved claim still expires automatically and may be taken over safely using the stale-invalidation protocol.
+
+### Classification and audit
+
+Only **valid, non-stale exclusive claims** belong in collision/live-claim blocker classifications. Stale claims are invalidated first and then the target is reclassified from live state. Run/audit output should identify stale invalidations separately (`stale_claims_invalidated_this_run`, `stale_claim_issue_ids`) whenever any are found.
+
 ## Maximum work-conserving execution
 
 After own-claim reconciliation, starting at the assigned role, traverse the cycle and perform all safely eligible work in project-priority order.
@@ -92,7 +128,7 @@ After every material issue, commit, check, revision, dependency, claim, handoff,
 5. continue that role while eligible work remains;
 6. advance to the next role only when the current role is exhausted and no own resumable issue requires priority.
 
-Useful work or any eligibility-changing event resets the empty-pass stop gate. Continue passes until the stop conditions below are satisfied.
+Useful work or any eligibility-changing event, including stale-claim invalidation, resets the empty-pass stop gate. Continue passes until the stop conditions below are satisfied.
 
 Never invent work, retry an unchanged blocker indefinitely, or idle on a mandatory external wait when another unrelated eligible target exists after the wait has been properly parked and the exclusive claim cleared.
 
@@ -106,7 +142,7 @@ A target may be excluded from immediately executable depth only when current aut
 
 - the target belongs to a future/inactive phase;
 - an explicit `Depends on`, Planner dependency/order decision, acceptance prerequisite, or other authoritative prerequisite is unsatisfied;
-- an earlier live conflicting **exclusive** `WORK-CLAIM` exists on that exact target;
+- an earlier valid, non-stale conflicting **exclusive** `WORK-CLAIM` exists on that exact target;
 - the target requires external evidence/CI/another Worker result before the measured role can safely act and no independent action remains for that role;
 - the measured Worker/role is prohibited by role authority or independence;
 - an unresolved P-REV prevents implementation because scope/AC/dependency/phase authority is genuinely undecided;
@@ -158,7 +194,7 @@ The sweep must examine **every approved current/earlier open focused issue/task*
 
 For each scanned target, classify the current live state for authorized roles as one of the applicable outcomes: eligible normal work, eligible revision work, eligible independent verification, hard dependency blocked, live-claimed, mandatory-wait responsibility, external-only wait, independence/role excluded, future/inactive, or other evidenced hard exclusion. Soft coordination/reuse relationships remain visible in the ledger but do not reduce executable depth.
 
-Immediately executable means the target is current/earlier and open, has no unsatisfied **real hard prerequisite for the measured role**, can be acted on safely now by an authorized role, has no earlier live conflicting exclusive exact-target claim, and requires no external wait before that role's next safe action. A revision counts as executable whenever the measured authorized role has a concrete safe correction/retest action now.
+Immediately executable means the target is current/earlier and open, has no unsatisfied **real hard prerequisite for the measured role**, can be acted on safely now by an authorized role, has no earlier valid non-stale conflicting exclusive exact-target claim, and requires no external wait before that role's next safe action. A revision counts as executable whenever the measured authorized role has a concrete safe correction/retest action now.
 
 If legitimate independent work can be exposed from approved scope, Planner must create, adapt, reopen, or split focused outcomes as appropriate, preserving real dependencies, acceptance criteria, phase boundaries, Designer coverage, independence, and non-duplication. Then re-fetch state and continue the role cycle so newly executable work can be consumed in the same run when safe.
 
@@ -194,7 +230,7 @@ Before acquiring a new unrelated exclusive claim, the Worker must prove one of t
 
 A claim on issue A has zero ownership effect on issue B. Parent/child, sibling, same-feature, dependency, role, pass, cursor, phase, backlog, chain, batch, queue, or invocation relationships never create broader ownership.
 
-Use a two-phase safety check before writes: inspect target state, claim the exact target when collision protection is needed, then immediately re-fetch and abandon the claim if an earlier conflicting exclusive claim exists.
+Use a two-phase safety check before writes: inspect target state, claim the exact target when collision protection is needed, then immediately re-fetch and abandon the claim if an earlier valid non-stale conflicting exclusive claim exists. If an apparent earlier claim is older than three hours, apply the stale-invalidation protocol before deciding collision state.
 
 If a target reaches a genuine mandatory wait and the Worker moves elsewhere, use the parking protocol above: record wait evidence/resume trigger, explicitly clear exclusivity, retain responsibility, then continue. Never silently leave an uncleared claim behind.
 
