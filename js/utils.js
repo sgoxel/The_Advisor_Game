@@ -152,4 +152,5 @@ window.Game.Utils.loadScriptOnce("js/npc_contextual_activity.js", "r04NpcContext
 // retries installation until UI/state are ready, then converts legacy addLog calls into a
 // bounded structured activity stream without changing Simulation authority.
 window.Game.Utils.loadScriptOnce("js/activity_log_runtime.js", "r04ActivityLogRuntimeModule");
+window.Game.Utils.loadScriptOnce("js/activity_log_quality.js", "r04ActivityLogQualityModule");
 window.Game.Utils.loadScriptOnce("js/debug_log_export.js", "r04DebugLogExportModule");
