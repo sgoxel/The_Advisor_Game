@@ -112,4 +112,9 @@
   } else {
     install();
   }
+
+  // #253 stays coupled to this authoritative runtime bridge rather than generic Utils.
+  // The interior module derives floors/walls/door from the canonical originVillage and
+  // materializes only presentation/pathfinding integration on the same runtime world.
+  Game.Utils?.loadScriptOnce?.('js/starter_village_interiors.js', 'r04StarterVillageInteriorsModule');
 })();
