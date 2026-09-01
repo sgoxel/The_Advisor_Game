@@ -300,3 +300,6 @@
     document.addEventListener('DOMContentLoaded', install, { once: true });
   }
 })(typeof window !== 'undefined' ? window : globalThis);
+
+// #345 presentation-only vector-layer diagnostics load after the runtime/debug stack.
+window.Game?.Utils?.loadScriptOnce?.('js/vector_layer_debug.js', 'r04VectorLayerDebugModule');
