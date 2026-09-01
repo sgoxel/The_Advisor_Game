@@ -149,3 +149,105 @@ test('same authoritative minute does not rematerialize all NPC spatial state on 
   expect(evidence.queueDepth).toBeLessThanOrEqual(2);
   expect(failures).toEqual([]);
 });
+
+test('distant demotion unloads detail and promotion reconciles before visible authoritative work resumes', async ({ page }) => {
+  test.setTimeout(90_000);
+  const failures = collectRuntimeFailures(page);
+  await ready(page);
+
+  const evidence = await page.evaluate(async () => {
+    const Game = window.Game;
+    const runtime = Game.NPCRelevanceRuntime;
+    const scheduler = Game.FrameBudgetScheduler;
+    const player = Game.State.world.player;
+    const npc = Game.State.world.npcs.find((entry) => entry?.id && entry !== player) || Game.State.world.npcs[0];
+    const original = { row: npc.row, col: npc.col, interactionCritical: npc.interactionCritical, selectedForInteraction: npc.selectedForInteraction, dialogueWith: npc.dialogueWith };
+
+    Game.State.camera.followPlayer = false;
+    Game.State.camera.dragging = false;
+    Game.State.camera.vx = 0;
+    Game.State.camera.vy = 0;
+    Game.State.keys = {};
+
+    npc.interactionCritical = false;
+    npc.selectedForInteraction = false;
+    npc.dialogueWith = null;
+    npc.row = Number(player.row) + 90;
+    npc.col = Number(player.col) + 90;
+    runtime.scheduleFrame();
+    Game.Renderer.renderWorld(true);
+    const demoted = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
+
+    const promotedBefore = runtime.snapshot().promotedReconciliations;
+    npc.row = Number(player.row) + 1;
+    npc.col = Number(player.col);
+    const promotedStart = { row: npc.row, col: npc.col };
+    runtime.scheduleFrame();
+    for (let attempt = 0; attempt < 20 && scheduler.metrics().queueDepth > 0; attempt += 1) {
+      Game.Renderer.renderWorld(true);
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+    const afterDetail = runtime.snapshot();
+    const promotedEntry = afterDetail.entries.find((entry) => entry.id === String(npc.id));
+
+    Game.NPCRuntimeBridge.scheduleReconcile();
+    for (let attempt = 0; attempt < 20 && scheduler.metrics().queueDepth > 0; attempt += 1) {
+      Game.Renderer.renderWorld(true);
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+    const afterAuthoritative = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
+    const promotedEnd = { row: npc.row, col: npc.col };
+
+    npc.row = original.row;
+    npc.col = original.col;
+    npc.interactionCritical = original.interactionCritical;
+    npc.selectedForInteraction = original.selectedForInteraction;
+    npc.dialogueWith = original.dialogueWith;
+
+    return {
+      demotedTier: demoted?.tier,
+      demotedDetailLoaded: demoted?.detailLoaded,
+      promotedTier: promotedEntry?.tier,
+      promotedPendingAfterDetail: promotedEntry?.authoritativePromotionPending,
+      promotedPendingAfterAuthoritative: afterAuthoritative?.authoritativePromotionPending,
+      promotedReconciliationsDelta: afterDetail.promotedReconciliations - promotedBefore,
+      promotedStart,
+      promotedEnd
+    };
+  });
+
+  expect(evidence.demotedTier).toBe('distant');
+  expect(evidence.demotedDetailLoaded).toBe(false);
+  expect(['critical', 'nearby']).toContain(evidence.promotedTier);
+  expect(evidence.promotedReconciliationsDelta).toBeGreaterThanOrEqual(1);
+  expect(evidence.promotedPendingAfterDetail).toBe(true);
+  expect(evidence.promotedPendingAfterAuthoritative).toBe(false);
+  expect(Math.abs(evidence.promotedEnd.row - evidence.promotedStart.row) + Math.abs(evidence.promotedEnd.col - evidence.promotedStart.col)).toBeLessThanOrEqual(1);
+  expect(failures).toEqual([]);
+});
+
+test('relevance scheduler metadata stays outside authoritative persisted world state', async ({ page }) => {
+  const failures = collectRuntimeFailures(page);
+  await ready(page);
+
+  const evidence = await page.evaluate(() => {
+    const runtime = window.Game.NPCRelevanceRuntime;
+    runtime.scheduleFrame();
+    const snapshot = runtime.snapshot();
+    const worldJson = JSON.stringify(window.Game.State.world);
+    const authoritativeNpcState = window.Game.State.world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, activity: npc.activity }));
+    return {
+      compactStatePersisted: snapshot.compactStatePersisted,
+      worldContainsPromotionPending: worldJson.includes('authoritativePromotionPending'),
+      worldContainsRelevanceVersion: worldJson.includes(String(runtime.version)),
+      authoritativeNpcState,
+      authoritativeNpcStateRoundTrip: JSON.parse(JSON.stringify(authoritativeNpcState))
+    };
+  });
+
+  expect(evidence.compactStatePersisted).toBe(false);
+  expect(evidence.worldContainsPromotionPending).toBe(false);
+  expect(evidence.worldContainsRelevanceVersion).toBe(false);
+  expect(evidence.authoritativeNpcStateRoundTrip).toEqual(evidence.authoritativeNpcState);
+  expect(failures).toEqual([]);
+});
