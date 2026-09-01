@@ -6,6 +6,7 @@ on:
     paths:
       - 'js/terrain_routing.js'
       - 'js/npc_terrain_routing_bridge.js'
+      - 'js/npc_indoor_work_anchors.js'
       - 'js/utils.js'
       - 'tests/browser/r04-terrain-routing.spec.mjs'
       - '.github/workflows/r04-terrain-routing-verification.yml'
