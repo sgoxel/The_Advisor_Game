@@ -2,8 +2,9 @@
 (function installNpcIndoorWorkAnchors(global) {
   'use strict';
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-npc-indoor-work-anchors-v1';
+  const VERSION = 'r04-npc-indoor-work-anchors-v2';
   let renderHookInstalled = false;
+  let assigningIndoorAnchors = false;
 
   function key(point) { return `${point.row},${point.col}`; }
   function binding(world) { return world?.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 }; }
@@ -39,66 +40,73 @@
   }
 
   function assignIndoorAnchors() {
+    if (assigningIndoorAnchors) return false;
     const world = Game.State?.world;
     if (!world || !Array.isArray(world.npcs)) return false;
-    Game.StarterVillageInteriors?.materialize?.(world);
-    Game.NPCWorkplaces?.sync?.();
-    const assignments = assignmentMap(world);
-    const b = binding(world);
-    const claimed = new Set();
-    const records = [];
 
-    const ordered = world.npcs.slice().sort((a, c) => String(a.id).localeCompare(String(c.id)));
-    for (const npc of ordered) {
-      const assignment = assignments.get(String(npc.id));
-      if (!assignment || isOutdoor(assignment) || assignment.workplaceKind !== 'building' || !assignment.workplaceBuildingId) {
-        npc.indoorWorkAnchor = null;
-        continue;
+    assigningIndoorAnchors = true;
+    try {
+      Game.StarterVillageInteriors?.materialize?.(world);
+      Game.NPCWorkplaces?.sync?.();
+      const assignments = assignmentMap(world);
+      const b = binding(world);
+      const claimed = new Set();
+      const records = [];
+
+      const ordered = world.npcs.slice().sort((a, c) => String(a.id).localeCompare(String(c.id)));
+      for (const npc of ordered) {
+        const assignment = assignments.get(String(npc.id));
+        if (!assignment || isOutdoor(assignment) || assignment.workplaceKind !== 'building' || !assignment.workplaceBuildingId) {
+          npc.indoorWorkAnchor = null;
+          continue;
+        }
+        const interior = interiorFor(world, assignment.workplaceBuildingId);
+        if (!interior) {
+          npc.indoorWorkAnchor = null;
+          continue;
+        }
+        const candidates = interiorCandidates(world, interior).filter((point) => !claimed.has(key(point)));
+        if (!candidates.length) {
+          npc.indoorWorkAnchor = null;
+          records.push({ npcId: npc.id, buildingId: assignment.workplaceBuildingId, resolved: false, reason: 'no-unoccupied-walkable-interior-floor' });
+          continue;
+        }
+        const slot = Math.max(0, Number(assignment.capacitySlot || 0));
+        const target = candidates[slot % candidates.length] || candidates[0];
+        claimed.add(key(target));
+        const work = strategic(target, b);
+        npc.anchors = npc.anchors || {};
+        npc.anchors.work = {
+          ...(npc.anchors.work || {}),
+          ...work,
+          buildingId: String(assignment.workplaceBuildingId),
+          indoor: true,
+          source: 'npc-workplaces+starter-village-interiors',
+          capacitySlot: assignment.capacitySlot
+        };
+        npc.indoorWorkAnchor = Object.freeze({
+          authority: 'simulation-derived',
+          buildingId: String(assignment.workplaceBuildingId),
+          ...work,
+          capacitySlot: assignment.capacitySlot
+        });
+        records.push({ npcId: npc.id, buildingId: String(assignment.workplaceBuildingId), localRow: target.row, localCol: target.col, resolved: true });
       }
-      const interior = interiorFor(world, assignment.workplaceBuildingId);
-      if (!interior) {
-        npc.indoorWorkAnchor = null;
-        continue;
-      }
-      const candidates = interiorCandidates(world, interior).filter((point) => !claimed.has(key(point)));
-      if (!candidates.length) {
-        npc.indoorWorkAnchor = null;
-        records.push({ npcId: npc.id, buildingId: assignment.workplaceBuildingId, resolved: false, reason: 'no-unoccupied-walkable-interior-floor' });
-        continue;
-      }
-      const slot = Math.max(0, Number(assignment.capacitySlot || 0));
-      const target = candidates[slot % candidates.length] || candidates[0];
-      claimed.add(key(target));
-      const work = strategic(target, b);
-      npc.anchors = npc.anchors || {};
-      npc.anchors.work = {
-        ...(npc.anchors.work || {}),
-        ...work,
-        buildingId: String(assignment.workplaceBuildingId),
-        indoor: true,
-        source: 'npc-workplaces+starter-village-interiors',
-        capacitySlot: assignment.capacitySlot
-      };
-      npc.indoorWorkAnchor = Object.freeze({
+
+      world.npcIndoorWorkAnchors = Object.freeze({
+        version: VERSION,
         authority: 'simulation-derived',
-        buildingId: String(assignment.workplaceBuildingId),
-        ...work,
-        capacitySlot: assignment.capacitySlot
+        assignmentSource: Game.NPCWorkplaces?.version || null,
+        interiorSource: world.buildingInteriors?.version || null,
+        resolvedCount: records.filter((item) => item.resolved).length,
+        unresolvedCount: records.filter((item) => !item.resolved).length,
+        records: Object.freeze(records.map(Object.freeze))
       });
-      records.push({ npcId: npc.id, buildingId: String(assignment.workplaceBuildingId), localRow: target.row, localCol: target.col, resolved: true });
+      Game.NPCTerrainRouting?.refreshRoutes?.();
+      return true;
+    } finally {
+      assigningIndoorAnchors = false;
     }
-
-    world.npcIndoorWorkAnchors = Object.freeze({
-      version: VERSION,
-      authority: 'simulation-derived',
-      assignmentSource: Game.NPCWorkplaces?.version || null,
-      interiorSource: world.buildingInteriors?.version || null,
-      resolvedCount: records.filter((item) => item.resolved).length,
-      unresolvedCount: records.filter((item) => !item.resolved).length,
-      records: Object.freeze(records.map(Object.freeze))
-    });
-    Game.NPCTerrainRouting?.refreshRoutes?.();
-    return true;
   }
 
   function installRenderHook() {
