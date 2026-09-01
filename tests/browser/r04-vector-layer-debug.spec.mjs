@@ -31,7 +31,11 @@ function authoritativeSnapshot() {
     }))),
     roads: world.originVillage?.roadTiles || [],
     buildings: world.originVillage?.buildings || [],
-    npcs: (world.npcs || []).map((npc) => ({ id: npc.id, row: npc.row, col: npc.col }))
+    // NPC tile coordinates are authoritative Simulation state, but they legitimately
+    // advance with GameTime while this intentionally exhaustive presentation test runs.
+    // Preserve identity/population invariants here instead of falsely attributing normal
+    // runtime motion to a vector-layer toggle.
+    npcIds: (world.npcs || []).map((npc) => npc.id)
   });
 }
 
