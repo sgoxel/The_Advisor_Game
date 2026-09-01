@@ -1,11 +1,11 @@
 /*
-  R04 / #244: presentation-only starter-village exteriors.
+  R04 / #244 + #329: presentation-only starter-village exteriors.
   Placement/type/footprint/entrance remain Simulation authority.
 */
 (function installStarterVillageExteriors() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-starter-village-exteriors-v3-readable-silhouettes';
+  const VERSION = 'r04-starter-village-exteriors-v4-projection-bounds';
   const MODE = 'authoritative-building-silhouettes';
 
   const STYLES = Object.freeze({
@@ -31,6 +31,7 @@
 
   let overlayCanvas = null;
   let renderHookInstalled = false;
+  let rejectedProjectionCount = 0;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   function styleFor(building) {
@@ -59,15 +60,6 @@
     return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null;
   }
 
-  function footprintPolygon(footprint) {
-    if (!footprint) return null;
-    const r = Number(footprint.row), c = Number(footprint.col);
-    const h = Number(footprint.height), w = Number(footprint.width);
-    if (![r,c,h,w].every(Number.isFinite) || h <= 0 || w <= 0) return null;
-    const points = [project(r,c), project(r,c+w), project(r+h,c+w), project(r+h,c)];
-    return points.every(Boolean) ? points : null;
-  }
-
   function center(points) {
     return { x:points.reduce((s,p)=>s+p.x,0)/points.length, y:points.reduce((s,p)=>s+p.y,0)/points.length };
   }
@@ -77,6 +69,38 @@
       minX:Math.min(...points.map(p=>p.x)), maxX:Math.max(...points.map(p=>p.x)),
       minY:Math.min(...points.map(p=>p.y)), maxY:Math.max(...points.map(p=>p.y))
     };
+  }
+
+  function polygonArea(points) {
+    let sum = 0;
+    for (let i = 0; i < points.length; i += 1) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      sum += a.x * b.y - b.x * a.y;
+    }
+    return Math.abs(sum) * 0.5;
+  }
+
+  function safeFootprint(points, width, height) {
+    if (!Array.isArray(points) || points.length !== 4 || !points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y))) return false;
+    const b = bounds(points);
+    const spanX = b.maxX - b.minX;
+    const spanY = b.maxY - b.minY;
+    if (spanX > Math.max(320, width * 0.78) || spanY > Math.max(260, height * 0.78)) return false;
+    if (polygonArea(points) > width * height * 0.42) return false;
+    return true;
+  }
+
+  function footprintPolygon(footprint, width, height) {
+    if (!footprint) return null;
+    const r = Number(footprint.row), c = Number(footprint.col);
+    const h = Number(footprint.height), w = Number(footprint.width);
+    if (![r,c,h,w].every(Number.isFinite) || h <= 0 || w <= 0) return null;
+    const points = [project(r,c), project(r,c+w), project(r+h,c+w), project(r+h,c)];
+    if (!safeFootprint(points, width, height)) {
+      rejectedProjectionCount += 1;
+      return null;
+    }
+    return points;
   }
 
   function inset(points, scale) {
@@ -107,6 +131,8 @@
     const e=project(Number(building.entrance?.row), Number(building.entrance?.col));
     if (!e) return;
     const dx=c.x-e.x, dy=c.y-e.y, d=Math.hypot(dx,dy)||1;
+    const span = Math.max(1, b.maxX-b.minX, b.maxY-b.minY);
+    if (d > Math.max(96, span * 4)) return;
     const len=Math.min(d, clamp(Math.min(b.maxX-b.minX,b.maxY-b.minY)*0.34,8,22));
     const end={x:e.x+dx/d*len,y:e.y+dy/d*len};
     ctx.save();
@@ -147,7 +173,7 @@
   }
 
   function drawBuilding(ctx, building, width, height) {
-    const footprint=footprintPolygon(building.footprint); if (!footprint) return false;
+    const footprint=footprintPolygon(building.footprint,width,height); if (!footprint) return false;
     const fb=bounds(footprint);
     if (fb.maxX < -36 || fb.maxY < -48 || fb.minX > width+36 || fb.minY > height+48) return false;
     const style=styleFor(building), fw=fb.maxX-fb.minX, fh=fb.maxY-fb.minY;
@@ -210,6 +236,7 @@
     const ctx=canvas.getContext('2d'); if(!ctx) return false;
     ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,width,height);
 
+    rejectedProjectionCount=0;
     let visible=0; const types=new Set();
     for(const b of buildings) if(drawBuilding(ctx,b,width,height)){visible+=1;types.add(String(b.type||'unknown'));}
 
@@ -221,7 +248,8 @@
       buildingCount:String(buildings.length), visibleBuildingCount:String(visible), visibleBuildingTypes:Array.from(types).sort().join(','),
       visualFamilies:Array.from(families).sort().join(','), presentationAuthority:'presentation-only', descriptorSource:'originVillage.buildings',
       regionSize:String(Game.State?.world?.rows||0), presentationMode:MODE, placeholderMode:'none', rectangleOverlay:'disabled',
-      fullyStoneCoveredBuildings:String(fully), stoneCoveredTiles:String(covered), footprintTiles:String(total)
+      fullyStoneCoveredBuildings:String(fully), stoneCoveredTiles:String(covered), footprintTiles:String(total),
+      projectionGuard:'bounded-footprint', rejectedProjectionCount:String(rejectedProjectionCount)
     });
     return true;
   }
@@ -239,7 +267,7 @@
 
   Game.StarterVillageExteriors=Object.freeze({
     version:VERSION, authority:'presentation-only', descriptorSource:'originVillage.buildings', presentationMode:MODE,
-    snapshotDescriptors, snapshotPresentationPlan, snapshotPlaceholderCoverage, ensureOverlay, drawPresentation, detachPresentation
+    snapshotDescriptors, snapshotPresentationPlan, snapshotPlaceholderCoverage, safeFootprint, ensureOverlay, drawPresentation, detachPresentation
   });
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize);else initialize();
