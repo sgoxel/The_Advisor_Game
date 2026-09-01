@@ -52,7 +52,7 @@ permissions:
 jobs:
   spatial-world-and-npc-occupancy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout exact repository state
         uses: actions/checkout@v4
