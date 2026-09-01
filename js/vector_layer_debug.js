@@ -176,28 +176,55 @@
     button.type = 'button';
     button.className = 'secondary-btn vector-layer-debug-toggle';
     button.dataset.vectorLayerId = entry.id;
+    button.addEventListener('click', () => setEnabled(button.dataset.vectorLayerId, !isEnabled(button.dataset.vectorLayerId)));
+    updateButton(button, entry);
+    return button;
+  }
+
+  function updateButton(button, entry) {
+    button.dataset.vectorLayerId = entry.id;
     button.setAttribute('aria-pressed', entry.enabled ? 'true' : 'false');
     button.setAttribute('aria-label', `${entry.label}: ${entry.enabled ? 'enabled' : 'disabled'}`);
     button.textContent = entry.enabled ? 'On' : 'Off';
-    button.addEventListener('click', () => setEnabled(entry.id, !isEnabled(entry.id)));
-    return button;
   }
 
   function renderTable(section) {
     const body = section.querySelector('[data-vector-layer-body]');
     if (!body) return;
-    body.textContent = '';
+
+    const existingRows = new Map(
+      Array.from(body.querySelectorAll('[data-vector-layer-row]'))
+        .map((row) => [row.dataset.vectorLayerRow, row])
+    );
+    const activeIds = new Set();
+
     for (const entry of entries.values()) {
-      const row = document.createElement('tr');
-      row.dataset.vectorLayerRow = entry.id;
-      const name = document.createElement('td');
-      name.textContent = entry.label;
-      const type = document.createElement('td');
-      type.textContent = entry.category;
-      const state = document.createElement('td');
-      state.appendChild(makeButton(entry));
-      row.append(name, type, state);
-      body.appendChild(row);
+      activeIds.add(entry.id);
+      let row = existingRows.get(entry.id);
+      if (!row) {
+        row = document.createElement('tr');
+        row.dataset.vectorLayerRow = entry.id;
+
+        const name = document.createElement('td');
+        name.dataset.vectorLayerName = '';
+        const type = document.createElement('td');
+        type.dataset.vectorLayerCategory = '';
+        const state = document.createElement('td');
+        state.appendChild(makeButton(entry));
+        row.append(name, type, state);
+        body.appendChild(row);
+      }
+
+      const name = row.querySelector('[data-vector-layer-name]');
+      const type = row.querySelector('[data-vector-layer-category]');
+      const button = row.querySelector('[data-vector-layer-id]');
+      if (name && name.textContent !== entry.label) name.textContent = entry.label;
+      if (type && type.textContent !== entry.category) type.textContent = entry.category;
+      if (button) updateButton(button, entry);
+    }
+
+    for (const [id, row] of existingRows) {
+      if (!activeIds.has(id)) row.remove();
     }
   }
 
