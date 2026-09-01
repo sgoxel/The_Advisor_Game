@@ -23,10 +23,10 @@ async function ready(page) {
     camera.inertiaVelocityX = 0;
     camera.inertiaVelocityY = 0;
     window.Game.State.input?.keys?.clear?.();
-    // This suite owns scheduling semantics, not NPC bubble semantics. Suppress the
-    // presentation-only contextual wrapper so live NPC schedule ticks cannot make an
-    // unrelated render invariant abort the scheduler fixture while jobs are draining.
     if (window.Game.Config) window.Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
+    // Runtime modules can finish installing render wrappers after scheduler startup.
+    // Reassert the scheduler on the settled test runtime before measurements begin.
+    window.Game.FrameBudgetScheduler.wrapRenderer();
   });
   await expect.poll(
     () => page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().interactionActive),
@@ -56,8 +56,8 @@ async function drainUntilKeysGone(page, keys, maxSlices = 30) {
 
 test('interaction frames defer optional jobs and idle render slack resumes them', async ({ page }) => {
   test.setTimeout(90_000);
-  const failures = collectRuntimeFailures(page);
   await ready(page);
+  const failures = collectRuntimeFailures(page);
   const testKeys = Array.from({ length: 12 }, (_, index) => `test-job-${index}`);
 
   const during = await page.evaluate((keys) => {
@@ -101,8 +101,8 @@ test('interaction frames defer optional jobs and idle render slack resumes them'
 });
 
 test('real wheel interaction protects rendering before optional background work', async ({ page }) => {
-  const failures = collectRuntimeFailures(page);
   await ready(page);
+  const failures = collectRuntimeFailures(page);
   const canvas = page.locator('#gameCanvas');
   await canvas.hover();
 
@@ -130,8 +130,8 @@ test('real wheel interaction protects rendering before optional background work'
 });
 
 test('stable job keys deduplicate superseded optional work without changing Simulation state', async ({ page }) => {
-  const failures = collectRuntimeFailures(page);
   await ready(page);
+  const failures = collectRuntimeFailures(page);
   const before = await page.evaluate(() => {
     const world = window.Game.State.world;
     window.__frameBudgetDedupeValues = [];
