@@ -17,6 +17,10 @@ async function ready(page) {
     window.Game?.State?.world?.terrain?.length
   ), null, { timeout: 30_000 });
   await page.evaluate(() => {
+    // This suite verifies environment scheduling/region determinism, not contextual NPC
+    // bubble invariants. Suppress that presentation-only wrapper so unrelated live NPC
+    // schedule ticks cannot abort region activation/render calls used by this fixture.
+    if (window.Game.Config) window.Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
     window.Game.Utils?.loadScriptOnce?.('js/frame_budget_scheduler.js', 'r04FrameBudgetSchedulerModule');
   });
   await page.waitForFunction(() => Boolean(window.Game?.FrameBudgetScheduler?.metrics), null, { timeout: 10_000 });
