@@ -23,7 +23,22 @@ async function ready(page) {
     camera.inertiaVelocityX = 0;
     camera.inertiaVelocityY = 0;
     window.Game.State.input?.keys?.clear?.();
+    // This suite owns scheduling semantics, not NPC bubble semantics. Suppress the
+    // presentation-only contextual wrapper so live NPC schedule ticks cannot make an
+    // unrelated render invariant abort the scheduler fixture while jobs are draining.
+    if (window.Game.Config) window.Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
   });
+  await expect.poll(
+    () => page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().interactionActive),
+    { timeout: 10_000 }
+  ).toBe(false);
+}
+
+async function waitForIdleScheduler(page) {
+  await expect.poll(
+    () => page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().interactionActive),
+    { timeout: 10_000 }
+  ).toBe(false);
 }
 
 test('interaction frames defer optional jobs and idle render slack resumes them', async ({ page }) => {
@@ -31,39 +46,43 @@ test('interaction frames defer optional jobs and idle render slack resumes them'
   const failures = collectRuntimeFailures(page);
   await ready(page);
 
-  const evidence = await page.evaluate(async () => {
+  const during = await page.evaluate(() => {
     const scheduler = window.Game.FrameBudgetScheduler;
-    let executions = 0;
+    window.__frameBudgetExecutions = 0;
     for (let index = 0; index < 12; index += 1) {
       scheduler.enqueue(`test-job-${index}`, () => {
         const started = performance.now();
         while (performance.now() - started < 0.35) { /* bounded representative slice */ }
-        executions += 1;
+        window.__frameBudgetExecutions += 1;
         return true;
       }, { priority: index % 3, label: `test job ${index}` });
     }
-
     scheduler.noteInteraction('automated-pan', 260);
     window.Game.Renderer.renderWorld(true);
-    const during = { executions, metrics: scheduler.metrics() };
-
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    for (let attempt = 0; attempt < 12 && scheduler.metrics().queueDepth > 0; attempt += 1) {
-      window.Game.Renderer.renderWorld(true);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    }
-    const after = { executions, metrics: scheduler.metrics() };
-    return { during, after };
+    return { executions: window.__frameBudgetExecutions, metrics: scheduler.metrics() };
   });
 
-  expect(evidence.during.executions).toBe(0);
-  expect(evidence.during.metrics.interactionActive).toBe(true);
-  expect(evidence.during.metrics.queueDepth).toBe(12);
-  expect(evidence.during.metrics.deferredJobs).toBeGreaterThanOrEqual(12);
-  expect(evidence.after.executions).toBe(12);
-  expect(evidence.after.metrics.queueDepth).toBe(0);
-  expect(evidence.after.metrics.completedJobs).toBeGreaterThanOrEqual(12);
-  expect(evidence.after.metrics.jobWorstMs).toBeLessThan(50);
+  expect(during.executions).toBe(0);
+  expect(during.metrics.interactionActive).toBe(true);
+  expect(during.metrics.queueDepth).toBe(12);
+  expect(during.metrics.deferredJobs).toBeGreaterThanOrEqual(12);
+
+  await waitForIdleScheduler(page);
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const depth = await page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().queueDepth);
+    if (depth === 0) break;
+    await page.evaluate(() => window.Game.Renderer.renderWorld(true));
+    await page.waitForTimeout(20);
+  }
+
+  const after = await page.evaluate(() => ({
+    executions: window.__frameBudgetExecutions,
+    metrics: window.Game.FrameBudgetScheduler.metrics()
+  }));
+  expect(after.executions).toBe(12);
+  expect(after.metrics.queueDepth).toBe(0);
+  expect(after.metrics.completedJobs).toBeGreaterThanOrEqual(12);
+  expect(after.metrics.jobWorstMs).toBeLessThan(50);
   expect(failures).toEqual([]);
 });
 
@@ -85,7 +104,7 @@ test('real wheel interaction protects rendering before optional background work'
   await page.evaluate(() => window.Game.Renderer.renderWorld(true));
   expect(await page.evaluate(() => window.__frameBudgetWheelJobRuns)).toBe(0);
 
-  await page.waitForTimeout(180);
+  await waitForIdleScheduler(page);
   await page.evaluate(() => window.Game.Renderer.renderWorld(true));
   await expect.poll(() => page.evaluate(() => window.__frameBudgetWheelJobRuns)).toBe(1);
 
@@ -99,31 +118,28 @@ test('real wheel interaction protects rendering before optional background work'
 test('stable job keys deduplicate superseded optional work without changing Simulation state', async ({ page }) => {
   const failures = collectRuntimeFailures(page);
   await ready(page);
-  const result = await page.evaluate(async () => {
-    const scheduler = window.Game.FrameBudgetScheduler;
+  const before = await page.evaluate(() => {
     const world = window.Game.State.world;
-    const before = JSON.stringify({
-      seed: world.seed,
-      rows: world.rows,
-      cols: world.cols,
-      player: { row: world.player.row, col: world.player.col }
-    });
-    const values = [];
-    scheduler.enqueue('dedupe-world-job', () => { values.push('old'); return true; }, { version: '1' });
-    scheduler.enqueue('dedupe-world-job', () => { values.push('new'); return true; }, { version: '2' });
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    window.Game.Renderer.renderWorld(true);
-    const after = JSON.stringify({
-      seed: world.seed,
-      rows: world.rows,
-      cols: world.cols,
-      player: { row: world.player.row, col: world.player.col }
-    });
-    return { values, before, after, metrics: scheduler.metrics() };
+    window.__frameBudgetDedupeValues = [];
+    window.Game.FrameBudgetScheduler.enqueue('dedupe-world-job', () => { window.__frameBudgetDedupeValues.push('old'); return true; }, { version: '1' });
+    window.Game.FrameBudgetScheduler.enqueue('dedupe-world-job', () => { window.__frameBudgetDedupeValues.push('new'); return true; }, { version: '2' });
+    return JSON.stringify({ seed: world.seed, rows: world.rows, cols: world.cols, player: { row: world.player.row, col: world.player.col } });
+  });
+
+  await waitForIdleScheduler(page);
+  await page.evaluate(() => window.Game.Renderer.renderWorld(true));
+
+  const result = await page.evaluate(() => {
+    const world = window.Game.State.world;
+    return {
+      values: window.__frameBudgetDedupeValues,
+      after: JSON.stringify({ seed: world.seed, rows: world.rows, cols: world.cols, player: { row: world.player.row, col: world.player.col } }),
+      metrics: window.Game.FrameBudgetScheduler.metrics()
+    };
   });
 
   expect(result.values).toEqual(['new']);
-  expect(result.after).toBe(result.before);
+  expect(result.after).toBe(before);
   expect(result.metrics.authority).toBe('scheduling-only');
   expect(result.metrics.failedJobs).toBe(0);
   expect(failures).toEqual([]);
