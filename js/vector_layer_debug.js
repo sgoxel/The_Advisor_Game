@@ -13,6 +13,8 @@
   const savedVisibility = new Map();
   let baseRenderSource = null;
   let baseRenderWrapper = null;
+  let baseRenderInstalled = false;
+  let baseRenderInProgress = false;
   let uiInstalled = false;
   let renderPending = false;
 
@@ -239,16 +241,37 @@
   function installBaseRenderGate() {
     const renderer = Game.Renderer;
     if (!renderer || typeof renderer.renderWorld !== 'function') return false;
+    if (baseRenderInstalled) return true;
     const current = renderer.renderWorld;
-    if (current === baseRenderWrapper || current.__worldPresentationDebugV2) return true;
+    if (current.__worldPresentationDebugV2) {
+      baseRenderWrapper = current;
+      baseRenderInstalled = true;
+      return true;
+    }
     baseRenderSource = current;
     baseRenderWrapper = function worldPresentationDebugRender(...args) {
-      const result = withBaseMasks(() => withBackgroundGate(() => baseRenderSource.apply(this, args)));
-      enforceVisibility();
-      return result;
+      if (baseRenderInProgress) {
+        enforceVisibility();
+        return false;
+      }
+      baseRenderInProgress = true;
+      try {
+        return withBaseMasks(() => withBackgroundGate(() => baseRenderSource.apply(this, args)));
+      } finally {
+        baseRenderInProgress = false;
+        enforceVisibility();
+      }
     };
     Object.defineProperty(baseRenderWrapper, '__worldPresentationDebugV2', { value: true });
-    try { renderer.renderWorld = baseRenderWrapper; return true; } catch (_) { return false; }
+    try {
+      renderer.renderWorld = baseRenderWrapper;
+      baseRenderInstalled = true;
+      return true;
+    } catch (_) {
+      baseRenderSource = null;
+      baseRenderWrapper = null;
+      return false;
+    }
   }
 
   function cloneWithMethodGate(gameKey, methodName, layerId) {
