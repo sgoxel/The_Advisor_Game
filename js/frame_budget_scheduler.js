@@ -68,6 +68,11 @@ window.Game = window.Game || {};
   }
 
   function noteInteraction(kind, holdMs) {
+    // Runtime modules legitimately wrap Renderer.renderWorld after scheduler startup.
+    // Reassert the scheduler as the outermost wrapper at the interaction boundary so
+    // the visible interaction frame is always measured/prioritized. Shared renderDepth
+    // prevents duplicate accounting if an older scheduler wrapper remains deeper in the chain.
+    wrapRenderer();
     const hold = Number.isFinite(Number(holdMs)) ? Math.max(0, Number(holdMs)) : INTERACTION_HOLD_MS;
     interactionUntil = Math.max(interactionUntil, nowMs() + hold);
     return String(kind || 'interaction');
@@ -196,16 +201,19 @@ window.Game = window.Game || {};
   function wrapRenderer() {
     const renderer = Game.Renderer;
     if (!renderer || typeof renderer.renderWorld !== 'function') return false;
-    if (wrappedRenderer === renderer && renderer.renderWorld !== originalRenderWorld) return true;
-    if (renderer.renderWorld && renderer.renderWorld.__frameBudgetWrapped === true) return true;
+    // Only the current top-level function proves the scheduler is still outermost.
+    // If another runtime module wrapped renderWorld later, wrap that new chain again.
+    // renderDepth makes a nested older scheduler wrapper account only once.
+    if (renderer.renderWorld.__frameBudgetWrapped === true) return true;
 
-    originalRenderWorld = renderer.renderWorld;
+    const previousRenderWorld = renderer.renderWorld;
+    originalRenderWorld = previousRenderWorld;
     const wrapped = function (...args) {
       const startedAt = nowMs();
       lastRenderStartedAt = startedAt;
       renderDepth += 1;
       try {
-        return originalRenderWorld.apply(this, args);
+        return previousRenderWorld.apply(this, args);
       } finally {
         renderDepth -= 1;
         const endedAt = nowMs();
@@ -263,7 +271,7 @@ window.Game = window.Game || {};
   }
 
   Game.FrameBudgetScheduler = Object.freeze({
-    version: '1.0.0',
+    version: '1.0.1',
     authority: 'scheduling-only',
     enqueue,
     cancel,
