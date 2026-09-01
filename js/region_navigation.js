@@ -1,8 +1,8 @@
-/* R02-T18 / #113 + Admin #233 + R04 #352: Simulation-callable adjacent-region activation with lazy neighbor prefetch. */
+/* R02-T18 / #113 + Admin #233 + R04 #352: Simulation-callable adjacent-region activation with compact lazy neighbor prefetch. */
 (function installRegionNavigation() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'admin-100x100-region-navigation-v3-lazy-prefetch';
+  const VERSION = 'admin-100x100-region-navigation-v4-compact-lazy-prefetch';
   const RADIUS = 1;
   const MAX_PREFETCH_CACHE = 24;
   const prefetchCache = new Map();
@@ -40,6 +40,24 @@
     if (prefetchCache.has(key)) prefetchCache.delete(key);
     prefetchCache.set(key, value);
     while (prefetchCache.size > MAX_PREFETCH_CACHE) prefetchCache.delete(prefetchCache.keys().next().value);
+  }
+
+  // Off-screen prefetch deliberately stays compact. Full 100x100 reconstruction is authoritative
+  // work and is performed only when a region becomes relevant/active (or an explicit caller asks
+  // buildWindow). Doing that 10,000-tile reconstruction inside one background scheduler step defeats
+  // the frame budget even though the job itself was deferred.
+  function compactPrefetchDescriptor(seed, x, y, requestGeneration) {
+    const descriptor = Game.WorldCoordinates?.describeRegion?.(seed, x, y) || { x, y };
+    return Object.freeze({
+      authority: 'scheduling-only',
+      materialized: false,
+      seed: String(seed),
+      x,
+      y,
+      regionId: descriptor.id || null,
+      generatorVersion: Game.RegionTerrain?.generatorVersion || null,
+      cachedAtGeneration: requestGeneration
+    });
   }
 
   // Compatibility path: explicit callers/tests may still request the full deterministic 3x3 mosaic.
@@ -91,14 +109,13 @@
       const step = () => {
         const started = nowMs();
         if (requestGeneration !== generation) { pendingKeys.delete(job.jobKey); pendingMeta.delete(job.jobKey); discardedJobs += 1; return true; }
-        const region = reconstruct(seed, job.x, job.y);
-        putPrefetch(job.resultKey, Object.freeze({ ...regionMeta(region, job.x, job.y), cachedAtGeneration: requestGeneration, authority: 'deterministic-prefetch' }));
+        putPrefetch(job.resultKey, compactPrefetchDescriptor(seed, job.x, job.y, requestGeneration));
         completedJobs += 1; pendingKeys.delete(job.jobKey); pendingMeta.delete(job.jobKey);
         sliceSamples.push(Math.max(0, nowMs() - started)); if (sliceSamples.length > 120) sliceSamples.shift();
         return true;
       };
       pendingKeys.add(job.jobKey); pendingMeta.set(job.jobKey, Object.freeze({ enqueuedAt, requestGeneration })); queuedJobs += 1;
-      scheduler.enqueue(job.jobKey, step, { priority: -10, version: String(requestGeneration), label: `environment neighbor ${job.x},${job.y}` });
+      scheduler.enqueue(job.jobKey, step, { priority: -10, version: String(requestGeneration), label: `environment neighbor descriptor ${job.x},${job.y}` });
     }
   }
 
@@ -133,7 +150,7 @@
   function prefetchSnapshot() { return Object.freeze([...prefetchCache.values()].map((entry) => Object.freeze({ ...entry }))); }
   function capture() {
     const world = Game.State?.world;
-    return JSON.parse(JSON.stringify({ currentRegion: world?.currentRegion || null, activeRegionWindow: world?.activeRegionWindow || null, activeRows: world?.rows, activeCols: world?.cols, player: world?.player ? { regionX: world.player.regionX, regionY: world.player.regionY, worldX: world.player.worldX, worldY: world.player.worldY, row: world.player.row, col: world.player.col } : null }));
+    return JSON.parse(JSON.stringify({ currentRegion: world?.currentRegion || null, activeRegionWindow: world?.activeRegionWindow || null, activeRows: world?.rows, activeCols: world?.cols, player: world?.player ? { regionX: world.player.regionX, regionY: world.player.regionY, worldX: world.player.worldX, world.playerworldY: world.player.worldY, row: world.player.row, col: world.player.col } : null }));
   }
 
   Game.RegionNavigation = Object.freeze({ version: VERSION, authority: 'simulation', buildWindow, buildActiveRegion, activate, activateNeighbor, capture, lazyMetrics, prefetchSnapshot });
