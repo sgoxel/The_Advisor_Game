@@ -1,11 +1,11 @@
 /*
-  R04 / #317 + #346: contextual NPC activity labels.
+  R04 / #317 + #346 + #347: contextual NPC activity labels.
   Presentation derives human-readable actions from Simulation-validated activity state.
 */
 (function installNpcContextualActivity(global) {
   'use strict';
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-contextual-npc-activity-v2-location-gated';
+  const VERSION = 'r04-contextual-npc-activity-v3-partner-gated';
   const RETRY_LIMIT = 600;
   let attempts = 0;
   let installed = false;
@@ -32,22 +32,24 @@
     if (occupation.includes('trade') || occupation.includes('merchant')) return 'Trading';
     return 'Performing Duties';
   }
+  function hasValidDirectPartner(npc) {
+    return Boolean(Game.NPCIndoorWorkAnchors?.conversationValidity?.(npc, Game.State?.world)?.valid);
+  }
   function semanticActivity(npc) {
     const activity = normalized(npc?.activity || npc?.dailySchedule?.activity || 'idle');
     const scheduled = normalized(npc?.dailySchedule?.activity);
     const movement = normalized(npc?.movementDecision);
-    if (npc?.dialogueWith || activity === 'talking' || activity === 'chatting') return 'Chatting';
-    // #346: a future schedule must never override Simulation's current travel state.
+    if ((npc?.dialogueWith || activity === 'talking' || activity === 'chatting') && hasValidDirectPartner(npc)) return 'Chatting';
     const visiblyMoving = ['move', 'side-step', 'yield-detour'].includes(movement);
     if (visiblyMoving || ['commuting-to-work', 'returning-home', 'walking', 'traveling', 'approach'].includes(activity)) return 'Walking';
-    if (activity === 'waiting') return 'Waiting';
+    if (activity === 'waiting' || ((npc?.dialogueWith || activity === 'talking' || activity === 'chatting') && !hasValidDirectPartner(npc))) return 'Waiting';
     if (scheduled === 'sleep' || scheduled === 'sleeping' || activity === 'sleep' || activity === 'sleeping') return 'Sleeping';
     if (activity === 'working' || activity === 'work') return occupationAction(npc);
-    if (activity === 'social' || activity === 'socializing') return 'Chatting';
+    if (activity === 'social' || activity === 'socializing') return 'Socializing';
     if (activity === 'local-errand' || activity === 'errand') return visiblyMoving ? 'Walking' : 'Running Errands';
     if (activity === 'home' || activity === 'rest' || activity === 'resting' || activity === 'idle') return 'Resting';
     const direct = {
-      baking: 'Baking', walking: 'Walking', chatting: 'Chatting',
+      baking: 'Baking', walking: 'Walking', chatting: 'Waiting', talking: 'Waiting',
       'cutting-woods': 'Cutting Woods', 'cutting-wood': 'Cutting Woods', hunting: 'Hunting',
       'checking-crops': 'Checking Crops', forging: 'Forging', milling: 'Milling', guarding: 'Guarding',
       trading: 'Trading', harvesting: 'Harvesting', planting: 'Planting', watering: 'Watering', cooking: 'Cooking', eating: 'Eating'
