@@ -1,21 +1,21 @@
 /*
-  R04 / #237 Admin regression: final production integration bridge for NPC spatial state.
+  R04 / #237 + #351: final production integration bridge for NPC spatial state.
 
   Legacy NPCWorld still participates in the compatibility render chain and can mutate
   coordinates before the newer spatial wrapper finishes. The spatial runtime correctly
-  owns authoritative occupancy, but its same-game-minute idempotence guard cannot know
-  that another wrapper changed coordinates afterward. This bridge detects that drift and
-  re-applies NPCSpatial at the final render boundary without changing schedule, topology,
-  collision, yielding or GameTime rules.
+  owns authoritative occupancy. Expensive final reconciliation is queued through the
+  render-first scheduler so active camera frames are never blocked by optional repair work.
 */
 (function installNpcRuntimeBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-runtime-bridge-v1';
+  const VERSION = 'r04-npc-runtime-bridge-v2-lazy-reconcile';
   const REGION_SIZE = Number(Game.SpatialWorld?.regionSize || Game.Config?.LOGICAL_REGION_TILES || 100);
   let installed = false;
   let attempts = 0;
   let lastSpatialSignature = '';
+  let reconcileRequests = 0;
+  let reconcileRuns = 0;
 
   function coordinateSignature() {
     const npcs = Game.State?.world?.npcs;
@@ -46,15 +46,13 @@
     const world = Game.State?.world;
     const spatial = Game.NPCSpatial;
     if (!world?.originVillage || !spatial || typeof spatial.updateAt !== 'function') return false;
+    reconcileRuns += 1;
 
     const before = coordinateSignature();
     const drifted = Boolean(lastSpatialSignature && before !== lastSpatialSignature);
     const invalid = !validSpatialPopulation();
 
     if (drifted || invalid || !lastSpatialSignature) {
-      // The key is runtime bookkeeping, not world truth. Clearing it only when the
-      // observed coordinates diverged lets NPCSpatial recompute the same authoritative
-      // game-minute solution that its idempotence guard would otherwise skip.
       if (world.npcRuntime) world.npcRuntime.lastRoutineStateKey = null;
       spatial.updateAt();
     }
@@ -67,6 +65,21 @@
     return validSpatialPopulation();
   }
 
+  function scheduleReconcile() {
+    reconcileRequests += 1;
+    Game.NPCRelevanceRuntime?.scheduleFrame?.();
+    const scheduler = Game.FrameBudgetScheduler;
+    if (scheduler?.enqueue) {
+      scheduler.enqueue('npc-runtime-reconcile', () => reconcile(), {
+        priority: 25,
+        label: 'NPC runtime authoritative reconcile',
+        version: String(Math.floor(Number(Game.GameTime?.capture?.()?.totalGameMinutes || 0)))
+      });
+      return true;
+    }
+    return reconcile();
+  }
+
   function attach() {
     const renderer = Game.Renderer;
     if (installed) return true;
@@ -75,7 +88,7 @@
     const renderWorld = renderer.renderWorld.bind(renderer);
     renderer.renderWorld = function npcRuntimeBridgeRenderWorld(force) {
       const result = renderWorld(force);
-      reconcile();
+      scheduleReconcile();
       return result;
     };
     installed = true;
@@ -85,12 +98,11 @@
   function settle() {
     attempts += 1;
     const attached = attach();
-    const reconciled = attached && reconcile();
-    if ((!attached || !reconciled) && attempts < 600) requestAnimationFrame(settle);
+    if (attached) scheduleReconcile();
+    if (!attached && attempts < 600) requestAnimationFrame(settle);
   }
 
   function start() {
-    // Attach after all compatibility wrappers have had the opportunity to install.
     requestAnimationFrame(() => requestAnimationFrame(settle));
   }
 
@@ -99,8 +111,14 @@
     authority: 'simulation-integration',
     get installed() { return installed; },
     validSpatialPopulation,
-    reconcile
+    reconcile,
+    scheduleReconcile,
+    metrics() {
+      return Object.freeze({ reconcileRequests, reconcileRuns, queued: Boolean(Game.FrameBudgetScheduler?.metrics?.().queuedKeys?.includes('npc-runtime-reconcile')) });
+    }
   });
+
+  Game.Utils?.loadScriptOnce?.('js/npc_relevance_runtime.js', 'r04NpcRelevanceRuntimeModule');
 
   if (document.readyState === 'complete') start();
   else window.addEventListener('load', start, { once: true });
