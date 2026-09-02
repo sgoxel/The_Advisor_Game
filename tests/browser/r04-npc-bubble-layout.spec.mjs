@@ -91,21 +91,28 @@ for (const viewport of [
         const base = originalGridToScreen.call(this, row, col, ...rest);
         const r = Math.trunc(Number(row) || 0);
         const c = Math.trunc(Number(col) || 0);
-        // Keep the population deliberately dense, but distribute protected character
-        // icon rectangles across several deterministic lanes. Collapsing every icon
-        // into one ~18px patch makes *all* legal bubble slots impossible and tests
-        // fixture geometry rather than overlap/suppression behavior.
+        const isSpeaker = r === pairTiles[0].row && c === pairTiles[0].col;
+        const isListener = r === pairTiles[1].row && c === pairTiles[1].col;
+        if (isSpeaker || isListener) {
+          return {
+            ...base,
+            x: width * 0.5 + (isSpeaker ? -28 : 28),
+            y: height * 0.78
+          };
+        }
+
+        // Keep the population deliberately dense in one lower-screen band while
+        // preserving real vertical slack above protected character rectangles.
+        // This exercises deterministic bubble suppression/placement instead of an
+        // impossible fixture where protected icons occupy every candidate height.
         const hash = Math.abs((r * 73856093) ^ (c * 19349663));
-        const columns = width <= 480 ? 3 : (width <= 900 ? 5 : 7);
-        const rows = height <= 900 ? 4 : 5;
+        const columns = width <= 480 ? 3 : (width <= 900 ? 5 : 8);
         const laneX = hash % columns;
-        const laneY = Math.floor(hash / columns) % rows;
-        const spanX = Math.min(width * 0.72, columns * 96);
-        const spanY = Math.min(height * 0.46, rows * 74);
+        const spanX = Math.min(width * 0.78, columns * 104);
         return {
           ...base,
           x: width * 0.5 - spanX * 0.5 + (columns === 1 ? 0 : laneX * spanX / (columns - 1)),
-          y: height * 0.58 - spanY * 0.5 + (rows === 1 ? 0 : laneY * spanY / (rows - 1))
+          y: height * 0.8 + ((Math.floor(hash / columns) % 3) - 1) * 7
         };
       };
 
