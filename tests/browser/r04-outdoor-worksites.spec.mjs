@@ -93,3 +93,89 @@ test('same compatible seed/state reconstructs equivalent shared worksite identit
   expect(result.rebuilt).toEqual(result.first);
   expect(result.first.assignments.every((entry) => entry.sharedCapacity === 3 && entry.capacitySlot >= 0)).toBe(true);
 });
+
+test('outdoor workers commute through authoritative worksite anchors instead of fake home workplaces', async ({ page }) => {
+  test.setTimeout(60_000);
+  await ready(page);
+  await page.waitForFunction(() => Boolean(
+    window.Game?.NPCSpatial?.ensureSpatialNpcs &&
+    window.Game?.NPCTerrainRouting?.refreshRoutes &&
+    window.Game?.State?.world?.originVillage &&
+    window.Game?.State?.world?.terrain?.length
+  ));
+
+  const result = await page.evaluate(() => {
+    const world = Game.State.world;
+    Game.NPCSpatial.ensureSpatialNpcs();
+    Game.NPCTerrainRouting.refreshRoutes();
+    const binding = world.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 };
+    const local = (point) => ({
+      row: Number.isFinite(Number(point?.localRow)) ? Number(point.localRow) : Number(point?.row) - Number(binding.rowOffset || 0),
+      col: Number.isFinite(Number(point?.localCol)) ? Number(point.localCol) : Number(point?.col) - Number(binding.colOffset || 0)
+    });
+    const contains = (building, point) => {
+      const fp = building?.footprint || building;
+      return point.row >= Number(fp?.row) && point.row < Number(fp?.row) + Number(fp?.height || building?.height || 1) &&
+        point.col >= Number(fp?.col) && point.col < Number(fp?.col) + Number(fp?.width || building?.width || 1);
+    };
+    const routeInfo = (route) => (route || []).map(local);
+    const records = world.npcOutdoorWorksiteRouting?.records || [];
+    const samples = records.filter((entry) => entry.resolved).map((entry) => {
+      const npc = world.npcs.find((candidate) => String(candidate.id) === String(entry.npcId));
+      const work = local(npc?.anchors?.work);
+      const home = local(npc?.anchors?.home);
+      const homeToWork = routeInfo(npc?.spatialRoutes?.homeToWork);
+      const workToSocial = routeInfo(npc?.spatialRoutes?.workToSocial);
+      return {
+        id: entry.npcId,
+        occupation: npc?.occupation,
+        worksiteId: npc?.anchors?.work?.worksiteId || null,
+        worksiteKind: npc?.anchors?.work?.worksiteKind || null,
+        buildingId: npc?.anchors?.work?.buildingId ?? null,
+        outdoor: npc?.anchors?.work?.outdoor === true,
+        work,
+        home,
+        insideBuilding: (world.originVillage.buildings || []).some((building) => contains(building, work)),
+        homeToWork,
+        workToSocial,
+        homeToWorkWalkable: homeToWork.every((point, index) => {
+          const tile = world.terrain?.[point.row]?.[point.col];
+          const contiguous = index === 0 || Math.abs(point.row - homeToWork[index - 1].row) + Math.abs(point.col - homeToWork[index - 1].col) === 1;
+          return Boolean(tile && Game.TerrainRouting.isWalkableTile(tile) && contiguous);
+        }),
+        workToSocialWalkable: workToSocial.every((point, index) => {
+          const tile = world.terrain?.[point.row]?.[point.col];
+          const contiguous = index === 0 || Math.abs(point.row - workToSocial[index - 1].row) + Math.abs(point.col - workToSocial[index - 1].col) === 1;
+          return Boolean(tile && Game.TerrainRouting.isWalkableTile(tile) && contiguous);
+        })
+      };
+    });
+    return {
+      routing: world.npcTerrainRouting,
+      integration: world.npcOutdoorWorksiteRouting,
+      samples
+    };
+  });
+
+  expect(result.integration?.authority).toBe('simulation');
+  expect(result.integration?.assignedCount).toBeGreaterThan(0);
+  expect(result.routing?.outdoorWorksitesIntegrated).toBe(true);
+  expect(result.routing?.outdoorWorksiteNpcCount).toBe(result.integration.assignedCount);
+  expect(result.samples.length).toBeGreaterThan(0);
+
+  for (const sample of result.samples) {
+    expect(sample.worksiteId).toMatch(/^worksite:/);
+    expect(sample.worksiteKind).toBeTruthy();
+    expect(sample.buildingId).toBeNull();
+    expect(sample.outdoor).toBe(true);
+    expect(sample.insideBuilding).toBe(false);
+    expect(sample.work).not.toEqual(sample.home);
+    expect(sample.homeToWork.length).toBeGreaterThan(1);
+    expect(sample.workToSocial.length).toBeGreaterThan(1);
+    expect(sample.homeToWork[0]).toEqual(sample.home);
+    expect(sample.homeToWork.at(-1)).toEqual(sample.work);
+    expect(sample.workToSocial[0]).toEqual(sample.work);
+    expect(sample.homeToWorkWalkable).toBe(true);
+    expect(sample.workToSocialWalkable).toBe(true);
+  }
+});
