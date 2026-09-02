@@ -144,36 +144,54 @@ for (const viewport of [
       };
     });
 
-    expect(evidence.before).toBe(evidence.after);
-    expect(evidence.layout).not.toBeNull();
-    expect(evidence.layout.authority).toBe('presentation-only');
-    expect(evidence.layout.overlapCount).toBe(0);
-    expect(evidence.dataset.overlapCount).toBe(0);
-    expect(evidence.dataset.version).toBe('r04-npc-activity-bubble-layout-v1');
-    expect(evidence.dataset.authority).toBe('presentation-only');
-    expect(evidence.pointerEvents).toBe('none');
-    expect(evidence.populationCount).toBeGreaterThanOrEqual(20);
-    expect(evidence.dataset.npcCount).toBeGreaterThanOrEqual(20);
-    expect(evidence.dialogueCount).toBe(1);
-    expect(evidence.dataset.dialoguePairCount).toBe(1);
-    expect(evidence.dataset.activityBubbleCount).toBeGreaterThan(0);
-    expect(evidence.dataset.activityBubbleCount).toBeLessThanOrEqual(evidence.layout.maximumActivityBubbles);
-    expect(evidence.dataset.suppressedCount).toBeGreaterThan(0);
-    expect(evidence.dataset.suppressedCount).toBe(evidence.layout.suppressedIds.length);
+    const diagnostic = JSON.stringify({
+      viewport,
+      populationCount: evidence.populationCount,
+      dialogueCount: evidence.dialogueCount,
+      dataset: evidence.dataset,
+      pointerEvents: evidence.pointerEvents,
+      layout: evidence.layout ? {
+        authority: evidence.layout.authority,
+        overlapCount: evidence.layout.overlapCount,
+        maximumActivityBubbles: evidence.layout.maximumActivityBubbles,
+        suppressedIds: evidence.layout.suppressedIds,
+        boxCount: evidence.layout.boxes?.length,
+        viewport: evidence.layout.viewport
+      } : null,
+      pageErrors: errors.pageErrors,
+      consoleErrors: errors.consoleErrors
+    });
+
+    expect(evidence.before, diagnostic).toBe(evidence.after);
+    expect(evidence.layout, diagnostic).not.toBeNull();
+    expect(evidence.layout.authority, diagnostic).toBe('presentation-only');
+    expect(evidence.layout.overlapCount, diagnostic).toBe(0);
+    expect(evidence.dataset.overlapCount, diagnostic).toBe(0);
+    expect(evidence.dataset.version, diagnostic).toBe('r04-npc-activity-bubble-layout-v1');
+    expect(evidence.dataset.authority, diagnostic).toBe('presentation-only');
+    expect(evidence.pointerEvents, diagnostic).toBe('none');
+    expect(evidence.populationCount, diagnostic).toBeGreaterThanOrEqual(20);
+    expect(evidence.dataset.npcCount, diagnostic).toBeGreaterThanOrEqual(20);
+    expect(evidence.dialogueCount, diagnostic).toBe(1);
+    expect(evidence.dataset.dialoguePairCount, diagnostic).toBe(1);
+    expect(evidence.dataset.activityBubbleCount, diagnostic).toBeGreaterThan(0);
+    expect(evidence.dataset.activityBubbleCount, diagnostic).toBeLessThanOrEqual(evidence.layout.maximumActivityBubbles);
+    expect(evidence.dataset.suppressedCount, diagnostic).toBeGreaterThan(0);
+    expect(evidence.dataset.suppressedCount, diagnostic).toBe(evidence.layout.suppressedIds.length);
 
     for (const box of evidence.layout.boxes) {
-      expect(box.rect.left).toBeGreaterThanOrEqual(0);
-      expect(box.rect.top).toBeGreaterThanOrEqual(0);
-      expect(box.rect.right).toBeLessThanOrEqual(evidence.layout.viewport.width);
-      expect(box.rect.bottom).toBeLessThanOrEqual(evidence.layout.viewport.height);
+      expect(box.rect.left, diagnostic).toBeGreaterThanOrEqual(0);
+      expect(box.rect.top, diagnostic).toBeGreaterThanOrEqual(0);
+      expect(box.rect.right, diagnostic).toBeLessThanOrEqual(evidence.layout.viewport.width);
+      expect(box.rect.bottom, diagnostic).toBeLessThanOrEqual(evidence.layout.viewport.height);
     }
     for (let i = 0; i < evidence.layout.boxes.length; i += 1) {
       for (let j = i + 1; j < evidence.layout.boxes.length; j += 1) {
-        expect(intersects(evidence.layout.boxes[i].rect, evidence.layout.boxes[j].rect), `${evidence.layout.boxes[i].id} overlaps ${evidence.layout.boxes[j].id}`).toBe(false);
+        expect(intersects(evidence.layout.boxes[i].rect, evidence.layout.boxes[j].rect), `${evidence.layout.boxes[i].id} overlaps ${evidence.layout.boxes[j].id}; ${diagnostic}`).toBe(false);
       }
     }
 
-    expect(errors.pageErrors, `page errors: ${errors.pageErrors.join('\n')}`).toEqual([]);
-    expect(errors.consoleErrors.filter((line) => !/favicon/i.test(line)), `console errors: ${errors.consoleErrors.join('\n')}`).toEqual([]);
+    expect(errors.pageErrors, `page errors: ${errors.pageErrors.join('\n')}; ${diagnostic}`).toEqual([]);
+    expect(errors.consoleErrors.filter((line) => !/favicon/i.test(line)), `console errors: ${errors.consoleErrors.join('\n')}; ${diagnostic}`).toEqual([]);
   });
 }
