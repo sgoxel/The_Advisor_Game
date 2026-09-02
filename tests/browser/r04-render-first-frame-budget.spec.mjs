@@ -65,12 +65,17 @@ async function measureLegacyVsRenderFirst(page, sampleCount = 5) {
   const sliceCount = 12;
   const sliceMs = 6;
 
-  for (let sample = 0; sample < sampleCount; sample += 1) {
+  async function warmVisibleRender() {
     await waitForIdleScheduler(page);
-    const renderFirstKeys = Array.from({ length: sliceCount }, (_, index) => `comparison-${sample}-${index}`);
-    const renderFirstMs = await page.evaluate(({ keys, sliceMs: workloadMs }) => {
+    await page.evaluate(() => window.Game.Renderer.renderWorld(true));
+  }
+
+  async function measureRenderFirst(sample) {
+    await warmVisibleRender();
+    const keys = Array.from({ length: sliceCount }, (_, index) => `comparison-${sample}-${index}`);
+    const measured = await page.evaluate(({ keys: jobKeys, sliceMs: workloadMs }) => {
       const scheduler = window.Game.FrameBudgetScheduler;
-      keys.forEach((key) => {
+      jobKeys.forEach((key) => {
         scheduler.enqueue(key, () => {
           const started = performance.now();
           while (performance.now() - started < workloadMs) { /* representative bounded optional slice */ }
@@ -81,19 +86,21 @@ async function measureLegacyVsRenderFirst(page, sampleCount = 5) {
       const started = performance.now();
       window.Game.Renderer.renderWorld(true);
       return performance.now() - started;
-    }, { keys: renderFirstKeys, sliceMs });
-    renderFirst.push(renderFirstMs);
+    }, { keys, sliceMs });
 
-    const queuedAfterRender = await page.evaluate((keys) => {
+    const queuedAfterRender = await page.evaluate((jobKeys) => {
       const queued = new Set(window.Game.FrameBudgetScheduler.metrics().queuedKeys);
-      return keys.filter((key) => queued.has(key));
-    }, renderFirstKeys);
+      return jobKeys.filter((key) => queued.has(key));
+    }, keys);
     expect(queuedAfterRender).toHaveLength(sliceCount);
-
     await waitForIdleScheduler(page);
-    await drainUntilKeysGone(page, renderFirstKeys, 60);
+    await drainUntilKeysGone(page, keys, 60);
+    return measured;
+  }
 
-    const legacyMs = await page.evaluate(({ sliceCount: count, sliceMs: workloadMs }) => {
+  async function measureLegacy() {
+    await warmVisibleRender();
+    return page.evaluate(({ sliceCount: count, sliceMs: workloadMs }) => {
       const started = performance.now();
       // Controlled legacy baseline: the exact same optional slices execute synchronously
       // on the interaction frame before visible rendering instead of yielding to it.
@@ -104,7 +111,19 @@ async function measureLegacyVsRenderFirst(page, sampleCount = 5) {
       window.Game.Renderer.renderWorld(true);
       return performance.now() - started;
     }, { sliceCount, sliceMs });
-    legacy.push(legacyMs);
+  }
+
+  for (let sample = 0; sample < sampleCount; sample += 1) {
+    // Alternate branch order and warm the visible renderer immediately before each
+    // measured branch. The workload and thresholds remain identical; this only
+    // prevents first-render/cache effects from systematically favoring legacy.
+    if ((sample & 1) === 0) {
+      renderFirst.push(await measureRenderFirst(sample));
+      legacy.push(await measureLegacy());
+    } else {
+      legacy.push(await measureLegacy());
+      renderFirst.push(await measureRenderFirst(sample));
+    }
   }
 
   return {
