@@ -43,10 +43,7 @@ for (const viewport of [
       const rect = overlay.getBoundingClientRect();
 
       // #347 requires a real reciprocal adjacent pair before direct Chatting is
-      // authoritative. This layout regression must not depend on a particular
-      // routine/relevance timing slice to manufacture one. Build a legal pair from
-      // two currently active NPCs on two free adjacent road tiles, then snapshot the
-      // authoritative fixture before exercising presentation-only layout.
+      // authoritative. Build one legal pair, then exercise dense presentation.
       const npcs = world.npcs;
       const speaker = npcs[0];
       const listener = npcs[1];
@@ -80,39 +77,35 @@ for (const viewport of [
       const line = `${speaker.name} and ${listener.name} are talking.`;
       speaker.dialogueLine = line;
       listener.dialogueLine = line;
-      world.npcDialogues = [{
-        authority: 'presentation-context',
-        authoritativeFact: false,
-        speakerId: speaker.id,
-        listenerId: listener.id,
-        line,
-        adjacent: true
-      }];
+      world.npcDialogues = [{ authority: 'presentation-context', authoritativeFact: false, speakerId: speaker.id, listenerId: listener.id, line, adjacent: true }];
 
       const before = JSON.stringify({
-        npcs: Game.State.world.npcs.map((npc) => ({
-          id: npc.id,
-          row: npc.row,
-          col: npc.col,
-          activity: npc.activity,
-          movementDecision: npc.movementDecision,
-          dialogueWith: npc.dialogueWith,
-          dialogueLine: npc.dialogueLine
-        })),
+        npcs: Game.State.world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, activity: npc.activity, movementDecision: npc.movementDecision, dialogueWith: npc.dialogueWith, dialogueLine: npc.dialogueLine })),
         dialogues: Game.State.world.npcDialogues
       });
 
       const originalGridToScreen = Game.Renderer.gridToScreen;
-      const centerX = Math.max(100, rect.width * 0.50);
-      const centerY = Math.max(100, rect.height * 0.52);
+      const width = Math.max(1, rect.width);
+      const height = Math.max(1, rect.height);
       Game.Renderer.gridToScreen = function denseProjection(row, col, ...rest) {
         const base = originalGridToScreen.call(this, row, col, ...rest);
         const r = Math.trunc(Number(row) || 0);
         const c = Math.trunc(Number(col) || 0);
+        // Keep the population deliberately dense, but distribute protected character
+        // icon rectangles across several deterministic lanes. Collapsing every icon
+        // into one ~18px patch makes *all* legal bubble slots impossible and tests
+        // fixture geometry rather than overlap/suppression behavior.
+        const hash = Math.abs((r * 73856093) ^ (c * 19349663));
+        const columns = width <= 480 ? 3 : (width <= 900 ? 5 : 7);
+        const rows = height <= 900 ? 4 : 5;
+        const laneX = hash % columns;
+        const laneY = Math.floor(hash / columns) % rows;
+        const spanX = Math.min(width * 0.72, columns * 96);
+        const spanY = Math.min(height * 0.46, rows * 74);
         return {
           ...base,
-          x: centerX + (((r * 17 + c * 11) % 7) - 3) * 3,
-          y: centerY + (((r * 13 + c * 19) % 7) - 3) * 3
+          x: width * 0.5 - spanX * 0.5 + (columns === 1 ? 0 : laneX * spanX / (columns - 1)),
+          y: height * 0.58 - spanY * 0.5 + (rows === 1 ? 0 : laneY * spanY / (rows - 1))
         };
       };
 
@@ -123,22 +116,12 @@ for (const viewport of [
       }
 
       const after = JSON.stringify({
-        npcs: Game.State.world.npcs.map((npc) => ({
-          id: npc.id,
-          row: npc.row,
-          col: npc.col,
-          activity: npc.activity,
-          movementDecision: npc.movementDecision,
-          dialogueWith: npc.dialogueWith,
-          dialogueLine: npc.dialogueLine
-        })),
+        npcs: Game.State.world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, activity: npc.activity, movementDecision: npc.movementDecision, dialogueWith: npc.dialogueWith, dialogueLine: npc.dialogueLine })),
         dialogues: Game.State.world.npcDialogues
       });
       const layout = Game.NPCBubbleLayout.snapshot();
       return {
-        before,
-        after,
-        layout,
+        before, after, layout,
         populationCount: Game.State.world.npcs.length,
         dialogueCount: Game.State.world.npcDialogues?.length || 0,
         dataset: {
