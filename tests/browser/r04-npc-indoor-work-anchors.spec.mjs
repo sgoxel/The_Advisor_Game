@@ -39,12 +39,23 @@ test('indoor workers resolve to unique walkable anchors inside their assigned wo
     const interiors = new Map((world.buildingInteriors?.interiors || []).map((item) => [String(item.buildingId), item]));
     const records = [];
     const outdoor = [];
+    const guardDuty = [];
 
     for (const npc of world.npcs || []) {
       const assignment = assignments.get(String(npc.id));
       if (!assignment) continue;
       if (assignment.workplaceKind === 'outdoor-worksite-required') {
         outdoor.push({ id: npc.id, anchor: npc.indoorWorkAnchor });
+        continue;
+      }
+      const profession = String(assignment.profession || '').trim().toLowerCase();
+      if (profession === 'guard' || profession === 'militia') {
+        guardDuty.push({
+          id: npc.id,
+          anchor: npc.indoorWorkAnchor,
+          source: npc.anchors?.work?.source || null,
+          indoor: npc.anchors?.work?.indoor === true
+        });
         continue;
       }
       if (assignment.workplaceKind !== 'building' || !assignment.workplaceBuildingId) continue;
@@ -74,7 +85,8 @@ test('indoor workers resolve to unique walkable anchors inside their assigned wo
       resolvedCount: world.npcIndoorWorkAnchors?.resolvedCount || 0,
       unresolvedCount: world.npcIndoorWorkAnchors?.unresolvedCount || 0,
       records,
-      outdoor
+      outdoor,
+      guardDuty
     };
   });
 
@@ -102,6 +114,12 @@ test('indoor workers resolve to unique walkable anchors inside their assigned wo
 
   expect(Array.from(byBuilding.values()).some((count) => count > 1)).toBe(true);
   for (const record of evidence.outdoor) expect(record.anchor).toBeNull();
+  expect(evidence.guardDuty.length).toBeGreaterThan(0);
+  for (const record of evidence.guardDuty) {
+    expect(record.anchor).toBeNull();
+    expect(record.indoor).toBe(false);
+    expect(record.source).toBe('guard-duty-anchors');
+  }
 });
 
 test('home-to-work routes enter through the authoritative entrance and door before the interior anchor', async ({ page }) => {
