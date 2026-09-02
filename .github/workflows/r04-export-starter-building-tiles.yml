@@ -32,21 +32,23 @@ jobs:
         run: node tools/export_starter_building_tiles.mjs
       - name: Validate deterministic regeneration
         run: |
-          git diff -- textures/tiles/building > /tmp/first.diff
+          git add -A textures/tiles/building
+          git diff --cached --binary -- textures/tiles/building > /tmp/first.diff
           node tools/export_starter_building_tiles.mjs
-          git diff -- textures/tiles/building > /tmp/second.diff
+          git add -A textures/tiles/building
+          git diff --cached --binary -- textures/tiles/building > /tmp/second.diff
           cmp /tmp/first.diff /tmp/second.diff
       - name: Publish generated building tiles without force push
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- textures/tiles/building; then
+          git add -A textures/tiles/building
+          if git diff --cached --quiet -- textures/tiles/building; then
             echo 'Building tile exports already current.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add textures/tiles/building
           git commit -m 'R04 #349 materialize starter village building tiles'
           for attempt in 1 2 3; do
             if git push origin HEAD:main; then exit 0; fi
