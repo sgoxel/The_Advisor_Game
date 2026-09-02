@@ -145,6 +145,11 @@ window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatia
 // interpolation layer after the spatial runtime is available.
 window.Game.Utils.loadScriptOnce("js/npc_motion_presentation.js", "r04NpcMotionPresentationModule");
 
+// #261 guard shift policy is loaded after authoritative NPCSpatial exists but before the
+// indoor/routing bridges. It supplies only a desired-target policy; actual movement remains
+// owned by NPCSpatial/#237 and route construction remains #257.
+window.Game.Utils.loadScriptOnce("js/guard_shift_runtime.js", "r04GuardShiftRuntimeModule");
+
 // Final Simulation-integration bridges for NPC positions. The indoor-work bridge derives a
 // stable interior target from #259 workplaces + #253 same-world interiors before #257 routing
 // composes the authoritative entrance/door path to that target.
