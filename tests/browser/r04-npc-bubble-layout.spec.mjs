@@ -104,11 +104,22 @@ for (const viewport of [
         const c = Math.trunc(Number(col) || 0);
         const isSpeaker = r === pairTiles[0].row && c === pairTiles[0].col;
         const isListener = r === pairTiles[1].row && c === pairTiles[1].col;
+        const isActivityCritical = r === Math.trunc(Number(activityCritical.row)) && c === Math.trunc(Number(activityCritical.col));
         if (isSpeaker || isListener) {
           return {
             ...base,
             x: width * 0.5 + (isSpeaker ? -28 : 28),
             y: height * 0.78
+          };
+        }
+        if (isActivityCritical) {
+          // Keep the one explicitly relevant non-dialogue actor outside the lower dense
+          // collision band so every viewport has at least one physically legal activity
+          // bubble candidate. The remaining population still drives suppression pressure.
+          return {
+            ...base,
+            x: width * 0.18,
+            y: height * 0.42
           };
         }
 
