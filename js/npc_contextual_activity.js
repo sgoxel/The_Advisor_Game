@@ -5,7 +5,7 @@
 (function installNpcContextualActivity(global) {
   'use strict';
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-contextual-npc-activity-v3-partner-gated';
+  const VERSION = 'r04-contextual-npc-activity-v4-isolated-presentation-world';
   const RETRY_LIMIT = 600;
   let attempts = 0;
   let installed = false;
@@ -67,20 +67,29 @@
     try { return callback(); } finally { Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = prior; }
   }
   function drawContextualBubbles() {
-    const world = Game.State?.world;
+    const authoritativeWorld = Game.State?.world;
     const layout = Game.NPCBubbleLayout;
-    if (!world || !Array.isArray(world.npcs) || !layout?.draw) return false;
+    if (!authoritativeWorld || !Array.isArray(authoritativeWorld.npcs) || !layout?.draw) return false;
     if (Game.Config?.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES === false) return false;
-    const authoritativeNpcs = world.npcs;
+    const authoritativeNpcs = authoritativeWorld.npcs;
     const presentationNpcs = authoritativeNpcs.map(presentationClone);
     const before = authoritativeNpcs.map((npc) => ({ id: npc.id, activity: npc.activity, row: npc.row, col: npc.col }));
-    world.npcs = presentationNpcs;
+
+    // Never replace `authoritativeWorld.npcs` in-place. Region activation and other
+    // synchronous runtime hooks may retain the authoritative world object while the
+    // presentation draw is running. Mutating that object's `npcs` reference therefore
+    // lets presentation-only work leak into authoritative update paths. Instead expose
+    // a shallow presentation-world facade for the duration of the bubble draw; every
+    // presented NPC is already a detached clone and the authoritative world object is
+    // never modified.
+    const presentationWorld = { ...authoritativeWorld, npcs: presentationNpcs };
+    Game.State.world = presentationWorld;
     try {
       layout.draw();
       lastSnapshot = Object.freeze({ version: VERSION, authority: 'presentation-only', labels: presentationNpcs.map((npc) => Object.freeze({ id: npc.id, name: npc.name, activity: npc.activity })) });
       return true;
     } finally {
-      world.npcs = authoritativeNpcs;
+      Game.State.world = authoritativeWorld;
       for (let i = 0; i < authoritativeNpcs.length; i += 1) {
         const current = authoritativeNpcs[i], original = before[i];
         if (!current || !original || current.id !== original.id || current.activity !== original.activity || current.row !== original.row || current.col !== original.col) throw new Error('Contextual activity presentation detected authoritative NPC mutation.');
