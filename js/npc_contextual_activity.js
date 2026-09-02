@@ -5,7 +5,7 @@
 (function installNpcContextualActivity(global) {
   'use strict';
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-contextual-npc-activity-v4-isolated-presentation-world';
+  const VERSION = 'r04-contextual-npc-activity-v5-authority-guard';
   const RETRY_LIMIT = 600;
   let attempts = 0;
   let installed = false;
@@ -58,7 +58,10 @@
     return activity ? activity.split('-').filter(Boolean).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Resting';
   }
   function presentationClone(npc) {
-    return { ...npc, activity: semanticActivity(npc), movementDecision: ['side-step', 'yield-detour', 'yield-wait'].includes(normalized(npc?.movementDecision)) ? 'hold' : npc?.movementDecision };
+    // Derive presentation semantics from a detached shell. Even read-only presentation
+    // helpers must never receive the authoritative NPC object when a clone is sufficient.
+    const detached = { ...npc };
+    return { ...detached, activity: semanticActivity(detached), movementDecision: ['side-step', 'yield-detour', 'yield-wait'].includes(normalized(detached?.movementDecision)) ? 'hold' : detached?.movementDecision };
   }
   function withBubblesSuppressed(callback) {
     if (!Game.Config) return callback();
@@ -66,14 +69,36 @@
     Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
     try { return callback(); } finally { Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = prior; }
   }
+  function authoritySnapshot(npcs) {
+    return npcs.map((npc) => ({ id: npc?.id, activity: npc?.activity, row: npc?.row, col: npc?.col }));
+  }
+  function authorityDifferences(npcs, before) {
+    const fields = ['id', 'activity', 'row', 'col'];
+    const differences = [];
+    for (let i = 0; i < before.length; i += 1) {
+      const current = npcs[i], original = before[i];
+      if (!current || !original) {
+        differences.push(`index=${i}:record-missing`);
+        continue;
+      }
+      for (const field of fields) {
+        // Object.is treats an unchanged NaN as unchanged; the old !== guard could
+        // report a mutation when an already-invalid numeric value simply remained NaN.
+        if (!Object.is(current[field], original[field])) differences.push(`index=${i},id=${String(original.id)},field=${field}`);
+      }
+    }
+    if (npcs.length !== before.length) differences.push(`length=${before.length}->${npcs.length}`);
+    return differences;
+  }
   function drawContextualBubbles() {
     const authoritativeWorld = Game.State?.world;
     const layout = Game.NPCBubbleLayout;
     if (!authoritativeWorld || !Array.isArray(authoritativeWorld.npcs) || !layout?.draw) return false;
     if (Game.Config?.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES === false) return false;
     const authoritativeNpcs = authoritativeWorld.npcs;
+    // Capture authority before any presentation semantic derivation, not only before draw.
+    const before = authoritySnapshot(authoritativeNpcs);
     const presentationNpcs = authoritativeNpcs.map(presentationClone);
-    const before = authoritativeNpcs.map((npc) => ({ id: npc.id, activity: npc.activity, row: npc.row, col: npc.col }));
 
     // Never replace `authoritativeWorld.npcs` in-place. Region activation and other
     // synchronous runtime hooks may retain the authoritative world object while the
@@ -90,10 +115,8 @@
       return true;
     } finally {
       Game.State.world = authoritativeWorld;
-      for (let i = 0; i < authoritativeNpcs.length; i += 1) {
-        const current = authoritativeNpcs[i], original = before[i];
-        if (!current || !original || current.id !== original.id || current.activity !== original.activity || current.row !== original.row || current.col !== original.col) throw new Error('Contextual activity presentation detected authoritative NPC mutation.');
-      }
+      const differences = authorityDifferences(authoritativeNpcs, before);
+      if (differences.length) throw new Error(`Contextual activity presentation detected authoritative NPC mutation: ${differences.slice(0, 8).join('; ')}`);
     }
   }
   function install() {
