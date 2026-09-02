@@ -14,6 +14,7 @@ window.Game = window.Game || {};
   const queue = [];
   const queuedByKey = new Map();
   const frameSamples = [];
+  const interactionFrameSamples = [];
   const jobSamples = [];
   let interactionUntil = 0;
   let renderDepth = 0;
@@ -68,10 +69,6 @@ window.Game = window.Game || {};
   }
 
   function noteInteraction(kind, holdMs) {
-    // Runtime modules legitimately wrap Renderer.renderWorld after scheduler startup.
-    // Reassert the scheduler as the outermost wrapper at the interaction boundary so
-    // the visible interaction frame is always measured/prioritized. Shared renderDepth
-    // prevents duplicate accounting if an older scheduler wrapper remains deeper in the chain.
     wrapRenderer();
     const hold = Number.isFinite(Number(holdMs)) ? Math.max(0, Number(holdMs)) : INTERACTION_HOLD_MS;
     interactionUntil = Math.max(interactionUntil, nowMs() + hold);
@@ -135,20 +132,17 @@ window.Game = window.Game || {};
 
   function runBackgroundSlice(frameStartedAt) {
     if (!queue.length) return { ran: 0, deferred: 0 };
-
     const current = nowMs();
     if (interactionActive(current)) {
       counters.deferredJobs += queue.length;
       return { ran: 0, deferred: queue.length };
     }
-
     const elapsed = Math.max(0, current - (Number(frameStartedAt) || current));
     const available = Math.min(MAX_BACKGROUND_SLICE_MS, FRAME_TARGET_MS - elapsed - MIN_SLACK_MS);
     if (available <= 0.25) {
       counters.deferredJobs += queue.length;
       return { ran: 0, deferred: queue.length };
     }
-
     const deadline = current + available;
     let ran = 0;
     while (queue.length && nowMs() < deadline && !interactionActive()) {
@@ -175,15 +169,12 @@ window.Game = window.Game || {};
       clampSample(jobSamples, duration);
       counters.executedSlices += 1;
       ran += 1;
-
       const done = result === true || (result && typeof result === 'object' && result.done === true);
-      if (done) {
-        finishJob(job);
-      } else {
+      if (done) finishJob(job);
+      else {
         counters.yieldedJobs += 1;
         queue.push(queue.shift());
       }
-
       if (shouldYield(deadline)) break;
     }
     if (queue.length) counters.deferredJobs += queue.length;
@@ -192,11 +183,12 @@ window.Game = window.Game || {};
 
   function recordRenderFrame(startedAt, endedAt) {
     const duration = Math.max(0, endedAt - startedAt);
+    const interactive = interactionActive(startedAt);
     counters.frames += 1;
-    // Classify the frame at its authoritative start boundary. A visible render that
-    // begins while input pressure is active remains an interaction frame even if a
-    // slow render itself outlives the short interaction hold window.
-    if (interactionActive(startedAt)) counters.interactionFrames += 1;
+    if (interactive) {
+      counters.interactionFrames += 1;
+      clampSample(interactionFrameSamples, duration);
+    }
     clampSample(frameSamples, duration);
     return duration;
   }
@@ -204,11 +196,7 @@ window.Game = window.Game || {};
   function wrapRenderer() {
     const renderer = Game.Renderer;
     if (!renderer || typeof renderer.renderWorld !== 'function') return false;
-    // Only the current top-level function proves the scheduler is still outermost.
-    // If another runtime module wrapped renderWorld later, wrap that new chain again.
-    // renderDepth makes a nested older scheduler wrapper account only once.
     if (renderer.renderWorld.__frameBudgetWrapped === true) return true;
-
     const previousRenderWorld = renderer.renderWorld;
     originalRenderWorld = previousRenderWorld;
     const wrapped = function (...args) {
@@ -233,11 +221,6 @@ window.Game = window.Game || {};
   }
 
   function installInteractionSignals() {
-    // Capture input at the window boundary rather than only on the base game canvas.
-    // The living-world renderer uses multiple sibling overlay canvases; a real wheel/
-    // pan/touch event can therefore land on an overlay even when the pointer is over
-    // the game viewport. Window capture observes it before overlays/runtime wrappers
-    // can intercept it and immediately reasserts the scheduler as the render outermost.
     global.addEventListener('wheel', () => noteInteraction('wheel'), { capture: true, passive: true });
     global.addEventListener('mousedown', () => noteInteraction('pointer-pan'), true);
     global.addEventListener('mousemove', (event) => {
@@ -268,6 +251,9 @@ window.Game = window.Game || {};
       renderP50Ms: percentile(frameSamples, 0.50),
       renderP95Ms: percentile(frameSamples, 0.95),
       renderWorstMs: frameSamples.length ? Math.max(...frameSamples) : 0,
+      interactionRenderP50Ms: percentile(interactionFrameSamples, 0.50),
+      interactionRenderP95Ms: percentile(interactionFrameSamples, 0.95),
+      interactionRenderWorstMs: interactionFrameSamples.length ? Math.max(...interactionFrameSamples) : 0,
       jobP95Ms: percentile(jobSamples, 0.95),
       jobWorstMs: jobSamples.length ? Math.max(...jobSamples) : 0,
       lastRenderStartedAt
@@ -275,7 +261,7 @@ window.Game = window.Game || {};
   }
 
   Game.FrameBudgetScheduler = Object.freeze({
-    version: '1.0.3',
+    version: '1.0.4',
     authority: 'scheduling-only',
     enqueue,
     cancel,
