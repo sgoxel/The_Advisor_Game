@@ -79,7 +79,7 @@ test('indoor workers resolve to unique walkable anchors inside their assigned wo
   });
 
   expect(evidence.authority).toBe('simulation-derived');
-  expect(evidence.version).toBe('r04-npc-indoor-work-anchors-v1');
+  expect(evidence.version).toBe('r04-npc-post-routing-integration-v5');
   expect(evidence.records.length).toBeGreaterThan(0);
   expect(evidence.resolvedCount).toBe(evidence.records.length);
   expect(evidence.unresolvedCount).toBe(0);
