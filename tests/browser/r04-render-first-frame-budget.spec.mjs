@@ -24,8 +24,6 @@ async function ready(page) {
     camera.inertiaVelocityY = 0;
     window.Game.State.input?.keys?.clear?.();
     if (window.Game.Config) window.Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
-    // Runtime modules can finish installing render wrappers after scheduler startup.
-    // Reassert the scheduler on the settled test runtime before measurements begin.
     window.Game.FrameBudgetScheduler.wrapRenderer();
   });
   await expect.poll(
@@ -125,7 +123,12 @@ test('real wheel interaction protects rendering before optional background work'
   const metrics = await page.evaluate(() => window.Game.FrameBudgetScheduler.metrics());
   expect(metrics.interactionFrames).toBeGreaterThan(0);
   expect(metrics.failedJobs).toBe(0);
-  expect(metrics.renderWorstMs).toBeLessThan(50);
+  // #350's accepted contract is interaction-window p95 <= 33.3ms and no
+  // optional background long task >= 50ms. Global renderWorstMs includes
+  // startup/materialization frames outside the measured interaction window.
+  expect(metrics.interactionRenderP95Ms).toBeGreaterThan(0);
+  expect(metrics.interactionRenderP95Ms).toBeLessThanOrEqual(33.3);
+  expect(metrics.jobWorstMs).toBeLessThan(50);
   expect(failures).toEqual([]);
 });
 
