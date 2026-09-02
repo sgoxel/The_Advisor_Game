@@ -1,8 +1,8 @@
-/* R04 / #318 + #346 + #347: post-routing Simulation integration for anchors, activity legality and direct dialogue. */
+/* R04 / #318 + #346 + #347 + #261: post-routing Simulation integration for anchors, activity legality and direct dialogue. */
 (function installNpcIndoorWorkAnchors(global) {
   'use strict';
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-npc-post-routing-integration-v4';
+  const VERSION = 'r04-npc-post-routing-integration-v5';
   let renderHookInstalled = false;
   let assigningIndoorAnchors = false;
 
@@ -14,6 +14,7 @@
   function interiorFor(world, buildingId) { return world?.buildingInteriors?.interiors?.find?.((item) => String(item.buildingId) === String(buildingId)) || null; }
   function assignmentMap(world) { return new Map((world?.npcWorkplaces?.assignments || []).map((item) => [String(item.id), item])); }
   function isOutdoor(assignment) { return assignment?.workplaceKind === 'outdoor-worksite-required' || Game.NPCWorkplaces?.outdoorProfessions?.includes?.(assignment?.profession); }
+  function isGuardDuty(assignment) { return ['guard', 'militia'].includes(String(assignment?.profession || '').trim().toLowerCase()); }
   function tileWalkable(world, point) { const tile = world?.terrain?.[point.row]?.[point.col]; return Boolean(tile && Game.TerrainRouting?.isWalkableTile?.(tile)); }
   function interiorCandidates(world, interior) {
     const door = interior?.door;
@@ -29,11 +30,15 @@
       Game.StarterVillageInteriors?.materialize?.(world);
       Game.NPCWorkplaces?.sync?.();
       Game.OutdoorWorksites?.sync?.();
+      // #261 owns guard duty targets. Re-apply those deterministic anchors before the
+      // ordinary indoor-worker pass, then exclude guard/militia from #318's interior work
+      // placement so the duty post cannot be overwritten by a guard-post interior.
+      Game.GuardShiftRuntime?.sync?.();
       const assignments = assignmentMap(world), b = binding(world), claimed = new Set(), records = [];
       const ordered = world.npcs.slice().sort((a, c) => String(a.id).localeCompare(String(c.id)));
       for (const npc of ordered) {
         const assignment = assignments.get(String(npc.id));
-        if (!assignment || isOutdoor(assignment) || assignment.workplaceKind !== 'building' || !assignment.workplaceBuildingId) { npc.indoorWorkAnchor = null; continue; }
+        if (!assignment || isOutdoor(assignment) || isGuardDuty(assignment) || assignment.workplaceKind !== 'building' || !assignment.workplaceBuildingId) { npc.indoorWorkAnchor = null; continue; }
         const interior = interiorFor(world, assignment.workplaceBuildingId);
         if (!interior) { npc.indoorWorkAnchor = null; continue; }
         const candidates = interiorCandidates(world, interior).filter((point) => !claimed.has(key(point)));
