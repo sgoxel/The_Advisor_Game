@@ -94,7 +94,7 @@
         dayStartMinute: DAY_START,
         nightStartMinute: NIGHT_START
       });
-      assignments.push(Object.freeze({ npcId: npc.id, shift, dutyAnchorId: anchor.id, dutySide: anchor.dutySide, row: duty.row, col: duty.col, workplaceBuildingId: anchor.workplaceBuildingId || null }));
+      assignments.push(Object.freeze({ npcId: npc.id, shift, dutyAnchorId: anchor.id, dutySide: anchor.side, row: duty.row, col: duty.col, workplaceBuildingId: anchor.workplaceBuildingId || null }));
     }
 
     world.guardShiftRuntime = Object.freeze({
