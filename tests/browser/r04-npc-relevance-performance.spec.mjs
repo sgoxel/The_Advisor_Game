@@ -129,7 +129,9 @@ test('camera interaction defers NPC detail/reconcile work and idle frame slack d
   }));
 
   expect(after.scheduler.interactionActive).toBe(false);
-  expect(after.scheduler.queuedKeys).not.toContain('npc-runtime-reconcile');
+  // renderWorld continuously schedules the next authoritative reconcile, so instantaneous
+  // queue emptiness is racy. Prove idle slack actually consumed owned work instead.
+  expect(after.scheduler.completedJobs).toBeGreaterThan(during.scheduler.completedJobs);
   expect(after.bridge.reconcileRuns).toBeGreaterThan(during.bridge.reconcileRuns);
   expect(after.relevance.completedJobs).toBeGreaterThanOrEqual(during.relevance.completedJobs);
   expect(after.relevance.npcJobWorstMs).toBeLessThan(50);
