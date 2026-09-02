@@ -12,6 +12,7 @@ on:
       - '.github/workflows/r04-npc-relevance-performance-verification.yml'
   workflow_dispatch:
 
+# Keep workflow_dispatch available for exact-SHA recovery verification when a GITHUB_TOKEN recovery push cannot fan out into downstream workflows.
 permissions:
   contents: read
 
