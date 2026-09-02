@@ -155,8 +155,14 @@
       const desiredMap = new Map();
       const fixedNpcIds = new Set();
       const guards = [];
+      const dialogueNpcIds = new Set();
+      for (const dialogue of world.npcDialogues || []) {
+        if (dialogue?.speakerId) dialogueNpcIds.add(dialogue.speakerId);
+        if (dialogue?.listenerId) dialogueNpcIds.add(dialogue.listenerId);
+      }
       for (const npc of world.npcs) {
-        if (isGuard(npc) && npc.guardShiftAssignment?.dutyAnchorId) {
+        const dialogueEngaged = Boolean(npc.dialogueWith) || dialogueNpcIds.has(npc.id);
+        if (isGuard(npc) && npc.guardShiftAssignment?.dutyAnchorId && !dialogueEngaged) {
           const desired = desiredFor(npc, totalGameMinutes);
           if (desired?.point) {
             desiredMap.set(npc.id, desired);
