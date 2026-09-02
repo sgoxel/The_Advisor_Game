@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "village_hall",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "village_hall_roof_corner_nw_256px.png",
+      "sha256": "60edc400c1b672bd3e6a60f9d9fbff42671c2fe9b9a79f83ea667f20ea29f40e"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "village_hall_roof_edge_n_256px.png",
+      "sha256": "1391e559582765e7016b4929f7ed043588f106c5cd9c09f495cf3eae5e732193"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "village_hall_roof_corner_ne_256px.png",
+      "sha256": "7da70cc6902e634a690308997c206a21f8b58c886587992ba7ccec6cbeb658a4"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "village_hall_roof_ridge_256px.png",
+      "sha256": "5844e7ad8419c602882ea1f634578ab8700f1a3c093bf5b6fd6e44325c5df257"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "village_hall_wall_edge_w_256px.png",
+      "sha256": "4717b453e7f4bcf68ede59fc21b82093b2bf432c5960e79b4022f4c4df243e59"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "village_hall_wall_center_256px.png",
+      "sha256": "cfd32ffc3711400b0e1788c680bae62c75508063ae6389321329a765ef794e94"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "village_hall_wall_edge_e_256px.png",
+      "sha256": "b070d14da61a8f00fe829ac5e8e0bd487b74f147bd81f8b114f6c384ee02061d"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "village_hall_wall_window_256px.png",
+      "sha256": "b0d402f9c7ba737d8ae9eb848114d7eecd0d343d85d54962c03b1f3e746b21cf"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "village_hall_base_corner_sw_256px.png",
+      "sha256": "e95682fb3d593ec77416d97450e9f14d093ffaae409799c1307bfbc658a3422a"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "village_hall_entrance_256px.png",
+      "sha256": "9519caccbdb1a9aa9b425a309d73cb69163e007e17236e2809bc366d30f4dee2"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "village_hall_base_corner_se_256px.png",
+      "sha256": "12f98d30beff7b46b3cf15ac46e322c7c17c528bfcebca9bcb39658132a0948a"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "village_hall_family_feature_256px.png",
+      "sha256": "ed103e2112d11cf89bc4a180afbfdb9b948b98cdbb20794fab0c369f7967e511"
+    }
+  ]
+}

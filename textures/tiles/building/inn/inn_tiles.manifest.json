@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "inn",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "inn_roof_corner_nw_256px.png",
+      "sha256": "b6c42b52ffc7782804d904633bcb3c9ed0104cc10ebe59f24b043904bf2e3fa9"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "inn_roof_edge_n_256px.png",
+      "sha256": "7577237b14f3d7aa6450c3beaab83e4d0daa0ee9b36c2ebce1318fea38781cba"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "inn_roof_corner_ne_256px.png",
+      "sha256": "90a078e5b617c78f0b21c708920709da1e7e4e026bd0ea9544c841ef7ff97100"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "inn_roof_ridge_256px.png",
+      "sha256": "32bfca19b5797bd3a8f5131cbd48d31369b807761dbb5662ad8e34d97be6bf15"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "inn_wall_edge_w_256px.png",
+      "sha256": "74e66e94d76305b964e8517d70c14eed3fd99a92315b21db1bd2830c4e112de8"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "inn_wall_center_256px.png",
+      "sha256": "3d685c8adf334733c6f17e28881d0b62dc615b6ae530e0bbf2c72f5d0787558c"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "inn_wall_edge_e_256px.png",
+      "sha256": "712fce189c9d65e114f31378349bbf69bc275e52607116d68b23ee7f4e73f0b1"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "inn_wall_window_256px.png",
+      "sha256": "6873dc40458484eb6de738845af3f48337be29cbc255ca7ffa04d47646571085"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "inn_base_corner_sw_256px.png",
+      "sha256": "a05e99bc7a0c93714f0048bd2438195da202def57e3fa96811eb102a113104be"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "inn_entrance_256px.png",
+      "sha256": "3187d143ca1dcdfd6f96b5d58f096a031df46cd7b76e281bf9b6403fe7042f7f"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "inn_base_corner_se_256px.png",
+      "sha256": "382bf135bb444f8458ea8c888721c9a9a229224252c00cd8ed54b75496c25688"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "inn_family_feature_256px.png",
+      "sha256": "96dff5be5e4046400dcb6491d11e22b94fe624d432ed0748585669b44e434900"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "smithy",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "smithy_roof_corner_nw_256px.png",
+      "sha256": "9e637d742c2229be9d269bb4c3fb4120801c5efc191f506a056e66fba228a856"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "smithy_roof_edge_n_256px.png",
+      "sha256": "1f0c535b866cb62d37e202d2089174b8e2648b501a61a939a5adb2a620f0197e"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "smithy_roof_corner_ne_256px.png",
+      "sha256": "485fba4dfc16d271d5cab403394acd157ab4e9e9e4629ea94077d4c5b48cfbc0"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "smithy_roof_ridge_256px.png",
+      "sha256": "b96ace6ffb754a99441e08fb70b5527abc58dc6f5eef19e7070a8a653f74ab5f"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "smithy_wall_edge_w_256px.png",
+      "sha256": "e4a775e1b5257e884f0d7dd5ae6f9cf3f5551f3372b8c99e953817cb80f4675d"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "smithy_wall_center_256px.png",
+      "sha256": "c0ab59a03b44b83bf59853fd77291015d3d730354b5034f3ba711199d4ad3547"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "smithy_wall_edge_e_256px.png",
+      "sha256": "36e847e25aaf5338eaa5fd6c496edc45b038a5b2c66040445938868469d975bb"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "smithy_wall_window_256px.png",
+      "sha256": "a41ba62b90661de628d02bb3fa1c75dc92fd864382afc80869118e2a9f60afa0"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "smithy_base_corner_sw_256px.png",
+      "sha256": "a15f42278d2e08d688e2ff88eb31f9eb4cafcb5ca6c0f4f82a5102c1af5090ec"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "smithy_entrance_256px.png",
+      "sha256": "fe25bae968f2266a9debd20835bc8983703c33b57783d639320d37f288b6b81c"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "smithy_base_corner_se_256px.png",
+      "sha256": "ad120987b4ff3b91d9bd18f836d5a7dc0afa189f06df0bc68d4e7cd7ec5db7d5"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "smithy_family_feature_256px.png",
+      "sha256": "9862e4aa37157c7b4b38f2776e81c355be477bad3832c3842e678b821e3e603c"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "home",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "home_roof_corner_nw_256px.png",
+      "sha256": "d1b5a775ec0a53b823030b441ebd4746b609ebc14c2eefdf0245ae568dfa5c98"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "home_roof_edge_n_256px.png",
+      "sha256": "e41da7f6b4e897bfc8be1345d360bc69cc3d2a411a783ca1ac6bbb2d69c8f3fe"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "home_roof_corner_ne_256px.png",
+      "sha256": "a6b359f56a3f12b8cc3b76f3061c96d780c882b917158d38d132e7f8875aaaa8"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "home_roof_ridge_256px.png",
+      "sha256": "0671d690ad7822e4b9d36694bb59d449dcc5e7d02e6c477443cb7788f67ea4ab"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "home_wall_edge_w_256px.png",
+      "sha256": "d5f07c4a383b4cf372fbf1bbe68d4b75de7db89d0b9f49a7f122e263f5181145"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "home_wall_center_256px.png",
+      "sha256": "77898d4ce9167acba58fd4449b242d804a06c5ece2a45365b58e12ebfbb7f75c"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "home_wall_edge_e_256px.png",
+      "sha256": "856edf3483d45d8b492c1c6a8422b3412deefba67588804b0e8e7dc602d7165c"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "home_wall_window_256px.png",
+      "sha256": "64494fca361233ee6650070ca6dc85f47c135c9afb135b93c6c55793fd11ebce"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "home_base_corner_sw_256px.png",
+      "sha256": "8f2d5dda24ddada6ede6b1fec1052c3c07f69a4cb76d4f33f426c61cafb262a3"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "home_entrance_256px.png",
+      "sha256": "70a3c5ac9b0c761b65115ad0cee1c8a05120e5b8184b956350d77be4277be92d"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "home_base_corner_se_256px.png",
+      "sha256": "00b473722cb5abbb39ad6cb3b730b51eccd4cb3d033aed0a05d8b8ec55b5ff98"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "home_family_feature_256px.png",
+      "sha256": "6f6329634a60de34b3a601ad9d4f0113913da7b65a2a03d059e54d9d4f2eb868"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "guard_post",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "guard_post_roof_corner_nw_256px.png",
+      "sha256": "976c0eb6c34cd9f1cdc6ea0c62c627bb687d8f5525414a9fbb5ba05d0773eb8d"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "guard_post_roof_edge_n_256px.png",
+      "sha256": "c571acac0c3b672b0fc483f153c12d470aa8be9b2cc9135834c88e959fc4091d"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "guard_post_roof_corner_ne_256px.png",
+      "sha256": "12ea0ac23efa997a0e1321c8e7367ff9858672f3ad83b5b6d6ce8dd4ad46e311"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "guard_post_roof_ridge_256px.png",
+      "sha256": "05b8f3c34d9c54722576dbb43e723352c27268acb17c945244eabb0d0ee4ca93"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "guard_post_wall_edge_w_256px.png",
+      "sha256": "2e21935d3dc592c1e5e6e0d54fa8493398eb1b7bc01cbda39d3bd194d8e1d614"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "guard_post_wall_center_256px.png",
+      "sha256": "2955abcea42fe2fbf7d55dd0f0cb71c302b986dab337e0da51a7b1d1d70d9900"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "guard_post_wall_edge_e_256px.png",
+      "sha256": "c9d78fd09e224df069c2690c7088a2b387b02c493312b3e217d88c0b39004626"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "guard_post_wall_window_256px.png",
+      "sha256": "a348b5d59f97fa2afe08f45314e8e63f92bea3501261c523cc4502bf9e633200"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "guard_post_base_corner_sw_256px.png",
+      "sha256": "d9860dd596362f1d8750d3120e4f53dbfead5a2d74ca828a153f28e3a8c964e8"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "guard_post_entrance_256px.png",
+      "sha256": "0ef372b9b6242f373241c8a35d52c00d5b5560ade56460583b6d41280381ef04"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "guard_post_base_corner_se_256px.png",
+      "sha256": "2d659e3a086632b00470ac601d44781de320779c532cf50af27fa0fb1906f37f"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "guard_post_family_feature_256px.png",
+      "sha256": "2252e53730082402c87f9b99b79af77950bbdfa20f2c75f4c8384e1d340b1cdf"
+    }
+  ]
+}

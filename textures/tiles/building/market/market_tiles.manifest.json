@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "market",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "market_roof_corner_nw_256px.png",
+      "sha256": "9385cebe2a018791dc00af8b3e127df22ad80cd29570db767b57c24abfc37abc"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "market_roof_edge_n_256px.png",
+      "sha256": "3f250890d93bc7ddcba5f1f4f7981b74c3559e74643a28e3cc35cb613a5f25d0"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "market_roof_corner_ne_256px.png",
+      "sha256": "a864a63f7bb96c8cb5d73cbf9ff24f4d6c229b9ca3e07553fbbb0685e669c2ed"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "market_roof_ridge_256px.png",
+      "sha256": "176f57fe58b1bdf37497f1c95795c3ffd83b7f0b236470ae3b674d6ca837f285"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "market_wall_edge_w_256px.png",
+      "sha256": "20946dc4d5a84acf5a00e19bfb86fc220366129b61c86828507f1294baa84d0f"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "market_wall_center_256px.png",
+      "sha256": "a193bbdd470818aad1ec43d86464318c3f47dcfc8ad30697638e208cb81d0784"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "market_wall_edge_e_256px.png",
+      "sha256": "7338eff47ef0db08db76531c2b642f7a0bfc5f07c105be5e8a08c87a2390b478"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "market_wall_window_256px.png",
+      "sha256": "9829f352a5227e8cfa27e67a2a8798199acb44f5746a4ed28a5482ba55236aca"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "market_base_corner_sw_256px.png",
+      "sha256": "736b49813993968eb111bede935313d61fc6f59d18376daa143d4167a552f21a"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "market_entrance_256px.png",
+      "sha256": "c045444fe183888dbc3b915549d76ff798e920dedba72e315311a55d983f23a8"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "market_base_corner_se_256px.png",
+      "sha256": "b5b0415f80ab222ab5f0e498df4217b423c037889a538848e7a75845d8a63f78"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "market_family_feature_256px.png",
+      "sha256": "3991dfcb2965dadcaee973477a74fb1c755af56bcd4c25e15e52b81ef7888cdf"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "farmstead",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "farmstead_roof_corner_nw_256px.png",
+      "sha256": "093a5a6f928ae1c8df72eec38d83fae975612ba00341d3404aefe90a2e323d81"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "farmstead_roof_edge_n_256px.png",
+      "sha256": "71d01f98858d49dba94f8794505964b5ed1e8fa85e259243afc26ac574ecd08d"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "farmstead_roof_corner_ne_256px.png",
+      "sha256": "97def0856361f71d10a898c8f3d11a1f1b66145ccdf000015e43aec9aeba8036"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "farmstead_roof_ridge_256px.png",
+      "sha256": "8c08c835497df00c6368cdc761bc289779d5a690a049bda06dcca3de1a441162"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "farmstead_wall_edge_w_256px.png",
+      "sha256": "87b2aafabbd81c172115791c781f7f0700f6ba689cc790b85b688e29ab76cd93"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "farmstead_wall_center_256px.png",
+      "sha256": "3a81c9ed3225600983629e66e4350025ede07c4fea0615c147b09be942cd4221"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "farmstead_wall_edge_e_256px.png",
+      "sha256": "c0671376192fc0bddaf738aea145f5a1c7f1dcac62b6727b9d59d521fa60e64c"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "farmstead_wall_window_256px.png",
+      "sha256": "b00d92452325b58413a4667b2eca086376b32baa9c43c4d110ce8045760fd80a"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "farmstead_base_corner_sw_256px.png",
+      "sha256": "58f230d8c2d724e3eea9a01d0095572106d738be7763aa37d8017dcbfa75e9d4"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "farmstead_entrance_256px.png",
+      "sha256": "20ec2a0b13f8483b9051993bdbf51e04eaf02069f2899d09ce897d1435d30191"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "farmstead_base_corner_se_256px.png",
+      "sha256": "c010afe6e1f46c60c64af01f8cd43d41b2c192aa118e87238977e8a2720af7a7"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "farmstead_family_feature_256px.png",
+      "sha256": "134a7559848ce7bb048f9cdf6d5400cb450972420bb0aa81fd45dfa4bd0fd1e9"
+    }
+  ]
+}

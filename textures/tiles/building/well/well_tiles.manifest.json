@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "well",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "well_roof_corner_nw_256px.png",
+      "sha256": "8269e11ded0ff79cbe8b0cc9f984687d59061cda8573a732c736af1dd89aca03"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "well_roof_edge_n_256px.png",
+      "sha256": "bab98a35669c0955bff19155fbc569fe726608da812090132405c42c088f43a8"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "well_roof_corner_ne_256px.png",
+      "sha256": "27a5f4ae39056a35ed5ac904f385e8266cf95365c9e9ed5020a01821ecbdc1cb"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "well_roof_ridge_256px.png",
+      "sha256": "ccc18ef3eae7f06c20baf779fd3f2ce013671b2bf6a0459d6867c0e17fcf81ab"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "well_wall_edge_w_256px.png",
+      "sha256": "b12d91d19d1612c3626d09838653e5463fe9dabd1dbad8f227f50eda439179f5"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "well_wall_center_256px.png",
+      "sha256": "49aa4c53dec31b1b5459dd12c879338cfb1b4bb7874f474c03b205d46b8a9993"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "well_wall_edge_e_256px.png",
+      "sha256": "fb7adf14f46e9c3a3e726a32e79cc1da775847364ed8e123d9d709872a882f78"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "well_wall_window_256px.png",
+      "sha256": "c014f96b39c7a4f16630b8e46bf25c48bf86f10b3e9dddf915b3402bbe77036a"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "well_base_corner_sw_256px.png",
+      "sha256": "8eb1c3bcefc0f398b147e3396d2239eabe98544b23adf4de810497fc9071a91f"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "well_entrance_256px.png",
+      "sha256": "260c8fc5e28a5d4df0cd4b6a640042bc88431a0089cf2d2000882382ed2ae87d"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "well_base_corner_se_256px.png",
+      "sha256": "e3f37eaf350e44b2e03d5b9b7289833c844653a916b3da1f8001c5acd419fe0c"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "well_family_feature_256px.png",
+      "sha256": "9479681b57a1bd8b0be2e365eec4ecbe311e9f83f1aca91c3152fcdf7959d249"
+    }
+  ]
+}

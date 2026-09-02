@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "bakery",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "bakery_roof_corner_nw_256px.png",
+      "sha256": "12ea6f46cec0b8afb81d9b15596f29025e6aa8732477dfdae5e06c201e19ac87"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "bakery_roof_edge_n_256px.png",
+      "sha256": "3f39cf4ccf4bd584119b6f3f7c97a1aea22a901da070cbb8a4de68df72172640"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "bakery_roof_corner_ne_256px.png",
+      "sha256": "755e8cd61134c2793bd014b063c60e1f8657823c6b9c1487fe3e6009fb73fe44"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "bakery_roof_ridge_256px.png",
+      "sha256": "ec46953dbe79ae21b5855c6818829b789add8587836baf9803d685dbcfaef16d"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "bakery_wall_edge_w_256px.png",
+      "sha256": "94963ced31756f4bbdc5e21d31ef6a803411de6654b678e7261625aabaf6b2ea"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "bakery_wall_center_256px.png",
+      "sha256": "3cee8504b4988e3d3858e279e6f4af47bc6a31d098c2d983c4863cd3dddf00f2"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "bakery_wall_edge_e_256px.png",
+      "sha256": "4275c2e381e5c661682a019943f4de92a76de9f79e7cc1cf252c79ea1a4034c6"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "bakery_wall_window_256px.png",
+      "sha256": "27fe6483c0cccf80b3f0e935140eefaaffdaddc6716ba4cfa19c72fd042ca6e0"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "bakery_base_corner_sw_256px.png",
+      "sha256": "6c20fd1bc9545e801e97f68697a5f283208b0db59edba6caf967bc10b8e6cf6c"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "bakery_entrance_256px.png",
+      "sha256": "653836eb5f0c0e6467bd9266751891f1f7cead0c40aa0a75494be56d8f6489d9"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "bakery_base_corner_se_256px.png",
+      "sha256": "98936fb4c08a6d2a22aec5c4c3d7e5d240e22ad779e35f3a7ad55dbf17551bee"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "bakery_family_feature_256px.png",
+      "sha256": "e55b6ea3813c2cc8cb37170172fbc5615ed872bdd2ad96c4a9a8b8c77cca3995"
+    }
+  ]
+}

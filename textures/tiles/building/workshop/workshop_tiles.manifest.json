@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "family": "workshop",
+  "atlas": {
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "roof_corner_nw",
+      "filename": "workshop_roof_corner_nw_256px.png",
+      "sha256": "3c7df35c37f7ac6aba673619819bfed183b973c2228e2de6b470ca420af66b7c"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "roof_edge_n",
+      "filename": "workshop_roof_edge_n_256px.png",
+      "sha256": "b0b33003cc539212838cd338c7a644f0764944984bae89eeeaba59d5a883706e"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "roof_corner_ne",
+      "filename": "workshop_roof_corner_ne_256px.png",
+      "sha256": "27f0d0240161fc3a4fe2ebce602e7a12b2e7d51b2e01131ddc28f4a99a483227"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "roof_ridge",
+      "filename": "workshop_roof_ridge_256px.png",
+      "sha256": "d6372413cd79c154e1bde85897179231305b98586003528ca29d14124eb4a904"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "wall_edge_w",
+      "filename": "workshop_wall_edge_w_256px.png",
+      "sha256": "639108ca8adff3268702aa88474ad4cccf8a16053cbd66468eae7ac669a3dc84"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "wall_center",
+      "filename": "workshop_wall_center_256px.png",
+      "sha256": "d4f560686d4695bba5ed6557161a4e28cd574abe03f9b64be5ff8c3ec5fa0b0a"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "wall_edge_e",
+      "filename": "workshop_wall_edge_e_256px.png",
+      "sha256": "c19ea2f304fc7ff979588376b0a4d031c5ec0fb15402ebcef30c75842019249d"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "wall_window",
+      "filename": "workshop_wall_window_256px.png",
+      "sha256": "93fd34254cbfa9bccf4feb73bbd183d1add7a96853f3015ef4e92d293afad3b7"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "base_corner_sw",
+      "filename": "workshop_base_corner_sw_256px.png",
+      "sha256": "9361059f769bbdc1b86bc921262df7a99d691bf4e5abca08f53881662c2b1570"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "type": "entrance",
+      "filename": "workshop_entrance_256px.png",
+      "sha256": "677835e0891586b2cc019d3ebb84a1d6bc050668508101f6cc1905720c7314a9"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "base_corner_se",
+      "filename": "workshop_base_corner_se_256px.png",
+      "sha256": "a0c1b323498e25460c805f8d6fe98f7318123591f0d15b39d8d3af0eb903144d"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "family_feature",
+      "filename": "workshop_family_feature_256px.png",
+      "sha256": "b2e8987037afe65d6a5c747fdee0aafb7499ce394d3d4a5757d98cbb5c8766ae"
+    }
+  ]
+}
