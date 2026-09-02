@@ -93,7 +93,9 @@ test('camera interaction defers NPC detail/reconcile work and idle frame slack d
 
   const during = await page.evaluate(() => {
     const scheduler = window.Game.FrameBudgetScheduler;
-    scheduler.noteInteraction('npc-performance-test', 260);
+    // CI rendering can exceed a few hundred milliseconds. Keep the synthetic interaction
+    // active long enough to observe the scheduler's real deferral contract after render.
+    scheduler.noteInteraction('npc-performance-test', 2500);
     window.Game.NPCRelevanceRuntime.scheduleFrame();
     window.Game.NPCRuntimeBridge.scheduleReconcile();
     window.Game.Renderer.renderWorld(true);
@@ -109,7 +111,7 @@ test('camera interaction defers NPC detail/reconcile work and idle frame slack d
   expect(during.bridge.reconcileRequests).toBeGreaterThan(0);
   expect(during.relevance.deferredJobs).toBeGreaterThanOrEqual(0);
 
-  await page.waitForTimeout(310);
+  await page.waitForTimeout(2550);
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const reconcileQueued = await page.evaluate(() => {
       const scheduler = window.Game.FrameBudgetScheduler;
@@ -143,7 +145,7 @@ test('same authoritative minute deduplicates repeated relevance scheduling witho
   await ready(page);
   const failures = collectRuntimeFailures(page);
 
-  const evidence = await page.evaluate(async () => {
+  const evidence = await page.evaluate(() => {
     const Game = window.Game;
     const capturedTime = Game.GameTime.capture();
     Game.GameTime.stop();
@@ -156,12 +158,11 @@ test('same authoritative minute deduplicates repeated relevance scheduling witho
       for (let index = 0; index < 30; index += 1) Game.NPCRelevanceRuntime.scheduleFrame();
       const queuedNpcDetailKeys = scheduler.metrics().queuedKeys.filter((key) => key.startsWith('npc-detail:'));
       for (let attempt = 0; attempt < 40 && scheduler.metrics().queuedKeys.some((key) => key.startsWith('npc-detail:')); attempt += 1) {
-        // The focused contract measures relevance jobs only. A renderer frame may queue the
-        // normal authoritative reconcile between async slices; remove that unrelated job
-        // before each synchronous slice so it cannot repair/move the fixture under test.
+        // Drain only relevance-owned jobs synchronously. Yielding through a real timer here
+        // would permit unrelated requestAnimationFrame reconciliation to mutate the focused
+        // authoritative snapshot between the start/end measurements.
         scheduler.cancel('npc-runtime-reconcile');
         scheduler.runBackgroundSlice(performance.now());
-        await new Promise((resolve) => setTimeout(resolve, 2));
       }
       scheduler.cancel('npc-runtime-reconcile');
       const after = Game.NPCRelevanceRuntime.snapshot();
