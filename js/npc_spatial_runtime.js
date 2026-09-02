@@ -30,6 +30,7 @@
   function inBounds(p) { return p.row >= 0 && p.row < REGION_SIZE && p.col >= 0 && p.col < REGION_SIZE; }
   function distance(a, b) { return Math.abs(a.row - b.row) + Math.abs(a.col - b.col); }
   function same(a, b) { return a && b && a.row === b.row && a.col === b.col; }
+  function waitDebt(npc) { return Math.max(0, Math.floor(Number(npc?.movementWaitStreak) || 0)); }
 
   function authoritativeGameMinutes() {
     const captured = Game.GameTime?.capture?.();
@@ -101,6 +102,10 @@
         routineOffsetMs: undefined,
         routineOffsetGameMinutes: (hash32(`${person.id}|${index}`) % 121) - 60,
         movementDecision: prior.movementDecision || 'hold',
+        movementWaitStreak: waitDebt(prior),
+        movementBlockedBy: prior.movementBlockedBy || null,
+        intendedRow: Number.isInteger(prior.intendedRow) ? prior.intendedRow : null,
+        intendedCol: Number.isInteger(prior.intendedCol) ? prior.intendedCol : null,
         dialogueWith: null,
         dialogueLine: null,
         anchors: {
@@ -129,7 +134,8 @@
       lastSpatialGameMinutes: Number(world.npcRuntime?.lastSpatialGameMinutes ?? authoritativeGameMinutes()),
       collisionCount: 0,
       sideStepCount: 0,
-      yieldWaitCount: 0
+      yieldWaitCount: 0,
+      maxMovementWaitStreak: 0
     };
     return true;
   }
@@ -259,7 +265,14 @@
       const fixedKey = key(fixedPoint.row, fixedPoint.col);
       if (!inBounds(fixedPoint) || occupied.has(fixedKey)) continue;
       occupied.set(fixedKey, npc.id);
-      resolved.set(npc.id, { point: fixedPoint, decision: npc.movementDecision || 'hold', collided: false });
+      resolved.set(npc.id, {
+        point: fixedPoint,
+        intended: fixedPoint,
+        decision: npc.movementDecision || 'hold',
+        collided: false,
+        blockedBy: null,
+        waitStreak: waitDebt(npc)
+      });
     }
 
     if (dialoguePlan) {
@@ -272,14 +285,19 @@
         const targetKey = key(target.row, target.col);
         if (occupied.has(targetKey)) return;
         occupied.set(targetKey, id);
-        resolved.set(id, { point: target, decision: 'dialogue-position', collided: false });
+        resolved.set(id, { point: target, intended: target, decision: 'dialogue-position', collided: false, blockedBy: null, waitStreak: 0 });
       });
     }
 
+    // A blocked NPC accumulates deterministic fairness debt. Higher debt always wins the
+    // next contested active reservation before the seed/step tie-breaker, so repeated waits
+    // cannot starve the same NPC forever while a legal continuation exists.
     const ordered = npcs
       .filter((npc) => !resolved.has(npc.id))
       .slice()
       .sort((a, b) => {
+        const debtDelta = waitDebt(b) - waitDebt(a);
+        if (debtDelta) return debtDelta;
         const pa = hash32(`${seed}|${step}|${a.id}`);
         const pb = hash32(`${seed}|${step}|${b.id}`);
         return pa - pb || String(a.id).localeCompare(String(b.id));
@@ -289,14 +307,22 @@
       const previous = point(npc);
       const desired = point(desiredMap.get(npc.id)?.point || previous);
       const desiredKey = key(desired.row, desired.col);
+      const desiredOwner = occupied.get(desiredKey) || null;
+      const detours = [
+        { row: previous.row - 1, col: previous.col },
+        { row: previous.row, col: previous.col + 1 },
+        { row: previous.row + 1, col: previous.col },
+        { row: previous.row, col: previous.col - 1 }
+      ];
+      if ((hash32(`${seed}|${step}|${npc.id}|detour`) & 1) === 1) detours.reverse();
       const candidates = [
         { point: desired, decision: same(previous, desired) ? 'hold' : 'move' },
         ...sideCandidates(previous, desired, `${seed}|${step}|${npc.id}`).map((candidate) => ({ point: candidate, decision: 'side-step' })),
-        { point: previous, decision: 'yield-wait' },
-        { point: { row: previous.row - 1, col: previous.col }, decision: 'yield-detour' },
-        { point: { row: previous.row, col: previous.col + 1 }, decision: 'yield-detour' },
-        { point: { row: previous.row + 1, col: previous.col }, decision: 'yield-detour' },
-        { point: { row: previous.row, col: previous.col - 1 }, decision: 'yield-detour' }
+        ...detours.map((candidate) => ({ point: candidate, decision: 'yield-detour' })),
+        // Waiting is deliberately last among legal one-tile options. This turns a true lack
+        // of immediate continuation into an observable bounded wait instead of preferring a
+        // stationary cycle while a neighboring legal detour exists.
+        { point: previous, decision: 'yield-wait' }
       ];
 
       let chosen = null;
@@ -323,6 +349,13 @@
         }
       }
       if (!chosen) throw new Error(`No collision-safe tile available for NPC ${npc.id}.`);
+      const priorDebt = waitDebt(npc);
+      const previousDistance = distance(previous, desired);
+      const chosenDistance = distance(chosen.point, desired);
+      const progressed = same(chosen.point, desired) || chosenDistance < previousDistance;
+      chosen.intended = desired;
+      chosen.blockedBy = chosen.collided ? desiredOwner : null;
+      chosen.waitStreak = chosen.collided && !progressed ? Math.min(npcs.length, priorDebt + 1) : 0;
       if (chosen.collided) collisionCount += 1;
       if (chosen.decision === 'side-step') sideStepCount += 1;
       if (chosen.decision === 'yield-wait') yieldWaitCount += 1;
@@ -398,6 +431,7 @@
     const dialoguePlan = chooseDialoguePlan(activeNpcs, totalGameMinutes, village, roads);
     const resolution = resolveOccupancy(world.npcs, desiredMap, { village, roads, seed: world.seed, step, dialoguePlan, fixedNpcIds });
 
+    let maxMovementWaitStreak = 0;
     for (const npc of world.npcs) {
       const resolved = resolution.resolved.get(npc.id);
       const desired = desiredMap.get(npc.id);
@@ -407,6 +441,11 @@
       npc.localCol = npc.col - Number(world.npcRuntime.originBinding?.colOffset || 0);
       npc.activity = desired?.activity || npc.activity || 'idle';
       npc.movementDecision = resolved.decision;
+      npc.movementWaitStreak = Math.max(0, Math.floor(Number(resolved.waitStreak) || 0));
+      npc.movementBlockedBy = resolved.blockedBy || null;
+      npc.intendedRow = Number.isInteger(resolved.intended?.row) ? resolved.intended.row : npc.row;
+      npc.intendedCol = Number.isInteger(resolved.intended?.col) ? resolved.intended.col : npc.col;
+      maxMovementWaitStreak = Math.max(maxMovementWaitStreak, npc.movementWaitStreak);
       npc.dialogueWith = null;
       npc.dialogueLine = null;
       if (!fixedNpcIds.has(npc.id)) relevance?.markAuthoritativeUpdated?.(npc, totalGameMinutes);
@@ -440,6 +479,7 @@
     world.npcRuntime.collisionCount = resolution.collisionCount;
     world.npcRuntime.sideStepCount = resolution.sideStepCount;
     world.npcRuntime.yieldWaitCount = resolution.yieldWaitCount;
+    world.npcRuntime.maxMovementWaitStreak = maxMovementWaitStreak;
     world.npcRuntime.relevanceActiveCount = activeNpcs.length;
     world.npcRuntime.relevanceFixedCount = fixedNpcIds.size;
     return true;
