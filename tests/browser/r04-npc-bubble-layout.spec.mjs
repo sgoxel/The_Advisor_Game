@@ -38,8 +38,57 @@ for (const viewport of [
       Game.NPCSpatial.updateAt();
       Game.Renderer.renderWorld(true);
 
+      const world = Game.State.world;
       const overlay = document.getElementById('npcWorldOverlay');
       const rect = overlay.getBoundingClientRect();
+
+      // #347 requires a real reciprocal adjacent pair before direct Chatting is
+      // authoritative. This layout regression must not depend on a particular
+      // routine/relevance timing slice to manufacture one. Build a legal pair from
+      // two currently active NPCs on two free adjacent road tiles, then snapshot the
+      // authoritative fixture before exercising presentation-only layout.
+      const npcs = world.npcs;
+      const speaker = npcs[0];
+      const listener = npcs[1];
+      const occupiedByOthers = new Set(npcs.slice(2).map((npc) => `${Math.trunc(Number(npc.row))},${Math.trunc(Number(npc.col))}`));
+      const roads = new Set((world.originVillage?.roadTiles || []).map((p) => `${Math.trunc(Number(p.row))},${Math.trunc(Number(p.col))}`));
+      let pairTiles = null;
+      for (const key of roads) {
+        if (occupiedByOthers.has(key)) continue;
+        const [rowText, colText] = key.split(',');
+        const row = Number(rowText), col = Number(colText);
+        for (const [dr, dc] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+          const neighborKey = `${row + dr},${col + dc}`;
+          if (!roads.has(neighborKey) || occupiedByOthers.has(neighborKey)) continue;
+          pairTiles = [{ row, col }, { row: row + dr, col: col + dc }];
+          break;
+        }
+        if (pairTiles) break;
+      }
+      if (!pairTiles) throw new Error('Unable to construct adjacent free road pair for bubble-layout fixture.');
+
+      speaker.row = pairTiles[0].row;
+      speaker.col = pairTiles[0].col;
+      listener.row = pairTiles[1].row;
+      listener.col = pairTiles[1].col;
+      speaker.activity = 'talking';
+      listener.activity = 'talking';
+      speaker.movementDecision = 'dialogue-position';
+      listener.movementDecision = 'dialogue-position';
+      speaker.dialogueWith = listener.id;
+      listener.dialogueWith = speaker.id;
+      const line = `${speaker.name} and ${listener.name} are talking.`;
+      speaker.dialogueLine = line;
+      listener.dialogueLine = line;
+      world.npcDialogues = [{
+        authority: 'presentation-context',
+        authoritativeFact: false,
+        speakerId: speaker.id,
+        listenerId: listener.id,
+        line,
+        adjacent: true
+      }];
+
       const before = JSON.stringify({
         npcs: Game.State.world.npcs.map((npc) => ({
           id: npc.id,
