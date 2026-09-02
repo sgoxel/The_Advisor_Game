@@ -203,10 +203,14 @@ test('R04 combined render-first NPC/environment performance gate', async ({ page
   expect(Object.values(after.relevance.counts).reduce((sum, value) => sum + value, 0)).toBe(after.population);
   expect(Object.keys(before.bucketCounts).length).toBeGreaterThan(1);
 
-  const comparison = await sameFixtureComparison(page);
   const interactionStats = stats(interaction.frameTimes);
   const absolutePass = interactionStats.p95Ms <= 33.3;
-  const relativePass = comparison.legacy.p95Ms > 0 && comparison.renderFirst.p95Ms <= comparison.legacy.p95Ms * 0.80;
+  let comparison = null;
+  let relativePass = false;
+  if (!absolutePass) {
+    comparison = await sameFixtureComparison(page);
+    relativePass = comparison.legacy.p95Ms > 0 && comparison.renderFirst.p95Ms <= comparison.legacy.p95Ms * 0.80;
+  }
   expect(absolutePass || relativePass).toBe(true);
   expect(runtimeFailures).toEqual([]);
 
