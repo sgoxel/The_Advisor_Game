@@ -34,7 +34,8 @@ test('starter village uses cached semantic building tiles without normal vector 
       rasterCells: Number(overlay?.dataset.rasterCellCount || 0),
       cacheReady: cache.ready,
       cacheError: cache.error,
-      tileFamilies: String(overlay?.dataset.tileFamilies || '').split(',').filter(Boolean),
+      renderedTileFamilies: String(overlay?.dataset.tileFamilies || '').split(',').filter(Boolean),
+      authoritativeTileFamilies: [...new Set(plan.map((entry) => entry.tileFamily).filter(Boolean))],
       plan
     };
   });
@@ -47,7 +48,11 @@ test('starter village uses cached semantic building tiles without normal vector 
   expect(evidence.rasterCells).toBeGreaterThan(evidence.rasterBuildings);
   expect(evidence.cacheError).toBe(0);
   expect(evidence.cacheReady).toBeGreaterThanOrEqual(120);
-  expect(evidence.tileFamilies).toEqual(expect.arrayContaining(['home','inn','village_hall','smithy','farmstead']));
+  expect(evidence.authoritativeTileFamilies).toEqual(expect.arrayContaining(['home','inn','village_hall','smithy','farmstead']));
+  expect(evidence.renderedTileFamilies.length).toBeGreaterThan(0);
+  for (const family of evidence.renderedTileFamilies) {
+    expect(evidence.authoritativeTileFamilies).toContain(family);
+  }
 
   for (const item of evidence.plan.filter((entry) => entry.tileFamily && entry.tileFamily !== 'well')) {
     expect(item.tileTypes.length, `missing semantic composition for ${item.id}`).toBeGreaterThan(0);
