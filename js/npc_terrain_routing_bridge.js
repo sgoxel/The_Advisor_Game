@@ -1,8 +1,8 @@
-/* R04 / #325 + #257: bind NPC routine routes to shared authoritative terrain routing and building transitions. */
+/* R04 / #325 + #257 + #260: bind NPC routine routes to shared authoritative terrain routing, building transitions and outdoor worksites. */
 (function installNpcTerrainRoutingBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-terrain-routing-bridge-v4';
+  const VERSION = 'r04-npc-terrain-routing-bridge-v5';
   let renderHookInstalled = false;
 
   function key(point) { return `${point.row},${point.col}`; }
@@ -138,6 +138,65 @@
     };
   }
 
+  function applyOutdoorWorksiteAnchors(world, npcs, binding) {
+    Game.OutdoorWorksites?.sync?.();
+    const assignments = new Map((world?.outdoorWorksites?.assignments || []).map((item) => [String(item.id), item]));
+    let assignedCount = 0;
+    let unavailableCount = 0;
+    const records = [];
+
+    for (const npc of npcs || []) {
+      const assignment = assignments.get(String(npc.id));
+      if (!assignment) {
+        npc.outdoorWorksite = null;
+        continue;
+      }
+      if (assignment.status !== 'assigned' || !Number.isInteger(Number(assignment.row)) || !Number.isInteger(Number(assignment.col))) {
+        npc.outdoorWorksite = Object.freeze({ authority: 'simulation', worksiteId: assignment.worksiteId || null, worksiteKind: assignment.worksiteKind, resolved: false });
+        unavailableCount += 1;
+        records.push(Object.freeze({ npcId: npc.id, worksiteId: assignment.worksiteId || null, worksiteKind: assignment.worksiteKind, resolved: false }));
+        continue;
+      }
+
+      const local = { row: Math.trunc(Number(assignment.row)), col: Math.trunc(Number(assignment.col)) };
+      const work = strategicPoint(local, binding);
+      npc.anchors = npc.anchors || {};
+      npc.anchors.work = {
+        ...(npc.anchors.work || {}),
+        ...work,
+        buildingId: null,
+        indoor: false,
+        outdoor: true,
+        worksiteId: assignment.worksiteId,
+        worksiteKind: assignment.worksiteKind,
+        source: 'outdoor-worksites',
+        capacitySlot: assignment.capacitySlot,
+        sharedCapacity: assignment.sharedCapacity
+      };
+      npc.outdoorWorksite = Object.freeze({
+        authority: 'simulation',
+        resolved: true,
+        worksiteId: assignment.worksiteId,
+        worksiteKind: assignment.worksiteKind,
+        ...work,
+        capacitySlot: assignment.capacitySlot,
+        sharedCapacity: assignment.sharedCapacity
+      });
+      assignedCount += 1;
+      records.push(Object.freeze({ npcId: npc.id, worksiteId: assignment.worksiteId, worksiteKind: assignment.worksiteKind, localRow: local.row, localCol: local.col, resolved: true }));
+    }
+
+    world.npcOutdoorWorksiteRouting = Object.freeze({
+      version: 'r04-outdoor-worksite-routing-v1',
+      authority: 'simulation',
+      assignmentSource: Game.OutdoorWorksites?.version || null,
+      assignedCount,
+      unavailableCount,
+      records: Object.freeze(records)
+    });
+    return assignedCount;
+  }
+
   function refreshRoutes() {
     const world = Game.State?.world;
     Game.StarterVillageInteriors?.materialize?.(world);
@@ -145,6 +204,7 @@
     const npcs = world?.npcs;
     if (!Array.isArray(terrain) || !Array.isArray(npcs) || !npcs.length || !Game.TerrainRouting) return false;
     const binding = world.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 };
+    const outdoorWorksiteNpcCount = applyOutdoorWorksiteAnchors(world, npcs, binding);
     const occupied = new Set(npcs.map((npc) => key(localPoint(npc, binding))));
     let routed = 0;
     let routeLegCount = 0;
@@ -181,14 +241,17 @@
       authority: 'simulation',
       terrainRoutingVersion: Game.TerrainRouting.version,
       interiorRoutingVersion: world.buildingInteriors?.version || null,
+      outdoorWorksiteVersion: world.outdoorWorksites?.version || null,
+      outdoorWorksiteNpcCount,
       routedNpcCount: routed,
       totalNpcCount: npcs.length,
       routeLegCount,
       invalidRouteCount,
       buildingTransitionCount,
       repairedGoalTransitionCount,
-      routeSource: 'authoritative-terrain+occupancy+building-transitions',
+      routeSource: 'authoritative-terrain+occupancy+building-transitions+outdoor-worksites',
       buildingEntranceIntegrated: true,
+      outdoorWorksitesIntegrated: true,
       interiorEdgesPreserved: true
     };
     return routed > 0;
@@ -213,7 +276,7 @@
     return true;
   }
 
-  Game.NPCTerrainRouting = Object.freeze({ version: VERSION, authority: 'simulation', refreshRoutes, initialize });
+  Game.NPCTerrainRouting = Object.freeze({ version: VERSION, authority: 'simulation', refreshRoutes, initialize, applyOutdoorWorksiteAnchors });
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize);
