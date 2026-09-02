@@ -42,15 +42,32 @@ test('NPC routines are driven by authoritative Game.GameTime, not a seconds-long
       // different values at the same authoritative game time must resolve identically.
       Game.NPCSpatial.updateAt(0);
       const first = Game.NPCSpatial.capture();
+      const firstStateKey = String(Game.State?.world?.npcRuntime?.lastRoutineStateKey || '');
       Game.NPCSpatial.updateAt(987654321);
       const second = Game.NPCSpatial.capture();
+      const secondStateKey = String(Game.State?.world?.npcRuntime?.lastRoutineStateKey || '');
+      const changedNpcIds = [];
+      const changedKeysByNpc = {};
+      for (let index = 0; index < Math.max(first.length, second.length); index += 1) {
+        const before = first[index] || {};
+        const after = second[index] || {};
+        if (JSON.stringify(before) === JSON.stringify(after)) continue;
+        const id = String(before.id || after.id || `index-${index}`);
+        changedNpcIds.push(id);
+        changedKeysByNpc[id] = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
+          .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+      }
       snapshots.push({
         minuteOfDay,
         first,
         second,
         sameAuthoritativeTimeStable: JSON.stringify(first) === JSON.stringify(second),
         uniqueTileCount: new Set(first.map((npc) => `${npc.row},${npc.col}`)).size,
-        populationCount: first.length
+        populationCount: first.length,
+        firstStateKey,
+        secondStateKey,
+        changedNpcIds,
+        changedKeysByNpc
       });
     }
 
@@ -71,7 +88,11 @@ test('NPC routines are driven by authoritative Game.GameTime, not a seconds-long
         minuteOfDay: entry.minuteOfDay,
         sameAuthoritativeTimeStable: entry.sameAuthoritativeTimeStable,
         uniqueTileCount: entry.uniqueTileCount,
-        populationCount: entry.populationCount
+        populationCount: entry.populationCount,
+        firstStateKey: entry.firstStateKey,
+        secondStateKey: entry.secondStateKey,
+        changedNpcIds: entry.changedNpcIds,
+        changedKeysByNpc: entry.changedKeysByNpc
       })),
       distinctRepresentativeStates: new Set(compactHashes).size
     };
@@ -85,7 +106,7 @@ test('NPC routines are driven by authoritative Game.GameTime, not a seconds-long
   expect(evidence.distinctRepresentativeStates).toBeGreaterThanOrEqual(3);
 
   for (const snapshot of evidence.snapshots) {
-    expect(snapshot.sameAuthoritativeTimeStable).toBe(true);
+    expect(snapshot.sameAuthoritativeTimeStable, JSON.stringify(snapshot)).toBe(true);
     expect(snapshot.populationCount).toBeGreaterThanOrEqual(20);
     expect(snapshot.uniqueTileCount).toBe(snapshot.populationCount);
   }
