@@ -19,9 +19,6 @@ function assertSemanticGrammar(item) {
   const w = Number(item.footprint?.width || 0);
   expect(item.compositionMode).toBe('screen-space-semantic-mosaic');
   expect(item.cells.length, `cell count for ${item.id}`).toBe(h * w);
-  expect(item.screenEnvelope, `screen envelope for ${item.id}`).toBeTruthy();
-  expect(item.screenEnvelope.cellWidth, `cell width for ${item.id}`).toBeGreaterThan(0);
-  expect(item.screenEnvelope.cellHeight, `cell height for ${item.id}`).toBeGreaterThan(0);
 
   if (item.tileFamily === 'well') return;
   const entranceCells = item.cells.filter((cell) => cell.type === 'entrance');
@@ -39,6 +36,12 @@ function assertSemanticGrammar(item) {
     expect([...baseTypes].some((type) => type.startsWith('base_') || type === 'entrance' || type.startsWith('wall_')), `base grammar for ${item.id}`).toBe(true);
     expect(new Set(item.cells.map((cell) => cell.type)).size, `semantic diversity for ${item.id}`).toBeGreaterThanOrEqual(4);
   }
+}
+
+function assertScreenEnvelope(item) {
+  expect(item.screenEnvelope, `screen envelope for ${item.id}`).toBeTruthy();
+  expect(item.screenEnvelope.cellWidth, `cell width for ${item.id}`).toBeGreaterThan(0);
+  expect(item.screenEnvelope.cellHeight, `cell height for ${item.id}`).toBeGreaterThan(0);
 }
 
 test('starter village uses cached semantic building mosaics without normal vector fallback', async ({ page }) => {
@@ -80,7 +83,16 @@ test('starter village uses cached semantic building mosaics without normal vecto
   expect(evidence.authoritativeTileFamilies).toEqual(expect.arrayContaining(['home','inn','village_hall','smithy','farmstead']));
   expect(evidence.renderedTileFamilies.length).toBeGreaterThan(0);
   for (const family of evidence.renderedTileFamilies) expect(evidence.authoritativeTileFamilies).toContain(family);
-  for (const item of evidence.plan.filter((entry) => entry.tileFamily)) assertSemanticGrammar(item);
+
+  const semanticPlans = evidence.plan.filter((entry) => entry.tileFamily);
+  for (const item of semanticPlans) assertSemanticGrammar(item);
+
+  // Projection acceptance/rejection belongs to canonical #329. This #349 verifier
+  // validates envelopes only for plans the projection guard actually accepted,
+  // while the rendered counters above ensure the runtime still draws mosaics.
+  const projectedPlans = semanticPlans.filter((entry) => entry.screenEnvelope);
+  expect(projectedPlans.length).toBeGreaterThan(0);
+  for (const item of projectedPlans) assertScreenEnvelope(item);
 });
 
 test('representative semantic mosaic has visible roof wall and base pixel bands', async ({ page }) => {
