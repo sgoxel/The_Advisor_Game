@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>R04 #348 Starter Village Building Atlas Readability Evidence</title>
+<style>
+:root{font-family:system-ui,sans-serif;color-scheme:dark;background:#171717;color:#eee}body{margin:24px}h1{font-size:22px}p{max-width:1000px;line-height:1.45}.family{margin:24px 0;padding:16px;border:1px solid #555;border-radius:8px}.samples{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}.sample{display:grid;gap:6px;justify-items:center}.frame{padding:8px;border:1px dashed #777;overflow:hidden;background:#252525}.building{display:grid;grid-template-columns:repeat(3,var(--tile));grid-template-rows:repeat(3,var(--tile));position:relative;width:calc(var(--tile)*3);height:calc(var(--tile)*3)}.tile{width:var(--tile);height:var(--tile);overflow:hidden;position:relative}.tile img{position:absolute;width:calc(var(--tile)*4);height:calc(var(--tile)*4);max-width:none;left:calc(var(--col)*var(--tile)*-1);top:calc(var(--row)*var(--tile)*-1)}.feature{position:absolute;right:4px;bottom:4px;width:var(--tile);height:var(--tile);overflow:hidden;filter:drop-shadow(0 2px 2px #000)}.feature img{position:absolute;width:calc(var(--tile)*4);height:calc(var(--tile)*4);max-width:none;left:calc(var(--tile)*-3);top:calc(var(--tile)*-2)}.normal{--tile:42px}.z24{--tile:46px}.z26{--tile:50px}.z28{--tile:54px}.label{font-size:12px;color:#ccc}.note{font-size:12px;color:#bbb}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px}.legend span{padding:3px 7px;border:1px solid #555;border-radius:12px}</style>
+</head>
+<body>
+<h1>#348 — Starter-village building atlas visual/readability evidence</h1>
+<p>This committed presentation-only evidence surface assembles the exact generated #348 raster atlas cells without runtime adoption. It is intentionally independent of #349. Each family is shown at a bounded representative normal preview scale and at the #329-adjacent 2.4x / 2.6x / 2.8x evidence neighborhood. The previews use the same roof/wall/base/entrance/family-feature semantics for every family; pixels do not define collision, footprint, entrance truth, or Simulation state.</p>
+<div class="legend"><span>normal: 42 px evidence tile</span><span>2.4x: 46 px</span><span>2.6x: 50 px</span><span>2.8x: 54 px</span><span>all frames explicitly bounded</span></div>
+<div id="evidence"></div>
+<script>
+const families=['home','inn','village_hall','bakery','market','smithy','workshop','guard_post','mill','farmstead','storage','well'];
+const samples=[['normal','normal'],['z24','2.4x'],['z26','2.6x'],['z28','2.8x']];
+const layout=[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]];
+const root=document.querySelector('#evidence');
+for(const family of families){
+  const section=document.createElement('section'); section.className='family';
+  section.innerHTML=`<h2>${family}</h2><div class="samples"></div><p class="note">Assembly: roof corners/edge → wall edges/center → base corners + authoritative entrance semantic; family_feature is overlaid only as a readability cue. Source: ../source/buildings/${family}_starter_1024.png</p>`;
+  const samplesRoot=section.querySelector('.samples');
+  for(const [cls,label] of samples){
+    const sample=document.createElement('div'); sample.className='sample';
+    const frame=document.createElement('div'); frame.className='frame';
+    const building=document.createElement('div'); building.className=`building ${cls}`;
+    for(const [row,col] of layout){const tile=document.createElement('div');tile.className='tile';tile.style.setProperty('--row',row);tile.style.setProperty('--col',col);tile.innerHTML=`<img alt="" src="../source/buildings/${family}_starter_1024.png">`;building.appendChild(tile)}
+    const feature=document.createElement('div');feature.className='feature';feature.innerHTML=`<img alt="" src="../source/buildings/${family}_starter_1024.png">`;building.appendChild(feature);
+    frame.appendChild(building); sample.append(frame); sample.insertAdjacentHTML('beforeend',`<div class="label">${label}</div>`); samplesRoot.appendChild(sample);
+  }
+  root.appendChild(section);
+}
+</script>
+</body>
+</html>
