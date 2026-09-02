@@ -89,6 +89,17 @@ export const MAIN_ROAD_TILE_TYPES = Object.freeze([
   'main_intersection_cross',
 ]);
 
+export const STARTER_BUILDING_FAMILIES = Object.freeze([
+  'home', 'inn', 'village_hall', 'bakery', 'market', 'smithy',
+  'workshop', 'guard_post', 'mill', 'farmstead', 'storage', 'well',
+]);
+
+export const STARTER_BUILDING_TILE_TYPES = Object.freeze([
+  'roof_corner_nw', 'roof_edge_n', 'roof_corner_ne', 'roof_ridge',
+  'wall_edge_w', 'wall_center', 'wall_edge_e', 'wall_window',
+  'base_corner_sw', 'entrance', 'base_corner_se', 'family_feature',
+]);
+
 export function createCanonicalRoadTileRegistry() {
   return new SemanticTileRegistry(ROAD_TILE_TYPES.map((type) => ({
     family: 'road',
@@ -105,6 +116,16 @@ export function createCanonicalMainRoadTileRegistry() {
     size: 256,
     source: `textures/tiles/main_road/main_road_${type}_256px.png`,
   })));
+}
+
+export function createCanonicalStarterBuildingTileRegistry() {
+  return new SemanticTileRegistry(STARTER_BUILDING_FAMILIES.flatMap((family) =>
+    STARTER_BUILDING_TILE_TYPES.map((type) => ({
+      family,
+      type,
+      size: 256,
+      source: `textures/tiles/building/${family}/${family}_${type}_256px.png`,
+    }))));
 }
 
 export function resolveTileUrl(entry, baseUrl = globalThis.location?.href ?? 'http://localhost/') {
