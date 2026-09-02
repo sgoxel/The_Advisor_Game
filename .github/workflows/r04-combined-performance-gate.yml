@@ -1,0 +1,66 @@
+name: R04 Combined Performance Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/browser/r04-combined-performance-gate.spec.mjs'
+      - '.github/workflows/r04-combined-performance-gate.yml'
+      - 'js/frame_budget_scheduler.js'
+      - 'js/npc_relevance_runtime.js'
+      - 'js/npc_runtime_bridge.js'
+      - 'js/region_navigation.js'
+      - 'js/renderer.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r04-combined-performance-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact candidate
+        run: |
+          echo "candidate=${GITHUB_SHA}"
+          git rev-parse HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify combined performance on desktop
+        run: npx playwright test tests/browser/r04-combined-performance-gate.spec.mjs --project=desktop
+      - name: Verify combined performance on constrained tablet
+        run: npx playwright test tests/browser/r04-combined-performance-gate.spec.mjs --project=tablet
+      - name: Preserve component-focused compatibility
+        run: >-
+          npx playwright test
+          tests/browser/r04-render-first-frame-budget.spec.mjs
+          tests/browser/r04-npc-relevance-performance.spec.mjs
+          tests/browser/r04-environment-lazy-prefetch.spec.mjs
+          --project=desktop
+      - name: Prepare exact-SHA evidence
+        if: always()
+        run: |
+          mkdir -p r04-combined-performance-evidence
+          printf 'candidate=%s\nrun=%s\nattempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > r04-combined-performance-evidence/candidate.txt
+          if [ -d playwright-report ]; then cp -R playwright-report r04-combined-performance-evidence/; fi
+          if [ -d test-results ]; then cp -R test-results r04-combined-performance-evidence/; fi
+      - name: Upload exact-SHA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r04-combined-performance-${{ github.sha }}
+          path: r04-combined-performance-evidence
+          if-no-files-found: error
+          retention-days: 14
