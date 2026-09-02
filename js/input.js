@@ -292,6 +292,10 @@ window.Game = window.Game || {};
     });
 
     dom.canvas.addEventListener('wheel', (event) => {
+      // Bind the actual camera-wheel path to the render-first scheduler. Runtime
+      // modules may wrap Renderer.renderWorld after scheduler startup, so the real
+      // interaction boundary must reassert scheduler priority/measurement directly.
+      window.Game.FrameBudgetScheduler?.noteInteraction?.('wheel');
       event.preventDefault();
       const pos = getCanvasMousePosition(event);
       input.mouseX = pos.x;
