@@ -40,8 +40,17 @@ test('contextual bubble pass preserves authoritative NPC objects and replaces ge
 
   const evidence = await page.evaluate(() => {
     const Game = window.Game;
-    Game.Renderer.renderWorld(true);
     const npcs = Game.State.world.npcs;
+    // #351 limits expensive activity detail to relevant NPCs. This presentation fixture
+    // deliberately changes projection, so establish one explicit interaction-critical NPC
+    // through the public relevance metadata contract before the draw assertions run.
+    const activityCritical = npcs.find((npc) => !npc.dialogueWith) || npcs[0];
+    activityCritical.interactionCritical = true;
+    Game.NPCRelevanceRuntime?.markAuthoritativeUpdated?.(
+      activityCritical,
+      Game.GameTime?.capture?.()?.totalGameMinutes ?? 0
+    );
+    Game.Renderer.renderWorld(true);
     const references = npcs.slice();
     const before = JSON.stringify(npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, activity: npc.activity, occupation: npc.occupation, movementDecision: npc.movementDecision, dialogueWith: npc.dialogueWith })));
 
