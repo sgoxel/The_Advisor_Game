@@ -230,17 +230,18 @@ window.Game = window.Game || {};
   }
 
   function installInteractionSignals() {
-    const canvas = Game.State && Game.State.dom && Game.State.dom.canvas
-      ? Game.State.dom.canvas
-      : document.getElementById('gameCanvas');
-    const target = canvas || document;
-    target.addEventListener('wheel', () => noteInteraction('wheel'), { capture: true, passive: true });
-    target.addEventListener('mousedown', () => noteInteraction('pointer-pan'), true);
-    target.addEventListener('mousemove', (event) => {
+    // Capture input at the window boundary rather than only on the base game canvas.
+    // The living-world renderer uses multiple sibling overlay canvases; a real wheel/
+    // pan/touch event can therefore land on an overlay even when the pointer is over
+    // the game viewport. Window capture observes it before overlays/runtime wrappers
+    // can intercept it and immediately reasserts the scheduler as the render outermost.
+    global.addEventListener('wheel', () => noteInteraction('wheel'), { capture: true, passive: true });
+    global.addEventListener('mousedown', () => noteInteraction('pointer-pan'), true);
+    global.addEventListener('mousemove', (event) => {
       if ((event.buttons || 0) !== 0 || (Game.State && Game.State.camera && Game.State.camera.dragActive)) noteInteraction('pointer-pan');
     }, true);
-    target.addEventListener('touchstart', () => noteInteraction('touch-pan'), { capture: true, passive: true });
-    target.addEventListener('touchmove', () => noteInteraction('touch-pan'), { capture: true, passive: true });
+    global.addEventListener('touchstart', () => noteInteraction('touch-pan'), { capture: true, passive: true });
+    global.addEventListener('touchmove', () => noteInteraction('touch-pan'), { capture: true, passive: true });
     global.addEventListener('keydown', (event) => {
       const key = String(event.key || '').toLowerCase();
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) noteInteraction('keyboard-pan');
@@ -271,7 +272,7 @@ window.Game = window.Game || {};
   }
 
   Game.FrameBudgetScheduler = Object.freeze({
-    version: '1.0.1',
+    version: '1.0.2',
     authority: 'scheduling-only',
     enqueue,
     cancel,
