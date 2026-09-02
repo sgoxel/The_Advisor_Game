@@ -15,6 +15,7 @@ async function ready(page) {
     window.Game?.NPCRelevanceRuntime?.snapshot &&
     window.Game?.FrameBudgetScheduler?.metrics &&
     window.Game?.NPCRuntimeBridge?.scheduleReconcile &&
+    window.Game?.NPCRuntimeBridge?.validSpatialPopulation?.() &&
     window.Game?.State?.world?.npcs?.length
   ), null, { timeout: 30_000 });
   await page.evaluate(async () => {
@@ -23,6 +24,11 @@ async function ready(page) {
     // tests deliberately manipulate authoritative NPC fixtures.
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
+  await page.waitForFunction(
+    () => window.Game?.NPCRuntimeBridge?.validSpatialPopulation?.() === true,
+    null,
+    { timeout: 30_000 }
+  );
 }
 
 test('stable NPC identity produces deterministic distributed authoritative-time buckets', async ({ page }) => {
@@ -142,14 +148,20 @@ test('same authoritative minute deduplicates repeated relevance scheduling witho
     Game.GameTime.setForTest(Math.floor(capturedTime.totalGameMinutes));
     try {
       const scheduler = Game.FrameBudgetScheduler;
+      scheduler.cancel('npc-runtime-reconcile');
       const before = Game.NPCRelevanceRuntime.snapshot();
       const startPositions = Game.State.world.npcs.map((npc) => `${npc.id}:${npc.row},${npc.col}`);
       for (let index = 0; index < 30; index += 1) Game.NPCRelevanceRuntime.scheduleFrame();
       const queuedNpcDetailKeys = scheduler.metrics().queuedKeys.filter((key) => key.startsWith('npc-detail:'));
       for (let attempt = 0; attempt < 40 && scheduler.metrics().queuedKeys.some((key) => key.startsWith('npc-detail:')); attempt += 1) {
+        // The focused contract measures relevance jobs only. A renderer frame may queue the
+        // normal authoritative reconcile between async slices; remove that unrelated job
+        // before each synchronous slice so it cannot repair/move the fixture under test.
+        scheduler.cancel('npc-runtime-reconcile');
         scheduler.runBackgroundSlice(performance.now());
         await new Promise((resolve) => setTimeout(resolve, 2));
       }
+      scheduler.cancel('npc-runtime-reconcile');
       const after = Game.NPCRelevanceRuntime.snapshot();
       return {
         startPositions,
@@ -163,6 +175,7 @@ test('same authoritative minute deduplicates repeated relevance scheduling witho
     } finally {
       Game.GameTime.restore(capturedTime);
       Game.GameTime.start();
+      Game.NPCRuntimeBridge.scheduleReconcile();
     }
   });
 
@@ -186,67 +199,100 @@ test('distant demotion unloads detail and interaction-critical promotion reconci
     const player = Game.State.world.player;
     const npc = Game.State.world.npcs.find((entry) => entry?.id && entry !== player) || Game.State.world.npcs[0];
     const original = { row: npc.row, col: npc.col, interactionCritical: npc.interactionCritical, selectedForInteraction: npc.selectedForInteraction, dialogueWith: npc.dialogueWith };
+    const capturedTime = Game.GameTime.capture();
     const playerRow = Number.isFinite(Number(player?.row)) ? Number(player.row) : 0;
     const playerCol = Number.isFinite(Number(player?.col)) ? Number(player.col) : 0;
+    const barrierKey = 'test:npc-relevance-promotion-isolation';
 
-    if (Game.State.camera) {
-      Game.State.camera.dragActive = false;
-      Game.State.camera.inertiaVelocityX = 0;
-      Game.State.camera.inertiaVelocityY = 0;
-    }
-    Game.State.input?.keys?.clear?.();
+    Game.GameTime.stop();
+    Game.GameTime.setForTest(Math.floor(capturedTime.totalGameMinutes));
 
-    npc.interactionCritical = false;
-    npc.selectedForInteraction = false;
-    npc.dialogueWith = null;
-    npc.row = playerRow + 90;
-    npc.col = playerCol + 90;
-    runtime.scheduleFrame();
-    const demoted = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
+    try {
+      if (Game.State.camera) {
+        Game.State.camera.dragActive = false;
+        Game.State.camera.inertiaVelocityX = 0;
+        Game.State.camera.inertiaVelocityY = 0;
+      }
+      Game.State.input?.keys?.clear?.();
+      for (let attempt = 0; attempt < 60 && scheduler.interactionActive(); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      scheduler.cancel('npc-runtime-reconcile');
 
-    const promotedBefore = runtime.snapshot().promotedReconciliations;
-    npc.interactionCritical = true;
-    const promotedStart = { row: npc.row, col: npc.col };
-    runtime.scheduleFrame();
-    const pendingEntry = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const key = `npc-detail:${npc.id}`;
-      if (!scheduler.metrics().queuedKeys.includes(key)) break;
+      npc.interactionCritical = false;
+      npc.selectedForInteraction = false;
+      npc.dialogueWith = null;
+      npc.row = playerRow + 90;
+      npc.col = playerCol + 90;
+      runtime.scheduleFrame();
+      scheduler.cancel('npc-runtime-reconcile');
+      const demoted = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
+
+      const promotedBefore = runtime.snapshot().promotedReconciliations;
+      npc.interactionCritical = true;
+      const promotedStart = { row: npc.row, col: npc.col };
+      runtime.scheduleFrame();
+      const pendingEntry = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
+      const detailKey = `npc-detail:${npc.id}`;
+      const detailQueuedBefore = scheduler.metrics().queuedKeys.includes(detailKey);
+
+      // The critical detail job has priority 30. Put a test-only priority-29 barrier directly
+      // behind it; the barrier marks interaction pressure so runBackgroundSlice stops before
+      // the normal priority-25 authoritative reconcile can execute. This exercises the real
+      // queued detail closure while isolating the exact no-teleport measurement window.
+      scheduler.enqueue(barrierKey, () => {
+        scheduler.noteInteraction('npc-relevance-focused-isolation', 80);
+        return true;
+      }, { priority: 29, label: 'NPC relevance focused isolation barrier' });
+      scheduler.cancel('npc-runtime-reconcile');
       scheduler.runBackgroundSlice(performance.now());
-      await new Promise((resolve) => setTimeout(resolve, 2));
+      scheduler.cancel('npc-runtime-reconcile');
+
+      const afterDetail = runtime.snapshot();
+      const promotedEntry = afterDetail.entries.find((entry) => entry.id === String(npc.id));
+      const promotedEnd = { row: npc.row, col: npc.col };
+
+      // Only after the focused detail/no-teleport observation is complete do we acknowledge
+      // the separate authoritative update. That transition owns clearing promotion-pending.
+      runtime.markAuthoritativeUpdated(npc);
+      const afterAuthoritative = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
+
+      return {
+        demotedTier: demoted?.tier,
+        demotedDetailLoaded: demoted?.detailLoaded,
+        promotedTier: promotedEntry?.tier,
+        detailQueuedBefore,
+        promotedPendingBeforeDetail: pendingEntry?.authoritativePromotionPending,
+        promotedPendingAfterDetail: promotedEntry?.authoritativePromotionPending,
+        promotedPendingAfterAuthoritative: afterAuthoritative?.authoritativePromotionPending,
+        promotedReconciliationsDelta: afterDetail.promotedReconciliations - promotedBefore,
+        promotedStart,
+        promotedEnd
+      };
+    } finally {
+      scheduler.cancel(barrierKey);
+      scheduler.cancel('npc-runtime-reconcile');
+      npc.row = original.row;
+      npc.col = original.col;
+      npc.interactionCritical = original.interactionCritical;
+      npc.selectedForInteraction = original.selectedForInteraction;
+      npc.dialogueWith = original.dialogueWith;
+      runtime.markAuthoritativeUpdated(npc);
+      Game.GameTime.restore(capturedTime);
+      Game.GameTime.start();
+      // Ordinary authoritative reconciliation is intentionally resumed only after the
+      // focused relevance-detail measurement and fixture restoration are complete.
+      Game.NPCRuntimeBridge.scheduleReconcile();
     }
-    const afterDetail = runtime.snapshot();
-    const promotedEntry = afterDetail.entries.find((entry) => entry.id === String(npc.id));
-
-    runtime.markAuthoritativeUpdated(npc);
-    const afterAuthoritative = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
-    const promotedEnd = { row: npc.row, col: npc.col };
-
-    npc.row = original.row;
-    npc.col = original.col;
-    npc.interactionCritical = original.interactionCritical;
-    npc.selectedForInteraction = original.selectedForInteraction;
-    npc.dialogueWith = original.dialogueWith;
-
-    return {
-      demotedTier: demoted?.tier,
-      demotedDetailLoaded: demoted?.detailLoaded,
-      promotedTier: promotedEntry?.tier,
-      promotedPendingBeforeDetail: pendingEntry?.authoritativePromotionPending,
-      promotedPendingAfterDetail: promotedEntry?.authoritativePromotionPending,
-      promotedPendingAfterAuthoritative: afterAuthoritative?.authoritativePromotionPending,
-      promotedReconciliationsDelta: afterDetail.promotedReconciliations - promotedBefore,
-      promotedStart,
-      promotedEnd
-    };
   });
 
   expect(evidence.demotedTier).toBe('distant');
   expect(evidence.demotedDetailLoaded).toBe(false);
   expect(evidence.promotedTier).toBe('critical');
+  expect(evidence.detailQueuedBefore).toBe(true);
   expect(evidence.promotedPendingBeforeDetail).toBe(true);
   expect(evidence.promotedReconciliationsDelta).toBeGreaterThanOrEqual(1);
-  expect(evidence.promotedPendingAfterDetail).toBe(false);
+  expect(evidence.promotedPendingAfterDetail).toBe(true);
   expect(evidence.promotedPendingAfterAuthoritative).toBe(false);
   expect(Math.abs(evidence.promotedEnd.row - evidence.promotedStart.row) + Math.abs(evidence.promotedEnd.col - evidence.promotedStart.col)).toBe(0);
   expect(failures).toEqual([]);
