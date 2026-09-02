@@ -10,7 +10,7 @@
 (function installRoadRuntimeBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-road-runtime-bridge-v1';
+  const VERSION = 'r04-road-runtime-bridge-v2-main-road-composition';
   let installed = false;
   let attempts = 0;
 
@@ -27,7 +27,19 @@
     if (!roads || !worldReady()) return false;
     try {
       roads.ensureSemanticAssets?.();
-      return roads.drawPresentation?.() !== false;
+      const ordinaryDrawn = roads.drawPresentation?.() !== false;
+
+      // #339: StarterVillageRoads and MainRoadRenderer intentionally share one
+      // transparent road overlay. StarterVillageRoads clears that canvas before
+      // drawing ordinary roads, so the final runtime bridge must compose the
+      // verified two-tile main-road layer *after* that clear. Otherwise the late
+      // bridge erases the broad main-road surface and leaves only the underlying
+      // ordinary-road tiles, producing the Admin-observed rail/ladder pattern.
+      const mainRoads = Game.MainRoadRenderer;
+      if (!mainRoads?.drawPresentation) return ordinaryDrawn;
+      mainRoads.ensureAssets?.();
+      const mainDrawn = mainRoads.drawPresentation();
+      return ordinaryDrawn && mainDrawn !== false;
     } catch (error) {
       console.warn('Road runtime bridge presentation failed.', error);
       return false;
