@@ -3,19 +3,21 @@
 
   Legacy NPCWorld still participates in the compatibility render chain and can mutate
   coordinates before the newer spatial wrapper finishes. The spatial runtime correctly
-  owns authoritative occupancy. Expensive final reconciliation is queued through the
-  render-first scheduler so active camera frames are never blocked by optional repair work.
+  owns authoritative occupancy. Valid-state reconciliation is queued through the
+  render-first scheduler; invalid authoritative occupancy is repaired synchronously
+  before optional relevance throttling can preserve corrupted coordinates.
 */
 (function installNpcRuntimeBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-runtime-bridge-v2-lazy-reconcile';
+  const VERSION = 'r04-npc-runtime-bridge-v3-invalid-recovery';
   const REGION_SIZE = Number(Game.SpatialWorld?.regionSize || Game.Config?.LOGICAL_REGION_TILES || 100);
   let installed = false;
   let attempts = 0;
   let lastSpatialSignature = '';
   let reconcileRequests = 0;
   let reconcileRuns = 0;
+  let invalidRecoveryRuns = 0;
 
   function coordinateSignature() {
     const npcs = Game.State?.world?.npcs;
@@ -42,6 +44,26 @@
     return true;
   }
 
+  function runSpatialUpdate({ forceFull = false } = {}) {
+    const spatial = Game.NPCSpatial;
+    if (!spatial || typeof spatial.updateAt !== 'function') return false;
+    if (!forceFull) return spatial.updateAt();
+
+    // Relevance throttling is valid only while the authoritative compact population is
+    // already spatially valid. If a legacy render wrapper has produced NaN/duplicate/
+    // out-of-bounds coordinates, treating those NPCs as non-due would freeze corruption.
+    // Bypass the scheduling-only relevance service for this synchronous recovery call;
+    // the next normal frame re-enters relevance scheduling from a valid population.
+    const relevance = Game.NPCRelevanceRuntime;
+    if (!relevance) return spatial.updateAt();
+    try {
+      Game.NPCRelevanceRuntime = null;
+      return spatial.updateAt();
+    } finally {
+      Game.NPCRelevanceRuntime = relevance;
+    }
+  }
+
   function reconcile() {
     const world = Game.State?.world;
     const spatial = Game.NPCSpatial;
@@ -54,7 +76,8 @@
 
     if (drifted || invalid || !lastSpatialSignature) {
       if (world.npcRuntime) world.npcRuntime.lastRoutineStateKey = null;
-      spatial.updateAt();
+      if (invalid) invalidRecoveryRuns += 1;
+      runSpatialUpdate({ forceFull: invalid });
     }
 
     const after = coordinateSignature();
@@ -67,6 +90,12 @@
 
   function scheduleReconcile() {
     reconcileRequests += 1;
+
+    // Invalid Simulation occupancy is not optional presentation/background work. Repair
+    // it immediately so the lazy scheduler never receives corrupted coordinates as a
+    // legitimate fixed/non-due baseline.
+    if (!validSpatialPopulation()) return reconcile();
+
     Game.NPCRelevanceRuntime?.scheduleFrame?.();
     const scheduler = Game.FrameBudgetScheduler;
     if (scheduler?.enqueue) {
@@ -114,7 +143,12 @@
     reconcile,
     scheduleReconcile,
     metrics() {
-      return Object.freeze({ reconcileRequests, reconcileRuns, queued: Boolean(Game.FrameBudgetScheduler?.metrics?.().queuedKeys?.includes('npc-runtime-reconcile')) });
+      return Object.freeze({
+        reconcileRequests,
+        reconcileRuns,
+        invalidRecoveryRuns,
+        queued: Boolean(Game.FrameBudgetScheduler?.metrics?.().queuedKeys?.includes('npc-runtime-reconcile'))
+      });
     }
   });
 
