@@ -17,8 +17,11 @@ async function ready(page) {
     window.Game?.NPCRuntimeBridge?.scheduleReconcile &&
     window.Game?.State?.world?.npcs?.length
   ), null, { timeout: 30_000 });
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     if (window.Game?.Config) window.Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
+    // Let any presentation frame that was already in flight finish before focused
+    // tests deliberately manipulate authoritative NPC fixtures.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 }
 
@@ -205,6 +208,7 @@ test('distant demotion unloads detail and interaction-critical promotion reconci
     npc.interactionCritical = true;
     const promotedStart = { row: npc.row, col: npc.col };
     runtime.scheduleFrame();
+    const pendingEntry = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const key = `npc-detail:${npc.id}`;
       if (!scheduler.metrics().queuedKeys.includes(key)) break;
@@ -228,6 +232,7 @@ test('distant demotion unloads detail and interaction-critical promotion reconci
       demotedTier: demoted?.tier,
       demotedDetailLoaded: demoted?.detailLoaded,
       promotedTier: promotedEntry?.tier,
+      promotedPendingBeforeDetail: pendingEntry?.authoritativePromotionPending,
       promotedPendingAfterDetail: promotedEntry?.authoritativePromotionPending,
       promotedPendingAfterAuthoritative: afterAuthoritative?.authoritativePromotionPending,
       promotedReconciliationsDelta: afterDetail.promotedReconciliations - promotedBefore,
@@ -239,8 +244,9 @@ test('distant demotion unloads detail and interaction-critical promotion reconci
   expect(evidence.demotedTier).toBe('distant');
   expect(evidence.demotedDetailLoaded).toBe(false);
   expect(evidence.promotedTier).toBe('critical');
+  expect(evidence.promotedPendingBeforeDetail).toBe(true);
   expect(evidence.promotedReconciliationsDelta).toBeGreaterThanOrEqual(1);
-  expect(evidence.promotedPendingAfterDetail).toBe(true);
+  expect(evidence.promotedPendingAfterDetail).toBe(false);
   expect(evidence.promotedPendingAfterAuthoritative).toBe(false);
   expect(Math.abs(evidence.promotedEnd.row - evidence.promotedStart.row) + Math.abs(evidence.promotedEnd.col - evidence.promotedStart.col)).toBe(0);
   expect(failures).toEqual([]);
