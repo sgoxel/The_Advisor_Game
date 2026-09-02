@@ -79,6 +79,17 @@ for (const viewport of [
       listener.dialogueLine = line;
       world.npcDialogues = [{ authority: 'presentation-context', authoritativeFact: false, speakerId: speaker.id, listenerId: listener.id, line, adjacent: true }];
 
+      // #351 limits activity-detail drawing to currently relevant NPCs. This fixture
+      // overrides projection only after relevance state may already be cached, so establish
+      // one explicit non-dialogue interaction-critical NPC through the scheduling contract.
+      // The existing >0 activity assertion stays meaningful without bypassing relevance.
+      const activityCritical = npcs[2];
+      activityCritical.interactionCritical = true;
+      Game.NPCRelevanceRuntime?.markAuthoritativeUpdated?.(
+        activityCritical,
+        Game.GameTime.capture?.()?.totalGameMinutes ?? 0
+      );
+
       const before = JSON.stringify({
         npcs: Game.State.world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, activity: npc.activity, movementDecision: npc.movementDecision, dialogueWith: npc.dialogueWith, dialogueLine: npc.dialogueLine })),
         dialogues: Game.State.world.npcDialogues
