@@ -1,0 +1,58 @@
+name: R04 Export Starter Building Tiles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/export_starter_building_tiles.mjs'
+      - 'tools/split_tile_atlas.mjs'
+      - 'design/source/buildings/**'
+      - '.github/workflows/r04-export-starter-building-tiles.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: r04-export-starter-building-tiles-main
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Export canonical starter-village building tiles
+        run: node tools/export_starter_building_tiles.mjs
+      - name: Validate deterministic regeneration
+        run: |
+          git diff -- textures/tiles/building > /tmp/first.diff
+          node tools/export_starter_building_tiles.mjs
+          git diff -- textures/tiles/building > /tmp/second.diff
+          cmp /tmp/first.diff /tmp/second.diff
+      - name: Publish generated building tiles without force push
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- textures/tiles/building; then
+            echo 'Building tile exports already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add textures/tiles/building
+          git commit -m 'R04 #349 materialize starter village building tiles'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "Push raced main; rebasing generated commit (attempt ${attempt}/3)."
+            git fetch origin main
+            git rebase origin/main
+          done
+          echo 'Unable to publish generated building tiles after bounded retries.' >&2
+          exit 1
