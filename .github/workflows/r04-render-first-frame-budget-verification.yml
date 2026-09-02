@@ -9,6 +9,7 @@ on:
       - 'js/input.js'
       - 'js/app.js'
       - 'js/renderer.js'
+      - 'js/npc_terrain_routing_bridge.js'
       - 'tests/browser/r04-render-first-frame-budget.spec.mjs'
       - '.github/workflows/r04-render-first-frame-budget-verification.yml'
   workflow_dispatch:
