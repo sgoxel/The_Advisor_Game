@@ -57,6 +57,15 @@ jobs:
       - name: Run R01 responsive browser verification
         run: npm run test:browser:r01
 
+      - name: Measure Playwright evidence contributors
+        if: always()
+        shell: bash
+        run: |
+          echo 'Top-level evidence sizes:'
+          du -sh playwright-report test-results 2>/dev/null || true
+          echo 'Largest evidence files:'
+          find playwright-report test-results -type f -printf '%s %p\n' 2>/dev/null | sort -nr | head -n 20 || true
+
       - name: Upload Playwright evidence
         if: always()
         uses: actions/upload-artifact@v4
