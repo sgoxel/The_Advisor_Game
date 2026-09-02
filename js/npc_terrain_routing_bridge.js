@@ -2,7 +2,7 @@
 (function installNpcTerrainRoutingBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-terrain-routing-bridge-v5';
+  const VERSION = 'r04-npc-terrain-routing-bridge-v6';
   let renderHookInstalled = false;
 
   function key(point) { return `${point.row},${point.col}`; }
@@ -198,6 +198,13 @@
   }
 
   function refreshRoutes() {
+    // Route-template reconstruction is authoritative but not presentation-critical. During
+    // camera/pointer/zoom interaction, reuse the already-authoritative route state instead of
+    // running up to three terrain searches per NPC synchronously inside the render call. The
+    // next non-interactive refresh (or an explicit non-render caller) rebuilds the templates.
+    // This changes scheduling only; it does not change GameTime, route legality or Simulation truth.
+    if (Game.FrameBudgetScheduler?.interactionActive?.()) return false;
+
     const world = Game.State?.world;
     Game.StarterVillageInteriors?.materialize?.(world);
     const terrain = world?.terrain;
