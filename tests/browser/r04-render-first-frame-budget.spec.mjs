@@ -98,8 +98,23 @@ async function measureLegacyVsRenderFirst(page, sampleCount = 3) {
       return jobKeys.filter((key) => queued.has(key));
     }, keys);
     expect(queuedAfterRender).toHaveLength(sliceCount);
-    await waitForIdleScheduler(page);
-    await drainUntilKeysGone(page, keys, 60);
+
+    // The timing assertion above has already proved that the synthetic optional
+    // workload stayed queued during the interaction render. Cleanup must not
+    // drive the application's global optional queue: doing so can execute and
+    // continuously replenish unrelated production jobs, turning test cleanup
+    // into an unbounded workload. Idle-resume behavior is verified separately.
+    const cleanup = await page.evaluate((jobKeys) => {
+      const scheduler = window.Game.FrameBudgetScheduler;
+      const cancelled = jobKeys.map((key) => scheduler.cancel(key));
+      const queued = new Set(scheduler.metrics().queuedKeys);
+      return {
+        cancelled,
+        remaining: jobKeys.filter((key) => queued.has(key))
+      };
+    }, keys);
+    expect(cleanup.cancelled.every(Boolean)).toBe(true);
+    expect(cleanup.remaining).toEqual([]);
     return measured;
   }
 
