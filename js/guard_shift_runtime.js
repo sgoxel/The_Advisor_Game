@@ -100,7 +100,6 @@
       assignmentCount: assignments.length,
       assignments: Object.freeze(assignments)
     });
-    Game.NPCTerrainRouting?.refreshRoutes?.();
     return true;
   }
 
