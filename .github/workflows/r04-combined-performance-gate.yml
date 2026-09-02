@@ -9,6 +9,7 @@ on:
       - 'js/frame_budget_scheduler.js'
       - 'js/npc_relevance_runtime.js'
       - 'js/npc_runtime_bridge.js'
+      - 'js/npc_terrain_routing_bridge.js'
       - 'js/region_navigation.js'
       - 'js/renderer.js'
   workflow_dispatch:
