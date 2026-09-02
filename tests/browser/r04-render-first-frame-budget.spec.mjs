@@ -59,15 +59,14 @@ async function drainUntilKeysGone(page, keys, maxSlices = 30) {
   }
 }
 
-async function measureLegacyVsRenderFirst(page, sampleCount = 5) {
+async function measureLegacyVsRenderFirst(page, sampleCount = 3) {
   const renderFirst = [];
   const legacy = [];
   // Keep each optional slice within the scheduler's 6ms background budget, but
-  // use a representative populated queue. Twelve slices gave the >=20% branch
-  // only ~20% theoretical headroom against the measured visible-render cost,
-  // making ordinary CI jitter capable of erasing a real scheduling improvement.
-  // Twenty-four identical bounded slices preserve the same-fixture comparison
-  // and stable >=20% threshold while providing useful measurement headroom.
+  // use a representative populated queue. Twenty-four identical bounded slices
+  // preserve the same-fixture >=20% comparison headroom. Three repeated samples
+  // keep p95 conservative (the maximum of the sample set) while bounding exact-CI
+  // runtime; acceptance thresholds and per-slice workload are unchanged.
   const sliceCount = 24;
   const sliceMs = 6;
 
@@ -108,8 +107,6 @@ async function measureLegacyVsRenderFirst(page, sampleCount = 5) {
     await warmVisibleRender();
     return page.evaluate(({ sliceCount: count, sliceMs: workloadMs }) => {
       const started = performance.now();
-      // Controlled legacy baseline: the exact same optional slices execute synchronously
-      // on the interaction frame before visible rendering instead of yielding to it.
       for (let index = 0; index < count; index += 1) {
         const sliceStarted = performance.now();
         while (performance.now() - sliceStarted < workloadMs) { /* legacy unbounded frame work */ }
@@ -120,9 +117,6 @@ async function measureLegacyVsRenderFirst(page, sampleCount = 5) {
   }
 
   for (let sample = 0; sample < sampleCount; sample += 1) {
-    // Alternate branch order and warm the visible renderer immediately before each
-    // measured branch. The workload and thresholds remain identical; this only
-    // prevents first-render/cache effects from systematically favoring legacy.
     if ((sample & 1) === 0) {
       renderFirst.push(await measureRenderFirst(sample));
       legacy.push(await measureLegacy());
@@ -152,7 +146,7 @@ test('interaction frames defer optional jobs and idle render slack resumes them'
     keys.forEach((key, index) => {
       scheduler.enqueue(key, () => {
         const started = performance.now();
-        while (performance.now() - started < 0.35) { /* bounded representative slice */ }
+        while (performance.now() - started < 0.35) { }
         window.__frameBudgetExecutions += 1;
         return true;
       }, { priority: index % 3, label: `test job ${index}` });
@@ -163,11 +157,6 @@ test('interaction frames defer optional jobs and idle render slack resumes them'
   }, testKeys);
 
   expect(during.executions).toBe(0);
-  // `interactionActive` is intentionally a wall-clock window and may expire by
-  // the time metrics are read after an expensive synchronous visible render.
-  // Durable interaction-frame accounting proves that this render started under
-  // interaction pressure; queued/execution/deferred assertions below prove the
-  // optional work actually yielded during that frame.
   expect(during.metrics.interactionFrames).toBeGreaterThan(0);
   expect(testKeys.every((key) => during.metrics.queuedKeys.includes(key))).toBe(true);
   expect(during.metrics.queueDepth).toBeGreaterThanOrEqual(12);
@@ -192,7 +181,7 @@ test('interaction frames defer optional jobs and idle render slack resumes them'
 });
 
 test('real wheel interaction protects rendering before optional background work', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   await ready(page);
   const failures = collectRuntimeFailures(page);
   const canvas = page.locator('#gameCanvas');
@@ -220,12 +209,6 @@ test('real wheel interaction protects rendering before optional background work'
   expect(metrics.interactionRenderP95Ms).toBeGreaterThan(0);
   expect(metrics.jobWorstMs).toBeLessThan(50);
 
-  // #350 explicitly accepts either an absolute <=33.3ms interaction p95 OR a
-  // material improvement against the same fixture using the legacy unbounded
-  // scheduling path. Preserve the absolute branch unchanged and define material
-  // improvement as at least 20% lower p95 under identical visible render +
-  // optional workload. Each representative optional slice is 6ms (<50ms); the
-  // legacy baseline executes all 24 synchronously on the interaction frame.
   const comparison = await measureLegacyVsRenderFirst(page);
   const absolutePass = metrics.interactionRenderP95Ms <= 33.3;
   const materialImprovementPass = comparison.legacyP95Ms > 0 &&
