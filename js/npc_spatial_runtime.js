@@ -345,13 +345,28 @@
     }
   }
 
+  function validSpatialPopulation(npcs) {
+    if (!Array.isArray(npcs) || npcs.length === 0) return false;
+    const occupied = new Set();
+    for (const npc of npcs) {
+      const row = Number(npc?.row);
+      const col = Number(npc?.col);
+      if (!Number.isInteger(row) || !Number.isInteger(col)) return false;
+      if (!inBounds({ row, col })) return false;
+      const positionKey = key(row, col);
+      if (occupied.has(positionKey)) return false;
+      occupied.add(positionKey);
+    }
+    return true;
+  }
+
   function updateAt(_legacyElapsedMs = null) {
     const worldBefore = Game.State?.world;
     const totalGameMinutes = authoritativeGameMinutes();
     const step = Math.floor(totalGameMinutes);
     const priorRuntime = worldBefore?.npcRuntime;
     const priorStateKey = `${String(worldBefore?.seed || '')}|${String(priorRuntime?.bindingKey || '')}|${step}`;
-    if (Array.isArray(worldBefore?.npcs) && worldBefore.npcs.length > 0 && priorRuntime?.lastRoutineStateKey === priorStateKey) {
+    if (validSpatialPopulation(worldBefore?.npcs) && priorRuntime?.lastRoutineStateKey === priorStateKey) {
       priorRuntime.lastSpatialGameMinutes = totalGameMinutes;
       return true;
     }
