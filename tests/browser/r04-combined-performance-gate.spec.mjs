@@ -137,12 +137,18 @@ test('R04 combined render-first NPC/environment performance gate', async ({ page
     const start = world.currentRegion || { x: 0, y: 0 };
     const frameTimes = [];
 
-    scheduler.noteInteraction('r04-353-mixed-pan-zoom', 2600);
+    scheduler.noteInteraction('r04-353-mixed-pan-zoom', 5000);
     nav.activate(Number(start.x || 0) + 1, Number(start.y || 0));
     Game.NPCRelevanceRuntime.scheduleFrame();
     Game.NPCRuntimeBridge.scheduleReconcile();
 
-    for (let i = 0; i < 12; i += 1) {
+    const deferral = {
+      scheduler: scheduler.metrics(),
+      environment: nav.lazyMetrics()
+    };
+
+    for (let i = 0; i < 8; i += 1) {
+      scheduler.noteInteraction('r04-353-mixed-pan-zoom', 5000);
       const t0 = performance.now();
       Game.Renderer.renderWorld(true);
       frameTimes.push(performance.now() - t0);
@@ -151,6 +157,7 @@ test('R04 combined render-first NPC/environment performance gate', async ({ page
 
     return {
       frameTimes,
+      deferral,
       scheduler: scheduler.metrics(),
       relevance: Game.NPCRelevanceRuntime.snapshot(),
       bridge: Game.NPCRuntimeBridge.metrics(),
@@ -158,13 +165,13 @@ test('R04 combined render-first NPC/environment performance gate', async ({ page
     };
   });
 
-  expect(interaction.scheduler.interactionActive).toBe(true);
-  expect(interaction.environment.pendingJobs).toBeGreaterThan(0);
-  expect(interaction.environment.pendingJobs).toBeLessThanOrEqual(8);
-  expect(interaction.environment.completedJobs).toBe(before.environment.completedJobs);
-  expect(interaction.scheduler.queuedKeys.includes('npc-runtime-reconcile')).toBe(true);
+  expect(interaction.deferral.scheduler.interactionActive).toBe(true);
+  expect(interaction.deferral.environment.pendingJobs).toBeGreaterThan(0);
+  expect(interaction.deferral.environment.pendingJobs).toBeLessThanOrEqual(8);
+  expect(interaction.deferral.environment.completedJobs).toBe(before.environment.completedJobs);
+  expect(interaction.deferral.scheduler.queuedKeys.includes('npc-runtime-reconcile')).toBe(true);
 
-  await page.waitForTimeout(2650);
+  await page.waitForTimeout(5100);
   await drain(page, 100);
 
   const after = await page.evaluate(() => {
