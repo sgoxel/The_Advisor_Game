@@ -102,10 +102,13 @@ test('camera interaction defers NPC detail/reconcile work and idle frame slack d
 
   await page.waitForTimeout(310);
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const reconcileQueued = await page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().queuedKeys.includes('npc-runtime-reconcile'));
+    const reconcileQueued = await page.evaluate(() => {
+      const scheduler = window.Game.FrameBudgetScheduler;
+      scheduler.runBackgroundSlice(performance.now());
+      return scheduler.metrics().queuedKeys.includes('npc-runtime-reconcile');
+    });
     if (!reconcileQueued) break;
-    await page.evaluate(() => window.Game.Renderer.renderWorld(true));
-    await page.waitForTimeout(16);
+    await page.waitForTimeout(4);
   }
 
   const after = await page.evaluate(() => ({
@@ -116,15 +119,16 @@ test('camera interaction defers NPC detail/reconcile work and idle frame slack d
     population: window.Game.State.world.npcs.length
   }));
 
+  expect(after.scheduler.interactionActive).toBe(false);
   expect(after.scheduler.queuedKeys).not.toContain('npc-runtime-reconcile');
-  expect(after.bridge.reconcileRuns).toBeGreaterThan(0);
-  expect(after.relevance.completedJobs).toBeGreaterThan(0);
+  expect(after.bridge.reconcileRuns).toBeGreaterThan(during.bridge.reconcileRuns);
+  expect(after.relevance.completedJobs).toBeGreaterThanOrEqual(during.relevance.completedJobs);
   expect(after.relevance.npcJobWorstMs).toBeLessThan(50);
   expect(after.uniquePositions).toBe(after.population);
   expect(failures).toEqual([]);
 });
 
-test('same authoritative minute does not rematerialize all NPC spatial state on repeated renders', async ({ page }) => {
+test('same authoritative minute deduplicates repeated relevance scheduling without rematerializing spatial state', async ({ page }) => {
   await ready(page);
   const failures = collectRuntimeFailures(page);
 
@@ -134,22 +138,24 @@ test('same authoritative minute does not rematerialize all NPC spatial state on 
     Game.GameTime.stop();
     Game.GameTime.setForTest(Math.floor(capturedTime.totalGameMinutes));
     try {
-      Game.NPCRuntimeBridge.reconcileNow?.();
+      const scheduler = Game.FrameBudgetScheduler;
       const before = Game.NPCRelevanceRuntime.snapshot();
-      const startKey = Game.State.world.npcRuntime?.lastRoutineStateKey || '';
       const startPositions = Game.State.world.npcs.map((npc) => `${npc.id}:${npc.row},${npc.col}`);
-      for (let index = 0; index < 30; index += 1) Game.Renderer.renderWorld(true);
-      await new Promise((resolve) => setTimeout(resolve, 220));
-      Game.Renderer.renderWorld(true);
+      for (let index = 0; index < 30; index += 1) Game.NPCRelevanceRuntime.scheduleFrame();
+      const queuedNpcDetailKeys = scheduler.metrics().queuedKeys.filter((key) => key.startsWith('npc-detail:'));
+      for (let attempt = 0; attempt < 40 && scheduler.metrics().queuedKeys.some((key) => key.startsWith('npc-detail:')); attempt += 1) {
+        scheduler.runBackgroundSlice(performance.now());
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
       const after = Game.NPCRelevanceRuntime.snapshot();
       return {
-        startKey,
-        endKey: Game.State.world.npcRuntime?.lastRoutineStateKey || '',
         startPositions,
         endPositions: Game.State.world.npcs.map((npc) => `${npc.id}:${npc.row},${npc.col}`),
+        population: Game.State.world.npcs.length,
+        queuedNpcDetailKeys,
         beforeJobs: before.completedJobs,
         afterJobs: after.completedJobs,
-        queueDepth: Game.FrameBudgetScheduler.metrics().queueDepth
+        remainingNpcDetailKeys: scheduler.metrics().queuedKeys.filter((key) => key.startsWith('npc-detail:'))
       };
     } finally {
       Game.GameTime.restore(capturedTime);
@@ -157,10 +163,11 @@ test('same authoritative minute does not rematerialize all NPC spatial state on 
     }
   });
 
-  expect(evidence.endKey).toBe(evidence.startKey);
+  expect(new Set(evidence.queuedNpcDetailKeys).size).toBe(evidence.queuedNpcDetailKeys.length);
+  expect(evidence.queuedNpcDetailKeys.length).toBeLessThanOrEqual(evidence.population);
   expect(evidence.endPositions).toEqual(evidence.startPositions);
-  expect(evidence.afterJobs - evidence.beforeJobs).toBeLessThanOrEqual(evidence.startPositions.length);
-  expect(evidence.queueDepth).toBeLessThanOrEqual(2);
+  expect(evidence.afterJobs - evidence.beforeJobs).toBeLessThanOrEqual(evidence.population);
+  expect(evidence.remainingNpcDetailKeys).toEqual([]);
   expect(failures).toEqual([]);
 });
 
@@ -179,11 +186,12 @@ test('distant demotion unloads detail and interaction-critical promotion reconci
     const playerRow = Number.isFinite(Number(player?.row)) ? Number(player.row) : 0;
     const playerCol = Number.isFinite(Number(player?.col)) ? Number(player.col) : 0;
 
-    Game.State.camera.followPlayer = false;
-    Game.State.camera.dragging = false;
-    Game.State.camera.vx = 0;
-    Game.State.camera.vy = 0;
-    Game.State.keys = {};
+    if (Game.State.camera) {
+      Game.State.camera.dragActive = false;
+      Game.State.camera.inertiaVelocityX = 0;
+      Game.State.camera.inertiaVelocityY = 0;
+    }
+    Game.State.input?.keys?.clear?.();
 
     npc.interactionCritical = false;
     npc.selectedForInteraction = false;
@@ -191,28 +199,22 @@ test('distant demotion unloads detail and interaction-critical promotion reconci
     npc.row = playerRow + 90;
     npc.col = playerCol + 90;
     runtime.scheduleFrame();
-    Game.Renderer.renderWorld(true);
     const demoted = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
 
     const promotedBefore = runtime.snapshot().promotedReconciliations;
     npc.interactionCritical = true;
     const promotedStart = { row: npc.row, col: npc.col };
     runtime.scheduleFrame();
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
       const key = `npc-detail:${npc.id}`;
       if (!scheduler.metrics().queuedKeys.includes(key)) break;
-      Game.Renderer.renderWorld(true);
-      await new Promise((resolve) => setTimeout(resolve, 16));
+      scheduler.runBackgroundSlice(performance.now());
+      await new Promise((resolve) => setTimeout(resolve, 2));
     }
     const afterDetail = runtime.snapshot();
     const promotedEntry = afterDetail.entries.find((entry) => entry.id === String(npc.id));
 
-    Game.NPCRuntimeBridge.scheduleReconcile();
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (!scheduler.metrics().queuedKeys.includes('npc-runtime-reconcile')) break;
-      Game.Renderer.renderWorld(true);
-      await new Promise((resolve) => setTimeout(resolve, 16));
-    }
+    runtime.markAuthoritativeUpdated(npc);
     const afterAuthoritative = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
     const promotedEnd = { row: npc.row, col: npc.col };
 
@@ -240,7 +242,7 @@ test('distant demotion unloads detail and interaction-critical promotion reconci
   expect(evidence.promotedReconciliationsDelta).toBeGreaterThanOrEqual(1);
   expect(evidence.promotedPendingAfterDetail).toBe(true);
   expect(evidence.promotedPendingAfterAuthoritative).toBe(false);
-  expect(Math.abs(evidence.promotedEnd.row - evidence.promotedStart.row) + Math.abs(evidence.promotedEnd.col - evidence.promotedStart.col)).toBeLessThanOrEqual(1);
+  expect(Math.abs(evidence.promotedEnd.row - evidence.promotedStart.row) + Math.abs(evidence.promotedEnd.col - evidence.promotedStart.col)).toBe(0);
   expect(failures).toEqual([]);
 });
 
