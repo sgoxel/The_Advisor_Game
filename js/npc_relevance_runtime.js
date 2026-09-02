@@ -8,7 +8,7 @@
   const Game = global.Game = global.Game || {};
   if (Game.NPCRelevanceRuntime) return;
 
-  const VERSION = 'r04-npc-relevance-v2-authoritative-gating';
+  const VERSION = 'r04-npc-relevance-v3-authoritative-catchup';
   const TIER = Object.freeze({ CRITICAL: 'critical', NEARBY: 'nearby', LOCAL: 'local', DISTANT: 'distant' });
   const CADENCE_MINUTES = Object.freeze({ critical: 1, nearby: 2, local: 5, distant: 15 });
   const NEAR_DISTANCE = 14;
@@ -121,10 +121,18 @@
     const tier = classify(npc);
     const promoted = rank(tier) < rank(entry.tier) || entry.authoritativePromotionPending === true;
     if (promoted) return true;
-    if (tier === TIER.DISTANT) return false;
     if (entry.lastAuthoritativeMinute >= minute) return false;
     const cadence = cadenceFor(tier);
-    return tier === TIER.CRITICAL || (minute % cadence) === stableBucket(npc, tier);
+    if (tier === TIER.CRITICAL) return true;
+
+    // Normal authoritative reconciliation remains identity-staggered on the tier bucket.
+    // If authoritative time jumps past more than one cadence (resume/test/large time step),
+    // compact Simulation state must catch up instead of freezing indefinitely because the
+    // exact bucket minute was skipped. This does not materialize expensive DISTANT detail:
+    // isDue() above still keeps that presentation/detail work unloaded.
+    const bucketDue = (minute % cadence) === stableBucket(npc, tier);
+    const overdue = (minute - entry.lastAuthoritativeMinute) >= cadence * 2;
+    return bucketDue || overdue;
   }
 
   function markAuthoritativeUpdated(npc, minuteInput = gameMinute()) {
