@@ -74,5 +74,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            !test-results/**/trace.zip
           if-no-files-found: ignore
           retention-days: 14
