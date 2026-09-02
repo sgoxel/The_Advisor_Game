@@ -2,11 +2,14 @@
 (function installGuardShiftRuntime() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-guard-shift-runtime-v1';
+  const VERSION = 'r04-guard-shift-runtime-v2-spatial-integration';
   const MINUTES_PER_DAY = 24 * 60;
   const DAY_START = 6 * 60;
   const NIGHT_START = 18 * 60;
   const COMMUTE_MINUTES = 60;
+  let spatialBridgeInstalled = false;
+  let renderHookInstalled = false;
+  let applying = false;
 
   function normalized(value) { return String(value ?? '').trim().toLowerCase().replace(/[ _]+/g, '-'); }
   function isGuard(npc) { return ['guard', 'militia'].includes(normalized(npc?.currentProfession || npc?.profession || npc?.occupation || npc?.role)); }
@@ -39,6 +42,11 @@
     if (!Array.isArray(route) || !route.length) return null;
     const t = Math.max(0, Math.min(1, Number(progress) || 0));
     return route[Math.min(route.length - 1, Math.floor(t * route.length))] || null;
+  }
+  function gameMinutes() {
+    const captured = Game.GameTime?.capture?.();
+    const value = Number(captured?.totalGameMinutes ?? Game.State?.world?.gameTime?.totalGameMinutes ?? 0);
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
   }
 
   function sync() {
@@ -128,10 +136,112 @@
     return { point: npc.anchors?.home, activity: 'off-duty' };
   }
 
+  // Apply only guard targets through the existing #237 occupancy resolver. Non-guards are
+  // fixed at their already-authoritative positions, so #261 does not create a second route
+  // engine or move unrelated NPCs. #257 routes supply the sampled commute points.
+  function applyAt(totalGameMinutesInput = null) {
+    if (applying) return false;
+    const world = Game.State?.world;
+    const spatial = Game.NPCSpatial;
+    if (!world || !Array.isArray(world.npcs) || typeof spatial?.resolveOccupancy !== 'function') return false;
+    applying = true;
+    try {
+      sync();
+      const totalGameMinutes = totalGameMinutesInput == null ? gameMinutes() : Number(totalGameMinutesInput);
+      const desiredMap = new Map();
+      const fixedNpcIds = new Set();
+      const guards = [];
+      for (const npc of world.npcs) {
+        if (isGuard(npc) && npc.guardShiftAssignment?.dutyAnchorId) {
+          const desired = desiredFor(npc, totalGameMinutes);
+          if (desired?.point) {
+            desiredMap.set(npc.id, desired);
+            guards.push(npc);
+            continue;
+          }
+        }
+        fixedNpcIds.add(npc.id);
+        desiredMap.set(npc.id, { point: { row: npc.row, col: npc.col }, activity: npc.activity || 'idle' });
+      }
+      if (!guards.length) return false;
+
+      const resolution = spatial.resolveOccupancy(world.npcs, desiredMap, {
+        village: world.originVillage,
+        seed: world.seed,
+        step: Math.floor(Number(totalGameMinutes) || 0),
+        fixedNpcIds
+      });
+      const b = binding(world);
+      let activeDutyCount = 0;
+      for (const npc of guards) {
+        const resolved = resolution.resolved.get(npc.id);
+        const desired = desiredMap.get(npc.id);
+        if (!resolved || !desired) continue;
+        npc.row = resolved.point.row;
+        npc.col = resolved.point.col;
+        npc.localRow = npc.row - Number(b.rowOffset || 0);
+        npc.localCol = npc.col - Number(b.colOffset || 0);
+        npc.activity = desired.activity;
+        npc.movementDecision = resolved.decision;
+        npc.dialogueWith = null;
+        npc.dialogueLine = null;
+        if (desired.activity === 'guarding') activeDutyCount += 1;
+        Game.NPCRelevanceRuntime?.markAuthoritativeUpdated?.(npc, totalGameMinutes);
+      }
+
+      const prior = world.guardShiftRuntime || {};
+      world.guardShiftRuntime = Object.freeze({
+        ...prior,
+        version: VERSION,
+        authority: 'simulation',
+        clockAuthority: 'Game.GameTime',
+        lastAppliedGameMinutes: totalGameMinutes,
+        activeDutyCount,
+        collisionCount: resolution.collisionCount,
+        sideStepCount: resolution.sideStepCount,
+        yieldWaitCount: resolution.yieldWaitCount
+      });
+      return true;
+    } finally {
+      applying = false;
+    }
+  }
+
+  function installSpatialBridge() {
+    if (spatialBridgeInstalled || !Game.NPCSpatial || typeof Game.NPCSpatial.updateAt !== 'function') return spatialBridgeInstalled;
+    const spatial = Game.NPCSpatial;
+    const originalUpdateAt = spatial.updateAt.bind(spatial);
+    Game.NPCSpatial = Object.freeze({
+      ...spatial,
+      updateAt(...args) {
+        const result = originalUpdateAt(...args);
+        applyAt();
+        return result;
+      }
+    });
+    spatialBridgeInstalled = true;
+    return true;
+  }
+
+  function installRenderHook() {
+    if (renderHookInstalled || !Game.Renderer || typeof Game.Renderer.renderWorld !== 'function') return renderHookInstalled;
+    const renderWorld = Game.Renderer.renderWorld.bind(Game.Renderer);
+    Game.Renderer.renderWorld = function guardShiftRenderWorld(...args) {
+      const result = renderWorld(...args);
+      applyAt();
+      return result;
+    };
+    renderHookInstalled = true;
+    return true;
+  }
+
   function initialize() {
     if (!Game.NPCSpatial || !Game.GuardDutyAnchors) return false;
     Game.NPCSpatial.ensureSpatialNpcs?.();
     sync();
+    installSpatialBridge();
+    installRenderHook();
+    applyAt();
     return true;
   }
 
@@ -145,6 +255,9 @@
     isGuard,
     sync,
     desiredFor,
+    applyAt,
+    installSpatialBridge,
+    installRenderHook,
     initialize
   });
 
