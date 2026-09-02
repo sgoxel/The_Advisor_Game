@@ -193,7 +193,10 @@ window.Game = window.Game || {};
   function recordRenderFrame(startedAt, endedAt) {
     const duration = Math.max(0, endedAt - startedAt);
     counters.frames += 1;
-    if (interactionActive(endedAt)) counters.interactionFrames += 1;
+    // Classify the frame at its authoritative start boundary. A visible render that
+    // begins while input pressure is active remains an interaction frame even if a
+    // slow render itself outlives the short interaction hold window.
+    if (interactionActive(startedAt)) counters.interactionFrames += 1;
     clampSample(frameSamples, duration);
     return duration;
   }
@@ -272,7 +275,7 @@ window.Game = window.Game || {};
   }
 
   Game.FrameBudgetScheduler = Object.freeze({
-    version: '1.0.2',
+    version: '1.0.3',
     authority: 'scheduling-only',
     enqueue,
     cancel,
