@@ -8,6 +8,7 @@ on:
       - 'js/npc_relevance_runtime.js'
       - 'js/npc_runtime_bridge.js'
       - 'js/npc_spatial_runtime.js'
+      - 'js/guard_shift_runtime.js'
       - 'tests/browser/r04-npc-relevance-performance.spec.mjs'
       - '.github/workflows/r04-npc-relevance-performance-verification.yml'
   workflow_dispatch:
