@@ -21,9 +21,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Install browser test dependencies
-        run: npm ci
+          node-version: '22'
+      - name: Install pinned browser test dependency
+        run: npm install --ignore-scripts
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Verify semantic starter-building raster runtime
