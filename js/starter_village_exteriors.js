@@ -7,9 +7,10 @@
   'use strict';
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-starter-village-exteriors-v5-semantic-raster';
-  const MODE = 'authoritative-building-silhouettes'; // compatibility surface for existing diagnostics
+  const VERSION = 'r04-starter-village-exteriors-v6-semantic-mosaic';
+  const MODE = 'authoritative-building-silhouettes';
   const RENDER_BACKEND = 'semantic-raster-building-tiles';
+  const COMPOSITION_MODE = 'screen-space-semantic-mosaic';
   const TILE_SIZE = 256;
   const TILE_TYPES = Object.freeze([
     'roof_corner_nw','roof_edge_n','roof_corner_ne','roof_ridge',
@@ -163,10 +164,10 @@
     if(!f||!e)return null;
     const r=Number(f.row),c=Number(f.col),h=Number(f.height),w=Number(f.width),er=Number(e.row),ec=Number(e.col);
     if(![r,c,h,w,er,ec].every(Number.isFinite))return null;
-    if(er===r-1&&ec>=c&&ec<c+w)return{row:0,col:ec-c};
-    if(er===r+h&&ec>=c&&ec<c+w)return{row:h-1,col:ec-c};
-    if(ec===c-1&&er>=r&&er<r+h)return{row:er-r,col:0};
-    if(ec===c+w&&er>=r&&er<r+h)return{row:er-r,col:w-1};
+    if(er===r-1&&ec>=c&&ec<c+w)return{row:0,col:ec-c,side:'north'};
+    if(er===r+h&&ec>=c&&ec<c+w)return{row:h-1,col:ec-c,side:'south'};
+    if(ec===c-1&&er>=r&&er<r+h)return{row:er-r,col:0,side:'west'};
+    if(ec===c+w&&er>=r&&er<r+h)return{row:er-r,col:w-1,side:'east'};
     return null;
   }
 
@@ -200,8 +201,8 @@
     const r=Number(f.row),c=Number(f.col),h=Math.trunc(Number(f.height)),w=Math.trunc(Number(f.width));
     if(![r,c,h,w].every(Number.isFinite)||h<=0||w<=0)return null;
     const door=entranceCell(building),cells=[];
-    for(let lr=0;lr<h;lr+=1)for(let lc=0;lc<w;lc+=1)cells.push({row:r+lr,col:c+lc,type:semanticType(building,lr,lc,h,w,door)});
-    return{family,cells,door};
+    for(let lr=0;lr<h;lr+=1)for(let lc=0;lc<w;lc+=1)cells.push({row:r+lr,col:c+lc,localRow:lr,localCol:lc,type:semanticType(building,lr,lc,h,w,door)});
+    return{family,row:r,col:c,height:h,width:w,cells,door};
   }
 
   function imageStateForPlan(plan) {
@@ -217,17 +218,24 @@
     return loading?'loading':'ready';
   }
 
-  function drawRasterCell(ctx,image,row,col,width,height) {
-    const p00=project(row,col),p10=project(row,col+1),p11=project(row+1,col+1),p01=project(row+1,col);
-    const polygon=[p00,p10,p11,p01];
-    if(!safeFootprint(polygon,width,height)){rejectedProjectionCount+=1;return false;}
-    const b=bounds(polygon);
-    if(b.maxX<-36||b.maxY<-48||b.minX>width+36||b.minY>height+48)return false;
+  function presentationEnvelope(footprint,plan) {
+    const b=bounds(footprint),spanX=b.maxX-b.minX,spanY=b.maxY-b.minY;
+    if(!(spanX>0&&spanY>0&&plan?.width>0&&plan?.height>0))return null;
+    return{minX:b.minX,minY:b.minY,maxX:b.maxX,maxY:b.maxY,width:spanX,height:spanY,cellWidth:spanX/plan.width,cellHeight:spanY/plan.height};
+  }
+
+  function rasterCellRect(envelope,cell) {
+    return{x:envelope.minX+cell.localCol*envelope.cellWidth,y:envelope.minY+cell.localRow*envelope.cellHeight,width:envelope.cellWidth,height:envelope.cellHeight};
+  }
+
+  function drawRasterCell(ctx,image,envelope,cell,width,height) {
+    const rect=rasterCellRect(envelope,cell);
+    if(![rect.x,rect.y,rect.width,rect.height].every(Number.isFinite)||rect.width<=0||rect.height<=0)return false;
+    if(rect.x+rect.width<-36||rect.y+rect.height<-48||rect.x>width+36||rect.y>height+48)return false;
     ctx.save();
     ctx.imageSmoothingEnabled=false;
-    ctx.beginPath();ctx.moveTo(p00.x,p00.y);ctx.lineTo(p10.x,p10.y);ctx.lineTo(p11.x,p11.y);ctx.lineTo(p01.x,p01.y);ctx.closePath();ctx.clip();
-    ctx.transform((p10.x-p00.x)/TILE_SIZE,(p10.y-p00.y)/TILE_SIZE,(p01.x-p00.x)/TILE_SIZE,(p01.y-p00.y)/TILE_SIZE,p00.x,p00.y);
-    ctx.drawImage(image,0,0,TILE_SIZE,TILE_SIZE);
+    ctx.beginPath();ctx.rect(rect.x,rect.y,rect.width,rect.height);ctx.clip();
+    ctx.drawImage(image,0,0,TILE_SIZE,TILE_SIZE,rect.x,rect.y,rect.width,rect.height);
     ctx.restore();
     return true;
   }
@@ -241,9 +249,11 @@
     if(!plan)return{drawn:false,state:'unsupported'};
     const state=imageStateForPlan(plan);
     if(state!=='ready')return{drawn:false,state};
+    const envelope=presentationEnvelope(footprint,plan);
+    if(!envelope)return{drawn:false,state:'guarded'};
     let cells=0;
-    for(const cell of plan.cells){const image=ensureImage(plan.family,cell.type);if(image&&drawRasterCell(ctx,image,cell.row,cell.col,width,height))cells+=1;}
-    return{drawn:cells>0,state:'ready',cells,family:plan.family};
+    for(const cell of plan.cells){const image=ensureImage(plan.family,cell.type);if(image&&drawRasterCell(ctx,image,envelope,cell,width,height))cells+=1;}
+    return{drawn:cells>0,state:'ready',cells,family:plan.family,envelope};
   }
 
   function drawVectorFallback(ctx,building,width,height) {
@@ -264,7 +274,11 @@
   function snapshotPresentationPlan() {
     const buildings=Game.State?.world?.originVillage?.buildings;
     if(!Array.isArray(buildings))return[];
-    return buildings.map(b=>{const s=styleFor(b),plan=rasterPlan(b);return{id:b.id,type:b.type,family:s.family,cue:s.cue,tileFamily:plan?.family||null,tileTypes:plan?[...new Set(plan.cells.map(x=>x.type))].sort():[],footprint:b.footprint?{...b.footprint}:null,entrance:b.entrance?{...b.entrance}:null};});
+    const canvas=overlayCanvas,width=Math.max(1,canvas?.clientWidth||Game.State?.dom?.canvas?.clientWidth||1),height=Math.max(1,canvas?.clientHeight||Game.State?.dom?.canvas?.clientHeight||1);
+    return buildings.map(b=>{
+      const s=styleFor(b),plan=rasterPlan(b),footprint=plan?footprintPolygon(b.footprint,width,height):null,envelope=footprint?presentationEnvelope(footprint,plan):null;
+      return{id:b.id,type:b.type,family:s.family,cue:s.cue,tileFamily:plan?.family||null,tileTypes:plan?[...new Set(plan.cells.map(x=>x.type))].sort():[],cells:plan?plan.cells.map(x=>({localRow:x.localRow,localCol:x.localCol,type:x.type})):[],door:plan?.door?{...plan.door}:null,compositionMode:COMPOSITION_MODE,screenEnvelope:envelope?{minX:envelope.minX,minY:envelope.minY,maxX:envelope.maxX,maxY:envelope.maxY,cellWidth:envelope.cellWidth,cellHeight:envelope.cellHeight}:null,footprint:b.footprint?{...b.footprint}:null,entrance:b.entrance?{...b.entrance}:null};
+    });
   }
 
   function snapshotPlaceholderCoverage() {
@@ -304,7 +318,7 @@
       buildingCount:String(buildings.length),visibleBuildingCount:String(visible),visibleBuildingTypes:Array.from(types).sort().join(','),visualFamilies:Array.from(families).sort().join(','),
       presentationAuthority:'presentation-only',descriptorSource:'originVillage.buildings',regionSize:String(Game.State?.world?.rows||0),presentationMode:MODE,placeholderMode:'none',rectangleOverlay:'disabled',
       fullyStoneCoveredBuildings:String(fully),stoneCoveredTiles:String(covered),footprintTiles:String(total),projectionGuard:'bounded-footprint',rejectedProjectionCount:String(rejectedProjectionCount),
-      renderBackend:RENDER_BACKEND,tileAssetState:assetState,rasterBuildingCount:String(rasterBuildings),vectorFallbackBuildingCount:String(fallbackBuildings),rasterCellCount:String(rasterCells),tileFamilies:Array.from(tileFamilies).sort().join(','),tileCacheReady:String(cache.ready),tileCacheError:String(cache.error)
+      renderBackend:RENDER_BACKEND,compositionMode:COMPOSITION_MODE,tileAssetState:assetState,rasterBuildingCount:String(rasterBuildings),vectorFallbackBuildingCount:String(fallbackBuildings),rasterCellCount:String(rasterCells),tileFamilies:Array.from(tileFamilies).sort().join(','),tileCacheReady:String(cache.ready),tileCacheError:String(cache.error)
     });
     return true;
   }
@@ -321,7 +335,7 @@
   function initialize(){ensureOverlay();ensureRegistry();installRenderHook();drawPresentation();}
 
   Game.StarterVillageExteriors=Object.freeze({
-    version:VERSION,authority:'presentation-only',descriptorSource:'originVillage.buildings',presentationMode:MODE,renderBackend:RENDER_BACKEND,
+    version:VERSION,authority:'presentation-only',descriptorSource:'originVillage.buildings',presentationMode:MODE,renderBackend:RENDER_BACKEND,compositionMode:COMPOSITION_MODE,
     snapshotDescriptors,snapshotPresentationPlan,snapshotPlaceholderCoverage,snapshotTileCache,safeFootprint,ensureOverlay,drawPresentation,detachPresentation
   });
 
