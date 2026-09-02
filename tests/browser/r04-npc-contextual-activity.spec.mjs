@@ -25,8 +25,11 @@ test('generic routine states resolve to deterministic profession/context activit
       woodcutter: semantic({ occupation: 'woodcutter', activity: 'working', movementDecision: 'hold' }),
       hunter: semantic({ occupation: 'hunter', activity: 'working', movementDecision: 'hold' }),
       moving: semantic({ occupation: 'baker', activity: 'working', movementDecision: 'move' }),
+      // #347: a dialogueWith string alone is not authoritative proof of direct dialogue.
+      // Without a reciprocal adjacent live partner this must remain Waiting.
       talking: semantic({ occupation: 'trader', activity: 'talking', dialogueWith: 'npc-2', movementDecision: 'hold' }),
       sleeping: semantic({ occupation: 'villager', activity: 'home', dailySchedule: { activity: 'sleeping' }, movementDecision: 'hold' }),
+      // Generic social activity is not direct conversation without a valid pair.
       social: semantic({ occupation: 'villager', activity: 'social', movementDecision: 'hold' }),
       errand: semantic({ occupation: 'villager', activity: 'local-errand', movementDecision: 'hold' })
     };
@@ -40,9 +43,9 @@ test('generic routine states resolve to deterministic profession/context activit
     woodcutter: 'Cutting Woods',
     hunter: 'Hunting',
     moving: 'Walking',
-    talking: 'Chatting',
+    talking: 'Waiting',
     sleeping: 'Sleeping',
-    social: 'Chatting',
+    social: 'Socializing',
     errand: 'Running Errands'
   });
 });
@@ -55,8 +58,8 @@ test('contextual bubble pass preserves authoritative NPC objects and replaces ge
   const evidence = await page.evaluate(() => {
     const Game = window.Game;
     // Settle the normal authoritative GameTime update first. Then invoke only the
-    // presentation pass so this assertion measures #317 rather than a second
-    // authoritative renderer/GameTime refresh that may legitimately replace records.
+    // presentation pass so this assertion measures contextual presentation rather
+    // than a second authoritative renderer/GameTime refresh that may replace records.
     Game.Renderer.renderWorld(true);
     const npcs = Game.State.world.npcs;
     const references = npcs.slice();
@@ -70,7 +73,30 @@ test('contextual bubble pass preserves authoritative NPC objects and replaces ge
       dialogueWith: npc.dialogueWith
     })));
 
-    Game.NPCContextualActivity.draw();
+    // Keep the presentation assertion independent from current camera placement.
+    // The layout still uses the real NPC records/semantic labels; only screen-space
+    // projection is made deterministic and visibly in-bounds for this presentation test.
+    const renderer = Game.Renderer;
+    const originalGridToScreen = renderer.gridToScreen;
+    const overlay = document.getElementById('npcWorldOverlay');
+    const rect = overlay?.getBoundingClientRect?.() || { width: innerWidth, height: innerHeight };
+    const centerX = Math.max(120, Number(rect.width || innerWidth) * 0.5);
+    const centerY = Math.max(120, Number(rect.height || innerHeight) * 0.55);
+    renderer.gridToScreen = function contextualFixtureProjection(row, col, ...rest) {
+      const base = originalGridToScreen.call(this, row, col, ...rest);
+      const r = Math.trunc(Number(row) || 0);
+      const c = Math.trunc(Number(col) || 0);
+      return {
+        ...base,
+        x: centerX + (((r * 17 + c * 11) % 11) - 5) * 18,
+        y: centerY + (((r * 13 + c * 19) % 9) - 4) * 18
+      };
+    };
+    try {
+      Game.NPCContextualActivity.draw();
+    } finally {
+      renderer.gridToScreen = originalGridToScreen;
+    }
 
     const afterNpcs = Game.State.world.npcs;
     const after = JSON.stringify(afterNpcs.map((npc) => ({
@@ -84,7 +110,6 @@ test('contextual bubble pass preserves authoritative NPC objects and replaces ge
     })));
     const snapshot = Game.NPCContextualActivity.snapshot();
     const expected = new Map(afterNpcs.map((npc) => [npc.id, Game.NPCContextualActivity.semanticActivity(npc)]));
-    const overlay = document.getElementById('npcWorldOverlay');
 
     return {
       before,
