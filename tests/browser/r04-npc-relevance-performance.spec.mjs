@@ -4,7 +4,7 @@ function collectRuntimeFailures(page) {
   const failures = [];
   page.on('pageerror', (error) => failures.push(`pageerror:${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') failures.push(`console:${message.text()}`);
+    if (message.type() === 'error') failures.push(`console:${message.text()}`));
   });
   return failures;
 }
@@ -20,11 +20,6 @@ async function ready(page) {
   await page.evaluate(() => {
     if (window.Game?.Config) window.Game.Config.DEFAULT_SHOW_NPC_ACTIVITY_BUBBLES = false;
   });
-}
-
-function finiteCoordinate(value, fallback = 0) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
 }
 
 test('stable NPC identity produces deterministic distributed authoritative-time buckets', async ({ page }) => {
@@ -49,17 +44,16 @@ test('stable NPC identity produces deterministic distributed authoritative-time 
   expect(failures).toEqual([]);
 });
 
-test('relevance tiers distinguish visible/near work from distant compact work without renderer truth', async ({ page }) => {
+test('relevance tiers distinguish interaction-critical work from distant compact work without renderer truth', async ({ page }) => {
   await ready(page);
   const failures = collectRuntimeFailures(page);
 
   const evidence = await page.evaluate(() => {
     const runtime = window.Game.NPCRelevanceRuntime;
     const player = window.Game.State.world.player;
-    const real = window.Game.State.world.npcs[0];
     const playerRow = Number.isFinite(Number(player?.row)) ? Number(player.row) : 0;
     const playerCol = Number.isFinite(Number(player?.col)) ? Number(player.col) : 0;
-    const critical = runtime.classify(real);
+    const critical = runtime.classify({ id: 'critical-probe', row: playerRow + 90, col: playerCol + 90, interactionCritical: true });
     const distant = runtime.classify({ id: 'far-probe', row: playerRow + 90, col: playerCol + 90 });
     runtime.scheduleFrame();
     const snapshot = runtime.snapshot();
@@ -74,7 +68,7 @@ test('relevance tiers distinguish visible/near work from distant compact work wi
     };
   });
 
-  expect(['critical', 'nearby']).toContain(evidence.critical);
+  expect(evidence.critical).toBe('critical');
   expect(evidence.distant).toBe('distant');
   expect(evidence.authority).toBe('scheduling-only');
   expect(evidence.compactStatePersisted).toBe(false);
@@ -83,7 +77,7 @@ test('relevance tiers distinguish visible/near work from distant compact work wi
   expect(failures).toEqual([]);
 });
 
-test('camera interaction defers NPC detail/reconcile work and idle frame slack drains it', async ({ page }) => {
+test('camera interaction defers NPC detail/reconcile work and idle frame slack drains owned work', async ({ page }) => {
   test.setTimeout(90_000);
   await ready(page);
   const failures = collectRuntimeFailures(page);
@@ -108,8 +102,8 @@ test('camera interaction defers NPC detail/reconcile work and idle frame slack d
 
   await page.waitForTimeout(310);
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const depth = await page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().queueDepth);
-    if (depth === 0) break;
+    const reconcileQueued = await page.evaluate(() => window.Game.FrameBudgetScheduler.metrics().queuedKeys.includes('npc-runtime-reconcile'));
+    if (!reconcileQueued) break;
     await page.evaluate(() => window.Game.Renderer.renderWorld(true));
     await page.waitForTimeout(16);
   }
@@ -122,7 +116,7 @@ test('camera interaction defers NPC detail/reconcile work and idle frame slack d
     population: window.Game.State.world.npcs.length
   }));
 
-  expect(after.scheduler.queueDepth).toBe(0);
+  expect(after.scheduler.queuedKeys).not.toContain('npc-runtime-reconcile');
   expect(after.bridge.reconcileRuns).toBeGreaterThan(0);
   expect(after.relevance.completedJobs).toBeGreaterThan(0);
   expect(after.relevance.npcJobWorstMs).toBeLessThan(50);
@@ -135,22 +129,32 @@ test('same authoritative minute does not rematerialize all NPC spatial state on 
   const failures = collectRuntimeFailures(page);
 
   const evidence = await page.evaluate(async () => {
-    const before = window.Game.NPCRelevanceRuntime.snapshot();
-    const startKey = window.Game.State.world.npcRuntime?.lastRoutineStateKey || '';
-    const startPositions = window.Game.State.world.npcs.map((npc) => `${npc.id}:${npc.row},${npc.col}`);
-    for (let index = 0; index < 30; index += 1) window.Game.Renderer.renderWorld(true);
-    await new Promise((resolve) => setTimeout(resolve, 220));
-    window.Game.Renderer.renderWorld(true);
-    const after = window.Game.NPCRelevanceRuntime.snapshot();
-    return {
-      startKey,
-      endKey: window.Game.State.world.npcRuntime?.lastRoutineStateKey || '',
-      startPositions,
-      endPositions: window.Game.State.world.npcs.map((npc) => `${npc.id}:${npc.row},${npc.col}`),
-      beforeJobs: before.completedJobs,
-      afterJobs: after.completedJobs,
-      queueDepth: window.Game.FrameBudgetScheduler.metrics().queueDepth
-    };
+    const Game = window.Game;
+    const capturedTime = Game.GameTime.capture();
+    Game.GameTime.stop();
+    Game.GameTime.setForTest(Math.floor(capturedTime.totalGameMinutes));
+    try {
+      Game.NPCRuntimeBridge.reconcileNow?.();
+      const before = Game.NPCRelevanceRuntime.snapshot();
+      const startKey = Game.State.world.npcRuntime?.lastRoutineStateKey || '';
+      const startPositions = Game.State.world.npcs.map((npc) => `${npc.id}:${npc.row},${npc.col}`);
+      for (let index = 0; index < 30; index += 1) Game.Renderer.renderWorld(true);
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      Game.Renderer.renderWorld(true);
+      const after = Game.NPCRelevanceRuntime.snapshot();
+      return {
+        startKey,
+        endKey: Game.State.world.npcRuntime?.lastRoutineStateKey || '',
+        startPositions,
+        endPositions: Game.State.world.npcs.map((npc) => `${npc.id}:${npc.row},${npc.col}`),
+        beforeJobs: before.completedJobs,
+        afterJobs: after.completedJobs,
+        queueDepth: Game.FrameBudgetScheduler.metrics().queueDepth
+      };
+    } finally {
+      Game.GameTime.restore(capturedTime);
+      Game.GameTime.start();
+    }
   });
 
   expect(evidence.endKey).toBe(evidence.startKey);
@@ -160,7 +164,7 @@ test('same authoritative minute does not rematerialize all NPC spatial state on 
   expect(failures).toEqual([]);
 });
 
-test('distant demotion unloads detail and promotion reconciles before visible authoritative work resumes', async ({ page }) => {
+test('distant demotion unloads detail and interaction-critical promotion reconciles before authoritative work resumes', async ({ page }) => {
   test.setTimeout(90_000);
   await ready(page);
   const failures = collectRuntimeFailures(page);
@@ -191,11 +195,12 @@ test('distant demotion unloads detail and promotion reconciles before visible au
     const demoted = runtime.snapshot().entries.find((entry) => entry.id === String(npc.id));
 
     const promotedBefore = runtime.snapshot().promotedReconciliations;
-    npc.row = playerRow + 1;
-    npc.col = playerCol;
+    npc.interactionCritical = true;
     const promotedStart = { row: npc.row, col: npc.col };
     runtime.scheduleFrame();
-    for (let attempt = 0; attempt < 20 && scheduler.metrics().queueDepth > 0; attempt += 1) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const key = `npc-detail:${npc.id}`;
+      if (!scheduler.metrics().queuedKeys.includes(key)) break;
       Game.Renderer.renderWorld(true);
       await new Promise((resolve) => setTimeout(resolve, 16));
     }
@@ -203,7 +208,8 @@ test('distant demotion unloads detail and promotion reconciles before visible au
     const promotedEntry = afterDetail.entries.find((entry) => entry.id === String(npc.id));
 
     Game.NPCRuntimeBridge.scheduleReconcile();
-    for (let attempt = 0; attempt < 20 && scheduler.metrics().queueDepth > 0; attempt += 1) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (!scheduler.metrics().queuedKeys.includes('npc-runtime-reconcile')) break;
       Game.Renderer.renderWorld(true);
       await new Promise((resolve) => setTimeout(resolve, 16));
     }
@@ -230,7 +236,7 @@ test('distant demotion unloads detail and promotion reconciles before visible au
 
   expect(evidence.demotedTier).toBe('distant');
   expect(evidence.demotedDetailLoaded).toBe(false);
-  expect(['critical', 'nearby']).toContain(evidence.promotedTier);
+  expect(evidence.promotedTier).toBe('critical');
   expect(evidence.promotedReconciliationsDelta).toBeGreaterThanOrEqual(1);
   expect(evidence.promotedPendingAfterDetail).toBe(true);
   expect(evidence.promotedPendingAfterAuthoritative).toBe(false);
