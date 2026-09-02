@@ -6,7 +6,7 @@
   'use strict';
 
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-main-road-renderer-v1';
+  const VERSION = 'r04-main-road-renderer-v2-final-bridge-composition';
   const FAMILY = 'main_road';
   const SIZE = 256;
   const images = new Map();
@@ -162,7 +162,11 @@
     if (!ready) { if (attempt < 80) retryTimer = global.setTimeout(() => initialize(attempt + 1), 50); return false; }
     if (retryTimer) global.clearTimeout(retryTimer);
     ensureAssets();
-    installRenderHook();
+    // Production composition is owned by the deliberately late RoadRuntimeBridge,
+    // which must draw ordinary roads first (clearing the shared overlay) and main
+    // roads second. Keep the local wrapper only for isolated embeddings/tests that
+    // do not load that bridge, avoiding a redundant main-road redraw every frame.
+    if (!Game.RoadRuntimeBridge?.drawRoads) installRenderHook();
     drawPresentation();
     return true;
   }
