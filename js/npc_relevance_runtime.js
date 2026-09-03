@@ -8,13 +8,14 @@
   const Game = global.Game = global.Game || {};
   if (Game.NPCRelevanceRuntime) return;
 
-  const VERSION = 'r04-npc-relevance-v3-authoritative-catchup';
+  const VERSION = 'r04-npc-relevance-v4-temporal-phase';
   const TIER = Object.freeze({ CRITICAL: 'critical', NEARBY: 'nearby', LOCAL: 'local', DISTANT: 'distant' });
   const CADENCE_MINUTES = Object.freeze({ critical: 1, nearby: 2, local: 5, distant: 15 });
   const NEAR_DISTANCE = 14;
   const LOCAL_DISTANCE = 38;
   const compact = new Map();
   const samples = [];
+  const dispatchSamples = [];
   let lastSecond = -1;
   let jobsThisSecond = 0;
   let jobsPerSecond = 0;
@@ -31,10 +32,10 @@
     return hash >>> 0;
   }
 
-  function gameMinute() {
+  function gameTime() {
     const captured = Game.GameTime?.capture?.();
     const value = Number(captured?.totalGameMinutes ?? Game.State?.world?.gameTime?.totalGameMinutes ?? 0);
-    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
   }
 
   function manhattan(a, b) {
@@ -79,21 +80,45 @@
     return cadence <= 1 ? 0 : hash32(`${Game.State?.world?.seed || ''}|${npc?.id || ''}|${tier}`) % cadence;
   }
 
-  function ensureCompact(npc, minute) {
+  // Integer-minute buckets keep deterministic coarse cadence, but they are insufficient
+  // for runtime desynchronization: all CRITICAL NPCs have cadence=1 and therefore bucket=0.
+  // A second deterministic phase spreads each NPC inside its cadence window. The phase is
+  // Simulation-input-derived only; renderer FPS/device speed never changes who is due.
+  function stablePhase(npc, tier) {
+    const cadence = cadenceFor(tier);
+    const hash = hash32(`${Game.State?.world?.seed || ''}|${npc?.id || ''}|${tier}|temporal-phase`);
+    return (hash / 0x100000000) * cadence;
+  }
+
+  function dueThreshold(time, npc, tier) {
+    const cadence = cadenceFor(tier);
+    const cycleStart = Math.floor(time / cadence) * cadence;
+    const current = cycleStart + stablePhase(npc, tier);
+    if (time + 1e-9 >= current) return current;
+    return current - cadence;
+  }
+
+  function ensureCompact(npc, time) {
     const id = String(npc?.id || '');
     if (!id) return null;
     let entry = compact.get(id);
     if (!entry) {
       const tier = classify(npc);
-      const cadence = cadenceFor(tier);
       entry = {
         id,
         tier,
         previousTier: tier,
         bucket: stableBucket(npc, tier),
-        lastObservedMinute: minute,
-        lastDetailedMinute: minute - cadence,
-        lastAuthoritativeMinute: minute - cadence,
+        phaseOffsetMinutes: stablePhase(npc, tier),
+        lastObservedMinute: Math.floor(time),
+        lastObservedTime: time,
+        // The already-valid authoritative population is the initial baseline. Starting
+        // every entry one cadence overdue would recreate the exact population-wide burst
+        // that #351 is intended to remove.
+        lastDetailedMinute: Math.floor(time),
+        lastDetailedTime: time,
+        lastAuthoritativeMinute: Math.floor(time),
+        lastAuthoritativeTime: time,
         lastRow: Number(npc.row),
         lastCol: Number(npc.col),
         lastActivity: String(npc.activity || 'idle'),
@@ -105,46 +130,48 @@
     return entry;
   }
 
-  function isDue(entry, tier, minute, promoted) {
-    if (promoted) return true;
-    if (tier === TIER.DISTANT) return false;
-    const cadence = cadenceFor(tier);
-    if (tier === TIER.CRITICAL) return entry.lastDetailedMinute < minute;
-    if (entry.lastDetailedMinute >= minute) return false;
-    return (minute % cadence) === stableBucket({ id: entry.id }, tier);
+  function refreshTierMetadata(entry, npc, tier) {
+    entry.bucket = stableBucket(npc, tier);
+    entry.phaseOffsetMinutes = stablePhase(npc, tier);
   }
 
-  function authoritativeDue(npc, minuteInput = gameMinute()) {
-    const minute = Math.max(0, Math.floor(Number(minuteInput) || 0));
-    const entry = ensureCompact(npc, minute);
+  function isDue(entry, npc, tier, time, promoted) {
+    if (promoted) return true;
+    if (tier === TIER.DISTANT) return false;
+    const threshold = dueThreshold(time, npc, tier);
+    return Number(entry.lastDetailedTime ?? entry.lastDetailedMinute ?? -Infinity) + 1e-9 < threshold;
+  }
+
+  function authoritativeDue(npc, minuteInput = gameTime()) {
+    const time = Math.max(0, Number(minuteInput) || 0);
+    const entry = ensureCompact(npc, time);
     if (!entry) return true;
     const tier = classify(npc);
     const promoted = rank(tier) < rank(entry.tier) || entry.authoritativePromotionPending === true;
     if (promoted) return true;
-    if (entry.lastAuthoritativeMinute >= minute) return false;
-    const cadence = cadenceFor(tier);
-    if (tier === TIER.CRITICAL) return true;
 
-    // Normal authoritative reconciliation remains identity-staggered on the tier bucket.
-    // If authoritative time jumps past more than one cadence (resume/test/large time step),
-    // compact Simulation state must catch up instead of freezing indefinitely because the
-    // exact bucket minute was skipped. This does not materialize expensive DISTANT detail:
-    // isDue() above still keeps that presentation/detail work unloaded.
-    const bucketDue = (minute % cadence) === stableBucket(npc, tier);
-    const overdue = (minute - entry.lastAuthoritativeMinute) >= cadence * 2;
-    return bucketDue || overdue;
+    const lastTime = Number(entry.lastAuthoritativeTime ?? entry.lastAuthoritativeMinute ?? time);
+    const threshold = dueThreshold(time, npc, tier);
+    if (lastTime + 1e-9 < threshold) return true;
+
+    // Preserve the existing compact-authority catch-up guarantee for large authoritative
+    // time jumps. Normal progression remains identity-phased inside each cadence window.
+    const cadence = cadenceFor(tier);
+    return (time - lastTime) >= cadence * 2;
   }
 
-  function markAuthoritativeUpdated(npc, minuteInput = gameMinute()) {
-    const minute = Math.max(0, Math.floor(Number(minuteInput) || 0));
-    const entry = ensureCompact(npc, minute);
+  function markAuthoritativeUpdated(npc, minuteInput = gameTime()) {
+    const time = Math.max(0, Number(minuteInput) || 0);
+    const entry = ensureCompact(npc, time);
     if (!entry) return false;
     const tier = classify(npc);
     entry.previousTier = entry.tier;
     entry.tier = tier;
-    entry.bucket = stableBucket(npc, tier);
-    entry.lastAuthoritativeMinute = minute;
-    entry.lastObservedMinute = minute;
+    refreshTierMetadata(entry, npc, tier);
+    entry.lastAuthoritativeMinute = Math.floor(time);
+    entry.lastAuthoritativeTime = time;
+    entry.lastObservedMinute = Math.floor(time);
+    entry.lastObservedTime = time;
     entry.lastRow = Number(npc.row);
     entry.lastCol = Number(npc.col);
     entry.lastActivity = String(npc.activity || 'idle');
@@ -163,17 +190,31 @@
     jobsThisSecond += 1;
   }
 
-  function materialize(npc, entry, tier, minute, promoted) {
+  function recordDispatch(npc, entry, tier, time) {
+    dispatchSamples.push(Object.freeze({
+      id: String(npc?.id || entry.id),
+      tier,
+      bucket: entry.bucket,
+      phaseOffsetMinutes: Number(entry.phaseOffsetMinutes.toFixed(6)),
+      gameTimeMinutes: Number(time.toFixed(6)),
+      monotonicMs: Number((typeof performance !== 'undefined' ? performance.now() : 0).toFixed(3))
+    }));
+    if (dispatchSamples.length > 512) dispatchSamples.splice(0, dispatchSamples.length - 512);
+  }
+
+  function materialize(npc, entry, tier, time, promoted) {
     const started = performance.now();
     if (Game.NPCLife?.scheduleState) {
-      try { npc.dailySchedule = Game.NPCLife.scheduleState(npc, minute); } catch (_) {}
+      try { npc.dailySchedule = Game.NPCLife.scheduleState(npc, time); } catch (_) {}
     }
     if (promoted) entry.authoritativePromotionPending = true;
     entry.previousTier = entry.tier;
     entry.tier = tier;
-    entry.bucket = stableBucket(npc, tier);
-    entry.lastObservedMinute = minute;
-    entry.lastDetailedMinute = minute;
+    refreshTierMetadata(entry, npc, tier);
+    entry.lastObservedMinute = Math.floor(time);
+    entry.lastObservedTime = time;
+    entry.lastDetailedMinute = Math.floor(time);
+    entry.lastDetailedTime = time;
     entry.lastRow = Number(npc.row);
     entry.lastCol = Number(npc.col);
     entry.lastActivity = String(npc.activity || 'idle');
@@ -182,49 +223,53 @@
     const duration = Math.max(0, performance.now() - started);
     samples.push(duration);
     if (samples.length > 240) samples.splice(0, samples.length - 240);
+    recordDispatch(npc, entry, tier, time);
     completedJobs += 1;
     updateRateCounter();
     return true;
   }
 
-  function scheduleNpc(npc, minute) {
-    const entry = ensureCompact(npc, minute);
+  function scheduleNpc(npc, time) {
+    const entry = ensureCompact(npc, time);
     if (!entry) return false;
     const tier = classify(npc);
     const promoted = rank(tier) < rank(entry.tier);
     if (promoted) entry.authoritativePromotionPending = true;
-    entry.lastObservedMinute = minute;
+    entry.lastObservedMinute = Math.floor(time);
+    entry.lastObservedTime = time;
     entry.lastRow = Number(npc.row);
     entry.lastCol = Number(npc.col);
     entry.lastActivity = String(npc.activity || entry.lastActivity || 'idle');
 
-    if (!isDue(entry, tier, minute, promoted)) {
+    if (!isDue(entry, npc, tier, time, promoted)) {
       entry.previousTier = entry.tier;
       entry.tier = tier;
-      entry.bucket = stableBucket(npc, tier);
+      refreshTierMetadata(entry, npc, tier);
       if (tier === TIER.DISTANT) entry.detailLoaded = false;
       return false;
     }
 
     const scheduler = Game.FrameBudgetScheduler;
     const jobKey = `npc-detail:${entry.id}`;
+    const cadence = cadenceFor(tier);
+    const cycle = Math.floor(time / cadence);
     if (scheduler?.enqueue) {
-      scheduler.enqueue(jobKey, () => materialize(npc, entry, tier, minute, promoted), {
+      scheduler.enqueue(jobKey, () => materialize(npc, entry, tier, time, promoted), {
         priority: tier === TIER.CRITICAL ? 30 : tier === TIER.NEARBY ? 20 : tier === TIER.LOCAL ? 10 : 0,
         label: `NPC detail ${entry.id}`,
-        version: `${minute}:${tier}:${entry.bucket}`
+        version: `${cycle}:${tier}:${entry.bucket}:${entry.phaseOffsetMinutes.toFixed(6)}`
       });
       if (scheduler.interactionActive?.() && tier !== TIER.CRITICAL) deferredJobs += 1;
       return true;
     }
-    return materialize(npc, entry, tier, minute, promoted);
+    return materialize(npc, entry, tier, time, promoted);
   }
 
   function scheduleFrame() {
     const npcs = Game.State?.world?.npcs;
     if (!Array.isArray(npcs) || !npcs.length) return false;
-    const minute = gameMinute();
-    for (const npc of npcs) scheduleNpc(npc, minute);
+    const time = gameTime();
+    for (const npc of npcs) scheduleNpc(npc, time);
     return true;
   }
 
@@ -251,6 +296,7 @@
       npcJobP95Ms: p95,
       npcJobWorstMs: sorted.length ? sorted[sorted.length - 1] : 0,
       cadenceMinutes: CADENCE_MINUTES,
+      dispatchSamples: dispatchSamples.slice(),
       entries: Array.from(compact.values()).map((entry) => Object.freeze({ ...entry }))
     });
   }
@@ -262,6 +308,7 @@
     cadenceMinutes: CADENCE_MINUTES,
     classify,
     stableBucket,
+    stablePhase,
     authoritativeDue,
     markAuthoritativeUpdated,
     scheduleFrame,
