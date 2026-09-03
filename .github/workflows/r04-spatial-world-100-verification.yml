@@ -10,11 +10,13 @@ on:
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
       - 'js/npc_spatial_runtime.js'
+      - 'js/npc_bounded_progress_runtime.js'
       - 'js/npc_runtime_bridge.js'
       - 'js/npc_world.js'
       - 'js/npc_life.js'
       - 'js/utils.js'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
+      - 'tests/browser/r04-npc-bounded-progress.spec.mjs'
       - 'tests/browser/r04-npc-distribution.spec.mjs'
       - 'tests/browser/r04-npc-authoritative-game-time.spec.mjs'
       - 'tests/browser/r04-npc-public-startup.spec.mjs'
@@ -31,11 +33,13 @@ on:
       - 'js/spatial_world.js'
       - 'js/region_navigation.js'
       - 'js/npc_spatial_runtime.js'
+      - 'js/npc_bounded_progress_runtime.js'
       - 'js/npc_runtime_bridge.js'
       - 'js/npc_world.js'
       - 'js/npc_life.js'
       - 'js/utils.js'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
+      - 'tests/browser/r04-npc-bounded-progress.spec.mjs'
       - 'tests/browser/r04-npc-distribution.spec.mjs'
       - 'tests/browser/r04-npc-authoritative-game-time.spec.mjs'
       - 'tests/browser/r04-npc-public-startup.spec.mjs'
@@ -63,6 +67,7 @@ jobs:
       - name: Validate NPC integration source syntax
         run: |
           node --check js/npc_spatial_runtime.js
+          node --check js/npc_bounded_progress_runtime.js
           node --check js/npc_runtime_bridge.js
 
       - name: Set up Node.js
@@ -86,6 +91,9 @@ jobs:
 
       - name: Run focused 100x100 spatial-world and NPC occupancy regression
         run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs --project=desktop
+
+      - name: Verify dense bounded NPC route progress
+        run: npx playwright test tests/browser/r04-npc-bounded-progress.spec.mjs --project=desktop
 
       - name: Verify distributed NPC daily-life destinations
         run: npx playwright test tests/browser/r04-npc-distribution.spec.mjs --project=desktop
