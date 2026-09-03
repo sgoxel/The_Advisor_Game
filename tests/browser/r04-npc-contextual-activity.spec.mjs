@@ -101,7 +101,7 @@ test('contextual bubble pass preserves authoritative NPC objects and replaces ge
   expect(evidence.sameReferences).toBe(true);
   expect(evidence.snapshot?.authority).toBe('presentation-only');
   expect(evidence.snapshot?.labels?.length).toBeGreaterThan(0);
-  expect(evidence.overlay.layoutVersion).toBe('r04-npc-activity-bubble-layout-v1');
+  expect(evidence.overlay.layoutVersion).toBe('r04-npc-activity-bubble-layout-v2-relevance-cull');
   expect(evidence.overlay.activityCount + evidence.overlay.dialogueCount).toBeGreaterThan(0);
   for (const label of evidence.snapshot.labels) {
     expect(label.activity).toBe(evidence.expected[label.id]);
