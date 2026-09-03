@@ -2,30 +2,38 @@
   "schema_version": 1,
   "policy_version": "2026-09-03-throughput-v1",
   "next_role": "designer",
-  "needs_full_scan": true,
-  "bootstrap_reason": "Admin #359 throughput policy introduced after prior #97 checkpoint; first scheduled Worker must rebuild current live state before fast-path reuse.",
+  "needs_full_scan": false,
+  "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T19:20:00+03:00",
-    "last_exhaustive_scan_at": null,
-    "last_exhaustive_main_sha": null,
+    "created_at": "2026-09-03T19:31:42Z",
+    "last_exhaustive_scan_at": "2026-09-03T19:31:42Z",
+    "last_exhaustive_main_sha": "eec905370619457c01a5888635d0ed549eefa272",
     "roadmap_sha": null,
     "todo_sha": null,
-    "executable_depth": null,
+    "executable_depth": 0,
     "eligible_issue_ids": [],
-    "critical_blockers": [],
-    "watched_evidence": [],
+    "critical_blockers": [
+      {"issue": 360, "fan_out": 1, "reason": "R04 spatial verification cannot reach downstream #237-focused evidence until the current untouched-startup failure is exactly attributed; run 33796344365 remains nonterminal."},
+      {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
+    ],
+    "watched_evidence": [
+      {"issue": 360, "trigger": "run 33796344365 becomes terminal with GitHub-visible exact failure artifact/log or new exact attribution evidence"},
+      {"issue": 358, "trigger": "exact post-8273d581 descendant runtime trace reproduces a stable in-envelope NPC ID disappearance or a new attributable T-REV"},
+      {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"},
+      {"issue": 354, "trigger": "inspectable contributor-level R01 artifact evidence or controlled smaller representative evidence becomes available"}
+    ],
     "live_claim_stale_deadlines": []
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
     "2": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
-    "3": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 360], "last_reconciled_at": "2026-09-03T19:31:42Z"},
     "4": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
     "5": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 0,
-    "material_no_progress_runs": 0,
+    "material_no_progress_runs": 1,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -33,6 +41,8 @@
   "notes": [
     "Cache only; README/ROADMAP/TODO and exact issue history remain authoritative.",
     "Do not write this file for a pure QUIESCENT_FAST_PATH run.",
-    "Material updates use current blob SHA compare-and-swap and must not overwrite newer concurrent state."
+    "Material updates use current blob SHA compare-and-swap and must not overwrite newer concurrent state.",
+    "ROADMAP.md and TODO.md were not present at the canonical root during this bootstrap rebuild; their cache SHAs remain null rather than inferred from historical issue text.",
+    "Worker #3 acquired and immediately cleared #360 and #358 after exact-history/evidence reconciliation proved no safe repository mutation; both responsibilities remain non-exclusive waits."
   ]
 }
