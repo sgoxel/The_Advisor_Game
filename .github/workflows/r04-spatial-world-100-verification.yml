@@ -24,6 +24,7 @@ on:
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
       - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
+      - '.github/evidence-triggers/r04-spatial-world-100.txt'
       - '.github/workflows/r04-spatial-world-100-verification.yml'
   pull_request:
     paths:
@@ -47,6 +48,7 @@ on:
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
       - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
+      - '.github/evidence-triggers/r04-spatial-world-100.txt'
       - '.github/workflows/r04-spatial-world-100-verification.yml'
   workflow_dispatch:
 
