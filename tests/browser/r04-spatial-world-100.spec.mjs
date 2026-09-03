@@ -255,10 +255,12 @@ test('NPC dialogue occupies adjacent tiles and renders one shared development bu
     const a = dialogue ? npcs.find((npc) => npc.id === dialogue.speakerId) : null;
     const b = dialogue ? npcs.find((npc) => npc.id === dialogue.listenerId) : null;
     const overlay = document.getElementById('npcWorldOverlay');
+    const layout = window.Game.NPCBubbleLayout?.snapshot?.() || null;
     return {
       dialogue,
       distance: a && b ? Math.abs(a.row - b.row) + Math.abs(a.col - b.col) : null,
       sameTile: a && b ? a.row === b.row && a.col === b.col : null,
+      layout,
       overlay: {
         activityBubbleCount: Number(overlay?.dataset.activityBubbleCount || 0),
         dialoguePairCount: Number(overlay?.dataset.dialoguePairCount || 0),
@@ -272,7 +274,16 @@ test('NPC dialogue occupies adjacent tiles and renders one shared development bu
   expect(evidence.dialogue.adjacent).toBe(true);
   expect(evidence.distance).toBe(1);
   expect(evidence.sameTile).toBe(false);
-  expect(evidence.overlay.dialoguePairCount).toBe(1);
+  const pairVisible = Boolean(
+    evidence.layout?.pairedIds?.includes(evidence.dialogue.speakerId) &&
+    evidence.layout?.pairedIds?.includes(evidence.dialogue.listenerId)
+  );
+  expect(evidence.overlay.dialoguePairCount).toBe(pairVisible ? 1 : 0);
+  if (!pairVisible) {
+    expect(evidence.layout?.culledIds).toEqual(expect.arrayContaining([evidence.dialogue.speakerId, evidence.dialogue.listenerId]));
+    expect(evidence.layout?.cullReasons?.[evidence.dialogue.speakerId]).toBe('outside-viewport-relevance-envelope');
+    expect(evidence.layout?.cullReasons?.[evidence.dialogue.listenerId]).toBe('outside-viewport-relevance-envelope');
+  }
   expect(evidence.overlay.activityBubbleCount).toBeGreaterThan(0);
   expect(evidence.overlay.authority).toBe('presentation-only');
   expect(evidence.overlay.spatialRegionSize).toBe(100);
@@ -292,11 +303,15 @@ for (const viewport of [
       window.Game.NPCSpatial.updateAt(16_800);
       window.Game.NPCWorld.drawPresentation();
       const element = document.getElementById('npcWorldOverlay');
+      const dialogue = window.Game.State.world.npcDialogues?.[0] || null;
+      const layout = window.Game.NPCBubbleLayout?.snapshot?.() || null;
       return {
         rect: element?.getBoundingClientRect().toJSON(),
         npcCount: Number(element?.dataset.npcCount || 0),
         activityBubbleCount: Number(element?.dataset.activityBubbleCount || 0),
         dialoguePairCount: Number(element?.dataset.dialoguePairCount || 0),
+        dialogue,
+        layout,
         spatialRegionSize: Number(element?.dataset.spatialRegionSize || 0),
         pointerEvents: element ? getComputedStyle(element).pointerEvents : null
       };
@@ -305,7 +320,17 @@ for (const viewport of [
     expect(overlay.rect.height).toBeGreaterThan(100);
     expect(overlay.npcCount).toBeGreaterThanOrEqual(20);
     expect(overlay.activityBubbleCount).toBeGreaterThan(0);
-    expect(overlay.dialoguePairCount).toBe(1);
+    expect(overlay.dialogue).not.toBeNull();
+    const pairVisible = Boolean(
+      overlay.layout?.pairedIds?.includes(overlay.dialogue.speakerId) &&
+      overlay.layout?.pairedIds?.includes(overlay.dialogue.listenerId)
+    );
+    expect(overlay.dialoguePairCount).toBe(pairVisible ? 1 : 0);
+    if (!pairVisible) {
+      expect(overlay.layout?.culledIds).toEqual(expect.arrayContaining([overlay.dialogue.speakerId, overlay.dialogue.listenerId]));
+      expect(overlay.layout?.cullReasons?.[overlay.dialogue.speakerId]).toBe('outside-viewport-relevance-envelope');
+      expect(overlay.layout?.cullReasons?.[overlay.dialogue.listenerId]).toBe('outside-viewport-relevance-envelope');
+    }
     expect(overlay.spatialRegionSize).toBe(100);
     expect(overlay.pointerEvents).toBe('none');
     await assertNoUnexpectedErrors(errors.pageErrors, errors.consoleErrors);
