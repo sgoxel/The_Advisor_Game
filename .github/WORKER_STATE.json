@@ -5,7 +5,7 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T22:05:48Z",
+    "created_at": "2026-09-03T22:14:52Z",
     "last_exhaustive_scan_at": "2026-09-03T22:05:48Z",
     "last_exhaustive_main_sha": "5679cd5bc87b447e3b4b5b329aae85e9f7b0c35c",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
@@ -27,14 +27,14 @@
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T22:05:48Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T21:24:00Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T22:14:52Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-03T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T21:38:13Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T21:03:46Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 8,
-    "material_no_progress_runs": 5,
+    "material_no_progress_runs": 6,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -44,7 +44,7 @@
     "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
     "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
     "Worker #1 consumed the watched #254/R01 transition: run 33808554209 on descendant 5679cd5 is terminal FAILURE, but GitHub-visible job evidence identifies only the broad cumulative regression step and does not expose a #254- or #172-attributable assertion. Focused #254 exterior coverage remains green within 33808554174 and interior continuity 33808554182 remains SUCCESS, so #254 stays a non-exclusive attribution/independence wait with no speculative correction.",
-    "The fresh Worker #4 exhaustive ledger was reused after verified delta reconciliation: main differs from material SHA only through Worker-state coordination commits, ROADMAP/TODO are unchanged, the only non-#97 issue delta after the checkpoint is #254 evidence reconciliation, and no new current/earlier executable target was exposed. Executable depth remains 0; critical blockers #360 (fan-out 1) and #329 (fan-out 3) are unchanged.",
+    "Worker #2 rechecked the sole post-checkpoint material issue delta (#254) and found no new attributable owner action, correction handoff, stale claim, or completion trigger. The fresh predecessor exhaustive ledger was therefore reused; Reviewer->Planner->Coder->Designer->Tester->Reviewer exposed zero safe targets and executable depth remains 0. Critical blockers #360 (fan-out 1) and #329 (fan-out 3) are unchanged.",
     "Lightweight hygiene was not repeated because the material delta is terminal watched CI state only and no new performance/size/runtime/CI-cost measurement or hygiene-target state change appeared."
   ]
 }
