@@ -133,6 +133,14 @@ test('feet-anchored sprite redraw and fallback presentation cannot mutate protag
 
 test('activity bubbles remain screen-space feedback attached above world-space character bodies', async ({ page }) => {
   await waitForExteriorSprites(page);
+  await page.waitForFunction(() => {
+    const Game = window.Game;
+    Game.NPCWorld.drawPresentation();
+    Game.NPCBubbleLayout.draw();
+    const npcIds = new Set(Game.State.world.npcs.map((npc) => npc.id));
+    return (Game.NPCBubbleLayout.snapshot()?.boxes || [])
+      .some((box) => box.kind === 'activity' && npcIds.has(box.id));
+  });
 
   const evidence = await page.evaluate(() => {
     const Game = window.Game;
