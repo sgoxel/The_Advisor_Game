@@ -132,7 +132,8 @@ window.Game.Config = {
 // Load parser-safe early integration modules while HTML parsing is still in
 // progress. These modules expose Simulation-owned validation/resolution facts,
 // deterministic autonomous-driver APIs, and presentation-only status cards.
-// Loading them never executes an authoritative protagonist action by itself.
+// The bounded #172 runtime driver may execute only after its Simulation/routine
+// dependencies become available; it never grants presentation or player-input authority.
 if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<link rel="stylesheet" href="css/legality-feedback.css" />');
   document.write('<link rel="stylesheet" href="css/autonomy-feedback.css" />');
@@ -158,6 +159,7 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<script src="js/world_object_presentation_descriptor.js"><\/script>');
   document.write('<script src="js/autonomous_action_execution.js"><\/script>');
   document.write('<script src="js/autonomous_decision_loop.js"><\/script>');
+  document.write('<script src="js/autonomous_protagonist_runtime.js"><\/script>');
   document.write('<script src="js/autonomy_feedback_presentation.js"><\/script>');
   document.write('<script src="js/autonomy_feedback_runtime.js"><\/script>');
 
