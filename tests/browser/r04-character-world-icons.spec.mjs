@@ -106,7 +106,7 @@ for (const viewport of [
   { name: 'tablet', width: 820, height: 1180 },
   { name: 'desktop', width: 1440, height: 900 }
 ]) {
-  test(`character PNG overlay scale responds to zoom without mutating NPC state on ${viewport.name}`, async ({ page }) => {
+  test(`character PNG overlay keeps stable screen-space size while zoom changes world projection on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await waitForNpcWorld(page);
     await page.waitForFunction(() => Number(document.getElementById('npcWorldOverlay')?.dataset.pngNpcCount || 0) > 0);
@@ -129,14 +129,27 @@ for (const viewport of [
       }));
       const before = snapshot();
       const originalZoom = Number(Game.State.camera.zoom);
+      const player = Game.State.world.player;
+      const npc = Game.State.world.npcs[0];
 
-      Game.State.camera.zoom = 2;
-      Game.NPCWorld.drawPresentation();
-      const lowZoomSize = Number(overlay.dataset.iconSizePx || 0);
-
-      Game.State.camera.zoom = 5;
-      Game.NPCWorld.drawPresentation();
-      const highZoomSize = Number(overlay.dataset.iconSizePx || 0);
+      const samples = [2, 3.5, 5].map((zoom) => {
+        Game.State.camera.zoom = zoom;
+        Game.NPCWorld.drawPresentation();
+        const playerPoint = Game.Renderer.gridToScreen(Number(player.row), Number(player.col), 0, 0);
+        const npcPoint = Game.Renderer.gridToScreen(Number(npc.row), Number(npc.col), 0, 0);
+        const resolved = Game.NPCWorld.resolveWorldSpaceScale(overlay.clientWidth);
+        return {
+          zoom,
+          iconSize: Number(overlay.dataset.iconSizePx || 0),
+          spriteWidth: Number(overlay.dataset.spriteWidthPx || 0),
+          spriteHeight: Number(overlay.dataset.spriteHeightPx || 0),
+          resolvedWidth: Number(resolved.width || 0),
+          resolvedHeight: Number(resolved.height || 0),
+          playerPoint,
+          npcPoint,
+          protagonistRenderKind: overlay.dataset.protagonistRenderKind
+        };
+      });
 
       const after = snapshot();
       const presentationAuthority = overlay.dataset.presentationAuthority;
@@ -152,8 +165,7 @@ for (const viewport of [
       return {
         before,
         after,
-        lowZoomSize,
-        highZoomSize,
+        samples,
         presentationAuthority,
         pointerEvents,
         ariaHidden,
@@ -167,11 +179,39 @@ for (const viewport of [
     expect(evidence.rect.height).toBeGreaterThan(100);
     expect(evidence.visible).toBeGreaterThan(0);
     expect(evidence.png).toBeGreaterThan(0);
-    expect(evidence.lowZoomSize).toBeGreaterThanOrEqual(34);
-    expect(evidence.lowZoomSize).toBeLessThanOrEqual(64);
-    expect(evidence.highZoomSize).toBeGreaterThanOrEqual(34);
-    expect(evidence.highZoomSize).toBeLessThanOrEqual(64);
-    expect(evidence.highZoomSize).toBeGreaterThan(evidence.lowZoomSize);
+
+    const iconSizes = evidence.samples.map((sample) => sample.iconSize);
+    const spriteWidths = evidence.samples.map((sample) => sample.spriteWidth);
+    const spriteHeights = evidence.samples.map((sample) => sample.spriteHeight);
+    const resolvedWidths = evidence.samples.map((sample) => sample.resolvedWidth);
+    const resolvedHeights = evidence.samples.map((sample) => sample.resolvedHeight);
+
+    for (const sample of evidence.samples) {
+      expect(sample.iconSize).toBeGreaterThanOrEqual(34);
+      expect(sample.iconSize).toBeLessThanOrEqual(64);
+      expect(sample.spriteWidth).toBeGreaterThan(0);
+      expect(sample.spriteHeight).toBeGreaterThan(sample.spriteWidth);
+      expect(sample.protagonistRenderKind).toBe('world-space-png');
+      expect(Number.isFinite(sample.playerPoint.x) && Number.isFinite(sample.playerPoint.y)).toBe(true);
+      expect(Number.isFinite(sample.npcPoint.x) && Number.isFinite(sample.npcPoint.y)).toBe(true);
+    }
+
+    const spread = (values) => Math.max(...values) - Math.min(...values);
+    expect(spread(iconSizes)).toBeLessThanOrEqual(0.1);
+    expect(spread(spriteWidths)).toBeLessThanOrEqual(0.1);
+    expect(spread(spriteHeights)).toBeLessThanOrEqual(0.1);
+    expect(spread(resolvedWidths)).toBeLessThanOrEqual(0.1);
+    expect(spread(resolvedHeights)).toBeLessThanOrEqual(0.1);
+
+    const first = evidence.samples[0];
+    const last = evidence.samples[evidence.samples.length - 1];
+    const projectionDelta =
+      Math.abs(first.playerPoint.x - last.playerPoint.x) +
+      Math.abs(first.playerPoint.y - last.playerPoint.y) +
+      Math.abs(first.npcPoint.x - last.npcPoint.x) +
+      Math.abs(first.npcPoint.y - last.npcPoint.y);
+    expect(projectionDelta).toBeGreaterThan(0.5);
+
     expect(evidence.presentationAuthority).toBe('presentation-only');
     expect(evidence.pointerEvents).toBe('none');
     expect(evidence.ariaHidden).toBe('true');
