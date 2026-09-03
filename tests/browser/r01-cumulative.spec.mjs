@@ -52,6 +52,7 @@ async function waitForStrategicMap(page, navigate = true) {
 async function baseWorldSnapshot(page) {
   return page.evaluate(() => {
     const world = window.Game.State.world;
+    const protagonistOrigin = world.originBaseState?.protagonistOrigin || null;
     let hash = 2166136261 >>> 0;
     const feed = (value) => {
       const text = String(value);
@@ -81,10 +82,14 @@ async function baseWorldSnapshot(page) {
       rows: world.rows,
       cols: world.cols,
       hash: hash >>> 0,
-      player: {
-        row: world.player.row,
-        col: world.player.col
-      }
+      protagonistOrigin: protagonistOrigin ? {
+        regionX: protagonistOrigin.regionX,
+        regionY: protagonistOrigin.regionY,
+        worldX: protagonistOrigin.worldX,
+        worldY: protagonistOrigin.worldY,
+        localRow: protagonistOrigin.localRow,
+        localCol: protagonistOrigin.localCol
+      } : null
     };
   });
 }
@@ -98,6 +103,7 @@ test('same configured seed reloads the same base-world structure', async ({ page
   await waitForStrategicMap(page, false);
   const second = await baseWorldSnapshot(page);
 
+  expect(first.protagonistOrigin).not.toBeNull();
   expect(second).toEqual(first);
   expect(failures).toEqual([]);
 });
