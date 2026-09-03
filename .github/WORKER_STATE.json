@@ -5,9 +5,9 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T20:48:14Z",
-    "last_exhaustive_scan_at": "2026-09-03T20:48:14Z",
-    "last_exhaustive_main_sha": "e80199c7f28d71d02cbb22f33119285b8eb067c9",
+    "created_at": "2026-09-03T21:03:46Z",
+    "last_exhaustive_scan_at": "2026-09-03T21:03:46Z",
+    "last_exhaustive_main_sha": "cdbb5676fbab6c0c9295e50b4d19c72e7b8d33e2",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
@@ -17,7 +17,7 @@
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 254, "trigger": "focused run 33804329096 and affected interior/preservation evidence on e80199c7f28d71d02cbb22f33119285b8eb067c9 become terminal; terminal failure needing Worker #4 correction, different-Worker Tester PASS/T-REV, or issue completion"},
+      {"issue": 254, "trigger": "exact candidate cdbb5676fbab6c0c9295e50b4d19c72e7b8d33e2 runs including 33805826460 and 33805826680 become terminal; terminal failure needing Worker #5 correction, different-Worker Tester PASS/T-REV, or issue completion"},
       {"issue": 354, "trigger": "run 33801312037 on c0c8d57f9ce78825763976f0f463b9e7a2ac89bd becomes terminal and produces an artifact suitable for controlled size comparison, or a different-Worker Tester returns PASS/T-REV"},
       {"issue": 360, "trigger": "exact spatial verification produces terminal GitHub-visible attribution evidence or a new exact correction/handoff"},
       {"issue": 358, "trigger": "exact post-8273d581 descendant runtime trace reproduces a stable in-envelope NPC ID disappearance or a new attributable T-REV"},
@@ -31,10 +31,10 @@
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T20:14:55Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-03T20:38:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T20:48:14Z"},
-    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T19:50:53Z"}
+    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T21:03:46Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 3,
+    "productive_material_runs": 4,
     "material_no_progress_runs": 4,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -45,8 +45,8 @@
     "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
     "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
     "#359 was independently Tester-PASSed and closed by Worker #4 after verifying Worker #3 Reviewer correction 5d24eba2 and state checkpoint 051edd54.",
-    "#254 failed exact run 33800981403 was attributed to a wait-then-resample visibility observation race; Worker #4 issued T-REV then committed test-only correction e80199c7. Focused run 33804329096 and interior run 33804329257 are nonterminal; Worker #4 retains responsibility and cannot self-PASS.",
-    "#354 run 33801312037 remains in_progress; no repeated lightweight measurement was performed.",
-    "Worker #4 retained waits are #254/#307/#309/#349/#356/#357/#358; no live exclusive claim remains."
+    "#254 watched affected run 33804329257 failed at r04-exterior-world-space-sprites.spec.mjs:171 with activity pairCount=0. Worker #5 independently issued T-REV, inspected artifact 9912401181, attributed a wait/readiness race, and committed test-only correction cdbb5676; exact candidate CI is nonterminal and different-Worker Tester verification remains mandatory.",
+    "#354 run 33801312037 remains in_progress; immediate Worker #5 Reviewer re-fetch found Worker #1 had already proved/corrected the same R04 duplicate-trace contributor at c0c8d57, so no duplicate hygiene mutation was made.",
+    "Worker #5 retained waits are #237/#254/#346/#350/#351/#358; no live exclusive claim remains."
   ]
 }
