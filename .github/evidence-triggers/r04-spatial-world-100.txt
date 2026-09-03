@@ -1,0 +1,5 @@
+issue=359
+requested_suite=R04 100x100 Spatial World Verification
+reason=bootstrap connector-safe evidence recovery path and produce fresh current-main spatial evidence for active R04 waits
+source_context=Admin Worker #19 throughput remediation; existing #307-style waits demonstrated workflow_dispatch unavailability in connected Worker environment
+requested_at=2026-09-03T19:25:00+03:00
