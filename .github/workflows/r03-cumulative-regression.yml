@@ -30,6 +30,12 @@ on:
       - '.github/workflows/r03-cumulative-regression.yml'
   workflow_dispatch:
 
+# Broad cumulative evidence follows the newest candidate per ref. Focused workflows
+# remain responsible for exact intermediate target evidence when required.
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
