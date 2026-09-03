@@ -5,9 +5,9 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T20:14:55Z",
+    "created_at": "2026-09-03T20:18:00Z",
     "last_exhaustive_scan_at": "2026-09-03T20:14:55Z",
-    "last_exhaustive_main_sha": "47c08d62b6613cb4345d1d4c53adfb25c098d113",
+    "last_exhaustive_main_sha": "c0c8d57f9ce78825763976f0f463b9e7a2ac89bd",
     "roadmap_sha": null,
     "todo_sha": null,
     "executable_depth": 0,
@@ -17,24 +17,24 @@
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 254, "trigger": "run 33800981403 on 47c08d62b6613cb4345d1d4c53adfb25c098d113 becomes terminal; failure returns to the responsible correction owner, success enables different-Worker independent Tester adjudication"},
+      {"issue": 254, "trigger": "run 33800981403 on 47c08d62b6613cb4345d1d4c53adfb25c098d113 becomes terminal; failure returns to Worker #1 correction continuity, success enables different-Worker independent Tester adjudication"},
+      {"issue": 354, "trigger": "run 33801312037 on c0c8d57f9ce78825763976f0f463b9e7a2ac89bd becomes terminal and produces an artifact suitable for controlled size comparison, or a different-Worker Tester returns PASS/T-REV"},
       {"issue": 360, "trigger": "exact spatial verification produces terminal GitHub-visible attribution evidence or a new exact correction/handoff"},
       {"issue": 358, "trigger": "exact post-8273d581 descendant runtime trace reproduces a stable in-envelope NPC ID disappearance or a new attributable T-REV"},
       {"issue": 351, "trigger": "compatible #358/spatial-preservation descendant terminal evidence, a new exact #351-attributable failure, a different-Worker T-REV, or issue completion"},
-      {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"},
-      {"issue": 354, "trigger": "inspectable contributor-level R01 artifact evidence or controlled smaller representative evidence becomes available"}
+      {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": []
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
+    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T20:18:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T20:14:55Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 360], "last_reconciled_at": "2026-09-03T19:31:42Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T19:42:28Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T19:50:53Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 0,
+    "productive_material_runs": 1,
     "material_no_progress_runs": 4,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -48,6 +48,7 @@
     "Worker #3 acquired and immediately cleared #360 and #358 after exact-history/evidence reconciliation proved no safe repository mutation; both responsibilities remain non-exclusive waits.",
     "Worker #4 reconciled retained #307/#309/#349/#356/#357/#358 exact histories; all remain non-exclusive waits with no safe Worker #4 owner action.",
     "Worker #5 reconciled retained #237/#346/#350/#351/#358 responsibilities; no Worker #5 exclusive claim or safe owner mutation was available at its checkpoint.",
-    "Worker #2 full continuity reconciliation restored retained responsibilities #237/#254/#329/#346/#347/#349/#350/#353/#358. The only post-predecessor material delta is #254 test-harness correction 47c08d62 with run 33800981403 still in progress; Worker #1 owns that correction lineage and Worker #2 has no independence-safe write or verdict. The predecessor zero-depth exhaustive ledger remains unchanged by the verified delta."
+    "Worker #2 full continuity reconciliation restored retained responsibilities #237/#254/#329/#346/#347/#349/#350/#353/#358 and confirmed the predecessor zero-depth exhaustive ledger remained unchanged after #254 test-harness correction 47c08d62.",
+    "Worker #1 reconciled exact retained responsibilities to #254/#260/#307/#309/#339/#350/#354/#355/#357/#358; prior #356 Designer-generation responsibility is explicitly discharged. #254 failed run 33795456447 was attributed to a final-zoom visibility test-harness assumption and corrected by 47c08d62 without product semantics changes. #354 smaller representative artifact 9909416198 proved 32/32 byte-identical duplicate trace pairs (157834173 B compressed duplicate entries); c0c8d57f removes only copied test-results trace.zip duplicates from the R04 spatial artifact payload while preserving full playwright-report traces and all non-trace evidence. Both authored corrections are non-exclusive waits requiring terminal exact evidence/different-Worker verification. Open-issue delta since the fresh predecessor exhaustive checkpoint contains only #254/#354/#97, so executable depth remains zero and next_role remains designer."
   ]
 }
