@@ -71,7 +71,7 @@ test('approved #252 world-space PNG families bind only from authoritative exteri
 test('feet-anchored sprite redraw cannot mutate protagonist or NPC authority', async ({ page }) => {
   await waitForExteriorSprites(page);
 
-  const evidence = await page.evaluate(() => {
+  const evidenceHandle = await page.waitForFunction(() => {
     const Game = window.Game;
     const overlay = document.getElementById('npcWorldOverlay');
     const playerSnapshot = () => {
@@ -102,6 +102,8 @@ test('feet-anchored sprite redraw cannot mutate protagonist or NPC authority', a
     const before = { player: playerSnapshot(), npcs: npcSnapshot() };
     Game.NPCWorld.drawPresentation();
     const after = { player: playerSnapshot(), npcs: npcSnapshot() };
+    const pngNpcCount = Number(overlay.dataset.pngNpcCount || 0);
+    if (pngNpcCount <= 0) return false;
 
     return {
       before,
@@ -111,11 +113,12 @@ test('feet-anchored sprite redraw cannot mutate protagonist or NPC authority', a
       protagonistRenderKind: overlay.dataset.protagonistRenderKind,
       spriteWidth: Number(overlay.dataset.spriteWidthPx || 0),
       spriteHeight: Number(overlay.dataset.spriteHeightPx || 0),
-      pngNpcCount: Number(overlay.dataset.pngNpcCount || 0),
+      pngNpcCount,
       pointerEvents: getComputedStyle(overlay).pointerEvents,
       ariaHidden: overlay.getAttribute('aria-hidden')
     };
   });
+  const evidence = await evidenceHandle.jsonValue();
 
   expect(evidence.after).toEqual(evidence.before);
   expect(evidence.after.npcs.every((npc) => npc.authority === 'simulation' && npc.controlledBy === 'simulation' && npc.playerControllable === false)).toBe(true);
@@ -161,7 +164,7 @@ test('activity bubbles remain screen-space feedback attached above world-space c
       authority: layout?.authority,
       spriteWidth,
       spriteHeight,
-      overlapCount: activityPairs.filter(({ box, sprite }) => !(box.right <= sprite.left || box.left >= sprite.right || box.bottom <= sprite.top || box.top >= sprite.bottom)).length,
+      overlapCount: activityPairs.filter(({ box, sprite }) => rectanglesOverlap(box, sprite)).length,
       pairCount: activityPairs.length
     };
   });
