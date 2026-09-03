@@ -18,7 +18,7 @@ const TARGETS = Object.freeze({
   npc: { ref: 'npc:innkeeper', category: 'npc', stateRef: 'awake', available: true, relevance: 'active', location: { worldRef: 'world:seed-42', regionRef: 'region:0,0', settlementRef: 'village:0', siteRef: 'site:tavern', row: 1, col: 1 } },
   location: { ref: 'location:mill', category: 'location', stateRef: 'open', available: true, relevance: 'nearby', location: { worldRef: 'world:seed-42', regionRef: 'region:0,0', settlementRef: 'village:0', siteRef: 'site:mill', row: 2, col: 2 } },
   animal: { ref: 'animal:horse-1', category: 'animal', stateRef: 'calm', available: true, relevance: 'nearby', location: { worldRef: 'world:seed-42', regionRef: 'region:0,0', settlementRef: 'village:0', siteRef: 'site:stable', row: 3, col: 2 } },
-  creature: { ref: 'creature:wisp-1', category: 'creature', stateRef: 'roaming', available: true, relevance: 'nearby', location: { worldRef: 'world:seed-42', regionRef: 'region:0,0', settlementRef: null, siteRef: 'wild:marsh', row: 5, col: 4 } }
+  creature: { ref: 'creature:wisp-1', category: 'creature', stateRef: 'roaming', available: true, relevance: 'nearby', location: { worldRef: 'world:seed-42', regionRef: 'region:0,0', settlementRef: 'village:0', siteRef: 'wild:marsh', row: 5, col: 4 } }
 });
 
 function ruleFor(target, type) {
@@ -140,6 +140,11 @@ test('time, location, availability, target state and stale context reject withou
     const game = window.Game;
     const deltaCount = () => game.WorldDeltaPersistence.capture(game.State.world.seed).regions.length;
     const results = {};
+
+    // The production autonomous driver may legitimately create a world delta between
+    // beforeEach and this evaluation. Isolate this rejection-only contract at the
+    // start of the synchronous batch, then keep the strict zero-mutation assertion.
+    game.WorldDeltaPersistence.clearAll();
 
     results.time = game.WorldActionResolution.resolveInteraction(payload.npcRequest, { ...payload.npcContext, gameMinute: 60 }, payload.npcResolution);
     results.location = game.WorldActionResolution.resolveInteraction(payload.npcRequest, { ...payload.npcContext, actorLocation: { settlementRef: 'village:0', siteRef: 'site:market' } }, payload.npcResolution);
