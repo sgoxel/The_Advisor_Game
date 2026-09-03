@@ -101,12 +101,22 @@
       const binding = world.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 };
       const desiredMap = new Map();
       const fixedNpcIds = new Set();
+      const dialogueNpcIds = new Set((world.npcDialogues || []).flatMap((dialogue) => [dialogue?.speakerId, dialogue?.listenerId]).filter(Boolean));
       const travel = [];
 
       for (const npc of world.npcs) {
         const due = typeof relevance?.authoritativeDue === 'function' ? relevance.authoritativeDue(npc, totalGameMinutes) : true;
         const routeStep = due ? nextRouteStep(npc) : { ok: false, reasonCode: 'RELEVANCE_NOT_DUE' };
         const before = beforeById.get(String(npc.id)) || point(npc);
+
+        // Canonical #237 dialogue placement has already reserved an adjacent pair in the
+        // first occupancy pass. Keep those authoritative dialogue tiles fixed so this
+        // bounded-progress bridge cannot invalidate the stored dialogue adjacency.
+        if (dialogueNpcIds.has(npc.id)) {
+          fixedNpcIds.add(npc.id);
+          desiredMap.set(npc.id, { point: point(npc), activity: npc.activity || 'idle' });
+          continue;
+        }
 
         // If the canonical runtime already made one legal adjacent progress step this minute,
         // keep that authoritative result. This bridge only fills the coarse desired-index gap.
