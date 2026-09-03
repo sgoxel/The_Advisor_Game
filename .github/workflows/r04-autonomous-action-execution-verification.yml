@@ -5,8 +5,12 @@ on:
     branches: [main]
     paths:
       - 'js/autonomous_action_execution.js'
+      - 'js/autonomous_protagonist_runtime.js'
+      - 'js/config.js'
       - 'js/local_bot_driver.js'
       - 'js/protagonist_driver_intent.js'
+      - 'js/protagonist_routine.js'
+      - 'js/terrain_routing.js'
       - 'js/world_action_resolution.js'
       - 'js/spatial_action_legality.js'
       - 'js/interaction_validation.js'
@@ -15,6 +19,7 @@ on:
       - 'js/campaign_persistence.js'
       - 'js/region_navigation.js'
       - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-autonomous-protagonist-runtime.spec.mjs'
       - 'tests/browser/r04-local-bot-selection.spec.mjs'
       - 'tests/browser/r04-protagonist-driver-intent.spec.mjs'
       - 'tests/browser/r03-spatial-action-resolution-regression.spec.mjs'
@@ -26,8 +31,12 @@ on:
   pull_request:
     paths:
       - 'js/autonomous_action_execution.js'
+      - 'js/autonomous_protagonist_runtime.js'
+      - 'js/config.js'
       - 'js/local_bot_driver.js'
       - 'js/protagonist_driver_intent.js'
+      - 'js/protagonist_routine.js'
+      - 'js/terrain_routing.js'
       - 'js/world_action_resolution.js'
       - 'js/spatial_action_legality.js'
       - 'js/interaction_validation.js'
@@ -36,6 +45,7 @@ on:
       - 'js/campaign_persistence.js'
       - 'js/region_navigation.js'
       - 'tests/browser/r04-autonomous-action-execution.spec.mjs'
+      - 'tests/browser/r04-autonomous-protagonist-runtime.spec.mjs'
       - 'tests/browser/r04-local-bot-selection.spec.mjs'
       - 'tests/browser/r04-protagonist-driver-intent.spec.mjs'
       - 'tests/browser/r03-spatial-action-resolution-regression.spec.mjs'
@@ -68,6 +78,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run focused R04 autonomous action execution regression
         run: npx playwright test tests/browser/r04-autonomous-action-execution.spec.mjs
+      - name: Run populated-runtime autonomous protagonist regression
+        run: npx playwright test tests/browser/r04-autonomous-protagonist-runtime.spec.mjs
       - name: Preserve R04 Local BOT deterministic selection
         run: npx playwright test tests/browser/r04-local-bot-selection.spec.mjs
       - name: Preserve R04 protagonist driver intent contract
