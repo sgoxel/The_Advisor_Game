@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "policy_version": "2026-09-03-throughput-v1.1",
-  "next_role": "designer",
+  "next_role": "reviewer",
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T21:24:00Z",
-    "last_exhaustive_scan_at": "2026-09-03T21:24:00Z",
-    "last_exhaustive_main_sha": "1c68ade84075a08a561f5d424eb56ecf9494585f",
+    "created_at": "2026-09-03T21:34:00Z",
+    "last_exhaustive_scan_at": "2026-09-03T21:34:00Z",
+    "last_exhaustive_main_sha": "5679cd5bc87b447e3b4b5b329aae85e9f7b0c35c",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
@@ -17,7 +17,7 @@
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 254, "trigger": "exact Worker #2 test-harness correction 1c68ade84075a08a561f5d424eb56ecf9494585f runs 33807627908 and 33807628026 become terminal; terminal failure needing owner correction, different-Worker Tester PASS/T-REV, or issue completion"},
+      {"issue": 254, "trigger": "exact Worker #3 test-harness correction 5679cd5bc87b447e3b4b5b329aae85e9f7b0c35c runs 33808554174 and 33808554182 become terminal; terminal failure needing owner correction, different-Worker Tester PASS/T-REV, or issue completion"},
       {"issue": 360, "trigger": "exact spatial verification produces terminal GitHub-visible attribution evidence or a new exact correction/handoff"},
       {"issue": 358, "trigger": "exact post-8273d581 descendant runtime trace reproduces a stable in-envelope NPC ID disappearance or a new attributable T-REV"},
       {"issue": 351, "trigger": "compatible #358/spatial-preservation descendant terminal evidence, a new exact #351-attributable failure, a different-Worker T-REV, or issue completion"},
@@ -28,12 +28,12 @@
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T21:04:12Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T21:24:00Z"},
-    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-03T20:38:00Z"},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-03T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T20:48:14Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T21:03:46Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 5,
+    "productive_material_runs": 6,
     "material_no_progress_runs": 5,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -43,9 +43,8 @@
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
     "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
-    "Worker #2 consumed terminal #254 candidate failures 33805826460/33805826680. Focused interior continuity passed; shared exterior preservation failed on a default-seed fallback-count assumption and a second-snapshot activity-bubble race. Worker #2 committed test-only correction 1c68ade84075a08a561f5d424eb56ecf9494585f and parked non-exclusive pending exact CI and different-Worker verification.",
-    "#354 run 33801312037 is terminal FAILURE from existing startup/save-load/R01 checks, but its evidence preparation/upload succeeded. Worker #2 independently PARTIAL-PASSed Worker #1 Reviewer correction c0c8d57 for duplicate trace transport only after exact artifact 9913291522 measured 651526711 B versus the recorded 1066395253 B pre-correction R04 lineage; no product failure was waived and #354 remains open.",
-    "Worker #2 retained responsibilities remain #237/#254/#329/#346/#347/#349/#350/#353/#358; no live exclusive claim remains.",
-    "The fresh predecessor exhaustive ledger was reused after verified delta reconciliation; no additional safely executable current/earlier target was exposed. next_role remains Designer because Worker #2's #254 continuity action does not fabricate cursor ownership and #354 Tester verification was evidence-specific rather than an unrelated role backlog handoff."
+    "Worker #3 consumed the watched #254 terminal failures on Worker #2 candidate 1c68ade, independently issued T-REV 5532399285 for a pngNpcCount redraw/sampling race, and committed the smallest test-only atomic qualifying-frame correction. Exact candidate is 5679cd5bc87b447e3b4b5b329aae85e9f7b0c35c; exterior 33808554174 and interior-continuity 33808554182 are nonterminal and require different-Worker verification.",
+    "The predecessor exhaustive ledger was reused after exact delta reconciliation: only #254 changed eligibility after the prior checkpoint, and it is now a non-exclusive evidence/independence wait. No additional current/earlier executable target was exposed; executable depth remains 0.",
+    "Lightweight hygiene was checked only for the material test-harness delta: no runtime/workflow/payload layer was added, the polling is bounded by Playwright waitForFunction, and no new evidenced bloat finding or cleanup action was justified."
   ]
 }
