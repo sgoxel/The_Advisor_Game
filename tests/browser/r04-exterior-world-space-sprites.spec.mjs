@@ -164,7 +164,7 @@ test('activity bubbles remain screen-space feedback attached above world-space c
       authority: layout?.authority,
       spriteWidth,
       spriteHeight,
-      overlapCount: activityPairs.filter(({ box, sprite }) => rectanglesOverlap(box, sprite)).length,
+      overlapCount: activityPairs.filter(({ box, sprite }) => !(box.right <= sprite.left || box.left >= sprite.right || box.bottom <= sprite.top || box.top >= sprite.bottom)).length,
       pairCount: activityPairs.length
     };
   });
