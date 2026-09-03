@@ -160,6 +160,10 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<script src="js/autonomous_action_execution.js"><\/script>');
   document.write('<script src="js/autonomous_decision_loop.js"><\/script>');
   document.write('<script src="js/autonomous_protagonist_runtime.js"><\/script>');
+  // #237 preserves authoritative day phases but fills coarse route-index gaps with one
+  // adjacent, collision-resolved route request per authoritative minute. It retries until
+  // the existing NPCSpatial and shared terrain-routing stack is available.
+  document.write('<script src="js/npc_bounded_progress_runtime.js"><\/script>');
   document.write('<script src="js/autonomy_feedback_presentation.js"><\/script>');
   document.write('<script src="js/autonomy_feedback_runtime.js"><\/script>');
 
