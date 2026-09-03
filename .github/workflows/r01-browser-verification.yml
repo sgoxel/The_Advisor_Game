@@ -28,9 +28,11 @@ on:
       - '.github/workflows/r01-browser-verification.yml'
   workflow_dispatch:
 
+# Broad compatibility evidence follows the newest candidate on each ref.
+# Target-specific focused workflows remain available for exact intermediate candidates.
 concurrency:
-  group: verification-${{ github.workflow }}-${{ github.sha }}
-  cancel-in-progress: false
+  group: verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
