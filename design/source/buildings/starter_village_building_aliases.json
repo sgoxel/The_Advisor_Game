@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "authority": "presentation-only",
+  "presentation": "top-down-open-roof",
   "canonicalTypes": [
     "home",
     "inn",

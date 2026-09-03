@@ -10,13 +10,30 @@
     "cellSize": 256
   },
   "authority": "presentation-only",
-  "source": "Original deterministic starter-village building tile art generated for #348.",
+  "source": "Original deterministic top-down/open-roof starter-village building tile art generated for #356.",
   "composition": {
+    "view": "top-down-open-roof",
     "logicalCellOwnership": "building-only",
     "entranceSemantic": "entrance",
-    "repeatable": [
+    "northBoundary": [
+      "roof_corner_nw",
       "roof_edge_n",
-      "wall_center"
+      "roof_corner_ne",
+      "roof_ridge"
+    ],
+    "interior": [
+      "wall_center",
+      "wall_window",
+      "family_feature"
+    ],
+    "sideBoundary": [
+      "wall_edge_w",
+      "wall_edge_e"
+    ],
+    "southBoundary": [
+      "base_corner_sw",
+      "entrance",
+      "base_corner_se"
     ],
     "overhang": "none; pixels never redefine collision/footprint/occupancy"
   },
