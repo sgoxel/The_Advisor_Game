@@ -11,6 +11,7 @@ on:
       - 'js/utils.js'
       - 'tests/browser/r04-npc-bubble-layout.spec.mjs'
       - 'tests/browser/r04-npc-contextual-activity.spec.mjs'
+      - 'tests/browser/r04-npc-presentation-relevance.spec.mjs'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - '.github/workflows/r04-npc-bubble-layout-verification.yml'
   pull_request:
@@ -22,6 +23,7 @@ on:
       - 'js/utils.js'
       - 'tests/browser/r04-npc-bubble-layout.spec.mjs'
       - 'tests/browser/r04-npc-contextual-activity.spec.mjs'
+      - 'tests/browser/r04-npc-presentation-relevance.spec.mjs'
       - 'tests/browser/r04-spatial-world-100.spec.mjs'
       - '.github/workflows/r04-npc-bubble-layout-verification.yml'
   workflow_dispatch:
@@ -47,6 +49,7 @@ jobs:
           node --check js/npc_runtime_bridge.js
           node --check tests/browser/r04-npc-bubble-layout.spec.mjs
           node --check tests/browser/r04-npc-contextual-activity.spec.mjs
+          node --check tests/browser/r04-npc-presentation-relevance.spec.mjs
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -59,8 +62,8 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run dense NPC bubble and contextual activity regression
-        run: npx playwright test tests/browser/r04-npc-bubble-layout.spec.mjs tests/browser/r04-npc-contextual-activity.spec.mjs --project=desktop
+      - name: Run dense NPC bubble, relevance and contextual activity regression
+        run: npx playwright test tests/browser/r04-npc-bubble-layout.spec.mjs tests/browser/r04-npc-presentation-relevance.spec.mjs tests/browser/r04-npc-contextual-activity.spec.mjs --project=desktop
 
       - name: Preserve collision-safe NPC occupancy and shared dialogue regression
         run: npx playwright test tests/browser/r04-spatial-world-100.spec.mjs --project=desktop
