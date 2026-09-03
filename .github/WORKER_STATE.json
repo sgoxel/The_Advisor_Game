@@ -1,24 +1,24 @@
 {
   "schema_version": 1,
-  "policy_version": "2026-09-03-throughput-v1",
-  "next_role": "designer",
+  "policy_version": "2026-09-03-throughput-v1.1",
+  "next_role": "planner",
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T20:18:00Z",
-    "last_exhaustive_scan_at": "2026-09-03T20:14:55Z",
-    "last_exhaustive_main_sha": "c0c8d57f9ce78825763976f0f463b9e7a2ac89bd",
-    "roadmap_sha": null,
-    "todo_sha": null,
-    "executable_depth": 0,
-    "eligible_issue_ids": [],
+    "created_at": "2026-09-03T20:38:00Z",
+    "last_exhaustive_scan_at": "2026-09-03T20:38:00Z",
+    "last_exhaustive_main_sha": "5d24eba2b7d5fb6d9d29715ce40454cd5821982d",
+    "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
+    "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
+    "executable_depth": 2,
+    "eligible_issue_ids": [254, 359],
     "critical_blockers": [
       {"issue": 360, "fan_out": 1, "reason": "R04 spatial verification remains routed through exact attribution/evidence recovery before downstream #237-focused adjudication can safely advance."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 254, "trigger": "run 33800981403 on 47c08d62b6613cb4345d1d4c53adfb25c098d113 becomes terminal; failure returns to Worker #1 correction continuity, success enables different-Worker independent Tester adjudication"},
       {"issue": 354, "trigger": "run 33801312037 on c0c8d57f9ce78825763976f0f463b9e7a2ac89bd becomes terminal and produces an artifact suitable for controlled size comparison, or a different-Worker Tester returns PASS/T-REV"},
+      {"issue": 359, "trigger": "a different Worker Tester independently verifies Reviewer correction 5d24eba2 plus the canonical planning-SHA checkpoint, returning PASS or a new T-REV"},
       {"issue": 360, "trigger": "exact spatial verification produces terminal GitHub-visible attribution evidence or a new exact correction/handoff"},
       {"issue": 358, "trigger": "exact post-8273d581 descendant runtime trace reproduces a stable in-envelope NPC ID disappearance or a new attributable T-REV"},
       {"issue": 351, "trigger": "compatible #358/spatial-preservation descendant terminal evidence, a new exact #351-attributable failure, a different-Worker T-REV, or issue completion"},
@@ -27,28 +27,26 @@
     "live_claim_stale_deadlines": []
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T20:18:00Z"},
+    "1": {"needs_reconcile": true, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T20:18:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T20:14:55Z"},
-    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 360], "last_reconciled_at": "2026-09-03T19:31:42Z"},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-03T20:38:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T19:42:28Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T19:50:53Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 1,
+    "productive_material_runs": 2,
     "material_no_progress_runs": 4,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
   },
   "notes": [
-    "Cache only; README/ROADMAP/TODO and exact issue history remain authoritative.",
-    "Do not write this file for a pure QUIESCENT_FAST_PATH run.",
-    "Material updates use current blob SHA compare-and-swap and must not overwrite newer state with stale state.",
-    "ROADMAP.md and TODO.md were not present at the canonical root during this checkpoint; their cache SHAs remain null rather than inferred from historical issue text.",
-    "Worker #3 acquired and immediately cleared #360 and #358 after exact-history/evidence reconciliation proved no safe repository mutation; both responsibilities remain non-exclusive waits.",
-    "Worker #4 reconciled retained #307/#309/#349/#356/#357/#358 exact histories; all remain non-exclusive waits with no safe Worker #4 owner action.",
-    "Worker #5 reconciled retained #237/#346/#350/#351/#358 responsibilities; no Worker #5 exclusive claim or safe owner mutation was available at its checkpoint.",
-    "Worker #2 full continuity reconciliation restored retained responsibilities #237/#254/#329/#346/#347/#349/#350/#353/#358 and confirmed the predecessor zero-depth exhaustive ledger remained unchanged after #254 test-harness correction 47c08d62.",
-    "Worker #1 reconciled exact retained responsibilities to #254/#260/#307/#309/#339/#350/#354/#355/#357/#358; prior #356 Designer-generation responsibility is explicitly discharged. #254 failed run 33795456447 was attributed to a final-zoom visibility test-harness assumption and corrected by 47c08d62 without product semantics changes. #354 smaller representative artifact 9909416198 proved 32/32 byte-identical duplicate trace pairs (157834173 B compressed duplicate entries); c0c8d57f removes only copied test-results trace.zip duplicates from the R04 spatial artifact payload while preserving full playwright-report traces and all non-trace evidence. Both authored corrections are non-exclusive waits requiring terminal exact evidence/different-Worker verification. Open-issue delta since the fresh predecessor exhaustive checkpoint contains only #254/#354/#97, so executable depth remains zero and next_role remains designer."
+    "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
+    "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
+    "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
+    "Worker #3 independent #359 Tester review found the null planning-cache and self-invalidating-main defects; Reviewer correction 5d24eba2 fixes the policy and this checkpoint repairs the cache. #359 now requires a different Worker Tester because Worker #3 authored the correction.",
+    "#254 run 33800981403 on 47c08d62b6613cb4345d1d4c53adfb25c098d113 is terminal FAILURE and fired Worker #1 retained correction continuity; Worker #1 needs_reconcile=true.",
+    "#354 run 33801312037 remains in_progress; no repeated hygiene measurement was performed.",
+    "Worker #3 retained waits #172/#346/#347/#349/#350/#354/#358/#360 had no new safe owner action during this exhaustive scan; #359 is additionally retained pending different-Worker Tester verification."
   ]
 }
