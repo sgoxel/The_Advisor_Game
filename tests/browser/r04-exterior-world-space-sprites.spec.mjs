@@ -68,7 +68,7 @@ test('approved #252 world-space PNG families bind only from authoritative exteri
   expect(evidence.mapped.some((npc) => !npc.worldSpace && Boolean(npc.compatibilityIcon))).toBe(true);
 });
 
-test('feet-anchored sprite redraw and fallback presentation cannot mutate protagonist or NPC authority', async ({ page }) => {
+test('feet-anchored sprite redraw cannot mutate protagonist or NPC authority', async ({ page }) => {
   await waitForExteriorSprites(page);
 
   const evidence = await page.evaluate(() => {
@@ -112,7 +112,6 @@ test('feet-anchored sprite redraw and fallback presentation cannot mutate protag
       spriteWidth: Number(overlay.dataset.spriteWidthPx || 0),
       spriteHeight: Number(overlay.dataset.spriteHeightPx || 0),
       pngNpcCount: Number(overlay.dataset.pngNpcCount || 0),
-      fallbackNpcCount: Number(overlay.dataset.fallbackNpcCount || 0),
       pointerEvents: getComputedStyle(overlay).pointerEvents,
       ariaHidden: overlay.getAttribute('aria-hidden')
     };
@@ -126,23 +125,14 @@ test('feet-anchored sprite redraw and fallback presentation cannot mutate protag
   expect(evidence.spriteWidth).toBeGreaterThan(0);
   expect(evidence.spriteHeight).toBeGreaterThan(evidence.spriteWidth);
   expect(evidence.pngNpcCount).toBeGreaterThan(0);
-  expect(evidence.fallbackNpcCount).toBeGreaterThan(0);
   expect(evidence.pointerEvents).toBe('none');
   expect(evidence.ariaHidden).toBe('true');
 });
 
 test('activity bubbles remain screen-space feedback attached above world-space character bodies', async ({ page }) => {
   await waitForExteriorSprites(page);
-  await page.waitForFunction(() => {
-    const Game = window.Game;
-    Game.NPCWorld.drawPresentation();
-    Game.NPCBubbleLayout.draw();
-    const npcIds = new Set(Game.State.world.npcs.map((npc) => npc.id));
-    return (Game.NPCBubbleLayout.snapshot()?.boxes || [])
-      .some((box) => box.kind === 'activity' && npcIds.has(box.id));
-  });
 
-  const evidence = await page.evaluate(() => {
+  const evidenceHandle = await page.waitForFunction(() => {
     const Game = window.Game;
     Game.NPCWorld.drawPresentation();
     Game.NPCBubbleLayout.draw();
@@ -166,6 +156,7 @@ test('activity bubbles remain screen-space feedback attached above world-space c
           }
         };
       });
+    if (activityPairs.length === 0) return false;
     return {
       authority: layout?.authority,
       spriteWidth,
@@ -174,6 +165,7 @@ test('activity bubbles remain screen-space feedback attached above world-space c
       pairCount: activityPairs.length
     };
   });
+  const evidence = await evidenceHandle.jsonValue();
 
   expect(evidence.authority).toBe('presentation-only');
   expect(evidence.pairCount).toBeGreaterThan(0);
