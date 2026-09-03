@@ -128,6 +128,8 @@ for (const viewport of [
         asset: Game.NPCWorld.worldIconAssetFor(npc)
       }));
       const before = snapshot();
+      const initialVisible = Number(overlay.dataset.visibleNpcCount || 0);
+      const initialPng = Number(overlay.dataset.pngNpcCount || 0);
       const originalZoom = Number(Game.State.camera.zoom);
       const player = Game.State.world.player;
       const npc = Game.State.world.npcs[0];
@@ -156,8 +158,6 @@ for (const viewport of [
       const pointerEvents = getComputedStyle(overlay).pointerEvents;
       const ariaHidden = overlay.getAttribute('aria-hidden');
       const rect = overlay.getBoundingClientRect().toJSON();
-      const visible = Number(overlay.dataset.visibleNpcCount || 0);
-      const png = Number(overlay.dataset.pngNpcCount || 0);
 
       Game.State.camera.zoom = originalZoom;
       Game.NPCWorld.drawPresentation();
@@ -170,15 +170,15 @@ for (const viewport of [
         pointerEvents,
         ariaHidden,
         rect,
-        visible,
-        png
+        initialVisible,
+        initialPng
       };
     });
 
     expect(evidence.rect.width).toBeGreaterThan(100);
     expect(evidence.rect.height).toBeGreaterThan(100);
-    expect(evidence.visible).toBeGreaterThan(0);
-    expect(evidence.png).toBeGreaterThan(0);
+    expect(evidence.initialVisible).toBeGreaterThan(0);
+    expect(evidence.initialPng).toBeGreaterThan(0);
 
     const iconSizes = evidence.samples.map((sample) => sample.iconSize);
     const spriteWidths = evidence.samples.map((sample) => sample.spriteWidth);
