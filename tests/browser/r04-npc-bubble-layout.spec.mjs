@@ -189,7 +189,7 @@ for (const viewport of [
     expect(evidence.layout.authority, diagnostic).toBe('presentation-only');
     expect(evidence.layout.overlapCount, diagnostic).toBe(0);
     expect(evidence.dataset.overlapCount, diagnostic).toBe(0);
-    expect(evidence.dataset.version, diagnostic).toBe('r04-npc-activity-bubble-layout-v1');
+    expect(evidence.dataset.version, diagnostic).toBe('r04-npc-activity-bubble-layout-v2-relevance-cull');
     expect(evidence.dataset.authority, diagnostic).toBe('presentation-only');
     expect(evidence.pointerEvents, diagnostic).toBe('none');
     expect(evidence.populationCount, diagnostic).toBeGreaterThanOrEqual(20);
