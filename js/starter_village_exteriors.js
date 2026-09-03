@@ -1,16 +1,17 @@
 /*
-  R04 / #244 + #329 + #349: presentation-only starter-village exteriors.
+  R04 / #244 + #329 + #349 + #357: presentation-only starter-village exteriors.
   Placement/type/footprint/entrance remain Simulation authority.
-  Normal rendering uses cached semantic raster tiles; vectors are loading/error fallback only.
+  Fixed building pixels are composed once into the cached world background;
+  the screen-space canvas is retained only as a bounded loading/error fallback.
 */
 (function installStarterVillageExteriors() {
   'use strict';
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-starter-village-exteriors-v6-semantic-mosaic';
+  const VERSION = 'r04-starter-village-exteriors-v7-background-composition';
   const MODE = 'authoritative-building-silhouettes';
-  const RENDER_BACKEND = 'semantic-raster-building-tiles';
-  const COMPOSITION_MODE = 'screen-space-semantic-mosaic';
+  const RENDER_BACKEND = 'world-background-building-composition';
+  const COMPOSITION_MODE = 'world-background-static-composition';
   const TILE_SIZE = 256;
   const TILE_TYPES = Object.freeze([
     'roof_corner_nw','roof_edge_n','roof_corner_ne','roof_ridge',
@@ -46,6 +47,10 @@
   let registryLoadStarted = false;
   let registryError = null;
   let redrawQueued = false;
+  let refreshQueued = false;
+  let composedCanvas = null;
+  let composedSignature = '';
+  let compositionStats = { buildings:0, cells:0, backgroundWidth:0, backgroundHeight:0, signature:'' };
   const imageCache = new Map();
 
   function canonicalFamily(building) {
@@ -68,7 +73,7 @@
     overlayCanvas.id = 'starterVillageExteriorOverlay';
     overlayCanvas.setAttribute('aria-hidden','true');
     overlayCanvas.tabIndex = -1;
-    Object.assign(overlayCanvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',zIndex:'1'});
+    Object.assign(overlayCanvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',zIndex:'1',display:'none'});
     host.appendChild(overlayCanvas);
     return overlayCanvas;
   }
@@ -118,6 +123,16 @@
     if(redrawQueued)return;
     redrawQueued=true;
     requestAnimationFrame(()=>{redrawQueued=false;drawPresentation();});
+  }
+
+  function queueWorldRefresh() {
+    if(refreshQueued)return;
+    refreshQueued=true;
+    requestAnimationFrame(()=>{
+      refreshQueued=false;
+      const renderer=Game.Renderer;
+      if(renderer&&typeof renderer.renderWorld==='function')renderer.renderWorld(true);
+    });
   }
 
   function ensureRegistry() {
@@ -224,36 +239,55 @@
     return{minX:b.minX,minY:b.minY,maxX:b.maxX,maxY:b.maxY,width:spanX,height:spanY,cellWidth:spanX/plan.width,cellHeight:spanY/plan.height};
   }
 
-  function rasterCellRect(envelope,cell) {
-    return{x:envelope.minX+cell.localCol*envelope.cellWidth,y:envelope.minY+cell.localRow*envelope.cellHeight,width:envelope.cellWidth,height:envelope.cellHeight};
+  function backgroundCellRect(cell,background) {
+    const rows=Math.max(1,Number(Game.State?.world?.rows)||1),cols=Math.max(1,Number(Game.State?.world?.cols)||1);
+    const cellWidth=background.width/cols,cellHeight=background.height/rows;
+    return{x:cell.col*cellWidth,y:cell.row*cellHeight,width:cellWidth,height:cellHeight};
   }
 
-  function drawRasterCell(ctx,image,envelope,cell,width,height) {
-    const rect=rasterCellRect(envelope,cell);
-    if(![rect.x,rect.y,rect.width,rect.height].every(Number.isFinite)||rect.width<=0||rect.height<=0)return false;
-    if(rect.x+rect.width<-36||rect.y+rect.height<-48||rect.x>width+36||rect.y>height+48)return false;
+  function buildingSignature(buildings,background) {
+    const identity=buildings.map(b=>{
+      const f=b?.footprint||{},e=b?.entrance||{};
+      return [b?.id,b?.type,f.row,f.col,f.height,f.width,e.row,e.col].join(':');
+    }).join('|');
+    return `${background.width}x${background.height}:${identity}`;
+  }
+
+  function composeStaticBuildings() {
+    const render=Game.State?.render,background=render?.worldBackgroundCanvas,buildings=Game.State?.world?.originVillage?.buildings;
+    if(!background||!Array.isArray(buildings)||!registry)return{ready:false,state:'loading',buildings:0,cells:0};
+    const plans=[];
+    for(const building of buildings){
+      const plan=rasterPlan(building);
+      if(!plan)continue;
+      const state=imageStateForPlan(plan);
+      if(state!=='ready')return{ready:false,state,buildings:0,cells:0};
+      plans.push(plan);
+    }
+    const signature=buildingSignature(buildings,background);
+    if(composedCanvas===background&&composedSignature===signature)return{ready:true,state:'ready',...compositionStats,cached:true};
+    const ctx=background.getContext('2d');
+    if(!ctx)return{ready:false,state:'error',buildings:0,cells:0};
+    let cellCount=0;
     ctx.save();
     ctx.imageSmoothingEnabled=false;
-    ctx.beginPath();ctx.rect(rect.x,rect.y,rect.width,rect.height);ctx.clip();
-    ctx.drawImage(image,0,0,TILE_SIZE,TILE_SIZE,rect.x,rect.y,rect.width,rect.height);
+    for(const plan of plans){
+      for(const cell of plan.cells){
+        const image=ensureImage(plan.family,cell.type);
+        if(!image)continue;
+        const rect=backgroundCellRect(cell,background);
+        ctx.drawImage(image,0,0,TILE_SIZE,TILE_SIZE,rect.x,rect.y,rect.width,rect.height);
+        cellCount+=1;
+      }
+    }
     ctx.restore();
-    return true;
-  }
-
-  function drawRasterBuilding(ctx,building,width,height) {
-    const footprint=footprintPolygon(building.footprint,width,height);
-    if(!footprint)return{drawn:false,state:'guarded'};
-    const fb=bounds(footprint);
-    if(fb.maxX<-36||fb.maxY<-48||fb.minX>width+36||fb.minY>height+48)return{drawn:false,state:'offscreen'};
-    const plan=rasterPlan(building);
-    if(!plan)return{drawn:false,state:'unsupported'};
-    const state=imageStateForPlan(plan);
-    if(state!=='ready')return{drawn:false,state};
-    const envelope=presentationEnvelope(footprint,plan);
-    if(!envelope)return{drawn:false,state:'guarded'};
-    let cells=0;
-    for(const cell of plan.cells){const image=ensureImage(plan.family,cell.type);if(image&&drawRasterCell(ctx,image,envelope,cell,width,height))cells+=1;}
-    return{drawn:cells>0,state:'ready',cells,family:plan.family,envelope};
+    composedCanvas=background;
+    composedSignature=signature;
+    compositionStats={buildings:plans.length,cells:cellCount,backgroundWidth:background.width,backgroundHeight:background.height,signature};
+    render.needsBackgroundUpload=true;
+    render.backgroundTextureReady=false;
+    queueWorldRefresh();
+    return{ready:true,state:'ready',...compositionStats,cached:false};
   }
 
   function drawVectorFallback(ctx,building,width,height) {
@@ -277,7 +311,7 @@
     const canvas=overlayCanvas,width=Math.max(1,canvas?.clientWidth||Game.State?.dom?.canvas?.clientWidth||1),height=Math.max(1,canvas?.clientHeight||Game.State?.dom?.canvas?.clientHeight||1);
     return buildings.map(b=>{
       const s=styleFor(b),plan=rasterPlan(b),footprint=plan?footprintPolygon(b.footprint,width,height):null,envelope=footprint?presentationEnvelope(footprint,plan):null;
-      return{id:b.id,type:b.type,family:s.family,cue:s.cue,tileFamily:plan?.family||null,tileTypes:plan?[...new Set(plan.cells.map(x=>x.type))].sort():[],cells:plan?plan.cells.map(x=>({localRow:x.localRow,localCol:x.localCol,type:x.type})):[],door:plan?.door?{...plan.door}:null,compositionMode:COMPOSITION_MODE,screenEnvelope:envelope?{minX:envelope.minX,minY:envelope.minY,maxX:envelope.maxX,maxY:envelope.maxY,cellWidth:envelope.cellWidth,cellHeight:envelope.cellHeight}:null,footprint:b.footprint?{...b.footprint}:null,entrance:b.entrance?{...b.entrance}:null};
+      return{id:b.id,type:b.type,family:s.family,cue:s.cue,tileFamily:plan?.family||null,tileTypes:plan?[...new Set(plan.cells.map(x=>x.type))].sort():[],cells:plan?plan.cells.map(x=>({row:x.row,col:x.col,localRow:x.localRow,localCol:x.localCol,type:x.type})):[],door:plan?.door?{...plan.door}:null,compositionMode:COMPOSITION_MODE,screenEnvelope:envelope?{minX:envelope.minX,minY:envelope.minY,maxX:envelope.maxX,maxY:envelope.maxY,cellWidth:envelope.cellWidth,cellHeight:envelope.cellHeight}:null,footprint:b.footprint?{...b.footprint}:null,entrance:b.entrance?{...b.entrance}:null};
     });
   }
 
@@ -292,6 +326,8 @@
     return{registryReady:Boolean(registry),registryError,entries,ready:entries.filter(x=>x.state==='ready').length,loading:entries.filter(x=>x.state==='loading').length,error:entries.filter(x=>x.state==='error').length};
   }
 
+  function snapshotComposition(){return{...compositionStats,backend:RENDER_BACKEND,compositionMode:COMPOSITION_MODE,overlayVisible:overlayCanvas?.style?.display!=='none'};}
+
   function drawPresentation() {
     ensureRegistry();primeCurrentFamilies();
     const canvas=ensureOverlay(),buildings=Game.State?.world?.originVillage?.buildings;
@@ -303,11 +339,13 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);
 
     rejectedProjectionCount=0;
-    let visible=0,rasterBuildings=0,fallbackBuildings=0,rasterCells=0;const types=new Set(),tileFamilies=new Set();
-    for(const building of buildings){
-      const raster=drawRasterBuilding(ctx,building,width,height);
-      if(raster.drawn){visible+=1;rasterBuildings+=1;rasterCells+=raster.cells||0;types.add(String(building.type||'unknown'));if(raster.family)tileFamilies.add(raster.family);continue;}
-      if(drawVectorFallback(ctx,building,width,height)){visible+=1;fallbackBuildings+=1;types.add(String(building.type||'unknown'));}
+    const composition=composeStaticBuildings();
+    let fallbackBuildings=0;
+    if(composition.ready){
+      canvas.style.display='none';
+    }else{
+      canvas.style.display='block';
+      for(const building of buildings)if(drawVectorFallback(ctx,building,width,height))fallbackBuildings+=1;
     }
 
     const coverage=snapshotPlaceholderCoverage(),fully=coverage.filter(x=>x.total>0&&x.settlement===x.total).length;
@@ -315,10 +353,11 @@
     const cache=snapshotTileCache();
     const assetState=registryError?'error':(!registry||cache.loading>0?'loading':(cache.error>0?'degraded':'ready'));
     Object.assign(canvas.dataset,{
-      buildingCount:String(buildings.length),visibleBuildingCount:String(visible),visibleBuildingTypes:Array.from(types).sort().join(','),visualFamilies:Array.from(families).sort().join(','),
+      buildingCount:String(buildings.length),visibleBuildingCount:String(composition.ready?composition.buildings:fallbackBuildings),visualFamilies:Array.from(families).sort().join(','),
       presentationAuthority:'presentation-only',descriptorSource:'originVillage.buildings',regionSize:String(Game.State?.world?.rows||0),presentationMode:MODE,placeholderMode:'none',rectangleOverlay:'disabled',
       fullyStoneCoveredBuildings:String(fully),stoneCoveredTiles:String(covered),footprintTiles:String(total),projectionGuard:'bounded-footprint',rejectedProjectionCount:String(rejectedProjectionCount),
-      renderBackend:RENDER_BACKEND,compositionMode:COMPOSITION_MODE,tileAssetState:assetState,rasterBuildingCount:String(rasterBuildings),vectorFallbackBuildingCount:String(fallbackBuildings),rasterCellCount:String(rasterCells),tileFamilies:Array.from(tileFamilies).sort().join(','),tileCacheReady:String(cache.ready),tileCacheError:String(cache.error)
+      renderBackend:RENDER_BACKEND,compositionMode:COMPOSITION_MODE,tileAssetState:assetState,rasterBuildingCount:String(composition.ready?composition.buildings:0),vectorFallbackBuildingCount:String(fallbackBuildings),rasterCellCount:String(composition.ready?composition.cells:0),tileCacheReady:String(cache.ready),tileCacheError:String(cache.error),
+      baseComposedBuildingCount:String(composition.ready?composition.buildings:0),baseComposedCellCount:String(composition.ready?composition.cells:0),screenOverlayDrawCount:String(fallbackBuildings)
     });
     return true;
   }
@@ -336,7 +375,7 @@
 
   Game.StarterVillageExteriors=Object.freeze({
     version:VERSION,authority:'presentation-only',descriptorSource:'originVillage.buildings',presentationMode:MODE,renderBackend:RENDER_BACKEND,compositionMode:COMPOSITION_MODE,
-    snapshotDescriptors,snapshotPresentationPlan,snapshotPlaceholderCoverage,snapshotTileCache,safeFootprint,ensureOverlay,drawPresentation,detachPresentation
+    snapshotDescriptors,snapshotPresentationPlan,snapshotPlaceholderCoverage,snapshotTileCache,snapshotComposition,safeFootprint,ensureOverlay,drawPresentation,detachPresentation
   });
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize);else initialize();
