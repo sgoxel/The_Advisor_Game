@@ -1,5 +1,5 @@
 /*
-  R04 / #275: presentation-only dense NPC activity/dialogue bubble layout.
+  R04 / #275 + #358: presentation-only dense NPC activity/dialogue bubble layout.
 
   This module never changes NPC positions, schedules, dialogue state, occupancy or
   Simulation truth. It suppresses the legacy bubble pass while the world renderer
@@ -10,9 +10,10 @@
 (function installNpcActivityBubbleLayout() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-activity-bubble-layout-v1';
+  const VERSION = 'r04-npc-activity-bubble-layout-v2-relevance-cull';
   const BUBBLE_HEIGHT = 18;
   const VIEWPORT_MARGIN = 6;
+  const RELEVANCE_MARGIN = 48;
   const RECT_GAP = 3;
   let attempts = 0;
   let installed = false;
@@ -89,6 +90,15 @@
     return { x, y };
   }
 
+  function isRelevantPoint(point, viewportWidth, viewportHeight) {
+    return Boolean(
+      point &&
+      Number.isFinite(point.x) && Number.isFinite(point.y) &&
+      point.x >= -RELEVANCE_MARGIN && point.x <= viewportWidth + RELEVANCE_MARGIN &&
+      point.y >= -RELEVANCE_MARGIN && point.y <= viewportHeight + RELEVANCE_MARGIN
+    );
+  }
+
   function maxActivityBubbles(viewportWidth) {
     if (viewportWidth <= 480) return 7;
     if (viewportWidth <= 900) return 12;
@@ -115,19 +125,21 @@
     ];
   }
 
-  function protectedIconRects(basePoints, viewportWidth) {
+  function protectedIconRects(basePoints, viewportWidth, viewportHeight) {
     const worldSpaceScale = typeof Game.NPCWorld?.resolveWorldSpaceScale === 'function'
       ? Game.NPCWorld.resolveWorldSpaceScale(viewportWidth)
       : null;
     const halfWidth = Math.max(12, Number(worldSpaceScale?.width || 0) / 2 || 12);
     const height = Math.max(34, Number(worldSpaceScale?.height || 0) || 34);
-    return Array.from(basePoints.values()).map((entry) => ({
-      id: entry.id,
-      left: entry.x - halfWidth,
-      right: entry.x + halfWidth,
-      top: entry.y - height,
-      bottom: entry.y + 8
-    }));
+    return Array.from(basePoints.values())
+      .filter((entry) => isRelevantPoint(entry, viewportWidth, viewportHeight))
+      .map((entry) => ({
+        id: entry.id,
+        left: entry.x - halfWidth,
+        right: entry.x + halfWidth,
+        top: entry.y - height,
+        bottom: entry.y + 8
+      }));
   }
 
   function slotFor(candidate, occupied, protectedIcons, viewportWidth, viewportHeight) {
@@ -161,17 +173,29 @@
       });
     }
 
-    const protectedIcons = protectedIconRects(basePoints, viewportWidth).filter((entry) => Number.isFinite(entry.left) && Number.isFinite(entry.top));
+    const protectedIcons = protectedIconRects(basePoints, viewportWidth, viewportHeight);
     const adjustments = new Map();
     const occupied = [];
     const boxes = [];
     const pairedIds = new Set();
     const suppressedIds = [];
+    const culledIds = [];
+    const cullReasons = {};
+
+    for (const entry of basePoints.values()) {
+      if (isRelevantPoint(entry, viewportWidth, viewportHeight)) continue;
+      adjustments.set(pointKey(entry.npc.row, entry.npc.col), { x: NaN, y: NaN, suppressed: true });
+      culledIds.push(entry.id);
+      cullReasons[entry.id] = 'outside-viewport-relevance-envelope';
+    }
 
     const dialogue = (world?.npcDialogues || []).find((entry) => {
       const a = npcs.find((npc) => npc.id === entry.speakerId);
       const b = npcs.find((npc) => npc.id === entry.listenerId);
-      return Boolean(a && b);
+      if (!a || !b) return false;
+      const pa = basePoints.get(pointKey(a.row, a.col));
+      const pb = basePoints.get(pointKey(b.row, b.col));
+      return isRelevantPoint(pa, viewportWidth, viewportHeight) && isRelevantPoint(pb, viewportWidth, viewportHeight);
     }) || null;
 
     if (dialogue) {
@@ -204,7 +228,7 @@
 
     const activities = npcs
       .map((npc, index) => ({ npc, index, point: basePoints.get(pointKey(npc.row, npc.col)) }))
-      .filter((entry) => !pairedIds.has(entry.npc.id) && entry.point && Number.isFinite(entry.point.x) && Number.isFinite(entry.point.y))
+      .filter((entry) => !pairedIds.has(entry.npc.id) && isRelevantPoint(entry.point, viewportWidth, viewportHeight))
       .sort((a, b) => activityPriority(b.npc) - activityPriority(a.npc) || a.point.y - b.point.y || String(a.npc.id).localeCompare(String(b.npc.id)));
 
     const maximum = maxActivityBubbles(viewportWidth);
@@ -256,6 +280,8 @@
       baseGridToScreen,
       boxes,
       suppressedIds,
+      culledIds,
+      cullReasons,
       viewport: { width: viewportWidth, height: viewportHeight },
       maximumActivityBubbles: maximum,
       overlapCount,
@@ -303,6 +329,7 @@
 
       canvas.dataset.bubbleLayoutVersion = VERSION;
       canvas.dataset.activityBubbleSuppressedCount = String(layout.suppressedIds.length);
+      canvas.dataset.activityBubbleCulledCount = String(layout.culledIds.length);
       canvas.dataset.bubbleLayoutOverlapCount = String(layout.overlapCount);
       canvas.dataset.bubbleLayoutMaxActivity = String(layout.maximumActivityBubbles);
       lastLayout = {
@@ -310,6 +337,8 @@
         authority: 'presentation-only',
         boxes: layout.boxes,
         suppressedIds: layout.suppressedIds,
+        culledIds: layout.culledIds,
+        cullReasons: layout.cullReasons,
         viewport: layout.viewport,
         overlapCount: layout.overlapCount,
         maximumActivityBubbles: layout.maximumActivityBubbles,
