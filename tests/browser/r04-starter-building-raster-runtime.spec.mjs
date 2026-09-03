@@ -4,20 +4,21 @@ async function ready(page) {
   await page.goto('./');
   await page.waitForFunction(() => Boolean(
     window.Game?.StarterVillageExteriors?.drawPresentation &&
+    window.Game?.StarterVillageExteriors?.snapshotComposition &&
     Array.isArray(window.Game?.State?.world?.originVillage?.buildings) &&
     window.Game.State.world.originVillage.buildings.length >= 20
   ), null, { timeout: 20_000 });
   await page.waitForFunction(() => {
     const overlay = document.getElementById('starterVillageExteriorOverlay');
     window.Game?.StarterVillageExteriors?.drawPresentation?.();
-    return overlay?.dataset.tileAssetState === 'ready' && Number(overlay.dataset.rasterBuildingCount || 0) > 0;
+    return overlay?.dataset.tileAssetState === 'ready' && Number(overlay.dataset.baseComposedBuildingCount || 0) > 0;
   }, null, { timeout: 20_000 });
 }
 
 function assertSemanticGrammar(item) {
   const h = Number(item.footprint?.height || 0);
   const w = Number(item.footprint?.width || 0);
-  expect(item.compositionMode).toBe('screen-space-semantic-mosaic');
+  expect(item.compositionMode).toBe('world-background-static-composition');
   expect(item.cells.length, `cell count for ${item.id}`).toBe(h * w);
 
   if (item.tileFamily === 'well') return;
@@ -44,7 +45,7 @@ function assertScreenEnvelope(item) {
   expect(item.screenEnvelope.cellHeight, `cell height for ${item.id}`).toBeGreaterThan(0);
 }
 
-test('starter village uses cached semantic building mosaics without normal vector fallback', async ({ page }) => {
+test('starter village composes fixed semantic building pixels into the cached world background', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(() => {
     const G = window.Game;
@@ -54,90 +55,122 @@ test('starter village uses cached semantic building mosaics without normal vecto
     const overlay = document.getElementById('starterVillageExteriorOverlay');
     const plan = G.StarterVillageExteriors.snapshotPresentationPlan();
     const cache = G.StarterVillageExteriors.snapshotTileCache();
+    const composition = G.StarterVillageExteriors.snapshotComposition();
     return {
       authoritativeBefore,
       authoritativeAfter: JSON.stringify(village.buildings),
       backend: overlay?.dataset.renderBackend,
       compositionMode: overlay?.dataset.compositionMode,
       assetState: overlay?.dataset.tileAssetState,
-      rasterBuildings: Number(overlay?.dataset.rasterBuildingCount || 0),
+      baseComposedBuildings: Number(overlay?.dataset.baseComposedBuildingCount || 0),
+      baseComposedCells: Number(overlay?.dataset.baseComposedCellCount || 0),
+      screenOverlayDraws: Number(overlay?.dataset.screenOverlayDrawCount || 0),
       fallbackBuildings: Number(overlay?.dataset.vectorFallbackBuildingCount || 0),
-      rasterCells: Number(overlay?.dataset.rasterCellCount || 0),
+      overlayDisplay: overlay?.style.display,
       cacheReady: cache.ready,
       cacheError: cache.error,
-      renderedTileFamilies: String(overlay?.dataset.tileFamilies || '').split(',').filter(Boolean),
-      authoritativeTileFamilies: [...new Set(plan.map((entry) => entry.tileFamily).filter(Boolean))],
+      composition,
       plan
     };
   });
 
   expect(evidence.authoritativeAfter).toBe(evidence.authoritativeBefore);
-  expect(evidence.backend).toBe('semantic-raster-building-tiles');
-  expect(evidence.compositionMode).toBe('screen-space-semantic-mosaic');
+  expect(evidence.backend).toBe('world-background-building-composition');
+  expect(evidence.compositionMode).toBe('world-background-static-composition');
   expect(evidence.assetState).toBe('ready');
-  expect(evidence.rasterBuildings).toBeGreaterThan(0);
+  expect(evidence.baseComposedBuildings).toBeGreaterThan(0);
+  expect(evidence.baseComposedCells).toBeGreaterThan(evidence.baseComposedBuildings);
+  expect(evidence.screenOverlayDraws).toBe(0);
   expect(evidence.fallbackBuildings).toBe(0);
-  expect(evidence.rasterCells).toBeGreaterThan(evidence.rasterBuildings);
+  expect(evidence.overlayDisplay).toBe('none');
   expect(evidence.cacheError).toBe(0);
   expect(evidence.cacheReady).toBeGreaterThanOrEqual(120);
-  expect(evidence.authoritativeTileFamilies).toEqual(expect.arrayContaining(['home','inn','village_hall','smithy','farmstead']));
-  expect(evidence.renderedTileFamilies.length).toBeGreaterThan(0);
-  for (const family of evidence.renderedTileFamilies) expect(evidence.authoritativeTileFamilies).toContain(family);
+  expect(evidence.composition.backgroundWidth).toBeGreaterThan(0);
+  expect(evidence.composition.backgroundHeight).toBeGreaterThan(0);
+  expect(evidence.composition.cells).toBe(evidence.baseComposedCells);
 
   const semanticPlans = evidence.plan.filter((entry) => entry.tileFamily);
   for (const item of semanticPlans) assertSemanticGrammar(item);
 
-  // Projection acceptance/rejection belongs to canonical #329. This #349 verifier
-  // validates envelopes only for plans the projection guard actually accepted,
-  // while the rendered counters above ensure the runtime still draws mosaics.
   const projectedPlans = semanticPlans.filter((entry) => entry.screenEnvelope);
   expect(projectedPlans.length).toBeGreaterThan(0);
   for (const item of projectedPlans) assertScreenEnvelope(item);
 });
 
-test('representative semantic mosaic has visible roof wall and base pixel bands', async ({ page }) => {
+test('representative roof wall and base semantics are baked into world-background pixels', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(() => {
     const G = window.Game;
     G.StarterVillageExteriors.drawPresentation();
-    const overlay = document.getElementById('starterVillageExteriorOverlay');
     const plan = G.StarterVillageExteriors.snapshotPresentationPlan();
-    const width = overlay?.clientWidth || 0;
-    const height = overlay?.clientHeight || 0;
-    const item = plan.find((entry) => entry.tileFamily !== 'well' && Number(entry.footprint?.height) >= 3 && Number(entry.footprint?.width) >= 3 && entry.screenEnvelope && entry.screenEnvelope.maxX > 0 && entry.screenEnvelope.maxY > 0 && entry.screenEnvelope.minX < width && entry.screenEnvelope.minY < height);
-    if (!overlay || !item) return null;
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const env = item.screenEnvelope;
-    const x0 = Math.max(0, Math.floor(env.minX * dpr));
-    const y0 = Math.max(0, Math.floor(env.minY * dpr));
-    const x1 = Math.min(overlay.width, Math.ceil(env.maxX * dpr));
-    const y1 = Math.min(overlay.height, Math.ceil(env.maxY * dpr));
-    const ctx = overlay.getContext('2d');
-    const data = ctx.getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
-    const bands = [new Set(), new Set(), new Set()];
-    const alpha = [0, 0, 0];
-    for (let y = 0; y < data.height; y += 1) {
-      const band = Math.min(2, Math.floor((y / Math.max(1, data.height)) * 3));
-      for (let x = 0; x < data.width; x += 1) {
-        const i = (y * data.width + x) * 4;
-        if (data.data[i + 3] < 24) continue;
-        alpha[band] += 1;
-        bands[band].add(`${data.data[i] >> 4}:${data.data[i + 1] >> 4}:${data.data[i + 2] >> 4}`);
-      }
-    }
-    return { id:item.id, type:item.type, alpha, colors:bands.map((band) => band.size), cells:item.cells, envelope:env };
+    const background = G.State.render.worldBackgroundCanvas;
+    const rows = G.State.world.rows;
+    const cols = G.State.world.cols;
+    const item = plan.find((entry) => entry.tileFamily !== 'well' && Number(entry.footprint?.height) >= 3 && Number(entry.footprint?.width) >= 3);
+    if (!background || !item) return null;
+    const ctx = background.getContext('2d');
+    const cw = background.width / cols;
+    const ch = background.height / rows;
+    const picks = [
+      item.cells.find((cell) => cell.type.startsWith('roof_')),
+      item.cells.find((cell) => cell.type.startsWith('wall_') || cell.type === 'family_feature'),
+      item.cells.find((cell) => cell.type.startsWith('base_') || cell.type === 'entrance')
+    ];
+    const samples = picks.map((cell) => {
+      if (!cell) return null;
+      const x = Math.max(0, Math.min(background.width - 1, Math.floor((cell.col + 0.5) * cw)));
+      const y = Math.max(0, Math.min(background.height - 1, Math.floor((cell.row + 0.5) * ch)));
+      const pixel = [...ctx.getImageData(x, y, 1, 1).data];
+      return { type: cell.type, row: cell.row, col: cell.col, pixel };
+    });
+    return { id:item.id, samples, background:{width:background.width,height:background.height} };
   });
 
   expect(evidence).toBeTruthy();
-  expect(evidence.alpha[0], `${evidence.id} roof-band pixels`).toBeGreaterThan(0);
-  expect(evidence.alpha[1], `${evidence.id} wall-band pixels`).toBeGreaterThan(0);
-  expect(evidence.alpha[2], `${evidence.id} base-band pixels`).toBeGreaterThan(0);
-  expect(evidence.colors[0], `${evidence.id} roof-band color diversity`).toBeGreaterThan(1);
-  expect(evidence.colors[1], `${evidence.id} wall-band color diversity`).toBeGreaterThan(1);
-  expect(evidence.colors[2], `${evidence.id} base-band color diversity`).toBeGreaterThan(1);
+  expect(evidence.background.width).toBeGreaterThan(0);
+  expect(evidence.background.height).toBeGreaterThan(0);
+  expect(evidence.samples.every(Boolean)).toBe(true);
+  for (const sample of evidence.samples) expect(sample.pixel[3], `${sample.type} alpha`).toBeGreaterThan(0);
+  const rgb = evidence.samples.map((sample) => sample.pixel.slice(0, 3).join(':'));
+  expect(new Set(rgb).size, `${evidence.id} baked semantic pixel diversity`).toBeGreaterThan(1);
 });
 
-test('semantic raster buildings stay bounded around the implicated zoom neighborhood', async ({ page }) => {
+test('repeated presentation calls reuse base composition and keep the screen overlay at zero draw cost', async ({ page }) => {
+  await ready(page);
+  const evidence = await page.evaluate(() => {
+    const G = window.Game;
+    const overlay = document.getElementById('starterVillageExteriorOverlay');
+    const authoritativeBefore = JSON.stringify(G.State.world.originVillage.buildings);
+    const compositionBefore = G.StarterVillageExteriors.snapshotComposition();
+    const backgroundBefore = G.State.render.worldBackgroundCanvas;
+    const started = performance.now();
+    for (let i = 0; i < 25; i += 1) G.StarterVillageExteriors.drawPresentation();
+    const elapsedMs = performance.now() - started;
+    const compositionAfter = G.StarterVillageExteriors.snapshotComposition();
+    return {
+      authoritativeBefore,
+      authoritativeAfter: JSON.stringify(G.State.world.originVillage.buildings),
+      sameBackgroundObject: backgroundBefore === G.State.render.worldBackgroundCanvas,
+      beforeSignature: compositionBefore.signature,
+      afterSignature: compositionAfter.signature,
+      cells: compositionAfter.cells,
+      screenOverlayDraws: Number(overlay?.dataset.screenOverlayDrawCount || 0),
+      overlayDisplay: overlay?.style.display,
+      elapsedMs
+    };
+  });
+
+  expect(evidence.authoritativeAfter).toBe(evidence.authoritativeBefore);
+  expect(evidence.sameBackgroundObject).toBe(true);
+  expect(evidence.beforeSignature).toBeTruthy();
+  expect(evidence.afterSignature).toBe(evidence.beforeSignature);
+  expect(evidence.cells).toBeGreaterThan(0);
+  expect(evidence.screenOverlayDraws).toBe(0);
+  expect(evidence.overlayDisplay).toBe('none');
+  expect(evidence.elapsedMs).toBeLessThan(250);
+});
+
+test('base-composed buildings stay bounded around the implicated zoom neighborhood', async ({ page }) => {
   await ready(page);
   const evidence = await page.evaluate(async () => {
     const G = window.Game;
@@ -149,15 +182,18 @@ test('semantic raster buildings stay bounded around the implicated zoom neighbor
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const overlay = document.getElementById('starterVillageExteriorOverlay');
       const plans = G.StarterVillageExteriors.snapshotPresentationPlan().filter((entry) => entry.screenEnvelope);
+      const composition = G.StarterVillageExteriors.snapshotComposition();
       samples.push({
         zoom,
         assetState: overlay?.dataset.tileAssetState,
         compositionMode: overlay?.dataset.compositionMode,
         fallback: Number(overlay?.dataset.vectorFallbackBuildingCount || 0),
-        rejected: Number(overlay?.dataset.rejectedProjectionCount || 0),
-        rasterCells: Number(overlay?.dataset.rasterCellCount || 0),
-        width: overlay?.width || 0,
-        height: overlay?.height || 0,
+        screenOverlayDraws: Number(overlay?.dataset.screenOverlayDrawCount || 0),
+        baseComposedBuildings: Number(overlay?.dataset.baseComposedBuildingCount || 0),
+        baseComposedCells: Number(overlay?.dataset.baseComposedCellCount || 0),
+        overlayDisplay: overlay?.style.display,
+        backgroundWidth: composition.backgroundWidth,
+        backgroundHeight: composition.backgroundHeight,
         invalidEnvelope: plans.some((entry) => !Number.isFinite(entry.screenEnvelope.minX) || !Number.isFinite(entry.screenEnvelope.minY) || entry.screenEnvelope.maxX < entry.screenEnvelope.minX || entry.screenEnvelope.maxY < entry.screenEnvelope.minY)
       });
     }
@@ -167,11 +203,14 @@ test('semantic raster buildings stay bounded around the implicated zoom neighbor
   expect(evidence.after).toBe(evidence.before);
   for (const sample of evidence.samples) {
     expect(sample.assetState).toBe('ready');
-    expect(sample.compositionMode).toBe('screen-space-semantic-mosaic');
+    expect(sample.compositionMode).toBe('world-background-static-composition');
     expect(sample.fallback).toBe(0);
-    expect(sample.rasterCells).toBeGreaterThan(0);
-    expect(sample.width).toBeGreaterThan(100);
-    expect(sample.height).toBeGreaterThan(100);
+    expect(sample.screenOverlayDraws).toBe(0);
+    expect(sample.baseComposedBuildings).toBeGreaterThan(0);
+    expect(sample.baseComposedCells).toBeGreaterThan(sample.baseComposedBuildings);
+    expect(sample.overlayDisplay).toBe('none');
+    expect(sample.backgroundWidth).toBeGreaterThan(100);
+    expect(sample.backgroundHeight).toBeGreaterThan(100);
     expect(sample.invalidEnvelope).toBe(false);
   }
 });
