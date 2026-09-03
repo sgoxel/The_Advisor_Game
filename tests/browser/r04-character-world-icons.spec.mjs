@@ -11,6 +11,27 @@ async function waitForNpcWorld(page) {
   ));
 }
 
+async function waitForVisibleNpcPngSnapshot(page) {
+  const handle = await page.waitForFunction(() => {
+    const overlay = document.getElementById('npcWorldOverlay');
+    if (!overlay) return false;
+    const visible = Number(overlay.dataset.visibleNpcCount || 0);
+    const png = Number(overlay.dataset.pngNpcCount || 0);
+    const fallback = Number(overlay.dataset.fallbackNpcCount || 0);
+    if (!(visible > 0 && png > 0 && png + fallback === visible)) return false;
+    return {
+      authority: overlay.dataset.presentationAuthority,
+      total: Number(overlay.dataset.npcCount || 0),
+      visible,
+      png,
+      fallback,
+      pointerEvents: getComputedStyle(overlay).pointerEvents,
+      ariaHidden: overlay.getAttribute('aria-hidden')
+    };
+  });
+  return handle.jsonValue();
+}
+
 test('Simulation-backed occupation deterministically selects presentation-only PNG families', async ({ page }) => {
   await waitForNpcWorld(page);
   const evidence = await page.evaluate(() => {
@@ -52,16 +73,7 @@ test('character world-icon PNG assets are available and render with safe fallbac
     expect(response.headers()['content-type'] || '').toContain('image/png');
   }
 
-  await page.waitForFunction(() => Number(document.getElementById('npcWorldOverlay')?.dataset.pngNpcCount || 0) > 0);
-  const evidence = await page.locator('#npcWorldOverlay').evaluate((overlay) => ({
-    authority: overlay.dataset.presentationAuthority,
-    total: Number(overlay.dataset.npcCount || 0),
-    visible: Number(overlay.dataset.visibleNpcCount || 0),
-    png: Number(overlay.dataset.pngNpcCount || 0),
-    fallback: Number(overlay.dataset.fallbackNpcCount || 0),
-    pointerEvents: getComputedStyle(overlay).pointerEvents,
-    ariaHidden: overlay.getAttribute('aria-hidden')
-  }));
+  const evidence = await waitForVisibleNpcPngSnapshot(page);
 
   expect(evidence.authority).toBe('presentation-only');
   expect(evidence.total).toBeGreaterThanOrEqual(12);
@@ -109,9 +121,9 @@ for (const viewport of [
   test(`character PNG overlay keeps stable screen-space size while zoom changes world projection on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await waitForNpcWorld(page);
-    await page.waitForFunction(() => Number(document.getElementById('npcWorldOverlay')?.dataset.pngNpcCount || 0) > 0);
+    const initialEvidence = await waitForVisibleNpcPngSnapshot(page);
 
-    const evidence = await page.evaluate(() => {
+    const evidence = await page.evaluate((initial) => {
       const Game = window.Game;
       const overlay = document.getElementById('npcWorldOverlay');
       const snapshot = () => Game.State.world.npcs.map((npc) => ({
@@ -128,8 +140,6 @@ for (const viewport of [
         asset: Game.NPCWorld.worldIconAssetFor(npc)
       }));
       const before = snapshot();
-      const initialVisible = Number(overlay.dataset.visibleNpcCount || 0);
-      const initialPng = Number(overlay.dataset.pngNpcCount || 0);
       const originalZoom = Number(Game.State.camera.zoom);
       const player = Game.State.world.player;
       const npc = Game.State.world.npcs[0];
@@ -170,10 +180,10 @@ for (const viewport of [
         pointerEvents,
         ariaHidden,
         rect,
-        initialVisible,
-        initialPng
+        initialVisible: initial.visible,
+        initialPng: initial.png
       };
-    });
+    }, initialEvidence);
 
     expect(evidence.rect.width).toBeGreaterThan(100);
     expect(evidence.rect.height).toBeGreaterThan(100);
