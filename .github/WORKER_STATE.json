@@ -5,7 +5,7 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T19:31:42Z",
+    "created_at": "2026-09-03T19:42:28Z",
     "last_exhaustive_scan_at": "2026-09-03T19:31:42Z",
     "last_exhaustive_main_sha": "eec905370619457c01a5888635d0ed549eefa272",
     "roadmap_sha": null,
@@ -28,12 +28,12 @@
     "1": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
     "2": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 360], "last_reconciled_at": "2026-09-03T19:31:42Z"},
-    "4": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null},
+    "4": {"needs_reconcile": false, "responsibility_issue_ids": [307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T19:42:28Z"},
     "5": {"needs_reconcile": true, "responsibility_issue_ids": [], "last_reconciled_at": null}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 0,
-    "material_no_progress_runs": 1,
+    "material_no_progress_runs": 2,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -43,6 +43,7 @@
     "Do not write this file for a pure QUIESCENT_FAST_PATH run.",
     "Material updates use current blob SHA compare-and-swap and must not overwrite newer concurrent state.",
     "ROADMAP.md and TODO.md were not present at the canonical root during this bootstrap rebuild; their cache SHAs remain null rather than inferred from historical issue text.",
-    "Worker #3 acquired and immediately cleared #360 and #358 after exact-history/evidence reconciliation proved no safe repository mutation; both responsibilities remain non-exclusive waits."
+    "Worker #3 acquired and immediately cleared #360 and #358 after exact-history/evidence reconciliation proved no safe repository mutation; both responsibilities remain non-exclusive waits.",
+    "Worker #4 reconciled retained #307/#309/#349/#356/#357/#358 exact histories; all remain non-exclusive waits with no safe Worker #4 owner action, and the fresh predecessor exhaustive zero-depth ledger was verified unchanged."
   ]
 }
