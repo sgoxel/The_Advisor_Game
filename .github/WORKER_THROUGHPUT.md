@@ -10,8 +10,8 @@ Keep development continuously productive without weakening correctness: spend Wo
 
 A scheduled Worker first checks the smallest state capable of proving whether useful eligibility may have changed:
 
-- current `main` SHA;
-- current ROADMAP/TODO blob SHAs and active phase;
+- current material `main` state, using the current `main` SHA unless the only post-checkpoint repository delta is a proven `.github/WORKER_STATE.json` coordination-state update as defined below;
+- current `ROADMAP.json` / `TODO.json` blob SHAs and active phase;
 - current/earlier product or infrastructure issue updates since the last exhaustive checkpoint, excluding pure #97 no-op audit traffic;
 - live exact-target claim/revision changes relevant to current/earlier work;
 - watched CI/workflow state transitions that are named resume triggers for parked work;
@@ -20,12 +20,25 @@ A scheduled Worker first checks the smallest state capable of proving whether us
 
 An issue comment, workflow transition, claim release, revision, dependency change, new current/earlier issue, commit, planning change, or stale deadline that can alter eligibility is material even when product source files did not change.
 
+### Coordination-state-only main delta
+
+`.github/WORKER_STATE.json` is committed on `main`, so a successful material checkpoint write necessarily changes the repository SHA after the exhaustive source/planning scan that produced it. That state write must not invalidate itself.
+
+A current `main` SHA may therefore be treated as materially equivalent to the checkpoint's `last_exhaustive_main_sha` **only** when all of the following are proven before fast-path use:
+
+1. an exact compare from `last_exhaustive_main_sha` to current `main` changes no repository path except `.github/WORKER_STATE.json`;
+2. current `ROADMAP.json` and `TODO.json` blob SHAs exactly equal the cached checkpoint values;
+3. the current state file is valid, does not request a full scan, and does not contain a conflicting/newer material fact requiring reconciliation;
+4. no issue/claim/revision/dependency/watched-evidence/stale-deadline condition independently invalidates the fast path.
+
+Any other changed path, any unprovable compare, any planning mismatch, or any uncertainty remains a material `main` delta and forces normal work-conserving execution. This exception is only for the checkpoint cache's own repository write; it never hides product, workflow, policy, asset, test, planning, or other repository changes.
+
 ## Quiescent fast path
 
 A scheduled Worker MUST use `QUIESCENT_FAST_PATH` instead of a full five-role cycle when **all** are true:
 
 1. `.github/WORKER_STATE.json` has a valid exhaustive checkpoint and does not request a full scan.
-2. Current `main`, ROADMAP and TODO SHAs equal that checkpoint.
+2. Current material `main` state equals that checkpoint, either by exact SHA equality or by the strictly proven coordination-state-only exception above; current `ROADMAP.json` and `TODO.json` SHAs equal the checkpoint.
 3. No current/earlier non-#97 material issue/claim/revision/dependency update occurred after the checkpoint.
 4. No watched CI/evidence resume trigger changed state.
 5. No recorded live claim crossed its stale deadline.
@@ -51,19 +64,21 @@ Even with no detected delta, at least one exhaustive scan is required every **6 
 
 ## Compact Worker state
 
-`.github/WORKER_STATE.json` is a cache/checkpoint, never product authority. Exact issue history remains authoritative for claims/revisions, and README/ROADMAP/TODO remain authoritative for scope/planning.
+`.github/WORKER_STATE.json` is a cache/checkpoint, never product authority. Exact issue history remains authoritative for claims/revisions, and `README.md` / `ROADMAP.json` / `TODO.json` remain authoritative for scope/planning.
 
 After a material full run, the Worker updates the state file from freshly verified facts using the current file SHA (compare-and-swap). If another Worker updated it first, re-fetch and merge only facts still true; never overwrite newer state with stale state.
 
 The state records at minimum:
 
 - `next_role`;
-- last exhaustive checkpoint time and main/ROADMAP/TODO SHAs;
+- last exhaustive checkpoint time, material `main` SHA, and exact `ROADMAP.json` / `TODO.json` blob SHAs;
 - exact executable depth and eligible issue IDs;
 - current critical blockers and their fan-out;
 - watched evidence/run IDs and resume targets;
 - live exclusive claim stale deadlines known at the checkpoint;
 - per scheduled Worker compact responsibility IDs and whether a full reconciliation is required.
+
+`last_exhaustive_main_sha` records the material repository state that was exhaustively verified before the checkpoint cache's own commit. A later state-only commit is handled only by the strict coordination-state-only comparison above.
 
 A missing, malformed, stale, conflicting, or `needs_full_scan=true` state file disables the fast path and causes a normal exhaustive scan.
 
