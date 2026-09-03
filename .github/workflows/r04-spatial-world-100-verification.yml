@@ -158,7 +158,11 @@ jobs:
         if: always()
         run: |
           if [ -d playwright-report ]; then cp -R playwright-report r04-spatial-world-100-evidence/; fi
-          if [ -d test-results ]; then cp -R test-results r04-spatial-world-100-evidence/; fi
+          if [ -d test-results ]; then
+            cp -R test-results r04-spatial-world-100-evidence/
+            # #354: playwright-report retains byte-identical trace ZIPs; avoid duplicate artifact transport.
+            find r04-spatial-world-100-evidence/test-results -type f -name 'trace.zip' -delete
+          fi
 
       - name: Upload Playwright evidence
         if: always()
