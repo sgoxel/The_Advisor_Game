@@ -1,24 +1,24 @@
 {
   "schema_version": 1,
   "policy_version": "2026-09-03-throughput-v1.1",
-  "next_role": "planner",
+  "next_role": "designer",
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T20:38:00Z",
-    "last_exhaustive_scan_at": "2026-09-03T20:38:00Z",
-    "last_exhaustive_main_sha": "5d24eba2b7d5fb6d9d29715ce40454cd5821982d",
+    "created_at": "2026-09-03T20:48:14Z",
+    "last_exhaustive_scan_at": "2026-09-03T20:48:14Z",
+    "last_exhaustive_main_sha": "e80199c7f28d71d02cbb22f33119285b8eb067c9",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
-    "executable_depth": 2,
-    "eligible_issue_ids": [254, 359],
+    "executable_depth": 0,
+    "eligible_issue_ids": [],
     "critical_blockers": [
       {"issue": 360, "fan_out": 1, "reason": "R04 spatial verification remains routed through exact attribution/evidence recovery before downstream #237-focused adjudication can safely advance."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
+      {"issue": 254, "trigger": "focused run 33804329096 and affected interior/preservation evidence on e80199c7f28d71d02cbb22f33119285b8eb067c9 become terminal; terminal failure needing Worker #4 correction, different-Worker Tester PASS/T-REV, or issue completion"},
       {"issue": 354, "trigger": "run 33801312037 on c0c8d57f9ce78825763976f0f463b9e7a2ac89bd becomes terminal and produces an artifact suitable for controlled size comparison, or a different-Worker Tester returns PASS/T-REV"},
-      {"issue": 359, "trigger": "a different Worker Tester independently verifies Reviewer correction 5d24eba2 plus the canonical planning-SHA checkpoint, returning PASS or a new T-REV"},
       {"issue": 360, "trigger": "exact spatial verification produces terminal GitHub-visible attribution evidence or a new exact correction/handoff"},
       {"issue": 358, "trigger": "exact post-8273d581 descendant runtime trace reproduces a stable in-envelope NPC ID disappearance or a new attributable T-REV"},
       {"issue": 351, "trigger": "compatible #358/spatial-preservation descendant terminal evidence, a new exact #351-attributable failure, a different-Worker T-REV, or issue completion"},
@@ -30,11 +30,11 @@
     "1": {"needs_reconcile": true, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T20:18:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T20:14:55Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-03T20:38:00Z"},
-    "4": {"needs_reconcile": false, "responsibility_issue_ids": [307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T19:42:28Z"},
+    "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T20:48:14Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T19:50:53Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 2,
+    "productive_material_runs": 3,
     "material_no_progress_runs": 4,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -44,9 +44,9 @@
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
     "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
-    "Worker #3 independent #359 Tester review found the null planning-cache and self-invalidating-main defects; Reviewer correction 5d24eba2 fixes the policy and this checkpoint repairs the cache. #359 now requires a different Worker Tester because Worker #3 authored the correction.",
-    "#254 run 33800981403 on 47c08d62b6613cb4345d1d4c53adfb25c098d113 is terminal FAILURE and fired Worker #1 retained correction continuity; Worker #1 needs_reconcile=true.",
-    "#354 run 33801312037 remains in_progress; no repeated hygiene measurement was performed.",
-    "Worker #3 retained waits #172/#346/#347/#349/#350/#354/#358/#360 had no new safe owner action during this exhaustive scan; #359 is additionally retained pending different-Worker Tester verification."
+    "#359 was independently Tester-PASSed and closed by Worker #4 after verifying Worker #3 Reviewer correction 5d24eba2 and state checkpoint 051edd54.",
+    "#254 failed exact run 33800981403 was attributed to a wait-then-resample visibility observation race; Worker #4 issued T-REV then committed test-only correction e80199c7. Focused run 33804329096 and interior run 33804329257 are nonterminal; Worker #4 retains responsibility and cannot self-PASS.",
+    "#354 run 33801312037 remains in_progress; no repeated lightweight measurement was performed.",
+    "Worker #4 retained waits are #254/#307/#309/#349/#356/#357/#358; no live exclusive claim remains."
   ]
 }
