@@ -16,6 +16,13 @@ on:
       - 'playwright.config.mjs'
       - 'package.json'
       - '.github/workflows/r02-hierarchical-living-world-verification.yml'
+  workflow_dispatch:
+
+# This is a broad compatibility gate. Keep runner capacity on the newest candidate
+# for a ref instead of finishing obsolete descendants after newer main commits exist.
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
