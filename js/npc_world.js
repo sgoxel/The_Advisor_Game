@@ -288,10 +288,11 @@
 
   function resolveWorldIconScale(viewportWidth) {
     const width = Math.max(1, Number(viewportWidth) || 1);
-    const zoomValue = Number(Game.State?.camera?.zoom);
-    const zoom = clamp(Number.isFinite(zoomValue) ? zoomValue : 5, 2, 5);
+    // #254 / Admin 2026-09-03: character apparent size is screen-space stable.
+    // Camera zoom changes projected anchors through Renderer.gridToScreen(), not sprite dimensions.
+    // Keep only bounded responsive form-factor scaling so protagonist and NPCs share one contract.
     const viewportScale = clamp(width / 1440, 0.78, 1.18);
-    const iconSize = clamp((30 + zoom * 6.2) * viewportScale, 34, 64);
+    const iconSize = clamp(52 * viewportScale, 34, 64);
     return {
       iconSize,
       fallbackRadius: clamp(iconSize / 6.8, 5, 9)
