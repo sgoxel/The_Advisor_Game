@@ -87,6 +87,12 @@
     function boundedUpdateAt(legacyElapsedMs = null) {
       const worldBefore = Game.State?.world;
       const beforeById = new Map((worldBefore?.npcs || []).map((npc) => [String(npc.id), point(npc)]));
+      const relevance = Game.NPCRelevanceRuntime;
+      const prePassMinutes = currentMinutes();
+      const dueById = new Map((worldBefore?.npcs || []).map((npc) => [
+        String(npc.id),
+        typeof relevance?.authoritativeDue === 'function' ? relevance.authoritativeDue(npc, prePassMinutes) : true
+      ]));
       const result = originalUpdateAt(legacyElapsedMs);
       const world = Game.State?.world;
       if (!world || !Array.isArray(world.npcs) || !world.originVillage) return result;
@@ -97,7 +103,6 @@
       if (lastProcessedStateKey === stateKey) return result;
       lastProcessedStateKey = stateKey;
 
-      const relevance = Game.NPCRelevanceRuntime;
       const binding = world.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 };
       const desiredMap = new Map();
       const fixedNpcIds = new Set();
@@ -105,7 +110,7 @@
       const travel = [];
 
       for (const npc of world.npcs) {
-        const due = typeof relevance?.authoritativeDue === 'function' ? relevance.authoritativeDue(npc, totalGameMinutes) : true;
+        const due = dueById.get(String(npc.id)) ?? true;
         const before = beforeById.get(String(npc.id)) || point(npc);
         const routeStep = due ? nextRouteStep(npc, before) : { ok: false, reasonCode: 'RELEVANCE_NOT_DUE' };
 
