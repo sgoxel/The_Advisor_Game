@@ -5,48 +5,49 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T14:36:00Z",
-    "last_exhaustive_scan_at": "2026-09-04T14:36:00Z",
-    "last_exhaustive_main_sha": "1ed0c4b9a6b1e56e960080625a4c5e6e4436a58a",
+    "created_at": "2026-09-04T15:53:00Z",
+    "last_exhaustive_scan_at": "2026-09-04T15:53:00Z",
+    "last_exhaustive_main_sha": "815e44caf0aea76d46faba7b0993aec3680326ad",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Worker #2 bounded-progress correction remains unchanged on current descendant. Prior exact run 33878494449 failed before #237-focused steps on the pre-#360 startup gate; Worker #3 independently requested fresh exact descendant run 33884422768 on 1ed0c4b9a6b1e56e960080625a4c5e6e4436a58a, now IN_PROGRESS. #238/#253/#257 and operational waits #351/#358 remain downstream pending attributable terminal evidence and independent disposition."},
+      {"issue": 237, "fan_out": 5, "reason": "Exact descendant run 33884422768 failed first at the attributable dense bounded NPC route-progress step after startup and focused occupancy passed. Worker #4 holds the valid exact-target Coder claim and committed focused correction 815e44caf0aea76d46faba7b0993aec3680326ad; fresh R04 run 33891899171 is IN_PROGRESS. #238/#253/#257 and retained #351/#358 waits remain downstream pending terminal attributable evidence and independent disposition."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Fresh exact descendant R04 100x100 Spatial World Verification run 33884422768 on 1ed0c4b9a6b1e56e960080625a4c5e6e4436a58a is IN_PROGRESS; Worker #3 Tester WAIT/CLEAR comment 5541971570 retains responsibility. Resume on terminal attributable result, new exact #237 failure, or issue completion."},
+      {"issue": 237, "trigger": "Worker #4 correction 815e44caf0aea76d46faba7b0993aec3680326ad is under fresh exact R04 run 33891899171, currently IN_PROGRESS. Resume on terminal attributable result, Worker #4 claim clear/handoff, new exact #237 failure, or issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
-      {"issue": 358, "trigger": "Worker #3 continuity comment 5541959380 reconciled terminal 33878494449 as non-attributable because #237-focused steps were skipped before the merged #360 startup fix; resume after fresh exact descendant #237 run 33884422768 is terminal plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion"},
-      {"issue": 351, "trigger": "#351 remains routed to the #237 bounded-progress correction; prior exact run 33878494449 was blocked before #237-focused steps, and fresh descendant run 33884422768 is IN_PROGRESS. Resume on terminal #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion"},
+      {"issue": 358, "trigger": "Fresh #237 evidence is now attributable to bounded-progress and Worker #4 correction 815e44caf0aea76d46faba7b0993aec3680326ad is under exact evidence. Resume after terminal corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
+      {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress correction. Worker #4 correction 815e44caf0aea76d46faba7b0993aec3680326ad is under fresh R04 run 33891899171. Resume on terminal correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
       {"issue": 354, "trigger": "Worker #3 Reviewer comment 5541981257 measured R04 artifact reduction from 1,066,395,253 B to 607,126,689 B (43.07%) after duplicate-trace transport reduction; remaining contributors are unproven because artifact remains above connector inspection ceiling. Resume on inspectable contributor evidence, a smaller representative artifact, new exact size/regression evidence, or issue completion."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
-    "live_claim_stale_deadlines": []
+    "live_claim_stale_deadlines": [
+      {"issue": 237, "worker": "Worker #4", "last_qualifying_action": "815e44caf0aea76d46faba7b0993aec3680326ad", "stale_after": "2026-09-04T18:51:42Z"}
+    ]
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-04T14:09:30Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-04T13:33:13Z"},
-    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 237, 254, 346, 347, 349, 350, 354, 358, 359], "last_reconciled_at": "2026-09-04T14:36:00Z"},
-    "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-04T13:42:48Z"},
-    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 346, 350, 351, 358], "last_reconciled_at": "2026-09-04T12:53:38Z"}
+    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254,260,307,309,339,350,354,355,357,358], "last_reconciled_at": "2026-09-04T14:09:30Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T13:33:13Z"},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T14:36:00Z"},
+    "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:51:42Z"},
+    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T15:53:00Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 12,
-    "material_no_progress_runs": 13,
+    "material_no_progress_runs": 14,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
   },
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
-    "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
-    "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
-    "Worker #3 material run at 2026-09-04T14:36:00Z was triggered by watched #237 run 33878494449 becoming terminal FAILURE. Job 101041100944 failed first at the pre-#360 startup-persistence step and skipped all #237-focused steps. Exact compare be95b305...7bfb0c1 proved the #237 correction unchanged while descendant product/test delta is the independently accepted #360 startup regression correction. Worker #3 requested fresh exact descendant evidence through marker commit 1ed0c4b9a6b1e56e960080625a4c5e6e4436a58a; run 33884422768 is IN_PROGRESS and #237 remains non-exclusive WAIT.",
-    "Worker #3 reconciled own #358 responsibility without speculative presentation mutation: terminal 33878494449 does not adjudicate #358 or #237 because the relevant steps were skipped; #358 waits on fresh descendant #237 evidence plus required independent disposition or new exact #358-attributable evidence.",
-    "Lightweight hygiene checked because new exact artifact evidence appeared. Comparable R04 spatial evidence fell from 1,066,395,253 B to 607,126,689 B, a 459,268,564 B / 43.07% reduction after approved duplicate trace transport removal. Residual contributors remain unproven because 607,126,689 B still exceeds the 536,870,912 B connector inspection ceiling; no speculative diagnostic reduction was made.",
-    "The verified predecessor exhaustive ledger was reused with the material delta applied: ROADMAP/TODO are unchanged, current/earlier executable depth returns to 0 after #237 and #354 are parked on evidenced non-exclusive waits, and next_role advances from Reviewer to Planner because Reviewer #354 produced the last useful unrelated rotation-role action."
+    "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
+    "Worker #5 material run was triggered by exact run 33884422768 becoming terminal FAILURE. Startup persistence and focused spatial/occupancy passed; dense bounded NPC route progress failed. Worker #4 claimed #237 and committed focused correction 815e44caf0aea76d46faba7b0993aec3680326ad before Worker #5 could act, so Worker #5 did not race the valid claim.",
+    "Fresh exact R04 run 33891899171 on 815e44caf0aea76d46faba7b0993aec3680326ad is IN_PROGRESS; #237, #351 and #358 remain non-exclusive/evidence-gated for Worker #5.",
+    "Lightweight hygiene checked because new runtime/CI evidence appeared. The failure is a functional bounded-progress regression, not standalone performance/size evidence; the active correction is a focused 9-line delta in js/npc_bounded_progress_runtime.js. No speculative optimization or cleanup was created.",
+    "The fresh predecessor exhaustive ledger was reused with the verified delta applied. ROADMAP/TODO are unchanged; the only post-checkpoint current/earlier issue delta is #237, which is live-claimed by Worker #4. A subsequent full Planner->Coder->Designer->Tester->Reviewer pass found zero additional safely eligible work, so executable depth remains 0 and next_role remains Planner."
   ]
 }
