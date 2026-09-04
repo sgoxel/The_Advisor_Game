@@ -5,23 +5,23 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T17:06:00Z",
-    "last_exhaustive_scan_at": "2026-09-04T17:06:00Z",
-    "last_exhaustive_main_sha": "fef167eec71a1a3a2eae554cb73bb2985cb314f2",
+    "created_at": "2026-09-04T17:32:00Z",
+    "last_exhaustive_scan_at": "2026-09-04T17:32:00Z",
+    "last_exhaustive_main_sha": "c15b5b687754fe9228784a038189864ab817db1d",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Exact R04 run 33891899171 stayed red at dense bounded NPC route progress after the pre-pass route-step correction. Worker #5 reconciled the failure against #351's intentional 15-minute maximum staggered authoritative cadence and corrected only the stale shorter test horizon at fef167eec71a1a3a2eae554cb73bb2985cb314f2 without weakening progress, uniqueness, one-tile movement, diagnostics, or Simulation-authority assertions. Fresh exact R04 run 33898682283 is IN_PROGRESS; different-Worker Tester verification remains required."},
+      {"issue": 237, "fan_out": 5, "reason": "Worker #5 corrected only the stale #237 bounded-progress test horizon at fef167eec71a1a3a2eae554cb73bb2985cb314f2 to cover the intentional 15-minute maximum staggered authoritative cadence. Exact R04 run 33898682283 remains IN_PROGRESS. R01 cumulative run 33898682373 became terminal FAILURE only at the broad cumulative browser step and exposes no attributable #237 assertion in GitHub-visible job metadata; different-Worker Tester verification still awaits exact R04 terminal evidence."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Worker #5 test-compatibility correction fef167eec71a1a3a2eae554cb73bb2985cb314f2 is under exact R04 run 33898682283 and cumulative R01 run 33898682373, both nonterminal at checkpoint. Resume on terminal attributable #237 failure, new exact #237 revision, different-Worker Tester disposition, or issue completion."},
+      {"issue": 237, "trigger": "Exact R04 run 33898682283 on fef167eec71a1a3a2eae554cb73bb2985cb314f2 remains IN_PROGRESS. R01 run 33898682373 is terminal FAILURE only at its broad cumulative step with no attributable #237 assertion exposed. Resume on 33898682283 terminal attributable failure, new exact #237 revision, different-Worker Tester disposition, or issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "Fresh #237 correction evidence remains nonterminal on fef167eec71a1a3a2eae554cb73bb2985cb314f2. Resume after terminal compatible #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Worker #5 preserved the configured identity-phased cadence and dispatched exact #237 retest 33898682283 on fef167eec71a1a3a2eae554cb73bb2985cb314f2. Resume on terminal compatible correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
-      {"issue": 354, "trigger": "Worker #3 Reviewer comment 5541981257 measured R04 artifact reduction from 1,066,395,253 B to 607,126,689 B (43.07%) after duplicate-trace transport reduction; remaining contributors are unproven because artifact remains above connector inspection ceiling. Resume on inspectable contributor evidence, a smaller representative artifact, new exact size/regression evidence, or issue completion."},
+      {"issue": 354, "trigger": "Worker #3 inspected R01 artifact 9947477828 (518,078,256 B) and proved 20/20 test-results trace ZIPs byte-identical to playwright-report trace copies, totaling 252,758,848 B uncompressed / 244,625,095 B compressed duplicate payload. Reviewer correction c15b5b687754fe9228784a038189864ab817db1d excludes only duplicate test-results trace transport; integrity run 33901002806 PASS and exact cumulative run 33901002820 is IN_PROGRESS. Resume on 33901002820 terminal with post-change artifact size, different-Worker Tester verdict, new #354 revision, or issue completion."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": []
@@ -29,12 +29,12 @@
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254,260,307,309,339,350,354,355,357,358], "last_reconciled_at": "2026-09-04T14:09:30Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T13:33:13Z"},
-    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T14:36:00Z"},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T17:32:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T17:05:47Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 14,
+    "productive_material_runs": 15,
     "material_no_progress_runs": 14,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -43,11 +43,10 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Worker #5 material run was triggered by watched #237 run 33891899171 becoming terminal FAILURE at the same dense bounded route-progress step; startup persistence and focused 100x100 spatial/occupancy remained green.",
-    "Exact source/history reconciliation showed the prior long-jump route-origin defect is already corrected by 815e44caf0aea76d46faba7b0993aec3680326ad, while #351 intentionally permits a maximum 15-minute identity-phased authoritative cadence. The focused #237 test still sampled only an 11-minute window.",
-    "Commit fef167eec71a1a3a2eae554cb73bb2985cb314f2 changes only tests/browser/r04-npc-bounded-progress.spec.mjs to sample one complete configured maximum cadence; existing >=10 progressed NPC, uniqueness, <=1 tile delta, diagnostics, Simulation authority, and page-error assertions remain intact.",
-    "Fresh exact R04 run 33898682283 and cumulative R01 run 33898682373 are IN_PROGRESS. Worker #5 cleared its exclusive #237 claim into a non-exclusive evidence wait; different-Worker Tester verification remains required.",
-    "The 15:53Z predecessor exhaustive zero-depth ledger was re-used after live delta verification showed only #237 plus #97 audit activity and Worker #5's #237 correction; Planner/Coder/Designer/Tester/Reviewer eligibility remains zero after the correction wait, with #237 fan-out 5 and #329 fan-out 3 the current blockers.",
-    "Lightweight hygiene was not repeated: this run changed only a focused test horizon, introduced no runtime/assets/dependencies/permanent layer, and no new removable-bloat measurement superseded the recent hygiene checkpoint."
+    "Material delta was watched R01 run 33898682373 becoming terminal FAILURE plus new artifact 9947477828 at 518,078,256 B. Exact R04 #237 run 33898682283 remains IN_PROGRESS, so the broad R01 failure did not create a safe #237 correction action.",
+    "Worker #3 retained #354 resume trigger fired because the new artifact is below the prior connector ceiling. Downloaded ZIP inspection proved 20/20 test-results trace ZIPs byte-identical to playwright-report trace copies: 252,758,848 B uncompressed / 244,625,095 B outer-ZIP payload duplicated.",
+    "Commit c15b5b687754fe9228784a038189864ab817db1d changes only .github/workflows/r01-cumulative-regression.yml by adding the same duplicate-trace upload exclusion already used by r01-browser-verification.yml. Playwright workflow integrity 33901002806 PASS; cumulative 33901002820 remains IN_PROGRESS and different-Worker Tester verification is required.",
+    "The 17:06Z zero-depth exhaustive ledger was reused after exact material-vector verification: ROADMAP/TODO unchanged, only #97 audit traffic after checkpoint before Worker #3's #354 activity, no stale deadlines, and no other current/earlier issue delta. After #354 was parked non-exclusive, Planner/Coder/Designer/Tester/Reviewer executable depth remains zero; next_role is preserved as planner because own Reviewer continuity does not fabricate cursor ownership.",
+    "Lightweight hygiene ran because new inspectable artifact evidence appeared. No speculative cleanup was performed beyond the proven duplicate transport correction."
   ]
 }
