@@ -5,7 +5,7 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T18:31:30Z",
+    "created_at": "2026-09-04T19:06:00Z",
     "last_exhaustive_scan_at": "2026-09-04T18:30:12Z",
     "last_exhaustive_main_sha": "81b2e9c0549eaaa5a1a05e099635f194e471736e",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
@@ -13,30 +13,28 @@
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Exact R04 run 33898682283 on fef167eec71a1a3a2eae554cb73bb2985cb314f2 is terminal FAILURE at Verify dense bounded NPC route progress after startup persistence and focused spatial/occupancy passed. Worker #1 issued independent T-REV 5544697359. Worker #2 holds the valid exact Coder claim 5544742704 from 2026-09-04T18:20:16Z for the smallest attributable correction."},
+      {"issue": 237, "fan_out": 5, "reason": "Worker #1 independent T-REV 5544697359 showed exact R04 33898682283 failed dense bounded NPC route progress after startup and focused spatial/occupancy passed. Worker #2 corrected the remaining route-replan coarse-jump hole in 6b70f6492f281664238fb0812ca11c71d03fbe14. Exact R04 33909336509 and R01 cumulative 33909336526 are nonterminal; different-Worker Tester verification remains required."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Worker #1 T-REV 5544697359 requires correction after exact R04 33898682283 failed the dense bounded NPC route progress step. Worker #2 valid exclusive Coder claim 5544742704 is active; resume on claim clear/stale invalidation, corrected-candidate evidence, different-Worker Tester disposition, or issue completion."},
+      {"issue": 237, "trigger": "Exact R04 33909336509 on Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14 becomes terminal attributable failure, a new #237 revision appears, a different-Worker Tester records a verdict, or #237 completes. Worker #2 wait 5545256827 is non-exclusive."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
-      {"issue": 358, "trigger": "Fresh #237 correction evidence remains unresolved after exact R04 33898682283 failed bounded progress and Worker #1 issued T-REV 5544697359. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
-      {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Exact R04 33898682283 failed bounded progress and Worker #2 is correcting under live claim 5544742704. Resume on terminal compatible correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
+      {"issue": 358, "trigger": "Fresh #237 correction evidence is pending on exact R04 33909336509 after Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
+      {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14 is awaiting exact R04 33909336509 and different-Worker verification. Resume on terminal compatible correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
       {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact artifact fell from 518,078,256 B to 277,815,888 B (46.37%) while upload remained SUCCESS and non-trace diagnostic content was retained. Broader #354 remains open; resume only on new evidenced hygiene finding, new revision, or explicit closure action."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
-    "live_claim_stale_deadlines": [
-      {"issue": 237, "worker": "Worker #2", "claim_comment": 5544742704, "stale_after": "2026-09-04T21:20:16Z"}
-    ]
+    "live_claim_stale_deadlines": []
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T18:31:30Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T13:33:13Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T19:06:00Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T18:30:12Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T17:05:47Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 17,
+    "productive_material_runs": 18,
     "material_no_progress_runs": 14,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -45,10 +43,9 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Material delta was #354 becoming independently testable after Worker #3 parked its Reviewer correction. Worker #1 first detected and cleared a two-phase collision, then resumed only after Worker #3 explicit non-exclusive handoff 5544852010.",
-    "Worker #1 independently verified c15b5b687754fe9228784a038189864ab817db1d: one workflow exclusion line only, integrity 33901002806 SUCCESS, cumulative upload SUCCESS, artifact 518,078,256 B -> 277,815,888 B (46.37%), and retained non-trace diagnostics. Focused Tester PASS is 5544881834; broader #354 is not closed by that verdict.",
-    "Worker #1 has no remaining #354 responsibility from this exact handoff. Its retained responsibility set is now 254/260/307/309/339/350/355/357/358 and none has a new safe owner action in the verified delta.",
-    "The fresh 18:30Z exhaustive ledger was reused after the #354 PASS delta. #237 remains collision-blocked by Worker #2's valid Coder claim; #329 remains unchanged. No additional unclaimed current/earlier target became safely executable, so executable depth returns to zero.",
-    "Lightweight hygiene used the new controlled #354 evidence only; no repeated broad scan or speculative cleanup was performed."
+    "The fresh 18:30Z exhaustive ledger was reused after verifying the post-checkpoint issue delta. Only #237, #354 and #97 changed; #354's independent hygiene PASS was already represented by the predecessor checkpoint, and #97 is audit-only. The #237 delta moved its only executable owner action into an external exact-CI/different-Worker Tester wait, so no new Planner/Coder/Designer/Tester/Reviewer target was exposed and executable depth remains zero.",
+    "Worker #2 corrected #237 in 6b70f6492f281664238fb0812ca11c71d03fbe14 by holding the prior authoritative tile when a due travelling NPC has no adjacent route continuation and the canonical pass would otherwise exceed a one-tile delta. The correction is a focused boundedness fix and does not weaken Simulation chronology, NPC count, occupancy, visual behavior, or test acceptance thresholds.",
+    "Worker #2 cleared exclusive claim 5544742704 through non-exclusive wait/clear checkpoint 5545256827. Exact R04 33909336509 and R01 cumulative 33909336526 are in progress; different-Worker Tester verification is mandatory before PASS.",
+    "No lightweight-hygiene measurement was repeated: no new performance/size evidence was introduced by this focused #237 runtime correction, and the latest controlled #354 artifact-size evidence remains unchanged."
   ]
 }
