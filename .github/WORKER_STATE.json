@@ -5,23 +5,23 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T19:19:30Z",
-    "last_exhaustive_scan_at": "2026-09-04T19:19:30Z",
+    "created_at": "2026-09-04T19:30:12Z",
+    "last_exhaustive_scan_at": "2026-09-04T19:30:12Z",
     "last_exhaustive_main_sha": "aaa12e4d386546a84bc9e2c94c625580741f6d0e",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Worker #1 independent T-REV 5544697359 showed exact R04 33898682283 failed dense bounded NPC route progress after startup and focused spatial/occupancy passed. Worker #2 corrected the remaining route-replan coarse-jump hole in 6b70f6492f281664238fb0812ca11c71d03fbe14. Exact R04 33909336509 and R01 cumulative 33909336526 remain nonterminal; different-Worker Tester verification remains required."},
+      {"issue": 237, "fan_out": 5, "reason": "Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14 remains under independent verification. Exact R04 33909336509 is still nonterminal. R01 cumulative 33909336526 became terminal FAILURE at its broad regression step, but connector-visible metadata exposes no exact failing assertion attributable to #237 and evidence upload succeeded; Worker #3 recorded evidence checkpoint 5545523527 without speculative PASS/T-REV."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Exact R04 33909336509 on Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14 becomes terminal attributable failure, a new #237 revision appears, a different-Worker Tester records a verdict, or #237 completes. Worker #2 wait 5545256827 is non-exclusive."},
+      {"issue": 237, "trigger": "Exact R04 33909336509 on Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14 becomes terminal attributable failure/success suitable for independent Tester disposition, a new #237 revision appears, a different-Worker Tester records a verdict, or #237 completes. R01 33909336526 is terminal FAILURE only at the broad cumulative step with no connector-visible #237-attributable assertion; Worker #2 wait 5545256827 remains non-exclusive."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "Fresh #237 correction evidence is pending on exact R04 33909336509 after Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Worker #2 correction 6b70f6492f281664238fb0812ca11c71d03fbe14 is awaiting exact R04 33909336509 and different-Worker verification. Resume on terminal compatible correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
-      {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact artifact fell from 518,078,256 B to 277,815,888 B (46.37%) while upload remained SUCCESS and non-trace diagnostic content was retained. Broader #354 remains open; resume only on new evidenced hygiene finding, new revision, or explicit closure action."},
+      {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact artifact fell from 518,078,256 B to 277,815,888 B (46.37%) while upload remained SUCCESS and non-trace diagnostic content was retained. New exact R01 artifact 9951418138 is 274,571,455 B, so no hygiene regression is evidenced. Broader #354 remains open; resume only on new evidenced hygiene finding, new revision, or explicit closure action."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": []
@@ -29,13 +29,13 @@
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T18:31:30Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T19:19:30Z"},
-    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T18:30:12Z"},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T19:30:12Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T17:05:47Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 18,
-    "material_no_progress_runs": 15,
+    "material_no_progress_runs": 16,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -43,8 +43,9 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "19:19Z material refresh: exact compare from the prior exhaustive material checkpoint showed only the known #237 bounded-progress runtime correction plus WORKER_STATE coordination changes. Post-19:06 issue delta contained only #237 and audit-only #97; #237 exact R04/R01 evidence remained nonterminal. Reusing the fresh predecessor exhaustive ledger therefore exposed no new eligibility, and the subsequent Planner->Coder->Designer->Tester->Reviewer pass produced zero useful progress.",
-    "Worker #2 #237 remains a non-exclusive evidence/different-Worker Tester wait after correction 6b70f6492f281664238fb0812ca11c71d03fbe14; live exclusive Worker #2 claims are zero and executable depth remains zero.",
-    "No lightweight-hygiene measurement was repeated because no new performance/size/runtime/CI-cost evidence appeared and the latest controlled #354 evidence is unchanged."
+    "19:30Z material refresh: the only post-19:19 non-audit eligibility-relevant delta was watched R01 run 33909336526 becoming terminal FAILURE. Current main differs from material checkpoint aaa12e4d only by the predecessor WORKER_STATE coordination commit 1f2d9cd; ROADMAP/TODO remain exact. Exact R04 33909336509 is still IN_PROGRESS, so #237 has no safe independent verdict/correction action for Worker #3 yet.",
+    "The fresh 19:19 exhaustive ledger was reused after verifying the delta. Capacity remains truthfully zero executable targets; no legitimate approved-scope decomposition or unnecessary serialization change was exposed, and the subsequent Planner->Coder->Designer->Tester->Reviewer pass produced zero useful progress.",
+    "Worker #3 recorded #237 evidence checkpoint 5545523527; no exclusive claim was acquired and all retained responsibilities remain non-exclusive waits with unchanged resume conditions except the newly recorded terminal broad R01 failure.",
+    "LIGHTWEIGHT HYGIENE CHECK performed because new CI-size evidence appeared: R01 artifact 9951418138 is 274,571,455 B versus the prior post-#354 controlled 277,815,888 B artifact. No regression/duplicate finding is evidenced; no hygiene action or cleanup target was created."
   ]
 }
