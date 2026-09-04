@@ -5,23 +5,23 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T18:30:12Z",
+    "created_at": "2026-09-04T18:31:30Z",
     "last_exhaustive_scan_at": "2026-09-04T18:30:12Z",
-    "last_exhaustive_main_sha": "3e0cbd07fb80ef900afc65a3fa199205a0e37b9d",
+    "last_exhaustive_main_sha": "81b2e9c0549eaaa5a1a05e099635f194e471736e",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
-    "executable_depth": 1,
-    "eligible_issue_ids": [354],
+    "executable_depth": 0,
+    "eligible_issue_ids": [],
     "critical_blockers": [
       {"issue": 237, "fan_out": 5, "reason": "Exact R04 run 33898682283 on fef167eec71a1a3a2eae554cb73bb2985cb314f2 is terminal FAILURE at Verify dense bounded NPC route progress after startup persistence and focused spatial/occupancy passed. Worker #1 issued independent T-REV 5544697359. Worker #2 holds the valid exact Coder claim 5544742704 from 2026-09-04T18:20:16Z for the smallest attributable correction."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Worker #1 T-REV 5544697359 requires correction after exact R04 33898682283 failed the dense bounded NPC route progress step. Worker #2 valid exclusive Coder claim 5544742704 is active; resume Worker #3 responsibility only on claim clear/stale invalidation, corrected-candidate evidence, different-Worker Tester disposition, or issue completion."},
+      {"issue": 237, "trigger": "Worker #1 T-REV 5544697359 requires correction after exact R04 33898682283 failed the dense bounded NPC route progress step. Worker #2 valid exclusive Coder claim 5544742704 is active; resume on claim clear/stale invalidation, corrected-candidate evidence, different-Worker Tester disposition, or issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "Fresh #237 correction evidence remains unresolved after exact R04 33898682283 failed bounded progress and Worker #1 issued T-REV 5544697359. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Exact R04 33898682283 failed bounded progress and Worker #2 is correcting under live claim 5544742704. Resume on terminal compatible correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
-      {"issue": 354, "trigger": "Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d has integrity run 33901002806 SUCCESS and exact cumulative run 33901002820 terminal FAILURE only in the broad regression step; its upload step succeeded. Artifact 9948312351 is 277,815,888 B versus prior exact artifact 9947477828 at 518,078,256 B, a 240,262,368 B (46.37%) reduction; downloaded exact artifact has no test-results trace.zip entries. Resume Worker #3 only on different-Worker Tester verdict, new #354 revision, or issue completion."},
+      {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact artifact fell from 518,078,256 B to 277,815,888 B (46.37%) while upload remained SUCCESS and non-trace diagnostic content was retained. Broader #354 remains open; resume only on new evidenced hygiene finding, new revision, or explicit closure action."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": [
@@ -29,14 +29,14 @@
     ]
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254,260,307,309,339,350,354,355,357,358], "last_reconciled_at": "2026-09-04T14:09:30Z"},
+    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T18:31:30Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T13:33:13Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T18:30:12Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T17:05:47Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 16,
+    "productive_material_runs": 17,
     "material_no_progress_runs": 14,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -45,10 +45,10 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Fast path was disabled by post-checkpoint material updates on #237/#354 and watched CI transitions. Exact compare from prior material c15b5b6 to pre-checkpoint main 3e0cbd0 changed only WORKER_STATE.json, so planning/product source remained unchanged.",
-    "Worker #3 resumed retained #354 Reviewer responsibility, measured exact post-correction artifact 9948312351 at 277,815,888 B versus 518,078,256 B before correction (46.37% reduction), and parked non-exclusive because a different Worker Tester must verify Worker #3-authored c15b5b6.",
-    "#237 is high-fan-out correction work but is collision-blocked for Worker #3 by Worker #2 valid exact Coder claim 5544742704 after independent T-REV 5544697359. No stale deadline fired.",
-    "Capacity/role ledger reused all unchanged classifications from the fresh predecessor exhaustive scan and applied the only material issue deltas (#237/#354). Executable depth is 1: #354 is independently testable by a different Worker; Worker #3 is independence-excluded. No legitimate new decomposition was created because the dominant #237 blocker is already actively claimed and no other approved-scope classification changed.",
-    "Lightweight hygiene was not repeated as a full scan; only the new exact #354 controlled artifact measurement was recorded under the existing hygiene target."
+    "Material delta was #354 becoming independently testable after Worker #3 parked its Reviewer correction. Worker #1 first detected and cleared a two-phase collision, then resumed only after Worker #3 explicit non-exclusive handoff 5544852010.",
+    "Worker #1 independently verified c15b5b687754fe9228784a038189864ab817db1d: one workflow exclusion line only, integrity 33901002806 SUCCESS, cumulative upload SUCCESS, artifact 518,078,256 B -> 277,815,888 B (46.37%), and retained non-trace diagnostics. Focused Tester PASS is 5544881834; broader #354 is not closed by that verdict.",
+    "Worker #1 has no remaining #354 responsibility from this exact handoff. Its retained responsibility set is now 254/260/307/309/339/350/355/357/358 and none has a new safe owner action in the verified delta.",
+    "The fresh 18:30Z exhaustive ledger was reused after the #354 PASS delta. #237 remains collision-blocked by Worker #2's valid Coder claim; #329 remains unchanged. No additional unclaimed current/earlier target became safely executable, so executable depth returns to zero.",
+    "Lightweight hygiene used the new controlled #354 evidence only; no repeated broad scan or speculative cleanup was performed."
   ]
 }
