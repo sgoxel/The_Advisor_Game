@@ -5,15 +5,15 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T19:06:00Z",
-    "last_exhaustive_scan_at": "2026-09-04T18:30:12Z",
-    "last_exhaustive_main_sha": "81b2e9c0549eaaa5a1a05e099635f194e471736e",
+    "created_at": "2026-09-04T19:19:30Z",
+    "last_exhaustive_scan_at": "2026-09-04T19:19:30Z",
+    "last_exhaustive_main_sha": "aaa12e4d386546a84bc9e2c94c625580741f6d0e",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Worker #1 independent T-REV 5544697359 showed exact R04 33898682283 failed dense bounded NPC route progress after startup and focused spatial/occupancy passed. Worker #2 corrected the remaining route-replan coarse-jump hole in 6b70f6492f281664238fb0812ca11c71d03fbe14. Exact R04 33909336509 and R01 cumulative 33909336526 are nonterminal; different-Worker Tester verification remains required."},
+      {"issue": 237, "fan_out": 5, "reason": "Worker #1 independent T-REV 5544697359 showed exact R04 33898682283 failed dense bounded NPC route progress after startup and focused spatial/occupancy passed. Worker #2 corrected the remaining route-replan coarse-jump hole in 6b70f6492f281664238fb0812ca11c71d03fbe14. Exact R04 33909336509 and R01 cumulative 33909336526 remain nonterminal; different-Worker Tester verification remains required."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
@@ -28,14 +28,14 @@
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T18:31:30Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T19:06:00Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T19:19:30Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T18:30:12Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T17:05:47Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 18,
-    "material_no_progress_runs": 14,
+    "material_no_progress_runs": 15,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -43,9 +43,8 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "The fresh 18:30Z exhaustive ledger was reused after verifying the post-checkpoint issue delta. Only #237, #354 and #97 changed; #354's independent hygiene PASS was already represented by the predecessor checkpoint, and #97 is audit-only. The #237 delta moved its only executable owner action into an external exact-CI/different-Worker Tester wait, so no new Planner/Coder/Designer/Tester/Reviewer target was exposed and executable depth remains zero.",
-    "Worker #2 corrected #237 in 6b70f6492f281664238fb0812ca11c71d03fbe14 by holding the prior authoritative tile when a due travelling NPC has no adjacent route continuation and the canonical pass would otherwise exceed a one-tile delta. The correction is a focused boundedness fix and does not weaken Simulation chronology, NPC count, occupancy, visual behavior, or test acceptance thresholds.",
-    "Worker #2 cleared exclusive claim 5544742704 through non-exclusive wait/clear checkpoint 5545256827. Exact R04 33909336509 and R01 cumulative 33909336526 are in progress; different-Worker Tester verification is mandatory before PASS.",
-    "No lightweight-hygiene measurement was repeated: no new performance/size evidence was introduced by this focused #237 runtime correction, and the latest controlled #354 artifact-size evidence remains unchanged."
+    "19:19Z material refresh: exact compare from the prior exhaustive material checkpoint showed only the known #237 bounded-progress runtime correction plus WORKER_STATE coordination changes. Post-19:06 issue delta contained only #237 and audit-only #97; #237 exact R04/R01 evidence remained nonterminal. Reusing the fresh predecessor exhaustive ledger therefore exposed no new eligibility, and the subsequent Planner->Coder->Designer->Tester->Reviewer pass produced zero useful progress.",
+    "Worker #2 #237 remains a non-exclusive evidence/different-Worker Tester wait after correction 6b70f6492f281664238fb0812ca11c71d03fbe14; live exclusive Worker #2 claims are zero and executable depth remains zero.",
+    "No lightweight-hygiene measurement was repeated because no new performance/size/runtime/CI-cost evidence appeared and the latest controlled #354 evidence is unchanged."
   ]
 }
