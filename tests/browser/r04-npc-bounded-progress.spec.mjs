@@ -25,8 +25,16 @@ test('dense starter-village travel makes bounded authoritative progress without 
     let maxDelta = 0;
     let diagnosticShapeOk = true;
     let previous = new Map(world.npcs.map((npc) => [String(npc.id), { row: npc.row, col: npc.col }]));
+    const configuredCadences = Object.values(Game.NPCRelevanceRuntime?.cadenceMinutes || {})
+      .map(Number)
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const maxAuthoritativeCadence = Math.max(10, ...configuredCadences);
+    const finalMinute = 240 + Math.ceil(maxAuthoritativeCadence);
 
-    for (let minute = 240; minute <= 250; minute += 1) {
+    // #351 deliberately phases background authoritative work by NPC identity. Exercise at
+    // least one complete configured cadence so #237 proves bounded progress without forcing
+    // every background NPC to become due inside an older, shorter fixed sampling window.
+    for (let minute = 240; minute <= finalMinute; minute += 1) {
       Game.GameTime.setForTest(minute);
       Game.NPCSpatial.updateAt();
       const positions = world.npcs.map((npc) => ({
@@ -67,6 +75,7 @@ test('dense starter-village travel makes bounded authoritative progress without 
       allUnique,
       maxDelta,
       diagnosticShapeOk,
+      maxAuthoritativeCadence,
       finalDiagnostics,
       snapshots: snapshots.map((entry) => ({
         minute: entry.minute,
@@ -79,7 +88,7 @@ test('dense starter-village travel makes bounded authoritative progress without 
 
   expect(result.population).toBeGreaterThanOrEqual(16);
   expect(result.travelCount).toBeGreaterThanOrEqual(10);
-  expect(result.progressedCount, JSON.stringify(result.snapshots)).toBeGreaterThanOrEqual(10);
+  expect(result.progressedCount, JSON.stringify({ cadence: result.maxAuthoritativeCadence, snapshots: result.snapshots })).toBeGreaterThanOrEqual(10);
   expect(result.allUnique).toBe(true);
   expect(result.maxDelta).toBeLessThanOrEqual(1);
   expect(result.diagnosticShapeOk).toBe(true);
