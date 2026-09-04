@@ -1,5 +1,6 @@
-issue=359
+issue=237
 requested_suite=R04 100x100 Spatial World Verification
-reason=bootstrap connector-safe evidence recovery path and produce fresh current-main spatial evidence for active R04 waits
-source_context=Admin Worker #19 throughput remediation; existing #307-style waits demonstrated workflow_dispatch unavailability in connected Worker environment
-requested_at=2026-09-03T19:25:00+03:00
+reason=verify bounded-progress correction from preserved pre-update authoritative tile after direct candidate commits did not materialize exact workflow evidence
+candidate_sha=acb8f2baf06fe8c100fcf8bfe7d1dcbe115482f6
+source_context=Worker #2 continuity correction from Worker #6 root-cause refinement 5541071272
+requested_at=2026-09-04T16:15:21+03:00
