@@ -5,39 +5,37 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T23:19:28Z",
-    "last_exhaustive_scan_at": "2026-09-04T23:19:28Z",
-    "last_exhaustive_main_sha": "effc7b19a15ed2c14f1df9a8a7a808fa585a7f23",
+    "created_at": "2026-09-04T23:36:00Z",
+    "last_exhaustive_scan_at": "2026-09-04T23:36:00Z",
+    "last_exhaustive_main_sha": "a184fe8e032752aa5ea0364f7408673c804db72b",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 360, "fan_out": 6, "reason": "Accepted/evidenced #360 startup-persistence T-REV from run 33922393766 blocks #237 and its five current/earlier downstream targets transitively. Worker #5 reacquired a fresh exact Coder claim at 2026-09-04T23:16:08Z to attribute and correct the regression, so other Workers must not collide while that claim is valid."},
+      {"issue": 360, "fan_out": 6, "reason": "Worker #5 corrected the accepted/evidenced startup regression at a184fe8e032752aa5ea0364f7408673c804db72b. Exact R04 run 33929861724 is queued and different-Worker Tester verification remains required, so #360 still blocks #237 and its five current/earlier downstream targets until corrected evidence is terminal."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 360, "trigger": "Worker #5 fresh exact Coder claim 5547534540 is executing the accepted/evidenced T-REV. Resume on Worker #5 claim clear/wait with a correction handoff, terminal corrected #360 evidence, stale expiry after 2026-09-05T02:16:08Z absent qualifying same-target progress, or issue-state completion."},
-      {"issue": 237, "trigger": "Worker #5 attribution 5547482927 routes run 33922393766 startup failure to accepted #360 T-REV; #237 overlap/flicker and bounded-progress gates were skipped. Resume after #360-corrected terminal R04 evidence allows #237 target gates to execute, or on a new exact #237 revision/evidence/issue completion."},
+      {"issue": 360, "trigger": "Worker #5 correction a184fe8e032752aa5ea0364f7408673c804db72b is under exact R04 run 33929861724. Resume on terminal attributable failure, independent T-REV/PASS, or issue completion."},
+      {"issue": 237, "trigger": "Resume after #360-corrected terminal R04 evidence allows #237 overlap/flicker and bounded-progress gates to execute, or on a new exact #237 revision/evidence/issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
-      {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact R01 artifact remains reduced near 274 MB. New exact R04 spatial artifact 9957011555 is 607,567,972 B, essentially consistent with the previously measured residual 607,126,689 B and still above the connector inspection ceiling; no new redundant contributor is proven. Resume only on inspectable contributor evidence, a meaningful size regression/reduction, new revision, or explicit closure action."},
+      {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact R01 artifact remains reduced near 274 MB. R04 spatial artifact 9957011555 is 607,567,972 B and still above the connector inspection ceiling; resume only on inspectable contributor evidence, a meaningful size regression/reduction, new revision, or explicit closure action."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
-    "live_claim_stale_deadlines": [
-      {"issue": 360, "worker": "Worker #5", "claim_comment": 5547534540, "last_qualifying_action_at": "2026-09-04T23:16:08Z", "stale_after": "2026-09-05T02:16:08Z"}
-    ]
+    "live_claim_stale_deadlines": []
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T23:03:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T23:19:28Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T22:44:00Z"},
-    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-04T23:16:08Z"}
+    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-04T23:36:00Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 21,
+    "productive_material_runs": 22,
     "material_no_progress_runs": 20,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -46,9 +44,8 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Fast path was invalidated by post-checkpoint #360 material activity: Worker #5 recorded accepted/evidenced T-REV 5547482927, cleared to a non-exclusive correction handoff, then reacquired exact Coder claim 5547534540 at 23:16:08Z. The new live claim is valid and collision-blocks #360 correction work for other Workers.",
-    "Exact compare from material main effc7b19a15ed2c14f1df9a8a7a808fa585a7f23 to pre-run current main 4222a668b913c13f2f442957b636064009d5993e is coordination-state-only; ROADMAP/TODO blobs are unchanged. The fresh predecessor exhaustive zero-target ledger was therefore reusable after reconciling the sole non-#97 post-checkpoint material issue delta (#360). Executable depth remains 0.",
-    "Worker #2 retained responsibilities [237,254,329,346,347,349,350,353,358] expose no safe owner action now; #237 remains blocked behind #360 corrected evidence. No stale deadline fired.",
-    "LIGHTWEIGHT_HYGIENE was not repeated: no new performance/size/runtime/CI-cost measurement or plausibly hygiene-affecting repository delta appeared."
+    "Worker #5 continuity resumed #360 before unrelated rotation work. Source attribution showed NPCRuntimeBridge validated strategic row/col against the canonical local 100x100 bounds and forced a first reconcile update even for already-valid startup state. Commit a184fe8e032752aa5ea0364f7408673c804db72b makes bridge validation local-coordinate/binding aware and preserves valid startup state before observation.",
+    "The fresh 23:19Z predecessor exhaustive zero-target ledger was reused after reconciling the sole material continuity target. Worker #5 cleared exclusivity to an evidence WAIT after exact R04 run 33929861724 queued; executable depth remains 0 and next_role stays planner because own-claim reconciliation does not fabricate cursor ownership.",
+    "LIGHTWEIGHT HYGIENE CHECK: the correction removes one unconditional first-attach NPC spatial update when the authoritative startup population is already valid, while retaining invalid/drift recovery. No performance improvement is claimed without controlled runtime measurement; no new timer/listener/dependency/cache layer was added."
   ]
 }
