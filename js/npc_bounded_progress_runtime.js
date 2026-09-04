@@ -33,8 +33,8 @@
     return { routeName, route: Array.isArray(route) ? route.map(point) : [] };
   }
 
-  function nextRouteStep(npc) {
-    const current = point(npc);
+  function nextRouteStep(npc, currentOverride = null) {
+    const current = currentOverride ? point(currentOverride) : point(npc);
     const { routeName, route } = routeFor(npc);
     if (!routeName || route.length < 2) return { ok: false, reasonCode: routeName ? 'ROUTE_UNAVAILABLE' : 'NOT_TRAVELLING', routeName, current };
 
@@ -106,8 +106,8 @@
 
       for (const npc of world.npcs) {
         const due = typeof relevance?.authoritativeDue === 'function' ? relevance.authoritativeDue(npc, totalGameMinutes) : true;
-        const routeStep = due ? nextRouteStep(npc) : { ok: false, reasonCode: 'RELEVANCE_NOT_DUE' };
         const before = beforeById.get(String(npc.id)) || point(npc);
+        const routeStep = due ? nextRouteStep(npc, before) : { ok: false, reasonCode: 'RELEVANCE_NOT_DUE' };
 
         // Canonical #237 dialogue placement has already reserved an adjacent pair in the
         // first occupancy pass. Keep those authoritative dialogue tiles fixed so this
