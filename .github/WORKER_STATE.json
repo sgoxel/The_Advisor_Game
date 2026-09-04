@@ -5,7 +5,7 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-03T23:21:42Z",
+    "created_at": "2026-09-04T03:34:24Z",
     "last_exhaustive_scan_at": "2026-09-03T23:21:42Z",
     "last_exhaustive_main_sha": "c46e190de12faa3e4692a6df29900588353e02e2",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
@@ -28,13 +28,13 @@
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T22:05:48Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T22:14:52Z"},
-    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-03T21:34:00Z"},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-04T03:34:24Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-03T21:38:13Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 346, 350, 351, 358], "last_reconciled_at": "2026-09-03T23:21:42Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 8,
-    "material_no_progress_runs": 7,
+    "material_no_progress_runs": 8,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -46,6 +46,7 @@
     "Worker #1 consumed the watched #254/R01 transition: run 33808554209 on descendant 5679cd5 is terminal FAILURE, but GitHub-visible job evidence identifies only the broad cumulative regression step and does not expose a #254- or #172-attributable assertion. Focused #254 exterior coverage remains green within 33808554174 and interior continuity 33808554182 remains SUCCESS, so #254 stays a non-exclusive attribution/independence wait with no speculative correction.",
     "Worker #2 rechecked the sole post-checkpoint material issue delta (#254) and found no new attributable owner action, correction handoff, stale claim, or completion trigger. The fresh predecessor exhaustive ledger was therefore reused; Reviewer->Planner->Coder->Designer->Tester->Reviewer exposed zero safe targets and executable depth remains 0. Critical blockers #360 (fan-out 1) and #329 (fan-out 3) are unchanged.",
     "Worker #5 revalidated the same post-exhaustive #254 delta, normalized all intervening main changes as WORKER_STATE-only coordination commits, reconciled retained responsibilities #237/#254/#346/#350/#351/#358 from exact histories, and verified no post-Worker-#2 product issue delta. #237 remains routed behind #360; #350 remains behind canonical #329 compatibility; #351/#358 remain evidence-gated. Reusing the fresh predecessor ledger, Reviewer->Planner->Coder->Designer->Tester->Reviewer again exposed zero safe targets; executable depth remains 0 and next_role remains reviewer.",
+    "Worker #3 reconciled its retained #254 responsibility after terminal candidate evidence. Exact exterior run 33808554174 has focused #254 coverage green but a later Simulation-owned NPC presence preservation step red; interior run 33808554182 is green. No safe attributable Worker #3 correction exists, no claim was acquired, and the newer Worker #5 exhaustive zero-target ledger remains valid because no non-#97 product/planning issue delta occurred after that checkpoint before this reconciliation.",
     "Lightweight hygiene was not repeated because no new performance/size/runtime/CI-cost measurement or hygiene-target state change appeared; the prior cadence decision remains valid."
   ]
 }
