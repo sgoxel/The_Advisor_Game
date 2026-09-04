@@ -1,19 +1,30 @@
 import { test, expect } from '@playwright/test';
 
-function summarize(npcs) {
-  const positions = npcs.map((npc) => ({ id: npc.id, row: Number(npc.row), col: Number(npc.col) }));
-  const keys = positions.map((npc) => `${npc.row},${npc.col}`);
-  const rows = positions.map((npc) => npc.row);
-  const cols = positions.map((npc) => npc.col);
+function summarize(npcs, originBinding) {
+  const rowOffset = Number(originBinding?.rowOffset || 0);
+  const colOffset = Number(originBinding?.colOffset || 0);
+  const positions = npcs.map((npc) => ({
+    id: npc.id,
+    row: Number(npc.row),
+    col: Number(npc.col),
+    localRow: Number(npc.localRow),
+    localCol: Number(npc.localCol)
+  }));
+  const keys = positions.map((npc) => `${npc.localRow},${npc.localCol}`);
+  const rows = positions.map((npc) => npc.localRow);
+  const cols = positions.map((npc) => npc.localCol);
   return {
     count: positions.length,
     uniqueCount: new Set(keys).size,
-    allInteger: positions.every((npc) => Number.isInteger(npc.row) && Number.isInteger(npc.col)),
-    allInBounds: positions.every((npc) => npc.row >= 0 && npc.row < 100 && npc.col >= 0 && npc.col < 100),
-    zeroZeroCount: positions.filter((npc) => npc.row === 0 && npc.col === 0).length,
+    allInteger: positions.every((npc) => Number.isInteger(npc.localRow) && Number.isInteger(npc.localCol)),
+    allInBounds: positions.every((npc) => npc.localRow >= 0 && npc.localRow < 100 && npc.localCol >= 0 && npc.localCol < 100),
+    zeroZeroCount: positions.filter((npc) => npc.localRow === 0 && npc.localCol === 0).length,
+    bindingConsistent: positions.every((npc) => (
+      npc.row === npc.localRow + rowOffset && npc.col === npc.localCol + colOffset
+    )),
     rowSpan: positions.length ? Math.max(...rows) - Math.min(...rows) : 0,
     colSpan: positions.length ? Math.max(...cols) - Math.min(...cols) : 0,
-    signature: positions.map((npc) => `${npc.id}:${npc.row},${npc.col}`).join('|')
+    signature: positions.map((npc) => `${npc.id}:${npc.localRow},${npc.localCol}`).join('|')
   };
 }
 
@@ -37,7 +48,8 @@ test('untouched production startup keeps all NPCs collision-safe and spatially d
       populationCount: world.originVillage.population.length,
       bridgeInstalled: window.Game.NPCRuntimeBridge.installed,
       valid: window.Game.NPCRuntimeBridge.validSpatialPopulation(),
-      npcs: world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col }))
+      originBinding: world.npcRuntime?.originBinding,
+      npcs: world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, localRow: npc.localRow, localCol: npc.localCol }))
     };
   });
 
@@ -52,12 +64,13 @@ test('untouched production startup keeps all NPCs collision-safe and spatially d
       bridgeInstalled: window.Game.NPCRuntimeBridge.installed,
       valid: window.Game.NPCRuntimeBridge.validSpatialPopulation(),
       routineClockAuthority: world.npcRuntime?.routineClockAuthority,
-      npcs: world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col }))
+      originBinding: world.npcRuntime?.originBinding,
+      npcs: world.npcs.map((npc) => ({ id: npc.id, row: npc.row, col: npc.col, localRow: npc.localRow, localCol: npc.localCol }))
     };
   });
 
-  const a = summarize(first.npcs);
-  const b = summarize(second.npcs);
+  const a = summarize(first.npcs, first.originBinding);
+  const b = summarize(second.npcs, second.originBinding);
 
   expect(first.bridgeInstalled).toBe(true);
   expect(second.bridgeInstalled).toBe(true);
@@ -71,6 +84,8 @@ test('untouched production startup keeps all NPCs collision-safe and spatially d
   expect(b.allInteger).toBe(true);
   expect(a.allInBounds).toBe(true);
   expect(b.allInBounds).toBe(true);
+  expect(a.bindingConsistent).toBe(true);
+  expect(b.bindingConsistent).toBe(true);
   expect(a.zeroZeroCount).toBe(0);
   expect(b.zeroZeroCount).toBe(0);
   expect(a.rowSpan).toBeGreaterThanOrEqual(10);
