@@ -5,37 +5,37 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T13:03:56Z",
-    "last_exhaustive_scan_at": "2026-09-04T13:03:56Z",
-    "last_exhaustive_main_sha": "e8e67c2294035fafdecb177c1b80df9b5b87e744",
+    "created_at": "2026-09-04T13:27:47Z",
+    "last_exhaustive_scan_at": "2026-09-04T13:27:47Z",
+    "last_exhaustive_main_sha": "01e21b0746914b90d4fd047cbd8a39ee97f6a02c",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 360, "fan_out": 1, "reason": "Worker #6 corrected the attributable startup-coordinate regression in PR #361 at debd58557914d7607d58b5f8178b686df2b426ac; required PR CI is still nonterminal and different-Worker Tester verification is pending, so downstream #237 evidence remains unavailable."},
+      {"issue": 237, "fan_out": 5, "reason": "Fresh post-8273 runtime attribution proves boundedUpdateAt computes a route step from a post-jump NPCSpatial position and then restores the prior tile, permitting non-adjacent authoritative jumps; #238/#253/#257 are direct TODO dependents and #351/#358 are now explicitly parked on the #237 correction. Worker #2 holds fresh exclusive claim 5541110695."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
-      {"issue": 360, "trigger": "PR #361 head debd58557914d7607d58b5f8178b686df2b426ac has local focused PASS; check-runs strategic-map-browser 101031193433, cumulative-r01-browser 101031192589, and spatial-world-and-npc-occupancy 101031192469 are nonterminal; resume #237-related continuity on terminal attributable evidence plus required independent Tester disposition or issue completion"},
-      {"issue": 358, "trigger": "Worker #6 holds fresh exclusive Coder claim comment 5540764010 to reproduce exact post-8273d581 stable-ID presentation flicker; resume Worker #1 responsibility on claim clear/expiry plus exact attributable T-REV/runtime evidence, or issue completion"},
-      {"issue": 351, "trigger": "compatible #358/spatial-preservation descendant terminal evidence, a new exact #351-attributable failure, a different-Worker T-REV, or issue completion"},
+      {"issue": 360, "trigger": "PR #361 head debd58557914d7607d58b5f8178b686df2b426ac has local focused PASS; cumulative-r01-browser check 101031192589 is terminal FAILURE at a broad interaction/zoom assertion while strategic-map-browser 101031193433 and spatial-world-and-npc-occupancy 101031192469 remain in progress; resume on terminal attributable #360 evidence plus required different-Worker Tester disposition or issue completion"},
+      {"issue": 358, "trigger": "Exact post-8273 trace comment 5540875770 found zero authoritative+in-envelope presentation absences and routed remaining coordinate oscillation to #237; Worker #3 consumed this trigger in WAIT comment 5541145906; resume on #237 correction handoff plus different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion"},
+      {"issue": 351, "trigger": "Worker #6 root-cause refinement 5541071272 parks #351 on the exact #237 bounded-progress correction; resume on #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion"},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": [
-      {"issue": 358, "worker": "Worker #6", "claim_comment": 5540764010, "stale_after": "2026-09-04T15:58:12Z"}
+      {"issue": 237, "worker": "Worker #2", "claim_comment": 5541110695, "stale_after": "2026-09-04T16:27:19Z"}
     ]
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-04T13:03:56Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T22:14:52Z"},
-    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-04T03:34:24Z"},
+    "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-04T13:27:47Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-04T09:43:55Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 346, 350, 351, 358], "last_reconciled_at": "2026-09-04T12:53:38Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 8,
+    "productive_material_runs": 9,
     "material_no_progress_runs": 12,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -45,10 +45,8 @@
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
     "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
-    "Worker #1 consumed the watched #254/R01 transition: run 33808554209 on descendant 5679cd5 is terminal FAILURE, but GitHub-visible job evidence identifies only the broad cumulative regression step and does not expose a #254- or #172-attributable assertion. Focused #254 exterior coverage remains green within 33808554174 and interior continuity 33808554182 remains SUCCESS, so #254 stays a non-exclusive attribution/independence wait with no speculative correction.",
-    "Worker #4 six-hour safety refresh at 2026-09-04T09:43:55Z re-read README/ROADMAP/TODO authority and completed the required full Reviewer->Planner->Coder->Designer->Tester->Reviewer safety pass plus capacity recovery; executable depth remained 0, critical blockers #360/#329 were unchanged, and lightweight hygiene cadence was not triggered.",
-    "Worker #5 material reconciliation at 2026-09-04T12:53:38Z found the only post-refresh non-#97 issue delta at #360, where Worker #6 had begun attributable correction work; reusing the fresh exhaustive ledger exposed zero safe targets and next_role remained reviewer.",
-    "Worker #1 material reconciliation at 2026-09-04T13:03:56Z: fast path was disabled by fresh #360/#358/PR #361 activity. Exact #358 history shows Worker #6 acquired fresh exclusive Coder claim 5540764010 at 12:58:12Z, so Worker #1's retained #358 responsibility is collision-blocked until a qualifying clear/expiry/new attributable handoff. Exact #360 history shows Worker #6 corrected the current failure in PR #361 head debd58557914d7607d58b5f8178b686df2b426ac and parked non-exclusive for exact PR CI plus independent Tester verification; three relevant check-runs remained in progress at reconciliation. The only repository delta from the preceding exhaustive material main SHA to e8e67c2294035fafdecb177c1b80df9b5b87e744 was .github/WORKER_STATE.json, so ROADMAP/TODO and the predecessor exhaustive eligibility ledger remain reusable. Applying the fresh deltas, Reviewer->Planner->Coder->Designer->Tester->Reviewer exposes zero safe Worker #1 targets; executable depth remains 0, #360/#329 remain the critical blockers, no stale deadline has fired, and next_role remains reviewer.",
-    "Lightweight hygiene was not repeated because the post-checkpoint changes are coordination/claim/PR-test evidence transitions without new runtime, asset, dependency, CI-size, or presentation-cost measurement; the 24-hour cadence has not elapsed."
+    "Worker #3 material reconciliation at 2026-09-04T13:27:47Z: fast path was disabled by #358/#351/#237 issue deltas and watched #360 CI transition. Exact post-8273 #358 runtime trace reproduced zero unexplained in-envelope presentation absence but exposed authoritative coordinate oscillation; #351 refinement attributed that oscillation to #237 bounded progress. Worker #2 then acquired fresh exclusive #237 claim 5541110695, so Worker #3 reconciled retained #358 as non-exclusive WAIT in comment 5541145906 and did not race the correction.",
+    "The 13:03:56Z exhaustive ledger was reused because exact compare e8e67c2..01e21b0 changed only .github/WORKER_STATE.json, ROADMAP/TODO are unchanged, and the post-checkpoint issue search found only #97/#351/#358/#237 material issue deltas. Applying those deltas plus watched #360 CI leaves executable depth 0 for Worker #3; #237 is the highest current blocker with five direct operational/TODO dependents, #329 remains unchanged, and next_role remains reviewer because own-responsibility reconciliation does not fabricate cursor ownership.",
+    "Lightweight hygiene checked on the fresh runtime evidence: #358 trace 54078.9ms/443 frames/197 interaction frames/6814 deferred observations/final queue 16 and #351 trace 18949.4ms/158 spatial-authority skips/max 93-tile jump establish a correctness-routing defect, not proven standalone bloat. No optimization mutation or cleanup issue was created; existing #351/#350 performance scope remains authoritative while #237 correctness is fixed first."
   ]
 }
