@@ -10,7 +10,7 @@
 (function installNpcRuntimeBridge() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-runtime-bridge-v3-invalid-recovery';
+  const VERSION = 'r04-npc-runtime-bridge-v4-binding-aware-startup';
   const REGION_SIZE = Number(Game.SpatialWorld?.regionSize || Game.Config?.LOGICAL_REGION_TILES || 100);
   let installed = false;
   let attempts = 0;
@@ -31,13 +31,20 @@
     const npcs = world?.npcs;
     if (!village || !Array.isArray(village.population) || !Array.isArray(npcs)) return false;
     if (npcs.length !== village.population.length || npcs.length === 0) return false;
+    const binding = world.npcRuntime?.originBinding || { rowOffset: 0, colOffset: 0 };
+    const rowOffset = Number(binding.rowOffset || 0);
+    const colOffset = Number(binding.colOffset || 0);
+    if (!Number.isFinite(rowOffset) || !Number.isFinite(colOffset)) return false;
     const occupied = new Set();
     for (const npc of npcs) {
       const row = Number(npc.row);
       const col = Number(npc.col);
-      if (!Number.isInteger(row) || !Number.isInteger(col)) return false;
-      if (row < 0 || row >= REGION_SIZE || col < 0 || col >= REGION_SIZE) return false;
-      const key = `${row},${col}`;
+      const localRow = Number(npc.localRow);
+      const localCol = Number(npc.localCol);
+      if (!Number.isInteger(row) || !Number.isInteger(col) || !Number.isInteger(localRow) || !Number.isInteger(localCol)) return false;
+      if (localRow < 0 || localRow >= REGION_SIZE || localCol < 0 || localCol >= REGION_SIZE) return false;
+      if (row !== localRow + rowOffset || col !== localCol + colOffset) return false;
+      const key = `${localRow},${localCol}`;
       if (occupied.has(key)) return false;
       occupied.add(key);
     }
@@ -74,7 +81,12 @@
     const drifted = Boolean(lastSpatialSignature && before !== lastSpatialSignature);
     const invalid = !validSpatialPopulation();
 
-    if (drifted || invalid || !lastSpatialSignature) {
+    // A freshly attached bridge must observe an already-valid authoritative startup
+    // population without mutating it. Only later drift or genuinely invalid occupancy
+    // requires a Simulation update/recovery pass.
+    if (!lastSpatialSignature && !invalid) {
+      lastSpatialSignature = before;
+    } else if (drifted || invalid) {
       if (world.npcRuntime) world.npcRuntime.lastRoutineStateKey = null;
       if (invalid) invalidRecoveryRuns += 1;
       runSpatialUpdate({ forceFull: invalid });
