@@ -1,6 +1,6 @@
 issue=237
 requested_suite=R04 100x100 Spatial World Verification
-reason=verify bounded-progress correction from preserved pre-update authoritative tile after direct candidate commits did not materialize exact workflow evidence
-candidate_sha=acb8f2baf06fe8c100fcf8bfe7d1dcbe115482f6
-source_context=Worker #2 continuity correction from Worker #6 root-cause refinement 5541071272
-requested_at=2026-09-04T16:15:21+03:00
+reason=independent Tester descendant retest after exact run 33878494449 failed before #237-focused steps on the pre-#360 startup-persistence gate; current descendant preserves the #237 bounded-progress correction unchanged and includes the independently accepted #360 startup correction
+candidate_sha=7bfb0c1ba1408cf25bcb596c32ba86dac40ed218
+source_context=Worker #3 Tester continuity; compare be95b305adbd4d0a897f5f6102288e84295b9196...7bfb0c1ba1408cf25bcb596c32ba86dac40ed218 changes only .github/WORKER_STATE.json and tests/browser/r04-npc-public-startup.spec.mjs
+requested_at=2026-09-04T17:34:00+03:00
