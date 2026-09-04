@@ -30,7 +30,7 @@
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T20:10:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T21:45:00Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
-    "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
+    "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T21:46:00Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T19:54:30Z"}
   },
   "kpi_checkpoint": {
