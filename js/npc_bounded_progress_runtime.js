@@ -142,6 +142,18 @@
           desiredMap.set(npc.id, { point: routeStep.next, activity: npc.activity || 'idle' });
           travel.push({ npc, before, requested: routeStep.next, preResolved: false, routeStep });
         } else {
+          // A route-replan gap is not permission to preserve a coarse canonical jump. If a
+          // due travelling NPC cannot derive an adjacent continuation from its prior
+          // authoritative tile, hold that prior tile for this minute and expose the reason.
+          // The next due pass can rejoin once an adjacent route point is available.
+          if (due && TRAVEL_ACTIVITY[String(npc.activity || '')] && distance(before, point(npc)) > 1) {
+            npc.row = before.row;
+            npc.col = before.col;
+            npc.localRow = before.row - Number(binding.rowOffset || 0);
+            npc.localCol = before.col - Number(binding.colOffset || 0);
+            npc.movementDecision = 'yield-wait';
+            npc.movementBlockedBy = null;
+          }
           fixedNpcIds.add(npc.id);
           desiredMap.set(npc.id, { point: point(npc), activity: npc.activity || 'idle' });
           if (due && TRAVEL_ACTIVITY[String(npc.activity || '')]) travel.push({ npc, before, requested: null, preResolved: true, routeStep });
