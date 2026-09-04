@@ -111,3 +111,31 @@ test('same authoritative minute is idempotent and blocked travel exposes an evid
   expect(result.secondDiagnostics.step).toBe(result.firstDiagnostics.step);
   for (const row of result.stalledRows) expect(row.blockedReason).toBeTruthy();
 });
+
+test('route-step selection stays anchored to the preserved pre-update authoritative tile', async ({ page }) => {
+  await page.goto('./');
+  await page.waitForFunction(() => Boolean(window.Game?.NPCBoundedProgressRuntime?.nextRouteStep));
+
+  const result = await page.evaluate(() => {
+    const npc = {
+      id: 'bounded-origin-regression',
+      activity: 'local-errand',
+      row: 50,
+      col: 50,
+      spatialRoutes: {
+        workToSocial: [
+          { row: 10, col: 10 },
+          { row: 10, col: 11 },
+          { row: 10, col: 12 },
+          { row: 50, col: 50 }
+        ]
+      }
+    };
+    return window.Game.NPCBoundedProgressRuntime.nextRouteStep(npc, { row: 10, col: 10 });
+  });
+
+  expect(result.ok).toBe(true);
+  expect(result.current).toEqual({ row: 10, col: 10 });
+  expect(result.next).toEqual({ row: 10, col: 11 });
+  expect(Math.abs(result.next.row - result.current.row) + Math.abs(result.next.col - result.current.col)).toBe(1);
+});
