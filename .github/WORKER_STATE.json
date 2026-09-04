@@ -5,29 +5,32 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T22:44:00Z",
-    "last_exhaustive_scan_at": "2026-09-04T22:44:00Z",
+    "created_at": "2026-09-04T23:03:00Z",
+    "last_exhaustive_scan_at": "2026-09-04T23:03:00Z",
     "last_exhaustive_main_sha": "effc7b19a15ed2c14f1df9a8a7a808fa585a7f23",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Worker #4 correction effc7b19a15ed2c14f1df9a8a7a808fa585a7f23 exact R04 33922393766/job 101183400628 is terminal FAILURE, but untouched production NPC startup persistence failed first and the focused #237 spatial/occupancy plus bounded-progress gates were skipped. Worker #4 authored the candidate and cannot independently verdict it; no evidence-backed new Coder mutation is established. Different-Worker attribution/target-specific evidence remains required."},
+      {"issue": 360, "fan_out": 6, "reason": "Fresh Worker #5 independent attribution on #237 run 33922393766/job 101183400628 identifies the first failure as the accepted #360 startup-persistence contract: first startup frame expected structured spawn x=50 but observed x=178. #237 target gates were skipped. Worker #5 acquired a fresh exact #360 claim at 2026-09-04T22:59:44Z, so correction/routing is collision-blocked for other Workers until that claim clears, becomes a non-exclusive wait, or expires stale. #360 blocks #237 directly and its five current/earlier downstream targets transitively."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Exact Worker #4 correction effc7b19a15ed2c14f1df9a8a7a808fa585a7f23 has terminal R04 33922393766/job 101183400628 FAILURE only after untouched startup persistence failed; #237 target gates were skipped. Resume on different-Worker attribution/verdict, reliable target-specific terminal evidence, a new correction/revision, or issue completion."},
+      {"issue": 360, "trigger": "Worker #5 fresh exact claim 5547402265 is routing the current startup-persistence regression attributed from run 33922393766. Resume on Worker #5 claim clear/wait with a correction handoff, terminal corrected #360 evidence, stale expiry after 2026-09-05T01:59:44Z absent qualifying same-target progress, or issue-state completion."},
+      {"issue": 237, "trigger": "Worker #5 attribution 5547393319 routes run 33922393766 startup x mismatch (expected 50, actual 178) to #360; #237 overlap/flicker and bounded-progress gates were skipped. Resume after #360-corrected terminal R04 evidence allows #237 target gates to execute, or on a new exact #237 revision/evidence/issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
       {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact R01 artifact remains reduced near 274 MB. New exact R04 spatial artifact 9957011555 is 607,567,972 B, essentially consistent with the previously measured residual 607,126,689 B and still above the connector inspection ceiling; no new redundant contributor is proven. Resume only on inspectable contributor evidence, a meaningful size regression/reduction, new revision, or explicit closure action."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
-    "live_claim_stale_deadlines": []
+    "live_claim_stale_deadlines": [
+      {"issue": 360, "worker": "Worker #5", "claim_comment": 5547402265, "last_qualifying_action_at": "2026-09-04T22:59:44Z", "stale_after": "2026-09-05T01:59:44Z"}
+    ]
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T20:10:00Z"},
+    "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T23:03:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T21:45:00Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T22:44:00Z"},
@@ -35,7 +38,7 @@
   },
   "kpi_checkpoint": {
     "productive_material_runs": 21,
-    "material_no_progress_runs": 18,
+    "material_no_progress_runs": 19,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -43,8 +46,8 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Checkpoint delta from 21:45Z is watched #237 evidence only: R04 33922393766/job 101183400628 transitioned to terminal FAILURE at 22:42Z. Untouched NPC startup persistence failed before #237 focused/bounded gates, so Worker #4 recorded retained non-exclusive wait update 5547294396 rather than speculative correction or self-verdict.",
-    "The predecessor exhaustive zero-target ledger remains valid after reconciling the sole material issue/evidence delta; no other non-#97 current/earlier issue update was found and ROADMAP/TODO remain unchanged. Executable depth remains 0.",
-    "LIGHTWEIGHT_HYGIENE was checked because new exact artifact-size evidence appeared: R04 artifact 9957011555 is 607,567,972 B versus the prior comparable residual 607,126,689 B. The residual remains above the connector ceiling but no new redundant contributor or meaningful regression is proven, so no cleanup mutation or duplicate issue was created."
+    "Checkpoint delta from 22:44Z is exact issue attribution/routing only: Worker #5 established that run 33922393766 fails the accepted #360 startup-persistence contract at first-frame structured spawn x (expected 50, actual 178), while #237 target gates were skipped. Worker #5 then acquired a fresh exact #360 claim, so Worker #1 did not collide or speculate.",
+    "The predecessor exhaustive zero-target ledger was reused after verifying the only post-checkpoint non-#97 issue updates were #237 and #360 and ROADMAP/TODO/material source remain unchanged. #237 is now blocked by #360 correction evidence; executable depth remains 0 while Worker #5's fresh #360 claim is live.",
+    "LIGHTWEIGHT_HYGIENE was not repeated: no new hygiene-relevant measurement or plausibly cost-affecting repository delta appeared after the 22:44Z check."
   ]
 }
