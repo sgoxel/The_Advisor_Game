@@ -31,11 +31,11 @@
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T19:19:30Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T19:30:12Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
-    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T17:05:47Z"}
+    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T19:54:30Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 18,
-    "material_no_progress_runs": 16,
+    "material_no_progress_runs": 17,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -46,6 +46,7 @@
     "19:30Z material refresh: the only post-19:19 non-audit eligibility-relevant delta was watched R01 run 33909336526 becoming terminal FAILURE. Current main differs from material checkpoint aaa12e4d only by the predecessor WORKER_STATE coordination commit 1f2d9cd; ROADMAP/TODO remain exact. Exact R04 33909336509 is still IN_PROGRESS, so #237 has no safe independent verdict/correction action for Worker #3 yet.",
     "The fresh 19:19 exhaustive ledger was reused after verifying the delta. Capacity remains truthfully zero executable targets; no legitimate approved-scope decomposition or unnecessary serialization change was exposed, and the subsequent Planner->Coder->Designer->Tester->Reviewer pass produced zero useful progress.",
     "Worker #3 recorded #237 evidence checkpoint 5545523527; no exclusive claim was acquired and all retained responsibilities remain non-exclusive waits with unchanged resume conditions except the newly recorded terminal broad R01 failure.",
-    "LIGHTWEIGHT HYGIENE CHECK performed because new CI-size evidence appeared: R01 artifact 9951418138 is 274,571,455 B versus the prior post-#354 controlled 277,815,888 B artifact. No regression/duplicate finding is evidenced; no hygiene action or cleanup target was created."
+    "LIGHTWEIGHT HYGIENE CHECK performed because new CI-size evidence appeared: R01 artifact 9951418138 is 274,571,455 B versus the prior post-#354 controlled 277,815,888 B artifact. No regression/duplicate finding is evidenced; no hygiene action or cleanup target was created.",
+    "19:54Z Worker #5 reconciliation: fast-path certainty was unavailable because #237's 19:31Z issue update followed the 19:30Z exhaustive timestamp, although that exact dispatch was already represented by Worker #3's coordination checkpoint. Exact re-fetch found R04 33909336509 still IN_PROGRESS and no Worker #5 responsibility resume trigger. The fresh zero-depth predecessor exhaustive ledger was therefore preserved; no capacity or hygiene repeat was warranted and no #97 audit event was created."
   ]
 }
