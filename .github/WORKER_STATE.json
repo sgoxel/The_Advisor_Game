@@ -5,30 +5,30 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T12:53:38Z",
-    "last_exhaustive_scan_at": "2026-09-04T12:53:38Z",
-    "last_exhaustive_main_sha": "27538ccce394a9262f4f655d69848a771c3e94e3",
+    "created_at": "2026-09-04T13:03:56Z",
+    "last_exhaustive_scan_at": "2026-09-04T13:03:56Z",
+    "last_exhaustive_main_sha": "e8e67c2294035fafdecb177c1b80df9b5b87e744",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 360, "fan_out": 1, "reason": "R04 startup/spatial evidence recovery is under a fresh valid Worker #6 exclusive Coder claim; downstream #237-focused adjudication remains non-executable until attributable correction/handoff/evidence exists."},
+      {"issue": 360, "fan_out": 1, "reason": "Worker #6 corrected the attributable startup-coordinate regression in PR #361 at debd58557914d7607d58b5f8178b686df2b426ac; required PR CI is still nonterminal and different-Worker Tester verification is pending, so downstream #237 evidence remains unavailable."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
-      {"issue": 360, "trigger": "Worker #6 exact claim 5540639522 is actively attributing terminal run 33796344365 using artifacts 9911440311/9910067516; resume #237-related continuity only on exact attributable correction/handoff/evidence, claim clear with new actionable evidence, or issue completion"},
-      {"issue": 358, "trigger": "exact post-8273d581 descendant runtime trace reproduces a stable in-envelope NPC ID disappearance or a new attributable T-REV"},
+      {"issue": 360, "trigger": "PR #361 head debd58557914d7607d58b5f8178b686df2b426ac has local focused PASS; check-runs strategic-map-browser 101031193433, cumulative-r01-browser 101031192589, and spatial-world-and-npc-occupancy 101031192469 are nonterminal; resume #237-related continuity on terminal attributable evidence plus required independent Tester disposition or issue completion"},
+      {"issue": 358, "trigger": "Worker #6 holds fresh exclusive Coder claim comment 5540764010 to reproduce exact post-8273d581 stable-ID presentation flicker; resume Worker #1 responsibility on claim clear/expiry plus exact attributable T-REV/runtime evidence, or issue completion"},
       {"issue": 351, "trigger": "compatible #358/spatial-preservation descendant terminal evidence, a new exact #351-attributable failure, a different-Worker T-REV, or issue completion"},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": [
-      {"issue": 360, "worker": "Worker #6", "claim_comment": 5540639522, "stale_after": "2026-09-04T15:47:11Z"}
+      {"issue": 358, "worker": "Worker #6", "claim_comment": 5540764010, "stale_after": "2026-09-04T15:58:12Z"}
     ]
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-03T22:05:48Z"},
+    "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-04T13:03:56Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T22:14:52Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-04T03:34:24Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-04T09:43:55Z"},
@@ -36,7 +36,7 @@
   },
   "kpi_checkpoint": {
     "productive_material_runs": 8,
-    "material_no_progress_runs": 11,
+    "material_no_progress_runs": 12,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -46,12 +46,9 @@
     "Canonical planning cache is ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa; never infer absent planning authority from missing .md variants.",
     "A checkpoint commit that changes only .github/WORKER_STATE.json may be normalized as coordination-state-only main delta only under the strict exact-compare rule in WORKER_THROUGHPUT.md; any other changed path remains material.",
     "Worker #1 consumed the watched #254/R01 transition: run 33808554209 on descendant 5679cd5 is terminal FAILURE, but GitHub-visible job evidence identifies only the broad cumulative regression step and does not expose a #254- or #172-attributable assertion. Focused #254 exterior coverage remains green within 33808554174 and interior continuity 33808554182 remains SUCCESS, so #254 stays a non-exclusive attribution/independence wait with no speculative correction.",
-    "Worker #2 rechecked the sole post-checkpoint material issue delta (#254) and found no new attributable owner action, correction handoff, stale claim, or completion trigger. The fresh predecessor exhaustive ledger was therefore reused; Reviewer->Planner->Coder->Designer->Tester->Reviewer exposed zero safe targets and executable depth remains 0. Critical blockers #360 (fan-out 1) and #329 (fan-out 3) are unchanged.",
-    "Worker #5 revalidated the same post-exhaustive #254 delta, normalized all intervening main changes as WORKER_STATE-only coordination commits, reconciled retained responsibilities #237/#254/#346/#350/#351/#358 from exact histories, and verified no post-Worker-#2 product issue delta. #237 remains routed behind #360; #350 remains behind canonical #329 compatibility; #351/#358 remain evidence-gated. Reusing the fresh predecessor ledger, Reviewer->Planner->Coder->Designer->Tester->Reviewer again exposed zero safe targets; executable depth remains 0 and next_role remains reviewer.",
-    "Worker #3 reconciled its retained #254 responsibility after terminal candidate evidence. Exact exterior run 33808554174 has focused #254 coverage green but a later Simulation-owned NPC presence preservation step red; interior run 33808554182 is green. No safe attributable Worker #3 correction exists, no claim was acquired, and the newer Worker #5 exhaustive zero-target ledger remains valid because no non-#97 product/planning issue delta occurred after that checkpoint before this reconciliation.",
-    "Worker #4 rechecked its retained #254 responsibility against the newest exact issue history. The latest Worker #3 reconciliation confirms no new target-attributable #254 owner action, nonconflicted correction handoff, or completion trigger; Worker #4 remains independence-conflicted by incorporated e80199c7 test-harness authorship. No other current/earlier non-#97 issue changed after the predecessor exhaustive checkpoint, ROADMAP/TODO are unchanged, and all intervening main commits are WORKER_STATE-only; the predecessor exhaustive zero-target ledger was therefore reused and next_role remains reviewer.",
-    "Worker #4 six-hour safety refresh at 2026-09-04T09:43:55Z: README/ROADMAP/TODO authority was re-read; the all-state issue delta query since the prior exhaustive checkpoint returned only #97 audit traffic, so exact current/earlier target histories and classifications are unchanged; watched #254 exterior run 33808554174 remains terminal FAILURE with the focused target portion green as previously classified; no stale exclusive deadlines exist; Worker #4 retained responsibilities [254,307,309,349,356,357,358] have no fired resume trigger. Full Reviewer->Planner->Coder->Designer->Tester->Reviewer safety pass plus capacity recovery exposed zero safe executable targets, so executable depth remains 0, critical blockers #360/#329 are unchanged, and next_role remains reviewer.",
-    "Lightweight hygiene was not repeated because no new performance/size/runtime/CI-cost measurement or hygiene-target state change appeared; only coordination-state commits occurred since the prior hygiene decision and the 24-hour cadence has not elapsed.",
-    "Worker #5 material reconciliation at 2026-09-04T12:53:38Z: the only post-refresh non-#97 issue delta is #360. Worker #6 acquired fresh exclusive Coder claim comment 5540639522 at 12:47:11Z after terminal run 33796344365 artifacts became available, so #360 remains collision-blocked until 15:47:11Z absent qualifying progress/clear. This does not yet satisfy Worker #5 #237's upstream-resolution/issue-specific-evidence resume trigger. All other Worker #5 responsibility issues are unchanged by the verified issue delta. Reusing the 09:43:55Z exhaustive ledger with only this live-claim reclassification, Reviewer->Planner->Coder->Designer->Tester->Reviewer exposes zero safe targets; executable depth remains 0 and next_role remains reviewer. Hygiene cadence was not triggered because this issue-claim/evidence-attribution change adds no new performance/size/runtime-cost measurement or hygiene-target state change."
+    "Worker #4 six-hour safety refresh at 2026-09-04T09:43:55Z re-read README/ROADMAP/TODO authority and completed the required full Reviewer->Planner->Coder->Designer->Tester->Reviewer safety pass plus capacity recovery; executable depth remained 0, critical blockers #360/#329 were unchanged, and lightweight hygiene cadence was not triggered.",
+    "Worker #5 material reconciliation at 2026-09-04T12:53:38Z found the only post-refresh non-#97 issue delta at #360, where Worker #6 had begun attributable correction work; reusing the fresh exhaustive ledger exposed zero safe targets and next_role remained reviewer.",
+    "Worker #1 material reconciliation at 2026-09-04T13:03:56Z: fast path was disabled by fresh #360/#358/PR #361 activity. Exact #358 history shows Worker #6 acquired fresh exclusive Coder claim 5540764010 at 12:58:12Z, so Worker #1's retained #358 responsibility is collision-blocked until a qualifying clear/expiry/new attributable handoff. Exact #360 history shows Worker #6 corrected the current failure in PR #361 head debd58557914d7607d58b5f8178b686df2b426ac and parked non-exclusive for exact PR CI plus independent Tester verification; three relevant check-runs remained in progress at reconciliation. The only repository delta from the preceding exhaustive material main SHA to e8e67c2294035fafdecb177c1b80df9b5b87e744 was .github/WORKER_STATE.json, so ROADMAP/TODO and the predecessor exhaustive eligibility ledger remain reusable. Applying the fresh deltas, Reviewer->Planner->Coder->Designer->Tester->Reviewer exposes zero safe Worker #1 targets; executable depth remains 0, #360/#329 remain the critical blockers, no stale deadline has fired, and next_role remains reviewer.",
+    "Lightweight hygiene was not repeated because the post-checkpoint changes are coordination/claim/PR-test evidence transitions without new runtime, asset, dependency, CI-size, or presentation-cost measurement; the 24-hour cadence has not elapsed."
   ]
 }
