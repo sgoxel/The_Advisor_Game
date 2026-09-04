@@ -5,20 +5,20 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T23:03:00Z",
-    "last_exhaustive_scan_at": "2026-09-04T23:03:00Z",
+    "created_at": "2026-09-04T23:19:28Z",
+    "last_exhaustive_scan_at": "2026-09-04T23:19:28Z",
     "last_exhaustive_main_sha": "effc7b19a15ed2c14f1df9a8a7a808fa585a7f23",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 360, "fan_out": 6, "reason": "Fresh Worker #5 independent attribution on #237 run 33922393766/job 101183400628 identifies the first failure as the accepted #360 startup-persistence contract: first startup frame expected structured spawn x=50 but observed x=178. #237 target gates were skipped. Worker #5 acquired a fresh exact #360 claim at 2026-09-04T22:59:44Z, so correction/routing is collision-blocked for other Workers until that claim clears, becomes a non-exclusive wait, or expires stale. #360 blocks #237 directly and its five current/earlier downstream targets transitively."},
+      {"issue": 360, "fan_out": 6, "reason": "Accepted/evidenced #360 startup-persistence T-REV from run 33922393766 blocks #237 and its five current/earlier downstream targets transitively. Worker #5 reacquired a fresh exact Coder claim at 2026-09-04T23:16:08Z to attribute and correct the regression, so other Workers must not collide while that claim is valid."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 360, "trigger": "Worker #5 fresh exact claim 5547402265 is routing the current startup-persistence regression attributed from run 33922393766. Resume on Worker #5 claim clear/wait with a correction handoff, terminal corrected #360 evidence, stale expiry after 2026-09-05T01:59:44Z absent qualifying same-target progress, or issue-state completion."},
-      {"issue": 237, "trigger": "Worker #5 attribution 5547393319 routes run 33922393766 startup x mismatch (expected 50, actual 178) to #360; #237 overlap/flicker and bounded-progress gates were skipped. Resume after #360-corrected terminal R04 evidence allows #237 target gates to execute, or on a new exact #237 revision/evidence/issue completion."},
+      {"issue": 360, "trigger": "Worker #5 fresh exact Coder claim 5547534540 is executing the accepted/evidenced T-REV. Resume on Worker #5 claim clear/wait with a correction handoff, terminal corrected #360 evidence, stale expiry after 2026-09-05T02:16:08Z absent qualifying same-target progress, or issue-state completion."},
+      {"issue": 237, "trigger": "Worker #5 attribution 5547482927 routes run 33922393766 startup failure to accepted #360 T-REV; #237 overlap/flicker and bounded-progress gates were skipped. Resume after #360-corrected terminal R04 evidence allows #237 target gates to execute, or on a new exact #237 revision/evidence/issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
@@ -26,19 +26,19 @@
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": [
-      {"issue": 360, "worker": "Worker #5", "claim_comment": 5547402265, "last_qualifying_action_at": "2026-09-04T22:59:44Z", "stale_after": "2026-09-05T01:59:44Z"}
+      {"issue": 360, "worker": "Worker #5", "claim_comment": 5547534540, "last_qualifying_action_at": "2026-09-04T23:16:08Z", "stale_after": "2026-09-05T02:16:08Z"}
     ]
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T23:03:00Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T21:45:00Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T23:19:28Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T22:44:00Z"},
-    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T19:54:30Z"}
+    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-04T23:16:08Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 21,
-    "material_no_progress_runs": 19,
+    "material_no_progress_runs": 20,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -46,8 +46,9 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Checkpoint delta from 22:44Z is exact issue attribution/routing only: Worker #5 established that run 33922393766 fails the accepted #360 startup-persistence contract at first-frame structured spawn x (expected 50, actual 178), while #237 target gates were skipped. Worker #5 then acquired a fresh exact #360 claim, so Worker #1 did not collide or speculate.",
-    "The predecessor exhaustive zero-target ledger was reused after verifying the only post-checkpoint non-#97 issue updates were #237 and #360 and ROADMAP/TODO/material source remain unchanged. #237 is now blocked by #360 correction evidence; executable depth remains 0 while Worker #5's fresh #360 claim is live.",
-    "LIGHTWEIGHT_HYGIENE was not repeated: no new hygiene-relevant measurement or plausibly cost-affecting repository delta appeared after the 22:44Z check."
+    "Fast path was invalidated by post-checkpoint #360 material activity: Worker #5 recorded accepted/evidenced T-REV 5547482927, cleared to a non-exclusive correction handoff, then reacquired exact Coder claim 5547534540 at 23:16:08Z. The new live claim is valid and collision-blocks #360 correction work for other Workers.",
+    "Exact compare from material main effc7b19a15ed2c14f1df9a8a7a808fa585a7f23 to pre-run current main 4222a668b913c13f2f442957b636064009d5993e is coordination-state-only; ROADMAP/TODO blobs are unchanged. The fresh predecessor exhaustive zero-target ledger was therefore reusable after reconciling the sole non-#97 post-checkpoint material issue delta (#360). Executable depth remains 0.",
+    "Worker #2 retained responsibilities [237,254,329,346,347,349,350,353,358] expose no safe owner action now; #237 remains blocked behind #360 corrected evidence. No stale deadline fired.",
+    "LIGHTWEIGHT_HYGIENE was not repeated: no new performance/size/runtime/CI-cost measurement or plausibly hygiene-affecting repository delta appeared."
   ]
 }
