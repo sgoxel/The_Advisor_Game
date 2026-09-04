@@ -142,17 +142,19 @@
           desiredMap.set(npc.id, { point: routeStep.next, activity: npc.activity || 'idle' });
           travel.push({ npc, before, requested: routeStep.next, preResolved: false, routeStep });
         } else {
-          // A route-replan gap is not permission to preserve a coarse canonical jump. If a
-          // due travelling NPC cannot derive an adjacent continuation from its prior
-          // authoritative tile, hold that prior tile for this minute and expose the reason.
-          // The next due pass can rejoin once an adjacent route point is available.
-          if (due && TRAVEL_ACTIVITY[String(npc.activity || '')] && distance(before, point(npc)) > 1) {
+          const coarseGap = due && TRAVEL_ACTIVITY[String(npc.activity || '')] && distance(before, point(npc)) > 1;
+          if (coarseGap) {
+            // Route-replan gaps must remain bounded, but rolling an NPC back to its prior tile
+            // can collide with a tile that the canonical pass already reassigned. Feed the
+            // held prior tile back through the existing deterministic occupancy resolver so
+            // uniqueness is preserved without allowing the coarse canonical jump.
             npc.row = before.row;
             npc.col = before.col;
             npc.localRow = before.row - Number(binding.rowOffset || 0);
             npc.localCol = before.col - Number(binding.colOffset || 0);
-            npc.movementDecision = 'yield-wait';
-            npc.movementBlockedBy = null;
+            desiredMap.set(npc.id, { point: before, activity: npc.activity || 'idle' });
+            travel.push({ npc, before, requested: before, preResolved: false, routeStep });
+            continue;
           }
           fixedNpcIds.add(npc.id);
           desiredMap.set(npc.id, { point: point(npc), activity: npc.activity || 'idle' });
