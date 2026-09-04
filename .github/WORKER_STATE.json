@@ -5,22 +5,22 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T15:55:00Z",
-    "last_exhaustive_scan_at": "2026-09-04T15:53:00Z",
-    "last_exhaustive_main_sha": "815e44caf0aea76d46faba7b0993aec3680326ad",
+    "created_at": "2026-09-04T17:06:00Z",
+    "last_exhaustive_scan_at": "2026-09-04T17:06:00Z",
+    "last_exhaustive_main_sha": "fef167eec71a1a3a2eae554cb73bb2985cb314f2",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Exact descendant run 33884422768 failed first at the attributable dense bounded NPC route-progress step after startup and focused occupancy passed. Worker #4 committed focused correction 815e44caf0aea76d46faba7b0993aec3680326ad and cleared exclusivity into a non-exclusive evidence wait; fresh R04 run 33891899171 is IN_PROGRESS. #238/#253/#257 and retained #351/#358 waits remain downstream pending terminal attributable evidence and independent disposition."},
+      {"issue": 237, "fan_out": 5, "reason": "Exact R04 run 33891899171 stayed red at dense bounded NPC route progress after the pre-pass route-step correction. Worker #5 reconciled the failure against #351's intentional 15-minute maximum staggered authoritative cadence and corrected only the stale shorter test horizon at fef167eec71a1a3a2eae554cb73bb2985cb314f2 without weakening progress, uniqueness, one-tile movement, diagnostics, or Simulation-authority assertions. Fresh exact R04 run 33898682283 is IN_PROGRESS; different-Worker Tester verification remains required."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Worker #4 correction 815e44caf0aea76d46faba7b0993aec3680326ad is under exact R04 run 33891899171, currently IN_PROGRESS. Worker #4 is non-exclusive WAIT after claim clear; resume on terminal attributable result, new exact #237 failure, different-Worker Tester disposition, or issue completion."},
+      {"issue": 237, "trigger": "Worker #5 test-compatibility correction fef167eec71a1a3a2eae554cb73bb2985cb314f2 is under exact R04 run 33898682283 and cumulative R01 run 33898682373, both nonterminal at checkpoint. Resume on terminal attributable #237 failure, new exact #237 revision, different-Worker Tester disposition, or issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
-      {"issue": 358, "trigger": "Fresh #237 evidence is now attributable to bounded-progress and Worker #4 correction 815e44caf0aea76d46faba7b0993aec3680326ad is under exact evidence. Resume after terminal corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
-      {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress correction. Worker #4 correction 815e44caf0aea76d46faba7b0993aec3680326ad is under fresh R04 run 33891899171. Resume on terminal correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
+      {"issue": 358, "trigger": "Fresh #237 correction evidence remains nonterminal on fef167eec71a1a3a2eae554cb73bb2985cb314f2. Resume after terminal compatible #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
+      {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Worker #5 preserved the configured identity-phased cadence and dispatched exact #237 retest 33898682283 on fef167eec71a1a3a2eae554cb73bb2985cb314f2. Resume on terminal compatible correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
       {"issue": 354, "trigger": "Worker #3 Reviewer comment 5541981257 measured R04 artifact reduction from 1,066,395,253 B to 607,126,689 B (43.07%) after duplicate-trace transport reduction; remaining contributors are unproven because artifact remains above connector inspection ceiling. Resume on inspectable contributor evidence, a smaller representative artifact, new exact size/regression evidence, or issue completion."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
@@ -31,10 +31,10 @@
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T13:33:13Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T14:36:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
-    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T15:53:00Z"}
+    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T17:05:47Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 13,
+    "productive_material_runs": 14,
     "material_no_progress_runs": 14,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -43,10 +43,11 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Worker #4 material run was triggered by watched #237 run 33884422768 becoming terminal FAILURE. Startup persistence and focused spatial/occupancy passed; dense bounded NPC route progress was the first attributable failure.",
-    "Worker #4 diagnosed the correction gap: bounded-progress re-evaluated relevance after the canonical spatial pass had already marked authoritative updates, suppressing bridge correction for actors that were due before the pass. Commit 815e44caf0aea76d46faba7b0993aec3680326ad snapshots pre-pass due state without weakening occupancy, determinism, dialogue adjacency, or movement bounds.",
-    "Fresh exact R04 run 33891899171 on 815e44caf0aea76d46faba7b0993aec3680326ad is IN_PROGRESS. Worker #4 cleared its exclusive #237 claim into a non-exclusive WAIT because different-Worker Tester verification is required.",
-    "Fresh predecessor exhaustive ledger at 15:53Z was re-used after verifying the only current/earlier material delta was #237. No additional safely eligible Planner/Coder/Designer/Tester/Reviewer target exists; executable depth remains 0 and next_role remains Planner.",
-    "Lightweight hygiene was not repeated by Worker #4 because the contemporaneous predecessor full pass already checked the same new CI evidence and found a functional correctness regression rather than independently evidenced removable bloat."
+    "Worker #5 material run was triggered by watched #237 run 33891899171 becoming terminal FAILURE at the same dense bounded route-progress step; startup persistence and focused 100x100 spatial/occupancy remained green.",
+    "Exact source/history reconciliation showed the prior long-jump route-origin defect is already corrected by 815e44caf0aea76d46faba7b0993aec3680326ad, while #351 intentionally permits a maximum 15-minute identity-phased authoritative cadence. The focused #237 test still sampled only an 11-minute window.",
+    "Commit fef167eec71a1a3a2eae554cb73bb2985cb314f2 changes only tests/browser/r04-npc-bounded-progress.spec.mjs to sample one complete configured maximum cadence; existing >=10 progressed NPC, uniqueness, <=1 tile delta, diagnostics, Simulation authority, and page-error assertions remain intact.",
+    "Fresh exact R04 run 33898682283 and cumulative R01 run 33898682373 are IN_PROGRESS. Worker #5 cleared its exclusive #237 claim into a non-exclusive evidence wait; different-Worker Tester verification remains required.",
+    "The 15:53Z predecessor exhaustive zero-depth ledger was re-used after live delta verification showed only #237 plus #97 audit activity and Worker #5's #237 correction; Planner/Coder/Designer/Tester/Reviewer eligibility remains zero after the correction wait, with #237 fan-out 5 and #329 fan-out 3 the current blockers.",
+    "Lightweight hygiene was not repeated: this run changed only a focused test horizon, introduced no runtime/assets/dependencies/permanent layer, and no new removable-bloat measurement superseded the recent hygiene checkpoint."
   ]
 }
