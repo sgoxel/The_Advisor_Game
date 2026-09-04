@@ -5,19 +5,19 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-04T21:34:00Z",
-    "last_exhaustive_scan_at": "2026-09-04T21:34:00Z",
-    "last_exhaustive_main_sha": "fc85e3a3dfcc1fde83f01d9271e8371a9daa7b1c",
+    "created_at": "2026-09-04T21:45:00Z",
+    "last_exhaustive_scan_at": "2026-09-04T21:45:00Z",
+    "last_exhaustive_main_sha": "effc7b19a15ed2c14f1df9a8a7a808fa585a7f23",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
-    "executable_depth": 1,
-    "eligible_issue_ids": [237],
+    "executable_depth": 0,
+    "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Independent Tester Worker #2 FAIL/T-REV 5546597713 on Worker #1 candidate fc85e3a3dfcc1fde83f01d9271e8371a9daa7b1c: exact R04 33914733701 passed startup but failed focused spatial/occupancy before bounded-route verification. Worker #3 Reviewer attribution 5546685813 isolates the candidate's second occupancy pass for coarse route-gap holds as the narrow correction boundary and gives a concrete Coder correction path."},
+      {"issue": 237, "fan_out": 5, "reason": "Worker #4 landed focused Coder correction effc7b19a15ed2c14f1df9a8a7a808fa585a7f23 after Reviewer attribution 5546685813 and parked non-exclusively at 5546792918. Exact R04 33922393766 is still nonterminal; its startup-persistence step failed and the focused spatial/occupancy plus bounded-progress gates were skipped, so no independence-safe #237 verdict or further owner correction is established yet."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Resume on a Coder correction after Reviewer attribution 5546685813, new exact Tier 1/Tier 2 evidence, a new revision/verdict, or issue completion."},
+      {"issue": 237, "trigger": "Exact Worker #4 correction effc7b19a15ed2c14f1df9a8a7a808fa585a7f23 is under R04 33922393766/job 101183400628. Resume on terminal attributable focused/bounded evidence, a new correction/revision, evidence-path attribution if target gates remain skipped, or issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
@@ -28,14 +28,14 @@
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-04T20:10:00Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T19:19:30Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T21:45:00Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T15:54:30Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358], "last_reconciled_at": "2026-09-04T19:54:30Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 20,
-    "material_no_progress_runs": 17,
+    "material_no_progress_runs": 18,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 0
@@ -43,9 +43,9 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "21:22Z material delta: Worker #2 independently FAILed exact #237 candidate fc85e3a3dfcc1fde83f01d9271e8371a9daa7b1c at 5546597713 after focused spatial/occupancy failure in R04 33914733701.",
-    "Worker #3 resumed retained #237 responsibility as Reviewer, claim 5546673124, and recorded focused root-cause/correction guidance at 5546685813 before clearing exclusivity. The only product delta in the failed candidate is the coarse-gap second occupancy pass in js/npc_bounded_progress_runtime.js; Coder revision work is now executable.",
-    "The predecessor exhaustive ledger was reused after verifying current main differs from the material SHA only by WORKER_STATE, ROADMAP/TODO authority is unchanged, and the only post-checkpoint non-#97 issue delta is #237. Executable depth is therefore 1 (#237 Coder correction); next_role remains planner because this run's useful work was own-responsibility reconciliation rather than unrelated cursor work.",
-    "LIGHTWEIGHT_HYGIENE was not repeated: this material delta provided no new size/runtime/timer/listener/cache/CI-duration measurement and policy prohibits unchanged remeasurement."
+    "Post-21:34Z material issue search returned only #237. Worker #4 claimed #237 at 5546767188, landed focused correction effc7b19a15ed2c14f1df9a8a7a808fa585a7f23, then parked non-exclusively/cleared at 5546792918 for exact R04 evidence.",
+    "R04 33922393766/job 101183400628 is still in progress. Startup persistence failed and the focused spatial/occupancy plus bounded-progress steps were skipped, so Worker #2 has no independence-safe Tester verdict or attributable correction action yet.",
+    "The fresh predecessor exhaustive ledger was reused because ROADMAP/TODO are unchanged and the only material issue delta is #237; with #237 now in an evidenced non-exclusive CI wait, executable depth is 0. No new legitimate capacity exposure is evidenced.",
+    "LIGHTWEIGHT_HYGIENE was not repeated: the focused held-intent branch correction introduced no new performance/size/timer/listener/cache/CI-cost measurement or known hygiene-target state change."
   ]
 }
