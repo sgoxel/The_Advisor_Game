@@ -28,13 +28,13 @@
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [254, 260, 307, 309, 339, 350, 354, 355, 357, 358], "last_reconciled_at": "2026-09-04T13:03:56Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-03T22:14:52Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 329, 346, 347, 349, 350, 353, 358], "last_reconciled_at": "2026-09-04T13:33:13Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172, 254, 346, 347, 349, 350, 354, 358, 359, 360], "last_reconciled_at": "2026-09-04T13:32:18Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [254, 307, 309, 349, 356, 357, 358], "last_reconciled_at": "2026-09-04T09:43:55Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237, 254, 346, 350, 351, 358], "last_reconciled_at": "2026-09-04T12:53:38Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 9,
+    "productive_material_runs": 10,
     "material_no_progress_runs": 12,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
