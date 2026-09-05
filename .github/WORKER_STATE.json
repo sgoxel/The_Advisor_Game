@@ -5,7 +5,7 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-05T02:22:00Z",
+    "created_at": "2026-09-05T05:08:00Z",
     "last_exhaustive_scan_at": "2026-09-05T02:22:00Z",
     "last_exhaustive_main_sha": "35ba856f1c2b4588aa22f64ecfad3dd85372f0a4",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
@@ -13,11 +13,11 @@
     "executable_depth": 1,
     "eligible_issue_ids": [237],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Descendant R04 run 33934026325 executes startup, focused occupancy, bounded progress, destinations and GameTime pacing successfully. Worker #5 authored fef167e; Worker #2 also authored prior #237 correction lineage, so a different-Worker Tester disposition remains the executable critical-path action."},
+      {"issue": 237, "fan_out": 5, "reason": "Descendant R04 run 33934026325 executes startup, focused occupancy, bounded progress, destinations and GameTime pacing successfully. Worker #5 authored fef167e, but Workers #1 and #2 both authored prior #237 correction lineage; final Tester disposition requires another Worker without #237 correction authorship."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Different-Worker Tester verdict, new exact #237-attributable failure, or issue completion; current descendant run 33934026325 has affected steps 9-13 SUCCESS."},
+      {"issue": 237, "trigger": "Independent Tester verdict by a Worker without #237 correction authorship, new exact #237-attributable failure, or issue completion; current descendant run 33934026325 has affected steps 9-13 SUCCESS."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after required independent #237 disposition plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on required independent #237 disposition, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
@@ -26,7 +26,7 @@
     "live_claim_stale_deadlines": []
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T02:08:00Z"},
+    "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T05:08:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-05T02:22:00Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,354,356,357,358,360], "last_reconciled_at": "2026-09-05T00:46:00Z"},
@@ -34,7 +34,7 @@
   },
   "kpi_checkpoint": {
     "productive_material_runs": 26,
-    "material_no_progress_runs": 22,
+    "material_no_progress_runs": 23,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 1
@@ -42,10 +42,9 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "ROADMAP/TODO remain at f16c89050349b47966776d1b1dd538e7c40273c7 / 5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Fast path was disabled by the post-checkpoint #237 evidence handoff. Exact compare from prior material SHA e2a0bb91 to pre-checkpoint main 35ba856 changes only WORKER_STATE, and the post-checkpoint issue delta was limited to #237, #360 and pure #97 audit traffic.",
-    "Worker #2 independently PASSed and closed #360 after verifying Worker #5 correction a184fe8 against exact startup success and compatible descendant run 33934026325 where startup, focused spatial/occupancy, bounded progress, destinations and GameTime all succeed. The accepted #360 T-REV 5548151790 is resolved; later origin-village/save-load/R01 failures remain outside #360 without attribution.",
-    "Worker #2 retained #237 responsibility was reconciled non-exclusively. The affected chain is green, but Worker #2 authored prior #237 correction lineage and cannot grant the required final independent Tester PASS; no additional #237 mutation is justified by current evidence.",
-    "The fresh predecessor exhaustive ledger was reused after delta verification. Closing #360 reduces global immediately executable depth from 2 to 1: #237 remains the sole safely eligible current/earlier target for an authorized different-Worker Tester. No legitimate capacity expansion was exposed, so no filler was created.",
-    "LIGHTWEIGHT HYGIENE CHECK was not repeated: this run changed issue disposition and coordination state only; no new runtime/asset/dependency/CI-cost measurement or hygiene target change appeared."
+    "Worker #2 independently PASSed and closed #360 after verifying Worker #5 correction a184fe8 against exact startup success and compatible descendant run 33934026325 where startup, focused spatial/occupancy, bounded progress, destinations and GameTime all succeed.",
+    "Worker #1 reconciled #237 after the green Worker #5 handoff. Immediate claim re-fetch exposed Worker #1 prior #237 correction authorship fc85e3a, so the Tester claim was cleared without verdict. Workers #1/#2 are independence-excluded from final #237 PASS; #237 remains executable for another qualified independent Tester.",
+    "Executable depth remains 1: #237. No product mutation is justified by current evidence and no filler capacity was created.",
+    "LIGHTWEIGHT HYGIENE CHECK was not repeated: no new hygiene-relevant product/runtime/asset/dependency/CI-cost measurement appeared."
   ]
 }
