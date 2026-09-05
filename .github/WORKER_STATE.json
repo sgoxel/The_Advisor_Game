@@ -1,41 +1,42 @@
 {
   "schema_version": 1,
   "policy_version": "2026-09-03-throughput-v1.1",
-  "next_role": "planner",
+  "next_role": "reviewer",
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-05T00:55:22Z",
-    "last_exhaustive_scan_at": "2026-09-05T00:55:22Z",
+    "created_at": "2026-09-05T02:08:00Z",
+    "last_exhaustive_scan_at": "2026-09-05T02:08:00Z",
     "last_exhaustive_main_sha": "e2a0bb91ce470c6d4176279d125e3e6933b00fcc",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 360, "fan_out": 6, "reason": "Worker #4 accepted/evidenced T-REV remains unresolved. Workflow-integrity run 33934026300 is terminal SUCCESS, but exact R04 run 33934026325 on evidence-path correction e2a0bb91 is still IN_PROGRESS; focused spatial/occupancy attribution and downstream #237 bounded-progress evidence therefore remain unavailable."},
+      {"issue": 360, "fan_out": 6, "reason": "Accepted/evidenced T-REV remains unresolved. Evidence-path correction e2a0bb91 is independently verified usable, and Worker #5 holds a fresh valid Coder claim from 2026-09-05T02:06:25Z to attribute/correct the focused spatial/occupancy failure before downstream #237 evidence can proceed."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 360, "trigger": "Resume when exact R04 run 33934026325 reaches terminal state and exposes the focused spatial log, when a corrected/attributed exact #360 descendant appears, or on issue completion."},
-      {"issue": 354, "trigger": "Workflow-integrity run 33934026300 is terminal SUCCESS. Resume when exact R04 run 33934026325 becomes terminal with inspectable focused-log evidence plus a different-Worker Tester verdict, or on T-REV/issue completion."},
+      {"issue": 360, "trigger": "Resume when Worker #5 clears/parks/completes the fresh exact Coder claim, when a corrected exact #360 candidate/evidence appears, or on issue completion."},
       {"issue": 237, "trigger": "Resume after #360-corrected terminal R04 evidence allows #237 overlap/flicker and bounded-progress gates to execute, or on a new exact #237 revision/evidence/issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
-    "live_claim_stale_deadlines": []
+    "live_claim_stale_deadlines": [
+      {"issue": 360, "worker": "Worker #5", "claim_comment": 5548625959, "last_qualifying_action_at": "2026-09-05T02:06:25Z", "stale_after": "2026-09-05T05:06:25Z"}
+    ]
   },
   "scheduled_workers": {
-    "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T00:05:00Z"},
+    "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T02:08:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T23:19:28Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,354,356,357,358,360], "last_reconciled_at": "2026-09-05T00:46:00Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-05T00:55:22Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 23,
+    "productive_material_runs": 24,
     "material_no_progress_runs": 22,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -44,10 +45,10 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "ROADMAP/TODO remain at f16c89050349b47966776d1b1dd538e7c40273c7 / 5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Full-scan continuation required by the preceding Worker #4 checkpoint was completed. Only #360/#354 changed after the prior exhaustive checkpoint; no other non-#97 current/earlier issue delta was found.",
-    "#354 workflow-integrity run 33934026300 is SUCCESS. R04 run 33934026325 remains IN_PROGRESS, so #360 T-REV attribution/correction, #237 bounded-progress evidence, and Worker #5 retained #351/#358 continuations remain non-exclusive waits with no safe owner mutation now.",
-    "Current main differs from material SHA e2a0bb91 only by coordination-state commit 11639c45abdf35f6cebfcb901d1a1440edb85780 before this checkpoint; ROADMAP/TODO are unchanged.",
-    "Executable depth remains 0 after the required recovery/full-scan reconciliation. No legitimate approved-scope decomposition was created because the current shortfall is dominated by evidenced critical blockers rather than missing scope.",
-    "LIGHTWEIGHT HYGIENE CHECK was not repeated: Worker #4 already checked exact material SHA e2a0bb91 and no new hygiene-relevant measurement or runtime/workflow mutation appeared afterward."
+    "The preceding exhaustive ledger was reused after verified delta scan showed only #360/#354 plus #97 audit traffic changed; those changed targets were fully reconciled in this run.",
+    "#354 evidence-path correction e2a0bb91 received independent Worker #1 Tester PASS: integrity run 33934026300 is SUCCESS; cancelled R04 run 33934026325 still produced inspectable artifact 9960037361 (431424 B) containing focused startup and spatial logs, ending 1 passed and 9 passed respectively. The run-level cancellation is not treated as a broad R04/product PASS.",
+    "#360 remains under Worker #5 fresh exact Coder claim comment 5548625959 from 2026-09-05T02:06:25Z; no collision or speculative product change was attempted.",
+    "Executable depth returns to 0 after consuming the one newly eligible independent #354 Tester disposition. Capacity remains blocker-dominated; no filler/decomposition was created.",
+    "LIGHTWEIGHT HYGIENE CHECK was not repeated: exact material SHA e2a0bb91 was already checked by Worker #4 and no new hygiene-relevant repository/runtime mutation or measurement beyond the now-verified evidence-path behavior appeared."
   ]
 }
