@@ -2,27 +2,27 @@
   "schema_version": 1,
   "policy_version": "2026-09-03-throughput-v1.1",
   "next_role": "planner",
-  "needs_full_scan": false,
-  "bootstrap_reason": null,
+  "needs_full_scan": true,
+  "bootstrap_reason": "Worker #4 material run reached an atomic evidence-recovery checkpoint after #360 T-REV and #354 workflow correction; next run must resume normal work-conserving scan after watched exact evidence transitions.",
   "checkpoint": {
-    "created_at": "2026-09-05T00:05:00Z",
+    "created_at": "2026-09-05T00:46:00Z",
     "last_exhaustive_scan_at": "2026-09-05T00:05:00Z",
-    "last_exhaustive_main_sha": "a184fe8e032752aa5ea0364f7408673c804db72b",
+    "last_exhaustive_main_sha": "e2a0bb91ce470c6d4176279d125e3e6933b00fcc",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
     "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 360, "fan_out": 6, "reason": "Worker #5 corrected the accepted/evidenced startup regression at a184fe8e032752aa5ea0364f7408673c804db72b. Exact R04 run 33929861724 is in progress and different-Worker Tester verification remains required, so #360 still blocks #237 and its five current/earlier downstream targets until corrected evidence is terminal."},
+      {"issue": 360, "fan_out": 6, "reason": "Worker #4 issued accepted/evidenced Tester T-REV after exact run 33929861724 proved startup SUCCESS but the immediately following focused spatial/occupancy gate FAILURE, skipping #237 bounded-progress evidence. Exact failure attribution was blocked by artifact 9959298225 exceeding the connector ceiling; #354 correction e2a0bb91 now restores small focused logs and exact run 33934026325 is nonterminal."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 360, "trigger": "Worker #5 correction a184fe8e032752aa5ea0364f7408673c804db72b is under exact R04 run 33929861724, currently in progress. Resume on terminal attributable failure, independent T-REV/PASS, or issue completion."},
+      {"issue": 360, "trigger": "Resume when #354 exact R04 run 33934026325 reaches terminal state and exposes the focused spatial log, when a corrected/attributed exact #360 descendant appears, or on issue completion."},
+      {"issue": 354, "trigger": "Worker #4 Reviewer correction e2a0bb91ce470c6d4176279d125e3e6933b00fcc adds focused R04 logs to the existing small diagnostics artifact without removing full evidence. Resume on terminal workflow-integrity run 33934026300 plus terminal R04 run 33934026325 and different-Worker Tester verdict, or on T-REV/issue completion."},
       {"issue": 237, "trigger": "Resume after #360-corrected terminal R04 evidence allows #237 overlap/flicker and bounded-progress gates to execute, or on a new exact #237 revision/evidence/issue completion."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
-      {"issue": 354, "trigger": "Worker #1 independently PASSed Worker #3 Reviewer correction c15b5b687754fe9228784a038189864ab817db1d at comment 5544881834. Exact R01 artifact remains reduced near 274 MB. R04 spatial artifact 9957011555 is 607,567,972 B and still above the connector inspection ceiling; resume only on inspectable contributor evidence, a meaningful size regression/reduction, new revision, or explicit closure action."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
     "live_claim_stale_deadlines": []
@@ -31,21 +31,21 @@
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T00:05:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T23:19:28Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
-    "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,356,357,358], "last_reconciled_at": "2026-09-04T22:44:00Z"},
+    "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,354,356,357,358,360], "last_reconciled_at": "2026-09-05T00:46:00Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-04T23:36:00Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 22,
+    "productive_material_runs": 23,
     "material_no_progress_runs": 21,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
-    "non_dispatchable_evidence_waits": 0
+    "non_dispatchable_evidence_waits": 1
   },
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
-    "Canonical planning cache remains ROADMAP.json=f16c89050349b47966776d1b1dd538e7c40273c7 and TODO.json=5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Worker #1 fast path was invalidated only because watched exact R04 run 33929861724 advanced from queued to in_progress. No open issue was updated after the predecessor 23:36Z checkpoint, ROADMAP/TODO are unchanged, and the current main delta from material SHA a184fe8e032752aa5ea0364f7408673c804db72b is coordination-state-only.",
-    "The fresh predecessor exhaustive zero-target ledger remains valid after reconciling the nonterminal evidence transition. Worker #1 retained responsibilities expose no safe resume action until their recorded triggers fire. Executable depth remains 0 and next_role remains planner.",
-    "LIGHTWEIGHT HYGIENE CHECK was not repeated because no new hygiene-relevant repository delta or measurement appeared."
+    "ROADMAP/TODO remain at f16c89050349b47966776d1b1dd538e7c40273c7 / 5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
+    "Worker #4 materially rejected PASS on #360: exact startup is green but the immediately affected focused spatial/occupancy gate is red and #237 bounded-progress evidence did not execute.",
+    "Artifact 9959298225 is 598337112 B and exceeds the 536870912 B connector ceiling. Existing Reviewer target #354 was used to restore inspectable focused logs through commit e2a0bb91ce470c6d4176279d125e3e6933b00fcc; no assertions or full diagnostics were removed.",
+    "Atomic continuation checkpoint: exact runs 33934026300 and 33934026325 are nonterminal; next run must reconcile them and complete the required work-conserving/full-scan stop gate."
   ]
 }
