@@ -5,19 +5,19 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-05T05:28:26Z",
+    "created_at": "2026-09-05T05:39:28Z",
     "last_exhaustive_scan_at": "2026-09-05T05:28:26Z",
     "last_exhaustive_main_sha": "741550c693f5f959452ea36bf9234db8415e3950",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
-    "executable_depth": 1,
-    "eligible_issue_ids": [237],
+    "executable_depth": 0,
+    "eligible_issue_ids": [],
     "critical_blockers": [
-      {"issue": 237, "fan_out": 5, "reason": "Descendant R04 run 33934026325 executes startup, focused occupancy, bounded progress, destinations and GameTime pacing successfully. Workers #1, #2 and #3 authored prior #237 correction lineage and Worker #5 authored current correction fef167e; final Tester disposition requires a different Worker without #237 correction authorship."},
+      {"issue": 237, "fan_out": 5, "reason": "Descendant R04 run 33934026325 executes startup, focused occupancy, bounded progress, destinations and GameTime pacing successfully, but exact history proves Workers #1-#5 all authored incorporated #237 correction lineage. #237 is a focused issue, so the README cumulative phase/release deadlock exception does not apply. Final independent Tester disposition requires an Admin-invoked manual Worker #6-#20 without #237 correction authorship."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Independent Tester verdict by a Worker without #237 correction authorship, new exact #237-attributable failure, or issue completion; current descendant run 33934026325 has affected steps 9-13 SUCCESS."},
+      {"issue": 237, "trigger": "Admin-invoked manual Worker #6-#20 independent #237 verdict, new exact #237-attributable failure/correction path, or issue completion; current descendant run 33934026325 has affected steps 9-13 SUCCESS."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after required independent #237 disposition plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on required independent #237 disposition, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
@@ -29,11 +29,11 @@
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T05:08:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-05T02:22:00Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-05T05:28:26Z"},
-    "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,354,356,357,358,360], "last_reconciled_at": "2026-09-05T00:46:00Z"},
+    "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,354,356,357,358,360], "last_reconciled_at": "2026-09-05T05:39:28Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-05T02:14:00Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 27,
+    "productive_material_runs": 28,
     "material_no_progress_runs": 23,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -42,9 +42,9 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "ROADMAP/TODO remain at f16c89050349b47966776d1b1dd538e7c40273c7 / 5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "The prior exhaustive ledger was reused after exact delta verification: since the preceding exhaustive checkpoint, only #237 and audit issue #97 changed; repository compare from the prior material SHA to 741550c changed only .github/WORKER_STATE.json.",
-    "Worker #3 reconciled #237 and confirmed prior correction authorship 802e0ed48eb5b0457a1dfbf86a0ff6b7c27c247c, so Worker #3 is independence-excluded from final Tester PASS just like Workers #1/#2; Worker #5 authored current correction fef167e.",
-    "Executable depth remains 1 globally: #237 for a qualified independent Tester without correction authorship. Worker #3 has no safe authorized action on #237 now and no product mutation is justified by current evidence.",
+    "The fresh 2026-09-05T05:28:26Z exhaustive ledger was reused after exact delta verification: post-checkpoint non-#97 issue movement was only #237, and repository movement from material SHA 741550c to pre-run main 49a7d27 changed only .github/WORKER_STATE.json.",
+    "Worker #4 reconciled prior #237 correction authorship effc7b19a15ed2c14f1df9a8a7a808fa585a7f23. Combined with current exact history, Workers #1-#5 are all independence-conflicted for focused #237 final Tester PASS; README deadlock applies only to cumulative phase/release gates.",
+    "Executable scheduled depth is therefore 0. #237 is an external-only independent-verification wait until Admin invokes a clean manual Worker #6-#20, or new exact attributable evidence creates another safe correction path.",
     "LIGHTWEIGHT HYGIENE CHECK was not repeated: no new hygiene-relevant product/runtime/asset/dependency/CI-cost measurement appeared."
   ]
 }
