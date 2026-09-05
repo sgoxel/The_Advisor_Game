@@ -5,9 +5,9 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-05T06:18:37Z",
-    "last_exhaustive_scan_at": "2026-09-05T06:18:37Z",
-    "last_exhaustive_main_sha": "564491b3d0b6a32780f56c19fd4749b8f973e5df",
+    "created_at": "2026-09-05T12:19:09Z",
+    "last_exhaustive_scan_at": "2026-09-05T12:19:09Z",
+    "last_exhaustive_main_sha": "fa5013db9b59ee6ed22d893506bf34954394390a",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
     "executable_depth": 0,
@@ -17,7 +17,7 @@
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 237, "trigger": "Admin-invoked manual Worker #6-#20 independent #237 verdict, new exact #237-attributable failure/correction path, or issue completion; current descendant run 33934026325 has affected steps 9-13 SUCCESS."},
+      {"issue": 237, "trigger": "Admin-invoked manual Worker #6-#20 independent #237 verdict, new exact #237-attributable failure/correction path, or issue completion; descendant run 33934026325 remains terminal with affected steps 9-13 SUCCESS."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after required independent #237 disposition plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
       {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on required independent #237 disposition, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
@@ -27,14 +27,14 @@
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T05:08:00Z"},
-    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-05T06:18:37Z"},
+    "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-05T12:19:09Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-05T05:28:26Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,354,356,357,358,360], "last_reconciled_at": "2026-09-05T05:39:28Z"},
     "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-05T02:14:00Z"}
   },
   "kpi_checkpoint": {
     "productive_material_runs": 28,
-    "material_no_progress_runs": 24,
+    "material_no_progress_runs": 25,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
     "non_dispatchable_evidence_waits": 1
@@ -42,9 +42,9 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "ROADMAP/TODO remain at f16c89050349b47966776d1b1dd538e7c40273c7 / 5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "Worker #2 material reconciliation at 2026-09-05T06:18:37Z verified the only post-predecessor-checkpoint non-#97 issue delta was #237 independence routing; subsequent non-#97 issue movement was zero. Exact compare from prior material SHA 741550c to pre-run main 564491b changes only .github/WORKER_STATE.json, so the fresh predecessor exhaustive ledger is safely reusable under WORKER_THROUGHPUT.",
-    "#237 remains external-only for scheduled Workers: exact history shows Workers #1-#5 all authored incorporated correction lineage, while descendant R04 run 33934026325 has affected steps 9-13 SUCCESS. The next valid focused Tester disposition requires an Admin-invoked manual Worker #6-#20 without #237 correction authorship, unless new exact attributable evidence creates a correction path first.",
-    "Worker #2 own retained responsibilities remain non-exclusive and have no safe executable resume action. Executable depth remains 0; no stale exclusive claims exist.",
-    "LIGHTWEIGHT HYGIENE CHECK was not repeated because no new hygiene-relevant runtime, asset, dependency, workflow-cost, or measurement evidence appeared."
+    "Worker #2 six-hour safety refresh at 2026-09-05T12:19:09Z rebuilt the live current/earlier eligibility view from GitHub. Since the prior checkpoint, non-#97 issue movement is zero; current main fa5013db is the prior Worker #2 coordination-state-only commit on top of material SHA 564491b, with no ROADMAP/TODO delta.",
+    "#237 remains external-only for scheduled Workers: Workers #1-#5 all have incorporated correction authorship, while descendant R04 run 33934026325 remains terminal and affected steps 9-13 are successful. The next valid focused Tester disposition requires an Admin-invoked manual Worker #6-#20 without #237 correction authorship unless new attributable evidence creates a correction path first.",
+    "Worker #2 own retained responsibilities remain non-exclusive and expose no safe executable resume action. Full Planner->Coder->Designer->Tester->Reviewer safety pass and capacity recovery found executable depth 0; no stale exclusive claims exist. Critical blockers remain #237 fan-out 5 and #329 fan-out 3.",
+    "LIGHTWEIGHT HYGIENE CHECK was not repeated because no hygiene-relevant runtime, asset, dependency, workflow-cost, presentation, or measurement evidence changed and the 24-hour hygiene deadline has not been shown to fire."
   ]
 }
