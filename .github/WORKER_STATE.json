@@ -5,38 +5,37 @@
   "needs_full_scan": false,
   "bootstrap_reason": null,
   "checkpoint": {
-    "created_at": "2026-09-05T02:08:00Z",
+    "created_at": "2026-09-05T02:14:00Z",
     "last_exhaustive_scan_at": "2026-09-05T02:08:00Z",
     "last_exhaustive_main_sha": "e2a0bb91ce470c6d4176279d125e3e6933b00fcc",
     "roadmap_sha": "f16c89050349b47966776d1b1dd538e7c40273c7",
     "todo_sha": "5d3fece78e3748fe01ae65dc50de1be98f6021fa",
-    "executable_depth": 0,
-    "eligible_issue_ids": [],
+    "executable_depth": 2,
+    "eligible_issue_ids": [237, 360],
     "critical_blockers": [
-      {"issue": 360, "fan_out": 6, "reason": "Accepted/evidenced T-REV remains unresolved. Evidence-path correction e2a0bb91 is independently verified usable, and Worker #5 holds a fresh valid Coder claim from 2026-09-05T02:06:25Z to attribute/correct the focused spatial/occupancy failure before downstream #237 evidence can proceed."},
+      {"issue": 360, "fan_out": 6, "reason": "Worker #5 startup correction a184fe8 now has exact descendant startup plus affected spatial/occupancy/bounded-progress evidence green. No further #360 Coder mutation is justified; a different-Worker Tester must re-dispose the correction against #360's actual acceptance criteria."},
+      {"issue": 237, "fan_out": 5, "reason": "Descendant R04 run 33934026325 executes startup, focused occupancy, bounded progress, destinations and GameTime pacing successfully. Worker #5 authored fef167e and cannot self-PASS; different-Worker Tester disposition is now the executable critical-path action."},
       {"issue": 329, "fan_out": 3, "reason": "Canonical zoom/render compatibility remains unresolved for known #346/#347/#350 dependent or compatibility-sensitive work."}
     ],
     "watched_evidence": [
-      {"issue": 360, "trigger": "Resume when Worker #5 clears/parks/completes the fresh exact Coder claim, when a corrected exact #360 candidate/evidence appears, or on issue completion."},
-      {"issue": 237, "trigger": "Resume after #360-corrected terminal R04 evidence allows #237 overlap/flicker and bounded-progress gates to execute, or on a new exact #237 revision/evidence/issue completion."},
+      {"issue": 360, "trigger": "Resume Worker #5 only on a different-Worker Tester verdict, a new exact #360-attributable failure, or issue completion."},
+      {"issue": 237, "trigger": "Resume Worker #5 only on a different-Worker Tester verdict, a new exact #237-attributable failure, or issue completion; current descendant run 33934026325 has affected steps 9-13 SUCCESS."},
       {"issue": 254, "trigger": "Worker #3 descendant 5679cd5 has exterior run 33808554174 terminal FAILURE after focused #254 success, interior run 33808554182 SUCCESS, and R01 cumulative 33808554209 terminal FAILURE only at the broad cumulative step; resume on exact attributable owner-action evidence, a nonconflicted correction handoff, or issue completion"},
       {"issue": 358, "trigger": "#358 remains downstream of #237 bounded-progress compatibility. Resume after terminal compatible corrected #237 evidence plus a different-Worker #358 verdict, a new exact #358-attributable failure, or issue completion."},
-      {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
+      {"issue": 351, "trigger": "#351 remains routed behind #237 bounded-progress compatibility. Resume on terminal compatible #237 correction handoff plus required independent disposition, a new exact #351-specific failure, a different-Worker verdict, or issue completion."},
       {"issue": 172, "trigger": "GitHub-visible exact R01 failing assertion or other attributable evidence becomes available"}
     ],
-    "live_claim_stale_deadlines": [
-      {"issue": 360, "worker": "Worker #5", "claim_comment": 5548625959, "last_qualifying_action_at": "2026-09-05T02:06:25Z", "stale_after": "2026-09-05T05:06:25Z"}
-    ]
+    "live_claim_stale_deadlines": []
   },
   "scheduled_workers": {
     "1": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,260,307,309,339,350,355,357,358], "last_reconciled_at": "2026-09-05T02:08:00Z"},
     "2": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,329,346,347,349,350,353,358], "last_reconciled_at": "2026-09-04T23:19:28Z"},
     "3": {"needs_reconcile": false, "responsibility_issue_ids": [172,237,254,346,347,349,350,354,358,359], "last_reconciled_at": "2026-09-04T21:34:00Z"},
     "4": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,307,309,349,354,356,357,358,360], "last_reconciled_at": "2026-09-05T00:46:00Z"},
-    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-05T00:55:22Z"}
+    "5": {"needs_reconcile": false, "responsibility_issue_ids": [237,254,346,350,351,358,360], "last_reconciled_at": "2026-09-05T02:14:00Z"}
   },
   "kpi_checkpoint": {
-    "productive_material_runs": 24,
+    "productive_material_runs": 25,
     "material_no_progress_runs": 22,
     "quiescent_fast_paths_since_last_safety_refresh": 0,
     "stale_claims_invalidated": 0,
@@ -45,10 +44,11 @@
   "notes": [
     "Cache only; README.md, ROADMAP.json, TODO.json and exact issue history remain authoritative.",
     "ROADMAP/TODO remain at f16c89050349b47966776d1b1dd538e7c40273c7 / 5d3fece78e3748fe01ae65dc50de1be98f6021fa.",
-    "The preceding exhaustive ledger was reused after verified delta scan showed only #360/#354 plus #97 audit traffic changed; those changed targets were fully reconciled in this run.",
-    "#354 evidence-path correction e2a0bb91 received independent Worker #1 Tester PASS: integrity run 33934026300 is SUCCESS; cancelled R04 run 33934026325 still produced inspectable artifact 9960037361 (431424 B) containing focused startup and spatial logs, ending 1 passed and 9 passed respectively. The run-level cancellation is not treated as a broad R04/product PASS.",
-    "#360 remains under Worker #5 fresh exact Coder claim comment 5548625959 from 2026-09-05T02:06:25Z; no collision or speculative product change was attempted.",
-    "Executable depth returns to 0 after consuming the one newly eligible independent #354 Tester disposition. Capacity remains blocker-dominated; no filler/decomposition was created.",
-    "LIGHTWEIGHT HYGIENE CHECK was not repeated: exact material SHA e2a0bb91 was already checked by Worker #4 and no new hygiene-relevant repository/runtime mutation or measurement beyond the now-verified evidence-path behavior appeared."
+    "Fast path was disabled because #354 had a post-checkpoint material issue update. The fresh predecessor exhaustive ledger was then reused after delta verification: main product/planning content remained unchanged and only #354/#97 plus Worker #5 continuity updates required reconciliation.",
+    "#360 Worker #5 claim 5548625959 was cleared non-exclusive after exact scope attribution: startup is green, the issue AC routes later downstream failures to their owning target, and descendant e2a0bb91 preserves product/test state while running startup and focused spatial evidence green. Different-Worker Tester disposition remains required.",
+    "#237 retained resume trigger fired. Exact descendant R04 run 33934026325 / job 101218317666 has startup, focused 100x100 spatial/occupancy, dense bounded progress, distributed destinations and authoritative GameTime pacing all SUCCESS. Worker #5 authored fef167e and cleared the evidence-reconciliation claim for different-Worker Tester handoff.",
+    "The first later R04 failure is deterministic origin-village regression; later save/load/R01 failures remain visible but are not attributed to #237/#360 without exact evidence.",
+    "Global immediately executable depth is now 2: #237 and #360 are unclaimed different-Worker Tester dispositions. Worker #5 is independence-blocked from both; no additional legitimate capacity expansion was identified from the fresh predecessor ledger, so no filler was created.",
+    "LIGHTWEIGHT HYGIENE CHECK was not repeated: exact material product SHA e2a0bb91 was already checked by Worker #4 and this run added only issue/state coordination with no new hygiene-relevant runtime/repository measurement."
   ]
 }
