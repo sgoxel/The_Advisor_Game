@@ -73,8 +73,6 @@ These systems improve **influence and understanding**, not direct ownership of t
 
 # 🤖 Character AI and Advisor Relationship
 
-## One Character, Compatible Drivers
-
 The same protagonist may be driven by:
 
 1. **LLM Character Driver** — richer dialogue, interpretation, reasoning, personality expression and memory use.
@@ -112,12 +110,7 @@ Persistent advice may influence behavior but may never create resources, manufac
 
 The protagonist and procedurally generated world characters have stable, deterministic base identities. Compatible character-generation inputs—campaign SEED, stable character/world identity inputs and birthplace—must reproduce the same unchanged person when that character is materialized again.
 
-Base identity may include:
-
-- name and gender;
-- birth date and birthplace;
-- baseline personality and behavioral tendencies;
-- original/base profession or social role where applicable.
+Base identity may include name and gender, birth date and birthplace, baseline personality and behavioral tendencies, and original/base profession or social role where applicable.
 
 Travel must not replace identity. A known character remains the same person across settlements, regions and realms.
 
@@ -385,21 +378,17 @@ The public location represents the **current Admin-authorized public development
 
 Development should normally be cumulative: accepted work extends the current product instead of replacing it with disconnected prototypes.
 
-Under normal autonomous development, public replacement should follow independent testing and the verified release process. The latest GitHub Release should represent the latest verified release.
+Public replacement should normally follow the project's current verification and release policy. The latest GitHub Release should represent the latest verified release.
 
 The Admin may explicitly order a specified repository state, commit, imported template or development build to be published directly. In that case, Admin authorization is sufficient publication authority and no unrequested verification gate may block the publication.
 
 An Admin-directed unverified build must be labeled accurately as an **Admin-directed public development build**, not falsely described as independently verified. Testing, rollback, tagging or promotion to a verified release may occur later.
 
-Build, packaging, deployment and versioning mechanics are development implementation details rather than README product policy.
+Build, packaging, deployment and versioning mechanics are implementation details rather than README product policy.
 
 ---
 
-# 🏛️ Project Authority and Development Governance
-
-This section exists for contributors and autonomous Workers. It is intentionally placed after the game concept and product rules because README is first a public description of **what The Advisor Game is**.
-
-## Authority
+# 🏛️ Project Authority
 
 The **Admin is the highest project authority**.
 
@@ -409,92 +398,11 @@ Authority order:
 
 README defines persistent product scope, principles, invariants and high-level governance: **WHAT the project is and what should normally remain true**.
 
-README does not prescribe implementation architecture, repository/module layout, implementation order, roadmap phases, detailed task decomposition, asset pipeline internals, branching strategy, commands, automation storage or detailed deployment/testing mechanics unless a specific item is itself a product invariant.
+README does not prescribe implementation architecture, repository/module layout, implementation order, roadmap phases, detailed task decomposition, automation, scheduling, contributor orchestration, branching strategy, commands or detailed deployment/testing mechanics unless a specific item is itself a product invariant.
 
-If subordinate state conflicts with README and no Admin instruction authorizes the difference, README wins and subordinate state must be corrected. An explicit Admin instruction may override README, authorize an exception or require immediate publication/execution. Persistent policy changes should later be reflected in README where practical.
+If subordinate state conflicts with README and no Admin instruction authorizes the difference, README wins and subordinate state must be corrected. An explicit Admin instruction may override README, authorize an exception or require immediate publication/execution.
 
 **README may be modified only with explicit Admin authorization.**
-
-## Worker Model
-
-The project normally has five scheduled persistent Worker identities:
-
-**Worker #1, #2, #3, #4, #5**
-
-**Workers #6 through #20 are manual-only Admin-invoked persistent identities.** They have no schedule, timer, recurrence or recurring cursor slot.
-
-No Worker has a permanent role. Roles rotate through:
-
-**Planner → Coder → Designer → Tester → Reviewer → Planner → ...**
-
-For scheduled Workers, the rotation cursor defines only the **starting role**. It never creates ownership of a run, cycle, backlog, role or future work. Manual Workers do not consume or modify the scheduled cursor.
-
-Worker runs are work-conserving: starting from the applicable role, a Worker should continue through eligible work and roles rather than stopping after one task. **Before unrelated work, a persistent Worker must reconcile its own unfinished claim history and resume any open issue for which that same Worker still has a safe authorized action.** An executable owned issue outranks the rotation cursor, capacity expansion, a new issue, an easier issue, or a preferred role. A Worker may move to unrelated work only when every unfinished owned issue is in a genuine evidenced mandatory wait with no safe owner action remaining.
-
-A mandatory wait must not become an indefinite lock. When the remaining action requires nonterminal external/CI evidence, an independent Worker, an unsatisfied hard prerequisite controlled elsewhere, or unavailable required Admin/external input, the owner records the blocker and resume trigger, clears exclusive ownership, and retains non-exclusive continuity responsibility. If correction work later becomes executable again, the responsible Worker resumes it ahead of unrelated work. Difficulty, size, investigation cost, or context pressure are not mandatory-wait reasons.
-
-Ownership protection is **target-scoped and time-bounded**. A valid exclusive `WORK-CLAIM` protects only the named issue/task. Claiming issue A creates no ownership over issue B, related tasks, dependencies, a phase, a role, the cursor or the project. An exclusive claim becomes **stale and invalid after more than three hours without a qualifying action by that same Worker on that exact issue**. Claim creation starts the three-hour window. A qualifying action must show concrete target progress or a material target-state decision/evidence update; empty heartbeats, repeated status-only comments, unrelated work, or re-fetch-only activity do not refresh the window. Before treating a claim as a collision blocker or taking over a stale claim, Workers must inspect the exact issue history and timestamps. Stale invalidation removes collision protection but does not erase authorship, independence restrictions, audit history, or any non-exclusive responsibility to resume if the issue has not already been validly taken over/completed.
-
-Multiple Workers may overlap in time on non-conflicting eligible targets. A Worker encountering an expired claim records the stale-claim evidence before takeover and then uses the normal exact-target claim/re-fetch safety check.
-
-## Roles
-
-### Planner
-
-Owns project planning below Admin and README: phases/order, dependencies, architecture/organization, decomposition, task scope and acceptance criteria, role routing and normal release prerequisites. Planner owns `ROADMAP.json` and active `TODO.json`, keeps exactly one active phase, reconciles README changes before other planning, and keeps current/earlier work prioritized.
-
-Planner should maintain a deep but legitimate work inventory and a meaningful pool of immediately executable current/earlier work when approved scope permits. Future/dependency-blocked work does not count as immediately executable capacity. Planner should favor genuine independent Coder, Designer, integration, regression, verification and supporting outcomes, avoid unnecessary serialization, and never create filler, duplicates, speculative/invented gameplay, fake dependencies or artificial micro-tasks merely to increase counts.
-
-Planner does not normally implement product code/visual production or approve releases.
-
-### Coder
-
-Implements approved runtime/application code, configuration, integration and implementation-focused tests. Coder may choose technical implementation inside approved scope but does not redefine Planner-owned scope, acceptance criteria, dependencies or phase order, and does not independently verify its own implementation.
-
-### Designer
-
-Owns approved UI/UX and visual production: 2D/2.5D/3D assets, portraits, sprites, textures, environments, buildings, props, maps/world presentation, WebGL visual work, readability, responsiveness, accessibility and visual performance.
-
-Designer chooses appropriate production tools and formats while preserving README-defined visual invariants such as the canonical tile-atlas contract. Gameplay and authoritative Simulation logic remain Coder responsibility unless an approved task explicitly includes technical visual integration.
-
-Designer does not redefine planning or approve releases.
-
-### Tester
-
-Verifies exact committed state, including functionality, visual work, integration, regression, usability, performance, accessibility, public behavior, revisions and release candidates.
-
-Under normal autonomous development, only an **independent Worker acting as Tester** may call implementation/design work independently verified or approve a phase/release. A Worker must not independently PASS its own earlier implementation, design, revision, bug fix, workflow fix or process change.
-
-### Reviewer
-
-Owns development-process health: defect analysis, bottleneck detection, CI/automation/reliability problems, stale state, missing checks, recurring failures and process improvement.
-
-When evidence supports it, Reviewer may create/fix focused workflow, configuration, tooling, process or code defects without inventing product scope or overriding Planner authority. Reviewer-produced changes require a different Worker acting as Tester before being independently verified.
-
-Reviewer is not phase/release approval authority.
-
-## Revisions and Independence
-
-Implementation/design discoveries that require scope, acceptance criteria, dependency, TODO or phase changes return to Planner through the project revision process.
-
-Tester defects return to the responsible role for correction and later independent retest.
-
-All changes and revision decisions remain traceable in GitHub.
-
-### Tester Deadlock Exception
-
-A cumulative phase/release gate may use `DEADLOCK TESTER PASS` only when:
-
-- the gate is otherwise ready;
-- required implementation/design/revision work is complete;
-- no unresolved valid revision, target claim conflict or higher-authority blocker remains;
-- every authorized Tester identity is disqualified solely by accepted authorship inside that cumulative gate.
-
-The first Worker whose authorized execution reaches the gate may then perform the **full exact-state verification**, disclose its own included authorship and issue `DEADLOCK TESTER PASS`.
-
-This PASS may advance the phase/release but **must not be described as independent verification of that Worker's own included work**. If a genuinely independent Tester becomes available before the gate is claimed, normal independent verification takes priority.
-
-Explicit Admin authority may bypass normal Worker/testing/publication gates, but an Admin-authorized unverified state remains unverified unless it later receives valid verification.
 
 ---
 
