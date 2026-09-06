@@ -4,7 +4,7 @@
 >
 > This file is subordinate implementation documentation. It records useful facts and historical notes about the imported map baseline; it does not define project/product authority or freeze architecture.
 >
-> Authority order is defined by the root `README.md`: Admin explicit instruction → README.md → ROADMAP → TODO → Issues → Code / Assets → Tests. Planner-approved scope/decomposition and active issues may therefore change implementation details documented here. The root README itself may be changed only with explicit Admin authorization.
+> Authority order is defined by the root `README.md`: Admin explicit instruction → README.md → ROADMAP → TODO → Issues → Code / Assets → Tests. Approved plans and active issues may therefore change implementation details documented here. The root README itself may be changed only with explicit Admin authorization.
 >
 > When this file conflicts with higher-authority project state, follow the higher-authority state and update this technical documentation when useful. Historical change-log entries below are retained as history, not as permanent mandates.
 
@@ -130,19 +130,7 @@ Performance guidance is advisory; correctness, README compatibility, accessibili
 
 ---
 
-## 13. AI / Worker Update Guidance
-
-Workers should:
-- Follow Admin, root README, Planner-owned ROADMAP/TODO, and active issue scope in that authority order.
-- Prefer scoped changes and preserve unrelated behavior.
-- Inspect current implementation and regression coverage before changing architecture or data flow.
-- Update subordinate technical notes when an approved change makes factual documentation materially stale.
-
-Workers are not prohibited by this legacy document from changing tile types, grid structure, module boundaries, architecture, pipeline order, backend strategy, asynchronous behavior, or refactoring when higher-authority approved work requires or justifies those changes.
-
----
-
-## 14. Naming Conventions
+## 13. Naming Conventions
 
 Current imported code commonly uses:
 - camelCase → functions/variables
@@ -153,9 +141,9 @@ Match surrounding code unless approved work intentionally changes conventions.
 
 ---
 
-## 15. Technical Change Log
+## 14. Technical Change Log
 
-Historical entries are descriptive records only. They do not override current Admin/README/Planner/issue authority and do not permanently freeze the implementation decisions they describe.
+Historical entries are descriptive records only. They do not override current Admin/README/project authority and do not permanently freeze the implementation decisions they describe.
 
 Date: 2026-03-27
 Modified files: js/ui.js, js/terrain.js
@@ -228,7 +216,7 @@ Description: Reworked settlement road generation so each settlement road now sta
 Reason: Meet the requested settlement connection logic and clustered dirt coverage constraints with minimal architectural impact.
 
 Date: 2026-03-28
-Modified files: index.html, js/ui.js, js/app.js, js/state.js, locales/en.json, locales/tr.json, locales/en.js, locales/tr.js, js/README.txt
+Modified files: index.html, js/ui.js, js/app.js, js/state.js, locales/en.js, locales/en.json, locales/tr.js, locales/tr.json, js/README.txt
 Description: PNG export now outputs a transparent diamond-shaped map image matching gameplay orientation, and PNG import now restores these diamond exports correctly. Added a new main menu action to export per-tile-type mask PNG images bundled into a ZIP archive.
 Reason: Support gameplay-shaped PNG portability and provide mask assets for all tile types without changing the rest of the application.
 
@@ -251,4 +239,4 @@ Reason: Meet the requirement to stop using the old tile painting system for terr
 Date: 2026-08-28
 Modified files: js/README.txt
 Description: Reclassified this file as subordinate technical documentation, documented the current project authority boundary, converted legacy absolute AI/architecture/pipeline mandates into factual or advisory implementation notes, and retained historical change entries as provenance rather than permanent rules.
-Reason: R01-T06 / #63 requires the imported v155 guidance to remain useful without overriding Admin, root README, Planner-owned scope/decomposition, or approved implementation work.
+Reason: R01-T06 / #63 requires the imported v155 guidance to remain useful without overriding Admin, root README, project planning, or approved implementation work.
