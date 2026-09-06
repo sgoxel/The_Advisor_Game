@@ -24,7 +24,6 @@ on:
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
       - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
-      - '.github/evidence-triggers/r04-spatial-world-100.txt'
       - '.github/workflows/r04-spatial-world-100-verification.yml'
   pull_request:
     paths:
@@ -48,7 +47,6 @@ on:
       - 'tests/browser/r02-multi-region-terrain.spec.mjs'
       - 'tests/browser/r02-region-navigation.spec.mjs'
       - 'tests/browser/r02-deterministic-roundtrip.spec.mjs'
-      - '.github/evidence-triggers/r04-spatial-world-100.txt'
       - '.github/workflows/r04-spatial-world-100-verification.yml'
   workflow_dispatch:
 
@@ -168,7 +166,6 @@ jobs:
           if [ -d playwright-report ]; then cp -R playwright-report r04-spatial-world-100-evidence/; fi
           if [ -d test-results ]; then
             cp -R test-results r04-spatial-world-100-evidence/
-            # #354: playwright-report retains byte-identical trace ZIPs; avoid duplicate artifact transport.
             find r04-spatial-world-100-evidence/test-results -type f -name 'trace.zip' -delete
           fi
 
