@@ -368,44 +368,6 @@ Visual fidelity may scale by device—detail, render scale, effects or density m
 
 ---
 
-# 🌐 Public Development Build
-
-The evolving game remains publicly accessible at:
-
-### https://sgoxel.github.io/The_Advisor_Game/
-
-The public location represents the **current Admin-authorized public development build**.
-
-Development should normally be cumulative: accepted work extends the current product instead of replacing it with disconnected prototypes.
-
-Public replacement should normally follow the project's current verification and release policy. The latest GitHub Release should represent the latest verified release.
-
-The Admin may explicitly order a specified repository state, commit, imported template or development build to be published directly. In that case, Admin authorization is sufficient publication authority and no unrequested verification gate may block the publication.
-
-An Admin-directed unverified build must be labeled accurately as an **Admin-directed public development build**, not falsely described as independently verified. Testing, rollback, tagging or promotion to a verified release may occur later.
-
-Build, packaging, deployment and versioning mechanics are implementation details rather than README product policy.
-
----
-
-# 🏛️ Project Authority
-
-The **Admin is the highest project authority**.
-
-Authority order:
-
-**Admin explicit instruction → README.md → ROADMAP → TODO → Issues → Code / Assets → Tests**
-
-README defines persistent product scope, principles, invariants and high-level governance: **WHAT the project is and what should normally remain true**.
-
-README does not prescribe implementation architecture, repository/module layout, implementation order, roadmap phases, detailed task decomposition, automation, scheduling, contributor orchestration, branching strategy, commands or detailed deployment/testing mechanics unless a specific item is itself a product invariant.
-
-If subordinate state conflicts with README and no Admin instruction authorizes the difference, README wins and subordinate state must be corrected. An explicit Admin instruction may override README, authorize an exception or require immediate publication/execution.
-
-**README may be modified only with explicit Admin authorization.**
-
----
-
 # ✅ Summary of Non-Negotiable Product Truth
 
 - **Player advises → AI Character decides → Simulation validates → World reacts.**
