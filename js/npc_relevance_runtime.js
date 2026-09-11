@@ -8,7 +8,7 @@
   const Game = global.Game = global.Game || {};
   if (Game.NPCRelevanceRuntime) return;
 
-  const VERSION = 'r04-npc-relevance-v6-demotion-snapshot';
+  const VERSION = 'r04-npc-relevance-v7-region-aware';
   const TIER = Object.freeze({ CRITICAL: 'critical', NEARBY: 'nearby', LOCAL: 'local', DISTANT: 'distant' });
   const CADENCE_MINUTES = Object.freeze({ critical: 1, nearby: 2, local: 5, distant: 15 });
   const CRITICAL_DISTANCE = 6;
@@ -27,7 +27,29 @@
   function hash32(text) { let hash = 2166136261 >>> 0; for (const char of String(text)) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619) >>> 0; } return hash >>> 0; }
   function gameTime() { const captured = Game.GameTime?.capture?.(); const value = Number(captured?.totalGameMinutes ?? Game.State?.world?.gameTime?.totalGameMinutes ?? 0); return Number.isFinite(value) ? Math.max(0, value) : 0; }
   function manhattan(a, b) { return Math.abs(Number(a?.row || 0) - Number(b?.row || 0)) + Math.abs(Number(a?.col || 0) - Number(b?.col || 0)); }
-  function classify(npc) { const player = Game.State?.world?.player; const interactionCritical = Boolean(npc?.dialogueWith || npc?.interactionCritical || npc?.selectedForInteraction); if (interactionCritical) return TIER.CRITICAL; const distance = player ? manhattan(npc, player) : Infinity; if (distance <= CRITICAL_DISTANCE) return TIER.CRITICAL; if (distance <= NEAR_DISTANCE) return TIER.NEARBY; if (distance <= LOCAL_DISTANCE) return TIER.LOCAL; return TIER.DISTANT; }
+  function regionCoordinate(entity, axis, world) {
+    const direct = Number(entity?.[`region${axis}`]);
+    if (Number.isFinite(direct)) return Math.trunc(direct);
+    const current = Number(world?.currentRegion?.[axis.toLowerCase()]);
+    return Number.isFinite(current) ? Math.trunc(current) : 0;
+  }
+  function sameRegion(npc, player, world = Game.State?.world) {
+    if (!npc || !player) return false;
+    return regionCoordinate(npc, 'X', world) === regionCoordinate(player, 'X', world) &&
+      regionCoordinate(npc, 'Y', world) === regionCoordinate(player, 'Y', world);
+  }
+  function classify(npc) {
+    const world = Game.State?.world;
+    const player = world?.player;
+    if (player && !sameRegion(npc, player, world)) return TIER.DISTANT;
+    const interactionCritical = Boolean(npc?.dialogueWith || npc?.interactionCritical || npc?.selectedForInteraction);
+    if (interactionCritical) return TIER.CRITICAL;
+    const distance = player ? manhattan(npc, player) : Infinity;
+    if (distance <= CRITICAL_DISTANCE) return TIER.CRITICAL;
+    if (distance <= NEAR_DISTANCE) return TIER.NEARBY;
+    if (distance <= LOCAL_DISTANCE) return TIER.LOCAL;
+    return TIER.DISTANT;
+  }
   function rank(tier) { return tier === TIER.CRITICAL ? 0 : tier === TIER.NEARBY ? 1 : tier === TIER.LOCAL ? 2 : 3; }
   function cadenceFor(tier) { return CADENCE_MINUTES[tier] || CADENCE_MINUTES.distant; }
   function stableBucket(npc, tier) { const cadence = cadenceFor(tier); return cadence <= 1 ? 0 : hash32(`${Game.State?.world?.seed || ''}|${npc?.id || ''}|${tier}`) % cadence; }
@@ -42,7 +64,7 @@
   }
 
   function authoritativeDemotionSnapshot(npc, time) {
-    return Object.freeze({ id: String(npc?.id || ''), authoritativeTime: time, row: Number(npc?.row), col: Number(npc?.col), activity: String(npc?.activity || 'idle') });
+    return Object.freeze({ id: String(npc?.id || ''), authoritativeTime: time, regionX: regionCoordinate(npc, 'X', Game.State?.world), regionY: regionCoordinate(npc, 'Y', Game.State?.world), row: Number(npc?.row), col: Number(npc?.col), activity: String(npc?.activity || 'idle') });
   }
   function captureDemotion(entry, npc, tier, time) {
     const demotedToDistant = tier === TIER.DISTANT && entry.tier !== TIER.DISTANT;
@@ -61,7 +83,16 @@
   function materialize(npc, entry, tier, time, promoted) { const started = performance.now(); if (Game.NPCLife?.scheduleState) { try { npc.dailySchedule = Game.NPCLife.scheduleState(npc, time); } catch (_) {} } if (promoted) entry.authoritativePromotionPending = true; entry.previousTier = entry.tier; entry.tier = tier; refreshTierMetadata(entry, npc, tier); entry.lastObservedMinute = Math.floor(time); entry.lastObservedTime = time; entry.lastDetailedMinute = Math.floor(time); entry.lastDetailedTime = time; entry.lastRow = Number(npc.row); entry.lastCol = Number(npc.col); entry.lastActivity = String(npc.activity || 'idle'); entry.detailLoaded = tier !== TIER.DISTANT; if (promoted) promotedReconciliations += 1; const duration = Math.max(0, performance.now() - started); samples.push(duration); if (samples.length > 240) samples.splice(0, samples.length - 240); recordDispatch(npc, entry, tier, time); completedJobs += 1; updateRateCounter(); return true; }
   function scheduleNpc(npc, time) { const entry = ensureCompact(npc, time); if (!entry) return false; const tier = classify(npc); const promoted = rank(tier) < rank(entry.tier); if (promoted) entry.authoritativePromotionPending = true; captureDemotion(entry, npc, tier, time); entry.lastObservedMinute = Math.floor(time); entry.lastObservedTime = time; entry.lastRow = Number(npc.row); entry.lastCol = Number(npc.col); entry.lastActivity = String(npc.activity || entry.lastActivity || 'idle'); if (!isDue(entry, npc, tier, time, promoted)) { entry.previousTier = entry.tier; entry.tier = tier; refreshTierMetadata(entry, npc, tier); if (tier === TIER.DISTANT) entry.detailLoaded = false; return false; } const scheduler = Game.FrameBudgetScheduler; const jobKey = `npc-detail:${entry.id}`; const cadence = cadenceFor(tier); const cycle = Math.floor(time / cadence); if (scheduler?.enqueue) { scheduler.enqueue(jobKey, () => materialize(npc, entry, tier, time, promoted), { priority: tier === TIER.CRITICAL ? 30 : tier === TIER.NEARBY ? 20 : tier === TIER.LOCAL ? 10 : 0, label: `NPC detail ${entry.id}`, version: `${cycle}:${tier}:${entry.bucket}:${entry.phaseOffsetMinutes.toFixed(6)}` }); if (scheduler.interactionActive?.() && tier !== TIER.CRITICAL) deferredJobs += 1; return true; } return materialize(npc, entry, tier, time, promoted); }
   function scheduleFrame() { const npcs = Game.State?.world?.npcs; if (!Array.isArray(npcs) || !npcs.length) return false; const time = gameTime(); for (const npc of npcs) scheduleNpc(npc, time); return true; }
+  function recomputeAfterRegionTransition(worldInput = Game.State?.world, minuteInput = gameTime()) {
+    const world = worldInput && typeof worldInput === 'object' ? worldInput : null;
+    const npcs = world?.npcs;
+    if (!world || !Array.isArray(npcs) || !npcs.length) return Object.freeze({ authority: 'scheduling-only', evaluated: 0, scheduled: 0 });
+    const time = Math.max(0, Number(minuteInput) || 0);
+    let scheduled = 0;
+    for (const npc of npcs) if (scheduleNpc(npc, time)) scheduled += 1;
+    return Object.freeze({ authority: 'scheduling-only', evaluated: npcs.length, scheduled });
+  }
   function detailEligible(npc) { const entry = compact.get(String(npc?.id || '')); const tier = entry?.tier || classify(npc); return tier === TIER.CRITICAL || tier === TIER.NEARBY; }
   function snapshot() { const counts = { critical: 0, nearby: 0, local: 0, distant: 0 }; for (const entry of compact.values()) counts[entry.tier] = (counts[entry.tier] || 0) + 1; const sorted = samples.slice().sort((a, b) => a - b); const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] : 0; return Object.freeze({ version: VERSION, authority: 'scheduling-only', compactStatePersisted: false, counts: Object.freeze(counts), jobsPerSecond, deferredJobs, completedJobs, promotedReconciliations, npcJobP95Ms: p95, npcJobWorstMs: sorted.length ? sorted[sorted.length - 1] : 0, cadenceMinutes: CADENCE_MINUTES, dispatchSamples: dispatchSamples.slice(), entries: Array.from(compact.values()).map((entry) => Object.freeze({ ...entry })) }); }
-  Game.NPCRelevanceRuntime = Object.freeze({ version: VERSION, authority: 'scheduling-only', tiers: TIER, cadenceMinutes: CADENCE_MINUTES, classify, stableBucket, stablePhase, authoritativeDue, markAuthoritativeUpdated, scheduleFrame, detailEligible, snapshot });
+  Game.NPCRelevanceRuntime = Object.freeze({ version: VERSION, authority: 'scheduling-only', tiers: TIER, cadenceMinutes: CADENCE_MINUTES, classify, stableBucket, stablePhase, authoritativeDue, markAuthoritativeUpdated, scheduleFrame, recomputeAfterRegionTransition, detailEligible, snapshot });
 })(typeof window !== 'undefined' ? window : globalThis);
