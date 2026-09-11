@@ -8,7 +8,7 @@ Dev=EN; AI output/issues/comments/docs/code/assets=EN.
 ## AUTH
 Admin>README>ROADMAP>TODO>issues>code/assets>tests.
 README=product truth: scope+principles+invariants+high-level governance; NOT implementation HOW.
-Read main/README.md first every run. Conflict=>README wins unless Admin overrides; repair subordinates.
+Conflict=>README wins unless Admin overrides; repair subordinates.
 README edit only with explicit Admin authorization.
 
 ---
