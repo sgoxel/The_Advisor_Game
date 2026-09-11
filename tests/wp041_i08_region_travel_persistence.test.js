@@ -112,7 +112,7 @@ assert.strictEqual(world.currentRegion.y, -2);
 assert.strictEqual(player.row, 37);
 assert.strictEqual(player.col, 0);
 assert.strictEqual(player.moving, false);
-assert.deepStrictEqual(player.pathQueue, []);
+assert.strictEqual(player.pathQueue.length, 0);
 assert.strictEqual(player.health, 86);
 assert.strictEqual(player.history, history);
 
