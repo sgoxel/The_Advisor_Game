@@ -126,7 +126,6 @@ In the ROADMAP file, game development is broken down into very small, manageable
 The Game Designer aims to divide the game development process into a total of at least 100 work packages.
 The goal is to create at least 10 issue records per work package. 
 Issue records represent the smallest units of work that can be resolved in a single cycle; for example, a Game Programmer should be able to code the task in one go, and a Texture Artist should be able to draw the required image in one go.
-Game Designer reviews unresolved issues older than 2 hours.
 They clarify, reduce, split, reprioritize, or close them when duplicate, obsolete, or invalid.
 Age alone is not a reason to remove valid unresolved work.
 Claims older than 3 hours are stale and must be cleared by the first Worker that notices them.
