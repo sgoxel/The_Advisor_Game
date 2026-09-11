@@ -123,6 +123,7 @@ window.Game.Utils.loadScriptOnce("js/npc_life.js", "r02NpcLifeModule");
 window.Game.Utils.loadScriptOnce("js/protagonist_routine.js", "r04ProtagonistRoutineModule");
 window.Game.Utils.loadScriptOnce("js/npc_residency.js", "r04NpcResidencyModule");
 window.Game.Utils.loadScriptOnce("js/npc_workplaces.js", "r04NpcWorkplacesModule");
+window.Game.Utils.loadScriptOnce("js/innkeeper_identity_lookup.js", "wp002InnkeeperIdentityLookupModule");
 window.Game.Utils.loadScriptOnce("js/outdoor_worksites.js", "r04OutdoorWorksitesModule");
 window.Game.Utils.loadScriptOnce("js/guard_duty_anchors.js", "r04GuardDutyAnchorsModule");
 window.Game.Utils.loadScriptOnce("js/terrain_routing.js", "r04TerrainRoutingModule");
