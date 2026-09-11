@@ -8,9 +8,10 @@
   const Game = global.Game = global.Game || {};
   if (Game.NPCRelevanceRuntime) return;
 
-  const VERSION = 'r04-npc-relevance-v4-temporal-phase';
+  const VERSION = 'r04-npc-relevance-v5-authoritative-classification';
   const TIER = Object.freeze({ CRITICAL: 'critical', NEARBY: 'nearby', LOCAL: 'local', DISTANT: 'distant' });
   const CADENCE_MINUTES = Object.freeze({ critical: 1, nearby: 2, local: 5, distant: 15 });
+  const CRITICAL_DISTANCE = 6;
   const NEAR_DISTANCE = 14;
   const LOCAL_DISTANCE = 38;
   const compact = new Map();
@@ -42,26 +43,13 @@
     return Math.abs(Number(a?.row || 0) - Number(b?.row || 0)) + Math.abs(Number(a?.col || 0) - Number(b?.col || 0));
   }
 
-  function visibleOnCanvas(npc) {
-    const renderer = Game.Renderer;
-    const canvas = Game.State?.dom?.canvas || document.getElementById('gameCanvas');
-    if (!renderer?.gridToScreen || !canvas) return false;
-    try {
-      const point = renderer.gridToScreen(Number(npc.row), Number(npc.col), 0, 0);
-      const margin = 48;
-      return Number.isFinite(point?.x) && Number.isFinite(point?.y)
-        && point.x >= -margin && point.y >= -margin
-        && point.x <= canvas.clientWidth + margin && point.y <= canvas.clientHeight + margin;
-    } catch (_) {
-      return false;
-    }
-  }
-
   function classify(npc) {
     const player = Game.State?.world?.player;
-    const dialogueCritical = Boolean(npc?.dialogueWith || npc?.interactionCritical || npc?.selectedForInteraction);
-    if (dialogueCritical || visibleOnCanvas(npc)) return TIER.CRITICAL;
+    const interactionCritical = Boolean(npc?.dialogueWith || npc?.interactionCritical || npc?.selectedForInteraction);
+    if (interactionCritical) return TIER.CRITICAL;
+
     const distance = player ? manhattan(npc, player) : Infinity;
+    if (distance <= CRITICAL_DISTANCE) return TIER.CRITICAL;
     if (distance <= NEAR_DISTANCE) return TIER.NEARBY;
     if (distance <= LOCAL_DISTANCE) return TIER.LOCAL;
     return TIER.DISTANT;
