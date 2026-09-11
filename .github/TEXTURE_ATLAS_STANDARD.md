@@ -120,6 +120,22 @@ The manifest must truthfully map every occupied cell to its semantic type and ex
 - Artwork is presentation only. It must not become authority for walkability, collision, route semantics, profession, building identity, NPC identity, resources, or Simulation state.
 - A visual family is not complete merely because files exist; integration issues must verify the intended PNG is actually selected/rendered where required.
 
+### Mandatory 100x100 static composition
+
+Except for NPC world sprites, PNG slices are **source artwork, not independent runtime image objects**.
+
+All roads, paths, terrain transitions, buildings, walls, floors, roofs, trees, vegetation, furniture, props, resources, ruins and other non-NPC world artwork must follow `.github/STATIC_TILE_COMPOSITION_STANDARD.md`:
+
+1. The logical terrain/base is resolved first.
+2. The selected transparent 256 x 256 PNG slice is scaled into an exact 100 x 100 logical-tile composition surface.
+3. Transparent pixels reveal the already-resolved base terrain. Example: a transparent tree tile is painted over grass to create one grass+tree 100 x 100 tile image.
+4. The completed 100 x 100 RGBA result is flushed through the shared background presentation path.
+5. The PNG slice must not remain as a separate road/building/tree/object canvas, DOM element or per-object runtime sprite.
+
+For multi-tile buildings/objects, Texture Artist must provide tile-local semantic parts. Each covered world tile receives its appropriate transparent source part and is flattened independently into that tile's 100 x 100 runtime composite.
+
+Do not bake unrelated opaque terrain into transparent object families merely to mimic the final composite. The runtime composition stage owns base+overlay combination.
+
 ## Texture Artist handoff gate
 
 Texture Artist may hand an asset issue to Tester only when all applicable items are true:
@@ -131,7 +147,8 @@ Texture Artist may hand an asset issue to Tester only when all applicable items 
 5. Stable filenames and manifest mappings are present.
 6. Art style, scale, edge continuity/seams, transparency, and family consistency were actually inspected to the extent available.
 7. Required runtime registration/integration owned by the issue is complete.
-8. Audit records the atlas path, occupied cell map, slice paths, manifest path, actual checks, limitations, and next verification step.
+8. Every non-NPC runtime integration identifies its 100 x 100 static composition role/order and does not require an independent static world-image layer.
+9. Audit records the atlas path, occupied cell map, slice paths, manifest path, actual checks, limitations, 100 x 100 composition usage, and next verification step.
 
 Any failure keeps/returns the issue to **Texture Artist / READY** (or the smallest responsible correction role under current issue routing). It must not receive a visual PASS.
 
@@ -148,9 +165,10 @@ Tester must independently verify, as applicable:
 - stable semantic filenames/manifest entries;
 - visible seams, edge continuity, scale and style at representative gameplay zooms;
 - correct runtime selection/rendering;
-- absence of SVG production assets in the family.
+- absence of SVG production assets in the family;
+- for non-NPC world art, correct alpha composition into the exact 100 x 100 logical tile and absence of a separate persistent static presentation layer.
 
-Tester must FAIL any new/corrected Texture Artist deliverable that uses SVG or bypasses this PNG atlas pipeline without an explicit Admin override.
+Tester must FAIL any new/corrected Texture Artist deliverable that uses SVG or bypasses either the PNG atlas pipeline or the 100 x 100 static composition pipeline without an explicit Admin override.
 
 ## Reference implementation
 
