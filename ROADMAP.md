@@ -1,8 +1,8 @@
 # The Advisor Game — Product Roadmap
 
-Authority: Admin > README.md > WORKFLOW.md > this ROADMAP > TODO > issues > code/assets > tests.
+Authority: Admin > README.md > this ROADMAP > TODO > issues > code/assets > tests.
 
-This roadmap decomposes README product truth into small vertical work packages. It does not modify or supersede README. Each WP lists ten atomic issue records (`I01`–`I10`) intended to be independently actionable in a single work cycle. Under WORKFLOW.md, only a small near-term subset should be promoted into live GitHub WP issues at once; this roadmap is product decomposition, not READY-state authority.
+This roadmap decomposes README product truth into small vertical work packages. It does not modify or supersede README. Each WP lists ten atomic issue records (`I01`–`I10`) intended to be independently actionable in a single work cycle. Atomic issue creation, readiness, role routing, dependencies, claims, status, and lifecycle are governed by `.github/ISSUE_STANDARD.md`; roadmap entries do not become READY merely by existing here.
 
 ## Core Advisor → Character → Simulation → World loop
 
@@ -327,8 +327,8 @@ I01 advice autonomy; I02 Simulation legality; I03 world observability; I04 Local
 ## Roadmap governance
 
 - README remains product truth and is never changed from roadmap maintenance without explicit Admin authorization.
-- WORKFLOW controls how roadmap slices become live WPs; roadmap entries do not become READY merely by existing here.
-- Keep the live Design/Planning buffer small even though the product decomposition is broad.
-- Prefer vertical player-visible slices; split before implementation when one WP cannot finish safely in one claim.
+- `.github/ISSUE_STANDARD.md` controls atomic issue structure, readiness, role routing, dependencies, claims, status, and lifecycle; ROADMAP records do not become READY merely by existing here.
+- Keep the active issue set focused and executable; do not create broad staging queues or a separate Planning buffer.
+- Prefer one-cycle atomic records with independently verifiable outcomes; split oversized scope before production claim.
 - Simulation owns legality, state, resources, position, outcomes, and world truth. UI, renderer, assets, LLM, Local BOT, and tests never authoritatively mutate world state outside Simulation contracts.
-- Every promoted WP must carry actual English audit evidence and independent Test verification before VERIFIED/DONE.
+- Every repository change carries actual English audit evidence, and production output receives independent Tester verification where applicable before final release.
