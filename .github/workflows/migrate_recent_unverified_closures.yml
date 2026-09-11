@@ -1,0 +1,171 @@
+name: Migrate recent unverified issue closures
+
+on:
+  push:
+    paths:
+      - '.github/workflows/migrate_recent_unverified_closures.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reopen and normalize unverified closures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json, os, re, urllib.request, urllib.parse
+
+          repo = os.environ['GH_REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          target_dates = {'2026-09-10', '2026-09-11'}
+          api = 'https://api.github.com'
+
+          def request(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(api + path, data=data, method=method)
+              req.add_header('Authorization', 'Bearer ' + token)
+              req.add_header('Accept', 'application/vnd.github+json')
+              req.add_header('X-GitHub-Api-Version', '2022-11-28')
+              if data is not None:
+                  req.add_header('Content-Type', 'application/json')
+              with urllib.request.urlopen(req) as r:
+                  return json.load(r)
+
+          def result_text(body):
+              m = re.search(r'(?ms)^Result:\s*(.*?)(?=^Risks:|^Next:|^## |\Z)', body or '')
+              return (m.group(1).strip() if m else '')
+
+          def tester_verified_pass(body):
+              body = body or ''
+              role = bool(re.search(r'(?m)^Role:\s*Tester\s*$', body))
+              done = bool(re.search(r'(?m)^Status:\s*DONE\s*$', body))
+              result = result_text(body).lower()
+              return role and done and ('fail' not in result) and ('pass' in result)
+
+          def infer_wp(title, body):
+              m = re.search(r'WP-\d{3}', (title or '') + '\n' + (body or ''))
+              return m.group(0) if m else 'WP-001'
+
+          def infer_atomic(title, body, number):
+              text = (title or '') + '\n' + (body or '')
+              m = re.search(r'\bI\d{2}(?:-R\d+)?\b', text)
+              return m.group(0) if m else f'I00-R{number}'
+
+          def infer_priority(body):
+              m = re.search(r'(?m)(?:^Priority:\s*|\*\*Priority:\*\*\s*)(P[0-5])\b', body or '')
+              return m.group(1) if m else 'P4'
+
+          def normalize(issue):
+              body = issue.get('body') or ''
+              num = issue['number']
+              title = issue.get('title') or ''
+              note = (
+                  '\n\n## Lifecycle migration — 2026-09-11\n'
+                  'Reopened by Admin instruction because this issue was closed without a final independent Tester confirmation that the issue itself PASSes under the current `.github/ISSUE_STANDARD.md`.\n'
+                  'Prior checked boxes, producer checks, related Tester issues, and historical closure state are preserved as evidence but are not a substitute for this issue’s own final Tester verification.\n'
+                  '**Next:** Tester independently verifies the current acceptance scope and referenced output on current `main`. PASS -> set `Status: DONE` and close. FAIL -> keep open and hand this same issue to the responsible correction `Role` with `Status: READY`.\n'
+              )
+              if '## Lifecycle migration — 2026-09-11' in body:
+                  return body
+
+              if re.search(r'(?m)^Role:\s*', body) and re.search(r'(?m)^WP:\s*', body) and re.search(r'(?m)^Atomic record:\s*', body):
+                  body = re.sub(r'(?m)^Role:\s*.*$', 'Role: Tester', body, count=1)
+                  if re.search(r'(?m)^Claim:\s*', body):
+                      body = re.sub(r'(?m)^Claim:\s*.*$', 'Claim: NONE', body, count=1)
+                  else:
+                      body = re.sub(r'(?m)^(Dependency:\s*.*)$', r'\1\nClaim: NONE', body, count=1)
+                  if re.search(r'(?m)^Status:\s*', body):
+                      body = re.sub(r'(?m)^Status:\s*.*$', 'Status: VERIFY', body, count=1)
+                  else:
+                      body = re.sub(r'(?m)^(Claim:\s*NONE)$', r'\1\nStatus: VERIFY', body, count=1)
+                  return body.rstrip() + note
+
+              wp = infer_wp(title, body)
+              atomic = infer_atomic(title, body, num)
+              priority = infer_priority(body)
+              wrapper = f'''Role: Tester
+WP: {wp}
+Atomic record: {atomic}
+Priority: {priority}
+Dependency: NONE
+Claim: NONE
+Status: VERIFY
+
+## Objective
+Independently verify the preserved prior record and its claimed completion/disposition against current project authority and current `main`.
+
+## Scope
+- Verify only the outcome claimed by this preserved issue and any repository changes/references it cites.
+- Preserve the historical record below as evidence; retired process fields below are not current control fields.
+- If the prior outcome is incomplete, obsolete, incorrect, or requires correction, hand this same issue to the current responsible Role instead of closing it.
+
+## Out of scope
+- Unrelated new product work.
+- Treating historical closure or another issue's verification as this issue's PASS.
+
+## Acceptance criteria
+- [ ] Current README/ROADMAP/ISSUE_STANDARD authority is respected.
+- [ ] The prior result/disposition is independently verified with actual evidence.
+- [ ] PASS is recorded only if this issue's claimed outcome is valid on current `main`.
+- [ ] FAIL/incomplete work is handed to the responsible current Role with `Status: READY`.
+
+## Audit
+Purpose: Migrate a recent unverified closure into the current Tester-final lifecycle.
+Change: Reopened and normalized for final Tester verification; historical record preserved below.
+Refs: Admin instruction 2026-09-11; `.github/ISSUE_STANDARD.md`; #{num}.
+Checks: Closure date is inside 2026-09-10..2026-09-11 and no final independent Tester PASS was recorded for this issue.
+Result: VERIFY pending.
+Risks: Historical fields below may describe a retired workflow and must not override the current control block.
+Next: Tester independently verifies this issue.
+
+---
+## Preserved prior record
+
+'''
+              return wrapper + body
+
+          issues = []
+          page = 1
+          while True:
+              batch = request('GET', f'/repos/{repo}/issues?state=closed&per_page=100&page={page}&sort=updated&direction=desc')
+              if not batch:
+                  break
+              stop = False
+              for issue in batch:
+                  if 'pull_request' in issue:
+                      continue
+                  closed = issue.get('closed_at')
+                  if closed and closed[:10] in target_dates:
+                      issues.append(issue)
+              if len(batch) < 100:
+                  break
+              page += 1
+
+          reopened, skipped = [], []
+          for issue in sorted(issues, key=lambda x: x['number']):
+              body = issue.get('body') or ''
+              if tester_verified_pass(body):
+                  skipped.append(issue['number'])
+                  continue
+              new_body = normalize(issue)
+              request('PATCH', f'/repos/{repo}/issues/{issue["number"]}', {
+                  'body': new_body,
+                  'state': 'open',
+                  'state_reason': 'reopened'
+              })
+              reopened.append(issue['number'])
+              print(f'REOPENED #{issue["number"]} {issue.get("title", "")}')
+
+          print('TARGET_COUNT=' + str(len(issues)))
+          print('REOPENED_COUNT=' + str(len(reopened)))
+          print('REOPENED=' + ','.join(map(str, reopened)))
+          print('SKIPPED_TESTER_PASS_COUNT=' + str(len(skipped)))
+          print('SKIPPED_TESTER_PASS=' + ','.join(map(str, skipped)))
+          PY
