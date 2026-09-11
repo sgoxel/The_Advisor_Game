@@ -42,13 +42,11 @@ Workers can be assigned to Routine Tasks or activated manually by the Admin.
 ## Purpose
 
 This file defines the mandatory structure and lifecycle for atomic GitHub issues used by routine workers and manually activated roles in **The Advisor Game**.
-
 It exists to keep work small, executable, auditable, and directly transferable between the current project roles without introducing a separate planning gate.
 
 Authority remains:
 
 **Admin > README.md > ROADMAP.md > TODO > issues > code/assets > tests.**
-
 `README.md` remains product truth for scope, principles, invariants, and high-level governance. This file must never be used to override README or explicit Admin direction.
 
 ---
@@ -343,7 +341,7 @@ If the current issue itself is structurally invalid or oversized, Game Designer 
 
 ## Issue age and stale work
 
-Game Designer reviews unresolved issues older than **2 hours**.
+Game Designer reviews unresolved issues older than **3 hours**.
 
 For such issues, Game Designer must determine whether the issue should be:
 
