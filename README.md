@@ -150,9 +150,9 @@ Where relevant, a building may materialize walls and walkable floors; usable ent
 
 Walls and solid obstacles constrain movement. Entrances connect exterior and interior walkable space. Character, room, door, furniture and building scale must remain mutually plausible.
 
-Entering or leaving a building preserves the **same building, occupants, location, history and campaign state**. Interior detail may be streamed, layered, cached or lazily materialized, but it refines the same authoritative place.
+Entering or leaving a building preserves the **same building, occupants, location, history and campaign state**. Interior detail may be streamed, cached or lazily materialized, but it refines the same authoritative place and must obey the same static 100 × 100 tile-composition presentation rule as other non-NPC world art.
 
-Roofs, ceilings or upper walls may hide, cut away, fade or become translucent so occupied interiors remain readable.
+Roofs, ceilings or upper walls may hide, cut away, fade or change their tile-local composite so occupied interiors remain readable; they must not require a separate persistent building/interior image layer.
 
 ## Autonomous Local Population
 
@@ -183,6 +183,8 @@ NPCs may exchange simple deterministic or Local-BOT ambient dialogue based on pr
 The world includes domestic animals, wildlife and a broad original medieval-fantasy bestiary.
 
 Presence and behavior should reflect SEED-defined habitat, terrain, biome, settlement type, danger and campaign state. Animals and creatures may idle, forage, flee, travel, gather, guard territory, threaten or interact where appropriate. Gameplay-relevant identity/state belongs to the Simulation.
+
+Unless the Admin grants a named presentation exception, non-NPC animals/creatures do not gain permanent independent world-image layers: when their logical tile changes, the affected static tile composites are invalidated and rebuilt from authoritative state.
 
 ---
 
@@ -275,70 +277,34 @@ A new campaign's fantasy date/time derives from the accepted real-world creation
 - day, month and time-of-day match;
 - **fantasy year = real-world year − 2000**.
 
-Example: `28.08.2026 14:30` → `28.08.0026 14:30`.
+Example: `28.08.2026 → 28.08.0026`.
 
-After creation, fantasy chronology becomes its own accelerated authoritative timeline. It must not be reset to the current civil calendar on each launch.
+The campaign stores the last accepted real-world timestamp needed for resume progression. On resume:
 
-Elapsed real-world time while the game is closed advances campaign time at the same normal-speed ratio: **one real-world hour advances one in-game day**. Resume catch-up must update relevant authoritative state efficiently rather than replaying every missed minute, NPC routine or visual day/night cycle.
+- default safe startup order is **load → validate → offline progression → start live clock**;
+- negative real-time deltas do not reverse the world;
+- corrupt or incompatible timestamps fall back safely;
+- **1 real-world hour offline = 1 in-game day** at default policy.
 
-A backward or otherwise invalid real-world clock change must not silently rewind established campaign chronology.
-
-## Active, Off-Screen and Hierarchical Simulation
-
-The active local world uses detailed real-time simulation appropriate to visible gameplay.
-
-Off-screen regions do not freeze permanently, but they also do not require full-detail entity ticking. They may use lower-cost aggregate progression, elapsed-time advancement or deterministic approximation.
-
-The same authoritative world may be represented at different detail levels:
-
-**global/world → realm/country → region → settlement → local active world**
-
-Higher-level state may track population trends, prosperity, food/resources, security, trade, military pressure, diplomacy, unrest, migration, hazards, settlement development, territorial control and other meaningful balances.
-
-**Simulation fidelity is not Simulation authority.** Compact distant state and detailed local state are representations of the same causal history.
-
-When detail becomes relevant, it is materialized from compatible SEED base data, coordinates, campaign time, higher-level outcomes, persistent changes, neighboring continuity and local rules.
-
-Invisible-world cost must scale primarily with **relevance**, not total world size. Long elapsed periods should normally be reconciled through bounded aggregate/end-state consequences rather than replaying every local micro-action.
-
-Expensive generation, catch-up and materialization should be asynchronous where practical, but scheduling order, device speed, visit order or render order must never change authoritative results. Stale asynchronous results must not overwrite newer state.
+Offline catch-up must remain bounded and suitable for large worlds. Distant regions should use compact or hierarchical progression rather than replaying every NPC minute-by-minute.
 
 ---
 
 # 🎨 World Presentation and Art Direction
 
-## Primary Game Surface
+The project is presented primarily as a **WebGL-rendered 2D/2.5D world**, with selective 3D only where it genuinely improves the experience.
 
-The primary playable surface is a persistent **living strategic world map**, not a collection of disconnected menus, cards, dashboards, text screens or static mockups.
+The target is a readable, grounded **seinen medieval-fantasy / old-school RPG** presentation: painterly or hand-crafted-feeling environments, practical rather than exaggerated materials, readable silhouettes, lived-in settlements, and characters that remain identifiable at gameplay scale.
 
-Local play uses a readable **WebGL-based, primarily tile-oriented 2D/2.5D RPG presentation** with top-down, shallow-isometric or near-isometric composition. Selective real-time 3D is allowed when coherent, but a fully 3D local world is not required.
+The visual system should prioritize:
 
-The map should visibly represent relevant terrain, elevation, biomes, water, forests, roads, settlements, buildings, interiors, rooms, doors, props, ruins, caves/dungeons, landmarks, resources, people, animals, creatures, groups, caravans, armies and environmental effects such as weather, lighting, fire, smoke, fog and water.
-
-The map is not decorative background art. Visible locations, movement and world changes correspond to Simulation state.
-
-As political scale increases, regional, realm/country and wider-world strategic views summarize the **same authoritative world**, rather than becoming disconnected substitute dashboards.
-
-## Visual Language
-
-Character-focused art follows an **original seinen-anime-inspired** language: mature, grounded, expressive, believable proportions, readable age/status/profession/culture and plausible medieval-fantasy materials.
-
-The local world evokes a **classic old-school tile-based PC RPG** with modern usability: readable floors and terrain, clear rooms/walls/doors, compact sprites, interior props, coherent roads/vegetation, restrained effects and strong atmosphere.
-
-The approved visual reference is a **composition/readability guide only**, never an asset source. Protected artwork, layouts, logos, characters, sprites, textures or identifiable game content must not be copied.
-
-Terrain, buildings, interiors, props, vegetation, creatures and characters should converge toward one original stylization family. Photorealistic terrain with unrelated sprite overlays is not the intended final language.
-
-## Character PNG Identity
-
-At the current development stage, static PNG assets are a valid primary character presentation. Animation is optional and must not block playable progress.
-
-Gameplay-relevant characters should preserve one recognizable visual identity across:
-
-1. **Full-body character PNG** for dialogue, inspection and close presentation.
-2. **World-space transparent PNG sprite** positioned at the character's authoritative location/tile.
-
-World sprites are not detached pins, permanent rectangles or unrelated generic avatars. Simplification is allowed for tile readability, but identity should remain recognizable through silhouette, clothing, equipment, palette, hair and role/status cues.
+- coherent roads, paths, terrain and settlement structure;
+- readable building footprints, entrances and interiors;
+- clear characters, creatures, objects and interaction points;
+- useful day/night atmosphere;
+- responsive presentation from mobile portrait through desktop;
+- stable world visuals while moving, panning and zooming;
+- performance appropriate for a large continuous world.
 
 Direct two-character dialogue should show relevant full-body character art where responsive layout permits.
 
@@ -350,39 +316,85 @@ Reusable tile-based visual families use a canonical **transparent 1024 × 1024 P
 
 If fewer variants are needed, unused cells remain fully transparent. Occupied cells must support deterministic export to individual **256 × 256 PNG tiles** with stable semantic family/type identity.
 
-The contract applies to reusable tile families such as roads, paths, terrain/transitions, building parts, walls, floors, interiors, furniture and props; unrelated assets such as full-body character art are not required to use it.
+This convention applies to roads, paths, terrain and transitions, building parts, walls, floors, interiors, furniture, props, vegetation, trees, resources, ruins and other reusable non-NPC world art.
 
-Transparent reusable overlays may reveal underlying authoritative terrain. Larger objects may use multi-tile authoritative footprints, and moving or behavior-rich objects may materialize as world-space entities.
+## Static 100 × 100 Tile Composition
 
-**Pixels never define gameplay truth.** Collision, blocking, walkability, interaction, ownership, movement, inventory/state and damage remain Simulation-backed.
+**NPC world sprites are the sole normal independently dynamic world-image exception.** Except for NPCs, every visible world graphic is resolved into the logical background tile before presentation.
 
-## Responsive and Accessible
+Each logical world tile has one exact **100 × 100 RGBA static presentation composite**. The authoritative terrain/base is painted first. Transparent atlas-derived roads, paths, terrain transitions, building/interior parts, walls, floors, roofs, trees, vegetation, furniture, props, resources, ruins and other non-NPC world artwork are then alpha-composited into that same tile image in deterministic order.
 
-Desktop, tablet and phone are first-class gameplay targets in portrait and landscape where applicable.
+For example, a tree on grass is presented as **one grass + transparent-tree 100 × 100 tile image**, not as an independent tree sprite. A road over dirt is one dirt + transparent-road tile image.
 
-Core play, navigation, input, save/load, Simulation continuity and required information must remain practical on representative current devices.
+The canonical **256 × 256 PNG slices are reusable source assets, not separate runtime image objects**. They are scaled and alpha-composited into the destination 100 × 100 logical-tile composite. Source object/structure art remains transparent so the underlying terrain is visible where appropriate.
 
-Interaction should support touch, mouse and keyboard where applicable. Important information must not depend only on color, hover, tiny targets or precision input.
+Multi-tile structures retain their authoritative Simulation footprints, but presentation is decomposed into tile-local semantic parts and composited independently into each covered logical tile. A building must not remain as one persistent giant world-space image layer over the background.
 
-Visual fidelity may scale by device—detail, render scale, effects or density may change—but this must never change Simulation outcomes, AI knowledge, legal actions, game time, campaign history or deterministic reconstruction.
+Except for NPCs, production world presentation must not retain persistent road, building, interior, tree, vegetation, prop, generic-object or vector/debug canvases, DOM images, or per-object sprite layers. If a non-NPC Simulation entity changes logical tile, the affected old/new tile composites are invalidated and rebuilt instead of promoting that entity to a permanent independent image layer, unless the Admin explicitly grants a named exception.
+
+The runtime must use sparse/bounded composition and GPU-safe background storage. It must **not** allocate one monolithic 10000 × 10000 texture merely because a 100 × 100 logical region uses 100 × 100-pixel composition units. Static pixels should be recomputed only when their authoritative presentation inputs change; camera movement, zoom and NPC interpolation do not by themselves invalidate static tile pixels.
+
+This is a performance and presentation invariant only. Pixels never become gameplay authority: terrain legality, collision, roads, building footprints, object identity/state, movement and outcomes remain Simulation-owned.
+
+World presentation must not replace unresolved artwork with CSS/vector geometry or invented placeholders when a real asset is required.
+
+---
+
+# 🌐 Public Development Build
+
+The canonical public development build is:
+
+**https://sgoxel.github.io/The_Advisor_Game/**
+
+The public build should expose only meaningful player/runtime surfaces by default. Development/debug controls may exist when deliberately enabled, but should not dominate the normal game experience.
+
+The game should remain:
+
+- responsive across phone, tablet and desktop;
+- usable in portrait and landscape layouts;
+- keyboard- and pointer-accessible where appropriate;
+- localization-capable;
+- playable without an external AI provider;
+- conservative about network use, credentials and external services.
+
+---
+
+# 📜 Project Authority and Development Governance
+
+Authority order:
+
+**Admin → README.md → ROADMAP → TODO → issues → code/assets → tests**
+
+The Admin may explicitly override any lower authority.
+
+`README.md` is the product truth. It defines game concept, scope, principles, invariants and high-level governance. It is **not** an implementation diary, task backlog, detailed roadmap or technical HOW manual.
+
+The README must not be changed unless the Admin explicitly authorizes the change.
+
+The repository must preserve a inspectable audit trail for meaningful changes. Plans, issues, code, assets and tests must remain subordinate to current README product truth and explicit Admin direction.
+
+Development details may evolve, but they must not weaken the core product:
+
+**Player advises → AI Character decides → Simulation validates → World reacts.**
 
 ---
 
 # ✅ Summary of Non-Negotiable Product Truth
 
-- **Player advises → AI Character decides → Simulation validates → World reacts.**
-- The protagonist remains autonomous; influence replaces direct control.
-- LLM and Local BOT are compatible drivers for the same character, and the game works without external AI.
-- Simulation owns authoritative world state.
-- The primary surface is one living, spatially coherent world.
-- Campaigns begin in an inhabited SEED-generated village at **(0, 0)**.
-- The world is deterministic, continuous and unbounded; one canonical region is **100 × 100 logical tiles**.
-- Settlements, characters, politics and ecology evolve through authoritative campaign history.
-- Time is real-time and persistent; at normal speed **one real-world hour = one in-game day**.
-- Off-screen simulation is hierarchical, relevance-bounded and lazily materialized.
-- Local presentation is WebGL-based tile-oriented 2D/2.5D with original seinen-inspired character art and classic RPG world readability.
-- Gameplay-relevant characters converge on matching full-body PNG + world-space PNG identity; animation is optional at the current stage.
-- Accessible buildings belong to the same authoritative world and support readable interiors.
-- Desktop, tablet and phone are first-class gameplay targets.
-- The public development build remains available at **https://sgoxel.github.io/The_Advisor_Game/**.
-- Admin is the highest project authority; README is the highest persistent authority below Admin.
+- The player is an **Advisor**, not the protagonist's direct controller.
+- The AI Character decides whether and how to act.
+- The Simulation is authoritative for legality, state, resources, position, outcomes and world truth.
+- LLM and Local BOT are alternate drivers of the **same persistent character**.
+- The game starts in a SEED-generated inhabited village at **(0, 0)**.
+- A normal region is exactly **100 × 100 logical tiles**; the world itself is continuous and unbounded.
+- An ordinary starter home is at least **10 × 10 logical tiles** with at least **two rooms**.
+- Buildings are part of the same world and are physically enterable where relevant.
+- NPCs are autonomous, Simulation-backed inhabitants with exclusive active-tile occupancy.
+- NPC world sprites are the sole normal independently dynamic world-image layer.
+- All non-NPC world art is flattened into exact **100 × 100 RGBA logical-tile composites**: terrain first, transparent PNG overlays second; separate persistent static object/road/building/vector layers are prohibited.
+- Reusable tile art uses a transparent **1024 × 1024 PNG atlas**, fixed **4 × 4**, with **256 × 256 cells** and transparent unused cells.
+- The world evolves through time, persistence, ecology, settlement change, politics and history.
+- **60 real minutes = 24 in-game hours** at normal speed.
+- New-campaign fantasy year = **real-world year − 2000**.
+- Default offline progression is **1 real hour = 1 in-game day**.
+- The canonical public build is **https://sgoxel.github.io/The_Advisor_Game/**.
