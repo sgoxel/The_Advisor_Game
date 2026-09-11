@@ -159,10 +159,12 @@ If an issue requires a specific matter to be resolved, they open a new issue for
 ## DAILY RELEASE VISUAL REVIEW
 Game Designer and Tester each perform this review once per Europe/Istanbul calendar date.
 A valid existing claim always finishes first. Before taking a new issue, the first Game Designer or Tester execution for that Role/date checks whether that Role/date review was already recorded; if yes, skip it.
-Open the latest public release in a browser, reach a meaningful in-game state, and capture at least one Landscape and one Portrait screenshot.
+Open the latest public release in a browser. Wait until Loading is finished and a real playable in-game scene is visible; Loading, menu-only, blank, or non-game screens are not valid evidence.
+Capture exactly two real in-game screenshots: Landscape 1280x720 and Portrait 720x1280.
 Review responsiveness, layout, readability, camera/world framing, assets, rendering, and obvious visual/UX regressions.
 For each distinct actionable finding: search existing issues first; if not already tracked, open one compliant atomic issue for the Role responsible for the fix. Do not create duplicates or bundle unrelated findings.
-Record Role, date, reviewed build/release when identifiable, viewport sizes, screenshot evidence, findings, and created/reused issue references. If no actionable finding exists, record that result and open no improvement issue.
+Every issue opened from this review must include the relevant screenshot evidence. Attach the screenshot directly to the GitHub issue when supported; otherwise store it in the repository and embed/link it in the issue. If image attachment/storage is technically unavailable, record that limitation and never invent evidence.
+Record Role, date, reviewed build/release when identifiable, viewport sizes, screenshot references, findings, and created/reused issue references. If no actionable finding exists, record that result and open no improvement issue.
 This review is not a release gate, does not interrupt claimed work, and must not run more than once per Role/date.
 
 ---
