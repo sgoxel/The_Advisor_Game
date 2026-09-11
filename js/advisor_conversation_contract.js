@@ -33,6 +33,10 @@ window.Game = window.Game || {};
     EXPLANATION: 'explanation'
   });
 
+  const INTENT_KIND = Object.freeze({
+    INQUIRE_INNKEEPER_WORK: 'inquire-innkeeper-work'
+  });
+
   const DISPOSITION = Object.freeze({
     ACCEPTED: 'accepted',
     REJECTED: 'rejected',
@@ -115,6 +119,32 @@ window.Game = window.Game || {};
       return MESSAGE_KIND.REQUEST;
     }
     return MESSAGE_KIND.EXPLANATION;
+  }
+
+  function classifyIntent(messageInput) {
+    const lower = cleanMessage(messageInput).toLowerCase();
+    const asks = /\b(ask|inquire|inquiry|question|talk|speak)\b/.test(lower);
+    const innkeeperRole = /\b(innkeeper|inn keeper|tavern keeper|publican)\b/.test(lower);
+    const workPurpose = /\b(work|job|jobs|employment|hiring|hire)\b/.test(lower);
+    return asks && innkeeperRole && workPurpose ? INTENT_KIND.INQUIRE_INNKEEPER_WORK : null;
+  }
+
+  function intentFor(messageInput) {
+    const kind = classifyIntent(messageInput);
+    if (kind !== INTENT_KIND.INQUIRE_INNKEEPER_WORK) return null;
+    return deepFreeze({
+      kind,
+      authority: 'character-consideration',
+      purpose: 'ask-local-innkeeper-about-work',
+      targetRole: 'innkeeper',
+      requiresCharacterDecision: true,
+      requiresSimulationValidation: true,
+      canCommitInteraction: false,
+      canCreateOpportunity: false,
+      canMoveActor: false,
+      authoritativeTargetRef: null,
+      authoritativeOpportunityRef: null
+    });
   }
 
   function hasDirectControlLanguage(messageInput) {
@@ -210,6 +240,7 @@ window.Game = window.Game || {};
       canMutateWorld: false,
       advisorMessage: message,
       messageKind: kind,
+      intent: record?.advisor?.intent || null,
       context,
       disposition,
       record
@@ -235,6 +266,7 @@ window.Game = window.Game || {};
 
     const kind = classifyMessage(message);
     const disposition = chooseDisposition(message, kind, context);
+    const advisorIntent = intentFor(message);
     const messageHash = stableHash(message).toString(16).padStart(8, '0');
     const record = deepFreeze({
       schemaVersion: SCHEMA_VERSION,
@@ -248,6 +280,7 @@ window.Game = window.Game || {};
       advisor: {
         message,
         kind,
+        intent: advisorIntent,
         directControlLanguageReinterpreted: hasDirectControlLanguage(message)
       },
       character: {
@@ -273,10 +306,13 @@ window.Game = window.Game || {};
     statuses: STATUS,
     reasonCodes: REASON,
     messageKinds: MESSAGE_KIND,
+    intentKinds: INTENT_KIND,
     dispositions: DISPOSITION,
     biases: BIAS,
     normalizeContext,
     classifyMessage,
+    classifyIntent,
+    intentFor,
     normalize,
     canonicalStringify
   });
