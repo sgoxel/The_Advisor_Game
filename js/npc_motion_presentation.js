@@ -1,14 +1,17 @@
-/* R04 / #331: presentation-only smooth NPC tile motion with age-aware bounded duration. */
+/* R04 / #331 + WP-111/I02: presentation-only smooth NPC tile motion with bounded retention. */
 (function installNpcMotionPresentation(global) {
   'use strict';
 
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-npc-motion-presentation-v1';
+  const VERSION = 'wp111-i02-npc-motion-presentation-v2';
   const MIN_TILE_MS = 500;
   const MAX_TILE_MS = 4000;
   const PAUSE_SNAP_MS = 600;
   const LARGE_GAP_MS = 4500;
+  const RETENTION_MS = 250;
   const motions = new Map();
+  const retained = new Map();
+  const retainedImageCache = new Map();
   let installed = false;
   let lastObservedRealMs = null;
   let lastObservedGameMinutes = null;
@@ -64,6 +67,25 @@
   function same(a, b) { return a && b && a.row === b.row && a.col === b.col; }
   function adjacent(a, b) { return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1; }
 
+  function stableIdentityStillExists(id) {
+    const world = Game.State?.world;
+    const population = world?.originVillage?.population;
+    if (!Array.isArray(population)) return false;
+    return population.some((person) => String(person?.id || '') === String(id || ''));
+  }
+
+  function snapshotPresentationNpc(npc, now) {
+    return Object.freeze({
+      id: String(npc.id),
+      authority: 'presentation-only',
+      occupation: String(npc.occupation || ''),
+      activity: String(npc.activity || ''),
+      row: Number(npc.row),
+      col: Number(npc.col),
+      lastSeenMs: now
+    });
+  }
+
   function observe(now = nowMs()) {
     const world = Game.State?.world;
     if (!Array.isArray(world?.npcs)) return;
@@ -77,7 +99,8 @@
 
     const liveIds = new Set();
     for (const npc of world.npcs) {
-      liveIds.add(npc.id);
+      liveIds.add(String(npc.id));
+      retained.set(String(npc.id), snapshotPresentationNpc(npc, now));
       const current = authoritativePoint(npc);
       const prior = motions.get(npc.id);
       if (!prior) {
@@ -97,7 +120,11 @@
         motions.set(npc.id, { ...prior, from: current, to: current, startedAtMs: now, authoritative: current });
       }
     }
-    for (const id of motions.keys()) if (!liveIds.has(id)) motions.delete(id);
+    for (const id of motions.keys()) if (!liveIds.has(String(id))) motions.delete(id);
+    for (const [id, snapshot] of retained.entries()) {
+      if (liveIds.has(id)) continue;
+      if (!stableIdentityStillExists(id) || now - snapshot.lastSeenMs > RETENTION_MS) retained.delete(id);
+    }
     lastObservedRealMs = now;
     lastObservedGameMinutes = gameMinutes;
   }
@@ -113,6 +140,82 @@
       row: motion.from.row + (motion.to.row - motion.from.row) * t,
       col: motion.from.col + (motion.to.col - motion.from.col) * t
     };
+  }
+
+  function retainedForFrame(now = nowMs()) {
+    const world = Game.State?.world;
+    const liveIds = new Set(Array.isArray(world?.npcs) ? world.npcs.map((npc) => String(npc?.id || '')) : []);
+    const result = [];
+    for (const [id, snapshot] of retained.entries()) {
+      if (liveIds.has(id)) continue;
+      if (!stableIdentityStillExists(id) || now - snapshot.lastSeenMs > RETENTION_MS) continue;
+      result.push(snapshot);
+    }
+    return result;
+  }
+
+  function requestRetainedImage(src) {
+    if (!src || typeof Image === 'undefined') return null;
+    if (retainedImageCache.has(src)) return retainedImageCache.get(src);
+    const record = { status: 'loading', image: null };
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => { record.status = 'ready'; record.image = image; };
+    image.onerror = () => { record.status = 'failed'; record.image = null; };
+    image.src = src;
+    retainedImageCache.set(src, record);
+    return record;
+  }
+
+  function drawFallback(ctx, scale) {
+    const radius = scale.fallbackRadius;
+    ctx.fillStyle = '#d8e7ef';
+    ctx.strokeStyle = '#26343d';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(0, -radius * 3.25, radius * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-radius * 0.7, -radius * 2.5);
+    ctx.lineTo(radius * 0.7, -radius * 2.5);
+    ctx.lineTo(radius * 0.95, -radius * 0.55);
+    ctx.lineTo(-radius * 0.95, -radius * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  function drawRetainedPresentations(now = nowMs()) {
+    const canvas = Game.NPCWorld?.ensureOverlay?.();
+    const renderer = Game.Renderer;
+    if (!canvas || !renderer?.gridToScreen) return 0;
+    const snapshots = retainedForFrame(now);
+    if (!snapshots.length) return 0;
+    const width = Math.max(1, canvas.clientWidth || Game.State?.dom?.canvas?.clientWidth || 1);
+    const height = Math.max(1, canvas.clientHeight || Game.State?.dom?.canvas?.clientHeight || 1);
+    const dpr = Math.max(1, global.devicePixelRatio || 1);
+    const scale = Game.NPCWorld?.resolveWorldSpaceScale?.(width) || { width: 40, height: 50, fallbackRadius: 7 };
+    const ctx = canvas.getContext?.('2d');
+    if (!ctx) return 0;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let drawn = 0;
+    for (const snapshot of snapshots) {
+      const point = renderer.gridToScreen(snapshot.row, snapshot.col, 0, 0);
+      if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) continue;
+      if (point.x < -scale.width || point.y < -scale.height || point.x > width + scale.width || point.y > height + scale.height) continue;
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      const asset = Game.NPCWorld?.worldSpaceAssetFor?.({ authority: 'simulation', occupation: snapshot.occupation }) || '';
+      const record = requestRetainedImage(asset);
+      if (record?.status === 'ready' && record.image) ctx.drawImage(record.image, -scale.width / 2, -scale.height, scale.width, scale.height);
+      else drawFallback(ctx, scale);
+      ctx.restore();
+      drawn += 1;
+    }
+    canvas.dataset.retainedNpcCount = String(drawn);
+    canvas.dataset.retentionMs = String(RETENTION_MS);
+    return drawn;
   }
 
   function withPresentationGrid(project) {
@@ -137,8 +240,10 @@
     const renderWorld = renderer.renderWorld.bind(renderer);
     renderer.renderWorld = function ageAwareNpcMotionRender(force) {
       const result = renderWorld(force);
-      observe();
+      const now = nowMs();
+      observe(now);
       withPresentationGrid(() => Game.NPCWorld.drawPresentation());
+      drawRetainedPresentations(now);
       return result;
     };
     installed = true;
@@ -151,10 +256,13 @@
     authority: 'presentation-only',
     minTileMs: MIN_TILE_MS,
     maxTileMs: MAX_TILE_MS,
+    retentionMs: RETENTION_MS,
     tileDurationMsForAge,
     durationForNpc,
     observe,
     presentationPosition,
+    retainedForFrame,
+    drawRetainedPresentations,
     install
   });
 
@@ -163,6 +271,6 @@
     attempts += 1;
     if (install() || attempts >= 80) global.clearInterval(timer);
   }, 50);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+  if (typeof document !== 'undefined' && document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
