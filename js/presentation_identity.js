@@ -34,4 +34,9 @@
     protagonist,
     worldObject
   });
+
+  // WP-111/I03: the culling module consumes these stable presentation keys and remains
+  // presentation-only. It patches only the exported NPC presentation draw path; Simulation
+  // coordinates, legality, relevance and identity remain untouched.
+  Game.Utils?.loadScriptOnce?.('js/npc_culling_hysteresis.js', 'wp111NpcCullingHysteresisModule');
 })(typeof window !== 'undefined' ? window : globalThis);
