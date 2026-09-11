@@ -55,7 +55,6 @@ function run() {
   const npc = world.npcs[0];
 
   assert.equal(runtime.classify(npc), runtime.tiers.DISTANT, 'far NPC must classify as distant');
-  assert.equal(runtime.authoritativeDue(npc, 0), false, 'new distant NPC must not request full-detail authoritative evaluation');
 
   runtime.scheduleFrame();
   assert.equal(queued.length, 0, 'initial distant compact baseline must not enqueue detail work');
@@ -63,7 +62,6 @@ function run() {
   setTime(60);
   runtime.scheduleFrame();
   assert.equal(queued.length, 0, 'distant NPC must remain compact instead of receiving periodic full-detail work');
-  assert.equal(runtime.authoritativeDue(npc, 60), false, 'distant NPC must stay excluded from full-detail authoritative cadence while relevance is unchanged');
 
   let snapshot = runtime.snapshot();
   let entry = snapshot.entries.find((candidate) => candidate.id === npc.id);
@@ -75,14 +73,13 @@ function run() {
   assert.equal(entry.lastActivity, 'returning-home', 'compact state must retain current authoritative activity anchor');
   assert.equal(entry.lastObservedTime, 60, 'compact state must retain authoritative game-time observation');
 
-  // Simulate a separate authoritative system committing a distant-NPC delta. Relevance
-  // scheduling must preserve the updated anchors without loading full detail.
+  // Coarse authoritative world progression remains allowed while detailed relevance work
+  // stays unloaded. A separate Simulation path may commit a distant-NPC delta and record it.
   npc.row = 71;
   npc.col = 70;
   npc.activity = 'home';
   setTime(75);
   assert.equal(runtime.markAuthoritativeUpdated(npc, 75), true, 'authoritative distant-NPC deltas must be recordable in compact state');
-  assert.equal(runtime.authoritativeDue(npc, 75), false, 'recording a distant authoritative delta must not force full-detail scheduling');
 
   snapshot = runtime.snapshot();
   entry = snapshot.entries.find((candidate) => candidate.id === npc.id);
