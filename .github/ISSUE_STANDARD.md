@@ -81,7 +81,6 @@ If an issue is too large for one cycle, it must be revised or split into smaller
 ## WORKER ROLES AND DUTIES
 Worker roles are assigned based on their numbers according to the following order:
 
-
 Worker #1:
 0. If there is a claimed issue, complete it first.
 1. Game Designer
@@ -115,7 +114,8 @@ Worker #4:
 5. Texture Artist
 
 Worker #5:
-0. If there is a claimed issue, complete it first. 1. UX Designer
+0. If there is a claimed issue, complete it first. 
+1. UX Designer
 2. Game Designer
 3. Game Programmer
 4. Texture Artist
@@ -128,7 +128,7 @@ In the ROADMAP file, game development is broken down into very small, manageable
 The Game Designer aims to divide the game development process into a total of at least 100 work packages.
 The goal is to create at least 10 issue records per work package. 
 Issue records represent the smallest units of work that can be resolved in a single cycle; for example, a Game Programmer should be able to code the task in one go, and a Texture Artist should be able to draw the required image in one go.
-The Game Designer removes unresolved issues and claims that have remained open for more than 2 hours. They analyze and revise issues that have been open for more than 2 hours, breaking them down into smaller issue segments if necessary.
+The Game Designer removes unresolved issues and claims that have remained open for more than 3 hours. They analyze and revise issues that have been open for more than 3 hours, breaking them down into smaller issue segments if necessary.
 If the task output completed by the final tester is ready for release, they publish the verified, functional final version of the application at https://sgoxel.github.io/The_Advisor_Game/.
 
 
