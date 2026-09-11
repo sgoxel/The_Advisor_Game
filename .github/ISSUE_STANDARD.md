@@ -156,6 +156,15 @@ They are required to read ROADMAP.md. They must first complete any previously cl
 They claim and complete only one task at a time.
 If an issue requires a specific matter to be resolved, they open a new issue for it.
 
+## DAILY RELEASE VISUAL REVIEW
+Game Designer and Tester each perform this review once per Europe/Istanbul calendar date.
+A valid existing claim always finishes first. Before taking a new issue, the first Game Designer or Tester execution for that Role/date checks whether that Role/date review was already recorded; if yes, skip it.
+Open the latest public release in a browser, reach a meaningful in-game state, and capture at least one Landscape and one Portrait screenshot.
+Review responsiveness, layout, readability, camera/world framing, assets, rendering, and obvious visual/UX regressions.
+For each distinct actionable finding: search existing issues first; if not already tracked, open one compliant atomic issue for the Role responsible for the fix. Do not create duplicates or bundle unrelated findings.
+Record Role, date, reviewed build/release when identifiable, viewport sizes, screenshot evidence, findings, and created/reused issue references. If no actionable finding exists, record that result and open no improvement issue.
+This review is not a release gate, does not interrupt claimed work, and must not run more than once per Role/date.
+
 ---
 
 ## Mandatory issue header
