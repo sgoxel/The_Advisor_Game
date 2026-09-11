@@ -1,16 +1,16 @@
 /*
-  R04 / #254: compose the independently verified exterior world-space character
-  presentation with #253 same-world interiors.
+  R04 / #254 + WP-112: keep Simulation-derived interior membership attached to
+  independently dynamic character presentation without relying on a separate interior canvas.
 
-  Character identity/position and building membership remain derived from Simulation.
-  This bridge only records presentation continuity and keeps the character layer above
-  the interior floor/cutaway canvas; it never mutates occupancy, movement or save state.
+  NPC/protagonist identity and position remain Simulation authority. Static interior/world art
+  is flattened by StaticTileCompositor; NPC presentation remains the sole dynamic world-image
+  exception.
 */
 (function installWorldSpaceCharacterInteriorBridge(global) {
   'use strict';
 
   const Game = global.Game = global.Game || {};
-  const VERSION = 'r04-world-space-character-interior-continuity-v1';
+  const VERSION = 'r04-world-space-character-interior-continuity-v2-static-background';
   const RETRY_MS = 120;
   let installed = false;
   let timer = 0;
@@ -51,13 +51,11 @@
 
   function synchronize() {
     const npcOverlay = global.document?.getElementById('npcWorldOverlay');
-    const interiorOverlay = global.document?.getElementById('starterVillageInteriorOverlay');
     const world = Game.State?.world;
     if (!npcOverlay || !world || !Game.NPCWorld) return false;
 
-    // #252 depth contract: interior floor/lower mass, then character sprites, then bubbles.
-    // The #253 and #324 canvases were both z-index 2; make their order explicit instead of
-    // relying on dynamic script/append timing.
+    // WP-112: there is no interior/background object canvas beneath NPCs anymore. Static world
+    // pixels are already in the shared background path; NPCs remain above that path.
     npcOverlay.style.zIndex = '3';
 
     const protagonist = presentationFor(world.player, 'protagonist');
@@ -70,22 +68,23 @@
     npcOverlay.dataset.protagonistLocationLayer = protagonist?.locationLayer || 'unavailable';
     npcOverlay.dataset.protagonistBuildingId = protagonist?.buildingId || '';
     npcOverlay.dataset.interiorNpcCount = String(interiorNpcCount);
-    npcOverlay.dataset.interiorLayerZIndex = interiorOverlay ? String(getComputedStyle(interiorOverlay).zIndex || '') : '';
+    npcOverlay.dataset.staticWorldPresentation = '100px-tile-composites';
+    npcOverlay.dataset.interiorLayerZIndex = '';
     return true;
   }
 
   function snapshot() {
     const world = Game.State?.world;
     const npcOverlay = global.document?.getElementById('npcWorldOverlay');
-    const interiorOverlay = global.document?.getElementById('starterVillageInteriorOverlay');
     return {
       version: VERSION,
       authority: 'presentation-only',
       protagonist: presentationFor(world?.player, 'protagonist'),
       npcs: Array.isArray(world?.npcs) ? world.npcs.map((npc) => presentationFor(npc, 'npc')).filter(Boolean) : [],
       layers: {
+        staticWorld: 'shared-background-100px-tile-composites',
         npc: npcOverlay ? Number.parseInt(getComputedStyle(npcOverlay).zIndex || '0', 10) || 0 : null,
-        interior: interiorOverlay ? Number.parseInt(getComputedStyle(interiorOverlay).zIndex || '0', 10) || 0 : null
+        interior: null
       }
     };
   }
@@ -94,9 +93,7 @@
     if (!Game.NPCWorld || !Game.StarterVillageInteriors) return false;
     installed = true;
     synchronize();
-    if (!timer && typeof global.setInterval === 'function') {
-      timer = global.setInterval(synchronize, RETRY_MS);
-    }
+    if (!timer && typeof global.setInterval === 'function') timer = global.setInterval(synchronize, RETRY_MS);
     return true;
   }
 
