@@ -199,9 +199,7 @@
     ];
 
     if (!events.length) out.push('(none)');
-    for (const event of events) {
-      out.push(JSON.stringify(event));
-    }
+    for (const event of events) out.push(JSON.stringify(event));
 
     out.push('', '----------------------------------------', 'RAW COMPATIBILITY LOG', '----------------------------------------');
     if (!lines.length) out.push('(none)');
@@ -300,6 +298,3 @@
     document.addEventListener('DOMContentLoaded', install, { once: true });
   }
 })(typeof window !== 'undefined' ? window : globalThis);
-
-// #345 presentation-only vector-layer diagnostics load after the runtime/debug stack.
-window.Game?.Utils?.loadScriptOnce?.('js/vector_layer_debug.js', 'r04VectorLayerDebugModule');
