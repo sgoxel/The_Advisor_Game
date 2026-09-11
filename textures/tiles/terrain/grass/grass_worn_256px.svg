@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Starting Village seamless grass worn variant</title>
+  <desc>Tileable subtly worn grass variation for visual repetition control. Presentation only; no road, collision, gameplay marker or directional lighting.</desc>
+  <defs>
+    <pattern id="grain" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M6 17l1-4 2 4M25 10l2-5 1 5M41 37l2-4 1 4M59 21l1-4 2 4M15 49l2-5 1 5M51 59l2-5 1 5" fill="none" stroke="#456a34" stroke-width="1.2" stroke-linecap="round" opacity=".55"/>
+      <path d="M12 30l1-3 1 3M34 20l1-3 2 3M28 56l1-3 1 3M56 43l1-3 1 3" fill="none" stroke="#789553" stroke-width="1" stroke-linecap="round" opacity=".45"/>
+      <circle cx="3" cy="43" r="1" fill="#806f45" opacity=".32"/><circle cx="45" cy="8" r="1.2" fill="#806f45" opacity=".28"/>
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="#5b7d3d"/>
+  <rect width="256" height="256" fill="url(#grain)"/>
+</svg>
