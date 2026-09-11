@@ -1,9 +1,9 @@
-/* WP-041/I05-I06 — preserve the same authoritative protagonist and refresh NPC relevance across one validated region transition. */
+/* WP-041/I05-I07 — preserve protagonist continuity, refresh NPC relevance, and rebase presentation across one validated region transition. */
 (function installRegionProtagonistTransition(global) {
   'use strict';
 
   const Game = global.Game = global.Game || {};
-  const VERSION = 'wp041-protagonist-transition-v2-npc-relevance';
+  const VERSION = 'wp041-protagonist-transition-v3-camera-rebase';
 
   function integer(value) {
     const number = Number(value);
@@ -12,6 +12,14 @@
 
   function protagonistId(player) {
     return String(player?.stableId || player?.characterId || player?.id || 'protagonist:main');
+  }
+
+  function rebasePresentation(world) {
+    const renderer = Game.Renderer;
+    if (!renderer || Game.State?.world !== world || !Game.State?.camera || typeof renderer.centerCamera !== 'function') return false;
+    renderer.centerCamera();
+    if (typeof renderer.markDirty === 'function') renderer.markDirty(true, true);
+    return true;
   }
 
   function commit(worldInput, resolutionInput) {
@@ -67,6 +75,10 @@
     // authoritative region/player location and must never authoritatively move an NPC.
     const npcRelevance = Game.NPCRelevanceRuntime?.recomputeAfterRegionTransition?.(world) || null;
 
+    // Camera/render state is presentation only. Rebase only after Simulation-owned position
+    // and region state is committed, then invalidate the existing render/minimap lifecycle.
+    const cameraRebased = rebasePresentation(world);
+
     return Object.freeze({
       authority: 'simulation',
       version: VERSION,
@@ -82,7 +94,8 @@
         authority: npcRelevance.authority,
         evaluated: Number(npcRelevance.evaluated || 0),
         scheduled: Number(npcRelevance.scheduled || 0)
-      }) : null
+      }) : null,
+      presentation: Object.freeze({ authority: 'presentation-only', cameraRebased })
     });
   }
 
