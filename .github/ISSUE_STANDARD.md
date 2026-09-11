@@ -1,6 +1,9 @@
 PROJECT: THE ADVISOR GAME
+
 ## LANG
 Dev=EN; AI output/issues/comments/docs/code/assets=EN.
+
+---
 
 ## AUTH
 Admin>README>ROADMAP>TODO>issues>code/assets>tests.
@@ -8,16 +11,24 @@ README=product truth: scope+principles+invariants+high-level governance; NOT imp
 Read main/README.md first every run. Conflict=>README wins unless Admin overrides; repair subordinates.
 README edit only with explicit Admin authorization.
 
+---
+
 ## CORE
 Player advises -> AI Character decides -> Simulation validates -> World reacts.
+
+---
 
 ## PRODUCT
 Public=https://sgoxel.github.io/The_Advisor_Game
 WebGL 2D/3D+isometric+responsive+accessible. LLM+LocalBOT=same Character; Simulation=authority. World=required.
 
+---
+
 ## GITHUB/AUDIT
 GitHub=workspace+record; no Drive. Inspect+verify.
 Every change=>issue/task+EN audit: purpose,change,refs,checks,result,risks,next.
+
+---
 
 ## FIXED GENERAL RULES
 The README.md file cannot be modified unless the Admin explicitly requests a change.
@@ -25,6 +36,8 @@ Workers must never BLOCK a task, even if doing so would cause an error. Workers 
 A worker cannot hold a claimed task for more than 3 hours. If a claim persists beyond 3 hours, the first worker to notice it must delete that claim.
 Workers #1 through #5 operate on Routine Tasks. The Admin can manually activate workers #6 through #20. Manually activated workers cannot claim tasks.
 Workers can be assigned to Routine Tasks or activated manually by the Admin.
+
+---
 
 ## Purpose
 
@@ -40,7 +53,7 @@ Authority remains:
 
 ---
 
-## 2. Scope
+## Scope
 
 This standard applies to atomic issues for:
 
