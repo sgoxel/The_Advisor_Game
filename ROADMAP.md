@@ -4,6 +4,38 @@ Authority: Admin > README.md > this ROADMAP > TODO > issues > code/assets > test
 
 This roadmap decomposes README product truth into small vertical work packages. It does not modify or supersede README. Each WP lists ten atomic issue records (`I01`–`I10`) intended to be independently actionable in a single work cycle. Atomic issue creation, readiness, role routing, dependencies, claims, status, and lifecycle are governed by `.github/ISSUE_STANDARD.md`; roadmap entries do not become READY merely by existing here.
 
+## CURRENT DELIVERY PRIORITY — Starting Village visual-first vertical slice
+
+Admin priority: the first product-completion target is a visually complete, stable, responsive **Starting Village** that is comfortable to play on desktop, tablet, and phone before broad feature expansion is preferred.
+
+This is an execution-priority overlay, not a renumbering of existing WPs. Existing issue/WP references remain valid. A valid active claim still completes first, and workers must never block: when no eligible item exists in the highest applicable group, continue through normal role order.
+
+### Priority A — Visible world stability and render continuity
+Prefer `WP-091`, `WP-092`, `WP-039`, `WP-040`, and `WP-111` work that keeps the currently visible world responsive and prevents NPCs or other valid scene elements from flickering, disappearing, being recreated with unstable identity, or dropping out during movement, camera pan, zoom, resize, relevance transitions, or frame pressure.
+
+### Priority B — Responsive game area and phone portrait navigation
+Prefer `WP-095`, `WP-108`, `WP-109`, and `WP-110` so the game area remains the primary surface on desktop, tablet, and phone. On phone portrait, the currently unused major surface must stay outside the visible viewport: the player switches between the **Game Area** and **Control Panel** with large Up/Down controls rather than shrinking both into one crowded screen. Persistent windows/panels must not consume game-area space unless their information is continuously necessary.
+
+### Priority C — Starting Village visual completion
+Prefer `WP-101` through `WP-107` together with existing `WP-021` through `WP-030`, `WP-044`, `WP-045`, and `WP-093`. Complete the visible Starting Village ground/terrain, roads/paths, buildings, protagonist model, required NPC profession visuals, props/vegetation, and movement/animation presentation as one coherent medieval-fantasy scene.
+
+### Priority D — Visual-slice verification and release quality
+Use `WP-112` with `WP-099` and the applicable parts of `WP-100` to certify the slice across representative desktop, tablet, phone landscape, and phone portrait layouts. Visual continuity must be checked while the game is actively moving, not only on a static frame.
+
+### Starting Village visual-first exit criteria
+The priority remains active until all of the following are independently verifiable:
+
+- The Starting Village reads as an inhabited medieval-fantasy place with coherent terrain, roads, buildings, props, protagonist, and NPC visuals rather than placeholders or debug-only presentation.
+- Starting Village building visuals cover the representative home plus the required local service/workplace set and remain scale-consistent with characters, rooms, roads, entrances, and logical tiles.
+- Roads and paths form visually coherent connections between homes, workplaces, services, gathering areas, farms, and exits, with stable presentation across zoom levels.
+- The protagonist and visible NPCs have stable visual identity, appropriate directional movement presentation, and do not flicker or disappear during normal movement, pan, zoom, resize, or relevance transitions.
+- Desktop and tablet layouts keep the game area comfortably playable without unnecessary persistent overlays.
+- Phone landscape remains playable with touch-sized controls and no clipped essential content.
+- Phone portrait shows either the Game Area or the Control Panel as the primary visible surface; the inactive major surface remains off-screen and Up/Down controls switch between them without losing game/control state.
+- Contextual panels, dialogs, labels, and debug/status surfaces do not permanently cover meaningful game space when they are not actively needed.
+- Orientation changes and responsive resizing preserve the same authoritative game state and do not create duplicate/missing entities or presentation resets.
+- Tester can certify the public build with motion-aware visual evidence and no critical visual continuity defect remaining in this slice.
+
 ## Core Advisor → Character → Simulation → World loop
 
 ### WP-001 — Tavern travel advice
@@ -307,7 +339,7 @@ I01 static/dynamic split; I02 base chunk cache; I03 tile composition; I04 cullin
 I01 event schema; I02 game/system time; I03 categories; I04 severity; I05 bounded retention; I06 dedupe; I07 errors; I08 localization; I09 non-authoritative persistence boundary; I10 tests.
 
 ### WP-095 — Responsive desktop/tablet/phone shell
-I01 desktop layout; I02 tablet layout; I03 phone layout; I04 touch targets; I05 overflow; I06 orientation; I07 map viewport; I08 dialogs; I09 performance; I10 tests.
+I01 desktop layout; I02 tablet landscape/portrait; I03 phone landscape; I04 phone portrait; I05 touch targets and safe areas; I06 overflow; I07 game/map viewport priority; I08 dialogs/context overlays; I09 orientation-state continuity; I10 tests.
 
 ### WP-096 — Keyboard accessibility
 I01 tab order; I02 focus visible; I03 dialogs; I04 escape behavior; I05 buttons; I06 inputs; I07 map alternatives; I08 ARIA labels; I09 no traps; I10 tests.
@@ -324,10 +356,49 @@ I01 camera fixture; I02 NPC load fixture; I03 world load fixture; I04 frame p95;
 ### WP-100 — Core-loop release gate
 I01 advice autonomy; I02 Simulation legality; I03 world observability; I04 Local BOT playability; I05 save/resume; I06 seed determinism; I07 performance; I08 accessibility; I09 localization; I10 public-build smoke.
 
+## Starting Village visual-first delivery extension
+
+### WP-101 — Starting Village visual inventory and style lock
+I01 asset inventory; I02 placeholder/debug-art inventory; I03 visual palette/material rules; I04 tile/character/building scale rules; I05 isometric silhouette/readability rules; I06 day/night legibility; I07 asset naming/source registry; I08 missing-asset fallback policy; I09 reference scene captures; I10 independent visual-spec verification.
+
+### WP-102 — Starting Village ground, terrain and vegetation visuals
+I01 grass ground family; I02 soil/mud family; I03 farm/field ground family; I04 water surface; I05 shoreline/bank transitions; I06 tree family; I07 bush/low vegetation family; I08 rock/ground-prop family; I09 terrain transition atlas integration; I10 in-game zoom/motion visual test.
+
+### WP-103 — Starting Village roads and paths visual set
+I01 one-tile path straights; I02 path turns; I03 T/cross intersections; I04 two-tile main-road visuals; I05 building-entrance connectors; I06 bridge/crossing visuals; I07 road-edge/terrain transitions; I08 zoom-stable road composition; I09 semantic atlas integration; I10 full-village route visual test.
+
+### WP-104 — Starting Village building visual set
+I01 starter-home visual set; I02 inn/tavern visual set; I03 market/shop visual set; I04 smithy/workshop visual set; I05 bakery visual set; I06 mill visual set; I07 village-hall visual set; I08 farm/outbuilding visual set; I09 interior/cutaway visual set; I10 character/room/road/entrance scale-consistency test.
+
+### WP-105 — Protagonist visual model and movement presentation
+I01 base protagonist silhouette/model; I02 directional facing set; I03 idle presentation; I04 directional walk cycle; I05 starter-clothing/profession presentation; I06 selection/focus presentation; I07 shadow/ground-contact presentation; I08 logical-tile scale consistency; I09 low/high-zoom readability; I10 movement/camera regression test.
+
+### WP-106 — Starting Village NPC visual roster
+I01 farmer/resident variants; I02 innkeeper/lodging variants; I03 butcher/produce-seller variants; I04 woodcutter/charcoal-burner variants; I05 smith/craftsperson variants; I06 baker/miller variants; I07 guard variants; I08 merchant/traveler variants; I09 generic resident/laborer variants; I10 profession readability and scale test.
+
+### WP-107 — NPC animation and visual continuity
+I01 idle-state presentation; I02 directional walk cycles; I03 tile-to-tile interpolation presentation; I04 route-turn continuity; I05 camera/zoom continuity; I06 relevance promotion/demotion continuity; I07 occlusion/roof/cutaway continuity; I08 animation-state carry across render refresh; I09 bounded performance under visible NPC load; I10 motion-sequence regression test.
+
+### WP-108 — Responsive game-area layout matrix
+I01 desktop landscape; I02 desktop narrow-window; I03 tablet landscape; I04 tablet portrait; I05 phone landscape; I06 phone portrait; I07 safe-area and browser-chrome handling; I08 resize/orientation state preservation; I09 touch-target/readability baseline; I10 cross-device visual regression.
+
+### WP-109 — Phone portrait Game Area / Control Panel switching
+I01 define Game Area primary surface; I02 define Control Panel primary surface; I03 keep inactive major surface fully off-screen; I04 Down control from Game Area to Control Panel; I05 Up control from Control Panel to Game Area; I06 preserve game/control state across switches; I07 prevent accidental dual-surface overlap; I08 touch/keyboard/focus accessibility; I09 preserve selected surface across safe resize/orientation flow; I10 phone-portrait interaction regression.
+
+### WP-110 — Gameplay HUD declutter and viewport budget
+I01 inventory persistent overlays; I02 remove/merge redundant persistent content; I03 collapse contextual-only panels when inactive; I04 define maximum non-game viewport occupation; I05 compact essential status presentation; I06 modal/dialog temporary-overlay behavior; I07 prevent debug/development UI from covering normal play; I08 touch-friendly open/close affordances; I09 keyboard/screen-reader accessibility; I10 desktop/tablet/phone viewport-coverage test.
+
+### WP-111 — Render continuity during active motion
+I01 stable presentation key per visible entity; I02 retain valid entity presentation during interpolation; I03 culling hysteresis at viewport edges; I04 relevance-transition presentation retention; I05 camera-pan continuity; I06 zoom continuity; I07 responsive resize/orientation continuity; I08 chunk/layer seam continuity; I09 frame-pressure/drop stress behavior; I10 no-flicker/no-disappearance motion regression.
+
+### WP-112 — Starting Village visual-slice release gate
+I01 no unresolved placeholder/debug visuals in normal Starting Village play; I02 terrain/roads/buildings visual-completeness check; I03 protagonist/NPC roster and animation completeness; I04 desktop gameplay-area certification; I05 tablet landscape/portrait certification; I06 phone-landscape certification; I07 phone-portrait Game/Control switching certification; I08 active-motion NPC/world continuity certification; I09 accessibility/performance sanity gate; I10 public-build visual certification with recorded evidence.
+
 ## Roadmap governance
 
 - README remains product truth and is never changed from roadmap maintenance without explicit Admin authorization.
 - `.github/ISSUE_STANDARD.md` controls atomic issue structure, readiness, role routing, dependencies, claims, status, and lifecycle; ROADMAP records do not become READY merely by existing here.
+- The Starting Village visual-first section is the current Admin execution priority; it changes task selection order, not authority boundaries or existing issue lifecycle rules.
 - Keep the active issue set focused and executable; do not create broad staging queues or a separate Planning buffer.
 - Prefer one-cycle atomic records with independently verifiable outcomes; split oversized scope before production claim.
 - Simulation owns legality, state, resources, position, outcomes, and world truth. UI, renderer, assets, LLM, Local BOT, and tests never authoritatively mutate world state outside Simulation contracts.
