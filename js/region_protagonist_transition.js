@@ -1,9 +1,9 @@
-/* WP-041/I05 — preserve the same authoritative protagonist across one validated region transition. */
+/* WP-041/I05-I06 — preserve the same authoritative protagonist and refresh NPC relevance across one validated region transition. */
 (function installRegionProtagonistTransition(global) {
   'use strict';
 
   const Game = global.Game = global.Game || {};
-  const VERSION = 'wp041-protagonist-transition-v1';
+  const VERSION = 'wp041-protagonist-transition-v2-npc-relevance';
 
   function integer(value) {
     const number = Number(value);
@@ -63,6 +63,10 @@
 
     if (world.player !== sameObject) throw new Error('Protagonist continuity invariant violated: authoritative player object was replaced.');
 
+    // Relevance is scheduling/materialization policy only. It observes the newly committed
+    // authoritative region/player location and must never authoritatively move an NPC.
+    const npcRelevance = Game.NPCRelevanceRuntime?.recomputeAfterRegionTransition?.(world) || null;
+
     return Object.freeze({
       authority: 'simulation',
       version: VERSION,
@@ -73,7 +77,12 @@
       row,
       col,
       worldX: player.worldX,
-      worldY: player.worldY
+      worldY: player.worldY,
+      npcRelevance: npcRelevance ? Object.freeze({
+        authority: npcRelevance.authority,
+        evaluated: Number(npcRelevance.evaluated || 0),
+        scheduled: Number(npcRelevance.scheduled || 0)
+      }) : null
     });
   }
 
