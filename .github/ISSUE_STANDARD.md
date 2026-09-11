@@ -32,7 +32,7 @@ Every change=>issue/task+EN audit: purpose,change,refs,checks,result,risks,next.
 
 ## FIXED GENERAL RULES
 The README.md file cannot be modified unless the Admin explicitly requests a change.
-Workers must never BLOCK a task, even if doing so would cause an error. Workers can claim only one task at a time. A worker cannot directly assign a task to another specific worker number; instead, they may open an issue for other roles to take up. The next required step is specified when the issue is closed. Once a worker has claimed a task, they MUST complete it immediately and prioritize it above all else before proceeding to other roles in sequence. They cannot switch roles or perform other work until the claimed task is finished.
+Workers must never BLOCK a task, even if doing so would cause an error. Workers can claim only one task at a time. A worker cannot directly assign a task to another specific worker number; instead, they may open an issue for other roles to take up. The next required step is specified at every handoff and at final closure. Once a worker has claimed a task, they MUST complete it immediately and prioritize it above all else before proceeding to other roles in sequence. They cannot switch roles or perform other work until the claimed task is finished.
 A worker cannot hold a claimed task for more than 3 hours. If a claim persists beyond 3 hours, the first worker to notice it must delete that claim.
 Workers #1 through #5 operate on Routine Tasks. The Admin can manually activate workers #6 through #20. Manually activated workers cannot claim tasks.
 Workers can be assigned to Routine Tasks or activated manually by the Admin.
@@ -126,7 +126,7 @@ In the ROADMAP file, game development is broken down into very small, manageable
 The Game Designer aims to divide the game development process into a total of at least 100 work packages.
 The goal is to create at least 10 issue records per work package. 
 Issue records represent the smallest units of work that can be resolved in a single cycle; for example, a Game Programmer should be able to code the task in one go, and a Texture Artist should be able to draw the required image in one go.
-They clarify, reduce, split, reprioritize, or close them when duplicate, obsolete, or invalid.
+They clarify, reduce, split, reprioritize, or mark issues duplicate, obsolete, or invalid for routing; Game Designer does not close issues.
 Age alone is not a reason to remove valid unresolved work.
 Claims older than 3 hours are stale and must be cleared by the first Worker that notices them.
 If the task output completed by the final tester is ready for release, they publish the verified, functional final version of the application at https://sgoxel.github.io/The_Advisor_Game/.
@@ -187,7 +187,7 @@ Status: READY | ACTIVE | VERIFY | DONE
 ### Field rules
 
 **Role**
-- Identifies the role allowed to claim the issue.
+- Identifies the role currently allowed to claim the issue and changes when responsibility is handed to another role.
 - Workers must not claim an issue whose Role does not match the role they are currently executing.
 - A worker number is never used as ownership authority.
 
@@ -222,10 +222,10 @@ Status: READY | ACTIVE | VERIFY | DONE
 - Manually activated Workers #6–#20 cannot claim tasks.
 
 **Status**
-- `READY` = atomic scope is actionable and dependencies are satisfied.
+- `READY` = actionable by the current `Role` and available for claim.
 - `ACTIVE` = currently being worked under a valid claim.
-- `VERIFY` = implementation/asset/UI work is complete and independent testing is the next required step.
-- `DONE` = the atomic issue is complete for its defined scope.
+- `VERIFY` = current `Role` must be `Tester`; final independent verification is required.
+- `DONE` = Tester independently verified the issue and closed it.
 
 `BLOCKED` is not a valid status.
 
@@ -268,15 +268,15 @@ The issue may contain additional technical detail when useful, but workers must 
 
 An issue is atomic only when all of the following are true:
 
-1. It has one primary role owner.
+1. It has one current role owner at a time.
 2. It has one concrete completion objective.
-3. It can reasonably be completed in one work cycle.
+3. It can reasonably be completed in one work cycle per role handoff.
 4. Its acceptance criteria are independently verifiable.
 5. It does not bundle unrelated systems, assets, interfaces, or defects.
 6. It does not require another role to complete hidden work inside the same claim.
 7. Its dependencies are explicit.
 
-If one issue requires significant coding, a new asset, UI redesign, and independent verification, those must normally be separate atomic issues connected by dependencies or `Next` routing.
+If one issue requires significant coding, a new asset, UI redesign, and independent verification, those must normally be separate atomic issues connected by dependencies or `Next` routing unless the same atomic objective legitimately requires sequential role handoffs.
 
 Do not create technical microtasks that have no meaningful executable or verifiable outcome merely to increase issue count.
 
@@ -284,7 +284,7 @@ Do not create technical microtasks that have no meaningful executable or verifia
 
 ## Role routing
 
-Atomic work is routed directly to the role responsible for producing or verifying it.
+Atomic work is routed directly to the role currently responsible for producing, correcting, or verifying it.
 
 There is **no Planner role and no mandatory Planning gate**.
 
@@ -309,9 +309,9 @@ Workers must ignore retired Design/Planning/Development/Graphics/Test lane owner
 Before claiming an issue, a worker must verify:
 
 - the issue is open;
-- `Status: READY`;
 - `Claim: NONE`;
 - the issue Role matches the worker's current role;
+- `Status: READY`, or `Status: VERIFY` when the current Role is Tester;
 - all listed dependencies are complete;
 - the scope is small enough for one cycle;
 - no higher-authority instruction makes the issue invalid.
@@ -320,19 +320,30 @@ After claiming:
 
 1. set `Claim` to an active claim with timestamp;
 2. set `Status: ACTIVE`;
-3. perform only that claimed task;
+3. perform only that claimed role task;
 4. do not switch roles or start another issue;
 5. record actual evidence only;
-6. finish the issue immediately.
+6. finish the current role task immediately.
 
-When complete:
+When the current role task is complete, use the Role handoff rule below. A worker must never keep several active claims.
 
-- production work requiring independent verification normally moves to `Status: VERIFY`, clears its claim, and states `Next: Tester`;
-- a standalone Tester issue that passes becomes `Status: DONE`;
-- design/maintenance work that requires no separate verification may become `DONE` when its own acceptance criteria are fully met;
-- close the GitHub issue when its atomic scope is complete and the required next step is recorded.
+---
 
-A worker must never keep several active claims.
+## Role handoff and closure
+
+`Role` is the mutable handoff field for the same atomic issue.
+
+At every handoff, the current role must record actual evidence, clear `Claim`, change `Role` to the next responsible role, set `Next` to that role/step, and set `Status: READY`. For final verification, hand off as `Role: Tester`, `Claim: NONE`, `Status: VERIFY`, `Next: Tester`.
+
+No role except Tester may set `Status: DONE` or close an issue.
+
+Tester must independently verify the actual behavior/output and all acceptance criteria; producer claims alone are never sufficient.
+
+- PASS -> Tester sets `Status: DONE`, records evidence, and closes the issue.
+- FAIL -> Tester does not close the issue; record failure evidence, clear `Claim`, change `Role` to the role responsible for the correction, set `Status: READY`, and set `Next` accordingly.
+- After correction, that role hands the same issue back as `Role: Tester`, `Status: VERIFY`.
+
+The same issue may move between any roles multiple times until Tester verifies a PASS.
 
 ---
 
@@ -349,7 +360,7 @@ If a distinct matter belongs to another role or separate scope:
 - record the dependency if required;
 - continue and finish the current claimed issue as far as its defined scope allows.
 
-If the current issue itself is structurally invalid or oversized, Game Designer must revise/split it according to project rules rather than preserving an unusable task indefinitely.
+If the current issue itself is structurally invalid or oversized, Game Designer must revise/split it according to project rules rather than preserving an unusable task indefinitely. Final closure still requires Tester verification.
 
 ---
 
@@ -363,11 +374,11 @@ For such issues, Game Designer must determine whether the issue should be:
 - reduced in scope;
 - split into smaller atomic issues;
 - reprioritized;
-- closed as duplicate, obsolete, or invalid.
+- marked as duplicate, obsolete, or invalid for routing/review.
 
 Age alone is not a reason to discard valid product work.
 
-Game Designer reviews unresolved issues older than 2 hours. They clarify, reduce, split, reprioritize, or close them when duplicate, obsolete, or invalid.
+Game Designer reviews unresolved issues older than 2 hours. They clarify, reduce, split, reprioritize, or mark them duplicate, obsolete, or invalid; they do not close them.
 
 Claims older than 3 hours are stale and must be cleared. Age alone is not a reason to remove valid unresolved work.
 
@@ -389,13 +400,13 @@ When dependencies are unresolved, the worker should skip that issue and select a
 
 ---
 
-## Tester handoff
+## Tester verification
 
-Production work should be independently testable.
+Every issue requires final Tester verification before closure.
 
-When coding, UI, or asset work needs verification, the producing role must leave concrete evidence and specify the required test scope in `Next`.
+The producing/correcting role must leave concrete evidence and exact test scope in `Next`, then hand the same issue to `Role: Tester`, `Status: VERIFY`.
 
-The Tester must verify actual behavior/evidence and must not merely accept the producer's claims.
+Tester must verify actual behavior/evidence and must not merely accept the producer's claims.
 
 Tester checks may include, where relevant:
 
@@ -408,7 +419,7 @@ Tester checks may include, where relevant:
 - responsive/accessibility behavior;
 - asset integration and visual correctness.
 
-If testing reveals a separate defect, create a new atomic issue for the responsible role rather than rewriting unrelated scope into the current test issue.
+If verification fails within the issue's acceptance scope, return the same issue to the responsible role using Role handoff. If testing reveals a truly separate defect outside the current atomic scope, create a new atomic issue for that defect without closing the current issue unless its own acceptance criteria independently PASS.
 
 ---
 
