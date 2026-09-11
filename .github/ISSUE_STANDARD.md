@@ -1,47 +1,215 @@
-# The Advisor Game — Atomic Issue Standard
+# The Advisor Game — Worker and Atomic Issue Standard
 
 ## 1. Purpose
 
-This file defines the mandatory structure and lifecycle for atomic GitHub issues used by routine workers and manually activated roles in **The Advisor Game**.
+This file is the single operational instruction source for Worker routines and atomic GitHub issue execution in **The Advisor Game**.
 
-It exists to keep work small, executable, auditable, and directly transferable between the current project roles without introducing a separate planning gate.
+Active Worker #1–#5 routine prompts must not duplicate role responsibilities, README-reading rules, claim rules, issue lifecycle rules, or production workflow. A routine prompt only identifies the Worker number and instructs that Worker to read this file and follow it exactly.
 
-Authority remains:
+This file does not change the project authority hierarchy:
 
 **Admin > README.md > ROADMAP.md > TODO > issues > code/assets > tests.**
 
-`README.md` remains product truth for scope, principles, invariants, and high-level governance. This file must never be used to override README or explicit Admin direction.
+`README.md` remains product truth for scope, principles, invariants, and high-level governance. `ROADMAP.md` decomposes that product truth into work packages and atomic records.
 
 ---
 
-## 2. Scope
+## 2. Language and repository record
 
-This standard applies to atomic issues for:
+Development and all AI output, issues, comments, documentation, code, assets, tests, and audits must be in English.
 
-- Game Programmer work;
-- Texture Artist work;
-- UX Designer work;
-- Tester work;
-- Game Designer work when the issue itself is an atomic roadmap/design maintenance task.
+GitHub is the project workspace and record. Do not use Drive for project work.
 
-A Work Package (WP) may contain many atomic issue records. The normal target is **at least 10 atomic issue records per WP**.
+Every repository-changing task must have an issue/task record and an English audit with:
 
-An atomic issue must be small enough that the responsible role can reasonably complete it in one work cycle.
+```text
+Purpose:
+Change:
+Refs:
+Checks:
+Result:
+Risks:
+Next:
+```
 
-Examples:
-
-- a Game Programmer can implement and verify the coding task in one cycle;
-- a Texture Artist can create/integrate the requested asset in one cycle;
-- a UX Designer can complete the requested interface task in one cycle;
-- a Tester can verify the requested scope in one cycle.
-
-If an issue is too large for one cycle, it must be revised or split into smaller atomic issues before new work proceeds on that oversized scope.
+Never invent work, tests, assets, commits, deployments, releases, or verification evidence.
 
 ---
 
-## 3. Mandatory issue header
+## 3. README access rule
 
-Every atomic issue must begin with the following control block:
+**Only a Worker currently executing the Game Designer role is required to read `main/README.md` as part of routine execution.**
+
+Other roles must not be instructed by their routine to read README.md. They execute from this standard, `ROADMAP.md`, eligible issues, repository code/assets, and actual test evidence as applicable.
+
+Game Designer must read `main/README.md` before performing Game Designer work.
+
+README.md must never be modified unless Admin explicitly requests a README change.
+
+If Game Designer finds a conflict between README.md and subordinate project artifacts, README wins unless Admin explicitly overrides it; repair the subordinate artifact rather than README.
+
+---
+
+## 4. Core product invariants
+
+The core loop is:
+
+**Player advises -> AI Character decides -> Simulation validates -> World reacts.**
+
+Public build:
+
+https://sgoxel.github.io/The_Advisor_Game/
+
+The product is WebGL, supports 2D/3D + isometric presentation, and must remain responsive and accessible. LLM and LocalBOT are drivers of the same Character. Simulation is authoritative. A living World is required.
+
+---
+
+## 5. Worker classes
+
+Workers #1 through #5 operate as Routine Tasks.
+
+Workers #6 through #20 may only be manually activated by Admin.
+
+Manually activated Workers #6–#20 cannot claim tasks.
+
+A Worker must never directly assign a task to a specific Worker number. When another role must handle a separate matter, create an issue for the appropriate **Role**.
+
+---
+
+## 6. Worker role priority orders
+
+Before trying the role order, a Worker must first finish any valid issue already claimed by that Worker.
+
+### Worker #1
+
+0. Existing valid claim
+1. Game Designer
+2. Game Programmer
+3. Texture Artist
+4. Tester
+5. UX Designer
+
+### Worker #2
+
+0. Existing valid claim
+1. Game Programmer
+2. Texture Artist
+3. Tester
+4. UX Designer
+5. Game Designer
+
+### Worker #3
+
+0. Existing valid claim
+1. Texture Artist
+2. Tester
+3. UX Designer
+4. Game Designer
+5. Game Programmer
+
+### Worker #4
+
+0. Existing valid claim
+1. Tester
+2. UX Designer
+3. Game Designer
+4. Game Programmer
+5. Texture Artist
+
+### Worker #5
+
+0. Existing valid claim
+1. UX Designer
+2. Game Designer
+3. Game Programmer
+4. Texture Artist
+5. Tester
+
+If a role has no eligible work, immediately try the next role in that Worker’s order.
+
+There is **no Planner role and no mandatory Planning gate**. Retired Design/Planning/Development/Graphics/Test lane ownership must not be used as current task authority.
+
+---
+
+## 7. Role responsibilities
+
+### Game Designer
+
+Before doing Game Designer work, read `main/README.md`.
+
+Create or update `ROADMAP.md` from README product truth. Break game development into very small, manageable, deliverable Work Packages (WPs).
+
+Targets:
+
+- at least 100 WPs total;
+- at least 10 atomic issue records per WP;
+- each atomic issue record small enough to be completed in one work cycle.
+
+A Game Programmer should be able to code one coding issue in one go. A Texture Artist should be able to create the required visual asset in one go. Equivalent one-cycle sizing applies to UX and Tester work.
+
+Review unresolved issues older than 2 hours. Clarify, reduce, split, reprioritize, or close them when duplicate, obsolete, or invalid. Age alone is not a reason to discard valid product work.
+
+The 2-hour unresolved-issue review rule does not override the 3-hour stale-claim rule.
+
+If final Tester output is genuinely release-ready, publish the verified functional application to:
+
+https://sgoxel.github.io/The_Advisor_Game/
+
+Never modify README.md unless Admin explicitly requests it.
+
+### Game Programmer
+
+Read `ROADMAP.md` and this standard.
+
+Complete any prior valid claim first. Then claim one eligible unclaimed issue with `Role: Game Programmer`.
+
+Inspect current code, implement the issue fully, run relevant checks/tests, record actual evidence and audit, complete/close the atomic scope, clear the claim, and state the next required role/step.
+
+If a distinct related matter is discovered, create a separate compliant issue for the appropriate Role without abandoning the current claim.
+
+If run capacity remains after full completion and claim clearance, take at most one additional task, still one claim at a time.
+
+### Texture Artist
+
+Read `ROADMAP.md` and this standard.
+
+Complete any prior valid claim first. Then claim one eligible unclaimed issue with `Role: Texture Artist` and fully produce/integrate the requested visual asset.
+
+If a distinct related matter is discovered, create a separate compliant issue for the appropriate Role without abandoning the current claim.
+
+Record actual evidence and audit, complete/close the atomic scope, clear the claim, and state the next required role/step.
+
+If run capacity remains, take at most one additional task after completion.
+
+### UX Designer
+
+Read `ROADMAP.md` and this standard.
+
+Complete any prior valid claim first. Then claim one eligible unclaimed issue with `Role: UX Designer` and complete the UI design/development scope fully.
+
+If a distinct related matter is discovered, create a separate compliant issue for the appropriate Role without abandoning the current claim.
+
+Record actual evidence and audit, complete/close the atomic scope, clear the claim, and state the next required role/step.
+
+If run capacity remains, take at most one additional task after completion.
+
+### Tester
+
+Read `ROADMAP.md` and this standard.
+
+Complete any prior valid claim first. Then claim one eligible unclaimed issue with `Role: Tester` and independently test coding, UI/UX work, and visual assets using actual evidence only.
+
+If testing reveals a distinct defect or matter for another role, create a separate compliant issue for the responsible Role. Do not assign a specific Worker number.
+
+Record checks actually performed and the required audit, complete/close the atomic test scope, clear the claim, and state the next required role/step.
+
+If run capacity remains, take at most one additional test task after completion.
+
+---
+
+## 8. Mandatory atomic issue header
+
+Every atomic issue must begin with:
 
 ```text
 Role: Game Designer | Game Programmer | Texture Artist | UX Designer | Tester
@@ -49,60 +217,69 @@ WP: WP-NNN
 Atomic record: INN
 Priority: P0 | P1 | P2 | P3 | P4 | P5
 Dependency: NONE | #issue[, #issue...]
-Claim: NONE | ACTIVE:<worker-or-role>:<UTC timestamp>
+Claim: NONE | ACTIVE:<worker-number>:<UTC timestamp>
 Status: READY | ACTIVE | VERIFY | DONE
 ```
 
-### Field rules
+### Role
 
-**Role**
-- Identifies the role allowed to claim the issue.
-- Workers must not claim an issue whose Role does not match the role they are currently executing.
-- A worker number is never used as ownership authority.
+The Role identifies who may claim the issue. Worker number is not ownership authority.
 
-**WP**
-- Must map to a valid ROADMAP work package.
-- Use the canonical form `WP-NNN`.
+### WP
 
-**Atomic record**
-- Must map to one ROADMAP atomic record, normally `I01`–`I10` or another explicitly added atomic record.
-- One live GitHub issue should represent one atomic record unless Admin explicitly directs otherwise.
+Must map to a valid ROADMAP WP using `WP-NNN`.
 
-**Priority**
-- `P0` = public build broken, severe corruption/data-loss, core loop unavailable.
-- `P1` = blocks multiple downstream tasks or critical verification.
-- `P2` = core Advisor -> Character -> Simulation -> World functionality.
-- `P3` = important gameplay/world expansion.
-- `P4` = UX, content, presentation, optimization or maintainability improvement.
-- `P5` = polish or low-risk refinement.
+### Atomic record
 
-**Dependency**
-- Use `NONE` when the task can be started immediately.
-- Otherwise reference only concrete prerequisite issues.
-- An issue is not eligible to be claimed while any required dependency remains unresolved.
-- Workers must not invent dependencies merely to postpone work.
+Must map to one ROADMAP atomic record, normally `I01`–`I10`, or another explicitly added atomic record.
 
-**Claim**
-- `NONE` means unclaimed.
-- `ACTIVE:<worker-or-role>:<UTC timestamp>` means the issue is currently claimed.
-- Only one task may be claimed by a worker at a time.
-- A worker with an active valid claim must finish that issue before switching roles or performing other work.
-- Claims older than **3 hours** are stale and must be cleared by the first worker that notices them.
-- Manually activated Workers #6–#20 cannot claim tasks.
+Normally, one live GitHub issue represents one atomic record unless Admin explicitly directs otherwise.
 
-**Status**
-- `READY` = atomic scope is actionable and dependencies are satisfied.
-- `ACTIVE` = currently being worked under a valid claim.
-- `VERIFY` = implementation/asset/UI work is complete and independent testing is the next required step.
-- `DONE` = the atomic issue is complete for its defined scope.
+### Priority
+
+- `P0` — public build broken, severe corruption/data loss, or core loop unavailable.
+- `P1` — blocks multiple downstream tasks or critical verification.
+- `P2` — core Advisor -> Character -> Simulation -> World functionality.
+- `P3` — important gameplay/world expansion.
+- `P4` — UX, content, presentation, optimization, or maintainability improvement.
+- `P5` — polish or low-risk refinement.
+
+### Dependency
+
+Use `NONE` when immediately actionable. Otherwise reference only concrete prerequisite issues.
+
+An issue is not eligible while any required dependency remains unresolved.
+
+Do not invent dependencies to postpone work.
+
+### Claim
+
+`NONE` means unclaimed.
+
+`ACTIVE:<worker-number>:<UTC timestamp>` means actively claimed.
+
+A Worker can hold only one claim at a time.
+
+Once claimed, the task becomes that Worker’s highest priority and must be completed before switching roles or performing other work.
+
+A claim older than **3 hours** is stale. The first Worker that notices it must clear that stale claim.
+
+Workers #6–#20 cannot claim.
+
+### Status
+
+- `READY` — atomic scope is actionable and dependencies are satisfied.
+- `ACTIVE` — being worked under a valid claim.
+- `VERIFY` — production work is complete and independent verification is the next required step.
+- `DONE` — atomic issue is complete for its defined scope.
 
 `BLOCKED` is not a valid status.
 
 ---
 
-## 4. Mandatory issue body
+## 9. Mandatory issue body
 
-Every atomic issue must contain these sections:
+Every atomic issue must contain:
 
 ```markdown
 ## Objective
@@ -112,7 +289,7 @@ Describe the single concrete result that must exist when this issue is complete.
 Describe exactly what is included.
 
 ## Out of scope
-List closely related work that must not be silently added to this issue.
+List closely related work that must not be silently added.
 
 ## Acceptance criteria
 - [ ] Concrete, observable criterion 1
@@ -129,118 +306,77 @@ Risks:
 Next:
 ```
 
-The issue may contain additional technical detail when useful, but workers must not replace these mandatory sections with an alternative format.
+Additional technical detail is allowed, but these mandatory fields and sections must not be replaced with an alternate format.
 
 ---
 
-## 5. Atomicity rules
+## 10. Atomicity rules
 
-An issue is atomic only when all of the following are true:
+An issue is atomic only when all are true:
 
-1. It has one primary role owner.
-2. It has one concrete completion objective.
-3. It can reasonably be completed in one work cycle.
-4. Its acceptance criteria are independently verifiable.
-5. It does not bundle unrelated systems, assets, interfaces, or defects.
-6. It does not require another role to complete hidden work inside the same claim.
-7. Its dependencies are explicit.
+1. one primary Role owns it;
+2. one concrete completion objective exists;
+3. it can reasonably be completed in one work cycle;
+4. acceptance criteria are independently verifiable;
+5. unrelated systems/assets/interfaces/defects are not bundled;
+6. another role is not required to perform hidden work inside the same claim;
+7. dependencies are explicit.
 
-If one issue requires significant coding, a new asset, UI redesign, and independent verification, those must normally be separate atomic issues connected by dependencies or `Next` routing.
+If substantial coding, asset production, UI work, and independent verification are all needed, they normally become separate atomic issues connected through dependencies or `Next` routing.
 
-Do not create technical microtasks that have no meaningful executable or verifiable outcome merely to increase issue count.
-
----
-
-## 6. Role routing
-
-Atomic work is routed directly to the role responsible for producing or verifying it.
-
-There is **no Planner role and no mandatory Planning gate**.
-
-Typical routing:
-
-```text
-Game design / roadmap contract -> Game Designer
-Game code / simulation / runtime logic -> Game Programmer
-Visual asset production -> Texture Artist
-UI design and UI implementation -> UX Designer
-Independent verification -> Tester
-```
-
-Technical implementation planning performed by a Game Programmer is part of that coding task and does not require a separate planning issue unless a distinct product/design decision is genuinely required.
-
-Workers must ignore retired Design/Planning/Development/Graphics/Test lane ownership as task authority.
+Do not create meaningless microtasks merely to increase issue count.
 
 ---
 
-## 7. Claim lifecycle
+## 11. Claim eligibility and lifecycle
 
-Before claiming an issue, a worker must verify:
+Before claiming, verify:
 
-- the issue is open;
+- issue is open;
 - `Status: READY`;
 - `Claim: NONE`;
-- the issue Role matches the worker's current role;
-- all listed dependencies are complete;
-- the scope is small enough for one cycle;
-- no higher-authority instruction makes the issue invalid.
+- issue Role matches the Worker’s current role;
+- every listed dependency is complete;
+- scope is one-cycle atomic;
+- no higher-authority instruction invalidates the issue.
 
 After claiming:
 
-1. set `Claim` to an active claim with timestamp;
+1. set `Claim` to `ACTIVE:<worker-number>:<UTC timestamp>`;
 2. set `Status: ACTIVE`;
 3. perform only that claimed task;
 4. do not switch roles or start another issue;
 5. record actual evidence only;
-6. finish the issue immediately.
+6. complete it immediately.
 
-When complete:
+When production work is complete and needs independent verification, normally set `Status: VERIFY`, clear the claim, and record `Next: Tester`.
 
-- production work requiring independent verification normally moves to `Status: VERIFY`, clears its claim, and states `Next: Tester`;
-- a standalone Tester issue that passes becomes `Status: DONE`;
-- design/maintenance work that requires no separate verification may become `DONE` when its own acceptance criteria are fully met;
-- close the GitHub issue when its atomic scope is complete and the required next step is recorded.
+A Tester issue that passes becomes `DONE`.
 
-A worker must never keep several active claims.
+Game Designer maintenance work that requires no separate verification may become `DONE` after its acceptance criteria are met.
+
+Close the GitHub issue when its atomic scope is complete and the next required role/step is recorded.
 
 ---
 
-## 8. Error and non-blocking rule
+## 12. Error and non-blocking rule
 
-Workers must never mark work `BLOCKED` or abandon an active claim merely because an error occurred.
+Workers must never mark an issue `BLOCKED` or abandon an active claim merely because an error occurred.
 
-For the active claimed issue, the worker must continue diagnosing and resolving the problem within the issue's scope and capabilities, while recording truthful evidence.
+Continue diagnosing/resolving the active task within its defined scope and capabilities while recording truthful evidence.
 
 If a distinct matter belongs to another role or separate scope:
 
-- open a separate atomic issue;
-- assign the appropriate **Role**, not a specific worker number;
-- record the dependency if required;
-- continue and finish the current claimed issue as far as its defined scope allows.
+- create a separate atomic issue;
+- assign the appropriate Role, not a Worker number;
+- record the dependency if genuinely required;
+- continue the current claimed issue.
 
-If the current issue itself is structurally invalid or oversized, Game Designer must revise/split it according to project rules rather than preserving an unusable task indefinitely.
-
----
-
-## 9. Issue age and stale work
-
-Game Designer reviews unresolved issues older than **2 hours**.
-
-For such issues, Game Designer must determine whether the issue should be:
-
-- clarified;
-- reduced in scope;
-- split into smaller atomic issues;
-- reprioritized;
-- closed as duplicate, obsolete, or invalid.
-
-Age alone is not a reason to discard valid product work.
-
-The **2-hour unresolved-issue review rule does not replace the 3-hour claim expiry rule**. An active claim becomes stale only after 3 hours unless Admin explicitly overrides the rule.
+If the current issue itself is structurally invalid or oversized, Game Designer must revise/split it rather than preserving an unusable task indefinitely.
 
 ---
 
-## 10. Dependency rules
+## 13. Dependency rules
 
 Dependencies exist only when one atomic issue genuinely cannot be completed correctly before another concrete issue finishes.
 
@@ -248,23 +384,23 @@ Workers must:
 
 - check dependencies before claiming;
 - avoid circular dependencies;
-- avoid broad dependencies such as an entire WP when only one atomic prerequisite is required;
-- avoid using dependencies as a substitute for issue decomposition;
+- avoid broad WP-level dependencies when one atomic prerequisite is enough;
+- avoid using dependencies instead of issue decomposition;
 - update/remove obsolete dependency references when upstream work changes.
 
-When dependencies are unresolved, the worker should skip that issue and select another eligible issue for the same role after any prior active claim has been completed/cleared.
+When dependencies are unresolved, skip that issue and continue to another eligible issue for the current role. If none exists, move to the next role in the Worker’s priority order.
 
 ---
 
-## 11. Tester handoff
+## 14. Tester handoff
 
 Production work should be independently testable.
 
-When coding, UI, or asset work needs verification, the producing role must leave concrete evidence and specify the required test scope in `Next`.
+When coding, UI, or asset work requires verification, the producing role must leave concrete evidence and specify the required test scope in `Next`.
 
-The Tester must verify actual behavior/evidence and must not merely accept the producer's claims.
+Tester independently verifies actual behavior/evidence and does not merely accept producer claims.
 
-Tester checks may include, where relevant:
+Relevant checks may include:
 
 - functional behavior;
 - Simulation authority boundaries;
@@ -275,102 +411,31 @@ Tester checks may include, where relevant:
 - responsive/accessibility behavior;
 - asset integration and visual correctness.
 
-If testing reveals a separate defect, create a new atomic issue for the responsible role rather than rewriting unrelated scope into the current test issue.
+If testing reveals a separate defect, create a new atomic issue for the responsible Role rather than rewriting unrelated scope into the current test issue.
 
 ---
 
-## 12. Audit standard
+## 15. Worker issue selection
 
-Every repository-changing atomic issue must contain an English audit with these exact headings:
-
-```text
-Purpose:
-Change:
-Refs:
-Checks:
-Result:
-Risks:
-Next:
-```
-
-Rules:
-
-- `Purpose` explains why the change exists.
-- `Change` states what was actually changed.
-- `Refs` references WP, atomic record, issues, files, commits, or Admin direction as applicable.
-- `Checks` lists only checks/tests actually performed.
-- `Result` records the actual outcome.
-- `Risks` records known residual risks, or `None identified` when appropriate.
-- `Next` names the next required **role or step**, never a specific worker number.
-
-Never claim unperformed tests, generated assets, commits, deployments, releases, or verification.
-
----
-
-## 13. Recommended issue template
-
-```markdown
-Role: Game Programmer
-WP: WP-040
-Atomic record: I03
-Priority: P1
-Dependency: #401, #402
-Claim: NONE
-Status: READY
-
-## Objective
-Implement the visible-NPC update cadence defined by WP-040/I03 without making renderer FPS authoritative.
-
-## Scope
-- Add the bounded visible-NPC cadence required by the current authoritative simulation model.
-- Reuse existing scheduler/relevance primitives where available.
-
-## Out of scope
-- Distant compact-state reconciliation.
-- New NPC artwork.
-- UI redesign.
-
-## Acceptance criteria
-- [ ] Visible/interaction-critical NPC cadence is implemented.
-- [ ] Simulation authority remains independent of renderer FPS.
-- [ ] Existing relevant automated/manual checks pass or actual failures are documented.
-- [ ] Required audit is complete.
-
-## Audit
-Purpose:
-Change:
-Refs:
-Checks:
-Result:
-Risks:
-Next:
-```
-
----
-
-## 14. Worker selection rule
-
-Workers execute their Admin-defined role priority order.
-
-Within a role, prefer eligible issues in this order unless Admin specifies otherwise:
+Within the current role, prefer eligible work in this order unless Admin explicitly specifies otherwise:
 
 1. existing valid claim;
 2. highest priority (`P0` before `P1`, etc.);
-3. issue with all dependencies satisfied;
+3. dependencies satisfied;
 4. oldest actionable issue;
-5. smaller issue when priority/age are otherwise equivalent.
+5. smaller issue when priority and age are otherwise equivalent.
 
-If no eligible issue exists for the current role, the worker immediately tries the next role in its assigned role order.
+If no eligible issue exists for the current role, immediately try the next role in the Worker’s role order.
 
-Workers must not create fake work merely to avoid moving to the next role.
+Do not create fake work merely to avoid moving to the next role.
 
 ---
 
-## 15. Release relationship
+## 16. Release relationship
 
-A passing atomic test issue does not automatically mean the entire application is release-ready.
+A passing atomic test does not automatically mean the whole application is release-ready.
 
-When final tested output is actually ready for release, the Game Designer may publish the verified functional build to:
+When final tested output is actually ready for release, Game Designer may publish the verified functional build to:
 
 https://sgoxel.github.io/The_Advisor_Game/
 
@@ -378,14 +443,28 @@ Release claims must be backed by actual repository/build/test evidence.
 
 ---
 
-## 16. Precedence and maintenance
+## 17. Routine prompt contract
 
-If this standard conflicts with:
+The active routine prompt for each Worker #1–#5 must contain no duplicated role responsibilities or workflow rules.
 
-1. explicit Admin direction — Admin wins;
-2. `README.md` — README wins;
-3. `ROADMAP.md` product decomposition — repair this standard or subordinate issue data as needed.
+Its entire operational instruction is:
 
-Do not modify `README.md` to make it conform to this file.
+```text
+Run Worker #N for sgoxel/The_Advisor_Game. Read .github/ISSUE_STANDARD.md and follow it exactly.
+```
 
-Workers must not invent alternate atomic issue formats unless Admin explicitly changes the standard.
+`#N` is replaced by that routine’s Worker number.
+
+All Worker behavior, role order, README access, issue selection, claim behavior, issue format, handoff, testing, and audit rules come from this file.
+
+---
+
+## 18. Precedence and maintenance
+
+If this standard conflicts with explicit Admin direction, Admin wins.
+
+If Game Designer discovers that this standard or ROADMAP conflicts with README product truth, README wins unless Admin explicitly overrides it, and the subordinate artifact must be repaired.
+
+Do not modify README.md to make it conform to this file.
+
+Workers must not invent alternate atomic issue formats or alternate routine responsibilities unless Admin explicitly changes the standard.
