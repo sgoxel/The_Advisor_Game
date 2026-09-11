@@ -94,17 +94,13 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
 }
 
-// #329 presentation safety: reject ground points that approach/cross the camera near plane
-// before any canvas/DOM overlay can amplify them into viewport-spanning transforms.
 window.Game.Utils.loadScriptOnce("js/projection_safety_guard.js", "r04ProjectionSafetyGuardModule");
-
-// #339 consumes the independently verified #337 classification and #338 semantic atlas only
-// for presentation. The renderer retries until both the classifier and ordinary road overlay
-// are ready, so these compatibility loads do not create a second topology authority.
 window.Game.Utils.loadScriptOnce("js/main_road_semantics.js", "r04MainRoadSemanticsModule");
 window.Game.Utils.loadScriptOnce("js/main_road_renderer.js", "r04MainRoadRendererModule");
 
-// R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
+// WP-111/I01: load stable presentation identity before visible entity renderers consume it.
+window.Game.Utils.loadScriptOnce("js/presentation_identity.js", "wp111PresentationIdentityModule");
+
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 window.Game.Utils.loadScriptOnce("js/world_object_renderer.js", "r04WorldObjectRendererModule");
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
@@ -138,31 +134,9 @@ window.Game.Utils.loadScriptOnce("js/starter_village_exteriors.js", "r04StarterV
 window.Game.Utils.loadScriptOnce("js/starter_village_dev_overlay.js", "r04StarterVillageDevOverlayModule");
 window.Game.Utils.loadScriptOnce("js/background_quad_guard.js", "r04BackgroundQuadGuardModule");
 
-// Loaded after NPC life/presentation modules so it can add deterministic tile occupancy,
-// route-conflict resolution, adjacent dialogue and development bubbles without duplicating
-// the existing character-world-icon implementation.
 window.Game.Utils.loadScriptOnce("js/npc_spatial_runtime.js", "admin100NpcSpatialRuntimeModule");
-
-// #331 keeps Simulation-owned integer occupancy untouched and adds only a final presentation
-// interpolation layer after the spatial runtime is available.
 window.Game.Utils.loadScriptOnce("js/npc_motion_presentation.js", "r04NpcMotionPresentationModule");
-
-// #261 guard shift policy is loaded after authoritative NPCSpatial exists but before the
-// indoor/routing bridges. It supplies only a desired-target policy; actual movement remains
-// owned by NPCSpatial/#237 and route construction remains #257.
 window.Game.Utils.loadScriptOnce("js/guard_shift_runtime.js", "r04GuardShiftRuntimeModule");
-
-// Final Simulation-integration bridges for NPC positions. The indoor-work bridge derives a
-// stable interior target from #259 workplaces + #253 same-world interiors before #257 routing
-// composes the authoritative entrance/door path to that target.
 window.Game.Utils.loadScriptOnce("js/npc_runtime_bridge.js", "r04NpcRuntimeBridgeModule");
 window.Game.Utils.loadScriptOnce("js/npc_indoor_work_anchors.js", "r04NpcIndoorWorkAnchorsModule");
 window.Game.Utils.loadScriptOnce("js/npc_terrain_routing_bridge.js", "r04NpcTerrainRoutingBridgeModule");
-window.Game.Utils.loadScriptOnce("js/npc_contextual_activity.js", "r04NpcContextualActivityModule");
-
-// #309 presentation-only compatibility bridge. It may load before UI exists; the module
-// retries installation until UI/state are ready, then converts legacy addLog calls into a
-// bounded structured activity stream without changing Simulation authority.
-window.Game.Utils.loadScriptOnce("js/activity_log_runtime.js", "r04ActivityLogRuntimeModule");
-window.Game.Utils.loadScriptOnce("js/activity_log_quality.js", "r04ActivityLogQualityModule");
-window.Game.Utils.loadScriptOnce("js/debug_log_export.js", "r04DebugLogExportModule");
