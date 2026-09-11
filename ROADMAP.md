@@ -358,8 +358,8 @@ I01 advice autonomy; I02 Simulation legality; I03 world observability; I04 Local
 
 ## Starting Village visual-first delivery extension
 
-### WP-101 — Starting Village visual inventory and style lock
-I01 asset inventory; I02 placeholder/debug-art inventory; I03 visual palette/material rules; I04 tile/character/building scale rules; I05 isometric silhouette/readability rules; I06 day/night legibility; I07 asset naming/source registry; I08 missing-asset fallback policy; I09 reference scene captures; I10 independent visual-spec verification.
+### WP-101 — Starting Village visual-first delivery definition and style lock
+I01 visual-first priority and exit criteria; I02 asset inventory; I03 placeholder/debug-art inventory; I04 visual palette/material rules; I05 tile/character/building scale rules; I06 isometric silhouette/readability rules; I07 day/night legibility; I08 asset naming/source registry; I09 reference scene captures; I10 independent visual-spec verification.
 
 ### WP-102 — Starting Village ground, terrain and vegetation visuals
 I01 grass ground family; I02 soil/mud family; I03 farm/field ground family; I04 water surface; I05 shoreline/bank transitions; I06 tree family; I07 bush/low vegetation family; I08 rock/ground-prop family; I09 terrain transition atlas integration; I10 in-game zoom/motion visual test.
