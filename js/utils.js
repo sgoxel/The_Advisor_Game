@@ -81,35 +81,26 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   document.addEventListener("readystatechange", armCanonicalStarterVillageBinding);
 }
 
-// #301: the semantic Road presentation and its final render-chain bridge are startup-critical.
-// Loading them with the compatibility queue made their execution race the statically parsed
-// Renderer/app scripts in the real public startup path. Parser-load them deterministically;
-// both modules already defer actual Renderer/world work until DOM/load readiness and remain
-// presentation-only. The fallback branch preserves non-parser embedding/test compatibility.
-if (typeof document !== "undefined" && document.readyState === "loading") {
-  document.write('<script id="r04StarterVillageRoadsModule" src="js/starter_village_roads.js"><\/script>');
-  document.write('<script id="r04RoadRuntimeBridgeModule" src="js/road_runtime_bridge.js"><\/script>');
-} else {
-  window.Game.Utils.loadScriptOnce("js/starter_village_roads.js", "r04StarterVillageRoadsModule");
-  window.Game.Utils.loadScriptOnce("js/road_runtime_bridge.js", "r04RoadRuntimeBridgeModule");
-}
-
-// #329 presentation safety: reject ground points that approach/cross the camera near plane
-// before any canvas/DOM overlay can amplify them into viewport-spanning transforms.
+// #329 presentation safety remains useful for the WebGL background and dynamic NPC path.
 window.Game.Utils.loadScriptOnce("js/projection_safety_guard.js", "r04ProjectionSafetyGuardModule");
 
-// #339 consumes the independently verified #337 classification and #338 semantic atlas only
-// for presentation. The renderer retries until both the classifier and ordinary road overlay
-// are ready, so these compatibility loads do not create a second topology authority.
+// Main-road classification remains semantic/presentation data only. The separate road canvas
+// renderer is retired by WP-112; StaticTileCompositor consumes this classifier and flattens the
+// selected transparent PNG road part into the same 100x100 tile composite as its terrain.
 window.Game.Utils.loadScriptOnce("js/main_road_semantics.js", "r04MainRoadSemanticsModule");
-window.Game.Utils.loadScriptOnce("js/main_road_renderer.js", "r04MainRoadRendererModule");
 
 // WP-111/I01: load stable presentation identity before visible entity renderers consume it.
 window.Game.Utils.loadScriptOnce("js/presentation_identity.js", "wp111PresentationIdentityModule");
 
-// R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
+// NPC presentation is the sole normal independently dynamic world-image exception.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
-window.Game.Utils.loadScriptOnce("js/world_object_renderer.js", "r04WorldObjectRendererModule");
+
+// WP-112 / Admin 2026-09-11: roads, buildings, trees, props and every other non-NPC world
+// graphic are composited into exact 100x100 logical-tile images and flushed through the
+// existing world-background upload path. Do not reintroduce separate static overlay canvases.
+window.Game.Utils.loadScriptOnce("js/static_tile_compositor.js", "wp112StaticTileCompositorModule");
+
+// R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
 window.Game.Utils.loadScriptOnce("js/game_time.js", "r02GameTimeModule");
 window.Game.Utils.loadScriptOnce("js/campaign_calendar.js", "r02CampaignCalendarModule");
@@ -137,8 +128,6 @@ window.Game.Utils.loadScriptOnce("js/political_geography.js", "r02PoliticalGeogr
 window.Game.Utils.loadScriptOnce("js/settlement_evolution.js", "r02SettlementEvolutionModule");
 window.Game.Utils.loadScriptOnce("js/relevance_bounded_compute.js", "r02RelevanceBoundedComputeModule");
 window.Game.Utils.loadScriptOnce("js/region_time_progression.js", "r02RegionTimeProgressionModule");
-window.Game.Utils.loadScriptOnce("js/starter_village_exteriors.js", "r04StarterVillageExteriorsModule");
-window.Game.Utils.loadScriptOnce("js/starter_village_dev_overlay.js", "r04StarterVillageDevOverlayModule");
 window.Game.Utils.loadScriptOnce("js/background_quad_guard.js", "r04BackgroundQuadGuardModule");
 
 // Loaded after NPC life/presentation modules so it can add deterministic tile occupancy,
