@@ -1,0 +1,73 @@
+@media (min-width:700px) and (max-width:960px) and (orientation:portrait){
+  #app{
+    grid-template-rows:auto minmax(420px,1fr) auto clamp(260px,30svh,320px);
+    min-height:100svh;
+  }
+
+  .ribbon{
+    padding:6px 10px;
+  }
+
+  .top-stats{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+  }
+
+  .resource-box,
+  .stat-box{
+    min-width:0;
+  }
+
+  #center-area{
+    min-height:420px;
+  }
+
+  .mobile-panel-tabs{
+    padding:6px 12px 0;
+  }
+
+  .mobile-tab-btn,
+  .choice-btn,
+  .primary-btn,
+  .secondary-btn,
+  .menu-btn,
+  .lang-select-wrap{
+    min-height:44px;
+  }
+
+  .bottom-ribbon{
+    min-height:0;
+    height:100%;
+    max-height:320px;
+    padding:6px 12px 10px;
+    overflow:hidden;
+  }
+
+  .bottom-ribbon .panel.active-panel{
+    min-height:0;
+    height:100%;
+    overflow:hidden;
+  }
+
+  .advisor-chat{
+    min-height:0;
+    padding:7px 10px;
+  }
+
+  .advisor-transcript{
+    min-height:72px;
+  }
+
+  .advisor-chat-form textarea{
+    min-height:44px;
+    max-height:72px;
+  }
+
+  .character-body{
+    grid-template-columns:80px 1fr;
+  }
+
+  .thumbnail{
+    width:80px;
+    height:80px;
+  }
+}
