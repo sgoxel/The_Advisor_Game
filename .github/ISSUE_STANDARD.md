@@ -161,6 +161,7 @@ Game Designer and Tester each perform this review once per Europe/Istanbul calen
 A valid existing claim always finishes first. Before taking a new issue, the first Game Designer or Tester execution for that Role/date checks whether that Role/date review was already recorded; if yes, skip it.
 Open the latest public release in a browser. Wait until Loading is finished and a real playable in-game scene is visible; Loading, menu-only, blank, or non-game screens are not valid evidence.
 Capture exactly two real in-game screenshots: Landscape 1280x720 and Portrait 720x1280.
+Before each screenshot, independently choose and wait a random 15-60 seconds while the game keeps running in a real playable state; each Worker must randomize its own delays so captures can sample different gameplay moments.
 Review responsiveness, layout, readability, camera/world framing, assets, rendering, and obvious visual/UX regressions.
 For each distinct actionable finding: search existing issues first; if not already tracked, open one compliant atomic issue for the Role responsible for the fix. Do not create duplicates or bundle unrelated findings.
 Every issue opened from this review must include the relevant screenshot evidence. Attach the screenshot directly to the GitHub issue when supported; otherwise store it in the repository and embed/link it in the issue. If image attachment/storage is technically unavailable, record that limitation and never invent evidence.
