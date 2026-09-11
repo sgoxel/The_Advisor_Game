@@ -1,9 +1,9 @@
-/* WP-041/I05-I07 — preserve protagonist continuity, refresh NPC relevance, and rebase presentation across one validated region transition. */
+/* WP-041/I05-I07-I09 — preserve protagonist continuity, refresh NPC relevance, rebase presentation, and expose a post-commit world reaction. */
 (function installRegionProtagonistTransition(global) {
   'use strict';
 
   const Game = global.Game = global.Game || {};
-  const VERSION = 'wp041-protagonist-transition-v3-camera-rebase';
+  const VERSION = 'wp041-protagonist-transition-v4-world-reaction';
 
   function integer(value) {
     const number = Number(value);
@@ -20,6 +20,38 @@
     renderer.centerCamera();
     if (typeof renderer.markDirty === 'function') renderer.markDirty(true, true);
     return true;
+  }
+
+  function presentWorldReaction(world, player, toX, toY, row, col) {
+    if (Game.State?.world !== world) return null;
+    const event = Object.freeze({
+      authority: 'presentation-only',
+      source: 'region-transition',
+      category: 'world',
+      severity: 'success',
+      title: 'Entered adjacent region',
+      actor: protagonistId(player),
+      location: `region ${toX},${toY} · tile ${row},${col}`,
+      outcome: 'Travel committed by Simulation',
+      details: Object.freeze({ regionX: toX, regionY: toY, row, col })
+    });
+    if (Game.ActivityLog?.authority === 'presentation-only' && typeof Game.ActivityLog.add === 'function') {
+      Game.ActivityLog.add(event);
+      return event;
+    }
+    if (Game.UI && typeof Game.UI.addLog === 'function') {
+      Game.UI.addLog(event.title, `${event.location}\n${event.outcome}`, {
+        category: event.category,
+        severity: event.severity,
+        source: event.source,
+        actor: event.actor,
+        location: event.location,
+        outcome: event.outcome,
+        timeKind: 'game'
+      });
+      return event;
+    }
+    return null;
   }
 
   function commit(worldInput, resolutionInput) {
@@ -79,6 +111,10 @@
     // and region state is committed, then invalidate the existing render/minimap lifecycle.
     const cameraRebased = rebasePresentation(world);
 
+    // World reaction is also presentation-only and is emitted strictly after the Simulation
+    // commit above, so it can report authoritative travel but can never cause it.
+    const worldReaction = presentWorldReaction(world, player, toX, toY, row, col);
+
     return Object.freeze({
       authority: 'simulation',
       version: VERSION,
@@ -95,7 +131,16 @@
         evaluated: Number(npcRelevance.evaluated || 0),
         scheduled: Number(npcRelevance.scheduled || 0)
       }) : null,
-      presentation: Object.freeze({ authority: 'presentation-only', cameraRebased })
+      presentation: Object.freeze({
+        authority: 'presentation-only',
+        cameraRebased,
+        worldReaction: worldReaction ? Object.freeze({
+          source: worldReaction.source,
+          title: worldReaction.title,
+          location: worldReaction.location,
+          outcome: worldReaction.outcome
+        }) : null
+      })
     });
   }
 
