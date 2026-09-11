@@ -353,7 +353,9 @@ For such issues, Game Designer must determine whether the issue should be:
 
 Age alone is not a reason to discard valid product work.
 
-The **2-hour unresolved-issue review rule does not replace the 3-hour claim expiry rule**. An active claim becomes stale only after 3 hours unless Admin explicitly overrides the rule.
+Game Designer reviews unresolved issues older than 2 hours. They clarify, reduce, split, reprioritize, or close them when duplicate, obsolete, or invalid.
+
+Claims older than 3 hours are stale and must be cleared. Age alone is not a reason to remove valid unresolved work.
 
 ---
 
