@@ -144,6 +144,11 @@ Responsible for all visual asset production tasks. Required to read the ROADMAP.
 Claims and completes only one task at a time.
 Opens a new issue if there is a related matter that needs to be addressed. If their allotted time remains, they claim a second task and proceed.
 
+## TEXTURE ARTIST STANDARD
+Before producing, evaluating, routing, accepting, or verifying Texture Artist work, read and obey `.github/TEXTURE_ATLAS_STANDARD.md`.
+Texture Artist runtime visual output must satisfy that standard; SVG/vector-only output is never complete and must not be handed to Tester as finished work.
+If compliant PNG generation/upload is unavailable, record the limitation and keep/return the issue to the correct Role/Status; never substitute SVG or claim completion.
+
 UX Designer:
 Responsible for all UI design and development tasks for the game. They are required to read ROADMAP.md. They must first complete any previously claimed task before taking on an unclaimed issue.
 They claim and complete only one task at a time.
