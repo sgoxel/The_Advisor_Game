@@ -65,4 +65,14 @@
     authority: 'simulation',
     resolveLocal
   });
+
+  // WP-002/I05 is a read-only downstream consumer of this authoritative identity.
+  // Load it immediately after I02 in browser runtime without changing I02 resolution semantics.
+  if (typeof document !== 'undefined' && document?.head && !document.getElementById('wp002InnkeeperWorkOpportunityLookupModule')) {
+    const script = document.createElement('script');
+    script.id = 'wp002InnkeeperWorkOpportunityLookupModule';
+    script.src = 'js/innkeeper_work_opportunity_lookup.js';
+    script.async = false;
+    document.head.appendChild(script);
+  }
 })();
