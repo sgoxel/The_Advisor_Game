@@ -1,0 +1,45 @@
+name: WP-102 I06 Tree Production
+
+on:
+  push:
+    branches:
+      - texture/wp102-i06-tree
+    paths:
+      - .github/texture-production/wp102_i06/READY
+
+permissions:
+  contents: write
+
+jobs:
+  produce-tree-family:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install image tooling
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Generate and validate canonical PNG family
+        run: python .github/texture-production/wp102_i06/generate_tree_atlas.py
+
+      - name: Remove temporary production transport
+        run: |
+          rm -rf .github/texture-production/wp102_i06
+          rm -f .github/workflows/wp102_i06_tree_production.yml
+
+      - name: Commit final tree PNG family
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --exit-code && { echo "No production changes created"; exit 1; } || true
+          git commit -m "Add Starting Village tree PNG atlas family (#479)"
+          git push origin HEAD:texture/wp102-i06-tree
