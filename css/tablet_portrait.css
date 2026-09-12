@@ -1,3 +1,5 @@
+@import url("phone_landscape.css");
+
 @media (min-width:700px) and (max-width:960px) and (orientation:portrait){
   #app{
     grid-template-rows:auto minmax(420px,1fr) auto clamp(260px,30svh,320px);
