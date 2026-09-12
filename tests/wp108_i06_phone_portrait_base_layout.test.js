@@ -13,7 +13,9 @@ expect(/@media\s*\(max-width:699px\)\s*and\s*\(orientation:portrait\)/, css, 'ph
 expect(/#app\{[\s\S]*?min-height:200svh;[\s\S]*?grid-template-rows:auto minmax\(0,calc\(100svh - 1px\)\) auto minmax\(0,calc\(100svh - 1px\)\)/, css, 'phone portrait must reserve separate viewport-scale game and control surfaces');
 expect(/#center-area\{[\s\S]*?grid-row:2;[\s\S]*?height:100%;/, css, 'game area must own the dedicated first major surface');
 expect(/\.mobile-panel-tabs\{[\s\S]*?grid-row:3;/, css, 'control tabs must begin the separate control surface');
-expect(/\.bottom-ribbon\{[\s\S]*?grid-row:4;[\s\S]*?height:100%;[\s\S]*?min-height:0;/, css, 'control panel must occupy its own full major surface rather than permanently shrinking the game');
+expect(/\.bottom-ribbon\{[\s\S]*?grid-row:4;/, css, 'control panel must occupy the dedicated second major surface');
+expect(/\.bottom-ribbon\{[\s\S]*?min-height:0;/, css, 'control surface must override the legacy phone minimum height');
+expect(/\.bottom-ribbon\{[\s\S]*?height:100%;/, css, 'control surface must fill its dedicated major row');
 expect(/env\(safe-area-inset-top,0px\)/, css, 'top safe area must be accommodated');
 expect(/env\(safe-area-inset-right,0px\)/, css, 'right safe area must be accommodated');
 expect(/env\(safe-area-inset-bottom,0px\)/, css, 'bottom safe area must be accommodated');
