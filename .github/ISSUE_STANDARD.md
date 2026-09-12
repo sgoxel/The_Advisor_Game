@@ -120,7 +120,7 @@ Worker #5:
 5. Tester
 
 ## ROLE DESCRIPTIONS
-Game Designer:
+### Game Designer:
 Reads the README.md file. Creates or updates a ROADMAP based on the concept outlined in the README file.
 In the ROADMAP file, game development is broken down into very small, manageable, and deliverable work packages (WPs).
 The Game Designer aims to divide the game development process into a total of at least 100 work packages.
@@ -132,30 +132,129 @@ Claims older than 3 hours are stale and must be cleared by the first Worker that
 If the task output completed by the final tester is ready for release, they publish the verified, functional final version of the application at https://sgoxel.github.io/The_Advisor_Game/.
 
 
-Game Programmer:
+### Game Programmer:
 Responsible for all game coding tasks. Required to read the ROADMAP.md file. First, completes any previously claimed tasks. Then, takes ownership of unclaimed issues.
 Claims and completes only one task at a time.
 Opens a new issue if there is a related matter that needs to be addressed.
 If the allotted task time remains, claims and proceeds with a second task.
 
-
-Texture Artist:
+### Texture Artist:
 Responsible for all visual asset production tasks. Required to read the ROADMAP.md file. First, completes any previously claimed tasks. Then, takes ownership of unclaimed issues.
 Claims and completes only one task at a time.
 Opens a new issue if there is a related matter that needs to be addressed. If their allotted time remains, they claim a second task and proceed.
 
-## TEXTURE ARTIST STANDARD
+#### TEXTURE ARTIST STANDARD
 Before producing, evaluating, routing, accepting, or verifying Texture Artist work, read and obey `.github/TEXTURE_ATLAS_STANDARD.md`.
 Texture Artist runtime visual output must satisfy that standard; SVG/vector-only output is never complete and must not be handed to Tester as finished work.
 If compliant PNG generation/upload is unavailable, record the limitation and keep/return the issue to the correct Role/Status; never substitute SVG or claim completion.
 
-UX Designer:
+##### Texture Artist end-to-end PNG production workflow
+
+For reusable tile-family asset issues, Texture Artist must use the following end-to-end production workflow unless the issue explicitly requires a different bounded PNG deliverable.
+
+1. Produce or generate one coherent source image for the requested family.
+2. The canonical retained runtime master for a reusable family must be one exact `1024 x 1024` RGBA PNG atlas.
+3. The canonical atlas must use a fixed `4 x 4` grid with exact `256 x 256` cells.
+4. One semantic tile variant must be assigned per occupied cell in row-major order unless an existing family manifest defines a different compatible order.
+5. Each final tile PNG must be created by exact pixel crop from the canonical atlas only. Do not redraw, resize per tile, stretch, or regenerate individual slices.
+6. A reusable tile family must include:
+   - `<family>_atlas_1024px.png`
+   - `<family>_<semantic-type>_256px.png` for each occupied tile
+   - `<family>_tiles.manifest.json`
+   - `<family>_tiles.descriptions.json`
+7. The manifest file is the runtime-oriented structural registry and must record at minimum:
+   - family
+   - atlas geometry
+   - row
+   - col
+   - semantic type
+   - filename
+   - SHA-256 of each tile PNG when available
+8. The descriptions file is the human-readable semantic registry and must record at minimum:
+   - row
+   - col
+   - semantic type
+   - filename
+   - short description of the tile's visual meaning
+9. Description metadata is documentation/provenance only and must never become Simulation authority.
+10. Except for NPC world sprites, non-NPC runtime integration must use the shared exact `100 x 100` static tile-composition path defined by current project standards.
+
+##### Generated-image normalization rule
+
+If a generated or produced reusable-family source image does not initially match the canonical atlas size, the worker must not abandon the issue for that reason alone.
+
+Instead:
+
+1. convert the accepted source image into one exact canonical `1024 x 1024` RGBA PNG atlas;
+2. record that normalization truthfully in the issue Audit;
+3. use the normalized exact `1024 x 1024` atlas as the deterministic source for all `256 x 256` crops.
+
+A worker must not claim that PNG production is unavailable merely because the first generated output was not already at the exact canonical size.
+
+##### Capability verification rule for Texture Artist work
+
+A worker may record a tooling/capability limitation only after attempting the actual bounded production path within the current execution surface.
+
+For reusable tile-family work, this means the worker must, to the extent available in the current execution surface, attempt to:
+
+1. generate or produce the source PNG;
+2. normalize to the canonical atlas size when required;
+3. create the deterministic crops;
+4. validate PNG outputs and dimensions;
+5. prepare the manifest and descriptions metadata.
+
+Do not declare the work impossible merely because a preferred shortcut or one-step tool was unavailable.
+
+##### Multi-role handoff for asset integration
+
+When a Texture Artist issue also requires application integration, the same atomic issue may move through the following handoff chain when that remains the smallest valid scope:
+
+`Texture Artist -> Game Programmer -> Tester`
+
+Typical expectations:
+
+- Texture Artist produces the compliant PNG source assets and required metadata.
+- Game Programmer wires the asset family into runtime selection/registration/composition.
+- Tester independently verifies file compliance and actual runtime use.
+
+If production and runtime integration are too large to remain atomic together, split them into separate dependent issues.
+
+##### Mandatory Audit content for reusable tile-family asset issues
+
+For reusable tile-family asset production, the issue Audit must record, as applicable:
+
+- source of the produced/generated family image;
+- canonical atlas path;
+- atlas dimensions and cell map;
+- every slice path;
+- manifest path;
+- descriptions path;
+- SHA-256 values when available;
+- whether normalization to exact `1024 x 1024` was required;
+- whether runtime integration is included in scope;
+- required next role handoff.
+
+##### Handoff rule for reusable tile-family production
+
+Texture Artist may hand a reusable tile-family issue forward only when all applicable outputs exist and were actually checked:
+
+- canonical `1024 x 1024` RGBA atlas;
+- exact `256 x 256` PNG slices;
+- truthful manifest;
+- truthful descriptions metadata;
+- issue Audit with actual evidence.
+
+If runtime integration is still required and is in scope, hand off the same issue to `Role: Game Programmer`, `Claim: NONE`, `Status: READY`, and set `Next` accordingly.
+
+If only independent verification remains, hand off to `Role: Tester`, `Claim: NONE`, `Status: VERIFY`, and set `Next: Tester`.
+
+### UX Designer:
 Responsible for all UI design and development tasks for the game. They are required to read ROADMAP.md. They must first complete any previously claimed task before taking on an unclaimed issue.
 They claim and complete only one task at a time.
 If an issue requires a specific matter to be resolved, they open a new issue for it.
 If their allotted time remains, they claim a second task and proceed.
 
-Tester:
+### Tester:
 Responsible for testing all coding, UI/UX developments, and visual assets for the game. 
 They are required to read ROADMAP.md. They must first complete any previously claimed task before taking on an unclaimed issue.
 They claim and complete only one task at a time.
