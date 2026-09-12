@@ -154,6 +154,7 @@ if (typeof document !== "undefined" && document.readyState === "loading") {
   document.write('<script src="js/protagonist_driver_intent.js"><\/script>');
   document.write('<script src="js/local_bot_driver.js"><\/script>');
   document.write('<script src="js/advisor_conversation_contract.js"><\/script>');
+  document.write('<script src="js/innkeeper_work_autonomy.js"><\/script>');
   // #293 exposes Simulation-owned object facts to presentation without rendering
   // objects or deriving gameplay authority from assets/pixels.
   document.write('<script src="js/world_object_presentation_descriptor.js"><\/script>');
