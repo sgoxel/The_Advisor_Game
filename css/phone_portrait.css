@@ -1,0 +1,98 @@
+@media (max-width:699px) and (orientation:portrait){
+  :root{
+    --phone-portrait-safe-top:env(safe-area-inset-top,0px);
+    --phone-portrait-safe-right:env(safe-area-inset-right,0px);
+    --phone-portrait-safe-bottom:env(safe-area-inset-bottom,0px);
+    --phone-portrait-safe-left:env(safe-area-inset-left,0px);
+  }
+
+  html,
+  body{
+    min-height:100%;
+    overflow-x:hidden;
+  }
+
+  body{
+    overflow-y:auto;
+  }
+
+  #app{
+    min-height:200svh;
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto minmax(0,calc(100svh - 1px)) auto minmax(0,calc(100svh - 1px));
+    align-content:start;
+  }
+
+  .ribbon{
+    grid-column:1;
+    grid-row:1;
+    padding-top:max(5px,var(--phone-portrait-safe-top));
+    padding-right:max(10px,var(--phone-portrait-safe-right));
+    padding-left:max(10px,var(--phone-portrait-safe-left));
+  }
+
+  #center-area{
+    grid-column:1;
+    grid-row:2;
+    min-height:0;
+    height:100%;
+    padding-right:var(--phone-portrait-safe-right);
+    padding-left:var(--phone-portrait-safe-left);
+  }
+
+  .center-overlay{
+    max-width:calc(100% - 24px - var(--phone-portrait-safe-left) - var(--phone-portrait-safe-right));
+  }
+
+  .mobile-panel-tabs{
+    grid-column:1;
+    grid-row:3;
+    padding:8px max(12px,var(--phone-portrait-safe-right)) 0 max(12px,var(--phone-portrait-safe-left));
+  }
+
+  .mobile-tab-btn,
+  .choice-btn,
+  .primary-btn,
+  .secondary-btn,
+  .menu-btn,
+  .lang-select-wrap{
+    min-height:44px;
+  }
+
+  .bottom-ribbon{
+    grid-column:1;
+    grid-row:4;
+    min-height:0;
+    height:100%;
+    max-height:none;
+    padding:8px max(12px,var(--phone-portrait-safe-right)) max(12px,var(--phone-portrait-safe-bottom)) max(12px,var(--phone-portrait-safe-left));
+    overflow:hidden;
+  }
+
+  .bottom-ribbon .panel.active-panel{
+    min-height:0;
+    height:100%;
+    overflow:hidden;
+  }
+
+  .advisor-chat{
+    min-height:0;
+  }
+
+  .advisor-transcript{
+    min-height:96px;
+  }
+
+  .advisor-chat-form textarea{
+    min-height:52px;
+  }
+
+  .character-body{
+    grid-template-columns:72px minmax(0,1fr);
+  }
+
+  .thumbnail{
+    width:72px;
+    height:72px;
+  }
+}
