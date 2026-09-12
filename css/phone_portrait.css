@@ -4,31 +4,47 @@
     --phone-portrait-safe-right:env(safe-area-inset-right,0px);
     --phone-portrait-safe-bottom:env(safe-area-inset-bottom,0px);
     --phone-portrait-safe-left:env(safe-area-inset-left,0px);
+    --phone-portrait-ribbon-height:72px;
+    --phone-portrait-tabs-height:56px;
   }
 
   html,
   body{
     min-height:100%;
     overflow-x:hidden;
+    scroll-snap-type:y mandatory;
+    scroll-behavior:smooth;
   }
 
   body{
     overflow-y:auto;
+    overscroll-behavior-y:contain;
   }
 
   #app{
     min-height:200svh;
     grid-template-columns:minmax(0,1fr);
-    grid-template-rows:auto minmax(0,calc(100svh - 1px)) auto minmax(0,calc(100svh - 1px));
+    grid-template-rows:
+      var(--phone-portrait-ribbon-height)
+      minmax(0,calc(100svh - var(--phone-portrait-ribbon-height)))
+      var(--phone-portrait-tabs-height)
+      minmax(0,calc(100svh - var(--phone-portrait-tabs-height)));
     align-content:start;
   }
 
   .ribbon{
     grid-column:1;
     grid-row:1;
+    height:var(--phone-portrait-ribbon-height);
+    min-height:var(--phone-portrait-ribbon-height);
+    max-height:var(--phone-portrait-ribbon-height);
+    box-sizing:border-box;
+    overflow:hidden;
     padding-top:max(5px,var(--phone-portrait-safe-top));
     padding-right:max(10px,var(--phone-portrait-safe-right));
     padding-left:max(10px,var(--phone-portrait-safe-left));
+    scroll-snap-align:start;
+    scroll-snap-stop:always;
   }
 
   #center-area{
@@ -38,6 +54,7 @@
     height:100%;
     padding-right:var(--phone-portrait-safe-right);
     padding-left:var(--phone-portrait-safe-left);
+    overflow:hidden;
   }
 
   .center-overlay{
@@ -47,7 +64,14 @@
   .mobile-panel-tabs{
     grid-column:1;
     grid-row:3;
-    padding:8px max(12px,var(--phone-portrait-safe-right)) 0 max(12px,var(--phone-portrait-safe-left));
+    height:var(--phone-portrait-tabs-height);
+    min-height:var(--phone-portrait-tabs-height);
+    max-height:var(--phone-portrait-tabs-height);
+    box-sizing:border-box;
+    overflow:hidden;
+    padding:6px max(12px,var(--phone-portrait-safe-right)) 6px max(12px,var(--phone-portrait-safe-left));
+    scroll-snap-align:start;
+    scroll-snap-stop:always;
   }
 
   .mobile-tab-btn,
@@ -65,6 +89,7 @@
     min-height:0;
     height:100%;
     max-height:none;
+    box-sizing:border-box;
     padding:8px max(12px,var(--phone-portrait-safe-right)) max(12px,var(--phone-portrait-safe-bottom)) max(12px,var(--phone-portrait-safe-left));
     overflow:hidden;
   }
