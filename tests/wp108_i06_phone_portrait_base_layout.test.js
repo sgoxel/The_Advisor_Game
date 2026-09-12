@@ -10,7 +10,8 @@ function expect(re, text, message) {
 
 expect(/@import url\(["']phone_portrait\.css["']\);/, responsiveEntry, 'phone portrait stylesheet must be present in the responsive load path');
 expect(/@media\s*\(max-width:699px\)\s*and\s*\(orientation:portrait\)/, css, 'phone portrait breakpoint must be isolated from tablet and landscape layouts');
-expect(/#app\{[\s\S]*?min-height:200svh;[\s\S]*?grid-template-rows:auto minmax\(0,calc\(100svh - 1px\)\) auto minmax\(0,calc\(100svh - 1px\)\)/, css, 'phone portrait must reserve separate viewport-scale game and control surfaces');
+expect(/#app\{[\s\S]*?min-height:200svh;/, css, 'phone portrait must reserve two viewport-scale major surfaces');
+expect(/#app\{[\s\S]*?grid-template-rows:[\s\S]*?var\(--phone-portrait-ribbon-height\)[\s\S]*?calc\(100svh - var\(--phone-portrait-ribbon-height\)\)[\s\S]*?var\(--phone-portrait-tabs-height\)[\s\S]*?calc\(100svh - var\(--phone-portrait-tabs-height\)\)/, css, 'phone portrait must keep game and control surfaces as two exact viewport-height row pairs');
 expect(/#center-area\{[\s\S]*?grid-row:2;[\s\S]*?height:100%;/, css, 'game area must own the dedicated first major surface');
 expect(/\.mobile-panel-tabs\{[\s\S]*?grid-row:3;/, css, 'control tabs must begin the separate control surface');
 expect(/\.bottom-ribbon\{[\s\S]*?grid-row:4;/, css, 'control panel must occupy the dedicated second major surface');
@@ -23,10 +24,10 @@ expect(/env\(safe-area-inset-left,0px\)/, css, 'left safe area must be accommoda
 expect(/\.mobile-tab-btn,[\s\S]*?\.lang-select-wrap\{[\s\S]*?min-height:44px;/, css, 'phone portrait touch controls must retain practical minimum sizing');
 
 if (/display\s*:\s*none/.test(css) && /#center-area|\.bottom-ribbon/.test(css)) {
-  throw new Error('base layout must not implement WP-109 surface switching by hiding a major surface');
+  throw new Error('base layout must not remove a mounted major surface');
 }
 if (/transform\s*:|translate[XY]?\s*\(/.test(css)) {
-  throw new Error('base layout must not implement WP-109 off-screen switching transforms');
+  throw new Error('base layout and WP-109/I03 isolation must preserve mounted surfaces instead of transform-based state replacement');
 }
 
 console.log('PASS WP-108/I06 phone portrait base layout');
