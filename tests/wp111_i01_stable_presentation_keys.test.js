@@ -44,7 +44,8 @@ assert(!/motions\.get\(index\)|motions\.set\(index/.test(motionSource), 'NPC mot
 const utilsSource = fs.readFileSync(path.join(root, 'js', 'utils.js'), 'utf8');
 const identityLoad = utilsSource.indexOf('js/presentation_identity.js');
 const npcWorldLoad = utilsSource.indexOf('js/npc_world.js');
-const objectLoad = utilsSource.indexOf('js/world_object_renderer.js');
-assert(identityLoad >= 0 && identityLoad < npcWorldLoad && identityLoad < objectLoad, 'stable identity resolver must load before visible entity renderers');
+const staticCompositorLoad = utilsSource.indexOf('js/static_tile_compositor.js');
+assert(identityLoad >= 0 && identityLoad < npcWorldLoad && identityLoad < staticCompositorLoad, 'stable identity resolver must load before current visible-entity/static-compositor presentation paths');
+assert(!utilsSource.includes('loadScriptOnce("js/world_object_renderer.js"'), 'retired separate world-object renderer must not be reintroduced');
 
 console.log('PASS WP-111/I01 stable presentation keys');
