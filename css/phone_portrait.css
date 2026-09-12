@@ -82,6 +82,17 @@
     letter-spacing:.02em;
   }
 
+  #center-area.panel-toggle-up .mobile-panels-toggle{
+    position:fixed;
+    top:max(12px,var(--phone-portrait-safe-top));
+    bottom:auto;
+    z-index:30;
+  }
+
+  #center-area.panel-toggle-up .mobile-panels-toggle::before{
+    content:"↑ Game";
+  }
+
   .mobile-panels-toggle:focus-visible{
     outline:3px solid currentColor;
     outline-offset:3px;
