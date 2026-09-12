@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "family": "grass",
+  "atlas": {
+    "filename": "grass_atlas_1024px.png",
+    "width": 1024,
+    "height": 1024,
+    "columns": 4,
+    "rows": 4,
+    "cellSize": 256
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "type": "base",
+      "filename": "grass_base_256px.png",
+      "sha256": "881ba6118e18d54f17031a671c74d82325b40c9de1476c7335a7574d38f58985"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "meadow",
+      "filename": "grass_meadow_256px.png",
+      "sha256": "86d050d53f10caed0123ae083aa8cbf32647da8da09909f67875291d542a9669"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "worn",
+      "filename": "grass_worn_256px.png",
+      "sha256": "26258d9d42d724c30bbbe498ee88ba09be547a9aebc1ce0e576fedc2085fd1d5"
+    }
+  ],
+  "runtimeComposition": {
+    "logicalTileSize": 100,
+    "mode": "static-tile-composite",
+    "baseRole": "terrain/base",
+    "independentWorldImage": false
+  }
+}
