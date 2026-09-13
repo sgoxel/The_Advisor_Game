@@ -175,6 +175,38 @@ python tools/tile_atlas_tool.py generated.png \
 
 `--semantics` remains accepted as a compatibility alias for `--metadata`.
 
+## Mandatory production use
+
+When this repository tool is available, Texture Artist must execute `tools/tile_atlas_tool.py` itself for reusable 4x4 atlas production processing. A separate ad-hoc script that only imitates the same resize, crop, trim, or metadata logic is not equivalent production evidence.
+
+The files emitted by the actual Tile Atlas Tool run are the authoritative derived files for publication. Do not manually re-slice the atlas or replace those PNG outputs afterward.
+
+Texture Artist audit should record the actual CLI command or GUI **Publish to Project** action, source dimensions, normalization mode, family, metadata input, emitted tile count, output paths, and verification result.
+
+## GitHub PNG publication
+
+When the generated files must be published through the connected GitHub API rather than a local `git push`, use GitHub's binary Git-data path for PNG files:
+
+**binary blob -> repository tree -> commit -> branch ref update**
+
+The ordinary UTF-8 text-content operations used for Markdown, JSON, JavaScript, CSS, and similar files are not the PNG binary publication path.
+
+If the connected GitHub surface exposes binary blob creation together with tree, commit, and branch-ref operations, use those operations for the exact PNG files emitted by `tools/tile_atlas_tool.py`. Do not conclude that PNG upload is unavailable merely because the ordinary text-file operations do not accept binary/local-file inputs.
+
+The final repository tree entries for PNG assets must point to binary blobs created from the exact Tile Atlas Tool output bytes. Text metadata may use ordinary text-file operations or may be included in the same Git-data commit.
+
+After publication, verify:
+
+- the canonical atlas path exists;
+- all intended semantic PNG tiles exist;
+- dimensions match the tool manifest;
+- hashes match when recorded;
+- descriptions and filenames remain consistent;
+- no temporary transport/staging files remain in production asset paths;
+- runtime mapping points to the committed family when integration is in scope.
+
+See `tools/TILE_ATLAS_GITHUB_PUBLISH.md` for the Admin-authorized operational summary.
+
 ## Tests
 
 From the `tools` directory:
