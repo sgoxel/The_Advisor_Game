@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The Advisor Game - deterministic 4x4 tile atlas normalizer and slicer.
 
-Canonical output: 1024x1024 RGBA PNG master, 4x4 grid, 256x256 PNG cells.
+Canonical master: 1024x1024 RGBA PNG, 4x4 grid, 256x256 cells.
+Derived tiles: crop each canonical cell, trim 1px from every edge, then resize 254x254 back to 256x256.
 Requires Pillow: python -m pip install Pillow
 """
 from __future__ import annotations
@@ -22,6 +23,8 @@ except ImportError as exc:
 ATLAS_SIZE = 1024
 GRID = 4
 CELL_SIZE = 256
+BORDER_TRIM = 1
+TRIMMED_SIZE = CELL_SIZE - (BORDER_TRIM * 2)
 RESAMPLE = Image.Resampling.LANCZOS
 
 
@@ -80,8 +83,15 @@ def load_semantics(path: Path | None) -> list[dict[str, str]]:
 
 
 def is_fully_transparent(tile: Image.Image) -> bool:
-    alpha = tile.getchannel("A")
-    return alpha.getbbox() is None
+    return tile.getchannel("A").getbbox() is None
+
+
+def trim_cell_border(tile: Image.Image) -> Image.Image:
+    """Discard 1px on all four cell edges and restore exact 256x256 output size."""
+    if tile.size != (CELL_SIZE, CELL_SIZE):
+        raise ValueError(f"Expected {CELL_SIZE}x{CELL_SIZE} cell, got {tile.size}.")
+    inner = tile.crop((BORDER_TRIM, BORDER_TRIM, CELL_SIZE - BORDER_TRIM, CELL_SIZE - BORDER_TRIM))
+    return inner.resize((CELL_SIZE, CELL_SIZE), RESAMPLE)
 
 
 def process(input_path: Path, output_dir: Path, family: str, mode: str = "fit",
@@ -99,10 +109,11 @@ def process(input_path: Path, output_dir: Path, family: str, mode: str = "fit",
     for index in range(16):
         row, col = divmod(index, GRID)
         box = (col * CELL_SIZE, row * CELL_SIZE, (col + 1) * CELL_SIZE, (row + 1) * CELL_SIZE)
-        tile = atlas.crop(box)
+        raw_tile = atlas.crop(box)
+        transparent = is_fully_transparent(raw_tile)
+        tile = trim_cell_border(raw_tile)
         semantic = safe_name(semantics[index]["semantic_type"])
         filename = f"{family}_{semantic}_256px.png"
-        transparent = is_fully_transparent(tile)
         emitted = not (skip_transparent and transparent)
         digest = None
         if emitted:
@@ -113,6 +124,7 @@ def process(input_path: Path, output_dir: Path, family: str, mode: str = "fit",
             "index": index, "row": row, "col": col, "semantic_type": semantic,
             "filename": filename if emitted else None, "sha256": digest,
             "fully_transparent": transparent, "emitted": emitted,
+            "border_processing": {"trim_px_each_edge": BORDER_TRIM, "intermediate_size": [TRIMMED_SIZE, TRIMMED_SIZE], "output_size": [CELL_SIZE, CELL_SIZE]},
         }
         tiles.append(record)
         descriptions.append({
@@ -127,73 +139,59 @@ def process(input_path: Path, output_dir: Path, family: str, mode: str = "fit",
                   "grid_rows": 4, "grid_cols": 4, "cell_width": 256, "cell_height": 256,
                   "ordering": "row-major", "sha256": sha256(master)},
         "normalization_mode": mode,
+        "derived_tile_border_policy": {"trim_px_each_edge": BORDER_TRIM, "source_cell_size": [256, 256], "trimmed_size": [254, 254], "resized_output_size": [256, 256], "resampling": "LANCZOS"},
         "tiles": tiles,
     }
-    manifest_path = output_dir / f"{family}_tiles.manifest.json"
-    desc_path = output_dir / f"{family}_tiles.descriptions.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    desc_path.write_text(json.dumps({"family": family, "tiles": descriptions}, indent=2) + "\n", encoding="utf-8")
+    (output_dir / f"{family}_tiles.manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    (output_dir / f"{family}_tiles.descriptions.json").write_text(json.dumps({"family": family, "tiles": descriptions}, indent=2) + "\n", encoding="utf-8")
     return manifest
 
 
 def launch_gui() -> None:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
-
     root = tk.Tk()
     root.title("The Advisor Game - 4x4 Tile Atlas Tool")
     root.resizable(False, False)
     input_var, output_var, family_var = tk.StringVar(), tk.StringVar(), tk.StringVar(value="tile")
     mode_var, semantics_var = tk.StringVar(value="fit"), tk.StringVar()
     skip_var = tk.BooleanVar(value=True)
-
-    frame = ttk.Frame(root, padding=14)
-    frame.grid()
+    frame = ttk.Frame(root, padding=14); frame.grid()
 
     def choose_input():
         p = filedialog.askopenfilename(filetypes=[("Images", "*.png *.jpg *.jpeg *.webp"), ("All files", "*.*")])
         if p:
             input_var.set(p)
-            if family_var.get() == "tile":
-                family_var.set(safe_name(Path(p).stem.replace("_atlas_1024px", "")))
-            if not output_var.get():
-                output_var.set(str(Path(p).parent / f"{family_var.get()}_tiles"))
-
+            if family_var.get() == "tile": family_var.set(safe_name(Path(p).stem.replace("_atlas_1024px", "")))
+            if not output_var.get(): output_var.set(str(Path(p).parent / f"{family_var.get()}_tiles"))
     def choose_output():
         p = filedialog.askdirectory()
         if p: output_var.set(p)
-
     def choose_semantics():
         p = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("All files", "*.*")])
         if p: semantics_var.set(p)
 
-    rows = [
-        ("Input atlas/image", input_var, choose_input, "Browse"),
-        ("Output folder", output_var, choose_output, "Browse"),
-        ("Semantic JSON (optional)", semantics_var, choose_semantics, "Browse"),
-    ]
-    for r, (label, var, command, button) in enumerate(rows):
+    rows = [("Input atlas/image", input_var, choose_input), ("Output folder", output_var, choose_output), ("Semantic JSON (optional)", semantics_var, choose_semantics)]
+    for r, (label, var, command) in enumerate(rows):
         ttk.Label(frame, text=label).grid(row=r, column=0, sticky="w", pady=4)
         ttk.Entry(frame, textvariable=var, width=58).grid(row=r, column=1, padx=8)
-        ttk.Button(frame, text=button, command=command).grid(row=r, column=2)
+        ttk.Button(frame, text="Browse", command=command).grid(row=r, column=2)
     ttk.Label(frame, text="Family name").grid(row=3, column=0, sticky="w", pady=4)
     ttk.Entry(frame, textvariable=family_var, width=30).grid(row=3, column=1, sticky="w", padx=8)
     ttk.Label(frame, text="Resize mode").grid(row=4, column=0, sticky="w", pady=4)
     ttk.Combobox(frame, textvariable=mode_var, values=("fit", "crop", "stretch"), state="readonly", width=12).grid(row=4, column=1, sticky="w", padx=8)
     ttk.Checkbutton(frame, text="Skip fully transparent cells", variable=skip_var).grid(row=5, column=1, sticky="w", padx=8, pady=4)
+    ttk.Label(frame, text="Tile border policy: trim 1px on every edge, then resize 254x254 → 256x256").grid(row=6, column=0, columnspan=3, sticky="w", pady=(8, 2))
 
     def run():
         try:
-            if not input_var.get() or not output_var.get():
-                raise ValueError("Select an input image and output folder.")
-            result = process(Path(input_var.get()), Path(output_var.get()), family_var.get(), mode_var.get(),
-                             Path(semantics_var.get()) if semantics_var.get() else None, skip_var.get())
+            if not input_var.get() or not output_var.get(): raise ValueError("Select an input image and output folder.")
+            result = process(Path(input_var.get()), Path(output_var.get()), family_var.get(), mode_var.get(), Path(semantics_var.get()) if semantics_var.get() else None, skip_var.get())
             count = sum(1 for t in result["tiles"] if t["emitted"])
-            messagebox.showinfo("Complete", f"Canonical atlas created and {count} tile PNG(s) emitted.")
+            messagebox.showinfo("Complete", f"Canonical atlas created and {count} border-safe tile PNG(s) emitted.")
         except Exception as exc:
             messagebox.showerror("Error", str(exc))
-
-    ttk.Button(frame, text="Normalize & Slice", command=run).grid(row=6, column=1, sticky="w", padx=8, pady=(12, 2))
+    ttk.Button(frame, text="Normalize & Slice", command=run).grid(row=7, column=1, sticky="w", padx=8, pady=(12, 2))
     root.mainloop()
 
 
@@ -208,11 +206,10 @@ def main() -> int:
     parser.add_argument("--gui", action="store_true", help="Launch GUI")
     args = parser.parse_args()
     if args.gui or args.input is None:
-        launch_gui()
-        return 0
+        launch_gui(); return 0
     output = args.output or args.input.parent / f"{safe_name(args.family)}_tiles"
     result = process(args.input, output, args.family, args.mode, args.semantics, not args.include_transparent)
-    print(f"Created {result['atlas']['filename']} and {sum(t['emitted'] for t in result['tiles'])} tile(s) in {output}")
+    print(f"Created {result['atlas']['filename']} and {sum(t['emitted'] for t in result['tiles'])} border-safe tile(s) in {output}")
     return 0
 
 
