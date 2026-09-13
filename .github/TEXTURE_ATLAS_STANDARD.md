@@ -230,6 +230,28 @@ Current tool responsibilities include:
 
 Texture Artist uses the tool on Admin-provided images; Texture Artist does not use it to create artwork.
 
+The actual repository implementation `tools/tile_atlas_tool.py` must be executed for production atlas processing when it is available. A separate ad-hoc script that only reproduces the same logic is not equivalent evidence of Tile Atlas Tool use.
+
+The exact files emitted by the actual Tile Atlas Tool run are the authoritative derived files for publication. Do not manually re-slice or replace those outputs after the tool run.
+
+---
+
+# 10A. GitHub binary publication of Tile Atlas Tool PNG outputs
+
+When Tile Atlas Tool outputs are published through the connected GitHub API rather than a local `git push`, PNG files must use GitHub's binary Git-data path:
+
+**binary blob -> repository tree -> commit -> branch ref update**
+
+Ordinary UTF-8 text-content operations are appropriate for Markdown, JSON, JavaScript, CSS, and similar text files, but they are not the PNG binary publication path.
+
+If the connected GitHub surface exposes binary blob creation together with tree, commit, and branch-ref operations, Texture Artist must use that route for the exact PNG output bytes and must not conclude that PNG upload is unavailable merely because ordinary text-file operations do not accept binary/local-file inputs.
+
+The final repository tree entries must reference binary blobs created from the exact `tools/tile_atlas_tool.py` output files. Text metadata may use normal UTF-8 file operations or may be included in the same Git-data commit.
+
+After publication, verify repository paths, PNG dimensions, manifest hashes when present, semantic filename consistency, and runtime mapping. Temporary transport/staging artifacts must not remain in production asset paths.
+
+Operational summary: `tools/TILE_ATLAS_GITHUB_PUBLISH.md`.
+
 ---
 
 # 11. Mandatory per-cell metadata
@@ -445,6 +467,8 @@ For reusable family integration, issue Audit must record as applicable:
 - checks actually performed;
 - next role.
 
+For Tile Atlas Tool processing, also record the actual `tools/tile_atlas_tool.py` CLI command or GUI publish action, emitted tile count, Git commit SHA after publication, target branch, and post-commit binary verification.
+
 Never state that Texture Artist generated the artwork.
 
 ---
@@ -490,6 +514,8 @@ Tester independently verifies:
 
 - source artwork is Admin-provided/authorized;
 - no worker-generated replacement image was introduced;
+- actual repository `tools/tile_atlas_tool.py` execution is evidenced for reusable atlas processing;
+- committed PNGs match the intended Tile Atlas Tool outputs;
 - canonical atlas geometry and RGBA format;
 - source-size normalization where applicable;
 - 1 px edge trim + 254-to-256 LANCZOS policy on derived tiles;
