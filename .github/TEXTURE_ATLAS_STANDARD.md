@@ -2,373 +2,266 @@
 
 ## Authority and scope
 
-This operational standard defines the mandatory production workflow for visual assets created, corrected, integrated, routed, or verified through the Texture Artist role.
+This operational standard defines the mandatory handling, validation, metadata, integration, routing, and verification workflow for visual assets in **The Advisor Game**.
 
 Authority remains:
 
 **Admin > README.md > ROADMAP.md > TODO > issues > code/assets > tests.**
 
-README product truth remains authoritative.
+README product truth remains authoritative. Explicit Admin direction overrides this operational standard.
 
-This file defines implementation and production HOW. It must not override README or explicit Admin direction.
+This file defines implementation/production HOW and must not modify README product truth.
 
 This standard applies to:
 
 - reusable tile families;
 - terrain and environmental artwork;
 - roads and paths;
-- vegetation;
-- trees;
+- vegetation and trees;
 - buildings and building parts;
 - furniture and props;
 - visual world objects;
 - standalone PNG sprites;
 - atlas metadata;
-- application integration of Texture Artist output;
-- verification of Texture Artist output.
+- application integration of visual assets;
+- verification of visual-asset integration.
 
-The production workflow must be:
-
-- reproducible;
-- deterministic;
-- auditable;
-- usable by Routine workers;
-- suitable for application integration;
-- independently verifiable by Tester.
+The workflow must be reproducible, deterministic, auditable, usable by routine workers, suitable for application integration, and independently verifiable by Tester.
 
 ---
 
-# 1. Hard production-format rule
+# 1. Admin-only image creation rule
 
-Texture Artist runtime visual deliverables must be PNG.
+**Only Admin may request, authorize, or initiate creation of new visual source images.**
 
-Allowed production outputs include:
+This includes:
 
-- RGBA PNG master atlases;
-- RGBA PNG tile slices;
-- standalone PNG sprites;
+- new 4 x 4 atlas images;
+- standalone sprites;
+- replacement textures;
+- terrain artwork;
+- building artwork;
+- NPC artwork;
+- props, vegetation, roads, UI artwork, and other production imagery.
+
+Texture Artist must not:
+
+- generate images;
+- call or request image-generation tools;
+- redraw production artwork;
+- synthesize replacement textures;
+- procedurally create production artwork;
+- create placeholder/fake PNGs to satisfy missing-art requirements;
+- substitute SVG/vector-only content for missing PNG artwork.
+
+All new image creation occurs only by explicit Admin order.
+
+Texture Artist is responsible for **discovering newly added Admin-provided visual assets in the project, validating them, preparing approved metadata/derived assets, and applying them correctly to the latest application version**.
+
+If a required visual source image is absent, Texture Artist records the missing Admin input and continues normal worker routing. Absence of artwork is never permission to create it.
+
+---
+
+# 2. Hard production-format rule
+
+Production visual deliverables used by the application must be PNG unless a higher-authority contract explicitly says otherwise.
+
+Allowed project visual outputs include:
+
+- RGBA PNG master atlases supplied/authorized by Admin;
+- RGBA PNG tile slices derived from Admin-provided atlases;
+- standalone Admin-provided PNG sprites;
 - JSON manifests;
 - JSON semantic-description metadata;
 - Markdown audit/documentation where required.
 
-The following are not valid completed Texture Artist runtime artwork:
+The following are not valid substitutes for required production artwork:
 
-- SVG;
-- vector-only artwork;
+- SVG/vector-only artwork;
 - HTML canvas drawing instructions;
 - CSS drawings;
 - JSON vector paths;
 - placeholder geometry;
-- textual descriptions instead of required artwork;
+- textual descriptions instead of artwork;
 - procedural mockups presented as final artwork.
 
-SVG/vector-only output must never be treated as completed Texture Artist production.
+---
 
-SVG/vector-only output must never be handed to Tester as completed visual work.
+# 3. Reusable visual-family rule
 
-Existing SVG artwork does not satisfy a new or corrected PNG asset requirement.
+Reusable tile-based visual families use one coherent atlas rather than unrelated individually generated images.
 
-Standalone sprites that do not require an atlas must also be PNG at the dimensions required by their issue/runtime contract.
+Examples include trees, roads, paths, terrain transitions, grass, soil, mud, water, farm fields, fences, walls, roofs, building parts, furniture, props, vegetation, rocks, ruins, and environmental decoration.
+
+The atlas approach preserves consistency in palette, style, perspective, lighting, density, scale, material language, edge treatment, and detail level.
+
+Texture Artist does not author this source atlas. Texture Artist validates and integrates an Admin-provided atlas.
 
 ---
 
-# 2. Reusable visual-family rule
+# 4. Canonical reusable atlas
 
-A reusable tile-based visual family must normally be produced as one coherent atlas rather than as unrelated individually generated images.
+Every reusable tile family must retain one canonical master atlas.
 
-Examples include:
+Canonical requirements:
 
-- trees;
-- roads;
-- paths;
-- terrain transitions;
-- grass;
-- soil;
-- mud;
-- water;
-- farm fields;
-- fences;
-- walls;
-- roofs;
-- building parts;
-- furniture;
-- props;
-- vegetation;
-- rocks;
-- ruins;
-- environmental decoration.
+- PNG;
+- RGBA;
+- exact `1024 x 1024 px` after normalization;
+- fixed `4 x 4` grid;
+- exact logical source cell size `256 x 256 px`;
+- 16 cells;
+- zero-based row/column metadata;
+- default row-major ordering.
 
-The atlas approach exists to preserve consistency in:
+The canonical atlas must not intentionally contain labels, numbers, captions, watermarks, UI, debug marks, or artwork crossing cell boundaries.
 
-- palette;
-- style;
-- perspective;
-- lighting;
-- visual density;
-- scale;
-- material language;
-- edge treatment;
-- detail level.
+Visible accidental separator/border lines are tolerated only as source defects because the approved derived-tile workflow removes one pixel from each cell edge. The canonical atlas itself remains retained and unchanged after normalization.
 
----
-
-# 3. Canonical reusable atlas
-
-Every reusable tile-based visual family must have one retained canonical master atlas.
-
-The canonical atlas requirements are:
-
-- format: PNG;
-- color mode: RGBA;
-- exact width: `1024 px`;
-- exact height: `1024 px`;
-- grid: `4 x 4`;
-- exact cell width: `256 px`;
-- exact cell height: `256 px`;
-- total cells: `16`;
-- metadata row/column indexing: zero-based;
-- default ordering: left-to-right, top-to-bottom.
-
-The atlas must not contain:
-
-- visible grid lines;
-- labels;
-- numbers;
-- captions;
-- cell borders;
-- debug marks;
-- watermarks;
-- UI;
-- artwork intentionally crossing cell boundaries.
-
-The retained canonical master filename must be:
+Canonical filename:
 
 `<family>_atlas_1024px.png`
 
-Example:
-
-`tree_atlas_1024px.png`
-
-The canonical master must remain in the repository.
-
-It is the authoritative visual source for deterministic slicing of that family.
+The canonical master remains in the repository and is the authoritative visual source for the family.
 
 ---
 
-# 4. Transparent-background rule
+# 5. Transparent-background rule
 
-When a family is intended to be composited over another world surface, the atlas background must use alpha transparency.
+When a family is intended as an overlay over another world surface, the atlas must preserve alpha transparency.
 
-Typical transparent families include:
+Typical transparent families include trees, bushes, roads/path overlays, fences, props, furniture, building-local parts, roof components, and decorative environmental objects.
 
-- trees;
-- bushes;
-- road/path overlays;
-- fences;
-- props;
-- furniture;
-- building-local parts;
-- roof components;
-- decorative environmental objects.
+Pixels outside intended artwork must remain transparent. Unused cells should be fully transparent when the family contract expects unused cells.
 
-Pixels outside intended artwork must remain transparent.
-
-Unused cells must be fully transparent across the complete `256 x 256` cell:
-
-`alpha = 0`
-
-Do not bake unrelated terrain into transparent overlay families merely to imitate the final runtime composition.
-
-The runtime composition system owns base + overlay combination.
+Do not bake unrelated terrain into transparent overlay families merely to imitate final runtime composition.
 
 ---
 
-# 5. Semantic cell planning
+# 6. Texture Artist discovery workflow
 
-Before generating a reusable atlas, define the semantic meaning of each intended occupied cell.
+When entering Texture Artist work, inspect the repository and latest application state for newly added or changed Admin-provided visual assets relevant to the issue.
 
-Use row-major ordering unless an existing compatible manifest defines another stable order.
+For each discovered asset family:
 
-Example:
+1. identify the Admin-provided source/canonical image;
+2. identify existing manifest/descriptions metadata, if any;
+3. inspect current runtime mappings and whether the latest app actually consumes the asset;
+4. validate format, dimensions, alpha/transparency, atlas organization, semantic identity, and destination path;
+5. use the approved Tile Atlas Tool where applicable;
+6. correct metadata and derived-file structure without altering the artistic content beyond permitted deterministic processing;
+7. integrate/register the asset into the latest application version where the issue includes integration;
+8. remove/supersede stale asset mappings or obsolete presentation paths where required;
+9. record exact evidence in the issue Audit;
+10. hand to Tester when integration is complete.
 
-| Row | Col | Semantic tile |
-| --- | --- | --- |
-| 0 | 0 | oak_broadleaf |
-| 0 | 1 | spruce_evergreen |
-| 0 | 2 | willow_drooping |
-| 0 | 3 | cherry_blossom |
-| 1 | 0 | apple_fruit |
-| 1 | 1 | birch_yellow |
-| 1 | 2 | maple_green |
-| 1 | 3 | pine_windswept |
-| 2 | 0 | sapling_light |
-| 2 | 1 | elder_gnarled |
-| 2 | 2 | oak_autumn |
-| 2 | 3 | blossom_white |
-| 3 | 0 | bushy_multi_stem |
-| 3 | 1 | poplar_columnar |
-| 3 | 2 | spruce_snow |
-| 3 | 3 | dead_leafless |
-
-Different families may use different semantic names.
-
-The canonical atlas geometry does not change.
+Texture Artist must not spend the cycle attempting image generation.
 
 ---
 
-# 6. Mandatory image-generation workflow
+# 7. Whole-atlas normalization rule
 
-When new artwork is required and image-generation capability is available, Texture Artist must actively use it rather than replacing required artwork with placeholders or descriptions.
+Admin-provided atlas source images are not required to arrive at exact 1024 x 1024 dimensions.
 
-The normal reusable-family workflow is:
-
-1. define the semantic cell map;
-2. generate one coherent family image;
-3. preserve transparency where required;
-4. inspect the generated source;
-5. normalize the complete accepted source to exact `1024 x 1024 RGBA` when required;
-6. retain the normalized canonical master;
-7. slice the canonical master deterministically into exact `256 x 256` PNG files;
-8. generate structural manifest metadata;
-9. generate semantic description metadata;
-10. calculate hashes when available;
-11. validate PNG files;
-12. commit the complete family to the repository;
-13. hand the work to Game Programmer when runtime integration remains;
-14. hand the final integrated result to Tester.
-
-Generation instructions should request, as applicable:
-
-- game-ready medieval-fantasy artwork;
-- consistency with existing game art;
-- one coherent 4 x 4 family;
-- one semantic variant per cell;
-- transparent background where required;
-- no labels;
-- no text;
-- no grid lines;
-- no borders;
-- no watermark;
-- no UI;
-- consistent perspective;
-- consistent scale;
-- consistent lighting;
-- consistent palette;
-- consistent material language;
-- every item fully contained in its intended cell.
-
----
-
-# 7. Generated-image normalization rule
-
-Image-generation systems are not required to return exact requested pixel dimensions on the first generation.
-
-A visually valid source image that is not already exact `1024 x 1024` must not cause the Texture Artist to abandon the task.
-
-Instead, the whole accepted source atlas must be normalized once to the canonical dimensions.
+Examples such as `1280 x 1280`, `960 x 960`, or another valid coherent atlas size must be normalized automatically by the approved Tile Atlas Tool before slicing.
 
 Required process:
 
-1. load the generated source as RGBA;
-2. resize/normalize the complete source atlas to exact `1024 x 1024`;
-3. preserve transparency;
-4. save the result as:
-   `<family>_atlas_1024px.png`;
-5. use only that retained canonical master for final slicing;
-6. record the original dimensions and normalization in the issue Audit.
+1. load the Admin-provided source as RGBA;
+2. normalize the complete source image to exact `1024 x 1024` using the selected approved normalization mode;
+3. preserve transparency where applicable;
+4. retain the normalized result as `<family>_atlas_1024px.png`;
+5. record original dimensions and normalization mode/provenance in metadata/audit;
+6. perform all derived slicing from that retained canonical master.
 
-Example:
-
-Generated source:
-
-`1254 x 1254 RGBA`
-
-Canonical retained atlas:
-
-`1024 x 1024 RGBA`
-
-Final grid:
-
-`4 x 4`
-
-Final cells:
-
-`256 x 256`
-
-Normalization happens once at the complete-atlas level.
-
-Do not resize individual final slices separately.
-
-Do not regenerate individual final slices independently after the canonical master has been accepted.
+Normalization happens once at complete-atlas level before cell extraction.
 
 ---
 
 # 8. Normalization acceptance gate
 
-Normalization is permitted only when the source already represents the intended coherent atlas.
-
-Before accepting the normalized master, inspect that:
+Before accepting the normalized canonical master, verify that:
 
 - the intended 4 x 4 organization remains valid;
-- each visual item remains inside its intended cell;
+- content remains inside its intended cells;
 - important artwork was not lost;
-- transparency was preserved;
+- transparency was preserved where required;
 - visual quality remains acceptable;
-- visual style remains coherent;
 - semantic identity remains clear.
 
-If normalization materially damages the artwork, regenerate the source atlas instead of accepting a damaged master.
+If normalization materially damages an Admin-provided image, do not redraw or regenerate it. Record the defect and required Admin replacement/correction.
 
 ---
 
-# 9. Deterministic slicing
+# 9. Admin-approved edge-safe derived-tile policy
 
-Every final reusable tile PNG must be exported from the retained canonical atlas by exact pixel crop.
+The previous pure pixel-identical crop rule is superseded by explicit Admin direction.
 
-For:
+For every occupied canonical 256 x 256 cell:
 
-`row`
+1. crop the exact canonical cell using row/column boundaries;
+2. remove exactly `1 px` from top, bottom, left, and right;
+3. remaining content is exact `254 x 254`;
+4. resize that 254 x 254 image back to exact `256 x 256` using LANCZOS;
+5. save as RGBA PNG.
 
-and:
+This policy applies whether visible border lines exist or not and avoids unreliable border detection.
 
-`col`
+The canonical 1024 x 1024 atlas is not modified by this per-cell operation.
 
-use:
-
-`left = col * 256`
-
-`top = row * 256`
-
-`right = left + 256`
-
-`bottom = top + 256`
-
-The result must be exactly:
-
-`256 x 256 px`
-
-and saved as PNG.
-
-During slicing, do not:
-
-- resize;
-- resample;
-- redraw;
-- regenerate;
-- stretch;
-- shift artwork;
-- crop inside the cell;
-- alter aspect ratio;
-- apply per-slice color changes;
-- apply per-slice effects.
-
-A final slice must be pixel-identical to the corresponding `256 x 256` region of the retained canonical atlas.
+Do not perform additional per-cell redraw, generation, color changes, artistic edits, shifts, or effects unless Admin explicitly orders them.
 
 ---
 
-# 10. Stable semantic filenames
+# 10. Mandatory Tile Atlas Tool use
 
-Each final sliced tile must use:
+For reusable 4 x 4 atlas families, use the approved repository Tile Atlas Tool as the normal deterministic processing/publishing boundary.
+
+Current tool responsibilities include:
+
+- normalize arbitrary valid source dimensions to exact 1024 x 1024 RGBA;
+- present all 16 cells in row-major order;
+- collect/validate metadata for each occupied cell;
+- apply the 1 px trim + 254-to-256 LANCZOS edge-safe derived-tile policy;
+- produce stable semantic filenames;
+- calculate hashes;
+- generate/update manifest and descriptions files;
+- publish into a checked-out project tree under `textures/tiles/<family>/`.
+
+Texture Artist uses the tool on Admin-provided images; Texture Artist does not use it to create artwork.
+
+---
+
+# 11. Mandatory per-cell metadata
+
+Every occupied cell must have at minimum:
+
+- row;
+- column;
+- stable semantic type;
+- human-readable description.
+
+Current tool schema may additionally include:
+
+- display name;
+- category;
+- runtime usage/composition role;
+- unused flag;
+- source provenance;
+- border-processing metadata;
+- SHA-256.
+
+Duplicate semantic types are invalid within one family.
+
+Unused cells may be explicitly marked unused and omitted from runtime slice emission.
+
+Visual metadata is presentation metadata only and never Simulation authority.
+
+---
+
+# 12. Stable semantic filenames
+
+Each derived tile uses:
 
 `<family>_<semantic-type>_256px.png`
 
@@ -376,882 +269,245 @@ Examples:
 
 `tree_oak_broadleaf_256px.png`
 
-`tree_spruce_evergreen_256px.png`
-
-`tree_dead_leafless_256px.png`
-
-Use stable semantic names.
-
-Do not use meaningless production names such as:
-
-- `tile01.png`
-- `output3.png`
-- `generated7.png`
-- `final_new2.png`
-
-when a semantic identity is known.
+`grass_lush_meadow_256px.png`
 
 Once integrated, semantic filenames should remain stable unless a deliberate migration changes them.
 
+Do not use meaningless production names when semantic identity is known.
+
 ---
 
-# 11. Standard repository layout
+# 13. Standard repository layout
 
-Unless a specific issue defines another valid path, reusable atlas families must use:
+Unless a specific higher-authority issue defines another valid path, reusable atlas families use:
 
 `textures/tiles/<family>/`
 
 Example:
 
-~~~text
+```text
 textures/tiles/tree/
     tree_atlas_1024px.png
-
     tree_oak_broadleaf_256px.png
     tree_spruce_evergreen_256px.png
-    tree_willow_drooping_256px.png
-    tree_cherry_blossom_256px.png
-
-    tree_apple_fruit_256px.png
-    tree_birch_yellow_256px.png
-    tree_maple_green_256px.png
-    tree_pine_windswept_256px.png
-
-    tree_sapling_light_256px.png
-    tree_elder_gnarled_256px.png
-    tree_oak_autumn_256px.png
-    tree_blossom_white_256px.png
-
-    tree_bushy_multi_stem_256px.png
-    tree_poplar_columnar_256px.png
-    tree_spruce_snow_256px.png
-    tree_dead_leafless_256px.png
-
+    ...
     tree_tiles.manifest.json
     tree_tiles.descriptions.json
-~~~
+```
 
-The canonical atlas, slices, manifest, and description metadata belong to the same family.
+Canonical atlas, derived slices, manifest, and description metadata belong to the same family.
 
 ---
 
-# 12. Mandatory structural manifest
+# 14. Structural manifest
 
 Every reusable atlas family must contain:
 
 `<family>_tiles.manifest.json`
 
-The manifest is the structural/runtime-oriented registry.
+The manifest is the runtime-oriented structural registry and must use the current Tile Atlas Tool schema version.
 
-Minimum structure:
+At minimum record:
 
-~~~json
-{
-  "version": 1,
-  "family": "tree",
-  "atlas": {
-    "filename": "tree_atlas_1024px.png",
-    "width": 1024,
-    "height": 1024,
-    "columns": 4,
-    "rows": 4,
-    "cellSize": 256
-  },
-  "tiles": [
-    {
-      "row": 0,
-      "col": 0,
-      "type": "oak_broadleaf",
-      "filename": "tree_oak_broadleaf_256px.png",
-      "sha256": "..."
-    }
-  ]
-}
-~~~
-
-The manifest must record:
-
-- version;
+- schema/version;
 - family;
-- atlas filename;
-- atlas width;
-- atlas height;
-- columns;
-- rows;
-- cell size.
-
-For every occupied runtime tile it must record:
-
-- row;
-- col;
+- canonical atlas filename;
+- original source dimensions when available;
+- normalization mode/provenance;
+- atlas width/height;
+- grid rows/columns;
+- logical source cell size;
+- derived border-processing rule;
+- row/col for occupied tiles;
 - semantic type;
 - filename;
+- emitted/unused state as applicable;
 - SHA-256 when available.
-
-Unused transparent cells do not need runtime tile entries unless explicitly required.
 
 ---
 
-# 13. Mandatory semantic-description metadata
+# 15. Semantic descriptions metadata
 
 Every reusable atlas family must also contain:
 
 `<family>_tiles.descriptions.json`
 
-This file stores human-readable semantic information.
+Each occupied tile record must include enough human-readable metadata that another worker can understand the visual meaning without reopening the atlas.
 
-Minimum structure:
-
-~~~json
-{
-  "version": 1,
-  "family": "tree",
-  "descriptionFilePurpose": "Human-readable semantic descriptions for each tree tile in the canonical 4x4 tree atlas.",
-  "tiles": [
-    {
-      "row": 0,
-      "col": 0,
-      "type": "oak_broadleaf",
-      "filename": "tree_oak_broadleaf_256px.png",
-      "description": "Large broadleaf oak-like tree with a dense rounded green canopy and thick gnarled trunk."
-    }
-  ]
-}
-~~~
-
-Every description record must include:
+At minimum:
 
 - row;
 - col;
-- type;
+- semantic type;
 - filename;
 - description.
 
-Descriptions should be concise but sufficiently clear that another worker can understand the visible meaning of the tile without reopening the atlas.
+Additional display/category/runtime-usage metadata from the current tool schema should be preserved when present.
 
 ---
 
-# 14. Metadata consistency rule
+# 16. Metadata consistency rule
 
-For every tile, the following must agree:
+For every emitted tile, the following must agree:
 
 - atlas cell;
 - row;
 - column;
 - semantic type;
-- PNG filename;
+- filename;
 - manifest entry;
-- description entry.
+- description entry;
+- runtime mapping where integrated.
 
-Example:
-
-~~~text
-Atlas cell:
-row 0, col 0
-
-Manifest:
-oak_broadleaf
-
-Description:
-oak_broadleaf
-
-File:
-tree_oak_broadleaf_256px.png
-~~~
-
-They must all refer to the same visual asset.
+Metadata inconsistencies must be corrected before Tester handoff.
 
 ---
 
-# 15. Description metadata is not Simulation authority
+# 17. Description metadata is not Simulation authority
 
-Descriptions and filenames are presentation metadata.
+Filenames/descriptions/categories/runtime-usage strings do not create authoritative gameplay facts.
 
-They must not create authoritative gameplay facts.
-
-For example:
-
-`tree_apple_fruit_256px.png`
-
-does not by itself prove that a world tile:
-
-- contains harvestable apples;
-- produces food;
-- owns resources;
-- is interactable;
-- is blocked or walkable;
-- belongs to a profession;
-- belongs to a settlement.
+They do not by themselves define walkability, harvestability, ownership, resources, profession capability, settlement membership, collision, or interaction legality.
 
 Simulation remains authoritative.
 
-Visual metadata helps presentation systems select artwork.
+---
 
-It does not create world truth.
+# 18. SHA-256 integrity records
+
+When available, calculate SHA-256 for final emitted PNGs and canonical master and record them in the manifest.
+
+Hashes support integrity checking, duplicate/change detection, provenance, and runtime asset verification.
 
 ---
 
-# 16. SHA-256 integrity records
+# 19. Binary PNG validation
 
-When the execution environment can calculate hashes, calculate SHA-256 for every final `256 x 256` PNG and record it in the manifest.
+Before handoff, verify actual binary PNG validity rather than trusting file extension alone.
 
-SHA-256 supports:
+Check as applicable:
 
-- integrity checking;
-- duplicate detection;
-- change detection;
-- provenance;
-- runtime asset verification.
-
-A regenerated or modified tile must receive the SHA-256 of the actual final PNG.
-
----
-
-# 17. Binary PNG validation
-
-Before handoff, verify the final assets are actual PNG binary files.
-
-Do not trust the `.png` filename extension alone.
-
-Verify as applicable:
-
-- valid PNG signature;
-- image decodes successfully;
-- expected image mode;
-- alpha channel where required;
-- correct dimensions;
-- intended non-empty artwork;
-- transparency where required.
-
-For reusable atlas families:
-
-Master:
-
-`1024 x 1024`
-
-Slices:
-
-`256 x 256`
-
-Grid:
-
-`4 x 4`
+- valid PNG signature/decoding;
+- expected RGBA mode;
+- canonical atlas exact 1024 x 1024;
+- derived tiles exact 256 x 256;
+- 4 x 4 source organization;
+- expected alpha/transparency;
+- intended non-empty artwork for occupied cells;
+- unused-cell handling;
+- matching metadata/hashes.
 
 ---
 
-# 18. Mandatory capability-attempt rule
+# 20. Texture Artist integration responsibility
 
-Texture Artist must not declare required visual production capability unavailable merely because one preferred shortcut or one tool action is unavailable.
+Texture Artist must apply newly added Admin-provided textures to the latest application version rather than merely leaving assets in the repository.
 
-Before recording a capability limitation for reusable atlas work, the worker must actually attempt every relevant available part of the bounded production path.
+Where integration is within scope, Texture Artist must:
 
-This includes, where available:
+- locate current runtime asset registries/mappings;
+- add/update semantic mapping for the new family;
+- map the family to the correct presentation role/order;
+- ensure non-NPC assets enter the shared static 100 x 100 tile-composition path;
+- preserve NPC dynamic presentation exception;
+- remove obsolete fallback/placeholder mappings superseded by the Admin asset when safe and within scope;
+- verify the latest app actually references the new family;
+- record changed runtime files and checks.
 
-1. image generation;
-2. local image processing;
-3. RGBA conversion;
-4. whole-atlas normalization;
-5. deterministic slicing;
-6. PNG decoding/validation;
-7. SHA-256 calculation;
-8. manifest generation;
-9. description metadata generation;
-10. binary repository upload;
-11. repository tree creation;
-12. repository commit creation;
-13. target branch/ref update;
-14. committed-file verification.
-
-A limitation may be recorded only after the required available path has actually been attempted and a real technical failure or missing capability has been observed.
-
-Do not infer capability absence from the failure or limitation of a different tool.
+If separate substantial programming work is genuinely required beyond bounded asset registration/integration, hand the same atomic issue or a dependent issue to Game Programmer according to `ISSUE_STANDARD.md`.
 
 ---
 
-# 19. GitHub binary-upload rule
+# 21. Static composition contract
 
-A UTF-8 text-file API is not a valid test of whether PNG upload capability exists.
+Except for NPC world sprites, non-NPC visual assets must follow `.github/STATIC_TILE_COMPOSITION_STANDARD.md`.
 
-If a normal text `create_file` or `update_file` action cannot accept PNG bytes, the worker must use the available binary-capable GitHub object workflow.
-
-The expected conceptual path is:
-
-~~~text
-Generated/local PNG
-        ↓
-Read actual PNG bytes
-        ↓
-Base64 encode for binary blob transport when required
-        ↓
-Create GitHub blob
-        ↓
-Create tree using blob SHA
-        ↓
-Create commit
-        ↓
-Update target branch/ref
-        ↓
-Fetch/verify committed PNG
-~~~
-
-When the available GitHub connector exposes operations equivalent to:
-
-- `create_blob`;
-- `create_tree`;
-- `create_commit`;
-- `update_ref`;
-
-the worker must attempt that path before declaring repository PNG upload unavailable.
-
-Do not treat:
-
-"UTF-8 create_file cannot write PNG"
-
-as:
-
-"GitHub cannot store PNG."
-
-Those are different claims.
+Reusable 256 x 256 source tiles are scaled/composited into exact 100 x 100 logical static presentation composites at runtime. They must not create permanent independent world-image layers unless Admin explicitly grants a named exception.
 
 ---
 
-# 20. Binary repository integrity rule
+# 22. Texture Artist audit requirements
 
-PNG assets committed through GitHub object APIs must remain actual binary PNG files.
+For reusable family integration, issue Audit must record as applicable:
 
-Do not commit:
-
-- base64 text pretending to be a `.png`;
-- JSON containing image bytes instead of the PNG;
-- Markdown-embedded image data instead of the runtime file.
-
-Base64 may be used only as the transport encoding required to create the binary blob.
-
-The repository object at the final `.png` path must decode as an actual PNG.
-
----
-
-# 21. Post-commit verification
-
-After committing PNG assets, verify the repository state when the execution surface permits.
-
-At minimum verify:
-
-- expected path exists;
-- repository object is present;
-- expected filename is correct;
-- committed file can be read/fetched;
-- PNG remains binary;
-- dimensions remain correct;
-- manifest filename matches;
-- descriptions filename matches;
-- SHA-256 remains correct when practical.
-
-Do not claim repository completion based only on local temporary files.
-
----
-
-# 22. Existing road-family reference
-
-The existing road family remains a structural reference for semantic atlas mapping.
-
-Reference:
-
-`textures/tiles/road/road_tiles.manifest.json`
-
-New families should preserve the same deterministic mapping principles while using family-specific semantic tile names.
-
-The descriptions metadata file extends the established structural model with human-readable semantic information.
-
----
-
-# 23. Runtime integration principles
-
-Visual asset existence alone does not complete an integration task.
-
-When application integration is in scope, the application must actually select and render the intended PNG assets.
-
-Runtime registry/loader references must point to:
-
-- final PNG slices; or
-- an explicitly supported canonical PNG atlas path.
-
-Artwork remains presentation data.
-
-Artwork must not become authority for:
-
-- collision;
-- walkability;
-- route semantics;
-- profession;
-- NPC identity;
-- building identity;
-- resource ownership;
-- Simulation state.
-
----
-
-# 24. Mandatory 100 x 100 static composition
-
-Except for NPC world sprites, final reusable PNG slices are source artwork.
-
-They are not persistent independent world-image objects.
-
-All applicable non-NPC world art must obey:
-
-`.github/STATIC_TILE_COMPOSITION_STANDARD.md`
-
-This includes:
-
-- terrain transitions;
-- roads;
-- paths;
-- buildings;
-- walls;
-- floors;
-- roofs;
-- trees;
-- vegetation;
-- furniture;
-- props;
-- resources;
-- ruins;
-- environmental artwork.
-
-The standard runtime process is:
-
-1. resolve authoritative logical terrain/base;
-2. select the required transparent source PNG;
-3. scale/compose it into the exact `100 x 100` logical tile composition surface;
-4. let transparent pixels reveal already-resolved lower layers;
-5. flatten the result into one exact `100 x 100 RGBA` static tile;
-6. send that final composite through the shared static/background presentation path.
-
-Example:
-
-~~~text
-grass base
-    +
-tree_oak_broadleaf_256px.png
-    ↓
-100 x 100 grass+tree composite
-    ↓
-shared static world presentation
-~~~
-
-The tree source PNG must not remain as an independent persistent tree layer.
-
----
-
-# 25. Multi-tile object rule
-
-Large buildings and other multi-tile objects may retain multi-tile authoritative Simulation footprints.
-
-Their presentation must still be tile-local.
-
-Texture Artist should provide suitable semantic parts such as:
-
-- corners;
-- edges;
-- wall sections;
-- roof parts;
-- entrances;
-- doors;
-- center parts;
-- transition pieces.
-
-Each covered logical tile selects the appropriate source PNG and produces its own final `100 x 100` runtime composite.
-
-Do not replace this model with one permanent giant building overlay unless explicitly authorized.
-
----
-
-# 26. NPC exception
-
-NPC world sprites are the normal dynamic exception to the static composition rule.
-
-NPC PNG sprites may remain independent dynamic world-space presentation objects because NPC movement and interpolation require frequent visual updates.
-
-This exception does not automatically apply to:
-
-- trees;
-- roads;
-- buildings;
-- props;
-- furniture;
-- vegetation;
-- static animals;
-- environmental decoration.
-
-Any additional named exception requires explicit project authority.
-
----
-
-# 27. Texture Artist audit requirements
-
-For every reusable atlas-family issue, the Texture Artist Audit must record actual evidence.
-
-Use the normal project Audit structure:
-
-~~~text
-Purpose:
-Change:
-Refs:
-Checks:
-Result:
-Risks:
-Next:
-~~~
-
-For reusable visual-family work, include as applicable:
-
-- generated source details;
-- original generated dimensions;
-- whether normalization was required;
+- Admin-provided source asset path;
+- source dimensions;
 - canonical atlas path;
-- canonical atlas dimensions;
+- normalization mode and whether normalization was required;
 - semantic cell map;
-- every final slice path;
+- every emitted slice path;
 - manifest path;
 - descriptions path;
-- SHA-256 values;
-- PNG validation results;
-- transparency checks;
-- binary repository commit result;
-- committed repository paths;
-- integration requirement;
-- next role handoff.
+- SHA-256 values when available;
+- runtime files/mappings changed;
+- intended 100 x 100 composition role/order;
+- whether legacy mappings were removed/superseded;
+- checks actually performed;
+- next role.
 
-Never invent evidence.
-
----
-
-# 28. Texture Artist handoff gate
-
-Texture Artist may hand a reusable visual-family issue forward only when all applicable requirements are satisfied.
-
-Required checks:
-
-1. No required visual deliverable is SVG/vector-only.
-2. Canonical master exists as exact `1024 x 1024` PNG.
-3. Master is RGBA where transparency is required.
-4. Master uses exact `4 x 4` geometry.
-5. Every final cell is exact `256 x 256`.
-6. Required semantic variants exist.
-7. Unused cells are transparent where applicable.
-8. Every slice comes from exact canonical atlas crop.
-9. No final slice was independently regenerated after canonicalization.
-10. Stable semantic filenames are used.
-11. Structural manifest exists.
-12. Semantic descriptions file exists.
-13. Manifest mappings are truthful.
-14. Description mappings are truthful.
-15. SHA-256 is recorded when available.
-16. PNG files were actually validated.
-17. Visual style was inspected.
-18. Family consistency was inspected.
-19. Normalization was recorded if used.
-20. Binary repository commit was completed when repository persistence is in scope.
-21. Repository paths were verified when possible.
-22. Runtime composition requirements are documented.
-23. Issue Audit contains actual evidence.
-
-File existence alone is not sufficient for visual PASS.
+Never state that Texture Artist generated the artwork.
 
 ---
 
-# 29. Texture Artist to Game Programmer handoff
+# 23. Handoff rule
 
-When artwork is complete but application integration remains, the normal handoff is:
+Texture Artist may hand an Admin-provided reusable family forward only when applicable outputs/checks exist:
 
-`Texture Artist -> Game Programmer`
+- canonical 1024 x 1024 RGBA atlas;
+- 256 x 256 edge-safe derived PNG tiles;
+- truthful current-schema manifest;
+- truthful descriptions metadata;
+- runtime mapping/integration completed when in scope;
+- issue Audit with actual evidence.
 
-Set:
+If only independent verification remains, hand to:
 
-~~~text
-Role: Game Programmer
-Claim: NONE
-Status: READY
-Next: Game Programmer
-~~~
+`Role: Tester`, `Claim: NONE`, `Status: VERIFY`, `Next: Tester`.
 
-The Texture Artist Audit must provide:
-
-- family name;
-- atlas path;
-- manifest path;
-- descriptions path;
-- semantic slice paths;
-- intended runtime selection behavior;
-- intended static composition behavior.
-
-Texture Artist must not close the issue.
+If separate coding remains, route to Game Programmer with a concrete bounded next step; Game Programmer later hands to Tester.
 
 ---
 
-# 30. Texture Artist to Tester handoff
+# 24. Missing-artwork rule
 
-If runtime integration is not required or was already completed and only independent verification remains, hand off as:
+A Texture Artist issue requiring artwork that Admin has not yet supplied must not be treated as permission to create that artwork.
 
-~~~text
-Role: Tester
-Claim: NONE
-Status: VERIFY
-Next: Tester
-~~~
+The worker must:
 
-Texture Artist must not set `DONE`.
+1. verify the asset is genuinely absent;
+2. record the exact missing Admin input in Audit/Next;
+3. avoid placeholders or substitutes;
+4. complete any independent integration/cleanup work still possible within scope;
+5. continue normal worker routing after the current valid claim is resolved according to `ISSUE_STANDARD.md`.
 
-Only Tester may final-close after independent PASS.
-
----
-
-# 31. Game Programmer integration gate
-
-When Game Programmer receives a visual-family integration task, the implementation should use the provided semantic metadata instead of arbitrary hard-coded atlas positions when manifest data is available.
-
-Game Programmer should, as applicable:
-
-1. read the family manifest;
-2. resolve the semantic tile;
-3. load the matching PNG;
-4. preserve Simulation authority;
-5. route non-NPC visuals through exact `100 x 100` static composition;
-6. avoid duplicate persistent visual layers;
-7. preserve deterministic asset selection;
-8. run actual checks;
-9. record Audit evidence;
-10. hand the result to Tester.
-
-The descriptions file may support debugging and documentation.
-
-It must not become authoritative Simulation logic.
+Do not use `BLOCKED` status.
 
 ---
 
-# 32. Tester verification gate
+# 25. Tester verification gate
 
-Tester must independently verify the actual produced visual family and, where applicable, runtime integration.
+Tester independently verifies:
 
-Verify as applicable:
+- source artwork is Admin-provided/authorized;
+- no worker-generated replacement image was introduced;
+- canonical atlas geometry and RGBA format;
+- source-size normalization where applicable;
+- 1 px edge trim + 254-to-256 LANCZOS policy on derived tiles;
+- final PNG dimensions and hashes;
+- semantic metadata consistency;
+- runtime use of the intended asset family;
+- static 100 x 100 composition compliance for non-NPC imagery;
+- absence of improper legacy/fallback presentation when superseded;
+- no Simulation authority moved into visual metadata.
 
-- valid PNG signature;
-- actual image decodability;
-- exact `1024 x 1024` master;
-- expected RGBA/alpha;
-- exact `4 x 4` layout;
-- exact `256 x 256` cells;
-- transparent unused cells;
-- exact slice dimensions;
-- slice-to-atlas pixel identity;
-- correct row/column mapping;
-- stable semantic filenames;
-- manifest correctness;
-- descriptions correctness;
-- SHA-256 correctness;
-- metadata/file consistency;
-- absence of SVG production assets;
-- visual style consistency;
-- scale consistency;
-- perspective consistency;
-- seams/edge behavior;
-- intended runtime rendering;
-- correct semantic asset selection;
-- correct `100 x 100` non-NPC static composition;
-- absence of obsolete persistent static presentation layers.
-
-If the source required normalization, Tester must verify that final slices derive from the retained normalized canonical master rather than from independently generated tile files.
+Tester must FAIL the issue if a required production image was created by a worker contrary to the Admin-only image creation rule.
 
 ---
 
-# 33. Tester PASS / FAIL routing
+# 26. Precedence and maintenance
 
-## PASS
+Explicit Admin direction wins over this file. README product truth wins over subordinate operational material when Admin has not explicitly overridden it.
 
-Tester must:
+Do not modify README to make it conform to this standard.
 
-- record actual verification evidence;
-- clear Claim;
-- set `Status: DONE`;
-- close the issue.
-
-## FAIL
-
-Tester must:
-
-- record concrete failure evidence;
-- not close the issue;
-- clear Claim;
-- change Role to the responsible correction role;
-- set `Status: READY`;
-- set the exact next step.
-
-Examples:
-
-Visual production problem:
-
-`Tester -> Texture Artist`
-
-Runtime integration problem:
-
-`Tester -> Game Programmer`
-
-After correction, the same issue returns as:
-
-~~~text
-Role: Tester
-Claim: NONE
-Status: VERIFY
-Next: Tester
-~~~
-
----
-
-# 34. Successful tree-atlas reference workflow
-
-The proven tree-atlas workflow is the reference production pattern for new reusable visual families.
-
-The process is:
-
-~~~text
-Define 16 semantic variants
-        ↓
-Generate one coherent 4 x 4 transparent family image
-        ↓
-Inspect source
-        ↓
-Normalize whole source to exact 1024 x 1024 RGBA if needed
-        ↓
-Retain canonical master
-        ↓
-Exact deterministic 256 x 256 slicing
-        ↓
-Stable semantic filenames
-        ↓
-SHA-256
-        ↓
-Structural manifest
-        ↓
-Human-readable descriptions metadata
-        ↓
-Validate PNG binary output
-        ↓
-Commit binary PNGs to GitHub
-        ↓
-Verify committed files
-        ↓
-Game Programmer runtime integration when required
-        ↓
-100 x 100 static composition for non-NPC world art
-        ↓
-Independent Tester verification
-~~~
-
-A compliant tree family may contain:
-
-~~~text
-textures/tiles/tree/
-    tree_atlas_1024px.png
-
-    tree_oak_broadleaf_256px.png
-    tree_spruce_evergreen_256px.png
-    tree_willow_drooping_256px.png
-    tree_cherry_blossom_256px.png
-
-    tree_apple_fruit_256px.png
-    tree_birch_yellow_256px.png
-    tree_maple_green_256px.png
-    tree_pine_windswept_256px.png
-
-    tree_sapling_light_256px.png
-    tree_elder_gnarled_256px.png
-    tree_oak_autumn_256px.png
-    tree_blossom_white_256px.png
-
-    tree_bushy_multi_stem_256px.png
-    tree_poplar_columnar_256px.png
-    tree_spruce_snow_256px.png
-    tree_dead_leafless_256px.png
-
-    tree_tiles.manifest.json
-    tree_tiles.descriptions.json
-~~~
-
----
-
-# 35. Invalid completion cases
-
-The following must not be treated as completed reusable Texture Artist work:
-
-- only a prompt exists;
-- only an image-generation preview exists;
-- only an SVG exists;
-- only a source image exists without canonical master;
-- source dimensions are non-canonical and were not normalized;
-- no deterministic slices exist;
-- slices were independently regenerated;
-- slice dimensions are incorrect;
-- manifest is missing;
-- descriptions metadata is missing;
-- semantic filenames conflict with metadata;
-- repository `.png` files actually contain text/base64 instead of PNG binary;
-- transparency requirements are violated;
-- runtime integration still uses obsolete vector assets;
-- non-NPC artwork remains as prohibited persistent world layers;
-- binary repository upload was declared impossible without attempting the available binary GitHub workflow;
-- required independent Tester verification has not occurred.
-
----
-
-# 36. Capability limitation handling
-
-A genuine capability limitation must be recorded truthfully.
-
-However, workers must distinguish between:
-
-- a preferred shortcut being unavailable;
-- and the required capability actually being unavailable.
-
-Use another available compliant method when it produces the required result.
-
-Examples:
-
-Generated source is not exact `1024 x 1024`:
-
-`normalize the whole atlas`
-
-Text-file API cannot write PNG:
-
-`use GitHub binary blob/tree/commit/ref workflow`
-
-Individual generated tiles are inconsistent:
-
-`generate one coherent atlas and slice it`
-
-One-step image export is unavailable:
-
-`use local deterministic processing`
-
-Do not substitute SVG.
-
-Do not falsely claim completion.
-
-Do not falsely claim capability absence.
-
-Do not return an issue to READY merely because the first attempted shortcut was unsuitable.
-
----
-
-# 37. Final production invariant
-
-For reusable Texture Artist tile families, the canonical production invariant is:
-
-**One coherent visual family -> one retained exact 1024 x 1024 RGBA master atlas -> fixed 4 x 4 grid -> exact deterministic 256 x 256 PNG slices -> stable semantic filenames -> structural manifest -> human-readable descriptions metadata -> binary repository commit -> runtime integration -> independent Tester verification.**
-
-For non-NPC world presentation:
-
-**Semantic PNG source -> authoritative base resolution -> exact 100 x 100 static composition -> shared world presentation.**
-
-Artwork is presentation.
-
-Simulation remains authority.
+Do not restore Texture Artist image-generation responsibility unless Admin explicitly changes this rule.
