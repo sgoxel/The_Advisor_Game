@@ -2,83 +2,106 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 import tile_atlas_tool as tool
 
 
-def metadata():
-    cells = tool.default_cells()
-    for i, cell in enumerate(cells):
-        cell["semantic_type"] = f"cell_{i:02d}"
-        cell["description"] = f"Cell {i}"
-        cell["display_name"] = f"Cell {i}"
-        cell["category"] = "terrain"
-        cell["runtime_usage"] = "terrain/base"
-    return cells
-
-
 class TileAtlasToolTests(unittest.TestCase):
-    def test_square_sources_normalize_to_1024(self):
-        for size in (960, 1280):
-            with self.subTest(size=size), tempfile.TemporaryDirectory() as td:
-                root = Path(td)
-                source = root / "source.png"
-                Image.new("RGBA", (size, size), (20, 80, 20, 255)).save(source)
-                result = tool.process(
-                    source, root / "out", "grass", "fit", cells=metadata(), require_metadata=True
-                )
-                atlas = result["manifest"]["atlas"]
-                self.assertEqual((atlas["width"], atlas["height"]), (1024, 1024))
-                self.assertEqual((atlas["sourceWidth"], atlas["sourceHeight"]), (size, size))
-                with Image.open(root / "out" / "grass_atlas_1024px.png") as image:
-                    self.assertEqual(image.size, (1024, 1024))
-                    self.assertEqual(image.mode, "RGBA")
-
-    def test_one_pixel_cell_border_is_removed_from_derived_tile(self):
+    def test_square_source_normalizes_to_1000_and_emits_100_tiles(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             source = root / "source.png"
-            image = Image.new("RGBA", (1024, 1024), (0, 0, 0, 255))
-            draw = ImageDraw.Draw(image)
-            for index in range(16):
-                row, col = divmod(index, 4)
-                left, top = col * 256, row * 256
-                draw.rectangle((left + 1, top + 1, left + 254, top + 254), fill=(20, 200, 40, 255))
+            Image.new("RGB", (1254, 1254), (20, 80, 20)).save(source)
+            result = tool.process(source, root / "out", "grass", "fit")
+            self.assertEqual(result["emitted_count"], 100)
+            atlas = result["manifest"]["atlas"]
+            self.assertEqual((atlas["width"], atlas["height"]), (1000, 1000))
+            self.assertEqual((atlas["columns"], atlas["rows"]), (10, 10))
+            with Image.open(root / "out" / "grass_atlas_1000px.png") as image:
+                self.assertEqual(image.size, (1000, 1000))
+                self.assertEqual(image.mode, "RGBA")
+            tiles = sorted((root / "out").glob("grass_*_100px.png"))
+            self.assertEqual(len(tiles), 100)
+            with Image.open(tiles[0]) as tile:
+                self.assertEqual(tile.size, (100, 100))
+                self.assertEqual(tile.mode, "RGBA")
+
+    def test_slice_is_exact_without_border_trim(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source = root / "source.png"
+            image = Image.new("RGBA", (1000, 1000), (0, 0, 0, 255))
+            for row in range(10):
+                for col in range(10):
+                    color = (row * 20, col * 20, 30, 255)
+                    for y in range(row * 100, (row + 1) * 100):
+                        for x in range(col * 100, (col + 1) * 100):
+                            image.putpixel((x, y), color)
             image.save(source)
+            tool.process(source, root / "out", "grass")
+            with Image.open(root / "out" / "grass_r03_c07_100px.png") as tile:
+                self.assertEqual(tile.getpixel((0, 0)), (60, 140, 30, 255))
+                self.assertEqual(tile.getpixel((99, 99)), (60, 140, 30, 255))
 
-            tool.process(source, root / "out", "grass", cells=metadata(), require_metadata=True)
-            with Image.open(root / "out" / "grass_cell_00_256px.png") as tile:
-                self.assertEqual(tile.getpixel((0, 0))[:3], (20, 200, 40))
-                self.assertEqual(tile.size, (256, 256))
-
-    def test_duplicate_semantic_type_fails(self):
-        cells = metadata()
-        cells[1]["semantic_type"] = cells[0]["semantic_type"]
-        errors = tool.validate_metadata("grass", cells)
-        self.assertTrue(any("Duplicate semantic type" in error for error in errors))
-
-    def test_publish_to_project_uses_fixed_family_path_and_schema(self):
+    def test_manifest_schema_has_100_runtime_tiles(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root / ".github").mkdir()
-            (root / "README.md").write_text("# Project\n", encoding="utf-8")
             source = root / "source.png"
-            Image.new("RGBA", (960, 960), (40, 100, 40, 255)).save(source)
+            Image.new("RGBA", (1000, 1000), (1, 2, 3, 255)).save(source)
+            tool.process(source, root / "out", "grass")
+            manifest = json.loads((root / "out" / "grass_tiles.manifest.json").read_text())
+            self.assertEqual(manifest["version"], 3)
+            self.assertEqual(manifest["atlas"]["cellSize"], 100)
+            self.assertEqual(len(manifest["tiles"]), 100)
+            self.assertEqual(manifest["derivedTilePolicy"]["borderTrimPx"], 0)
 
-            result = tool.publish_to_project(source, root, "grass", "fit", metadata())
-            target = root / "textures" / "tiles" / "grass"
-            self.assertEqual(Path(result["output_dir"]), target)
-            manifest = json.loads((target / "grass_tiles.manifest.json").read_text(encoding="utf-8"))
-            descriptions = json.loads(
-                (target / "grass_tiles.descriptions.json").read_text(encoding="utf-8")
-            )
-            self.assertEqual(manifest["version"], tool.SCHEMA_VERSION)
-            self.assertEqual(descriptions["version"], tool.SCHEMA_VERSION)
-            self.assertEqual(len(manifest["tiles"]), 16)
-            self.assertEqual(manifest["tiles"][0]["type"], "cell_00")
-            self.assertEqual(descriptions["tiles"][0]["description"], "Cell 0")
+    def test_github_publisher_creates_one_blob_per_file_then_tree_commit_ref(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            png1 = root / "a.png"
+            png2 = root / "b.png"
+            meta = root / "m.json"
+            Image.new("RGBA", (100, 100), (1, 2, 3, 255)).save(png1)
+            Image.new("RGBA", (100, 100), (4, 5, 6, 255)).save(png2)
+            meta.write_text('{"x":1}\n', encoding="utf-8")
+            calls = []
+
+            def fake(api, token, method, path, payload=None):
+                calls.append((method, path, payload))
+                if method == "GET" and "/git/ref/heads/" in path:
+                    return {"object": {"sha": "parent"}}
+                if method == "GET" and "/git/commits/" in path:
+                    return {"tree": {"sha": "base-tree"}}
+                if method == "POST" and path.endswith("/git/blobs"):
+                    return {"sha": f"blob-{sum(1 for c in calls if c[1].endswith('/git/blobs'))}"}
+                if method == "POST" and path.endswith("/git/trees"):
+                    return {"sha": "tree-new"}
+                if method == "POST" and path.endswith("/git/commits"):
+                    return {"sha": "commit-new"}
+                if method == "PATCH" and "/git/refs/heads/" in path:
+                    return {"object": {"sha": "commit-new"}}
+                raise AssertionError((method, path))
+
+            with patch.object(tool, "_github_request", side_effect=fake):
+                result = tool.publish_files_to_github(
+                    [png1, png2, meta],
+                    "owner/repo",
+                    "main",
+                    "textures/tiles/grass",
+                    "token",
+                    "publish",
+                )
+            self.assertEqual(result["commit"], "commit-new")
+            blob_calls = [c for c in calls if c[1].endswith("/git/blobs")]
+            self.assertEqual(len(blob_calls), 3)
+            self.assertEqual(blob_calls[0][2]["encoding"], "base64")
+            self.assertEqual(blob_calls[1][2]["encoding"], "base64")
+            self.assertEqual(blob_calls[2][2]["encoding"], "utf-8")
+            tree_call = next(c for c in calls if c[1].endswith("/git/trees"))
+            self.assertEqual(len(tree_call[2]["tree"]), 3)
 
 
 if __name__ == "__main__":
