@@ -2,7 +2,7 @@
 
 Small deterministic utility for Texture Artist atlas post-processing.
 
-It does **not** create artwork. It converts a generated source image into the repository's canonical atlas geometry and slices that canonical master.
+It does **not** create artwork. It converts a generated source image into the repository's canonical atlas geometry and produces border-safe derived tiles.
 
 ## Install
 
@@ -30,7 +30,21 @@ Normalization modes:
 - `crop`: preserves aspect ratio, fills 1024x1024, and center-crops overflow.
 - `stretch`: directly resizes to 1024x1024; use only when distortion is acceptable.
 
-The output canonical master is always exact 1024x1024 RGBA PNG. Slices are exact 256x256 RGBA PNG crops from the canonical master, row-major, with no per-tile resizing or regeneration.
+The retained canonical master is always exact 1024x1024 RGBA PNG.
+
+## Border-safe derived tile policy
+
+Every canonical 256x256 cell is processed identically, whether a visible separator/grid line exists or not:
+
+1. Crop the exact 256x256 cell from the canonical atlas.
+2. Remove exactly 1 pixel from the top, bottom, left, and right edges.
+3. The remaining image is exactly 254x254.
+4. Resize that 254x254 image back to exactly 256x256 using LANCZOS resampling.
+5. Save the result as the derived 256x256 RGBA PNG tile.
+
+This deterministic policy prevents an accidental one-pixel atlas separator at a cell boundary from surviving into the derived tile without requiring unreliable border detection. The retained canonical atlas itself is not modified by this operation.
+
+The manifest records this border-processing policy for auditability.
 
 ## Semantic names and descriptions
 
@@ -62,7 +76,7 @@ For family `tree`, the tool creates:
 - `tree_tiles.manifest.json`
 - `tree_tiles.descriptions.json`
 
-The manifest records atlas geometry, row/column coordinates, filenames, transparency state and SHA-256 hashes.
+The manifest records atlas geometry, border-processing policy, row/column coordinates, filenames, transparency state and SHA-256 hashes.
 
 ## Project use
 
