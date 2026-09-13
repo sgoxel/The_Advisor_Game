@@ -1,72 +1,40 @@
-# Tile Atlas Tool GitHub Publish Method
+# TILE_ATLAS_GITHUB_PUBLISH
 
-## Admin authority
+AUTHORITY: Admin > README > standards > issues > code/tests.
 
-This document is created by explicit Admin authority for The Advisor Game.
+INPUT:
+- Admin-provided atlas only.
+- Production processing MUST use `tools/tile_atlas_tool.py`.
+- Manual reimplementation of Tile Atlas Tool logic is NOT equivalent.
 
-## Required processing method
+PROCESS:
+1. Run `tools/tile_atlas_tool.py`.
+2. Keep exact tool outputs: canonical atlas, semantic PNG tiles, manifest, descriptions.
+3. Do not manually re-slice or replace tool outputs.
 
-For reusable 4x4 atlas families, use the actual repository tool:
+GITHUB_BINARY_UPLOAD:
+1. Upload EACH PNG FILE SEPARATELY with GitHub binary blob creation.
+2. Store returned blob SHA for each file.
+3. Do NOT combine the whole asset family into one blob payload.
+4. Family total size is NOT a reason to reject upload; evaluate each file independently.
+5. After all files have blob SHAs, create one repository tree mapping each path to its blob SHA.
+6. Create one commit from that tree.
+7. Update the target branch ref to the commit.
+8. Text files may use normal UTF-8 file operations.
+9. Never store base64 text as a `.png` file.
 
-`tools/tile_atlas_tool.py`
+TARGET:
+`textures/tiles/<family>/`
 
-Do not replace this production step with an ad-hoc script that merely copies the same slicing or resizing logic.
+VERIFY:
+- Every expected PNG path exists.
+- Each PNG is valid binary PNG.
+- Canonical atlas = 1024x1024 RGBA.
+- Derived tile = 256x256 RGBA.
+- Manifest hashes match when present.
+- Semantic filenames match metadata.
+- Runtime mapping points to committed assets when integration is in scope.
+- No temporary transport files remain.
 
-The required workflow is:
-
-1. Start with the Admin-provided atlas image.
-2. Prepare the fixed metadata for the 16 cells.
-3. Execute `tools/tile_atlas_tool.py` by CLI or GUI.
-4. Use the canonical atlas, semantic PNG tiles, manifest, and descriptions produced by that tool as the authoritative derived asset set.
-5. Do not manually re-slice or replace those generated PNG files after the tool run.
-
-The current tool remains responsible for whole-atlas normalization, 4x4 cell handling, the Admin-approved 1px edge trim and LANCZOS resize, semantic filenames, metadata, and hashes.
-
-## Required GitHub PNG publication method
-
-PNG files are binary assets. When publishing through the connected GitHub API, use the Git data binary path:
-
-`binary blob -> repository tree -> commit -> branch ref update`
-
-In the available GitHub toolset this corresponds to the blob, tree, commit, and ref operations.
-
-The UTF-8 contents operations used for ordinary text files are not the PNG binary publication path. A text-only contents operation must not be used as evidence that GitHub cannot accept PNG files when the binary Git-data path is available.
-
-The repository tree entries for generated PNG files must point to the binary blobs created from the exact Tile Atlas Tool output bytes. Normal repository file mode is used for the final asset files.
-
-Text metadata such as JSON or Markdown may use normal text-file operations or may be included in the same Git-data commit.
-
-## Publication verification
-
-After publication, verify:
-
-- canonical atlas path exists in GitHub;
-- every intended semantic PNG tile exists;
-- PNG dimensions match the Tile Atlas Tool manifest;
-- manifest hashes match the committed files when hashes are available;
-- descriptions and semantic filenames remain consistent;
-- no temporary transport files remain in the production asset tree;
-- runtime mapping points at the committed family when integration belongs to the issue.
-
-## Texture Artist audit
-
-Record:
-
-- Admin-provided source reference;
-- actual Tile Atlas Tool command or GUI action;
-- source dimensions and normalization mode;
-- emitted tile count;
-- output paths;
-- Git commit SHA;
-- target branch;
-- verification checks;
-- runtime mapping changes;
-- next role.
-
-Do not describe manually reproduced slicing logic as an actual Tile Atlas Tool execution.
-
-## Relationship to project standards
-
-This method supplements `.github/ISSUE_STANDARD.md`, `.github/TEXTURE_ATLAS_STANDARD.md`, `.github/STATIC_TILE_COMPOSITION_STANDARD.md`, and `tools/TILE_ATLAS_TOOL.md`.
-
-Explicit Admin direction remains higher authority. README remains unchanged unless Admin separately authorizes a README edit.
+AUDIT:
+Record source, Tile Tool command/action, output paths, blob/commit evidence, runtime mapping changes, checks, result, next role.
