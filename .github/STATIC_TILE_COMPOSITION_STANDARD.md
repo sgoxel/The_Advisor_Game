@@ -59,6 +59,22 @@ The retained canonical atlas itself is not modified by the per-tile edge-safe op
 
 The 256 x 256 PNG is a reusable source asset. It is **not** a separate persistent runtime world-image object.
 
+## Tile Atlas Tool and GitHub publication requirement
+
+When a non-NPC static family originates from an Admin-provided reusable 4 x 4 atlas, the 256 x 256 source PNGs consumed by this composition standard must come from an actual execution of `tools/tile_atlas_tool.py` when that repository tool is available.
+
+A manually reproduced slicing/resizing script is not equivalent production evidence merely because its output appears similar.
+
+When the Tile Atlas Tool outputs are published through the connected GitHub API, PNG files must use GitHub's binary Git-data path:
+
+**binary blob -> repository tree -> commit -> branch ref update**
+
+Ordinary UTF-8 text-file operations are not the PNG binary publication path. If the connected GitHub surface exposes binary blob creation plus tree, commit and branch-ref operations, those operations must be used for the exact Tile Atlas Tool output PNGs.
+
+Runtime composition must reference the committed semantic PNG family and metadata. Temporary transport/staging files, textual substitutes, manually re-sliced replacements, or placeholder imagery are not valid runtime source assets.
+
+Operational summary: `tools/TILE_ATLAS_GITHUB_PUBLISH.md`.
+
 ## Layer prohibition
 
 Except for NPC presentation, runtime code must not retain separate world-image layers for static/non-NPC artwork.
@@ -159,12 +175,14 @@ Texture Artist does not author imagery. For Admin-provided visual assets, Textur
 Texture Artist handoff must record:
 
 - Admin-provided atlas/master or sprite path;
+- actual Tile Atlas Tool invocation for reusable atlas families;
 - semantic cell mapping;
 - derived slice paths where applicable;
 - manifest/descriptions paths where applicable;
 - intended 100 x 100 runtime composition role/order;
 - required footprint mapping for multi-tile assets;
 - runtime files/mappings changed;
+- Git commit SHA when assets were published through GitHub;
 - checks actually performed;
 - next role.
 
@@ -186,6 +204,8 @@ The integration must:
 Tester must independently verify:
 
 - only Admin-provided visual source assets were used;
+- reusable atlas-derived PNGs came from actual `tools/tile_atlas_tool.py` processing;
+- committed PNGs and metadata correspond to the intended tool outputs;
 - final logical composition unit is exactly 100 x 100 RGBA;
 - terrain appears below transparent overlays;
 - roads/buildings/trees/objects are not duplicated in separate world-image layers;
