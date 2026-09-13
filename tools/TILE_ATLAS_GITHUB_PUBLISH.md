@@ -1,40 +1,29 @@
 # TILE_ATLAS_GITHUB_PUBLISH
 
-AUTHORITY: Admin > README > standards > issues > code/tests.
-
 INPUT:
-- Admin-provided atlas only.
-- Production processing MUST use `tools/tile_atlas_tool.py`.
-- Manual reimplementation of Tile Atlas Tool logic is NOT equivalent.
+- Exact files emitted by `tools/tile_atlas_tool.py`.
+- GitHub token from environment only.
 
-PROCESS:
-1. Run `tools/tile_atlas_tool.py`.
-2. Keep exact tool outputs: canonical atlas, semantic PNG tiles, manifest, descriptions.
-3. Do not manually re-slice or replace tool outputs.
+ALGORITHM:
+1. Read target branch ref.
+2. Read parent commit and base tree.
+3. For EACH PNG independently: read bytes -> base64 -> POST Git blob -> store blob SHA.
+4. For EACH JSON independently: UTF-8 -> POST Git blob -> store blob SHA.
+5. Build tree entries `textures/tiles/<family>/<filename>` from stored blob SHAs.
+6. POST one tree using current base tree.
+7. POST one commit using current branch commit as parent.
+8. PATCH target branch ref to new commit.
 
-GITHUB_BINARY_UPLOAD:
-1. Upload EACH PNG FILE SEPARATELY with GitHub binary blob creation.
-2. Store returned blob SHA for each file.
-3. Do NOT combine the whole asset family into one blob payload.
-4. Family total size is NOT a reason to reject upload; evaluate each file independently.
-5. After all files have blob SHAs, create one repository tree mapping each path to its blob SHA.
-6. Create one commit from that tree.
-7. Update the target branch ref to the commit.
-8. Text files may use normal UTF-8 file operations.
-9. Never store base64 text as a `.png` file.
-
-TARGET:
-`textures/tiles/<family>/`
+RULES:
+- Never combine multiple PNG files into one blob payload.
+- Family aggregate size is irrelevant to per-file blob upload.
+- Never save base64 text as `.png`.
+- Never alter Tile Atlas Tool PNG bytes after tool output.
+- Failed upload MUST NOT advance branch ref.
 
 VERIFY:
-- Every expected PNG path exists.
-- Each PNG is valid binary PNG.
-- Canonical atlas = 1024x1024 RGBA.
-- Derived tile = 256x256 RGBA.
-- Manifest hashes match when present.
-- Semantic filenames match metadata.
-- Runtime mapping points to committed assets when integration is in scope.
-- No temporary transport files remain.
-
-AUDIT:
-Record source, Tile Tool command/action, output paths, blob/commit evidence, runtime mapping changes, checks, result, next role.
+- Every expected path exists after commit.
+- Every PNG remains binary PNG.
+- Tile dimensions = `100x100`.
+- Master dimensions = `1000x1000`.
+- Manifest SHA-256 matches source bytes when checked locally.
