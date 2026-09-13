@@ -1,0 +1,91 @@
+name: Issue 495 grass atlas publish
+
+on:
+  push:
+    paths:
+      - '.github/admin_inputs/issue_495/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Reconstruct Admin source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          root = Path('.github/admin_inputs/issue_495')
+          payload = ''.join((root / f'source.b64.part{i:02d}').read_text().strip() for i in range(4))
+          (root / 'grass_admin_source.webp').write_bytes(base64.b64decode(payload))
+          PY
+      - name: Install atlas-tool dependency
+        run: python -m pip install -r tools/tile_atlas_tool_requirements.txt
+      - name: Publish canonical grass family
+        run: |
+          python tools/tile_atlas_tool.py .github/admin_inputs/issue_495/grass_admin_source.webp --project-root . --family grass --mode fit --metadata .github/admin_inputs/issue_495/grass_metadata.json
+      - name: Build runtime diversity sheet and update mapping
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from PIL import Image
+
+          family = Path('textures/tiles/grass')
+          manifest = json.loads((family / 'grass_tiles.manifest.json').read_text())
+          out = Image.new('RGBA', (1024, 1024), (0, 0, 0, 0))
+          tiles = manifest['tiles']
+          assert len(tiles) == 16, f'Expected 16 grass tiles, got {len(tiles)}'
+          for tile in tiles:
+              img = Image.open(family / tile['filename']).convert('RGBA')
+              assert img.size == (256, 256)
+              out.alpha_composite(img, (tile['col'] * 256, tile['row'] * 256))
+          out.save(family / 'grass_runtime_diversity_1024px.png', 'PNG', optimize=False)
+
+          cfg = Path('js/config.js')
+          text = cfg.read_text()
+          old = 'grass: "grass_tile_texture.png",//bright green'
+          new = 'grass: "tiles/grass/grass_runtime_diversity_1024px.png",//Admin atlas: 16 grass variants'
+          if old not in text and new not in text:
+              raise SystemExit('Expected grass texture mapping not found in js/config.js')
+          if old in text:
+              cfg.write_text(text.replace(old, new, 1))
+          PY
+      - name: Validate generated outputs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from PIL import Image
+          root = Path('textures/tiles/grass')
+          atlas = Image.open(root / 'grass_atlas_1024px.png').convert('RGBA')
+          assert atlas.size == (1024, 1024)
+          manifest = json.loads((root / 'grass_tiles.manifest.json').read_text())
+          assert len(manifest['tiles']) == 16
+          assert len({t['semantic_type'] for t in manifest['tiles']}) == 16
+          for t in manifest['tiles']:
+              img = Image.open(root / t['filename']).convert('RGBA')
+              assert img.size == (256, 256)
+          runtime = Image.open(root / 'grass_runtime_diversity_1024px.png').convert('RGBA')
+          assert runtime.size == (1024, 1024)
+          assert Path('textures/tiles/grass/grass_tiles.descriptions.json').is_file()
+          PY
+      - name: Remove temporary staging and one-shot workflow
+        run: |
+          rm -rf .github/admin_inputs/issue_495
+          rm -f .github/workflows/issue-495-grass-publish.yml
+      - name: Commit published family
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'assets: publish Admin grass atlas for issue 495'
+          git push
