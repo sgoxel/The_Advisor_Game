@@ -151,7 +151,7 @@ Texture Artist must:
 1. first complete any previously claimed task;
 2. inspect the repository for newly added or changed Admin-provided textures/assets relevant to the current issue;
 3. validate binary format, dimensions, transparency, atlas geometry, metadata, semantic identity, and project path as applicable;
-4. use the approved Tile Atlas Tool for normalization, edge-safe slicing, metadata editing, manifest/descriptions generation, and checked-out-project publishing when applicable;
+4. use the approved Tile Atlas Tool for normalization, direct deterministic slicing, metadata editing, manifest/descriptions generation, and checked-out-project publishing when applicable;
 5. register/map/integrate compliant assets into the latest application version when integration belongs to the issue scope;
 6. ensure non-NPC visual integration follows the shared 100 x 100 static tile-composition path;
 7. remove or supersede obsolete asset mappings/presentation paths when required;
@@ -173,15 +173,15 @@ If the required Admin-provided asset is not present, record that fact and contin
 For a reusable tile family already supplied by Admin:
 
 1. locate the newly added source/canonical atlas and related metadata in the repository or approved project input;
-2. verify the source represents the intended coherent 4 x 4 family;
-3. normalize the whole source to exact `1024 x 1024 RGBA PNG` when required;
-4. retain the canonical `<family>_atlas_1024px.png`;
-5. use the approved Tile Atlas Tool and current Admin edge-safe derived-tile rule: each canonical 256 x 256 cell is cropped, 1 px is removed from top/bottom/left/right, and the remaining 254 x 254 image is resized back to exact 256 x 256 using LANCZOS;
-6. require stable semantic metadata for occupied cells;
+2. verify the source represents the intended coherent 10 x 10 family and that occupied cells have stable semantic meaning;
+3. normalize the whole source to exact `1000 x 1000 RGBA PNG` when required;
+4. retain the canonical `<family>_atlas_1000px.png`;
+5. use the approved Tile Atlas Tool to slice the canonical atlas directly in row-major order into exact `100 x 100 RGBA PNG` cells with border trim `0` and no runtime size conversion;
+6. require stable semantic metadata for occupied cells, using default IDs `r00_c00` through `r09_c09` where custom semantic IDs are not supplied;
 7. produce/update `<family>_tiles.manifest.json` and `<family>_tiles.descriptions.json` using the current tool schema;
-8. verify SHA-256 values when available;
-9. verify final binary PNG files and paths;
-10. integrate/register the asset family in the latest application when within scope;
+8. verify SHA-256 values when available and collect committed binary blob SHAs where repository publishing applies;
+9. verify final binary PNG files and paths under `textures/tiles/<family>/`;
+10. integrate/register the committed semantic `100 x 100` PNG family in the latest application when within scope;
 11. hand to Game Programmer only when separate coding beyond Texture Artist integration scope is required; otherwise hand directly to Tester.
 
 Description/visual metadata is presentation metadata only and never Simulation authority.
@@ -199,12 +199,12 @@ For reusable visual-family integration, record as applicable:
 - Admin-provided source asset path;
 - original source dimensions;
 - canonical atlas path;
-- whether normalization to 1024 x 1024 was required;
+- whether normalization to 1000 x 1000 was required;
 - semantic cell map;
-- derived slice paths;
+- derived 100 x 100 slice paths;
 - manifest path;
 - descriptions path;
-- SHA-256 values when available;
+- SHA-256 values and/or committed blob SHAs when available;
 - runtime files/mappings changed;
 - intended 100 x 100 composition role/order;
 - checks actually performed;
