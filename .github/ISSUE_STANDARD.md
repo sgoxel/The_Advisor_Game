@@ -150,7 +150,7 @@ Texture Artist must:
 
 1. first complete any previously claimed task;
 2. inspect the repository for newly added or changed Admin-provided textures/assets relevant to the current issue;
-3. validate binary format, dimensions, transparency, atlas geometry, metadata, semantic identity, and project path as applicable;
+3. no need to validate binary format, dimensions, transparency, atlas geometry, metadata, semantic identity, and project path as applicable;
 4. use the approved Tile Atlas Tool for normalization, direct deterministic slicing, metadata editing, manifest/descriptions generation, and checked-out-project publishing when applicable;
 5. register/map/integrate compliant assets into the latest application version when integration belongs to the issue scope;
 6. ensure non-NPC visual integration follows the shared 100 x 100 static tile-composition path;
@@ -166,7 +166,7 @@ Texture Artist must **never**:
 - create fake/placeholder PNGs to satisfy a missing asset requirement;
 - substitute SVG/vector artwork for required PNG assets.
 
-If the required Admin-provided asset is not present, record that fact and continue normal worker routing; do not manufacture the missing image.
+If the required Admin-provided asset is not present, record that fact WARN the ADMIN with notification and continue normal worker routing; do not manufacture the missing image.
 
 #### Texture Artist Admin-provided atlas workflow
 
