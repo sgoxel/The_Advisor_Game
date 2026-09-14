@@ -6,7 +6,7 @@ labels: ""
 assignees: ""
 ---
 
-> This template is a convenience scaffold only. `.github/ISSUE_STANDARD.md` is the sole active routine-worker instruction source and governs issue structure, claims, routing, repository state, verification, and closure. `README.md` remains product truth under the repository authority hierarchy.
+> Follow `.github/ISSUE_STANDARD.md`. `README.md` remains product truth.
 
 Role: Game Designer | Game Programmer | Texture Artist | UX Designer | Tester
 WP: WP-NNN
@@ -18,18 +18,18 @@ Status: READY
 Repository state: NONE | DRIVE_PENDING_ADMIN_PUSH | GITHUB_VERIFIED
 
 ## Objective
-Describe the single concrete result that must exist when this issue is complete.
+State one concrete result.
 
 ## Scope
-Describe exactly what is included.
+State exactly what this issue includes.
 
 ## Out of scope
-List closely related work that must not be silently added to this issue.
+State related work that is not included.
 
 ## Acceptance criteria
-- [ ] Concrete, observable criterion 1
-- [ ] Concrete, observable criterion 2
-- [ ] Required checks/tests/evidence
+- [ ] Observable criterion 1
+- [ ] Observable criterion 2
+- [ ] Required tests/evidence
 
 ## Audit
 Purpose:
