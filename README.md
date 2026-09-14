@@ -264,6 +264,14 @@ Visual variants may reflect Simulation-backed rank, profession, culture or facti
 
 World presentation should reinforce the state of the living world without becoming gameplay authority itself.
 
+## Static 100 × 100 Tile Composition
+
+NPC world sprites are the sole normal independently dynamic world-image exception.
+
+All non-NPC world art is flattened into exact **100 × 100 RGBA logical-tile composites** before presentation. Each logical tile is composed deterministically with terrain/base first, followed by applicable roads, paths, transitions, buildings, interiors, vegetation, props, objects and other static visuals. Reusable atlas cells are source assets for this composition and do not remain independent persistent world-image layers.
+
+Static composition uses sparse, bounded caching. Camera movement and zoom do not rebuild unchanged tiles; only tiles whose authoritative static presentation inputs change are invalidated. These pixels remain presentation-only and never become authority for terrain legality, collision, occupancy, identity, movement, resources or Simulation outcomes.
+
 ---
 
 # 🌐 Public Development Build
