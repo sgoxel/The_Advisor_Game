@@ -1,0 +1,1633 @@
+{
+  "version": 3,
+  "family": "shoreline",
+  "atlas": {
+    "filename": "shoreline_atlas_1000px.png",
+    "width": 1000,
+    "height": 1000,
+    "mode": "RGBA",
+    "columns": 10,
+    "rows": 10,
+    "cellSize": 100,
+    "ordering": "row-major",
+    "sha256": "e3a5267d06f92552da060879baab5b5bc92807b3a6f12ccbfb888c67edf9bb90",
+    "sourceWidth": 1254,
+    "sourceHeight": 1254,
+    "normalizationMode": "fit",
+    "normalized": true
+  },
+  "derivedTilePolicy": {
+    "sourceCellSize": [
+      100,
+      100
+    ],
+    "outputSize": [
+      100,
+      100
+    ],
+    "borderTrimPx": 0,
+    "resamplingDuringSlice": "NONE"
+  },
+  "tiles": [
+    {
+      "index": 0,
+      "row": 0,
+      "col": 0,
+      "type": "r00_c00",
+      "semantic_type": "r00_c00",
+      "displayName": "r00_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c00_100px.png",
+      "sha256": "869c6032049658e408950e2db883549500b1eba221eaf780b69db3f802714be7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "col": 1,
+      "type": "r00_c01",
+      "semantic_type": "r00_c01",
+      "displayName": "r00_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c01_100px.png",
+      "sha256": "6ca9396cbde88862f692da45077f02d2b34f8ef9752de821ed48b052832213f6",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "col": 2,
+      "type": "r00_c02",
+      "semantic_type": "r00_c02",
+      "displayName": "r00_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c02_100px.png",
+      "sha256": "4b31d9ea90bbcf450f57de028e1e5add301464cf010a11bca85093b9d956dd73",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "col": 3,
+      "type": "r00_c03",
+      "semantic_type": "r00_c03",
+      "displayName": "r00_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c03_100px.png",
+      "sha256": "86c71a6c07768722c27dbeba2e8f7dd949d3771ec5866e43fa3f19acd9fb7de7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 4,
+      "row": 0,
+      "col": 4,
+      "type": "r00_c04",
+      "semantic_type": "r00_c04",
+      "displayName": "r00_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c04_100px.png",
+      "sha256": "56cfbdd8dc6a1e9fc2c936af4b6947ab48025f902948faa2a71d0fd06cc98569",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 5,
+      "row": 0,
+      "col": 5,
+      "type": "r00_c05",
+      "semantic_type": "r00_c05",
+      "displayName": "r00_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c05_100px.png",
+      "sha256": "91995ac368ee011a9faecbd38797c2ffeacb8fa38da893d77dea75382fc7c67a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 6,
+      "row": 0,
+      "col": 6,
+      "type": "r00_c06",
+      "semantic_type": "r00_c06",
+      "displayName": "r00_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c06_100px.png",
+      "sha256": "842f0e28074eed9c689e5215ff795ada223a260e05c26c5f03a1498074a58a2a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 7,
+      "row": 0,
+      "col": 7,
+      "type": "r00_c07",
+      "semantic_type": "r00_c07",
+      "displayName": "r00_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c07_100px.png",
+      "sha256": "d42697695e37cc3d7a3747e3d1be4db5f511ce43ccd65a666f7695869f43615c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 8,
+      "row": 0,
+      "col": 8,
+      "type": "r00_c08",
+      "semantic_type": "r00_c08",
+      "displayName": "r00_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c08_100px.png",
+      "sha256": "6159b70003511d35856c147b83c3d6b6d535a9b2c868b9e2315d8156f1247c85",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 9,
+      "row": 0,
+      "col": 9,
+      "type": "r00_c09",
+      "semantic_type": "r00_c09",
+      "displayName": "r00_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r00_c09_100px.png",
+      "sha256": "95ca43c960d38947d88262bc37faaebe186ad4ed3d51780ae181116a035d54b0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 10,
+      "row": 1,
+      "col": 0,
+      "type": "r01_c00",
+      "semantic_type": "r01_c00",
+      "displayName": "r01_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c00_100px.png",
+      "sha256": "ab48bf0ebb6a7093936b78887afa29c74c677de57ae4933ec3237a0e1a9b3c3d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 11,
+      "row": 1,
+      "col": 1,
+      "type": "r01_c01",
+      "semantic_type": "r01_c01",
+      "displayName": "r01_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c01_100px.png",
+      "sha256": "4dc8ab286ca66864ba176f1eadb298936b2ad01a4402f4da5ca8e86891e09851",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 12,
+      "row": 1,
+      "col": 2,
+      "type": "r01_c02",
+      "semantic_type": "r01_c02",
+      "displayName": "r01_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c02_100px.png",
+      "sha256": "43715e1e62f9945774b4a83da010ecf5f01b6f0adc2f1e40fae82f89a470eccc",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 13,
+      "row": 1,
+      "col": 3,
+      "type": "r01_c03",
+      "semantic_type": "r01_c03",
+      "displayName": "r01_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c03_100px.png",
+      "sha256": "55447a43d2364ac81902adf54b50dad9987dc6e9449942d871810db58c0f4ac9",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 14,
+      "row": 1,
+      "col": 4,
+      "type": "r01_c04",
+      "semantic_type": "r01_c04",
+      "displayName": "r01_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c04_100px.png",
+      "sha256": "0176175e925f7889e2af14c06cc8fb84861db0f0e4fb96b67db6f5e6ec3622e6",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 15,
+      "row": 1,
+      "col": 5,
+      "type": "r01_c05",
+      "semantic_type": "r01_c05",
+      "displayName": "r01_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c05_100px.png",
+      "sha256": "af12595e2d9720f424a5f0fa987eee107e88c75344d5b3bb3ef9b3b0da43ba77",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 16,
+      "row": 1,
+      "col": 6,
+      "type": "r01_c06",
+      "semantic_type": "r01_c06",
+      "displayName": "r01_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c06_100px.png",
+      "sha256": "597c5200af6c9b59e745390c776e0878465f51b6de385140b782856db1d40c3c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 17,
+      "row": 1,
+      "col": 7,
+      "type": "r01_c07",
+      "semantic_type": "r01_c07",
+      "displayName": "r01_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c07_100px.png",
+      "sha256": "7b6bb055ade64f11c8d115b37c3143aaf116e48a732ba58abcbeccd0775cab19",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 18,
+      "row": 1,
+      "col": 8,
+      "type": "r01_c08",
+      "semantic_type": "r01_c08",
+      "displayName": "r01_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c08_100px.png",
+      "sha256": "62c0ce5e1cc0f6e55cf99fe122af2db781b5107d742fb1341f960c1cd5753efb",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 19,
+      "row": 1,
+      "col": 9,
+      "type": "r01_c09",
+      "semantic_type": "r01_c09",
+      "displayName": "r01_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r01_c09_100px.png",
+      "sha256": "813828ae49ecea25439b8331c70eae2b2fe9c33615e41fa1917ddfac0f2ed534",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 20,
+      "row": 2,
+      "col": 0,
+      "type": "r02_c00",
+      "semantic_type": "r02_c00",
+      "displayName": "r02_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c00_100px.png",
+      "sha256": "2bb6bec9a4021f476e17f2e60491d78bdcb82cd2278a2a3cd9a3ad69c17ed911",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 21,
+      "row": 2,
+      "col": 1,
+      "type": "r02_c01",
+      "semantic_type": "r02_c01",
+      "displayName": "r02_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c01_100px.png",
+      "sha256": "05b458c2c56120d445b1920e629c967e81ccb869c1657d423286bcb877ddfe59",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 22,
+      "row": 2,
+      "col": 2,
+      "type": "r02_c02",
+      "semantic_type": "r02_c02",
+      "displayName": "r02_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c02_100px.png",
+      "sha256": "951915912eccfc92a0e9f9f9a6b3bad3a9a90f75a21c03376ce088108ee10915",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 23,
+      "row": 2,
+      "col": 3,
+      "type": "r02_c03",
+      "semantic_type": "r02_c03",
+      "displayName": "r02_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c03_100px.png",
+      "sha256": "6287ca51319a7dff218777753ceca34d4f3ffbb3e4e78c1636dca0c1aeb358bb",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 24,
+      "row": 2,
+      "col": 4,
+      "type": "r02_c04",
+      "semantic_type": "r02_c04",
+      "displayName": "r02_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c04_100px.png",
+      "sha256": "d827afdb6910383e4c23c147aa39bde8d2a3a09eb994dceeaab2c3be00da731b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 25,
+      "row": 2,
+      "col": 5,
+      "type": "r02_c05",
+      "semantic_type": "r02_c05",
+      "displayName": "r02_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c05_100px.png",
+      "sha256": "d1e7368b1678a5c991ce1c601bd05aa07550ef4bfd9bb7b66238e7e8286a4a92",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 26,
+      "row": 2,
+      "col": 6,
+      "type": "r02_c06",
+      "semantic_type": "r02_c06",
+      "displayName": "r02_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c06_100px.png",
+      "sha256": "e3c96d2b8e519b56c1b5a2dd3ec7993da038f4fe7b274d2aa21ddc0ac0bfe94f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 27,
+      "row": 2,
+      "col": 7,
+      "type": "r02_c07",
+      "semantic_type": "r02_c07",
+      "displayName": "r02_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c07_100px.png",
+      "sha256": "03cd44eb21b0a79e9bd6f99730564fec18ab3bec566e15125e69d9acc18e829b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 28,
+      "row": 2,
+      "col": 8,
+      "type": "r02_c08",
+      "semantic_type": "r02_c08",
+      "displayName": "r02_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c08_100px.png",
+      "sha256": "7a321b4e045525fa622a9eb6ec73437879de95005601c6f9018d6afb2f5daa73",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 29,
+      "row": 2,
+      "col": 9,
+      "type": "r02_c09",
+      "semantic_type": "r02_c09",
+      "displayName": "r02_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r02_c09_100px.png",
+      "sha256": "195980c9b3b657f025fdca2158798a54f3d8235f30ae064f81ce83a9957d6d48",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 30,
+      "row": 3,
+      "col": 0,
+      "type": "r03_c00",
+      "semantic_type": "r03_c00",
+      "displayName": "r03_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c00_100px.png",
+      "sha256": "f9febb5560c0686b93828868570afe06bd1fb967090db1813569e3bcdebe7c9b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 31,
+      "row": 3,
+      "col": 1,
+      "type": "r03_c01",
+      "semantic_type": "r03_c01",
+      "displayName": "r03_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c01_100px.png",
+      "sha256": "07b7c38ae8481172fff9fb0169e172e9b04de0a5508fe8c2845ac645bcf49142",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 32,
+      "row": 3,
+      "col": 2,
+      "type": "r03_c02",
+      "semantic_type": "r03_c02",
+      "displayName": "r03_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c02_100px.png",
+      "sha256": "8ec034be46f40c9a09cb4facaa6ab4e3f1a162d90040469281248478845a094e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 33,
+      "row": 3,
+      "col": 3,
+      "type": "r03_c03",
+      "semantic_type": "r03_c03",
+      "displayName": "r03_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c03_100px.png",
+      "sha256": "e2cba21c09b14850e2c4fe726caccd858defd444a751d4e524d9e517ecfedb73",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 34,
+      "row": 3,
+      "col": 4,
+      "type": "r03_c04",
+      "semantic_type": "r03_c04",
+      "displayName": "r03_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c04_100px.png",
+      "sha256": "c5880733933d90947b721e1ea3c0ce9f280faea722a50788ac24d15717d0ae40",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 35,
+      "row": 3,
+      "col": 5,
+      "type": "r03_c05",
+      "semantic_type": "r03_c05",
+      "displayName": "r03_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c05_100px.png",
+      "sha256": "80245202fc6bd0abe6a450aad39854d32807c7738ee6e791ff0e200b929b755d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 36,
+      "row": 3,
+      "col": 6,
+      "type": "r03_c06",
+      "semantic_type": "r03_c06",
+      "displayName": "r03_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c06_100px.png",
+      "sha256": "7c1c13f0b1a8a1e8395eda2b495e92e906ad38d6c563603d02389a7eb91889c5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 37,
+      "row": 3,
+      "col": 7,
+      "type": "r03_c07",
+      "semantic_type": "r03_c07",
+      "displayName": "r03_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c07_100px.png",
+      "sha256": "05810b81b9e5de891556e10d6984d7d68496a9cea8744e79cdfc70d1e0b0e53e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 38,
+      "row": 3,
+      "col": 8,
+      "type": "r03_c08",
+      "semantic_type": "r03_c08",
+      "displayName": "r03_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c08_100px.png",
+      "sha256": "7fe7966fc3699f01199fb1e17fec2b665bd2ea3f9c544a01beae018c93cb43ff",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 39,
+      "row": 3,
+      "col": 9,
+      "type": "r03_c09",
+      "semantic_type": "r03_c09",
+      "displayName": "r03_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r03_c09_100px.png",
+      "sha256": "665a00070a4d821d2b079a15e993e39ff43afb9e26bdfbba4e1f75211b900058",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 40,
+      "row": 4,
+      "col": 0,
+      "type": "r04_c00",
+      "semantic_type": "r04_c00",
+      "displayName": "r04_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c00_100px.png",
+      "sha256": "72c833f3d424a1d30db2a8f830c9ee18b45d4c76e0e0efb0174de78847c46dad",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 41,
+      "row": 4,
+      "col": 1,
+      "type": "r04_c01",
+      "semantic_type": "r04_c01",
+      "displayName": "r04_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c01_100px.png",
+      "sha256": "8faa9838814ec86c10892055c03b979bdaa7861a6d4d029db5b7718a6c2e2e4d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 42,
+      "row": 4,
+      "col": 2,
+      "type": "r04_c02",
+      "semantic_type": "r04_c02",
+      "displayName": "r04_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c02_100px.png",
+      "sha256": "cb1ab76d0d0c2d14c574f3321be0d0d4552385a1a60ee67bd80f410d03bdd71c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 43,
+      "row": 4,
+      "col": 3,
+      "type": "r04_c03",
+      "semantic_type": "r04_c03",
+      "displayName": "r04_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c03_100px.png",
+      "sha256": "75de4b2ca6e332a42b7dc85b32aa9271328bbcb99fd4797297f48644137deb39",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 44,
+      "row": 4,
+      "col": 4,
+      "type": "r04_c04",
+      "semantic_type": "r04_c04",
+      "displayName": "r04_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c04_100px.png",
+      "sha256": "1c49a6bcd433a0021b68f31cbe7713913ccebfc44501b8e3b6407c6254a1364d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 45,
+      "row": 4,
+      "col": 5,
+      "type": "r04_c05",
+      "semantic_type": "r04_c05",
+      "displayName": "r04_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c05_100px.png",
+      "sha256": "421d6f1117e2ae10584a1af7bbec106ac2ab90943b4063945b02a9de84fc0545",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 46,
+      "row": 4,
+      "col": 6,
+      "type": "r04_c06",
+      "semantic_type": "r04_c06",
+      "displayName": "r04_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c06_100px.png",
+      "sha256": "01ecfb0216c27dfd6e83838b10e153159bf140843cd4a522d7d496c0eac0dcc7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 47,
+      "row": 4,
+      "col": 7,
+      "type": "r04_c07",
+      "semantic_type": "r04_c07",
+      "displayName": "r04_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c07_100px.png",
+      "sha256": "904286b097c1cccd7b1e6a9e5b4548bb5ec34435576d46ea0ae6690761d08a2e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 48,
+      "row": 4,
+      "col": 8,
+      "type": "r04_c08",
+      "semantic_type": "r04_c08",
+      "displayName": "r04_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c08_100px.png",
+      "sha256": "21e03419aa96e6bada343d9aeabe6a8cbb7f1b348fccbed438ff4f17d88d8565",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 49,
+      "row": 4,
+      "col": 9,
+      "type": "r04_c09",
+      "semantic_type": "r04_c09",
+      "displayName": "r04_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r04_c09_100px.png",
+      "sha256": "18d282d70f9687e825cc6288f3974252fe6e3da67f857c5e86fc2e49eb7dba61",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 50,
+      "row": 5,
+      "col": 0,
+      "type": "r05_c00",
+      "semantic_type": "r05_c00",
+      "displayName": "r05_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c00_100px.png",
+      "sha256": "8bc5e89964a5ea50653b8f0c7065fc990e2d9b5141faf81be109f84446b1ca41",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 51,
+      "row": 5,
+      "col": 1,
+      "type": "r05_c01",
+      "semantic_type": "r05_c01",
+      "displayName": "r05_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c01_100px.png",
+      "sha256": "6ba6572712f5bcdd4a48ccb9f0bad2b8039b82b14ecd6960170d2fa8464be527",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 52,
+      "row": 5,
+      "col": 2,
+      "type": "r05_c02",
+      "semantic_type": "r05_c02",
+      "displayName": "r05_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c02_100px.png",
+      "sha256": "d7477e18458c483b606056a35a8adf48fc6ac1d9b3fbcdd07f661a360e1b86eb",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 53,
+      "row": 5,
+      "col": 3,
+      "type": "r05_c03",
+      "semantic_type": "r05_c03",
+      "displayName": "r05_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c03_100px.png",
+      "sha256": "dafb34e389864f47728e6871728de305f8e085520cb5b8093aef690309d521f6",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 54,
+      "row": 5,
+      "col": 4,
+      "type": "r05_c04",
+      "semantic_type": "r05_c04",
+      "displayName": "r05_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c04_100px.png",
+      "sha256": "e16525ccf058ad9b923e94044cb383ac47eb08e74c3b3696e3f24eca246b0d51",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 55,
+      "row": 5,
+      "col": 5,
+      "type": "r05_c05",
+      "semantic_type": "r05_c05",
+      "displayName": "r05_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c05_100px.png",
+      "sha256": "1c243fd75cca0f2ddbbe455890c981c0411d13819e01a51079e60bdd45a978e0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 56,
+      "row": 5,
+      "col": 6,
+      "type": "r05_c06",
+      "semantic_type": "r05_c06",
+      "displayName": "r05_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c06_100px.png",
+      "sha256": "ead8ab0d84f3e689f5826b060ccf724ccd0214fc6294747a24443be4e2c542a4",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 57,
+      "row": 5,
+      "col": 7,
+      "type": "r05_c07",
+      "semantic_type": "r05_c07",
+      "displayName": "r05_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c07_100px.png",
+      "sha256": "7f839e27970fd99f6fb5984b3394206256346e3fbc59a1ca8ed36e9136e5f207",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 58,
+      "row": 5,
+      "col": 8,
+      "type": "r05_c08",
+      "semantic_type": "r05_c08",
+      "displayName": "r05_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c08_100px.png",
+      "sha256": "30a3ad6da8e2393ee2917e21df634e1a87f2c6f6d25b704ee59e14dd9d07f164",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 59,
+      "row": 5,
+      "col": 9,
+      "type": "r05_c09",
+      "semantic_type": "r05_c09",
+      "displayName": "r05_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r05_c09_100px.png",
+      "sha256": "4898470e59f1259c4088c5118dae5f0ed991c10cb5b450f33ce5489f38669bbd",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 60,
+      "row": 6,
+      "col": 0,
+      "type": "r06_c00",
+      "semantic_type": "r06_c00",
+      "displayName": "r06_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c00_100px.png",
+      "sha256": "f55d3bac2ca159de364f09ed58c622f260d5a61225b8eb8f2bf2ac7f7d5b290e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 61,
+      "row": 6,
+      "col": 1,
+      "type": "r06_c01",
+      "semantic_type": "r06_c01",
+      "displayName": "r06_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c01_100px.png",
+      "sha256": "4de80cd5c2d50c3998caa79f1d499d44733892ae62ba9e17f2f0d200fad742e4",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 62,
+      "row": 6,
+      "col": 2,
+      "type": "r06_c02",
+      "semantic_type": "r06_c02",
+      "displayName": "r06_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c02_100px.png",
+      "sha256": "14f3cda366d30bf0ac398669520a41a5ea817d72a1fc629c447e87878347ddf5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 63,
+      "row": 6,
+      "col": 3,
+      "type": "r06_c03",
+      "semantic_type": "r06_c03",
+      "displayName": "r06_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c03_100px.png",
+      "sha256": "31b2e173252f20f0572d698bcd4b4a42a10755313b02fa39928dd0e97a767b19",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 64,
+      "row": 6,
+      "col": 4,
+      "type": "r06_c04",
+      "semantic_type": "r06_c04",
+      "displayName": "r06_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c04_100px.png",
+      "sha256": "71cfb88dcf78ff4a459841a2316901ada70ac566dec668f77367942b3b38ce90",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 65,
+      "row": 6,
+      "col": 5,
+      "type": "r06_c05",
+      "semantic_type": "r06_c05",
+      "displayName": "r06_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c05_100px.png",
+      "sha256": "cbf8806b1e0f8be2360dcf31d0013b97078a158884a4d40befa282edd5dad31d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 66,
+      "row": 6,
+      "col": 6,
+      "type": "r06_c06",
+      "semantic_type": "r06_c06",
+      "displayName": "r06_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c06_100px.png",
+      "sha256": "e7bd3f5d40b2c0ec58451ecb0562b5b478627c03f2dc432cbce10456b58914d0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 67,
+      "row": 6,
+      "col": 7,
+      "type": "r06_c07",
+      "semantic_type": "r06_c07",
+      "displayName": "r06_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c07_100px.png",
+      "sha256": "6cc2dd3411c42a8ca5ae7cdd575779b4ac385cf32cc1d2c9c9058a0109ad30be",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 68,
+      "row": 6,
+      "col": 8,
+      "type": "r06_c08",
+      "semantic_type": "r06_c08",
+      "displayName": "r06_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c08_100px.png",
+      "sha256": "93b2e99d5fb935c2b2edbfd985076d9c517277faa15c534742effd3a603dd731",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 69,
+      "row": 6,
+      "col": 9,
+      "type": "r06_c09",
+      "semantic_type": "r06_c09",
+      "displayName": "r06_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r06_c09_100px.png",
+      "sha256": "99abd892355584f286fdca23aae03ad864e074a80fb4aee991abcfd80ed40e1c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 70,
+      "row": 7,
+      "col": 0,
+      "type": "r07_c00",
+      "semantic_type": "r07_c00",
+      "displayName": "r07_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c00_100px.png",
+      "sha256": "436cb71a26a576f4d6033223abce760d0ff477d8d7fb4061eb6b75811e0ece67",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 71,
+      "row": 7,
+      "col": 1,
+      "type": "r07_c01",
+      "semantic_type": "r07_c01",
+      "displayName": "r07_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c01_100px.png",
+      "sha256": "3a356532d84867fd79665352fe81dd699fabf89ddaea2c4b7a71493ad5f50195",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 72,
+      "row": 7,
+      "col": 2,
+      "type": "r07_c02",
+      "semantic_type": "r07_c02",
+      "displayName": "r07_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c02_100px.png",
+      "sha256": "de7ea3c233726d1dabb6f66286b7b3dd193cf76a09f15e7961250677c288304c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 73,
+      "row": 7,
+      "col": 3,
+      "type": "r07_c03",
+      "semantic_type": "r07_c03",
+      "displayName": "r07_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c03_100px.png",
+      "sha256": "022b85face19782da161254e0cbfa7ff5ef306aa96ce0e3eacc68b0b6d8e3008",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 74,
+      "row": 7,
+      "col": 4,
+      "type": "r07_c04",
+      "semantic_type": "r07_c04",
+      "displayName": "r07_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c04_100px.png",
+      "sha256": "33ec0874f017a1bc0205400f4cde77d7ce31f131f05af1a35f05c52328c810be",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 75,
+      "row": 7,
+      "col": 5,
+      "type": "r07_c05",
+      "semantic_type": "r07_c05",
+      "displayName": "r07_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c05_100px.png",
+      "sha256": "b1ce20dfb0c1577e34a05cd2eed396be0c5cc020f754ce2aab95fc2ce161ed5c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 76,
+      "row": 7,
+      "col": 6,
+      "type": "r07_c06",
+      "semantic_type": "r07_c06",
+      "displayName": "r07_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c06_100px.png",
+      "sha256": "ac455337b069e4533127ed4246cdaa0d8f9832fb7ff54f845202102cd85d9b16",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 77,
+      "row": 7,
+      "col": 7,
+      "type": "r07_c07",
+      "semantic_type": "r07_c07",
+      "displayName": "r07_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c07_100px.png",
+      "sha256": "3f3e60d5070863b2738033bb8b0bc17edf47d3f2273dcbe0ab7e58f6a1d8d4db",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 78,
+      "row": 7,
+      "col": 8,
+      "type": "r07_c08",
+      "semantic_type": "r07_c08",
+      "displayName": "r07_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c08_100px.png",
+      "sha256": "1cecad89ef8885d80f9f0c6bc68ae8537f40fc5fe402b650190cd6aa5b4a9415",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 79,
+      "row": 7,
+      "col": 9,
+      "type": "r07_c09",
+      "semantic_type": "r07_c09",
+      "displayName": "r07_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r07_c09_100px.png",
+      "sha256": "15261da48f8f2aff1d4167a7b1a05d32acb78beb97a211fc906b16fb254d92a0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 80,
+      "row": 8,
+      "col": 0,
+      "type": "r08_c00",
+      "semantic_type": "r08_c00",
+      "displayName": "r08_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c00_100px.png",
+      "sha256": "9bef36f79d711a03b568488d983776ec25b3d89138736a6ccc1687e268c2d62d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 81,
+      "row": 8,
+      "col": 1,
+      "type": "r08_c01",
+      "semantic_type": "r08_c01",
+      "displayName": "r08_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c01_100px.png",
+      "sha256": "f2a7677973dff788dd607e753d18c789f600cf0bbfce7c4e013ef31202c47515",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 82,
+      "row": 8,
+      "col": 2,
+      "type": "r08_c02",
+      "semantic_type": "r08_c02",
+      "displayName": "r08_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c02_100px.png",
+      "sha256": "9fca31c9f1525ee2e3a7d18f001219f32d449949cd77f3ea0a194ab6179144f7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 83,
+      "row": 8,
+      "col": 3,
+      "type": "r08_c03",
+      "semantic_type": "r08_c03",
+      "displayName": "r08_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c03_100px.png",
+      "sha256": "806e7df250d97033d8bddc82314f3479fd6022f185b6f4b873f9dc0ef9261492",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 84,
+      "row": 8,
+      "col": 4,
+      "type": "r08_c04",
+      "semantic_type": "r08_c04",
+      "displayName": "r08_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c04_100px.png",
+      "sha256": "eb23a8a43ace53ae9385cf1acdfcad08f12dbe1420ae3b3aec19bf3c88e6ba22",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 85,
+      "row": 8,
+      "col": 5,
+      "type": "r08_c05",
+      "semantic_type": "r08_c05",
+      "displayName": "r08_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c05_100px.png",
+      "sha256": "73873bb1ab89bb111ca196cdd3fa92d385728f0068ba5c778db73d83d9ec6635",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 86,
+      "row": 8,
+      "col": 6,
+      "type": "r08_c06",
+      "semantic_type": "r08_c06",
+      "displayName": "r08_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c06_100px.png",
+      "sha256": "9b5df19cb2ff255996492541facfe1950d899d0aa09c8d86515835da733db723",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 87,
+      "row": 8,
+      "col": 7,
+      "type": "r08_c07",
+      "semantic_type": "r08_c07",
+      "displayName": "r08_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c07_100px.png",
+      "sha256": "b4861e49095e09b2b1c5728296489d3c0f0ba79a6171ca6c2c2be4cd588deca5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 88,
+      "row": 8,
+      "col": 8,
+      "type": "r08_c08",
+      "semantic_type": "r08_c08",
+      "displayName": "r08_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c08_100px.png",
+      "sha256": "02c5d0715dba4db7ef37e1575be943724145940d9111785ff4306d32345e5a04",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 89,
+      "row": 8,
+      "col": 9,
+      "type": "r08_c09",
+      "semantic_type": "r08_c09",
+      "displayName": "r08_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r08_c09_100px.png",
+      "sha256": "d702c98c463326766b60a2cc33c9af44db2fc253fbcb5044f84e3a58ae17dcb6",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 90,
+      "row": 9,
+      "col": 0,
+      "type": "r09_c00",
+      "semantic_type": "r09_c00",
+      "displayName": "r09_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c00_100px.png",
+      "sha256": "e9bcbc239a98b35e9e158d5f4c2aee2c955fc064b5a57eeeb2c7ee04d20bf1a5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 91,
+      "row": 9,
+      "col": 1,
+      "type": "r09_c01",
+      "semantic_type": "r09_c01",
+      "displayName": "r09_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c01_100px.png",
+      "sha256": "a5de4a6241dfd4a13dd00be1322d7a21653589e08ec8db591ae6c469181bc363",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 92,
+      "row": 9,
+      "col": 2,
+      "type": "r09_c02",
+      "semantic_type": "r09_c02",
+      "displayName": "r09_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c02_100px.png",
+      "sha256": "f876612866f3328c9deee55269b9c77b9e4ec8d77df6c843bf3907dc27ece352",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 93,
+      "row": 9,
+      "col": 3,
+      "type": "r09_c03",
+      "semantic_type": "r09_c03",
+      "displayName": "r09_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c03_100px.png",
+      "sha256": "857a8aae2c5e01b109b11e1fb0e11b68299d3a8ebb2cf48caade27c982795272",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 94,
+      "row": 9,
+      "col": 4,
+      "type": "r09_c04",
+      "semantic_type": "r09_c04",
+      "displayName": "r09_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c04_100px.png",
+      "sha256": "37e5d701800801e63cd547a0e96527a41c7672a4c70d81a4f8612d603ba0f9e7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 95,
+      "row": 9,
+      "col": 5,
+      "type": "r09_c05",
+      "semantic_type": "r09_c05",
+      "displayName": "r09_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c05_100px.png",
+      "sha256": "c423af8bf6c472e6dff04ff8cd6c47425888225b587054d86f66094451025578",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 96,
+      "row": 9,
+      "col": 6,
+      "type": "r09_c06",
+      "semantic_type": "r09_c06",
+      "displayName": "r09_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c06_100px.png",
+      "sha256": "e1ea047864bad48af70dc93326805f09089b83fb60581cc4ea86c29575a476a9",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 97,
+      "row": 9,
+      "col": 7,
+      "type": "r09_c07",
+      "semantic_type": "r09_c07",
+      "displayName": "r09_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c07_100px.png",
+      "sha256": "297a859d514ab1df970f92426eb371e1d85d50b8be2f1316efce2d266993d68d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 98,
+      "row": 9,
+      "col": 8,
+      "type": "r09_c08",
+      "semantic_type": "r09_c08",
+      "displayName": "r09_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c08_100px.png",
+      "sha256": "55eaa817ac04ee889a9f67fc3a032cf4091b676bb0ce3c132486ab99ab078ee7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 99,
+      "row": 9,
+      "col": 9,
+      "type": "r09_c09",
+      "semantic_type": "r09_c09",
+      "displayName": "r09_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/transition",
+      "filename": "shoreline_r09_c09_100px.png",
+      "sha256": "147e56c4f2be9e8325c9d37eeb26f8366fa3fbdf016582fb98bdc614f1c6e134",
+      "size": [
+        100,
+        100
+      ]
+    }
+  ]
+}
