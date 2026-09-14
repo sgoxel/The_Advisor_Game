@@ -37,6 +37,8 @@ GITHUB:
 - One tree -> one commit -> branch ref update.
 - Text JSON = separate UTF-8 Git blob or equivalent text-safe operation.
 - Never use aggregate family size as per-file upload failure reason.
+- If direct binary publishing is unavailable for an existing Admin-provided asset, follow `WORKFLOW.md` and `.github/DRIVE_BINARY_FALLBACK.md`; do not stop the integration solely because of connector capability.
+- Fallback staging is not repository completion. Verify the final files in GitHub before Tester handoff.
 
 ACCEPTANCE:
 - Master exact 1000x1000 RGBA.
