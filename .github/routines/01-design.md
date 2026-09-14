@@ -1,9 +1,7 @@
-# RETIRED — Legacy Design Lane Instructions
+# Retired Design Lane
 
-This file is retained only as a historical pointer.
+This file is historical only. **Do not use it to select, claim, route, hand off, verify, or close work.**
 
-It is **not an active routine instruction source** and must not be used to select, claim, route, block, hand off, verify, or close work.
+Use `.github/ISSUE_STANDARD.md` for all current worker roles and issue lifecycle rules.
 
-Current routine-worker authority and atomic issue lifecycle are defined exclusively by [`../ISSUE_STANDARD.md`](../ISSUE_STANDARD.md), subject to the repository authority hierarchy stated there and in `README.md`.
-
-Legacy Design/Planning/Development/Graphics/Test lane ownership, stage gates, lane claims, and lane statuses are retired and have no current task authority.
+Current design work uses the **Game Designer** role defined there. There is no separate legacy Design lane authority.

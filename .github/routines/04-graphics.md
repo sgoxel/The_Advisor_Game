@@ -1,9 +1,7 @@
-# RETIRED — Legacy Graphics Lane Instructions
+# Retired Graphics Lane
 
-This file is retained only as a historical pointer.
+This file is historical only. **Do not use it to select, claim, route, hand off, verify, or close work.**
 
-It is **not an active routine instruction source** and must not be used to select, claim, route, block, hand off, verify, or close work.
+Use `.github/ISSUE_STANDARD.md` for all current worker roles and issue lifecycle rules.
 
-Current routine-worker authority and atomic issue lifecycle are defined exclusively by [`../ISSUE_STANDARD.md`](../ISSUE_STANDARD.md), subject to the repository authority hierarchy stated there and in `README.md`.
-
-Legacy Design/Planning/Development/Graphics/Test lane ownership, stage gates, lane claims, and lane statuses are retired and have no current task authority. Visual-production work is routed through the current Texture Artist role defined by `ISSUE_STANDARD.md`.
+Current visual integration work uses the **Texture Artist** role defined there. Texture Artist integrates Admin-provided artwork and does not generate production images.

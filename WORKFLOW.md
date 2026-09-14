@@ -1,44 +1,71 @@
 # The Advisor Game Workflow
 
 ## Authority
-GitHub remains the authoritative workspace and audit record. Google Drive is permitted only as a binary-file staging and handoff fallback when the active GitHub connector cannot directly publish a required local or chat-produced binary asset.
 
-Drive is never authoritative project state. A file that exists only in Drive or in the synchronized local repository is not considered integrated into GitHub until the corresponding GitHub path is verified after commit/push.
+Use this order when rules conflict:
 
-## Normal path
-Admin-provided asset -> Texture Artist validation/processing -> GitHub commit -> GitHub verification -> Tester.
+**Admin > README.md > ROADMAP.md > TODO > issues > code/assets > tests**
 
-## Binary publishing fallback
-When direct GitHub binary upload is unavailable but the Admin-provided asset exists:
+`README.md` is product truth. Do not edit it unless Admin explicitly asks.
 
-1. Texture Artist completes all permitted validation and deterministic processing.
-2. Stage the resulting files in the configured Google Drive `The_Advisor_Game` repository-sync folder using their exact repository-relative paths.
-3. Preserve the canonical atlas, emitted slices, manifests/descriptions, and other issue-required files exactly as produced by approved tooling.
-4. Do not claim that Drive staging is a GitHub commit, GitHub upload, repository integration, or completed handoff.
-5. Set the issue `Repository state` to `DRIVE_PENDING_ADMIN_PUSH`.
-6. Clear the worker claim. A worker must not keep a claim while waiting for Admin to perform the manual Git operation.
-7. Emit an explicit `ADMIN ACTION REQUIRED` warning in the current chat identifying the issue and exact repository-relative paths that require manual commit/push.
-8. Trigger the available worker/routine notification surface for the same Admin action. If no notification surface is available in the active execution, record that limitation truthfully in the issue audit and do not claim a notification was sent.
-9. Admin allows Drive sync to place the files in the local Git working tree, reviews the intended changes, commits them, and pushes them to GitHub.
-10. Until the push is visible in GitHub, workers skip the pending issue and continue other eligible work according to normal role order. `DRIVE_PENDING_ADMIN_PUSH` is not a worker-blocking claim state.
-11. After the Admin push is visible, the responsible role verifies the expected GitHub paths and relevant bytes/metadata, changes `Repository state` to `GITHUB_VERIFIED`, and continues the normal role handoff.
-12. Tester must not pass or close repository-changing work while its repository state is `DRIVE_PENDING_ADMIN_PUSH`.
+## Core rule
 
-A connector limitation is not equivalent to missing Admin artwork and must not cause a Texture Artist task to stop when this approved staging path is available.
+**Player advises -> AI Character decides -> Simulation validates -> World reacts.**
 
-## Repository-state meanings
+Simulation owns authoritative game state and outcomes.
 
-- `NONE`: no repository-changing output has yet been produced, or repository state is not applicable to the current step.
-- `DRIVE_PENDING_ADMIN_PUSH`: required repository files were staged through the approved Drive-synchronized working-tree path, but the corresponding GitHub commit/push has not yet been verified.
-- `GITHUB_VERIFIED`: the expected repository paths are visible in GitHub and have been verified sufficiently for the next role handoff.
+## Simple work flow
 
-`DRIVE_PENDING_ADMIN_PUSH` must never be represented as `GITHUB_VERIFIED` merely because Google Drive sync completed locally.
+1. Read `README.md` first.
+2. Read `.github/ISSUE_STANDARD.md`.
+3. Read the issue and any role-specific standard it names.
+4. Complete one eligible issue at a time.
+5. Record real checks and evidence only.
+6. Hand the issue to the next required role.
+7. Tester verifies before closure.
 
-## Admin manual Git action
-The fallback assumes the configured Google Drive folder is synchronized into the Admin's local Git repository working tree. Admin remains responsible for reviewing `git status`/diff as appropriate, committing only the intended files, and pushing them to GitHub. Workers must never claim that Admin performed these steps until GitHub evidence exists.
+## Text and code files
 
-## Text and code
-Text/code changes should be written directly to GitHub when the connector supports them. Drive fallback is primarily for binary assets that cannot be passed directly to the GitHub connector from the active session.
+Use GitHub directly for supported text/code changes.
 
-## Visual creation boundary
-Only Admin may request or authorize creation of new production imagery. Texture Artist integrates Admin-provided artwork and must not generate, redraw, synthesize, procedurally create, or substitute replacement artwork.
+Examples: `.md`, `.js`, `.html`, `.css`, `.json`, issues, comments, and other UTF-8 text files.
+
+## Images and other binary files — REQUIRED RULE
+
+**Never upload binary files to GitHub with GitHub Blob, Create Blob, base64 upload, binary-upload APIs, Git trees, or similar GitHub binary methods.**
+
+This includes PNG, JPG/JPEG, WEBP, GIF, ZIP, and other binary files.
+
+For every binary file:
+
+1. Put the file in the configured Google Drive folder that mirrors the GitHub repository: `The_Advisor_Game/`.
+2. Use the exact repository-relative path and filename.
+3. If the same Drive file already exists, update/replace that Drive file. Do not create duplicate filenames.
+4. Set the issue to `Repository state: DRIVE_PENDING_ADMIN_PUSH`.
+5. Clear the worker claim.
+6. Tell Admin `ADMIN ACTION REQUIRED` and give the exact repository-relative paths.
+7. Admin commits and pushes the mirrored files to GitHub.
+8. After the files are visible in GitHub, verify them and set `Repository state: GITHUB_VERIFIED`.
+9. Continue the normal role handoff.
+
+Drive staging is not GitHub completion. Tester must not pass or close repository-changing work while it is `DRIVE_PENDING_ADMIN_PUSH`.
+
+## Repository states
+
+- `NONE`: no repository output is ready yet, or the state does not apply.
+- `DRIVE_PENDING_ADMIN_PUSH`: binary files are in the Drive mirror but are not yet verified in GitHub. Workers skip this issue until Admin pushes them.
+- `GITHUB_VERIFIED`: required repository files are visible and verified in GitHub.
+
+## Visual creation rule
+
+Only Admin may request or authorize new production artwork.
+
+Texture Artist does not create, redraw, synthesize, or substitute artwork. Texture Artist processes and integrates Admin-provided artwork only.
+
+If required artwork is missing, report the missing Admin input. Do not create a placeholder.
+
+For atlas requests, follow `.github/TEXTURE_ATLAS_STANDARD.md`.
+
+## Final truth rule
+
+Never claim a commit, upload, test, notification, deployment, verification, or release unless it actually happened and evidence exists.

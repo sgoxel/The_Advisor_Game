@@ -42,9 +42,13 @@ assert.ok(!debugExport.includes('vector_layer_debug.js'));
 assert.match(readme, /Static 100 × 100 Tile Composition/);
 assert.match(readme, /NPC world sprites are the sole normal independently dynamic world-image exception/);
 assert.match(readme, /All non-NPC world art is flattened into exact \*\*100 × 100 RGBA logical-tile composites\*\*/);
-assert.match(staticStandard, /exact \*\*100 x 100 px RGBA static presentation composite\*\*/);
-assert.match(staticStandard, /NPCs are the only normal independently dynamic world-image exception/);
-assert.match(textureStandard, /Mandatory 100x100 static composition/);
-assert.match(textureStandard, /PNG slices are \*\*source artwork, not independent runtime image objects\*\*/);
+assert.match(staticStandard, /Runtime tile: `100x100 RGBA`/);
+assert.match(staticStandard, /Non-NPC static visuals resolve into the 100x100 tile composite/);
+assert.match(staticStandard, /Do not keep duplicate persistent static image layers/);
+assert.match(staticStandard, /NPC visuals may remain dynamic/);
+assert.match(textureStandard, /Atlas: `1000x1000 RGBA PNG`/);
+assert.match(textureStandard, /Grid: `10x10`/);
+assert.match(textureStandard, /Cell: `100x100`/);
+assert.match(textureStandard, /Runtime uses committed family/);
 
 console.log('WP-112/I01 static 100x100 tile composition source regression: PASS');
