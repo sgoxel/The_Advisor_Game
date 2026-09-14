@@ -1,0 +1,81 @@
+name: Finalize issue 495 grass atlas
+
+on:
+  push:
+    paths:
+      - '.github/admin_inputs/issue_495/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Restore exact Admin source and reviewed runtime files
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, hashlib
+          stage = Path('.github/admin_inputs/issue_495')
+          payload = ''.join(p.read_text(encoding='ascii').strip() for p in sorted(stage.glob('source.b64.part*')))
+          source = stage / 'grass_admin_source.png'
+          source.write_bytes(base64.b64decode(payload, validate=True))
+          digest = hashlib.sha256(source.read_bytes()).hexdigest()
+          assert digest == '138f5cbdb1428fb1a3451fb1c127bbdb3b266fc2b526c4af889fc940816d041e', digest
+          targets = {
+              'final_config.js.b64': 'js/config.js',
+              'final_state.js.b64': 'js/state.js',
+              'final_renderer.js.b64': 'js/renderer.js',
+              'final_grass_test.js.b64': 'tests/wp102_i01_grass_atlas_integration.test.js',
+          }
+          for encoded, destination in targets.items():
+              Path(destination).write_bytes(base64.b64decode((stage / encoded).read_text(encoding='ascii'), validate=True))
+          PY
+      - name: Install atlas-tool dependency
+        run: python -m pip install -r tools/tile_atlas_tool_requirements.txt
+      - name: Execute committed atlas tool
+        run: python tools/tile_atlas_tool.py .github/admin_inputs/issue_495/grass_admin_source.png --project-root . --family grass --mode fit
+      - name: Verify binary geometry manifests mapping and regressions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import hashlib, json
+          root = Path('textures/tiles/grass')
+          pngs = sorted(root.glob('*.png'))
+          assert len(pngs) == 101, len(pngs)
+          for path in pngs:
+              with Image.open(path) as image:
+                  assert image.mode == 'RGBA', (path, image.mode)
+                  expected = (1000, 1000) if path.name == 'grass_atlas_1000px.png' else (100, 100)
+                  assert image.size == expected, (path, image.size)
+          manifest = json.loads((root / 'grass_tiles.manifest.json').read_text())
+          descriptions = json.loads((root / 'grass_tiles.descriptions.json').read_text())
+          assert len(manifest['tiles']) == 100
+          assert len(descriptions['tiles']) == 100
+          assert len({tile['semantic_type'] for tile in manifest['tiles']}) == 100
+          for tile in manifest['tiles']:
+              path = root / tile['filename']
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == tile['sha256']
+          print('Issue #495 binary and metadata checks: PASS')
+          PY
+          node --check js/config.js
+          node --check js/state.js
+          node --check js/renderer.js
+          node tests/wp102_i01_grass_atlas_integration.test.js
+          (cd tools && python -m unittest test_tile_atlas_tool.py -v)
+      - name: Commit final family and remove transport staging
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add js/config.js js/state.js js/renderer.js tests/wp102_i01_grass_atlas_integration.test.js textures/tiles/grass
+          git rm -r .github/admin_inputs/issue_495 .github/workflows/issue-495-finalize.yml
+          git commit -m 'Integrate Admin grass atlas runtime family (#495)'
+          git push
