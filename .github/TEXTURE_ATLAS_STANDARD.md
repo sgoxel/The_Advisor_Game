@@ -1,62 +1,100 @@
-# TEXTURE_ATLAS_STANDARD
+# Texture Atlas Standard
 
-AUTHORITY: Admin > README > ROADMAP > TODO > issues > code/assets > tests.
+## Authority
 
-ATLAS_IMAGE_DEFINITION:
-- **ATLAS IMAGE** means one production tile-source sheet for the single coherent visual family named by the governing issue or explicit Admin request.
-- An ATLAS IMAGE is **not** a world map, region map, scene illustration, poster, splash screen, concept-art sheet, UI mockup, infographic, or labeled presentation image.
-- When Admin says `create`, `draw`, or `generate an atlas image for issue #N`, first read issue `#N`, identify the exact requested visual family, and create only that family as the atlas source sheet. The issue number is lookup/context metadata and MUST NOT be drawn into the image.
-- Unless an explicit higher-authority instruction says otherwise, the canonical ATLAS IMAGE target is one exact `1000x1000 RGBA PNG` interpreted as a `10x10` grid of exact `100x100` cells.
-- The grid is structural, not decorative. The image itself MUST NOT contain visible grid lines, cell borders, coordinates, row/column labels, tile numbers, titles, captions, legends, compass roses, decorative frames, watermarks, issue numbers, or UI text.
-- Each occupied cell MUST remain a valid independently sliceable tile when cut exactly on the 100-pixel cell boundaries. Artwork MUST NOT accidentally cross into neighboring cells.
-- A multi-cell composition is allowed only when the governing issue explicitly requires one and every occupied cell has a stable semantic role after slicing.
-- Unused cells MUST be fully transparent.
-- Overlay/object families such as trees, vegetation, roads, paths, structures, props, and transition pieces use transparent background around the intended artwork unless the governing issue explicitly requires an opaque base. Terrain/base families may be opaque where appropriate.
-- `Top-down atlas` or `top-down view atlas` means direct overhead/orthographic game-art presentation with no horizon and no perspective or isometric camera tilt, unless the governing issue explicitly requests a different projection.
-- All occupied cells in one atlas must share coherent scale, lighting direction, material language, and art style appropriate to the requested family.
-- Atlas content MUST stay within the requested family. Do not fill cells with unrelated world scenery merely to occupy the sheet.
+**Admin > README.md > ROADMAP.md > TODO > issues > code/assets > tests**
 
-SOURCE:
-- Only Admin may request or authorize creation of new visual source images, including atlas images, standalone sprites, replacement artwork, textures, and other production imagery.
-- Texture Artist uses Admin-provided artwork only.
-- Texture Artist MUST NOT generate, redraw, synthesize, procedurally create, request image generation for, or substitute replacement artwork.
-- Missing required artwork is an Admin-provided-input condition and never permission for a worker to manufacture placeholders or alternate source art.
-- Production atlas processing MUST execute `tools/tile_atlas_tool.py`.
+Read the issue before processing or creating an atlas.
 
-CANONICAL_FORMAT:
-- Atlas: `1000x1000 RGBA PNG`.
+## Who may create artwork
+
+Only Admin may request or authorize new production artwork.
+
+Texture Artist may process and integrate Admin-provided artwork, but must not generate, redraw, synthesize, or substitute source artwork.
+
+If required artwork is missing, notify Admin. Do not create a placeholder.
+
+## What an atlas image is
+
+An **atlas image** is one production tile-source sheet for one visual family named by the issue or Admin.
+
+It is not a world map, region map, scene illustration, poster, splash image, UI mockup, infographic, or labeled presentation sheet.
+
+If Admin says `create/draw/generate an atlas image for issue #N`:
+
+1. Read issue `#N`.
+2. Identify the exact requested visual family.
+3. Create only that family.
+4. Do not draw the issue number into the image.
+
+## Top-down meaning
+
+`Top-down atlas` means direct overhead/orthographic game art.
+
+Do not use a horizon, perspective view, or isometric tilt unless the issue explicitly requires it.
+
+## Canonical format
+
+- Master: exact `1000x1000 RGBA PNG`.
 - Grid: `10x10`.
-- Cell: `100x100`.
-- Capacity: 100 tiles.
-- Ordering: row-major.
-- Source artwork needs no borders/numbers/labels.
-- Normalize source to 1000x1000 before slicing.
-- Slice directly; border trim = 0.
+- Cell: exact `100x100`.
+- Capacity: 100 cells.
+- Order: row-major.
+- Unused cells: fully transparent.
+- Overlay/object families: transparent background around the artwork unless the issue says otherwise.
+- Terrain/base families may be opaque where appropriate.
 
-OUTPUT:
-- `<family>_atlas_1000px.png`.
-- `<family>_<semantic>_100px.png` per occupied cell.
-- `<family>_tiles.manifest.json`.
-- `<family>_tiles.descriptions.json`.
-- Target: `textures/tiles/<family>/`.
+The grid is structural only. Do not draw visible grid lines, borders, coordinates, tile numbers, labels, titles, captions, legends, watermarks, issue numbers, or UI text.
 
-SEMANTICS:
-- Default stable IDs: `r00_c00` ... `r09_c09`.
-- Metadata may replace default IDs/descriptions.
-- Duplicate semantic IDs are invalid.
+Each occupied cell must be independently sliceable on exact 100-pixel boundaries. Artwork must not accidentally cross into another cell.
 
-GITHUB:
-- EACH PNG = separate binary Git blob.
-- Collect blob SHAs.
-- One tree -> one commit -> branch ref update.
-- Text JSON = separate UTF-8 Git blob or equivalent text-safe operation.
-- Never use aggregate family size as per-file upload failure reason.
-- If direct binary publishing is unavailable for an existing Admin-provided asset, follow `WORKFLOW.md` and `.github/DRIVE_BINARY_FALLBACK.md`; do not stop the integration solely because of connector capability.
-- Fallback staging is not repository completion. Verify the final files in GitHub before Tester handoff.
+Use a multi-cell composition only when the issue explicitly requires it and every occupied cell still has a stable semantic role.
 
-ACCEPTANCE:
-- Master exact 1000x1000 RGBA.
-- Tiles exact 100x100 RGBA.
-- Tool manifest matches outputs.
-- Runtime uses committed family.
-- Tester verifies before closure.
+All occupied cells must use coherent scale, lighting, materials, and style.
+
+## Required tool
+
+Production atlas processing must run:
+
+`tools/tile_atlas_tool.py`
+
+Normalize the whole source to 1000x1000 when needed, then slice directly with border trim `0`.
+
+## Output
+
+Target folder:
+
+`textures/tiles/<family>/`
+
+Required outputs:
+
+- `<family>_atlas_1000px.png`
+- `<family>_<semantic>_100px.png` for each occupied cell
+- `<family>_tiles.manifest.json`
+- `<family>_tiles.descriptions.json`
+
+Default semantic IDs are `r00_c00` through `r09_c09`. Metadata may replace them. Duplicate semantic IDs are invalid.
+
+## Binary upload rule — mandatory
+
+**Never upload atlas PNGs or other binary files to GitHub using GitHub Blob, Create Blob, base64 upload, binary-upload APIs, Git trees, or similar GitHub binary methods.**
+
+Instead:
+
+1. Put the master, slices, and other binary outputs in the Google Drive `The_Advisor_Game/` repository mirror.
+2. Use exact repository-relative paths and filenames.
+3. Update/replace existing Drive files instead of creating duplicate filenames.
+4. Set `Repository state: DRIVE_PENDING_ADMIN_PUSH` and clear the worker claim.
+5. Tell Admin the exact paths that require commit/push.
+6. After Admin pushes them, verify the files in GitHub and set `Repository state: GITHUB_VERIFIED`.
+
+Text metadata may be written directly to GitHub when supported, but do not claim the atlas family is integrated until its required binary files are visible in GitHub.
+
+## Acceptance
+
+- Master is exact 1000x1000 RGBA PNG.
+- Required tiles are exact 100x100 RGBA PNG.
+- Manifest/descriptions match the outputs.
+- Runtime uses the committed family where required.
+- GitHub paths are verified after Admin push.
+- Tester independently verifies before closure.
