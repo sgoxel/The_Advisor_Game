@@ -1,0 +1,1425 @@
+{
+  "version": 3,
+  "family": "forest",
+  "atlas": {
+    "filename": "forest_atlas_1000px.png",
+    "width": 1000,
+    "height": 1000,
+    "mode": "RGBA",
+    "columns": 10,
+    "rows": 10,
+    "cellSize": 100,
+    "ordering": "row-major",
+    "sha256": "5266588c05cb4cfae0a5606d2e0f5739a3bf04ba69f0504b33e806870b8235cc",
+    "sourceWidth": 1000,
+    "sourceHeight": 1000,
+    "normalizationMode": "fit",
+    "normalized": false
+  },
+  "derivedTilePolicy": {
+    "sourceCellSize": [
+      100,
+      100
+    ],
+    "outputSize": [
+      100,
+      100
+    ],
+    "borderTrimPx": 0,
+    "resamplingDuringSlice": "NONE"
+  },
+  "tiles": [
+    {
+      "index": 0,
+      "row": 0,
+      "col": 0,
+      "type": "r00_c00",
+      "semantic_type": "r00_c00",
+      "displayName": "Forest variant 001",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c00_100px.png",
+      "sha256": "13e364a7a8a477b64647d9f407460dfe70a2495fc0811d2a2f160714da9778c7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "col": 1,
+      "type": "r00_c01",
+      "semantic_type": "r00_c01",
+      "displayName": "Forest variant 002",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c01_100px.png",
+      "sha256": "3dd94a2f7d1b4a99911d8054c0775ab36f1bb50ec69dfadc0b6bcf5d31013a79",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "col": 2,
+      "type": "r00_c02",
+      "semantic_type": "r00_c02",
+      "displayName": "Forest variant 003",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c02_100px.png",
+      "sha256": "cf997caf7f2fcd95ab228dcea203977143e2612363333e6d91f94ab01813d0b0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "col": 3,
+      "type": "r00_c03",
+      "semantic_type": "r00_c03",
+      "displayName": "Forest variant 004",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c03_100px.png",
+      "sha256": "43c2a3d4078ff3f035fbc0c98c8a6ef8583691ce05a6832f8025ef435cee6133",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 4,
+      "row": 0,
+      "col": 4,
+      "type": "r00_c04",
+      "semantic_type": "r00_c04",
+      "displayName": "Forest variant 005",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c04_100px.png",
+      "sha256": "a49f91784a45654ccdac1da0c31fa1b6c4272a336fe91c6b82d47baace4aa866",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 5,
+      "row": 0,
+      "col": 5,
+      "type": "r00_c05",
+      "semantic_type": "r00_c05",
+      "displayName": "Forest variant 006",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c05_100px.png",
+      "sha256": "0334f6eabde5f15c55f51af4a10f7268aa108cc77e6af208469ad2f9350b4ef4",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 6,
+      "row": 0,
+      "col": 6,
+      "type": "r00_c06",
+      "semantic_type": "r00_c06",
+      "displayName": "Forest variant 007",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c06_100px.png",
+      "sha256": "0f5dacf973e0a0b0003752fbc333c8f8996d3ab0feb4596a2f5f7f716ebcb3dc",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 7,
+      "row": 0,
+      "col": 7,
+      "type": "r00_c07",
+      "semantic_type": "r00_c07",
+      "displayName": "Forest variant 008",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c07_100px.png",
+      "sha256": "513b3ca107ffe15f95ab8c486bb1e8b892155b38730b88728302755d4b08d1d9",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 8,
+      "row": 0,
+      "col": 8,
+      "type": "r00_c08",
+      "semantic_type": "r00_c08",
+      "displayName": "Forest variant 009",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c08_100px.png",
+      "sha256": "6b64dfba257f693099656fe7d7bfb5ea0aec0baf214544a97f7f54715b72eb72",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 9,
+      "row": 0,
+      "col": 9,
+      "type": "r00_c09",
+      "semantic_type": "r00_c09",
+      "displayName": "Forest variant 010",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r00_c09_100px.png",
+      "sha256": "e071845c097b569861fb4f11ac116f8cabecebbab85f185ec89f5735a308b3fa",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 10,
+      "row": 1,
+      "col": 0,
+      "type": "r01_c00",
+      "semantic_type": "r01_c00",
+      "displayName": "Forest variant 011",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c00_100px.png",
+      "sha256": "7927540134eabf146c05abe0b26d0dee099256ce901ed81476b742c815767647",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 11,
+      "row": 1,
+      "col": 1,
+      "type": "r01_c01",
+      "semantic_type": "r01_c01",
+      "displayName": "Forest variant 012",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c01_100px.png",
+      "sha256": "cd6915d3c8aa54d2cc6e8c442a99336a4d6c9ef9bfe3e7a72a25300fc65eac90",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 12,
+      "row": 1,
+      "col": 2,
+      "type": "r01_c02",
+      "semantic_type": "r01_c02",
+      "displayName": "Forest variant 013",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c02_100px.png",
+      "sha256": "882b1d8e848eb40476954ee0c2456f7da22f213f559f449dad23a30cdfb2cfac",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 13,
+      "row": 1,
+      "col": 3,
+      "type": "r01_c03",
+      "semantic_type": "r01_c03",
+      "displayName": "Forest variant 014",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c03_100px.png",
+      "sha256": "243ae6412709300a97eed4835826c19d4d58b615ad855a0f362b6744b6513ce2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 14,
+      "row": 1,
+      "col": 4,
+      "type": "r01_c04",
+      "semantic_type": "r01_c04",
+      "displayName": "Forest variant 015",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c04_100px.png",
+      "sha256": "fbfd43f7ebeeb4fce3e5d366ea27f12dcd63f8d9a32b96121da08cc89aa6a6e1",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 15,
+      "row": 1,
+      "col": 5,
+      "type": "r01_c05",
+      "semantic_type": "r01_c05",
+      "displayName": "Forest variant 016",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c05_100px.png",
+      "sha256": "e2f898474f47b47e6c587b536a648383107f47cb9b9f68fec252dd2af7aac5ff",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 16,
+      "row": 1,
+      "col": 6,
+      "type": "r01_c06",
+      "semantic_type": "r01_c06",
+      "displayName": "Forest variant 017",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c06_100px.png",
+      "sha256": "2ca92ead2fa74a844dd478b5e4aa92b4f2cba93a84addaa08c7603127dc1809b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 17,
+      "row": 1,
+      "col": 7,
+      "type": "r01_c07",
+      "semantic_type": "r01_c07",
+      "displayName": "Forest variant 018",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c07_100px.png",
+      "sha256": "886b473279941a706680c1c79f2fffcde6db46deb031953c658b5a9e7b286525",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 18,
+      "row": 1,
+      "col": 8,
+      "type": "r01_c08",
+      "semantic_type": "r01_c08",
+      "displayName": "Forest variant 019",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c08_100px.png",
+      "sha256": "be4b5bb1cd27e06eb9203a5e0356e39c9136682bd5eb093c5b9a6ddef7d17071",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 19,
+      "row": 1,
+      "col": 9,
+      "type": "r01_c09",
+      "semantic_type": "r01_c09",
+      "displayName": "Forest variant 020",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r01_c09_100px.png",
+      "sha256": "791ebbe2ec6366c4539dfdad77e019a88731f70d08e5e52d9715e14adf1b00f7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 20,
+      "row": 2,
+      "col": 0,
+      "type": "r02_c00",
+      "semantic_type": "r02_c00",
+      "displayName": "Forest variant 021",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c00_100px.png",
+      "sha256": "d6e78b521723652374d8211d32c0a843c98a0dc5ee57c4415589dcaf366c4450",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 21,
+      "row": 2,
+      "col": 1,
+      "type": "r02_c01",
+      "semantic_type": "r02_c01",
+      "displayName": "Forest variant 022",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c01_100px.png",
+      "sha256": "6f2d3188d966a4d878cbe80744ee78b7d808e9ece0973013ea57523581753fd3",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 22,
+      "row": 2,
+      "col": 2,
+      "type": "r02_c02",
+      "semantic_type": "r02_c02",
+      "displayName": "Forest variant 023",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c02_100px.png",
+      "sha256": "39d5ac64e7c75a8748cf4b85427d909dff41618f9b4b8b9c0ab04f2d7f538e36",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 23,
+      "row": 2,
+      "col": 3,
+      "type": "r02_c03",
+      "semantic_type": "r02_c03",
+      "displayName": "Forest variant 024",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c03_100px.png",
+      "sha256": "11ad3390aa38e2e284b61b865c339f2c882e9a7147a64e1cc0ed037fa9f50d9f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 24,
+      "row": 2,
+      "col": 4,
+      "type": "r02_c04",
+      "semantic_type": "r02_c04",
+      "displayName": "Forest variant 025",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c04_100px.png",
+      "sha256": "9ee52b19fb32672506bc9c8a383624aec6b039bb2e5502cc773506662365b7e8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 25,
+      "row": 2,
+      "col": 5,
+      "type": "r02_c05",
+      "semantic_type": "r02_c05",
+      "displayName": "Forest variant 026",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c05_100px.png",
+      "sha256": "5e7d67777b9ad903a58ba88e78c04f80b11bafedd01aa72ec8d60f426a149c6b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 26,
+      "row": 2,
+      "col": 6,
+      "type": "r02_c06",
+      "semantic_type": "r02_c06",
+      "displayName": "Forest variant 027",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c06_100px.png",
+      "sha256": "9654d33807b7539cc17c9490e9c6d07522321d726ce3690536f8b569a5900137",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 27,
+      "row": 2,
+      "col": 7,
+      "type": "r02_c07",
+      "semantic_type": "r02_c07",
+      "displayName": "Forest variant 028",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c07_100px.png",
+      "sha256": "b7f8d11b7f802a8ac626b189df325bcf1e254062d83d9fbaa6f8e9ac7210d399",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 28,
+      "row": 2,
+      "col": 8,
+      "type": "r02_c08",
+      "semantic_type": "r02_c08",
+      "displayName": "Forest variant 029",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c08_100px.png",
+      "sha256": "98424aacc07678fd1662e9541e6b4f2d25f3115056a7ba4bf5e778dbfe29c801",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 29,
+      "row": 2,
+      "col": 9,
+      "type": "r02_c09",
+      "semantic_type": "r02_c09",
+      "displayName": "Forest variant 030",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r02_c09_100px.png",
+      "sha256": "88611b7401eee60738fbee4ea3423a271f3044b2d300c8fe9f4db45583780966",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 30,
+      "row": 3,
+      "col": 0,
+      "type": "r03_c00",
+      "semantic_type": "r03_c00",
+      "displayName": "Forest variant 031",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c00_100px.png",
+      "sha256": "0f4a407a9fb83c29098aae09a70ddf051bb643efda984043874e4774fad4afaf",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 31,
+      "row": 3,
+      "col": 1,
+      "type": "r03_c01",
+      "semantic_type": "r03_c01",
+      "displayName": "Forest variant 032",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c01_100px.png",
+      "sha256": "1d6da6a184d629f78ac5e0ee12c1eb400e2249f841b60f001f98677937ce9349",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 32,
+      "row": 3,
+      "col": 2,
+      "type": "r03_c02",
+      "semantic_type": "r03_c02",
+      "displayName": "Forest variant 033",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c02_100px.png",
+      "sha256": "833069ba7e1d4a7cadcd6c93d963c7d226f1eb5be6ae556e68a6277b918959c2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 33,
+      "row": 3,
+      "col": 3,
+      "type": "r03_c03",
+      "semantic_type": "r03_c03",
+      "displayName": "Forest variant 034",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c03_100px.png",
+      "sha256": "f8f8cedaf531860a0eb8d1eb572cf6be2eb7602ff18b63bf90b1b12301fca0e8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 34,
+      "row": 3,
+      "col": 4,
+      "type": "r03_c04",
+      "semantic_type": "r03_c04",
+      "displayName": "Forest variant 035",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c04_100px.png",
+      "sha256": "ed138172bb2ddee7583810c328b1c793435d62235de20834ad77059005e2ab02",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 35,
+      "row": 3,
+      "col": 5,
+      "type": "r03_c05",
+      "semantic_type": "r03_c05",
+      "displayName": "Forest variant 036",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c05_100px.png",
+      "sha256": "e9a539af551445f6f234361af032aa385907a1f1393dee96f037cdefd640341f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 36,
+      "row": 3,
+      "col": 6,
+      "type": "r03_c06",
+      "semantic_type": "r03_c06",
+      "displayName": "Forest variant 037",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c06_100px.png",
+      "sha256": "c1b69e6ad2323a74f94e7b46cc3308ca0151a2c54687b8ce34709459375b3007",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 37,
+      "row": 3,
+      "col": 7,
+      "type": "r03_c07",
+      "semantic_type": "r03_c07",
+      "displayName": "Forest variant 038",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c07_100px.png",
+      "sha256": "c56005700a405e3a8af0b12951886b9ca70c830f08664adba24103d88bba827e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 38,
+      "row": 3,
+      "col": 8,
+      "type": "r03_c08",
+      "semantic_type": "r03_c08",
+      "displayName": "Forest variant 039",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c08_100px.png",
+      "sha256": "7ab387cd4e7bcddd2746b28e4bf0ac447824c66cd086b952cdac222cb6ed3042",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 39,
+      "row": 3,
+      "col": 9,
+      "type": "r03_c09",
+      "semantic_type": "r03_c09",
+      "displayName": "Forest variant 040",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r03_c09_100px.png",
+      "sha256": "3f60216e99d51471422f8375d24834bfa8878240e10e97fe35fe905550a95784",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 40,
+      "row": 4,
+      "col": 0,
+      "type": "r04_c00",
+      "semantic_type": "r04_c00",
+      "displayName": "Forest variant 041",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c00_100px.png",
+      "sha256": "f847363c0a73d8c8421eed31423ed8126b39393d60354b4adb54a0c97c412701",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 41,
+      "row": 4,
+      "col": 1,
+      "type": "r04_c01",
+      "semantic_type": "r04_c01",
+      "displayName": "Forest variant 042",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c01_100px.png",
+      "sha256": "8a921b29dd6da12c4136f99ca3222d12dbbbd84fb5ff12b72abdfeef55fa765c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 42,
+      "row": 4,
+      "col": 2,
+      "type": "r04_c02",
+      "semantic_type": "r04_c02",
+      "displayName": "Forest variant 043",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c02_100px.png",
+      "sha256": "167db455646100a95f161afc836fc5d88cbde2701b2190de602b21317e2fb745",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 43,
+      "row": 4,
+      "col": 3,
+      "type": "r04_c03",
+      "semantic_type": "r04_c03",
+      "displayName": "Forest variant 044",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c03_100px.png",
+      "sha256": "c842b894919c25df2f89e70557f0ee1e41a85f1562ea2feedc3d7494e81d473e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 44,
+      "row": 4,
+      "col": 4,
+      "type": "r04_c04",
+      "semantic_type": "r04_c04",
+      "displayName": "Forest variant 045",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c04_100px.png",
+      "sha256": "19e2acfbaff3460d0876648dbdbb5423f46208c38898613a5d43d66036f9d37a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 45,
+      "row": 4,
+      "col": 5,
+      "type": "r04_c05",
+      "semantic_type": "r04_c05",
+      "displayName": "Forest variant 046",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c05_100px.png",
+      "sha256": "97b590c5952fc83f97758b206491801df571af149a603aa428c262a9b6ddc1ec",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 46,
+      "row": 4,
+      "col": 6,
+      "type": "r04_c06",
+      "semantic_type": "r04_c06",
+      "displayName": "Forest variant 047",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c06_100px.png",
+      "sha256": "25cee3d85aeb7b3819560e5f854a6deb52e9efa05e2c46b0cc5c8624a1d4dec8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 47,
+      "row": 4,
+      "col": 7,
+      "type": "r04_c07",
+      "semantic_type": "r04_c07",
+      "displayName": "Forest variant 048",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c07_100px.png",
+      "sha256": "7e2d106ed710b66eb320e487581768d27bd2efdb02d9ec40c201b04c461305b2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 48,
+      "row": 4,
+      "col": 8,
+      "type": "r04_c08",
+      "semantic_type": "r04_c08",
+      "displayName": "Forest variant 049",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c08_100px.png",
+      "sha256": "d9991f9b9d5722ae0856cc5bbd70afda22f07af4dda86bb211dbcfdef5884157",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 49,
+      "row": 4,
+      "col": 9,
+      "type": "r04_c09",
+      "semantic_type": "r04_c09",
+      "displayName": "Forest variant 050",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r04_c09_100px.png",
+      "sha256": "34ce32fef4adc7e564030ed76081e53490d777faaed96a089092195b2b63314e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 50,
+      "row": 5,
+      "col": 0,
+      "type": "r05_c00",
+      "semantic_type": "r05_c00",
+      "displayName": "Forest variant 051",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c00_100px.png",
+      "sha256": "c8d5646ccbaa4c69e87c5847214d4cc2852e8f3fefbee607f85f2ffeb885ea93",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 51,
+      "row": 5,
+      "col": 1,
+      "type": "r05_c01",
+      "semantic_type": "r05_c01",
+      "displayName": "Forest variant 052",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c01_100px.png",
+      "sha256": "39157aafd23e6792aac42c9079bb985b9c6df221730ce9bf6d75a0d37a24870f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 52,
+      "row": 5,
+      "col": 2,
+      "type": "r05_c02",
+      "semantic_type": "r05_c02",
+      "displayName": "Forest variant 053",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c02_100px.png",
+      "sha256": "bf1b09bc167282bd6617b04432e9cb36eff37a4a0d1af83e2fccfde61d1c1612",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 53,
+      "row": 5,
+      "col": 3,
+      "type": "r05_c03",
+      "semantic_type": "r05_c03",
+      "displayName": "Forest variant 054",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c03_100px.png",
+      "sha256": "aefe0feed1549b1a2d6ae9541fc7b37af674f6b60e0fb6cd91b4bb307bb4cf38",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 54,
+      "row": 5,
+      "col": 4,
+      "type": "r05_c04",
+      "semantic_type": "r05_c04",
+      "displayName": "Forest variant 055",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c04_100px.png",
+      "sha256": "845de93e227d71355dd2e4e394f6c2466b7ebc721e95558b502267dfce015ef5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 55,
+      "row": 5,
+      "col": 5,
+      "type": "r05_c05",
+      "semantic_type": "r05_c05",
+      "displayName": "Forest variant 056",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c05_100px.png",
+      "sha256": "dc06ea0aef82d07457d08eda01e25cf2cd0b307ec868cbc7a6bec55e62e11875",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 56,
+      "row": 5,
+      "col": 6,
+      "type": "r05_c06",
+      "semantic_type": "r05_c06",
+      "displayName": "Forest variant 057",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c06_100px.png",
+      "sha256": "3220c249544e4bd13b86062d853e983aa1ebb0410db87f821090ab3e86a98767",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 57,
+      "row": 5,
+      "col": 7,
+      "type": "r05_c07",
+      "semantic_type": "r05_c07",
+      "displayName": "Forest variant 058",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c07_100px.png",
+      "sha256": "c600b58828274cad45a69e3c5632be6d7fe9afb4030171676159dd4b957c25ef",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 58,
+      "row": 5,
+      "col": 8,
+      "type": "r05_c08",
+      "semantic_type": "r05_c08",
+      "displayName": "Forest variant 059",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c08_100px.png",
+      "sha256": "f5bf866c1805d520872aefe9b440f9937039a7a6c195d15282aaa6ff67302724",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 59,
+      "row": 5,
+      "col": 9,
+      "type": "r05_c09",
+      "semantic_type": "r05_c09",
+      "displayName": "Forest variant 060",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r05_c09_100px.png",
+      "sha256": "540431ef07fb8e58a2c143d0d858e65032288adc5dcde276a605ab139f0a76c0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 60,
+      "row": 6,
+      "col": 0,
+      "type": "r06_c00",
+      "semantic_type": "r06_c00",
+      "displayName": "Forest variant 061",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c00_100px.png",
+      "sha256": "7492358c3eaa0af7f98e09a4f7c936e9fafd6870b099600bafb9962b1da8b0b8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 61,
+      "row": 6,
+      "col": 1,
+      "type": "r06_c01",
+      "semantic_type": "r06_c01",
+      "displayName": "Forest variant 062",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c01_100px.png",
+      "sha256": "3ab95818ad137e866b8d5d79b8248ff01f0d19ad4e0564c396906968542da5e9",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 62,
+      "row": 6,
+      "col": 2,
+      "type": "r06_c02",
+      "semantic_type": "r06_c02",
+      "displayName": "Forest variant 063",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c02_100px.png",
+      "sha256": "99d274e974e555bfa6295a586f3af64d2bf897539765e281c52985ded362edfb",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 63,
+      "row": 6,
+      "col": 3,
+      "type": "r06_c03",
+      "semantic_type": "r06_c03",
+      "displayName": "Forest variant 064",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c03_100px.png",
+      "sha256": "9d667abf1d267df273f0186f3e4de9048d32695d315ec5ca274bf7c2e644e933",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 64,
+      "row": 6,
+      "col": 4,
+      "type": "r06_c04",
+      "semantic_type": "r06_c04",
+      "displayName": "Forest variant 065",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c04_100px.png",
+      "sha256": "71d2c04735157f2cc8fceae8e37bf476540290c299cf20a349d33117426b16a7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 65,
+      "row": 6,
+      "col": 5,
+      "type": "r06_c05",
+      "semantic_type": "r06_c05",
+      "displayName": "Forest variant 066",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c05_100px.png",
+      "sha256": "9e17380cf7d78ba5beb4646ad303108259411fa4dd2560e0bf291a5d17ed1f02",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 66,
+      "row": 6,
+      "col": 6,
+      "type": "r06_c06",
+      "semantic_type": "r06_c06",
+      "displayName": "Forest variant 067",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c06_100px.png",
+      "sha256": "3326a999b196a0abbabb5f5d9a7f8d622cccaa14596640ab3f6e197f224f49f0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 67,
+      "row": 6,
+      "col": 7,
+      "type": "r06_c07",
+      "semantic_type": "r06_c07",
+      "displayName": "Forest variant 068",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c07_100px.png",
+      "sha256": "47c412625ff199fe6bda70de0b20298d009ca8a2aad43fb312afb3be791ad02a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 68,
+      "row": 6,
+      "col": 8,
+      "type": "r06_c08",
+      "semantic_type": "r06_c08",
+      "displayName": "Forest variant 069",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c08_100px.png",
+      "sha256": "6e9d89d4c5f793d7a0349d9556963fba844f36e8123884d16e5236d3ba2b90d7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 69,
+      "row": 6,
+      "col": 9,
+      "type": "r06_c09",
+      "semantic_type": "r06_c09",
+      "displayName": "Forest variant 070",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r06_c09_100px.png",
+      "sha256": "e28c28e701d1ec42c6f5345503f5856a28022a6725f562a7a2ebd3fc3ee1c2d4",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 70,
+      "row": 7,
+      "col": 0,
+      "type": "r07_c00",
+      "semantic_type": "r07_c00",
+      "displayName": "Forest variant 071",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c00_100px.png",
+      "sha256": "90d4bd47411dd75a28e4f0cf4f46c10773de0d1f19d709b6b01935cf43d48a79",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 71,
+      "row": 7,
+      "col": 1,
+      "type": "r07_c01",
+      "semantic_type": "r07_c01",
+      "displayName": "Forest variant 072",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c01_100px.png",
+      "sha256": "f9a8f1f9e0dc260bacebf841fefc7ef84b8699a4fb24ac0af675d37115d17c60",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 72,
+      "row": 7,
+      "col": 2,
+      "type": "r07_c02",
+      "semantic_type": "r07_c02",
+      "displayName": "Forest variant 073",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c02_100px.png",
+      "sha256": "50ec7a8ce0a427ddf3797ad5201b44bdb5a530f4c5fca453e7e704807b91b1b2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 73,
+      "row": 7,
+      "col": 3,
+      "type": "r07_c03",
+      "semantic_type": "r07_c03",
+      "displayName": "Forest variant 074",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c03_100px.png",
+      "sha256": "2f031115cc78a89c412fe7a5b158fb45d72cf23fa0854c93543ffa9b6a2511a1",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 74,
+      "row": 7,
+      "col": 4,
+      "type": "r07_c04",
+      "semantic_type": "r07_c04",
+      "displayName": "Forest variant 075",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c04_100px.png",
+      "sha256": "88b85249873736801f175318210658d396717afa4b6ea19bc83a47cbe5806b3b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 75,
+      "row": 7,
+      "col": 5,
+      "type": "r07_c05",
+      "semantic_type": "r07_c05",
+      "displayName": "Forest variant 076",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c05_100px.png",
+      "sha256": "e763e9c874ef8ebe2c20cee7951165520c2b120424c1dc8ffa01b2e7638ef125",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 76,
+      "row": 7,
+      "col": 6,
+      "type": "r07_c06",
+      "semantic_type": "r07_c06",
+      "displayName": "Forest variant 077",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c06_100px.png",
+      "sha256": "70b434ef69c98e9a8c4b4dbf78723f7652b246472c938a2bce3b4bc8fa7da329",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 77,
+      "row": 7,
+      "col": 7,
+      "type": "r07_c07",
+      "semantic_type": "r07_c07",
+      "displayName": "Forest variant 078",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c07_100px.png",
+      "sha256": "5ee4a605662aec197fab3d70b6849405a856f2ca45544637acd4d2c5a36afd42",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 78,
+      "row": 7,
+      "col": 8,
+      "type": "r07_c08",
+      "semantic_type": "r07_c08",
+      "displayName": "Forest variant 079",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c08_100px.png",
+      "sha256": "9ed96436854843d7bcc260ac9af2d15298d76319bcd2f0b4c7588a2882143a2b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 79,
+      "row": 7,
+      "col": 9,
+      "type": "r07_c09",
+      "semantic_type": "r07_c09",
+      "displayName": "Forest variant 080",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r07_c09_100px.png",
+      "sha256": "45d7f28431bd4ebbb3b1dca1eaa7079f04007175be3bf735f108cb62407a6247",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 80,
+      "row": 8,
+      "col": 0,
+      "type": "r08_c00",
+      "semantic_type": "r08_c00",
+      "displayName": "Forest variant 081",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r08_c00_100px.png",
+      "sha256": "34046a0804710b571b33919fb1503283ff96a162b83b9487ff6e4d2221217707",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 81,
+      "row": 8,
+      "col": 1,
+      "type": "r08_c01",
+      "semantic_type": "r08_c01",
+      "displayName": "Forest variant 082",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r08_c01_100px.png",
+      "sha256": "d1d41f7d95ef916ad0d2818a07d3db000d716dc8b1fa8b2125a11561b1ac9109",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 82,
+      "row": 8,
+      "col": 2,
+      "type": "r08_c02",
+      "semantic_type": "r08_c02",
+      "displayName": "Forest variant 083",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r08_c02_100px.png",
+      "sha256": "b1f0cfc502e8fa7e1582abd8b35b3dd8e8046f7b56d0f08991f42aa1578d4422",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 83,
+      "row": 8,
+      "col": 3,
+      "type": "r08_c03",
+      "semantic_type": "r08_c03",
+      "displayName": "Forest variant 084",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r08_c03_100px.png",
+      "sha256": "f151b388dd9eaaffa375bf643a4abd649c3290965e9558200f1b6a342ebac5ac",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 84,
+      "row": 8,
+      "col": 4,
+      "type": "r08_c04",
+      "semantic_type": "r08_c04",
+      "displayName": "Forest variant 085",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r08_c04_100px.png",
+      "sha256": "b23e03e42fb82d18cd93a423b7e28c983cf19d63f176266cb02f1474a68d15c8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 85,
+      "row": 8,
+      "col": 5,
+      "type": "r08_c05",
+      "semantic_type": "r08_c05",
+      "displayName": "Forest variant 086",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r08_c05_100px.png",
+      "sha256": "81b04672ca2551abffca8eaf6866c4f21b4528c673df016e1531d00ee449e766",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 86,
+      "row": 8,
+      "col": 6,
+      "type": "r08_c06",
+      "semantic_type": "r08_c06",
+      "displayName": "Forest variant 087",
+      "category": "vegetation",
+      "runtimeUsage": "vegetation/prop/object",
+      "filename": "forest_r08_c06_100px.png",
+      "sha256": "90a571c5033a6b66cb9344fe9cc06460df1263305b456adb933d22224356ea9f",
+      "size": [
+        100,
+        100
+      ]
+    }
+  ]
+}
