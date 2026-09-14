@@ -1,0 +1,1 @@
+This temporary note is superseded by the update to ISSUE_STANDARD.md and should not remain.
