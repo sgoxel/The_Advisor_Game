@@ -25,14 +25,28 @@ WebGL 2D/3D+isometric+responsive+accessible. LLM+LocalBOT=same Character; Simula
 ---
 
 ## GITHUB/AUDIT
-GitHub=workspace+record; no Drive. Inspect+verify.
+GitHub is the authoritative workspace and project record. Inspect and verify repository-changing work in GitHub before claiming completion.
+Google Drive is permitted only as the staging bridge defined by `WORKFLOW.md` and `.github/DRIVE_BINARY_FALLBACK.md` when an existing Admin-provided binary cannot be published directly through the active GitHub connection.
+Drive staging or local repository sync is never equivalent to a GitHub commit/push.
 Every change=>issue/task+EN audit: purpose,change,refs,checks,result,risks,next.
+
+### DRIVE-STAGED ADMIN PUSH RULE
+When a worker has completed permitted binary processing but direct GitHub binary publication is unavailable:
+
+1. Stage the exact issue-required files through the configured Google Drive repository-sync path using exact repository-relative paths.
+2. Set `Repository state: DRIVE_PENDING_ADMIN_PUSH`.
+3. Clear the worker claim; workers must not hold a claim while waiting for Admin's manual Git action.
+4. Emit `ADMIN ACTION REQUIRED` in the current chat with the issue number and exact repository-relative paths that require commit/push.
+5. Trigger the available worker/routine notification surface for the same Admin action. If that notification surface is unavailable in the active execution, record that limitation truthfully and do not claim it was sent.
+6. Workers must skip issues whose repository state is `DRIVE_PENDING_ADMIN_PUSH` and continue other eligible work according to normal role order.
+7. After Admin has committed and pushed the synchronized files, the responsible role verifies the expected paths in GitHub, records evidence, and sets `Repository state: GITHUB_VERIFIED`.
+8. Tester must not pass or close repository-changing work while its repository state is `DRIVE_PENDING_ADMIN_PUSH`.
 
 ---
 
 ## FIXED GENERAL RULES
 The README.md file cannot be modified unless the Admin explicitly requests a change.
-Workers must never BLOCK a task, even if doing so would cause an error. Workers can claim only one task at a time. A worker cannot directly assign a task to another specific worker number; instead, they may open an issue for other roles to take up. The next required step is specified at every handoff and at final closure. Once a worker has claimed a task, they MUST complete it immediately and prioritize it above all else before proceeding to other roles in sequence. They cannot switch roles or perform other work until the claimed task is finished.
+Workers must never BLOCK a task, even if doing so would cause an error. Workers can claim only one task at a time. A worker cannot directly assign a task to another specific worker number; instead, they may open an issue for other roles to take up. The next required step is specified at every handoff and at final closure. Once a worker has claimed a task, they MUST complete it immediately and prioritize it above all else before proceeding to other roles in sequence. They cannot switch roles or perform other work until the claimed task is finished or the work has truthfully reached `DRIVE_PENDING_ADMIN_PUSH` and the claim is cleared for Admin action.
 A worker cannot hold a claimed task for more than 3 hours. If a claim persists beyond 3 hours, the first worker to notice it must delete that claim.
 Workers #1 through #5 operate on Routine Tasks. The Admin can manually activate workers #6 through #20. Manually activated workers cannot claim tasks.
 Workers can be assigned to Routine Tasks or activated manually by the Admin.
@@ -180,9 +194,10 @@ For a reusable tile family already supplied by Admin:
 6. require stable semantic metadata for occupied cells, using default IDs `r00_c00` through `r09_c09` where custom semantic IDs are not supplied;
 7. produce/update `<family>_tiles.manifest.json` and `<family>_tiles.descriptions.json` using the current tool schema;
 8. verify SHA-256 values when available and collect committed binary blob SHAs where repository publishing applies;
-9. verify final binary PNG files and paths under `textures/tiles/<family>/`;
-10. integrate/register the committed semantic `100 x 100` PNG family in the latest application when within scope;
-11. hand to Game Programmer only when separate coding beyond Texture Artist integration scope is required; otherwise hand directly to Tester.
+9. publish directly to GitHub when the active connection supports the required binaries; otherwise use the Drive-staged Admin push workflow from `WORKFLOW.md` and `.github/DRIVE_BINARY_FALLBACK.md`;
+10. verify final binary PNG files and paths under `textures/tiles/<family>/` in GitHub before claiming repository integration is complete;
+11. integrate/register the committed semantic `100 x 100` PNG family in the latest application when within scope;
+12. hand to Game Programmer only when separate coding beyond Texture Artist integration scope is required; otherwise hand directly to Tester after GitHub verification.
 
 Description/visual metadata is presentation metadata only and never Simulation authority.
 
@@ -205,6 +220,9 @@ For reusable visual-family integration, record as applicable:
 - manifest path;
 - descriptions path;
 - SHA-256 values and/or committed blob SHAs when available;
+- repository state (`NONE`, `DRIVE_PENDING_ADMIN_PUSH`, or `GITHUB_VERIFIED`);
+- exact Drive-staged repository-relative paths when fallback is used;
+- Admin action/notification evidence or truthful notification limitation when fallback is used;
 - runtime files/mappings changed;
 - intended 100 x 100 composition role/order;
 - checks actually performed;
@@ -243,6 +261,7 @@ Priority: P0 | P1 | P2 | P3 | P4 | P5
 Dependency: NONE | #issue[, #issue...]
 Claim: NONE | ACTIVE:<worker-or-role>:<UTC timestamp>
 Status: READY | ACTIVE | VERIFY | DONE
+Repository state: NONE | DRIVE_PENDING_ADMIN_PUSH | GITHUB_VERIFIED
 ```
 
 ### Field rules
@@ -257,9 +276,14 @@ Status: READY | ACTIVE | VERIFY | DONE
 
 **Dependency** uses `NONE` when immediately actionable, otherwise only concrete prerequisite issues. Do not invent dependencies to postpone work.
 
-**Claim**: `NONE` means unclaimed. `ACTIVE:<worker-or-role>:<UTC timestamp>` means claimed. One active claim maximum. Claims older than 3 hours are stale and must be cleared by the first Worker that notices them. Manually activated Workers #6–#20 cannot claim tasks.
+**Claim**: `NONE` means unclaimed. `ACTIVE:<worker-or-role>:<UTC timestamp>` means claimed. One active claim maximum. Claims older than 3 hours are stale and must be cleared by the first Worker that notices them. Manually activated Workers #6–#20 cannot claim tasks. A claim must also be cleared when an issue enters `DRIVE_PENDING_ADMIN_PUSH`.
 
-**Status**: `READY` actionable; `ACTIVE` currently worked; `VERIFY` requires current Role Tester; `DONE` means Tester independently verified and closed. `BLOCKED` is not valid.
+**Status**: `READY` actionable; `ACTIVE` currently worked; `VERIFY` requires current Role Tester; `DONE` means Tester independently verified and closed. `BLOCKED` is not valid. An issue may remain `READY` while `Repository state: DRIVE_PENDING_ADMIN_PUSH`; in that case the repository-state gate makes it temporarily ineligible for worker claiming until Admin pushes and GitHub verification can resume.
+
+**Repository state**:
+- `NONE`: no repository-changing output has yet been produced, or repository state is not applicable to the current step.
+- `DRIVE_PENDING_ADMIN_PUSH`: required repository files were staged through the approved Drive-synchronized working-tree path, but the corresponding GitHub commit/push has not yet been verified. Claim must be `NONE`; workers skip the issue; Admin action is required.
+- `GITHUB_VERIFIED`: expected repository paths are visible in GitHub and have been verified sufficiently for the next normal role handoff.
 
 ---
 
@@ -313,6 +337,7 @@ Admin-provided visual asset discovery / validation / metadata / integration -> T
 UI design and UI implementation -> UX Designer
 Independent verification -> Tester
 New visual source image requirement -> Admin input required; not a worker image-generation task
+Drive-staged repository binary -> Admin manual commit/push -> responsible role GitHub verification
 ```
 
 Workers must ignore retired Design/Planning/Development/Graphics/Test lane ownership as task authority.
@@ -321,15 +346,19 @@ Workers must ignore retired Design/Planning/Development/Graphics/Test lane owner
 
 ## Claim lifecycle
 
-Before claiming, verify issue open, Claim NONE, Role match, READY (or VERIFY for Tester), dependencies complete, atomic scope valid, and no higher-authority instruction invalidates it.
+Before claiming, verify issue open, Claim NONE, Role match, READY (or VERIFY for Tester), dependencies complete, atomic scope valid, `Repository state` is not `DRIVE_PENDING_ADMIN_PUSH`, and no higher-authority instruction invalidates it.
 
 After claiming: set active claim/timestamp, set ACTIVE, perform only that role task, do not switch roles/start another issue, record actual evidence only, and finish immediately.
+
+If permitted work reaches the Drive fallback because direct GitHub binary publishing is unavailable, stage the files, set `Repository state: DRIVE_PENDING_ADMIN_PUSH`, clear Claim, return Status to READY, warn Admin in chat and through the available notification surface, record exact paths/evidence, and continue other eligible work. Do not retain the claim while waiting.
 
 ---
 
 ## Role handoff and closure
 
-At every handoff, record actual evidence, clear Claim, change Role to next responsible role, set Next, and set READY. For final verification: `Role: Tester`, `Claim: NONE`, `Status: VERIFY`, `Next: Tester`.
+At every normal role handoff, record actual evidence, clear Claim, change Role to next responsible role, set Next, and set READY. For final verification: `Role: Tester`, `Claim: NONE`, `Status: VERIFY`, `Next: Tester`.
+
+Do not hand repository-changing work to Tester while `Repository state: DRIVE_PENDING_ADMIN_PUSH`. After Admin push, the responsible role must verify GitHub and set `Repository state: GITHUB_VERIFIED` first.
 
 No role except Tester may set DONE or close an issue.
 
@@ -344,6 +373,8 @@ Tester independently verifies actual behavior/output and all acceptance criteria
 ## Error and non-blocking rule
 
 Workers must never mark work BLOCKED or abandon an active claim merely because an error occurred. Continue diagnosing/resolving within scope and capabilities while recording truthful evidence.
+
+If direct GitHub binary publication is the unavailable capability and the required Admin-provided binary exists, use the Drive fallback rather than treating the issue as blocked. Entering `DRIVE_PENDING_ADMIN_PUSH` clears the worker claim and releases the worker to continue other eligible work.
 
 If a distinct matter belongs to another role/scope, open a separate atomic issue for that Role, record dependency if required, and finish the current claimed issue as far as its scope permits.
 
@@ -365,6 +396,8 @@ Dependencies exist only when one atomic issue genuinely cannot be completed corr
 
 A missing Admin-provided image should be documented as required Admin input, not represented as permission for a Texture Artist to create that image.
 
+`DRIVE_PENDING_ADMIN_PUSH` is a repository-state gate, not an issue dependency and not a valid reason to invent a blocking dependency issue.
+
 ---
 
 ## Tester verification
@@ -374,6 +407,8 @@ Every issue requires final Tester verification before closure. Producer/correcto
 Tester checks may include functional behavior, Simulation authority boundaries, Advisor->Character->Simulation->World continuity, persistence/SEED/time behavior, rendering/camera/NPC/world performance, responsive/accessibility behavior, asset integration, metadata consistency, binary PNG validity, and visual correctness.
 
 For visual integration, Tester must additionally verify that the source artwork is Admin-provided and that no worker-generated replacement asset was introduced.
+
+Tester must reject any repository-changing issue that is still `DRIVE_PENDING_ADMIN_PUSH`; Drive or local-sync evidence cannot substitute for GitHub verification.
 
 ---
 
@@ -391,13 +426,17 @@ Risks:
 Next:
 ```
 
-`Next` names the next required role or step, never a specific worker number. Never claim unperformed tests, generated assets, commits, deployments, releases, or verification.
+When Drive fallback is used, the audit must additionally identify the exact staged repository-relative paths, `Repository state`, the required Admin commit/push action, chat warning evidence, notification evidence or truthful notification limitation, and later GitHub verification evidence.
+
+`Next` names the next required role or step, never a specific worker number. Never claim unperformed tests, generated assets, commits, deployments, releases, notifications, or verification.
 
 ---
 
 ## Worker selection rule
 
 Workers execute their Admin-defined role priority order. Within a role prefer: existing valid claim; highest priority; dependencies satisfied; oldest actionable issue; smaller issue when otherwise equivalent. If no eligible issue exists, immediately try the next role in assigned order. Do not create fake work merely to avoid moving to the next role.
+
+Issues with `Repository state: DRIVE_PENDING_ADMIN_PUSH` are not eligible for worker claiming until the required Admin push is visible and the responsible role can perform GitHub verification. Skip them without treating them as BLOCKED.
 
 ---
 
