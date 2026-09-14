@@ -1,0 +1,33 @@
+﻿# Google Drive for Desktop temporary upload directory
+._tmp.driveupload/
+**/._tmp.driveupload/
+
+
+# Other temporary files
+*.tmp
+*.temp
+~$*
+
+# Windows metadata
+desktop.ini
+Desktop.ini
+Thumbs.db
+ehthumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+*.bak
+*.swp
+*.swo
+
+# Google Drive / sync temporary files
+*.gdoc
+*.gsheet
+*.gslides
+*.part
+*.crdownload
+
+# Common OS metadata
+.DS_Store
