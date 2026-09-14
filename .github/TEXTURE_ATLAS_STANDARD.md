@@ -3,8 +3,10 @@
 AUTHORITY: Admin > README > ROADMAP > TODO > issues > code/assets > tests.
 
 SOURCE:
+- Only Admin may request or authorize creation of new visual source images, including atlas images, standalone sprites, replacement artwork, textures, and other production imagery.
 - Texture Artist uses Admin-provided artwork only.
-- Texture Artist MUST NOT generate/redraw/synthesize replacement artwork.
+- Texture Artist MUST NOT generate, redraw, synthesize, procedurally create, request image generation for, or substitute replacement artwork.
+- Missing required artwork is an Admin-provided-input condition and never permission for a worker to manufacture placeholders or alternate source art.
 - Production atlas processing MUST execute `tools/tile_atlas_tool.py`.
 
 CANONICAL_FORMAT:
