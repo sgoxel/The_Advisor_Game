@@ -42,3 +42,5 @@ Text/code changes should be written directly to GitHub when the connector suppor
 
 ## Visual creation boundary
 Only Admin may request or authorize creation of new production imagery. Texture Artist integrates Admin-provided artwork and must not generate, redraw, synthesize, procedurally create, or substitute replacement artwork.
+
+When Admin explicitly requests an **ATLAS IMAGE**, the request must be interpreted according to `.github/TEXTURE_ATLAS_STANDARD.md` before any image is created or processed. `Create/draw/generate atlas image for issue #N` means: read issue `#N`, identify its exact visual family, and create only the canonical tile-source sheet for that family. It never means a world map, region map, illustrated scene, poster, splash image, UI mockup, infographic, or labeled presentation graphic. The issue number is context only and must not appear inside the artwork.
