@@ -84,7 +84,7 @@ window.Game.Config = {
   TEXTURE_DIRECTORY: "textures",
   TEXTURE_FILES: {
     grass: "tiles/grass/grass_r00_c00_100px.png",//Admin atlas primary/fallback grass tile
-    dirt: "dirt_tile_texture.png",//brown
+    dirt: "tiles/dirt/dirt_r00_c00_100px.png",//Admin atlas primary/fallback dirt tile
     forest: "forest_tile_texture.png",//dark green
     lake: "lake_tile_texture.png",//dark blue
     river: "river_tile_texture.png",//light blue
@@ -93,13 +93,18 @@ window.Game.Config = {
     settlement: "settlement_tile_texture.png"//yellow
   },
 
-  // #495: every committed 100x100 grass slice participates in a stable,
+  // #495/#496: every committed 100x100 terrain slice participates in a stable,
   // presentation-only world-coordinate mapping. Simulation terrain remains authoritative.
   TEXTURE_VARIANT_FILES: {
     grass: Array.from({ length: 100 }, (_, index) => {
       const row = Math.floor(index / 10);
       const col = index % 10;
       return `tiles/grass/grass_r${String(row).padStart(2, "0")}_c${String(col).padStart(2, "0")}_100px.png`;
+    }),
+    dirt: Array.from({ length: 100 }, (_, index) => {
+      const row = Math.floor(index / 10);
+      const col = index % 10;
+      return `tiles/dirt/dirt_r${String(row).padStart(2, "0")}_c${String(col).padStart(2, "0")}_100px.png`;
     })
   },
 
