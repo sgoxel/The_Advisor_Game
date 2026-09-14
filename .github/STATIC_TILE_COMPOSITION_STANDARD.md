@@ -38,6 +38,8 @@ GITHUB:
 - Each PNG is one binary Git blob.
 - Collect blob SHAs.
 - Create one tree, one commit, then update branch ref.
+- If direct binary publishing is unavailable for an existing Admin-provided asset, follow `WORKFLOW.md` and `.github/DRIVE_BINARY_FALLBACK.md`; connector capability is not a missing-artwork condition.
+- Fallback staging is not GitHub completion. Verify the committed files before Tester handoff.
 
 CACHE:
 - Use bounded/sparse composition.
