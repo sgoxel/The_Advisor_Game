@@ -2,6 +2,11 @@
 
 AUTHORITY: Admin > README > ROADMAP > TODO > issues > code/assets > tests.
 
+SOURCE:
+- Only Admin may request or authorize creation of new visual source images, including atlas images, standalone sprites, replacement artwork, textures, and other production imagery.
+- Texture Artist integrates and processes Admin-provided visual assets only and MUST NOT generate, redraw, synthesize, procedurally create, request image generation for, or substitute source artwork.
+- Missing required artwork must be recorded as required Admin input; workers must not manufacture placeholders or alternate production art.
+
 TILE:
 - Runtime tile: `100x100 RGBA`.
 - Atlas slice: `100x100 RGBA`.
