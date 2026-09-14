@@ -1,42 +1,59 @@
 # The Advisor Game — Product Roadmap
 
-Authority: Admin > README.md > this ROADMAP > TODO > issues > code/assets > tests.
+## Authority
 
-This roadmap decomposes README product truth into small vertical work packages. It does not modify or supersede README. Each WP lists ten atomic issue records (`I01`–`I10`) intended to be independently actionable in a single work cycle. Atomic issue creation, readiness, role routing, dependencies, claims, status, and lifecycle are governed by `.github/ISSUE_STANDARD.md`; roadmap entries do not become READY merely by existing here.
+**Admin > README.md > ROADMAP.md > TODO > issues > code/assets > tests**
 
-## CURRENT DELIVERY PRIORITY — Starting Village visual-first vertical slice
+`README.md` is product truth. This file only organizes delivery work. It does not override README.
 
-Admin priority: the first product-completion target is a visually complete, stable, responsive **Starting Village** that is comfortable to play on desktop, tablet, and phone before broad feature expansion is preferred.
+Each WP contains atomic records `I01`-`I10`. A ROADMAP item is not automatically a READY issue. Use `.github/ISSUE_STANDARD.md` for issue format, role routing, claims, dependencies, status, repository state, handoff, testing, and closure.
 
-This is an execution-priority overlay, not a renumbering of existing WPs. Existing issue/WP references remain valid. A valid active claim still completes first, and workers must never block: when no eligible item exists in the highest applicable group, continue through normal role order.
+## Current priority — Starting Village visual-first slice
 
-### Priority A — Visible world stability and render continuity
-Prefer `WP-091`, `WP-092`, `WP-039`, `WP-040`, and `WP-111` work that keeps the currently visible world responsive and prevents NPCs or other valid scene elements from flickering, disappearing, being recreated with unstable identity, or dropping out during movement, camera pan, zoom, resize, relevance transitions, or frame pressure.
+Finish a visually complete, stable, responsive Starting Village before broad feature expansion.
 
-### Priority B — Responsive game area and phone portrait navigation
-Prefer `WP-095`, `WP-108`, `WP-109`, and `WP-110` so the game area remains the primary surface on desktop, tablet, and phone. On phone portrait, the currently unused major surface must stay outside the visible viewport: the player switches between the **Game Area** and **Control Panel** with large Up/Down controls rather than shrinking both into one crowded screen. Persistent windows/panels must not consume game-area space unless their information is continuously necessary.
+A valid current claim always finishes first. If no eligible issue exists in the highest priority group, continue normal role selection instead of waiting.
 
-### Priority C — Starting Village visual completion
-Prefer `WP-101` through `WP-107` together with existing `WP-021` through `WP-030`, `WP-044`, `WP-045`, and `WP-093`. Complete the visible Starting Village ground/terrain, roads/paths, buildings, protagonist model, required NPC profession visuals, props/vegetation, and movement/animation presentation as one coherent medieval-fantasy scene.
+### Priority A — Visible world stability
 
-### Priority D — Visual-slice verification and release quality
-Use `WP-112` with `WP-099` and the applicable parts of `WP-100` to certify the slice across representative desktop, tablet, phone landscape, and phone portrait layouts. Visual continuity must be checked while the game is actively moving, not only on a static frame.
+Prefer `WP-091`, `WP-092`, `WP-039`, `WP-040`, and `WP-111`.
 
-### Starting Village visual-first exit criteria
-The priority remains active until all of the following are independently verifiable:
+Keep visible world rendering responsive. NPCs and valid scene elements must not flicker, disappear, lose identity, or drop out during movement, pan, zoom, resize, relevance changes, or frame pressure.
 
-- The Starting Village reads as an inhabited medieval-fantasy place with coherent terrain, roads, buildings, props, protagonist, and NPC visuals rather than placeholders or debug-only presentation.
-- Starting Village building visuals cover the representative home plus the required local service/workplace set and remain scale-consistent with characters, rooms, roads, entrances, and logical tiles.
-- Roads and paths form visually coherent connections between homes, workplaces, services, gathering areas, farms, and exits, with stable presentation across zoom levels.
-- The protagonist and visible NPCs have stable visual identity, appropriate directional movement presentation, and do not flicker or disappear during normal movement, pan, zoom, resize, or relevance transitions.
-- Desktop and tablet layouts keep the game area comfortably playable without unnecessary persistent overlays.
-- Phone landscape remains playable with touch-sized controls and no clipped essential content.
-- Phone portrait shows either the Game Area or the Control Panel as the primary visible surface; the inactive major surface remains off-screen and Up/Down controls switch between them without losing game/control state.
-- Contextual panels, dialogs, labels, and debug/status surfaces do not permanently cover meaningful game space when they are not actively needed.
-- Orientation changes and responsive resizing preserve the same authoritative game state and do not create duplicate/missing entities or presentation resets.
-- Tester can certify the public build with motion-aware visual evidence and no critical visual continuity defect remaining in this slice.
+### Priority B — Responsive game area
 
-## Core Advisor → Character → Simulation → World loop
+Prefer `WP-095`, `WP-108`, `WP-109`, and `WP-110`.
+
+Keep the game area primary on desktop, tablet, and phone. In phone portrait, show either Game Area or Control Panel as the main surface. Keep the inactive major surface off-screen and switch with large Up/Down controls.
+
+### Priority C — Starting Village visuals
+
+Prefer `WP-101` through `WP-107`, plus `WP-021` through `WP-030`, `WP-044`, `WP-045`, and `WP-093`.
+
+Complete terrain, roads, buildings, protagonist, NPC professions, props, vegetation, and movement/animation as one coherent medieval-fantasy village.
+
+### Priority D — Visual release verification
+
+Use `WP-112`, `WP-099`, and relevant `WP-100` work.
+
+Test desktop, tablet, phone landscape, and phone portrait. Check visual continuity while the game is moving, not only in static screenshots.
+
+### Exit criteria
+
+This priority remains active until Tester can verify all of these:
+
+- Starting Village looks inhabited and coherent, not placeholder/debug-only.
+- Required building visuals exist and use plausible character/room/road/entrance/tile scale.
+- Roads and paths connect village locations clearly and remain stable across zoom.
+- Protagonist and NPC visuals keep stable identity and directional movement without flicker/disappearance.
+- Desktop/tablet remain comfortably playable without unnecessary persistent overlays.
+- Phone landscape has usable touch controls and no clipped essential content.
+- Phone portrait shows one primary major surface at a time and switches without losing state.
+- Contextual/debug panels do not permanently cover useful game space.
+- Resize/orientation changes preserve authoritative state and presentation continuity.
+- Public build passes motion-aware visual verification with no critical visual continuity defect in this slice.
+
+## Core Advisor -> Character -> Simulation -> World loop
 
 ### WP-001 — Tavern travel advice
 I01 advice intent; I02 autonomy evaluation; I03 tavern lookup; I04 legality gate; I05 route request; I06 incremental movement; I07 rejection path; I08 unreachable path; I09 persistence; I10 regression evidence.
@@ -396,10 +413,10 @@ I01 no unresolved placeholder/debug visuals in normal Starting Village play; I02
 
 ## Roadmap governance
 
-- README remains product truth and is never changed from roadmap maintenance without explicit Admin authorization.
-- `.github/ISSUE_STANDARD.md` controls atomic issue structure, readiness, role routing, dependencies, claims, status, and lifecycle; ROADMAP records do not become READY merely by existing here.
-- The Starting Village visual-first section is the current Admin execution priority; it changes task selection order, not authority boundaries or existing issue lifecycle rules.
-- Keep the active issue set focused and executable; do not create broad staging queues or a separate Planning buffer.
-- Prefer one-cycle atomic records with independently verifiable outcomes; split oversized scope before production claim.
-- Simulation owns legality, state, resources, position, outcomes, and world truth. UI, renderer, assets, LLM, Local BOT, and tests never authoritatively mutate world state outside Simulation contracts.
-- Every repository change carries actual English audit evidence, and production output receives independent Tester verification where applicable before final release.
+- `README.md` remains product truth. Do not edit it during roadmap maintenance unless Admin explicitly authorizes the change.
+- `.github/ISSUE_STANDARD.md` controls issue format, readiness, roles, dependencies, claims, status, repository state, handoffs, testing, and closure.
+- The Starting Village section changes execution priority only. It does not change authority or issue lifecycle rules.
+- Keep active work small and executable. Do not create a separate Planning queue or broad staging buffer.
+- Split oversized work before a production claim.
+- Simulation owns legality, state, resources, position, outcomes, and world truth. UI, renderer, assets, LLM, Local BOT, and tests must not become authority.
+- Every repository change needs truthful English audit evidence. Production work receives independent Tester verification where required.
