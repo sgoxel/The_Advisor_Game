@@ -1,1 +1,44 @@
 name: Finalize issue 496 dirt atlas
+
+on: push
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install Pillow
+      - name: Reconstruct verified Admin source and integration files
+        shell: bash
+        run: |
+          cat .github/admin_inputs/issue_496/source.b64.* | tr -d '\n' | base64 --decode > /tmp/admin_dirt_atlas.png
+          echo 'b2549c60cb7315d667df88a9075646b2ee63feaae5af4defdedebed1f765b9ef  /tmp/admin_dirt_atlas.png' | sha256sum --check
+          base64 --decode .github/admin_inputs/issue_496/config.js.b64 > js/config.js
+          base64 --decode .github/admin_inputs/issue_496/test.js.b64 > tests/wp102_i02_dirt_atlas_integration.test.js
+      - name: Run canonical atlas integration
+        run: python tools/tile_atlas_tool.py /tmp/admin_dirt_atlas.png --project-root . --family dirt --mode fit
+      - name: Verify integration
+        shell: bash
+        run: |
+          git diff --check
+          node --check js/config.js
+          node tests/wp102_i01_grass_atlas_integration.test.js
+          node tests/wp102_i02_dirt_atlas_integration.test.js
+          (cd tools && python -m unittest test_tile_atlas_tool.py -v)
+      - name: Commit integrated atlas and remove temporary staging
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add js/config.js tests/wp102_i02_dirt_atlas_integration.test.js textures/tiles/dirt
+          git rm -r .github/admin_inputs/issue_496 .github/workflows/issue-496-finalize.yml
+          git commit -m 'Integrate Admin soil and mud atlas runtime family (#496)'
+          git push origin main
