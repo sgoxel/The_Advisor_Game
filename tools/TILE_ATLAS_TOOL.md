@@ -1,41 +1,54 @@
-# TILE_ATLAS_TOOL
+# Tile Atlas Tool
 
-FORMAT:
-- Canonical atlas: `1000x1000 RGBA PNG`.
+Use `tools/tile_atlas_tool.py` for production atlas processing.
+
+## Required format
+
+- Master atlas: exact `1000x1000 RGBA PNG`.
 - Grid: `10x10`.
-- Cell/runtime tile: `100x100 RGBA PNG`.
-- Ordering: row-major.
-- Source artwork needs no borders/numbers/grid.
-- Normalize source to 1000x1000 before slicing.
-- Slice directly; border trim = 0.
+- Cell/runtime tile: exact `100x100 RGBA PNG`.
+- Order: row-major.
+- No visible grid, labels, numbers, or borders in source artwork.
+- Normalize the whole source to 1000x1000 before slicing when needed.
+- Slice directly with border trim `0`.
 
-TOOL:
-- Production processing MUST execute `tools/tile_atlas_tool.py`.
-- Default semantic IDs: `r00_c00` ... `r09_c09`.
-- Optional metadata may override semantic fields.
-- Outputs: `<family>_atlas_1000px.png`, 100px tile PNGs, manifest JSON, descriptions JSON.
-- Default project target: `textures/tiles/<family>/`.
+## Output
 
-CLI_EXPORT:
+Default target:
+
+`textures/tiles/<family>/`
+
+Outputs:
+
+- `<family>_atlas_1000px.png`
+- `<family>_<semantic>_100px.png`
+- `<family>_tiles.manifest.json`
+- `<family>_tiles.descriptions.json`
+
+Default semantic IDs are `r00_c00` through `r09_c09`.
+
+## Commands
+
+Export to a folder:
+
 `python tools/tile_atlas_tool.py INPUT --family grass --output OUTPUT --mode fit`
 
-CLI_PROJECT:
+Process directly into a checked-out project:
+
 `python tools/tile_atlas_tool.py INPUT --family grass --project-root PROJECT --mode fit`
 
-CLI_GITHUB:
-`GITHUB_TOKEN=... python tools/tile_atlas_tool.py INPUT --family grass --output OUTPUT --github-publish --github-repo owner/repo --github-branch main`
+## Do not use the GitHub publish option for binary files
 
-GITHUB:
-- Token source default: environment variable `GITHUB_TOKEN`.
-- Never store token in repository/output/manifest.
-- EACH PNG is uploaded as one independent base64 Git blob.
-- JSON outputs are uploaded as independent UTF-8 Git blobs.
-- After all blobs exist: one tree -> one commit -> branch ref update.
-- Default remote path: `textures/tiles/<family>/`.
+**Do not use `--github-publish` for PNG or other binary output. Do not use GitHub Blob, Create Blob, base64 upload, Git trees, or similar GitHub binary-upload methods.**
 
-VERIFY:
-- Master exact `1000x1000 RGBA`.
-- Every emitted tile exact `100x100 RGBA`.
-- Expected occupied tile count matches manifest.
-- SHA-256 values match files.
-- GitHub tree paths point to returned blob SHAs.
+For binary output, copy/stage the exact tool outputs into the Google Drive `The_Advisor_Game/` repository mirror at their exact repository-relative paths. Admin then commits/pushes the mirrored files.
+
+See `WORKFLOW.md` and `.github/DRIVE_BINARY_FALLBACK.md`.
+
+## Verify
+
+- Master is exact 1000x1000 RGBA.
+- Every emitted tile is exact 100x100 RGBA.
+- Occupied tile count matches the manifest.
+- SHA-256 values match the files where checked.
+- After Admin push, expected paths exist in GitHub.
