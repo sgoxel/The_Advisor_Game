@@ -104,6 +104,11 @@ window.Game.Utils.loadScriptOnce("js/shoreline_transition_runtime.js", "wp102I05
 // existing world-background upload path. Do not reintroduce separate static overlay canvases.
 window.Game.Utils.loadScriptOnce("js/static_tile_compositor.js", "wp112StaticTileCompositorModule");
 
+// WP-102/I07 #501: derive sparse low-vegetation presentation from authoritative terrain and
+// feed the existing category-30 vegetation/prop/object route of StaticTileCompositor. This
+// module owns no canvas/layer and does not change terrain, blocking or Simulation authority.
+window.Game.Utils.loadScriptOnce("js/low_vegetation_runtime.js", "wp102I07LowVegetationRuntimeModule");
+
 // R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
 window.Game.Utils.loadScriptOnce("js/game_time.js", "r02GameTimeModule");
