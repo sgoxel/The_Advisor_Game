@@ -1,0 +1,1633 @@
+{
+  "version": 3,
+  "family": "farm_field",
+  "atlas": {
+    "filename": "farm_field_atlas_1000px.png",
+    "width": 1000,
+    "height": 1000,
+    "mode": "RGBA",
+    "columns": 10,
+    "rows": 10,
+    "cellSize": 100,
+    "ordering": "row-major",
+    "sha256": "aa9281609af73669d159fdcac08f546c96695fc100c5e3ff769db501ed123aac",
+    "sourceWidth": 1254,
+    "sourceHeight": 1254,
+    "normalizationMode": "fit",
+    "normalized": true
+  },
+  "derivedTilePolicy": {
+    "sourceCellSize": [
+      100,
+      100
+    ],
+    "outputSize": [
+      100,
+      100
+    ],
+    "borderTrimPx": 0,
+    "resamplingDuringSlice": "NONE"
+  },
+  "tiles": [
+    {
+      "index": 0,
+      "row": 0,
+      "col": 0,
+      "type": "r00_c00",
+      "semantic_type": "r00_c00",
+      "displayName": "r00_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c00_100px.png",
+      "sha256": "0da536cad9537bce1d14c18eadf82dc85630c3e2357b3bb763b375b7986281bd",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "col": 1,
+      "type": "r00_c01",
+      "semantic_type": "r00_c01",
+      "displayName": "r00_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c01_100px.png",
+      "sha256": "950c95f98a38dcf9b04f745331273da80c1ce7afda58e8bf1a3078b3347a604a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "col": 2,
+      "type": "r00_c02",
+      "semantic_type": "r00_c02",
+      "displayName": "r00_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c02_100px.png",
+      "sha256": "0d00a78265b49083bac167f0576b5fb949543cdb54d316e7725f6ba7a228bed5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "col": 3,
+      "type": "r00_c03",
+      "semantic_type": "r00_c03",
+      "displayName": "r00_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c03_100px.png",
+      "sha256": "90e6a642006c6750a925bea23649cfc1ed94c41dc9b64f1206cf199aa484eab2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 4,
+      "row": 0,
+      "col": 4,
+      "type": "r00_c04",
+      "semantic_type": "r00_c04",
+      "displayName": "r00_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c04_100px.png",
+      "sha256": "67737ec9c693e8328a36452948e75bda1dcd697f45dd18b00ec4414c4836cf6e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 5,
+      "row": 0,
+      "col": 5,
+      "type": "r00_c05",
+      "semantic_type": "r00_c05",
+      "displayName": "r00_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c05_100px.png",
+      "sha256": "e59db9063b4cd110bfe190bb0f98091974805f8f9dab1a8114f145c5203bb33e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 6,
+      "row": 0,
+      "col": 6,
+      "type": "r00_c06",
+      "semantic_type": "r00_c06",
+      "displayName": "r00_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c06_100px.png",
+      "sha256": "f1f4d47604a24c74a243c55205ab99a6584aba939f0f4dce802067f8ceb9880b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 7,
+      "row": 0,
+      "col": 7,
+      "type": "r00_c07",
+      "semantic_type": "r00_c07",
+      "displayName": "r00_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c07_100px.png",
+      "sha256": "98eff8d197a9b272633cd1d2f10012e15407ba37eeb0fea93589003996c5e5ee",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 8,
+      "row": 0,
+      "col": 8,
+      "type": "r00_c08",
+      "semantic_type": "r00_c08",
+      "displayName": "r00_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c08_100px.png",
+      "sha256": "9013395b09c96a25cbb3e9b149bfb0d14fe998b67f302a171dc60a7705481e65",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 9,
+      "row": 0,
+      "col": 9,
+      "type": "r00_c09",
+      "semantic_type": "r00_c09",
+      "displayName": "r00_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r00_c09_100px.png",
+      "sha256": "2fcde81374aa2948294e16ece6775518892ae4aa194bd6130db4845658a4396e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 10,
+      "row": 1,
+      "col": 0,
+      "type": "r01_c00",
+      "semantic_type": "r01_c00",
+      "displayName": "r01_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c00_100px.png",
+      "sha256": "24c38b059800c88c059fee3463dfcc99df86dfcaa5bb8658b43377daac1b7771",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 11,
+      "row": 1,
+      "col": 1,
+      "type": "r01_c01",
+      "semantic_type": "r01_c01",
+      "displayName": "r01_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c01_100px.png",
+      "sha256": "aee4058894f861e4fa676e5b0cc4cc553ab22fcb16f2d3b66b0435a3f636cf04",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 12,
+      "row": 1,
+      "col": 2,
+      "type": "r01_c02",
+      "semantic_type": "r01_c02",
+      "displayName": "r01_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c02_100px.png",
+      "sha256": "71645d80a04cf335599ab847c131907d7ba7ca168fbb965f16f6b06e7da0d581",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 13,
+      "row": 1,
+      "col": 3,
+      "type": "r01_c03",
+      "semantic_type": "r01_c03",
+      "displayName": "r01_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c03_100px.png",
+      "sha256": "349f57ed2f81de87ca7409bf4d4314f5db36943b150785ed3318009e23996b65",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 14,
+      "row": 1,
+      "col": 4,
+      "type": "r01_c04",
+      "semantic_type": "r01_c04",
+      "displayName": "r01_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c04_100px.png",
+      "sha256": "ab2566fb89c5649ef117ca469a0c66e897d7c6e24ddb67f8351d0e36687a8282",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 15,
+      "row": 1,
+      "col": 5,
+      "type": "r01_c05",
+      "semantic_type": "r01_c05",
+      "displayName": "r01_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c05_100px.png",
+      "sha256": "8299430900647d343db5a556d1f383a432257ca9e45cdc483a7bbbab03492994",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 16,
+      "row": 1,
+      "col": 6,
+      "type": "r01_c06",
+      "semantic_type": "r01_c06",
+      "displayName": "r01_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c06_100px.png",
+      "sha256": "c2a610b9dafb701fe028d8863010e4c2d43f70ae41f31aa255c9982c3030748c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 17,
+      "row": 1,
+      "col": 7,
+      "type": "r01_c07",
+      "semantic_type": "r01_c07",
+      "displayName": "r01_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c07_100px.png",
+      "sha256": "5714769b59fabdba19b01b39a5ca60f4e4fe66a0d6084ec1fdfef4186f7d5196",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 18,
+      "row": 1,
+      "col": 8,
+      "type": "r01_c08",
+      "semantic_type": "r01_c08",
+      "displayName": "r01_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c08_100px.png",
+      "sha256": "6722021af5a2ccc3a0db3dd60f8b55737fca1a9dd56ac0ac26ab53d5a6bbf8aa",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 19,
+      "row": 1,
+      "col": 9,
+      "type": "r01_c09",
+      "semantic_type": "r01_c09",
+      "displayName": "r01_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r01_c09_100px.png",
+      "sha256": "d4081fce3b964696fda89a50a550e9038bf7b4a0b06ccd4bbe898435a4a96f2b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 20,
+      "row": 2,
+      "col": 0,
+      "type": "r02_c00",
+      "semantic_type": "r02_c00",
+      "displayName": "r02_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c00_100px.png",
+      "sha256": "88734436fa9472906be986012520aa04567eff38b75462e4358ac87735926eb0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 21,
+      "row": 2,
+      "col": 1,
+      "type": "r02_c01",
+      "semantic_type": "r02_c01",
+      "displayName": "r02_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c01_100px.png",
+      "sha256": "e86bc5ee281bb89653f1c01ea177c057f1bd49cc1e7d6d7b3c90882516c57dc1",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 22,
+      "row": 2,
+      "col": 2,
+      "type": "r02_c02",
+      "semantic_type": "r02_c02",
+      "displayName": "r02_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c02_100px.png",
+      "sha256": "411cb44386bff8e2241c101b91cd80baf7d6f44bca39194ae88840a0629d7844",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 23,
+      "row": 2,
+      "col": 3,
+      "type": "r02_c03",
+      "semantic_type": "r02_c03",
+      "displayName": "r02_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c03_100px.png",
+      "sha256": "a476046735a2b7660fd07a358814d296c5fea5462875bea50d249f517cf5a4bd",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 24,
+      "row": 2,
+      "col": 4,
+      "type": "r02_c04",
+      "semantic_type": "r02_c04",
+      "displayName": "r02_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c04_100px.png",
+      "sha256": "ef7177bbaa1d95c2d542733c879fc8ee6ab615e8d9c5e21c45ab2feb1507d54f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 25,
+      "row": 2,
+      "col": 5,
+      "type": "r02_c05",
+      "semantic_type": "r02_c05",
+      "displayName": "r02_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c05_100px.png",
+      "sha256": "f65045f3f4d0d2835852711f5400e7ce1ca0318883594db3d8ae1c5f8b916cd7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 26,
+      "row": 2,
+      "col": 6,
+      "type": "r02_c06",
+      "semantic_type": "r02_c06",
+      "displayName": "r02_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c06_100px.png",
+      "sha256": "22cb3cb12de302630333443f4e53374ca6191783c4515364f7c75111a8fd638e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 27,
+      "row": 2,
+      "col": 7,
+      "type": "r02_c07",
+      "semantic_type": "r02_c07",
+      "displayName": "r02_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c07_100px.png",
+      "sha256": "bc55a394ded4dc5b1115aa532cb0fa99064f896dad9054c637956223bb6c087f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 28,
+      "row": 2,
+      "col": 8,
+      "type": "r02_c08",
+      "semantic_type": "r02_c08",
+      "displayName": "r02_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c08_100px.png",
+      "sha256": "625987ea8b26f57b11d6371201bd4225454f8a209a0723ed8eb13445f55886db",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 29,
+      "row": 2,
+      "col": 9,
+      "type": "r02_c09",
+      "semantic_type": "r02_c09",
+      "displayName": "r02_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r02_c09_100px.png",
+      "sha256": "35cff291b33052c884b10aa5baba3a8ca65cd12d5febeb1536692b9b6627f977",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 30,
+      "row": 3,
+      "col": 0,
+      "type": "r03_c00",
+      "semantic_type": "r03_c00",
+      "displayName": "r03_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c00_100px.png",
+      "sha256": "e9a8efda1b0479e48467c26660b0f74df4c7c9d053538af0a2c2517a3be5a239",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 31,
+      "row": 3,
+      "col": 1,
+      "type": "r03_c01",
+      "semantic_type": "r03_c01",
+      "displayName": "r03_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c01_100px.png",
+      "sha256": "9190a1bef67dc77b25e4e9c2f98e7907f606fedbb901a9244ed95a7ee1793301",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 32,
+      "row": 3,
+      "col": 2,
+      "type": "r03_c02",
+      "semantic_type": "r03_c02",
+      "displayName": "r03_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c02_100px.png",
+      "sha256": "bd55b31847313014f70828e50802ef9db36c1cef636fb1f9df20d13e6dabbfb5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 33,
+      "row": 3,
+      "col": 3,
+      "type": "r03_c03",
+      "semantic_type": "r03_c03",
+      "displayName": "r03_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c03_100px.png",
+      "sha256": "6e106932ab08975c8c32b9d472e6e4a15b78f40e864ed689c523499695114285",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 34,
+      "row": 3,
+      "col": 4,
+      "type": "r03_c04",
+      "semantic_type": "r03_c04",
+      "displayName": "r03_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c04_100px.png",
+      "sha256": "0243a6c98f9ba2863c8bda014bba52372a9bba1aa85ff32e3df3a7ee53130a3e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 35,
+      "row": 3,
+      "col": 5,
+      "type": "r03_c05",
+      "semantic_type": "r03_c05",
+      "displayName": "r03_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c05_100px.png",
+      "sha256": "12eaacc14ff78a9c268dbdf81c9a391275ad7d469c7e25d6148bf0db6058fdb5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 36,
+      "row": 3,
+      "col": 6,
+      "type": "r03_c06",
+      "semantic_type": "r03_c06",
+      "displayName": "r03_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c06_100px.png",
+      "sha256": "69849c1c3a1b54801489f700506b86019f24825bdb59f1c6c6186422a7cfb9d5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 37,
+      "row": 3,
+      "col": 7,
+      "type": "r03_c07",
+      "semantic_type": "r03_c07",
+      "displayName": "r03_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c07_100px.png",
+      "sha256": "eb11dfb22bfc28881251fc38bc65972d83c7c5f0bde114fae0c6d8ff17304b0a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 38,
+      "row": 3,
+      "col": 8,
+      "type": "r03_c08",
+      "semantic_type": "r03_c08",
+      "displayName": "r03_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c08_100px.png",
+      "sha256": "225c4c5eb07cf7fd76b1adc5fef3a8ed4ebb34c0d83c177d7f1f08d2a7d75a6f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 39,
+      "row": 3,
+      "col": 9,
+      "type": "r03_c09",
+      "semantic_type": "r03_c09",
+      "displayName": "r03_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r03_c09_100px.png",
+      "sha256": "a0a44c5f15f7ea8919432b0876e5e32259528cbd31e7cbfa1121ad342af1bb0e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 40,
+      "row": 4,
+      "col": 0,
+      "type": "r04_c00",
+      "semantic_type": "r04_c00",
+      "displayName": "r04_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c00_100px.png",
+      "sha256": "db18b6ddc7bd53f60c22ca1d548a0cd874dfb1be7351fadc56b7ccf04149e555",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 41,
+      "row": 4,
+      "col": 1,
+      "type": "r04_c01",
+      "semantic_type": "r04_c01",
+      "displayName": "r04_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c01_100px.png",
+      "sha256": "28055ac01ec6719289cc780dbebef88db229f7a657870a9eecc9fb3399b69610",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 42,
+      "row": 4,
+      "col": 2,
+      "type": "r04_c02",
+      "semantic_type": "r04_c02",
+      "displayName": "r04_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c02_100px.png",
+      "sha256": "c3b2e2ef7d844d237062bc499d1d9f99a7e95a9a1a2e9c72afa24014b4f54f42",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 43,
+      "row": 4,
+      "col": 3,
+      "type": "r04_c03",
+      "semantic_type": "r04_c03",
+      "displayName": "r04_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c03_100px.png",
+      "sha256": "6c129fced8852eb0cf7111bd429e39dfd29a69f7a09678639fa696edda8a4602",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 44,
+      "row": 4,
+      "col": 4,
+      "type": "r04_c04",
+      "semantic_type": "r04_c04",
+      "displayName": "r04_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c04_100px.png",
+      "sha256": "7c175ca8806bc3f0a17c243aff8d99cf4ee3ef0436fb62ae37857887a41878eb",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 45,
+      "row": 4,
+      "col": 5,
+      "type": "r04_c05",
+      "semantic_type": "r04_c05",
+      "displayName": "r04_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c05_100px.png",
+      "sha256": "ab7fff41db05fedecae8398793d2bc543bcbee11b9d0f8828f59353adcf5696f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 46,
+      "row": 4,
+      "col": 6,
+      "type": "r04_c06",
+      "semantic_type": "r04_c06",
+      "displayName": "r04_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c06_100px.png",
+      "sha256": "ed3fc819fd8e89474933ce0ce7edb40cd165951225d94ed1483ae6724ae7a59f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 47,
+      "row": 4,
+      "col": 7,
+      "type": "r04_c07",
+      "semantic_type": "r04_c07",
+      "displayName": "r04_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c07_100px.png",
+      "sha256": "92ac08c955306ab8090e73988c554d41c677faaaa9746a8b7331743c8a250da8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 48,
+      "row": 4,
+      "col": 8,
+      "type": "r04_c08",
+      "semantic_type": "r04_c08",
+      "displayName": "r04_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c08_100px.png",
+      "sha256": "e53538753954a1936240e878857fefa0d0943176d58083dcd212988b8e23ae45",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 49,
+      "row": 4,
+      "col": 9,
+      "type": "r04_c09",
+      "semantic_type": "r04_c09",
+      "displayName": "r04_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r04_c09_100px.png",
+      "sha256": "35af650fb60d6d355cd5022bd8a4feae2b592253bfcd7629f1f2d18f45ed5e5f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 50,
+      "row": 5,
+      "col": 0,
+      "type": "r05_c00",
+      "semantic_type": "r05_c00",
+      "displayName": "r05_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c00_100px.png",
+      "sha256": "824f3d312af7939ee4d7e018ddb9db2439787b95e5a66a1158518c79100a7b61",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 51,
+      "row": 5,
+      "col": 1,
+      "type": "r05_c01",
+      "semantic_type": "r05_c01",
+      "displayName": "r05_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c01_100px.png",
+      "sha256": "210d6f79f30097af8122ea71a3676527417d41e6d7e684bea42e716e5f064696",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 52,
+      "row": 5,
+      "col": 2,
+      "type": "r05_c02",
+      "semantic_type": "r05_c02",
+      "displayName": "r05_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c02_100px.png",
+      "sha256": "3b4d83aa837e793a749a7e8904f5ba9632dd9c3996ff4874e1e37bcede1d0774",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 53,
+      "row": 5,
+      "col": 3,
+      "type": "r05_c03",
+      "semantic_type": "r05_c03",
+      "displayName": "r05_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c03_100px.png",
+      "sha256": "2ee427f1e895dc2202e2cafe345c75f62b26bf0271fb5b0c22ff5beb3725aa06",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 54,
+      "row": 5,
+      "col": 4,
+      "type": "r05_c04",
+      "semantic_type": "r05_c04",
+      "displayName": "r05_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c04_100px.png",
+      "sha256": "f9b026aed77154e2188965c0ec63c73d5ee2c098a0fa68e8ce75e40665d367c7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 55,
+      "row": 5,
+      "col": 5,
+      "type": "r05_c05",
+      "semantic_type": "r05_c05",
+      "displayName": "r05_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c05_100px.png",
+      "sha256": "3394a59833167464f779613d406256a80b07d446c470bcdd7c8a940f522ee2ab",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 56,
+      "row": 5,
+      "col": 6,
+      "type": "r05_c06",
+      "semantic_type": "r05_c06",
+      "displayName": "r05_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c06_100px.png",
+      "sha256": "86023fbc120a7ef66751b058cf1bbf6a71e168e7bb4d3cf7909dfd24302f1c10",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 57,
+      "row": 5,
+      "col": 7,
+      "type": "r05_c07",
+      "semantic_type": "r05_c07",
+      "displayName": "r05_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c07_100px.png",
+      "sha256": "6a58b90b613f82e3753010180de5748bab05965c3d3256d8cf048cb824bcfd11",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 58,
+      "row": 5,
+      "col": 8,
+      "type": "r05_c08",
+      "semantic_type": "r05_c08",
+      "displayName": "r05_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c08_100px.png",
+      "sha256": "fbd899d41e06c30aadea743da3c4709ad485fd336d12749bdab8595439eca5b2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 59,
+      "row": 5,
+      "col": 9,
+      "type": "r05_c09",
+      "semantic_type": "r05_c09",
+      "displayName": "r05_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r05_c09_100px.png",
+      "sha256": "834ed2dbc58281633aca91589c97b4bc6f7a4e12d5a2273408cb7ab05a72324f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 60,
+      "row": 6,
+      "col": 0,
+      "type": "r06_c00",
+      "semantic_type": "r06_c00",
+      "displayName": "r06_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c00_100px.png",
+      "sha256": "32632f174b7096a0bad015234b9f4af1bf1293d44be60cf896841c7cf769ae16",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 61,
+      "row": 6,
+      "col": 1,
+      "type": "r06_c01",
+      "semantic_type": "r06_c01",
+      "displayName": "r06_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c01_100px.png",
+      "sha256": "0177ee856c52ad71503a5c633fe450acdb55b2d2459d3c255932e0a723c434a4",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 62,
+      "row": 6,
+      "col": 2,
+      "type": "r06_c02",
+      "semantic_type": "r06_c02",
+      "displayName": "r06_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c02_100px.png",
+      "sha256": "0a645d8bd2ba3dddc05d68212eefdee53fbbf80d13a2c642b9f6cd9a27c1b564",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 63,
+      "row": 6,
+      "col": 3,
+      "type": "r06_c03",
+      "semantic_type": "r06_c03",
+      "displayName": "r06_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c03_100px.png",
+      "sha256": "92c56ee5c0f159f39594f27642792ed8f3d16ecc0f2d5c9fe7a34161e75485fe",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 64,
+      "row": 6,
+      "col": 4,
+      "type": "r06_c04",
+      "semantic_type": "r06_c04",
+      "displayName": "r06_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c04_100px.png",
+      "sha256": "96efba005d09203c0227c4b7353ff1fcf038992697e724313c28a0dc1395c817",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 65,
+      "row": 6,
+      "col": 5,
+      "type": "r06_c05",
+      "semantic_type": "r06_c05",
+      "displayName": "r06_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c05_100px.png",
+      "sha256": "ba13cfd5936c62fc5167a6c0aa4cdb012fbda38edc15f87601d1b97f3ea09817",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 66,
+      "row": 6,
+      "col": 6,
+      "type": "r06_c06",
+      "semantic_type": "r06_c06",
+      "displayName": "r06_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c06_100px.png",
+      "sha256": "dec3cee9f8952935c6476da3dd8597f6b788f561420a518788b333afffca6881",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 67,
+      "row": 6,
+      "col": 7,
+      "type": "r06_c07",
+      "semantic_type": "r06_c07",
+      "displayName": "r06_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c07_100px.png",
+      "sha256": "2cb054e72b1982c9154093fa0279958d99fc8f78379b4ca8e79b0c9e39b4aa58",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 68,
+      "row": 6,
+      "col": 8,
+      "type": "r06_c08",
+      "semantic_type": "r06_c08",
+      "displayName": "r06_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c08_100px.png",
+      "sha256": "26f9662df8df3b84cd7096720ddc5452f9613eccc24f6690cafa02c6f82b5dc1",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 69,
+      "row": 6,
+      "col": 9,
+      "type": "r06_c09",
+      "semantic_type": "r06_c09",
+      "displayName": "r06_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r06_c09_100px.png",
+      "sha256": "d0868f5d83d4487feb20cbb18bfb0fb95844ec2b63104dce86e0ed17465b00b0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 70,
+      "row": 7,
+      "col": 0,
+      "type": "r07_c00",
+      "semantic_type": "r07_c00",
+      "displayName": "r07_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c00_100px.png",
+      "sha256": "ecc1d022a0edbc6f71b8c9fe0f7935a15ef8f6384174c96c5c20fb06028d5d0c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 71,
+      "row": 7,
+      "col": 1,
+      "type": "r07_c01",
+      "semantic_type": "r07_c01",
+      "displayName": "r07_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c01_100px.png",
+      "sha256": "5b653cff5b3ae8b63d69bcfe3dffb53f85d61ef9fd581dce4a5a145d95f7881f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 72,
+      "row": 7,
+      "col": 2,
+      "type": "r07_c02",
+      "semantic_type": "r07_c02",
+      "displayName": "r07_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c02_100px.png",
+      "sha256": "02d6c30c949c4d2cbe4bf12e79e7a3b6420870ade88a204287d4427b9b289c7f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 73,
+      "row": 7,
+      "col": 3,
+      "type": "r07_c03",
+      "semantic_type": "r07_c03",
+      "displayName": "r07_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c03_100px.png",
+      "sha256": "bccf88a9113357d52f02e03ae5b28b7aef8b0860b93da45d08ae90d9cd458b6b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 74,
+      "row": 7,
+      "col": 4,
+      "type": "r07_c04",
+      "semantic_type": "r07_c04",
+      "displayName": "r07_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c04_100px.png",
+      "sha256": "643391d23d7eb0accde7275050dae297c437384a9e9ac0466a0ab984f37083f0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 75,
+      "row": 7,
+      "col": 5,
+      "type": "r07_c05",
+      "semantic_type": "r07_c05",
+      "displayName": "r07_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c05_100px.png",
+      "sha256": "dbc69284a9ada5ab9984ed2b57cca48a9955b2f8b2179e300f1d00cdd6e3fdb0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 76,
+      "row": 7,
+      "col": 6,
+      "type": "r07_c06",
+      "semantic_type": "r07_c06",
+      "displayName": "r07_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c06_100px.png",
+      "sha256": "5a2a11adf6bc00c9ed1e65be1d2ec48dc35b8aaf63b00215de49763dd5ea4321",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 77,
+      "row": 7,
+      "col": 7,
+      "type": "r07_c07",
+      "semantic_type": "r07_c07",
+      "displayName": "r07_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c07_100px.png",
+      "sha256": "a382a59704704c25d9008fa6ca779d3f73b3531a8ce375be6ed14ed0828bc15e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 78,
+      "row": 7,
+      "col": 8,
+      "type": "r07_c08",
+      "semantic_type": "r07_c08",
+      "displayName": "r07_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c08_100px.png",
+      "sha256": "5f6403fff069e14d94daa0b6938139bff4cc958dd78f99e30f22ea88a6dbc6ce",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 79,
+      "row": 7,
+      "col": 9,
+      "type": "r07_c09",
+      "semantic_type": "r07_c09",
+      "displayName": "r07_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r07_c09_100px.png",
+      "sha256": "6bce76088aa4c064b89c8446d7c4c9a74e88eadc4a4c5b546474e643d05478d4",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 80,
+      "row": 8,
+      "col": 0,
+      "type": "r08_c00",
+      "semantic_type": "r08_c00",
+      "displayName": "r08_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c00_100px.png",
+      "sha256": "3c9e2a97f89831deb8fc741a08356878d0546342902a370e87e6c045a479a8f9",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 81,
+      "row": 8,
+      "col": 1,
+      "type": "r08_c01",
+      "semantic_type": "r08_c01",
+      "displayName": "r08_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c01_100px.png",
+      "sha256": "b163a38f3fc802903a6311024646f43348285bd9628e20f561b6f0c054939c17",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 82,
+      "row": 8,
+      "col": 2,
+      "type": "r08_c02",
+      "semantic_type": "r08_c02",
+      "displayName": "r08_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c02_100px.png",
+      "sha256": "8350edc5d53cbf0292189534a82d254799f2fe377255423aa97a3af93cdede17",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 83,
+      "row": 8,
+      "col": 3,
+      "type": "r08_c03",
+      "semantic_type": "r08_c03",
+      "displayName": "r08_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c03_100px.png",
+      "sha256": "805a9ebcaa987366fcc4de3eea1e97a6e08c54c8d0521536486a6298ec46de76",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 84,
+      "row": 8,
+      "col": 4,
+      "type": "r08_c04",
+      "semantic_type": "r08_c04",
+      "displayName": "r08_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c04_100px.png",
+      "sha256": "cd3519d2581e728cf144536dcb10a154aecc41b26aedd09209aa5ed967081c09",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 85,
+      "row": 8,
+      "col": 5,
+      "type": "r08_c05",
+      "semantic_type": "r08_c05",
+      "displayName": "r08_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c05_100px.png",
+      "sha256": "f6ec8c50a67519a444e5eedde4373380b343cae5c60e1f12c7662c3d9310c4e3",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 86,
+      "row": 8,
+      "col": 6,
+      "type": "r08_c06",
+      "semantic_type": "r08_c06",
+      "displayName": "r08_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c06_100px.png",
+      "sha256": "e6cbf6ef496b1f6bf8cf5154b02a4a2526924c41ed18320bcc8c832e8d2cf0fb",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 87,
+      "row": 8,
+      "col": 7,
+      "type": "r08_c07",
+      "semantic_type": "r08_c07",
+      "displayName": "r08_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c07_100px.png",
+      "sha256": "dbcd5233374c3dad227046fc1644eea7f7c555dce1f09b4e23860bdd52062e44",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 88,
+      "row": 8,
+      "col": 8,
+      "type": "r08_c08",
+      "semantic_type": "r08_c08",
+      "displayName": "r08_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c08_100px.png",
+      "sha256": "5c469b558c3378b198dcfe2cd82138042d0f0f26fd555e5645a40cc3e8d798f0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 89,
+      "row": 8,
+      "col": 9,
+      "type": "r08_c09",
+      "semantic_type": "r08_c09",
+      "displayName": "r08_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r08_c09_100px.png",
+      "sha256": "9e51ec6a687c77335d62457b60cde2150f58e63816e39aeed1337576ed3fea47",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 90,
+      "row": 9,
+      "col": 0,
+      "type": "r09_c00",
+      "semantic_type": "r09_c00",
+      "displayName": "r09_c00",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c00_100px.png",
+      "sha256": "9cad2702cdb05298e822dd7e4d19aee9fec98b7ec4141f1bc879ddaf26e4ee46",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 91,
+      "row": 9,
+      "col": 1,
+      "type": "r09_c01",
+      "semantic_type": "r09_c01",
+      "displayName": "r09_c01",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c01_100px.png",
+      "sha256": "1e7f74493c5619f75c09d59459a5dac4ce3c27faca799825fb927c68304fb000",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 92,
+      "row": 9,
+      "col": 2,
+      "type": "r09_c02",
+      "semantic_type": "r09_c02",
+      "displayName": "r09_c02",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c02_100px.png",
+      "sha256": "4fabe830fa4ea44415a0393a249ced83b3f0f5ef6b9bc5d8c76ed761879e9e5d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 93,
+      "row": 9,
+      "col": 3,
+      "type": "r09_c03",
+      "semantic_type": "r09_c03",
+      "displayName": "r09_c03",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c03_100px.png",
+      "sha256": "e64abb50fac7ec85d301fa7bc1cea156e11089cb32095267a8dbd9e087810901",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 94,
+      "row": 9,
+      "col": 4,
+      "type": "r09_c04",
+      "semantic_type": "r09_c04",
+      "displayName": "r09_c04",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c04_100px.png",
+      "sha256": "ff61407590a5c2c2fe49726fc317dea8ad096716b7958841abcef89a89159ea8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 95,
+      "row": 9,
+      "col": 5,
+      "type": "r09_c05",
+      "semantic_type": "r09_c05",
+      "displayName": "r09_c05",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c05_100px.png",
+      "sha256": "329f65a585479a015fa6e1b9fb8ced6d781d6177f91caa38bd3b093993ddbe6f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 96,
+      "row": 9,
+      "col": 6,
+      "type": "r09_c06",
+      "semantic_type": "r09_c06",
+      "displayName": "r09_c06",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c06_100px.png",
+      "sha256": "0da30be19fd22ce8506b0972114e9966f785861dae7ba581e9d0f9c7f0d58b8c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 97,
+      "row": 9,
+      "col": 7,
+      "type": "r09_c07",
+      "semantic_type": "r09_c07",
+      "displayName": "r09_c07",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c07_100px.png",
+      "sha256": "97dbc5d2d023535280738dfe13139e4005ed0089f5bcaa61f71cf0e2bf60f6cb",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 98,
+      "row": 9,
+      "col": 8,
+      "type": "r09_c08",
+      "semantic_type": "r09_c08",
+      "displayName": "r09_c08",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c08_100px.png",
+      "sha256": "92a8f5667cf064159770562c82353b73209bbb0a31b1005b31ebdae9e3ad47d8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 99,
+      "row": 9,
+      "col": 9,
+      "type": "r09_c09",
+      "semantic_type": "r09_c09",
+      "displayName": "r09_c09",
+      "category": "terrain",
+      "runtimeUsage": "terrain/base",
+      "filename": "farm_field_r09_c09_100px.png",
+      "sha256": "7af441af7bd37ba5017132825e3744642dff1f997786fd8a5ce80266eadff4b8",
+      "size": [
+        100,
+        100
+      ]
+    }
+  ]
+}
