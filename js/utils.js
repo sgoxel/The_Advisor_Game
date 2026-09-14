@@ -95,6 +95,10 @@ window.Game.Utils.loadScriptOnce("js/presentation_identity.js", "wp111Presentati
 // NPC presentation is the sole normal independently dynamic world-image exception.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 
+// WP-102/I05: select opaque shoreline base-transition cells from authoritative terrain
+// adjacency before StaticTileCompositor snapshots that background into exact 100x100 tiles.
+window.Game.Utils.loadScriptOnce("js/shoreline_transition_runtime.js", "wp102I05ShorelineTransitionRuntimeModule");
+
 // WP-112 / Admin 2026-09-11: roads, buildings, trees, props and every other non-NPC world
 // graphic are composited into exact 100x100 logical-tile images and flushed through the
 // existing world-background upload path. Do not reintroduce separate static overlay canvases.
