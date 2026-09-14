@@ -6,7 +6,7 @@ labels: ""
 assignees: ""
 ---
 
-> This template is a convenience scaffold only. `.github/ISSUE_STANDARD.md` is the sole active routine-worker instruction source and governs issue structure, claims, routing, verification, and closure. `README.md` remains product truth under the repository authority hierarchy.
+> This template is a convenience scaffold only. `.github/ISSUE_STANDARD.md` is the sole active routine-worker instruction source and governs issue structure, claims, routing, repository state, verification, and closure. `README.md` remains product truth under the repository authority hierarchy.
 
 Role: Game Designer | Game Programmer | Texture Artist | UX Designer | Tester
 WP: WP-NNN
@@ -15,6 +15,7 @@ Priority: P0 | P1 | P2 | P3 | P4 | P5
 Dependency: NONE
 Claim: NONE
 Status: READY
+Repository state: NONE | DRIVE_PENDING_ADMIN_PUSH | GITHUB_VERIFIED
 
 ## Objective
 Describe the single concrete result that must exist when this issue is complete.
