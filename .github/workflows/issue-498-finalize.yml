@@ -1,0 +1,43 @@
+name: Finalize issue 498 water atlas
+
+on: push
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install Pillow
+      - name: Reconstruct verified Admin source and integration files
+        run: |
+          cat .github/admin_inputs/issue_498/source.b64.* | tr -d '\n' | base64 --decode > /tmp/admin_water_atlas.png
+          echo '5a3fc1b0889a8b074eece4a626b5b059ff5dd76ee366880090d1da25d7d087e5  /tmp/admin_water_atlas.png' | sha256sum --check
+          base64 --decode .github/admin_inputs/issue_498/config.js.b64 > js/config.js
+          base64 --decode .github/admin_inputs/issue_498/test.js.b64 > tests/wp102_i04_water_atlas_integration.test.js
+      - name: Run canonical atlas integration
+        run: python tools/tile_atlas_tool.py /tmp/admin_water_atlas.png --project-root . --family water --mode fit
+      - name: Verify integration
+        run: |
+          git diff --check
+          node --check js/config.js
+          node tests/wp102_i01_grass_atlas_integration.test.js
+          node tests/wp102_i02_dirt_atlas_integration.test.js
+          node tests/wp102_i03_farm_field_atlas_integration.test.js
+          node tests/wp102_i04_water_atlas_integration.test.js
+          (cd tools && python -m unittest test_tile_atlas_tool.py -v)
+      - name: Commit integrated atlas and remove temporary staging
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add js/config.js tests/wp102_i04_water_atlas_integration.test.js textures/tiles/water
+          git rm -r .github/admin_inputs/issue_498 .github/workflows/issue-498-finalize.yml
+          git commit -m 'Integrate Admin water-surface atlas (#498)'
+          git push origin main
