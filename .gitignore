@@ -1,18 +1,11 @@
-﻿# Google Drive for Desktop temporary upload directory
-._tmp.driveupload/
-**/._tmp.driveupload/
-
-
-# Other temporary files
-*.tmp
-*.temp
-~$*
+﻿# Google Drive temporary upload files
+.tmp.driveupload/
+**/.tmp.driveupload/
 
 # Windows metadata
 desktop.ini
 Desktop.ini
 Thumbs.db
-ehthumbs.db
 
 # Temporary files
 *.tmp
