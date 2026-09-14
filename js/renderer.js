@@ -1747,13 +1747,22 @@
     if (render.textureLoadPromise) return render.textureLoadPromise;
 
     const entries = Object.entries(Config.TEXTURE_FILES || {});
+    const variantEntries = Object.entries(Config.TEXTURE_VARIANT_FILES || {});
     render.textureLoadStatus = "loading";
-    render.textureLoadPromise = Promise.all(entries.map(async ([tileType, fileName]) => {
+    const primaryLoads = entries.map(async ([tileType, fileName]) => {
       const url = buildTextureUrl(fileName);
       const image = await loadTextureImage(url);
       render.textureImages[tileType] = image;
       console.info(`Terrain texture loaded: ${tileType} <- ${url}`);
-    })).then(() => {
+    });
+    const variantLoads = variantEntries.map(async ([tileType, fileNames]) => {
+      const names = Array.isArray(fileNames) ? fileNames : [];
+      const images = await Promise.all(names.map((fileName) => loadTextureImage(buildTextureUrl(fileName))));
+      render.textureVariantImages = render.textureVariantImages || {};
+      render.textureVariantImages[tileType] = images;
+      console.info(`Terrain texture variants loaded: ${tileType} (${images.length})`);
+    });
+    render.textureLoadPromise = Promise.all([...primaryLoads, ...variantLoads]).then(() => {
       render.texturePatterns = {};
       render.textureLoadStatus = "ready";
       markDirty(true, false);
@@ -1768,14 +1777,31 @@
     return render.textureLoadPromise;
   }
 
-  function getTileTextureImage(tileType) {
+  function stableTextureVariantIndex(tileType, row, col, count) {
+    if (!Number.isInteger(row) || !Number.isInteger(col) || count <= 1) return 0;
+    const seed = String(State.world && State.world.seed || "");
+    let hash = 2166136261;
+    const key = `${seed}|${tileType}|${row}|${col}`;
+    for (let index = 0; index < key.length; index += 1) {
+      hash ^= key.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) % count;
+  }
+
+  function getTileTextureImage(tileType, row, col) {
+    const variants = State.render.textureVariantImages && State.render.textureVariantImages[tileType];
+    if (Array.isArray(variants) && variants.length) {
+      return variants[stableTextureVariantIndex(tileType, row, col, variants.length)] || variants[0];
+    }
     return State.render.textureImages ? State.render.textureImages[tileType] : null;
   }
 
-  function getTileTexturePattern(ctx, tileType) {
-    const image = getTileTextureImage(tileType) || getTileTextureImage("grass");
+  function getTileTexturePattern(ctx, tileType, row, col) {
+    const image = getTileTextureImage(tileType, row, col) || getTileTextureImage("grass", row, col);
     if (!image) return null;
-    const cacheKey = `${tileType}|${canvasWidthCacheKey(ctx.canvas)}|global-rot`;
+    const variantIndex = stableTextureVariantIndex(tileType, row, col, (State.render.textureVariantImages && State.render.textureVariantImages[tileType] || []).length);
+    const cacheKey = `${tileType}|${variantIndex}|${canvasWidthCacheKey(ctx.canvas)}|global-rot`;
     const cached = State.render.texturePatterns && State.render.texturePatterns[cacheKey];
     if (cached) return cached;
     const pattern = ctx.createPattern(image, "repeat");
@@ -1815,21 +1841,28 @@
     if (!textureCtx) return null;
 
     const generatedShapes = Array.isArray(world && world.generatedTerrainShapes) ? world.generatedTerrainShapes : [];
-    const grassPattern = getTileTexturePattern(textureCtx, "grass");
-    if (grassPattern) {
-      fillRectWithPattern(textureCtx, grassPattern, 0, 0, canvasWidth, canvasHeight);
-    } else {
-      textureCtx.fillStyle = rgbToCss(rendererFallbackColor("grass"));
-      textureCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-    }
 
     if (generatedShapes.length) {
+      for (let row = 0; row < world.rows; row++) {
+        for (let col = 0; col < world.cols; col++) {
+          const x = Math.floor(col * cellWidth);
+          const y = Math.floor(row * cellHeight);
+          const width = Math.max(1, Math.ceil((col + 1) * cellWidth) - x);
+          const height = Math.max(1, Math.ceil((row + 1) * cellHeight) - y);
+          const grassPattern = getTileTexturePattern(textureCtx, "grass", row, col);
+          if (grassPattern) fillRectWithPattern(textureCtx, grassPattern, x, y, width, height);
+          else {
+            textureCtx.fillStyle = rgbToCss(rendererFallbackColor("grass"));
+            textureCtx.fillRect(x, y, width, height);
+          }
+        }
+      }
       drawGeneratedTerrainShapeTops(textureCtx, cellWidth, cellHeight, generatedShapes);
     } else {
       for (let row = 0; row < world.rows; row++) {
         for (let col = 0; col < world.cols; col++) {
           const appearance = getVisualTileAppearance(row, col);
-          const pattern = getTileTexturePattern(textureCtx, appearance.type);
+          const pattern = getTileTexturePattern(textureCtx, appearance.type, row, col);
           const x = Math.floor(col * cellWidth);
           const y = Math.floor(row * cellHeight);
           const width = Math.max(1, Math.ceil((col + 1) * cellWidth) - x);
@@ -1838,7 +1871,7 @@
           if (pattern) {
             fillRectWithPattern(textureCtx, pattern, x, y, width, height);
           } else {
-            const fallbackPattern = getTileTexturePattern(textureCtx, "grass");
+            const fallbackPattern = getTileTexturePattern(textureCtx, "grass", row, col);
             if (fallbackPattern) {
               fillRectWithPattern(textureCtx, fallbackPattern, x, y, width, height);
             } else {

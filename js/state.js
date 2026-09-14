@@ -154,6 +154,7 @@ window.Game = window.Game || {};
       backgroundTextureReady: false,
       worldBackgroundCanvas: null,
       textureImages: {},
+      textureVariantImages: {},
       texturePatterns: {},
       textureLoadPromise: null,
       textureLoadStatus: "idle"
