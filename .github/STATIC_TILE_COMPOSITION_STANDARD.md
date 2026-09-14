@@ -28,9 +28,15 @@ STATIC:
 
 ATLAS:
 - Follow `.github/TEXTURE_ATLAS_STANDARD.md`.
+- **ATLAS IMAGE** has the exact meaning defined by `.github/TEXTURE_ATLAS_STANDARD.md`: a production tile-source sheet for one coherent requested visual family, not a world map, region map, scene illustration, poster, splash image, UI, infographic, or labeled presentation graphic.
+- An issue number supplied with an atlas request is lookup/context metadata only and must never be rendered into the atlas artwork.
+- `Top-down atlas` means direct overhead/orthographic tile artwork with no horizon and no perspective/isometric tilt unless the governing issue explicitly requires another projection.
+- Atlas artwork must be independently sliceable on exact cell boundaries; no accidental artwork may cross from one cell into another.
 - Canonical atlas: `1000x1000`.
 - Grid: `10x10`.
 - Cell: `100x100`.
+- Visible grid lines, tile numbers, coordinates, labels, titles, legends, decorative frames, watermarks, and other presentation text are prohibited in production atlas artwork.
+- Unused cells are fully transparent.
 - Use actual `tools/tile_atlas_tool.py` outputs.
 - Runtime maps committed semantic 100x100 PNG files.
 
