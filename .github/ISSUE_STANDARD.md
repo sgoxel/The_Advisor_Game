@@ -34,7 +34,23 @@ Use this order when rules conflict:
 - Tool-specific standards belong with the tool or `tools/README.md`. Workers may propose project-wide standardization, but only Admin may make a tool mandatory in this file.
 - Tools explicitly required by this file remain mandatory.
 
-## 3. Worker role order
+## 3. Routine worker execution — mandatory
+
+Every Worker #1-#5 routine run must execute this loop:
+
+1. Connect to GitHub and scan **all open issues**.
+2. Clear every stale claim encountered.
+3. Complete this worker's existing valid claim first, if any.
+4. Otherwise follow this worker's role order and select the first real eligible issue.
+5. Claim it and set `Status: ACTIVE`.
+6. Perform the actual role work. Do not stop at analysis or planning.
+7. Run required checks/tests and record real evidence.
+8. Finish with the correct handoff, Tester closure, or required Admin/binary gate.
+9. If safe run capacity remains, repeat from step 1.
+
+A routine run must not silently do nothing. It may end only when no eligible issue exists across all roles, or when required external/Admin input or unavailable capability makes further valid progress impossible. In that case record the exact reason/evidence where applicable. An execution error must be diagnosed; it is not a reason to silently exit or disable the routine.
+
+## 4. Worker role order
 
 If there is no active claim, use the worker's role order and take the first eligible issue.
 
@@ -50,7 +66,7 @@ Within a role, prefer: valid existing claim -> highest priority -> dependencies 
 
 If no eligible issue exists for that role, immediately try the next role. Do not create fake work.
 
-## 4. Role duties
+## 5. Role duties
 
 ### Game Designer
 
@@ -108,13 +124,13 @@ If required artwork is missing, notify Admin and record the missing Admin input.
 - FAIL: record evidence, do not close, route back to the responsible role, set `READY`.
 - If a failure requires new artwork, record required Admin input. Do not ask Texture Artist to generate it.
 
-## 5. New visual creation rule
+## 6. New visual creation rule
 
 Only Admin may request or authorize creation of new production visual source images.
 
 An Admin image-generation request is allowed. A worker acting as Texture Artist may only process and integrate the resulting Admin-provided image.
 
-## 6. Binary file rule — mandatory
+## 7. Binary file rule — mandatory
 
 **Never upload images or other binary files to GitHub using GitHub Blob, Create Blob, base64 upload, binary-upload APIs, Git trees, or similar GitHub binary methods.**
 
@@ -137,7 +153,7 @@ Drive staging is not GitHub completion. Tester must not pass or close repository
 
 Text/code files may be written directly to GitHub when supported.
 
-## 7. Mandatory issue header
+## 8. Mandatory issue header
 
 Every atomic issue begins with:
 
@@ -166,7 +182,7 @@ Repository state: NONE | DRIVE_PENDING_ADMIN_PUSH | GITHUB_VERIFIED
   - `DRIVE_PENDING_ADMIN_PUSH`: required binary files are staged in Drive but not yet verified in GitHub. Claim must be `NONE`; workers skip the issue.
   - `GITHUB_VERIFIED`: required repository paths are visible and verified in GitHub.
 
-## 8. Mandatory issue body
+## 9. Mandatory issue body
 
 ```markdown
 ## Objective
@@ -195,7 +211,7 @@ Next:
 
 `Next` names the next role or step, never a specific worker number.
 
-## 9. Atomic issue rule
+## 10. Atomic issue rule
 
 An issue is atomic when it has:
 
@@ -208,7 +224,7 @@ An issue is atomic when it has:
 
 If it is too large, split it before production work.
 
-## 10. Claim flow
+## 11. Claim flow
 
 Before claiming, confirm:
 
@@ -228,7 +244,7 @@ After claiming:
 - record real evidence;
 - finish or correctly hand off before taking other work.
 
-## 11. Handoff and closure
+## 12. Handoff and closure
 
 For a normal handoff:
 
@@ -249,7 +265,7 @@ Next: Tester
 
 Only Tester may set `DONE` and close an issue.
 
-## 12. Dependencies and errors
+## 13. Dependencies and errors
 
 - Use dependencies only for real prerequisites.
 - Do not invent dependencies to postpone work.
@@ -259,7 +275,7 @@ Only Tester may set `DONE` and close an issue.
 - If a distinct problem belongs to another role, open a separate atomic issue and continue the current issue as far as validly possible.
 - `DRIVE_PENDING_ADMIN_PUSH` is a repository-state gate, not a dependency.
 
-## 13. Daily visual review
+## 14. Daily visual review
 
 Game Designer and Tester each perform this review once per Europe/Istanbul calendar date, after finishing any valid current claim.
 
@@ -273,7 +289,7 @@ Game Designer and Tester each perform this review once per Europe/Istanbul calen
 8. Do not generate replacement artwork during this review. New artwork needs Admin authorization/input.
 9. Record role, date, build, viewport sizes, screenshot references, findings, and reused/created issue numbers.
 
-## 14. Tester verification scope
+## 15. Tester verification scope
 
 As applicable, Tester checks:
 
@@ -288,7 +304,7 @@ As applicable, Tester checks:
 - binary PNG validity and visual correctness;
 - that worker-generated replacement artwork was not introduced.
 
-## 15. Release rule
+## 16. Release rule
 
 A completed issue does not automatically make the application release-ready.
 
@@ -296,7 +312,7 @@ Game Designer may publish the public build only after required Tester verificati
 
 Public build: https://sgoxel.github.io/The_Advisor_Game/
 
-## 16. Final precedence rule
+## 17. Final precedence rule
 
 If this file conflicts with Admin, Admin wins.
 
