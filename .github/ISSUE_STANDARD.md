@@ -25,6 +25,15 @@ Use this order when rules conflict:
 - Workers #6-#20 are manually activated by Admin and cannot claim issues.
 - Record only actions, tests, uploads, commits, notifications, and results that actually happened.
 
+### Reusable tools
+
+- Workers are encouraged to create or improve reusable deterministic development/test tools under `tools/` when repeated work in the current issue benefits from standardization. Python (`.py`) is preferred when appropriate.
+- Prefer extending an existing suitable tool over creating an overlapping tool.
+- Tool work must stay within the authorized issue scope and must not bypass acceptance criteria, Tester verification, Simulation authority, Admin-only artwork authorization, or binary-file rules.
+- Each tool must be usable by another worker and document required usage through `--help`, a module docstring, or `tools/README.md`. Record commands and meaningful results when used as issue evidence.
+- Tool-specific standards belong with the tool or `tools/README.md`. Workers may propose project-wide standardization, but only Admin may make a tool mandatory in this file.
+- Tools explicitly required by this file remain mandatory.
+
 ## 3. Worker role order
 
 If there is no active claim, use the worker's role order and take the first eligible issue.

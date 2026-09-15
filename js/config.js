@@ -89,12 +89,12 @@ window.Game.Config = {
     lake: "tiles/water/water_r00_c00_100px.png",//Admin atlas primary/fallback water tile
     river: "tiles/water/water_r00_c00_100px.png",//Admin atlas primary/fallback water tile
     road: "road_tile_texture.png",//gray
-    mountain: "mountain_tile_texture.png",//dark gray
+    mountain: "tiles/rock_ground_props/rock_ground_props_r00_c00_100px.png",//Admin atlas primary/fallback rock/ground-prop tile
     settlement: "tiles/farm_field/farm_field_r00_c00_100px.png",//Admin atlas primary/fallback farm-field tile
     shoreline: "tiles/shoreline/shoreline_r00_c00_100px.png"//Admin atlas primary/fallback shoreline tile
   },
 
-  // #495-#500: every committed 100x100 terrain/transition slice participates in a stable,
+  // #495-#502: every committed 100x100 terrain/transition slice participates in a stable,
   // presentation-only world-coordinate mapping. Simulation terrain remains authoritative.
   TEXTURE_VARIANT_FILES: {
     grass: Array.from({ length: 100 }, (_, index) => {
@@ -121,6 +121,11 @@ window.Game.Config = {
       const row = Math.floor(index / 10);
       const col = index % 10;
       return `tiles/water/water_r${String(row).padStart(2, "0")}_c${String(col).padStart(2, "0")}_100px.png`;
+    }),
+    mountain: Array.from({ length: 100 }, (_, index) => {
+      const row = Math.floor(index / 10);
+      const col = index % 10;
+      return `tiles/rock_ground_props/rock_ground_props_r${String(row).padStart(2, "0")}_c${String(col).padStart(2, "0")}_100px.png`;
     }),
     settlement: Array.from({ length: 100 }, (_, index) => {
       const row = Math.floor(index / 10);

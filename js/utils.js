@@ -95,10 +95,19 @@ window.Game.Utils.loadScriptOnce("js/presentation_identity.js", "wp111Presentati
 // NPC presentation is the sole normal independently dynamic world-image exception.
 window.Game.Utils.loadScriptOnce("js/npc_world.js", "r02NpcWorldModule");
 
+// WP-102/I05: select opaque shoreline base-transition cells from authoritative terrain
+// adjacency before StaticTileCompositor snapshots that background into exact 100x100 tiles.
+window.Game.Utils.loadScriptOnce("js/shoreline_transition_runtime.js", "wp102I05ShorelineTransitionRuntimeModule");
+
 // WP-112 / Admin 2026-09-11: roads, buildings, trees, props and every other non-NPC world
 // graphic are composited into exact 100x100 logical-tile images and flushed through the
 // existing world-background upload path. Do not reintroduce separate static overlay canvases.
 window.Game.Utils.loadScriptOnce("js/static_tile_compositor.js", "wp112StaticTileCompositorModule");
+
+// WP-102/I07 #501: derive sparse low-vegetation presentation from authoritative terrain and
+// feed the existing category-30 vegetation/prop/object route of StaticTileCompositor. This
+// module owns no canvas/layer and does not change terrain, blocking or Simulation authority.
+window.Game.Utils.loadScriptOnce("js/low_vegetation_runtime.js", "wp102I07LowVegetationRuntimeModule");
 
 // R02/R04 modules stay isolated from generic helpers; each preserves Simulation authority.
 window.Game.Utils.loadScriptOnce("js/world_composition.js", "r02WorldCompositionModule");
