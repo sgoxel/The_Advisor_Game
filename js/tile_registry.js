@@ -71,6 +71,18 @@ export const ROAD_TILE_TYPES = Object.freeze([
   't_junction',
 ]);
 
+export const LOCAL_ROAD_TILE_SIZE = 100;
+export const ROAD_TILE_SOURCE_BY_TYPE = Object.freeze({
+  straight_vertical: 'road_r00_c00_100px.png',
+  straight_horizontal: 'road_r00_c01_100px.png',
+  cross: 'road_r00_c05_100px.png',
+  turn_ne: 'road_r00_c03_100px.png',
+  turn_es: 'road_r00_c03_100px.png',
+  turn_sw: 'road_r00_c03_100px.png',
+  turn_wn: 'road_r00_c03_100px.png',
+  t_junction: 'road_r01_c02_100px.png',
+});
+
 export const MAIN_ROAD_TILE_TYPES = Object.freeze([
   'main_straight_vertical_left',
   'main_straight_vertical_right',
@@ -104,8 +116,8 @@ export function createCanonicalRoadTileRegistry() {
   return new SemanticTileRegistry(ROAD_TILE_TYPES.map((type) => ({
     family: 'road',
     type,
-    size: 256,
-    source: `textures/tiles/road/road_${type}_256px.png`,
+    size: LOCAL_ROAD_TILE_SIZE,
+    source: `textures/tiles/road/${ROAD_TILE_SOURCE_BY_TYPE[type]}`,
   })));
 }
 
