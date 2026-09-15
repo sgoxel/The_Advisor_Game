@@ -60,6 +60,7 @@ assert(compositorSource.includes("clip:[0,0,50,100]"), 'West dead end must use 1
 assert(compositorSource.includes("clip:[50,0,50,100]"), 'East dead end must use 100px/50px clipping.');
 assert(compositorSource.includes('sx/sourcePx*COMPOSITE_TILE_PX'), 'Clip scaling must use each overlay source size rather than a global 256px assumption.');
 assert(compositorSource.includes("source:'road'"), 'Roads must remain part of the unified static composition path.');
-assert(!compositorSource.includes('starterVillageRoadOverlay'), 'Runtime must not recreate an independent persistent road overlay.');
+assert(compositorSource.includes("layerPolicy:'static-background-plus-dynamic-npc-only'"), 'Roads must remain inside the unified static background policy.');
+assert(compositorSource.includes("'starterVillageRoadOverlay'"), 'Legacy road overlay cleanup must remain explicit so stale DOM layers are removed rather than recreated.');
 
 console.log('wp103_i09_local_road_runtime_mapping: PASS');
