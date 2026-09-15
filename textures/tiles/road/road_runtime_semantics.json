@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "family": "road",
+  "purpose": "Presentation-only canonical runtime semantic mapping for the Admin-provided local dirt-road/path atlas. This file does not define Simulation road topology.",
+  "atlas": "road_atlas_1000px.png",
+  "sourceTileSize": 100,
+  "materialSet": "local_dirt_path",
+  "semantics": {
+    "straight_vertical": {
+      "source": "road_r00_c00_100px.png",
+      "sourceSemantic": "r00_c00",
+      "quarterTurns": 0,
+      "connections": ["N", "S"]
+    },
+    "straight_horizontal": {
+      "source": "road_r00_c01_100px.png",
+      "sourceSemantic": "r00_c01",
+      "quarterTurns": 0,
+      "connections": ["E", "W"]
+    },
+    "cross": {
+      "source": "road_r00_c05_100px.png",
+      "sourceSemantic": "r00_c05",
+      "quarterTurns": 0,
+      "connections": ["N", "E", "S", "W"]
+    },
+    "t_junction": {
+      "source": "road_r01_c02_100px.png",
+      "sourceSemantic": "r01_c02",
+      "quarterTurns": 0,
+      "connections": ["N", "E", "W"],
+      "missingDirection": "S",
+      "derivedByRotation": true
+    },
+    "turn_wn": {
+      "source": "road_r00_c03_100px.png",
+      "sourceSemantic": "r00_c03",
+      "quarterTurns": 0,
+      "connections": ["W", "N"],
+      "derivedByRotation": false
+    },
+    "turn_ne": {
+      "source": "road_r00_c03_100px.png",
+      "sourceSemantic": "r00_c03",
+      "quarterTurns": 1,
+      "connections": ["N", "E"],
+      "derivedByRotation": true
+    },
+    "turn_es": {
+      "source": "road_r00_c03_100px.png",
+      "sourceSemantic": "r00_c03",
+      "quarterTurns": 2,
+      "connections": ["E", "S"],
+      "derivedByRotation": true
+    },
+    "turn_sw": {
+      "source": "road_r00_c03_100px.png",
+      "sourceSemantic": "r00_c03",
+      "quarterTurns": 3,
+      "connections": ["S", "W"],
+      "derivedByRotation": true
+    }
+  },
+  "deadEndPolicy": {
+    "sourceSemantics": ["straight_vertical", "straight_horizontal"],
+    "clipAtCompositeTime": true,
+    "sourceHalfSize": 50,
+    "note": "Dead ends reuse the canonical straight source and clip the unused half at presentation time; no additional source artwork is required."
+  },
+  "constraints": {
+    "simulationAuthority": false,
+    "allowRuntimeRotation": true,
+    "allowRuntimeSourceResizeToLogicalTile": true,
+    "logicalCompositeSize": 100,
+    "noIndependentPersistentRoadLayer": true
+  }
+}
