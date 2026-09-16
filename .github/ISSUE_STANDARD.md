@@ -38,7 +38,7 @@ Use this order when rules conflict:
 
 Every Worker #1-#5 routine run must execute this loop:
 
-1. Connect to GitHub and scan **all open issues**.
+1. Connect to GitHub and scan **all open issues from oldest to newest**. Use ascending issue creation time; ascending issue number is the normal equivalent for repository issues.
 2. Clear every stale claim encountered.
 3. Complete this worker's existing valid claim first, if any.
 4. Otherwise follow this worker's role order and select the first real eligible issue.
@@ -47,6 +47,8 @@ Every Worker #1-#5 routine run must execute this loop:
 7. Run required checks/tests and record real evidence.
 8. Finish with the correct handoff, Tester closure, or required Admin/binary gate.
 9. If safe run capacity remains, repeat from step 1.
+
+The oldest-to-newest order is mandatory for issue inspection on every routine scan. Do not begin from the newest issues or skip older open issues. This inspection order does not override claim ownership, role order, priority, dependency, eligibility, or repository-state rules used to select work.
 
 A routine run must not silently do nothing. It may end only when no eligible issue exists across all roles, or when required external/Admin input or unavailable capability makes further valid progress impossible. In that case record the exact reason/evidence where applicable. An execution error must be diagnosed; it is not a reason to silently exit or disable the routine.
 
