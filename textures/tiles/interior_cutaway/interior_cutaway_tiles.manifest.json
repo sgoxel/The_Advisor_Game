@@ -1,0 +1,1471 @@
+{
+  "version": 3,
+  "family": "interior_cutaway",
+  "atlas": {
+    "filename": "interior_cutaway_atlas_1000px.png",
+    "width": 1000,
+    "height": 1000,
+    "mode": "RGBA",
+    "columns": 10,
+    "rows": 10,
+    "cellSize": 100,
+    "ordering": "row-major",
+    "sha256": "93561582462308891b228d8454f4f9a912eef9d741b5e74d545f37adc046b871",
+    "sourceWidth": 1254,
+    "sourceHeight": 1254,
+    "sourceMode": "RGBA",
+    "processingMode": "canonical_production",
+    "normalized": true
+  },
+  "derivedTilePolicy": {
+    "sourceCellSize": "variable logical source grid cell",
+    "outputSize": [
+      100,
+      100
+    ],
+    "borderTrimPx": 0,
+    "reconstruction": "canonical_cell_repack"
+  },
+  "tiles": [
+    {
+      "index": 0,
+      "row": 0,
+      "col": 0,
+      "type": "wood_floor_horizontal_planks",
+      "semantic_type": "wood_floor_horizontal_planks",
+      "displayName": "Wood floor - horizontal planks",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_horizontal_planks_100px.png",
+      "sha256": "c81a7fac8c6c49ce86d27a292122079470f9975e34b8ed69d16733485a917f6a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "col": 1,
+      "type": "wood_floor_vertical_planks",
+      "semantic_type": "wood_floor_vertical_planks",
+      "displayName": "Wood floor - vertical planks",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_vertical_planks_100px.png",
+      "sha256": "1489770ce998566e2a348f2ee383db6c015135b3c1c5a5b785eb4c4b38398d5d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "col": 2,
+      "type": "wood_floor_mixed_planks",
+      "semantic_type": "wood_floor_mixed_planks",
+      "displayName": "Wood floor - mixed planks",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_mixed_planks_100px.png",
+      "sha256": "bd8fc4189381150e6f66773c216d9fd3f87926809a711274214592d25bcb0bd0",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "col": 3,
+      "type": "wood_floor_wide_horizontal",
+      "semantic_type": "wood_floor_wide_horizontal",
+      "displayName": "Wood floor - wide horizontal",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_wide_horizontal_100px.png",
+      "sha256": "67e4903c3494094225a71c8f7315c56367724abc55caa8977c4fab1c13ac429a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 4,
+      "row": 0,
+      "col": 4,
+      "type": "wood_floor_wide_vertical",
+      "semantic_type": "wood_floor_wide_vertical",
+      "displayName": "Wood floor - wide vertical",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_wide_vertical_100px.png",
+      "sha256": "a83aa7014cfdb0dd7ee6b954e384b2b89895a5e499d265611623cc5b1259fa98",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 5,
+      "row": 0,
+      "col": 5,
+      "type": "wood_floor_irregular_horizontal",
+      "semantic_type": "wood_floor_irregular_horizontal",
+      "displayName": "Wood floor - irregular horizontal",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_irregular_horizontal_100px.png",
+      "sha256": "24c9e25db11e5e592cff21090f715e726f67712408580c32fafabc00994be6ac",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 6,
+      "row": 0,
+      "col": 6,
+      "type": "wood_floor_dark_horizontal",
+      "semantic_type": "wood_floor_dark_horizontal",
+      "displayName": "Wood floor - dark horizontal",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_dark_horizontal_100px.png",
+      "sha256": "abcc7c29b91ffc9732e41e9128421a639103aedf2ff99b4e6c09eb099149c104",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 7,
+      "row": 0,
+      "col": 7,
+      "type": "wood_floor_light_horizontal",
+      "semantic_type": "wood_floor_light_horizontal",
+      "displayName": "Wood floor - light horizontal",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_light_horizontal_100px.png",
+      "sha256": "17d193f9ac7929b6d963250efc42040cd468460631f3b6c0926b19aea5aa91bf",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 8,
+      "row": 0,
+      "col": 8,
+      "type": "wood_floor_herringbone",
+      "semantic_type": "wood_floor_herringbone",
+      "displayName": "Wood floor - herringbone",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_herringbone_100px.png",
+      "sha256": "f434a2e893418c96a2e519c241d5df6e17867d3cff257acd61800d633efcaf46",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 9,
+      "row": 0,
+      "col": 9,
+      "type": "wood_floor_narrow_vertical",
+      "semantic_type": "wood_floor_narrow_vertical",
+      "displayName": "Wood floor - narrow vertical",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_wood_floor_narrow_vertical_100px.png",
+      "sha256": "45544c8002684f550b3d71a0a37e0b410132062d08f0089efdd77aec93277c21",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 10,
+      "row": 1,
+      "col": 0,
+      "type": "stone_floor_irregular_light",
+      "semantic_type": "stone_floor_irregular_light",
+      "displayName": "Stone floor - irregular light",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_floor_irregular_light_100px.png",
+      "sha256": "1bbb4c03daee66329e77604b1bf607a532971f73bb01ca29e48b5780d1da7522",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 11,
+      "row": 1,
+      "col": 1,
+      "type": "stone_floor_mossy_cobble",
+      "semantic_type": "stone_floor_mossy_cobble",
+      "displayName": "Stone floor - mossy cobble",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_floor_mossy_cobble_100px.png",
+      "sha256": "8d0046fe51d634269f3a41a8fa51280a396dafda80647f7ac13bcb6c9202009c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 12,
+      "row": 1,
+      "col": 2,
+      "type": "stone_floor_large_slabs",
+      "semantic_type": "stone_floor_large_slabs",
+      "displayName": "Stone floor - large slabs",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_floor_large_slabs_100px.png",
+      "sha256": "e85738d39949e2c9499f66badc64e09deb3f94db96548a1d66eb57d26bbc0e0a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 13,
+      "row": 1,
+      "col": 3,
+      "type": "earth_floor_packed",
+      "semantic_type": "earth_floor_packed",
+      "displayName": "Earth floor - packed",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_earth_floor_packed_100px.png",
+      "sha256": "984ba4c8d21544ebd132201f0d48e3169bdc5bdb280d75e50f9f1091d768b95d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 14,
+      "row": 1,
+      "col": 4,
+      "type": "earth_floor_sandy_pebbles",
+      "semantic_type": "earth_floor_sandy_pebbles",
+      "displayName": "Earth floor - sandy pebbles",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_earth_floor_sandy_pebbles_100px.png",
+      "sha256": "3110de9522aa76a0174c83f276d0b3c2b0c67f14f1b1707c0acc746e7b8bb75a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 15,
+      "row": 1,
+      "col": 5,
+      "type": "stone_floor_rounded",
+      "semantic_type": "stone_floor_rounded",
+      "displayName": "Stone floor - rounded",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_floor_rounded_100px.png",
+      "sha256": "898750104784d076d3977f288503c65ea43c98c0e9b780e285e7d82d2f768724",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 16,
+      "row": 1,
+      "col": 6,
+      "type": "earth_floor_scattered_straw",
+      "semantic_type": "earth_floor_scattered_straw",
+      "displayName": "Earth floor - scattered straw",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_earth_floor_scattered_straw_100px.png",
+      "sha256": "7d7cf9fcf8fd062dfbccb8eaf6de219a8761123a4b74897dd4ce4918b84a4a2b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 17,
+      "row": 1,
+      "col": 7,
+      "type": "straw_floor_dense",
+      "semantic_type": "straw_floor_dense",
+      "displayName": "Straw floor - dense",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_straw_floor_dense_100px.png",
+      "sha256": "f919307c43c88e9d51249ce52f0ea218e046dbf07cc0a79f870f749ed9302bab",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 18,
+      "row": 1,
+      "col": 8,
+      "type": "stone_floor_rubble",
+      "semantic_type": "stone_floor_rubble",
+      "displayName": "Stone floor - rubble",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_floor_rubble_100px.png",
+      "sha256": "2c6fdb5fe26699963eba5a34541a793a603a3cf4cbc4d63b099f09e588f14323",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 19,
+      "row": 1,
+      "col": 9,
+      "type": "stone_floor_mossy_cobble_alt",
+      "semantic_type": "stone_floor_mossy_cobble_alt",
+      "displayName": "Stone floor - mossy cobble alt",
+      "category": "floor",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_floor_mossy_cobble_alt_100px.png",
+      "sha256": "167365eb5d25221aebbe97de0fce3e347ddea9b549096530bd945af8124d6b78",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 20,
+      "row": 2,
+      "col": 0,
+      "type": "timber_plaster_boundary_01",
+      "semantic_type": "timber_plaster_boundary_01",
+      "displayName": "Timber/plaster boundary 01",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_01_100px.png",
+      "sha256": "c6fab846a64252b17a5ed8d2be5e05263d33c8b27c3ffd2ab333ab1c4ee3052d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 21,
+      "row": 2,
+      "col": 1,
+      "type": "timber_plaster_boundary_02",
+      "semantic_type": "timber_plaster_boundary_02",
+      "displayName": "Timber/plaster boundary 02",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_02_100px.png",
+      "sha256": "f0793dc0b14ee06f150f880b762730d216153f9ab558b8c41d56b5d21c87cc7e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 22,
+      "row": 2,
+      "col": 2,
+      "type": "timber_plaster_boundary_03",
+      "semantic_type": "timber_plaster_boundary_03",
+      "displayName": "Timber/plaster boundary 03",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_03_100px.png",
+      "sha256": "a1de6e0d480dcb4cb42e4255f15bee1a48832d9b7d11e879a5913d0869cb534a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 23,
+      "row": 2,
+      "col": 3,
+      "type": "timber_plaster_boundary_04",
+      "semantic_type": "timber_plaster_boundary_04",
+      "displayName": "Timber/plaster boundary 04",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_04_100px.png",
+      "sha256": "21eaa37861cb44902701bf7ebe14938a5945850d07d54441f478a5af3e0fc633",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 24,
+      "row": 2,
+      "col": 4,
+      "type": "timber_plaster_boundary_05",
+      "semantic_type": "timber_plaster_boundary_05",
+      "displayName": "Timber/plaster boundary 05",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_05_100px.png",
+      "sha256": "39769e3700d5d841a0c12eb5439986bbdcdee325160507e4e27e77934c08d168",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 25,
+      "row": 2,
+      "col": 5,
+      "type": "timber_plaster_boundary_06",
+      "semantic_type": "timber_plaster_boundary_06",
+      "displayName": "Timber/plaster boundary 06",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_06_100px.png",
+      "sha256": "ba08f5e7a50503a7612f9f4275aa76c56a6a3df85f502fd92e2e2717bf1af79e",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 26,
+      "row": 2,
+      "col": 6,
+      "type": "timber_plaster_boundary_07",
+      "semantic_type": "timber_plaster_boundary_07",
+      "displayName": "Timber/plaster boundary 07",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_07_100px.png",
+      "sha256": "7edc81b26747b6eae9627a7524c55030765c130be688954e4d34ceab2831dcf2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 27,
+      "row": 2,
+      "col": 7,
+      "type": "timber_plaster_boundary_08",
+      "semantic_type": "timber_plaster_boundary_08",
+      "displayName": "Timber/plaster boundary 08",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_08_100px.png",
+      "sha256": "0c19ba34b8349966f91b25479e1e8cf3885594d8254b66cb0f7f16e3450672a8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 28,
+      "row": 2,
+      "col": 8,
+      "type": "timber_plaster_boundary_09",
+      "semantic_type": "timber_plaster_boundary_09",
+      "displayName": "Timber/plaster boundary 09",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_09_100px.png",
+      "sha256": "19182f2ede1b570cf22e95582df5cce9fbfc639b94198677acdc3654a2ac3169",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 29,
+      "row": 2,
+      "col": 9,
+      "type": "timber_plaster_boundary_10",
+      "semantic_type": "timber_plaster_boundary_10",
+      "displayName": "Timber/plaster boundary 10",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_plaster_boundary_10_100px.png",
+      "sha256": "c3bcc2332950ea6028304b539eadc240af188441411068356c96f536921ae68f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 30,
+      "row": 3,
+      "col": 0,
+      "type": "stone_masonry_boundary_01",
+      "semantic_type": "stone_masonry_boundary_01",
+      "displayName": "Stone masonry boundary 01",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_01_100px.png",
+      "sha256": "7408f6cc87a930e45d77163c9d536e72b3bc5ec216b67621c4dc06427ff3500f",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 31,
+      "row": 3,
+      "col": 1,
+      "type": "stone_masonry_boundary_02",
+      "semantic_type": "stone_masonry_boundary_02",
+      "displayName": "Stone masonry boundary 02",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_02_100px.png",
+      "sha256": "c6f861e967108718341b00a9c9deb4c1e0e26a48d8e82d3991198c248d0c9cd3",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 32,
+      "row": 3,
+      "col": 2,
+      "type": "stone_masonry_boundary_03",
+      "semantic_type": "stone_masonry_boundary_03",
+      "displayName": "Stone masonry boundary 03",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_03_100px.png",
+      "sha256": "8f77b2cab02319508e9e7f5ece6838bd834d88538ffac09442899eb173e59f3d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 33,
+      "row": 3,
+      "col": 3,
+      "type": "stone_masonry_boundary_04",
+      "semantic_type": "stone_masonry_boundary_04",
+      "displayName": "Stone masonry boundary 04",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_04_100px.png",
+      "sha256": "8f95b010da4a69f01ca19fbe0076e27d1a32a87fbc91c611ee3bb2c5ca813d37",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 34,
+      "row": 3,
+      "col": 4,
+      "type": "stone_masonry_boundary_05",
+      "semantic_type": "stone_masonry_boundary_05",
+      "displayName": "Stone masonry boundary 05",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_05_100px.png",
+      "sha256": "6eb7c1883e75223fa4f30e93db5fff62363250ddd080e045ede483c0846084b2",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 35,
+      "row": 3,
+      "col": 5,
+      "type": "stone_masonry_boundary_06",
+      "semantic_type": "stone_masonry_boundary_06",
+      "displayName": "Stone masonry boundary 06",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_06_100px.png",
+      "sha256": "710d86d6d4cce50838ed9f0b64609776bafebbb3c6388d024e456e8e419716b8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 36,
+      "row": 3,
+      "col": 6,
+      "type": "stone_masonry_boundary_07",
+      "semantic_type": "stone_masonry_boundary_07",
+      "displayName": "Stone masonry boundary 07",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_07_100px.png",
+      "sha256": "2836b3a25c99dfd600d5aff970fe1b2ed9c74d8d3738feffc2ad777c9c30d65d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 37,
+      "row": 3,
+      "col": 7,
+      "type": "stone_masonry_boundary_08",
+      "semantic_type": "stone_masonry_boundary_08",
+      "displayName": "Stone masonry boundary 08",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_08_100px.png",
+      "sha256": "b8fe530cd9485f995a8e9eb4f81dee94378d5947aade16063f39f8bc7c5d97fd",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 38,
+      "row": 3,
+      "col": 8,
+      "type": "stone_masonry_boundary_09",
+      "semantic_type": "stone_masonry_boundary_09",
+      "displayName": "Stone masonry boundary 09",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_09_100px.png",
+      "sha256": "973b9cea8936e7f0d47575701708cef5749717311644776effab1ee79e6aba5d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 39,
+      "row": 3,
+      "col": 9,
+      "type": "stone_masonry_boundary_10",
+      "semantic_type": "stone_masonry_boundary_10",
+      "displayName": "Stone masonry boundary 10",
+      "category": "wall",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_masonry_boundary_10_100px.png",
+      "sha256": "35fba89b89d642c3d0a8e31ed5cc8ffead20c14c21b482c1a8332544f20efcb1",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 40,
+      "row": 4,
+      "col": 0,
+      "type": "doorway_threshold_01",
+      "semantic_type": "doorway_threshold_01",
+      "displayName": "Doorway/threshold 01",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_01_100px.png",
+      "sha256": "6fbfb17344733f6cd1ca9b2594df98919b20f8c1825d791819fcb6228876c75b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 41,
+      "row": 4,
+      "col": 1,
+      "type": "doorway_threshold_02",
+      "semantic_type": "doorway_threshold_02",
+      "displayName": "Doorway/threshold 02",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_02_100px.png",
+      "sha256": "3405e830ea6f4f7f4b36d560e814caa5cd830e68469bc0b3dbbe587ba603dc4d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 42,
+      "row": 4,
+      "col": 2,
+      "type": "doorway_threshold_03",
+      "semantic_type": "doorway_threshold_03",
+      "displayName": "Doorway/threshold 03",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_03_100px.png",
+      "sha256": "487f5c282bc1e700738715be1e4c19bd5435e301a836209af9455a79daa675ba",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 43,
+      "row": 4,
+      "col": 3,
+      "type": "doorway_threshold_04",
+      "semantic_type": "doorway_threshold_04",
+      "displayName": "Doorway/threshold 04",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_04_100px.png",
+      "sha256": "e50b3f40f2f6161a4eb05ca6fd01e5a5a0c1e248da65f6299691bbfa36e70a5d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 44,
+      "row": 4,
+      "col": 4,
+      "type": "doorway_threshold_05",
+      "semantic_type": "doorway_threshold_05",
+      "displayName": "Doorway/threshold 05",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_05_100px.png",
+      "sha256": "9b663e80db640438d81f9f6be49eb39f259c819cdc388bfbe0afccac77afa36a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 45,
+      "row": 4,
+      "col": 5,
+      "type": "doorway_threshold_06",
+      "semantic_type": "doorway_threshold_06",
+      "displayName": "Doorway/threshold 06",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_06_100px.png",
+      "sha256": "9246e80efab998d4fb07e69abded0a76283012a153052b7ce339a9a60f61af84",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 46,
+      "row": 4,
+      "col": 6,
+      "type": "doorway_threshold_07",
+      "semantic_type": "doorway_threshold_07",
+      "displayName": "Doorway/threshold 07",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_07_100px.png",
+      "sha256": "3f48d6f57cb4f536c45d9e0f5e12df84ea835e2845ae9b4a0ea0838870c1f6ed",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 47,
+      "row": 4,
+      "col": 7,
+      "type": "doorway_threshold_08",
+      "semantic_type": "doorway_threshold_08",
+      "displayName": "Doorway/threshold 08",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_08_100px.png",
+      "sha256": "14e1dfcb7b4ed7e0a077702c5ab2f577ce4031fdba9ccf4f85611a677c4d1ff6",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 48,
+      "row": 4,
+      "col": 8,
+      "type": "doorway_threshold_09",
+      "semantic_type": "doorway_threshold_09",
+      "displayName": "Doorway/threshold 09",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_09_100px.png",
+      "sha256": "50d10b71e2ae09a6065cb8fe394b4e9c414847d2d97e904955a35bf90d1664b5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 49,
+      "row": 4,
+      "col": 9,
+      "type": "doorway_threshold_10",
+      "semantic_type": "doorway_threshold_10",
+      "displayName": "Doorway/threshold 10",
+      "category": "threshold",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_doorway_threshold_10_100px.png",
+      "sha256": "e75b3dd75ac012ea086833515b49fe107ff2aed5a34aff62d03818565bc70234",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 50,
+      "row": 5,
+      "col": 0,
+      "type": "timber_cutaway_boundary_01",
+      "semantic_type": "timber_cutaway_boundary_01",
+      "displayName": "Timber cutaway boundary 01",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_01_100px.png",
+      "sha256": "c6289bad37573aa02e263dbcc4e759c264c07e22d52c5ed763148556330a959b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 51,
+      "row": 5,
+      "col": 1,
+      "type": "timber_cutaway_boundary_02",
+      "semantic_type": "timber_cutaway_boundary_02",
+      "displayName": "Timber cutaway boundary 02",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_02_100px.png",
+      "sha256": "18932ae43f309ef55d734320bae34b3c08610a78ddf43ff936c8af896e7a8525",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 52,
+      "row": 5,
+      "col": 2,
+      "type": "timber_cutaway_boundary_03",
+      "semantic_type": "timber_cutaway_boundary_03",
+      "displayName": "Timber cutaway boundary 03",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_03_100px.png",
+      "sha256": "a2c80b567ea1ef4c2c9d1033cfb2a3e5d744de4cd5f1a2a1be70259bc26d6c92",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 53,
+      "row": 5,
+      "col": 3,
+      "type": "timber_cutaway_boundary_04",
+      "semantic_type": "timber_cutaway_boundary_04",
+      "displayName": "Timber cutaway boundary 04",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_04_100px.png",
+      "sha256": "62212cec6f3ac68f14e9814e1741d9682d6bdd533117bbaf6e141e1650fc9fc4",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 54,
+      "row": 5,
+      "col": 4,
+      "type": "timber_cutaway_boundary_05",
+      "semantic_type": "timber_cutaway_boundary_05",
+      "displayName": "Timber cutaway boundary 05",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_05_100px.png",
+      "sha256": "04a6ad06dc86390a5e43e35cf94716fe622663adcd46675fdb3caea38e6ab1a3",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 55,
+      "row": 5,
+      "col": 5,
+      "type": "timber_cutaway_boundary_06",
+      "semantic_type": "timber_cutaway_boundary_06",
+      "displayName": "Timber cutaway boundary 06",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_06_100px.png",
+      "sha256": "61f2d10a9e79177c36f707527d3e5d164583d88328a31e541fbc4e2baf8bdc3d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 56,
+      "row": 5,
+      "col": 6,
+      "type": "timber_cutaway_boundary_07",
+      "semantic_type": "timber_cutaway_boundary_07",
+      "displayName": "Timber cutaway boundary 07",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_07_100px.png",
+      "sha256": "ce3663dc2f0109cfed6da8aabb898ba4f78a32dda5a9799ff9d841023b68483d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 57,
+      "row": 5,
+      "col": 7,
+      "type": "timber_cutaway_boundary_08",
+      "semantic_type": "timber_cutaway_boundary_08",
+      "displayName": "Timber cutaway boundary 08",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_08_100px.png",
+      "sha256": "c9d2d92715cd041bad510609b0660e42c90a96b10d654c541e87507bb4cfa525",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 58,
+      "row": 5,
+      "col": 8,
+      "type": "timber_cutaway_boundary_09",
+      "semantic_type": "timber_cutaway_boundary_09",
+      "displayName": "Timber cutaway boundary 09",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_09_100px.png",
+      "sha256": "2bb466774c9110322e3a6a4e58bf026d010e0cd4b71779a6dec1d20e8a9f9160",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 59,
+      "row": 5,
+      "col": 9,
+      "type": "timber_cutaway_boundary_10",
+      "semantic_type": "timber_cutaway_boundary_10",
+      "displayName": "Timber cutaway boundary 10",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_timber_cutaway_boundary_10_100px.png",
+      "sha256": "0daf18db6758a9aa2cf63b8b06d562daf00ac57570181d8df40613ac7d6f4502",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 60,
+      "row": 6,
+      "col": 0,
+      "type": "stone_cutaway_boundary_01",
+      "semantic_type": "stone_cutaway_boundary_01",
+      "displayName": "Stone cutaway boundary 01",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_01_100px.png",
+      "sha256": "a6c8f02062d0ba2aa67758e0d5c64ccae97ac37b849a507133653297b91afe77",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 61,
+      "row": 6,
+      "col": 1,
+      "type": "stone_cutaway_boundary_02",
+      "semantic_type": "stone_cutaway_boundary_02",
+      "displayName": "Stone cutaway boundary 02",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_02_100px.png",
+      "sha256": "479ee1ea14467fd3a7e6c0a894a798ce39ce86ec4b2bbadc397238c29e146430",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 62,
+      "row": 6,
+      "col": 2,
+      "type": "stone_cutaway_boundary_03",
+      "semantic_type": "stone_cutaway_boundary_03",
+      "displayName": "Stone cutaway boundary 03",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_03_100px.png",
+      "sha256": "3bc6e3ae5d6dfc2a33ee090b794036d4ea7cb244ccd24814cd104cbf5ee55519",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 63,
+      "row": 6,
+      "col": 3,
+      "type": "stone_cutaway_boundary_04",
+      "semantic_type": "stone_cutaway_boundary_04",
+      "displayName": "Stone cutaway boundary 04",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_04_100px.png",
+      "sha256": "4edf57d5df6d505cbfc9a40573b5d1c4ecb6f3815f57ae33ded87899d758f25a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 64,
+      "row": 6,
+      "col": 4,
+      "type": "stone_cutaway_boundary_05",
+      "semantic_type": "stone_cutaway_boundary_05",
+      "displayName": "Stone cutaway boundary 05",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_05_100px.png",
+      "sha256": "ea937b6cab53ce42668e4dac3d72a3e506d0ce656041925e9407e99c65c601d7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 65,
+      "row": 6,
+      "col": 5,
+      "type": "stone_cutaway_boundary_06",
+      "semantic_type": "stone_cutaway_boundary_06",
+      "displayName": "Stone cutaway boundary 06",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_06_100px.png",
+      "sha256": "51271583fbd9987693bf73dea652604f52add3282ce4a1e5a12012f297be579c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 66,
+      "row": 6,
+      "col": 6,
+      "type": "stone_cutaway_boundary_07",
+      "semantic_type": "stone_cutaway_boundary_07",
+      "displayName": "Stone cutaway boundary 07",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_07_100px.png",
+      "sha256": "53064a65adc4875f176724bb76ee20efc74a39fff715b4f732b6bffb56bb7029",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 67,
+      "row": 6,
+      "col": 7,
+      "type": "stone_cutaway_boundary_08",
+      "semantic_type": "stone_cutaway_boundary_08",
+      "displayName": "Stone cutaway boundary 08",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_08_100px.png",
+      "sha256": "983532ac2434c97fe2d5d15028ae6b06939872aca28fb41b29fdff0b133f6437",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 68,
+      "row": 6,
+      "col": 8,
+      "type": "stone_cutaway_boundary_09",
+      "semantic_type": "stone_cutaway_boundary_09",
+      "displayName": "Stone cutaway boundary 09",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_09_100px.png",
+      "sha256": "856929c700202cc4cdcc57b6de8a2191b418c008b358bdc2d09436989d9a975c",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 69,
+      "row": 6,
+      "col": 9,
+      "type": "stone_cutaway_boundary_10",
+      "semantic_type": "stone_cutaway_boundary_10",
+      "displayName": "Stone cutaway boundary 10",
+      "category": "cutaway",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_stone_cutaway_boundary_10_100px.png",
+      "sha256": "2d4128596ae2e8b28ed3cc599859a07896aad41998e74dd5202f88d51a7d43de",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 70,
+      "row": 7,
+      "col": 0,
+      "type": "window_lowwall_boundary_01",
+      "semantic_type": "window_lowwall_boundary_01",
+      "displayName": "Window/low-wall boundary 01",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_01_100px.png",
+      "sha256": "eaf7f6c52c479fc39b7f38a7d89b94e202881c4855f5479f17e56ee85fe9dad7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 71,
+      "row": 7,
+      "col": 1,
+      "type": "window_lowwall_boundary_02",
+      "semantic_type": "window_lowwall_boundary_02",
+      "displayName": "Window/low-wall boundary 02",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_02_100px.png",
+      "sha256": "d81f2d4b43fe7823a4789ce3fce597a2dd14a0668977cdc3f00cb58eecee14b7",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 72,
+      "row": 7,
+      "col": 2,
+      "type": "window_lowwall_boundary_03",
+      "semantic_type": "window_lowwall_boundary_03",
+      "displayName": "Window/low-wall boundary 03",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_03_100px.png",
+      "sha256": "d54d664daf026665a821a7a35cabc521096e43593d9d09753ca30e9823c80a8a",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 73,
+      "row": 7,
+      "col": 3,
+      "type": "window_lowwall_boundary_04",
+      "semantic_type": "window_lowwall_boundary_04",
+      "displayName": "Window/low-wall boundary 04",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_04_100px.png",
+      "sha256": "fe668ca70d642673310b2fedf8d90e5c29d9696179e9fd2a4219409319a556ea",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 74,
+      "row": 7,
+      "col": 4,
+      "type": "window_lowwall_boundary_05",
+      "semantic_type": "window_lowwall_boundary_05",
+      "displayName": "Window/low-wall boundary 05",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_05_100px.png",
+      "sha256": "b9517c05c05639f2b6fb7fefb1650d82fe9c9029b58a81d914f33982ad1ea84b",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 75,
+      "row": 7,
+      "col": 5,
+      "type": "window_lowwall_boundary_06",
+      "semantic_type": "window_lowwall_boundary_06",
+      "displayName": "Window/low-wall boundary 06",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_06_100px.png",
+      "sha256": "61b3b6b423b8264a6cb73faf457eb7755d8858d508ff562aa88fd4c74edb57ce",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 76,
+      "row": 7,
+      "col": 6,
+      "type": "window_lowwall_boundary_07",
+      "semantic_type": "window_lowwall_boundary_07",
+      "displayName": "Window/low-wall boundary 07",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_07_100px.png",
+      "sha256": "c4c5fb7f9cea75a9a1566b23d52be0102bfcc429e929a70d6770d313578c47d1",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 77,
+      "row": 7,
+      "col": 7,
+      "type": "window_lowwall_boundary_08",
+      "semantic_type": "window_lowwall_boundary_08",
+      "displayName": "Window/low-wall boundary 08",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_08_100px.png",
+      "sha256": "1bd5449ecd16712ebd1a4dbee5ace182c25608087904525369c4c01d2b228bf8",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 78,
+      "row": 7,
+      "col": 8,
+      "type": "window_lowwall_boundary_09",
+      "semantic_type": "window_lowwall_boundary_09",
+      "displayName": "Window/low-wall boundary 09",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_09_100px.png",
+      "sha256": "585f1e5de1cc76bbcde34125a2f0909230baf235904298020acffb43eb96ecf3",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 79,
+      "row": 7,
+      "col": 9,
+      "type": "window_lowwall_boundary_10",
+      "semantic_type": "window_lowwall_boundary_10",
+      "displayName": "Window/low-wall boundary 10",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_window_lowwall_boundary_10_100px.png",
+      "sha256": "db5553c2921f7e1df622fd4a01a779de3c455dc26876df42036ea235690e86bf",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 80,
+      "row": 8,
+      "col": 0,
+      "type": "floor_wall_transition_01",
+      "semantic_type": "floor_wall_transition_01",
+      "displayName": "Floor/wall transition 01",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_01_100px.png",
+      "sha256": "231a42e8df0175b3cc2bfa7fad930a62bf64e09931bd77888f7b7daa37ae12da",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 81,
+      "row": 8,
+      "col": 1,
+      "type": "floor_wall_transition_02",
+      "semantic_type": "floor_wall_transition_02",
+      "displayName": "Floor/wall transition 02",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_02_100px.png",
+      "sha256": "ed48f7d7415dc48431782c3853edf955ea7813299205348345ec50668a274e19",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 82,
+      "row": 8,
+      "col": 2,
+      "type": "floor_wall_transition_03",
+      "semantic_type": "floor_wall_transition_03",
+      "displayName": "Floor/wall transition 03",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_03_100px.png",
+      "sha256": "548b1b37b433e1df4f41d46e7f2dda170383cac9d502c8f7096507ff0bba9ad5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 83,
+      "row": 8,
+      "col": 3,
+      "type": "floor_wall_transition_04",
+      "semantic_type": "floor_wall_transition_04",
+      "displayName": "Floor/wall transition 04",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_04_100px.png",
+      "sha256": "cbf76b4b67893d75fe9772b2ecbd771210c9ce7f1518438997877c747a06fc5d",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 84,
+      "row": 8,
+      "col": 4,
+      "type": "floor_wall_transition_05",
+      "semantic_type": "floor_wall_transition_05",
+      "displayName": "Floor/wall transition 05",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_05_100px.png",
+      "sha256": "584c5639cf461a070a225f6fe5bd8655d8e9deca4c26999a291a0fc7c7f14f82",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 85,
+      "row": 8,
+      "col": 5,
+      "type": "floor_wall_transition_06",
+      "semantic_type": "floor_wall_transition_06",
+      "displayName": "Floor/wall transition 06",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_06_100px.png",
+      "sha256": "881c6c5d894a17aa8147e67ebaf8e1547d2fd8465dfdbb213962e9794b75bc58",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 86,
+      "row": 8,
+      "col": 6,
+      "type": "floor_wall_transition_07",
+      "semantic_type": "floor_wall_transition_07",
+      "displayName": "Floor/wall transition 07",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_07_100px.png",
+      "sha256": "53ddbe55effe8d33bd4d872eae327941e47b832c1f5eb438756c64ebb9f8d894",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 87,
+      "row": 8,
+      "col": 7,
+      "type": "floor_wall_transition_08",
+      "semantic_type": "floor_wall_transition_08",
+      "displayName": "Floor/wall transition 08",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_08_100px.png",
+      "sha256": "56bc0e21e6b31e247802ed67de57f85e3d81c350cf6d20b0eb32ca04dbb7afd5",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 88,
+      "row": 8,
+      "col": 8,
+      "type": "floor_wall_transition_09",
+      "semantic_type": "floor_wall_transition_09",
+      "displayName": "Floor/wall transition 09",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_09_100px.png",
+      "sha256": "929ace3a5a159a568121e3ace6c36fb6517b46e30057a108778957f7b94e3b48",
+      "size": [
+        100,
+        100
+      ]
+    },
+    {
+      "index": 89,
+      "row": 8,
+      "col": 9,
+      "type": "floor_wall_transition_10",
+      "semantic_type": "floor_wall_transition_10",
+      "displayName": "Floor/wall transition 10",
+      "category": "structure",
+      "runtimeUsage": "building/interior/static-composite",
+      "filename": "interior_cutaway_floor_wall_transition_10_100px.png",
+      "sha256": "81ac94c799f085d5d440cb9fb0d7af03ae6829b015e18db8721cfc046b088aa4",
+      "size": [
+        100,
+        100
+      ]
+    }
+  ]
+}
