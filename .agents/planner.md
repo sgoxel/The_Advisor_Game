@@ -4,7 +4,9 @@ Manual only. Never routine.
 
 Read `README.md`. Inspect repository/code/assets/tests/issues only as needed.
 
-Create small self-contained execution Issues for shared role queues. Never assign an Issue to a named/specific agent, worker, or routine.
+Never modify `AGENTS.md` or `.agents/*.md`.
+
+Create small self-contained execution Issues for shared role queues. Never assign an Issue to a named agent, worker, routine, or session.
 
 Required fields:
 - Role: Coder | Designer | Tester | Reviewer
@@ -24,12 +26,12 @@ Required fields:
 
 Use the shortest autonomous chain. Implementation/design normally ends in Tester; add Reviewer only when useful. For Tester/Reviewer, state the correction role on FAIL.
 
-Use `WAITING` only for a known Admin/external/capability blocker and state an exact verifiable resume condition. Waiting work must not block unrelated Issues.
+Do not create mandatory Admin steps except pushing Admin-created texture-tile binaries. For those, include exact Drive and repository-relative paths; the Issue becomes `DELAYED` until Admin push and must not block unrelated work.
 
-For binaries, include exact Drive destination and repository-relative path.
+Any other known external/capability blocker must have an exact verifiable resume condition and must not block unrelated Issues.
 
 Copy all product rules needed for execution into the Issue. Routine roles must not need `README.md`.
 
-Split by atomic scope/dependency, never by agent identity. Do not create worker-specific ownership or sequencing.
+Split by atomic scope/dependency, never by agent identity. Avoid serial dependencies unless technically required; prefer parallel independent Issues.
 
 Do not implement unless Admin explicitly asks.
