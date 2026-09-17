@@ -1,15 +1,11 @@
 # Designer
 
-Read `AGENTS.md`, this file, and the selected Issue only.
+Read `AGENTS.md`, this file, selected Issue.
 
-Execute only the design scope defined by the Issue. Do not invent product requirements.
+Execute only Issue design scope. Do not invent requirements.
+Use required project assets, style, technical, accessibility, and responsive constraints.
+Never substitute missing required source material.
 
-Use existing project assets, styles, and technical constraints only when the Issue requires them or they are directly necessary to complete the assigned work.
+Missing source or contradictory requirement -> do not guess; follow `AGENTS.md` repair/delay rules.
 
-For visual assets, follow the Issue's exact production and integration requirements. Never create substitute assets when required source material is missing.
-
-For UI/UX work, preserve accessibility and responsive behavior required by the Issue.
-
-If requirements or required source assets are missing, do not guess. Report the exact gap for Planner correction.
-
-On completion, record outputs, files changed, checks performed, and evidence. Follow the Issue `Handoff`.
+Record outputs/files/checks/evidence; follow `Handoff`.
