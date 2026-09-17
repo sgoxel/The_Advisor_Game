@@ -6,24 +6,25 @@ Admin instructions override this file.
 1. Read this file.
 2. Read only your role file in `.agents/`.
 3. Scan GitHub Issues for your role.
-4. Select the highest-priority eligible Issue; if tied, select the oldest Issue number.
-5. Read the selected Issue completely.
-6. Claim it before work.
-7. Execute only that Issue.
+4. Ignore Issues missing any required workflow field.
+5. Clear stale claims encountered during scanning.
+6. Select the highest-priority eligible Issue; if tied, select the lowest Issue number.
+7. Read the selected Issue completely.
+8. Re-read it immediately before claiming. If state or claim changed, restart selection.
+9. Claim it and set `Status: ACTIVE`.
+10. Execute only that Issue.
 
 Do not read `README.md`, ROADMAP files, old Issues, or other project-planning documents unless the selected Issue explicitly requires a specific file. Repository code/assets/tests may be inspected as needed to execute the Issue.
 
-Issues are execution contracts. They must contain all task requirements, constraints, dependencies, acceptance criteria, required checks, evidence, and handoff. Do not infer missing product requirements. If an Issue is not self-contained, stop work on that Issue and report exactly what is missing for Planner correction.
+Issues are execution contracts. Do not infer missing requirements. If an Issue is not self-contained, report the exact gap for Planner correction.
 
-An Issue is eligible only when:
-- Role matches the agent role.
-- Status is `READY` for execution or `VERIFY` for verification/review.
+Eligible Issue:
+- `Role` matches.
+- `Status` is `READY` for execution or `VERIFY` for verification/review.
 - All dependencies are `DONE`.
-- Claim is `NONE` or stale.
+- `Claim` is `NONE` or stale.
 
-Claim format: `<agent-id>@<UTC timestamp>`. Claims older than 3 hours are stale and may be cleared before selection. One active Issue per agent.
-
-Issue fields:
+Required workflow fields:
 - `Role`: Coder | Designer | Tester | Reviewer
 - `Priority`: P0 | P1 | P2 | P3
 - `Status`: READY | ACTIVE | VERIFY | DONE
@@ -31,11 +32,17 @@ Issue fields:
 - `Dependency`: NONE | issue numbers
 - `Handoff`: NONE | next role
 
-Set `Status: ACTIVE` when claimed. On completion, follow `Handoff`, update `Status` as required by the Issue, and clear `Claim`.
+Claims older than 3 hours are stale and must be cleared. One active Issue per agent.
 
-Record only actions, checks, tests, uploads, commits, and results actually performed. Never invent evidence.
+Completion:
+- If `Handoff: NONE`, set `Status: DONE`.
+- If handing to Tester or Reviewer, set `Status: VERIFY`.
+- Otherwise set `Status: READY` for the next role.
+- Clear `Claim`.
 
-Never upload binary files directly to GitHub. Use the exact Google Drive destination defined by the Issue.
+Record only real actions, checks, tests, uploads, commits, and results. Never invent evidence.
+
+Never upload binaries directly to GitHub. Use the exact Google Drive destination defined by the Issue.
 
 All project Issues, comments, docs, code, asset text, tests, commits, and audit text must be English.
 
