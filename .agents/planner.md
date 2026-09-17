@@ -8,16 +8,21 @@ Create small, self-contained GitHub Issues for execution roles.
 
 Every Issue must include:
 - Role
+- Priority
+- Status: `READY`
+- Claim: `NONE`
+- Dependency
+- Handoff
 - Objective
 - Exact scope
 - Required inputs/files
 - Constraints
-- Dependencies
 - Out of scope
 - Acceptance criteria
 - Required checks/tests
 - Required evidence
-- Handoff/next role when applicable
+
+For binary output, include the exact Google Drive destination and intended repository-relative path.
 
 Copy every product rule needed for execution directly into the Issue. Do not require routine agents to read `README.md` to understand the task.
 
