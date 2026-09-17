@@ -1,0 +1,154 @@
+name: Daily Visual Review Screenshot
+
+on:
+  schedule:
+    # Run daily at 08:00 UTC (adjustable)
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub Actions UI
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      issues: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium webdriver-manager
+      
+      - name: Capture screenshot
+        run: |
+          TIMESTAMP=$(date +%Y%m%d)
+          python3 tools/screenshot_tool.py \
+            "https://sgoxel.github.io/The_Advisor_Game/" \
+            "daily-${TIMESTAMP}.png" \
+            --wait-min 15 \
+            --wait-max 60
+      
+      - name: Configure git
+        run: |
+          git config --global user.name "copilot-swe-agent[bot]"
+          git config --global user.email "198982749+Copilot@users.noreply.github.com"
+      
+      - name: Commit and push screenshot
+        run: |
+          TIMESTAMP=$(date +%Y%m%d)
+          if git add tools/screenshots/daily-${TIMESTAMP}.png; then
+            git commit -m "Daily screenshot: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)"
+            git push origin HEAD:main
+          else
+            echo "No new screenshot to commit"
+          fi
+        continue-on-error: true
+      
+      - name: Create or update issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+            
+            // Get today's date
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0];
+            const dateDisplay = today.toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            });
+            
+            // Find the latest screenshot
+            const screenshotsDir = 'tools/screenshots';
+            const files = fs.readdirSync(screenshotsDir)
+              .filter(f => f.startsWith('daily-') && f.endsWith('.png'))
+              .sort()
+              .reverse();
+            
+            if (files.length === 0) {
+              console.log('No screenshot found');
+              return;
+            }
+            
+            const latestScreenshot = files[0];
+            const screenshotPath = path.join(screenshotsDir, latestScreenshot);
+            
+            // Search for existing visual review issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['visual-review']
+            });
+            
+            let issueNumber = null;
+            if (issues.data.length > 0) {
+              issueNumber = issues.data[0].number;
+            }
+            
+            // Prepare the issue body with screenshot
+            const body = `## Daily Visual Review - ${dateDisplay}
+
+Automated daily screenshot of the latest public release for visual inspection and audit.
+
+### Screenshot Details
+- **Date**: ${dateDisplay}
+- **Viewport**: 1280x720 (Landscape - Review Standard)
+- **Source**: Public release at https://sgoxel.github.io/The_Advisor_Game/
+- **Captured**: Automatically via GitHub Actions
+
+### What to Look For
+- Overall UI layout and presentation consistency
+- Game rendering and visual effects
+- Character and world rendering quality
+- Menu and panel functionality
+- Any visual regressions or unexpected rendering issues
+- Performance indicators (if visible)
+
+### Screenshot
+![Daily Screenshot - ${dateDisplay}](https://raw.githubusercontent.com/${{ github.repository }}/main/tools/screenshots/${latestScreenshot})
+
+**File**: [\`${latestScreenshot}\`](https://github.com/${{ github.repository }}/blob/main/tools/screenshots/${latestScreenshot})
+
+---
+*This issue is automatically updated daily at 08:00 UTC with the latest screenshot.*
+`;
+            
+            if (issueNumber) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: body
+              });
+              console.log(`Updated issue #${issueNumber}`);
+            } else {
+              // Create new issue
+              const newIssue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Daily Visual Review - ${dateDisplay}`,
+                body: body,
+                labels: ['visual-review', 'automated']
+              });
+              console.log(`Created issue #${newIssue.data.number}`);
+            }
