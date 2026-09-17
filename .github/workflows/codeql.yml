@@ -2,11 +2,11 @@ name: CodeQL Security Scan
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
   schedule:
-    - cron: "0 3 * * 1"   # weekly on Monday at 03:00 UTC
+    - cron: "0 3 * * 1"
 
 permissions:
   security-events: write
