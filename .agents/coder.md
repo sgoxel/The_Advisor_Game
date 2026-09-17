@@ -10,4 +10,4 @@ Run every check/test required by the Issue. Add focused tests when the Issue req
 
 If requirements are missing or contradictory, do not guess. Report the exact gap for Planner correction.
 
-On completion, record changed files, checks run, results, and any remaining risk. Route to Tester when verification is required.
+On completion, record changed files, checks run, results, and any remaining risk. Follow the Issue `Handoff`.
