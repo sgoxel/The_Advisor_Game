@@ -1,0 +1,78 @@
+name: Dependency Block Checker
+
+on:
+  issues:
+    types: [closed]
+  schedule:
+    - cron: "30 */4 * * *"  # every 4 hours, offset from agent-health
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  unblock-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Get all closed+completed issue numbers
+            const closed = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              per_page: 100,
+            });
+            const doneIds = new Set(
+              closed
+                .filter(i => !i.pull_request)
+                .map(i => String(i.number))
+            );
+
+            // Scan open DELAYED issues
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            for (const issue of open) {
+              const body = issue.body || '';
+
+              const statusMatch = body.match(/^Status:\s*(.+)$/m);
+              if (!statusMatch || statusMatch[1].trim() !== 'DELAYED') continue;
+
+              const depMatch = body.match(/^Dependency:\s*(.+)$/m);
+              if (!depMatch) continue;
+              const depVal = depMatch[1].trim();
+              if (depVal === 'NONE') continue;
+
+              const depNums = depVal.split(/[\s,]+/).filter(Boolean);
+              const allDone = depNums.every(n => doneIds.has(n));
+              if (!allDone) continue;
+
+              // Determine role for new status
+              const roleMatch = body.match(/^Role:\s*(.+)$/m);
+              const role = roleMatch ? roleMatch[1].trim() : '';
+              const newStatus = (role === 'Tester' || role === 'Reviewer') ? 'VERIFY' : 'READY';
+
+              const newBody = body.replace(/^Status:.*$/m, `Status: ${newStatus}`);
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: newBody,
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `✅ All dependencies (${depVal}) are now closed. Status updated to \`${newStatus}\`.`,
+              });
+
+              console.log(`Unblocked issue #${issue.number}`);
+            }

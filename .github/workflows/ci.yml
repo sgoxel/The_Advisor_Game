@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run tests
+        run: |
+          PASS=0
+          FAIL=0
+          ERRORS=""
+          for f in tests/*.test.js; do
+            if node "$f" 2>&1; then
+              PASS=$((PASS + 1))
+            else
+              FAIL=$((FAIL + 1))
+              ERRORS="$ERRORS\n  FAILED: $f"
+            fi
+          done
+          echo "Passed: $PASS  Failed: $FAIL"
+          if [ "$FAIL" -gt 0 ]; then
+            printf "$ERRORS\n"
+            exit 1
+          fi

@@ -1,0 +1,38 @@
+name: Visual Check
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            python3-pip xvfb chromium-browser
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r tools/tile_atlas_tool_requirements.txt 2>/dev/null || true
+          pip install pillow playwright 2>/dev/null || true
+          python3 -m playwright install chromium 2>/dev/null || true
+
+      - name: Run screenshot tool
+        run: |
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          DISPLAY=:99 python3 tools/screenshot_tool.py || true
+
+      - name: Upload screenshots as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.sha }}
+          path: tools/screenshots/
+          if-no-files-found: warn
+          retention-days: 14

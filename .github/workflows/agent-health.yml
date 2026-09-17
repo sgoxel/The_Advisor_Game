@@ -1,0 +1,70 @@
+name: Agent Health — Stale Lock Recovery
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  recover-stale-locks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const STALE_MS = 3 * 60 * 60 * 1000; // 3 hours
+            const now = Date.now();
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            for (const issue of issues) {
+              const body = issue.body || '';
+
+              // Find Claim line
+              const claimMatch = body.match(/^Claim:\s*(.+)$/m);
+              if (!claimMatch) continue;
+              const claimVal = claimMatch[1].trim();
+              if (claimVal === 'NONE') continue;
+
+              // Extract timestamp from "<run-id>@<UTC timestamp>"
+              const atIdx = claimVal.lastIndexOf('@');
+              if (atIdx === -1) continue;
+              const tsStr = claimVal.slice(atIdx + 1).trim();
+              const claimTime = new Date(tsStr).getTime();
+              if (isNaN(claimTime)) continue;
+
+              if (now - claimTime < STALE_MS) continue;
+
+              // Determine new Status based on current Role
+              const roleMatch = body.match(/^Role:\s*(.+)$/m);
+              const role = roleMatch ? roleMatch[1].trim() : '';
+              const newStatus = (role === 'Tester' || role === 'Reviewer') ? 'VERIFY' : 'READY';
+
+              const newBody = body
+                .replace(/^Claim:.*$/m, 'Claim: NONE')
+                .replace(/^Status:.*$/m, `Status: ${newStatus}`);
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: newBody,
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `🔓 **Stale lock recovered** (lock age > 3 h). Claim reset to \`NONE\`, Status set to \`${newStatus}\`.`,
+              });
+
+              console.log(`Recovered stale lock on issue #${issue.number}`);
+            }
