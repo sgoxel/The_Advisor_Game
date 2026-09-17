@@ -24,7 +24,7 @@ jobs:
               Status:     /^(READY|ACTIVE|VERIFY|DELAYED|DONE)$/,
               Claim:      /^(NONE|.+@.+)$/,
               Dependency: /^(NONE|[\d, ]+)$/,
-              Handoff:    /^(NONE|.+)$/,
+              Handoff:    /^(NONE|[A-Za-z]+( > [A-Za-z]+)*)$/,
             };
 
             const errors = [];

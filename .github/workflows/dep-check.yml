@@ -26,7 +26,7 @@ jobs:
             });
             const doneIds = new Set(
               closed
-                .filter(i => !i.pull_request)
+                .filter(i => !i.pull_request && i.state_reason === 'completed')
                 .map(i => String(i.number))
             );
 

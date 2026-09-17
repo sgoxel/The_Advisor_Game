@@ -19,6 +19,7 @@ jobs:
 
       - name: Run tests
         run: |
+          shopt -s nullglob
           PASS=0
           FAIL=0
           ERRORS=""
@@ -27,11 +28,11 @@ jobs:
               PASS=$((PASS + 1))
             else
               FAIL=$((FAIL + 1))
-              ERRORS="$ERRORS\n  FAILED: $f"
+              ERRORS="$ERRORS  FAILED: $f"$'\n'
             fi
           done
           echo "Passed: $PASS  Failed: $FAIL"
           if [ "$FAIL" -gt 0 ]; then
-            printf "$ERRORS\n"
+            printf '%s\n' "$ERRORS"
             exit 1
           fi

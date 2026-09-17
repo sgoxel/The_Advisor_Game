@@ -19,9 +19,9 @@ jobs:
 
       - name: Install Python dependencies
         run: |
+          pip install pillow playwright
+          python3 -m playwright install chromium
           pip install -r tools/tile_atlas_tool_requirements.txt 2>/dev/null || true
-          pip install pillow playwright 2>/dev/null || true
-          python3 -m playwright install chromium 2>/dev/null || true
 
       - name: Run screenshot tool
         run: |
