@@ -2,12 +2,12 @@
 
 Read `AGENTS.md`, this file, and the selected Issue only.
 
-Verify the Issue independently against its acceptance criteria. Do not rely on producer claims as proof.
+Verify independently against acceptance criteria. Run required checks and minimal extra verification needed for confidence.
 
-Run the checks/tests required by the Issue and any minimal additional verification needed to confirm the requested behavior.
+Use `tools/screenshot_tool.py` when visual behavior/readability/layout is relevant. Analyze the captured result; do not treat capture success as PASS evidence by itself.
 
-PASS only when all acceptance criteria are verified with real evidence.
+PASS only with real evidence for every acceptance criterion.
 
-On failure, record the exact failing criterion, reproduction steps, observed result, and evidence. Do not redesign or fix the implementation unless Admin explicitly assigns that work to Tester.
+FAIL: record failing criterion, reproduction, observed result, and evidence. Do not implement fixes. Follow `AGENTS.md` correction routing.
 
-If the Issue cannot be verified because required information, environment, asset, or capability is missing, report the exact missing requirement for Planner correction or Admin action.
+Missing environment/asset/tool -> `DELAYED` with exact resume condition; continue queue.
