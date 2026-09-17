@@ -1,0 +1,301 @@
+name: Copilot Agent Dispatcher
+
+# Triggers the GitHub Copilot coding agent when an issue is labeled
+# with an agent role label (agent:coder, agent:designer, agent:tester,
+# agent:reviewer). The agent is activated by assigning the issue to
+# the @copilot user, which is the API equivalent of "Assign to Copilot"
+# in the GitHub UI.
+#
+# Copilot is instructed to read AGENTS.md only and follow its workflow
+# to find and complete the appropriate issue.
+#
+# The scheduler job runs every hour and automatically dispatches the
+# highest-priority READY issue for each role without requiring a label.
+
+on:
+  issues:
+    types: [labeled]
+  schedule:
+    - cron: "0 * * * *"   # every hour at :00
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to dispatch to Copilot"
+        required: true
+        type: number
+      role:
+        description: "Agent role (Coder | Designer | Tester | Reviewer)"
+        required: true
+        type: choice
+        options:
+          - Coder
+          - Designer
+          - Tester
+          - Reviewer
+
+permissions:
+  issues: write
+
+jobs:
+  # ── Hourly scheduled scan ────────────────────────────────────────────────
+  # Finds the highest-priority READY issue for each role and dispatches it
+  # to @copilot directly, without requiring a human to apply a label.
+  scheduled-scan:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read AGENTS.md
+        id: agents_md
+        run: |
+          CONTENT=$(cat AGENTS.md)
+          echo "content<<AGENTS_EOF" >> "$GITHUB_OUTPUT"
+          echo "$CONTENT" >> "$GITHUB_OUTPUT"
+          echo "AGENTS_EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Scan and dispatch READY issues
+        uses: actions/github-script@v7
+        env:
+          AGENTS_MD: ${{ steps.agents_md.outputs.content }}
+        with:
+          script: |
+            function buildComment(role, agentsMd) {
+              return [
+                `<!-- agent-dispatch -->`,
+                `🤖 **Copilot Agent Dispatch — Role: \`${role}\`**`,
+                ``,
+                `You have been assigned to this issue as a **${role}** agent.`,
+                ``,
+                `**Instructions:** Read \`AGENTS.md\` (reproduced below) and follow its Routine exactly.`,
+                `Do not read any other instruction files. \`AGENTS.md\` contains everything you need:`,
+                `the workflow protocol, role definitions, self-repair rules, and result handling.`,
+                ``,
+                `<details>`,
+                `<summary>📄 AGENTS.md</summary>`,
+                ``,
+                `\`\`\`markdown`,
+                agentsMd,
+                `\`\`\``,
+                `</details>`,
+              ].join('\n');
+            }
+
+            const PRIORITY_ORDER = ['P0', 'P1', 'P2', 'P3', 'P4'];
+            const VALID_ROLES = ['Coder', 'Designer', 'Tester', 'Reviewer'];
+            const agentsMd = process.env.AGENTS_MD;
+
+            const allIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            function parseFields(body) {
+              const get = (field) => {
+                const m = (body || '').match(new RegExp(`^${field}:\\s*(.+)$`, 'm'));
+                return m ? m[1].trim() : null;
+              };
+              return {
+                role:     get('Role'),
+                status:   get('Status'),
+                claim:    get('Claim'),
+                priority: get('Priority'),
+                dep:      get('Dependency'),
+              };
+            }
+
+            const closedIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              per_page: 100,
+            });
+            const doneIds = new Set(
+              closedIssues
+                .filter(i => !i.pull_request && i.state_reason === 'completed')
+                .map(i => String(i.number))
+            );
+
+            function depsResolved(dep) {
+              if (!dep || dep === 'NONE') return true;
+              return dep.split(/[\s,]+/).filter(Boolean).every(n => doneIds.has(n));
+            }
+
+            const byRole = {};
+            for (const issue of allIssues) {
+              if (issue.pull_request) continue;
+              const f = parseFields(issue.body);
+              if (!VALID_ROLES.includes(f.role)) continue;
+              if (f.status !== 'READY') continue;
+              if (f.claim && f.claim !== 'NONE') continue;
+              if (!depsResolved(f.dep)) continue;
+              if (!byRole[f.role]) byRole[f.role] = [];
+              byRole[f.role].push({ issue, priority: f.priority });
+            }
+
+            async function dispatchIssue(issueNumber, role) {
+              try {
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  assignees: ['copilot'],
+                });
+                core.info(`[schedule] Assigned #${issueNumber} to @copilot (${role})`);
+              } catch (err) {
+                core.warning(`Could not assign #${issueNumber} to @copilot: ${err.message}`);
+              }
+
+              const commentBody = buildComment(role, agentsMd);
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                per_page: 100,
+              });
+              const existing = comments.find(c => c.body.includes('<!-- agent-dispatch -->'));
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body: commentBody,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: commentBody,
+                });
+              }
+            }
+
+            for (const role of VALID_ROLES) {
+              const candidates = byRole[role] || [];
+              if (candidates.length === 0) {
+                core.info(`No READY issues for role ${role}.`);
+                continue;
+              }
+              candidates.sort((a, b) => {
+                const pa = PRIORITY_ORDER.indexOf(a.priority);
+                const pb = PRIORITY_ORDER.indexOf(b.priority);
+                if (pa !== pb) return pa - pb;
+                return a.issue.number - b.issue.number;
+              });
+              const top = candidates[0];
+              core.info(`Dispatching #${top.issue.number} (${role}, ${top.priority})`);
+              await dispatchIssue(top.issue.number, role);
+            }
+
+  # ── Label-triggered or manual dispatch ──────────────────────────────────
+  dispatch:
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && startsWith(github.event.label.name, 'agent:'))
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read AGENTS.md
+        id: agents_md
+        run: |
+          CONTENT=$(cat AGENTS.md)
+          echo "content<<AGENTS_EOF" >> "$GITHUB_OUTPUT"
+          echo "$CONTENT" >> "$GITHUB_OUTPUT"
+          echo "AGENTS_EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch to Copilot
+        uses: actions/github-script@v7
+        env:
+          AGENTS_MD: ${{ steps.agents_md.outputs.content }}
+        with:
+          script: |
+            function buildComment(role, agentsMd) {
+              return [
+                `<!-- agent-dispatch -->`,
+                `🤖 **Copilot Agent Dispatch — Role: \`${role}\`**`,
+                ``,
+                `You have been assigned to this issue as a **${role}** agent.`,
+                ``,
+                `**Instructions:** Read \`AGENTS.md\` (reproduced below) and follow its Routine exactly.`,
+                `Do not read any other instruction files. \`AGENTS.md\` contains everything you need:`,
+                `the workflow protocol, role definitions, self-repair rules, and result handling.`,
+                ``,
+                `<details>`,
+                `<summary>📄 AGENTS.md</summary>`,
+                ``,
+                `\`\`\`markdown`,
+                agentsMd,
+                `\`\`\``,
+                `</details>`,
+              ].join('\n');
+            }
+
+            const isManual = context.eventName === 'workflow_dispatch';
+
+            let issueNumber, role;
+            if (isManual) {
+              issueNumber = parseInt(context.payload.inputs.issue_number, 10);
+              role = context.payload.inputs.role;
+            } else {
+              issueNumber = context.payload.issue.number;
+              const label = context.payload.label.name;
+              const rawRole = label.replace(/^agent:/, '');
+              role = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+            }
+
+            const validRoles = ['Coder', 'Designer', 'Tester', 'Reviewer'];
+            if (!validRoles.includes(role)) {
+              core.info(`Label "${context.payload.label?.name}" does not map to a valid role. Skipping.`);
+              return;
+            }
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                assignees: ['copilot'],
+              });
+              core.info(`Assigned issue #${issueNumber} to @copilot`);
+            } catch (err) {
+              core.warning(`Could not assign to @copilot: ${err.message}`);
+            }
+
+            const agentsMd = process.env.AGENTS_MD;
+            const commentBody = buildComment(role, agentsMd);
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            const already = comments.find(c => c.body.includes('<!-- agent-dispatch -->'));
+            if (already) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: already.id,
+                body: commentBody,
+              });
+              core.info('Updated existing dispatch comment.');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: commentBody,
+              });
+              core.info('Posted dispatch comment.');
+            }
+
+  # ── Label bootstrap ──────────────────────────────────────────────────────
+  ensure-labels:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/bootstrap-labels.yml
