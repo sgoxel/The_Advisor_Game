@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""
-Screenshot tool for The Advisor Game project.
-
-Opens a local HTML file, file:// URL, or http(s) URL in headless Chrome and
-saves a PNG into the adjacent screenshots/ directory.
-
-Examples:
-  python screenshot_tool.py index.html landscape.png
-  python screenshot_tool.py index.html portrait.png --width 720 --height 1280
-  python screenshot_tool.py https://sgoxel.github.io/The_Advisor_Game/ public.png
-
-By default the tool uses the project's landscape review viewport (1280x720)
-and waits a random 15-60 seconds before capture, matching the daily visual
-review requirement. Use --wait-min/--wait-max for non-review/debug captures.
-"""
+"""Capture visual-review screenshots for The Advisor Game."""
 
 from __future__ import annotations
 
@@ -24,103 +10,97 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+PROFILES = {
+    "phone": (720, 1280),
+    "tablet": (1280, 800),
+}
 
 
 def normalize_target(target: str) -> str:
-    """Return a browser-ready URL for a local path or supported URL."""
     value = target.strip()
     parsed = urlparse(value)
-
     if parsed.scheme in {"http", "https", "file"}:
         return value
-
-    # A one-letter scheme is normally a Windows drive letter, e.g. C:\\game\\index.html.
     if parsed.scheme and len(parsed.scheme) > 1:
         raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
-
-    local_path = Path(value).expanduser().resolve()
-    if not local_path.exists():
-        raise FileNotFoundError(f"Input file does not exist: {local_path}")
-    return local_path.as_uri()
+    path = Path(value).expanduser().resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Input file does not exist: {path}")
+    return path.as_uri()
 
 
 def create_driver(width: int, height: int):
-    """Create Chrome, preferring Selenium Manager with webdriver-manager fallback."""
     try:
         from selenium import webdriver
-        from selenium.common.exceptions import WebDriverException
         from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
     except ImportError as exc:
-        raise RuntimeError(
-            "Selenium is not installed. Install it with: pip install selenium webdriver-manager"
-        ) from exc
-
-    try:
-        from webdriver_manager.chrome import ChromeDriverManager
-    except ImportError:
-        ChromeDriverManager = None
+        raise RuntimeError("Selenium is required: pip install selenium") from exc
 
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument(f"--window-size={width},{height}")
     options.add_argument("--hide-scrollbars")
-
-    try:
-        return webdriver.Chrome(options=options)
-    except WebDriverException as first_error:
-        if ChromeDriverManager is None:
-            raise first_error
-        service = Service(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=options)
+    options.add_argument(f"--window-size={width},{height}")
+    return webdriver.Chrome(options=options)
 
 
-def take_screenshot(
+def output_paths(filename: str, shots: int) -> list[Path]:
+    directory = Path(__file__).resolve().parent / "screenshots"
+    directory.mkdir(parents=True, exist_ok=True)
+
+    name = Path(filename).name
+    if not name:
+        raise ValueError("Output filename is empty")
+    path = Path(name)
+    if path.suffix.lower() != ".png":
+        path = path.with_suffix(".png")
+
+    if shots == 1:
+        return [directory / path.name]
+
+    return [
+        directory / f"{path.stem}_{index:02d}.png"
+        for index in range(1, shots + 1)
+    ]
+
+
+def take_screenshots(
     target: str,
     output_file: str,
     *,
-    width: int = 1280,
-    height: int = 720,
+    width: int,
+    height: int,
+    shots: int = 1,
+    interval: float = 0.2,
     wait_min: float = 15.0,
-    wait_max: float = 25.0,
+    wait_max: float = 60.0,
     ready_timeout: float = 20.0,
 ) -> bool:
-    """Open target in Chrome and save a screenshot. Returns True on success."""
     if width <= 0 or height <= 0:
-        print("Error: width and height must be positive integers.", file=sys.stderr)
+        print("Error: width and height must be positive.", file=sys.stderr)
+        return False
+    if shots < 1:
+        print("Error: shots must be >= 1.", file=sys.stderr)
+        return False
+    if interval < 0:
+        print("Error: interval must be >= 0.", file=sys.stderr)
         return False
     if wait_min < 0 or wait_max < 0 or wait_min > wait_max:
-        print("Error: wait range must satisfy 0 <= wait-min <= wait-max.", file=sys.stderr)
+        print("Error: require 0 <= wait-min <= wait-max.", file=sys.stderr)
         return False
-
-    screenshots_dir = Path(__file__).resolve().parent / "screenshots"
-    screenshots_dir.mkdir(parents=True, exist_ok=True)
-
-    # Keep output inside screenshots/ even if a path-like filename is supplied.
-    output_name = Path(output_file).name
-    if not output_name:
-        print("Error: output filename is empty.", file=sys.stderr)
-        return False
-    if Path(output_name).suffix.lower() != ".png":
-        output_name += ".png"
-    screenshot_path = screenshots_dir / output_name
 
     try:
         browser_url = normalize_target(target)
-        print(f"Opening: {browser_url}")
-
+        paths = output_paths(output_file, shots)
         driver = create_driver(width, height)
         try:
             from selenium.webdriver.common.by import By
             from selenium.webdriver.support import expected_conditions as EC
             from selenium.webdriver.support.ui import WebDriverWait
-            # Explicitly enforce the content viewport after startup. Chrome's startup
-            # window sizing can vary slightly by platform/headless implementation.
+
             driver.set_window_size(width, height)
             driver.get(browser_url)
-
             WebDriverWait(driver, ready_timeout).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
@@ -129,56 +109,55 @@ def take_screenshot(
             )
 
             delay = random.uniform(wait_min, wait_max)
+            print(f"Opening: {browser_url}")
             print(f"Viewport: {width}x{height}")
-            print(f"Waiting {delay:.1f} seconds before taking screenshot...")
+            print(f"Waiting {delay:.1f}s before capture")
             time.sleep(delay)
 
-            print(f"Saving screenshot to: {screenshot_path}")
-            if not driver.save_screenshot(str(screenshot_path)):
-                raise RuntimeError("Chrome reported that screenshot capture failed")
-
-            print("Screenshot saved successfully!")
+            for index, path in enumerate(paths):
+                if index:
+                    time.sleep(interval)
+                if not driver.save_screenshot(str(path)):
+                    raise RuntimeError(f"Screenshot capture failed: {path}")
+                print(f"Saved: {path}")
             return True
         finally:
             driver.quit()
-
     except Exception as exc:
         print(f"Error taking screenshot: {exc}", file=sys.stderr)
         return False
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Capture a local HTML file or URL with headless Chrome."
-    )
+    parser = argparse.ArgumentParser(description="Capture headless Chrome review screenshots.")
     parser.add_argument("target", help="Local HTML path, file:// URL, or http(s) URL")
-    parser.add_argument("filename", help="PNG filename saved under screenshots/")
-    parser.add_argument("--width", type=int, default=1280, help="Viewport width (default: 1280)")
-    parser.add_argument("--height", type=int, default=720, help="Viewport height (default: 720)")
-    parser.add_argument(
-        "--wait-min", type=float, default=15.0, help="Minimum pre-capture wait in seconds (default: 15)"
-    )
-    parser.add_argument(
-        "--wait-max", type=float, default=60.0, help="Maximum pre-capture wait in seconds (default: 60)"
-    )
-    parser.add_argument(
-        "--ready-timeout", type=float, default=20.0, help="Page readiness timeout in seconds (default: 20)"
-    )
+    parser.add_argument("filename", help="Base PNG filename saved under tools/screenshots/")
+    parser.add_argument("--profile", choices=sorted(PROFILES), help="Viewport profile")
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--shots", type=int, default=1)
+    parser.add_argument("--interval", type=float, default=0.2)
+    parser.add_argument("--wait-min", type=float, default=15.0)
+    parser.add_argument("--wait-max", type=float, default=60.0)
+    parser.add_argument("--ready-timeout", type=float, default=20.0)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    success = take_screenshot(
+    width, height = PROFILES.get(args.profile, (args.width, args.height))
+    ok = take_screenshots(
         args.target,
         args.filename,
-        width=args.width,
-        height=args.height,
+        width=width,
+        height=height,
+        shots=args.shots,
+        interval=args.interval,
         wait_min=args.wait_min,
         wait_max=args.wait_max,
         ready_timeout=args.ready_timeout,
     )
-    return 0 if success else 1
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
