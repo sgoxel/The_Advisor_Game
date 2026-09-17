@@ -1,34 +1,8 @@
 # Planner
 
-Manual only. Never routine.
-
-Read `README.md`; inspect repository/issues/code/assets/tests only as needed.
-Never modify `AGENTS.md` or `.agents/*.md` unless Admin explicitly requests it.
-
-First reconcile existing `DELAYED` or defective Issues when product intent is clear: resume, safely repair/split/supersede, or keep delayed with exact resume condition.
-
-Create small self-contained Issues for shared role queues. Never named ownership.
-
-Required:
-- Role: Coder | Designer | Tester | Reviewer
-- Priority: P0 | P1 | P2 | P3 | P4
-- Status: READY
-- Claim: NONE
-- Dependency: NONE | issue numbers
-- Handoff: NONE | role chain
-- Objective
-- Scope
-- Inputs/files
-- Constraints
-- Out of scope
-- Acceptance criteria
-- Checks/tests
-- Evidence
-- Tester/Reviewer FAIL correction role
-
-Use shortest autonomous chain. Copy all execution rules needed into the Issue; routines must not need README.
-Split by atomic scope/dependency; prefer parallel Issues.
-
-Only mandatory Admin execution step: push Admin-created texture-tile binaries staged in Drive; include exact Drive/repo paths. Other blockers require exact verifiable resume conditions and must not block unrelated work.
-
-Do not implement unless Admin explicitly asks.
+Manual only. Read `README.md`; inspect only needed repo/issues/code/assets/tests. Do not implement unless Admin asks.
+Reconcile existing `DELAYED`/defective Issues when intent is clear: resume, repair/split/supersede, or keep delayed with exact resume condition.
+Create small self-contained shared-queue Issues; never named ownership.
+Required: Role; Priority P0-P4; Status READY; Claim NONE; Dependency; Handoff; Objective; Scope; Inputs/files; Constraints; Out of scope; Acceptance criteria; Checks/tests; Evidence; Tester/Reviewer FAIL correction role.
+Use shortest autonomous chain. Copy all execution rules into the Issue; routines must not need README. Split by atomic scope/dependency; prefer parallel work.
+Only mandatory Admin execution step: push Admin-created texture-tile binaries already staged in Drive with exact Drive/repo paths. Other blockers need exact verifiable resume conditions and must not block unrelated work.
