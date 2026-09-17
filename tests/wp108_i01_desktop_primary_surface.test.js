@@ -7,8 +7,8 @@ const css = fs.readFileSync(cssPath, 'utf8');
 
 assert(css.includes('@media(min-width:961px){'), 'Desktop-only responsive rule must exist.');
 assert(
-  css.includes('grid-template-rows:48px minmax(0,1fr) clamp(156px,21vh,172px)'),
-  'Desktop shell must reserve a bounded control ribbon so the game area remains the dominant surface.'
+  css.includes('grid-template-rows:48px minmax(0,1fr) 36px clamp(120px,17vh,136px)'),
+  'Desktop shell must reserve bounded contextual tabs and one active panel so the game area remains dominant.'
 );
 assert(
   css.includes('@media(max-width:960px){#app{grid-template-rows:auto minmax(0,1fr) auto auto}'),
@@ -19,20 +19,22 @@ assert(
   'Existing compact landscape layout must remain available below the desktop breakpoint.'
 );
 assert(
-  css.includes('.bottom-ribbon .panel{height:100%}'),
-  'Desktop panels must fill only the bounded ribbon instead of overlaying the game area.'
+  css.includes('.bottom-ribbon .panel{display:none;height:100%}') &&
+    css.includes('.bottom-ribbon .panel.active-panel{display:grid}'),
+  'Desktop must render only the active contextual panel inside the bounded panel row.'
 );
 assert(
   css.includes('.character-body{grid-template-columns:80px 1fr}') && css.includes('.thumbnail{width:80px;height:80px}'),
-  'Character summary must compact with the shorter desktop ribbon without hiding its essential identity text.'
+  'Character summary must remain compact without hiding essential identity text.'
 );
 
 const minGameHeights = [600, 720, 768, 900, 1080].map((viewportHeight) => {
-  const ribbonHeight = Math.min(172, Math.max(156, viewportHeight * 0.21));
+  const panelHeight = Math.min(136, Math.max(120, viewportHeight * 0.17));
+  const persistentChromeHeight = 48 + 36 + panelHeight;
   return {
     viewportHeight,
-    gameHeight: viewportHeight - 48 - ribbonHeight,
-    ratio: (viewportHeight - 48 - ribbonHeight) / viewportHeight
+    gameHeight: viewportHeight - persistentChromeHeight,
+    ratio: (viewportHeight - persistentChromeHeight) / viewportHeight
   };
 });
 
