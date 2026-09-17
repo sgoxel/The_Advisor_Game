@@ -27,8 +27,7 @@ jobs:
         run: |
           Xvfb :99 -screen 0 1280x800x24 &
           sleep 2
-          DISPLAY=:99 python3 tools/screenshot_tool.py || true
-
+          DISPLAY=:99 python3 tools/screenshot_tool.py index.html "screenshots-${{ github.sha }}.png" --wait-min 0 --wait-max 2
       - name: Upload screenshots as artifact
         uses: actions/upload-artifact@v4
         with:
