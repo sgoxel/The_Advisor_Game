@@ -1,0 +1,78 @@
+name: Issue Field Audit
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const number = context.payload.issue.number;
+            const roles = '(Coder|Designer|Tester|Reviewer)';
+            const valid = {
+              Role: new RegExp(`^${roles}$`),
+              Priority: /^(P0|P1|P2|P3|P4)$/,
+              Status: /^(READY|ACTIVE|VERIFY|DELAYED|DONE)$/,
+              Claim: /^(NONE|[^@\s]+@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00))$/,
+              Dependency: /^(NONE|#?\d+(?:[ ,]+#?\d+)*)$/,
+              Handoff: new RegExp(`^(NONE|${roles}(?: > ${roles})*)$`),
+            };
+            const errors = [];
+
+            for (const [field, rule] of Object.entries(valid)) {
+              const match = body.match(new RegExp(`^${field}:\\s*(.+)$`, 'm'));
+              if (!match) {
+                errors.push(`Missing \`${field}:\``);
+                continue;
+              }
+              const value = match[1].trim();
+              if (!rule.test(value)) errors.push(`Invalid \`${field}\`: \`${value}\``);
+            }
+
+            const tag = '<!-- agent-issue-lint -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              per_page: 100,
+            });
+            const previous = comments.find(c => c.body?.includes(tag));
+
+            if (errors.length === 0) {
+              if (previous && !previous.body.includes('validation passed')) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: previous.id,
+                  body: `${tag}\n✅ Workflow-field validation passed. Audit only; no Issue fields were changed.`
+                });
+              }
+              return;
+            }
+
+            const comment = `${tag}\n⚠️ **Workflow-field validation failed:**\n\n${errors.map(e => `- ${e}`).join('\n')}\n\nAudit only; no Issue fields were changed.`;
+            if (previous) {
+              if (previous.body !== comment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: previous.id,
+                  body: comment,
+                });
+              }
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                body: comment,
+              });
+            }

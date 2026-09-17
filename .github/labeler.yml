@@ -1,0 +1,34 @@
+js:
+  - changed-files:
+      - any-glob-to-any-file: "js/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: "tests/**"
+
+css:
+  - changed-files:
+      - any-glob-to-any-file: "css/**"
+
+textures:
+  - changed-files:
+      - any-glob-to-any-file: "textures/**"
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "index.html"
+          - "test_page.html"
+          - "css/**"
+
+tools:
+  - changed-files:
+      - any-glob-to-any-file: "tools/**"
+
+locales:
+  - changed-files:
+      - any-glob-to-any-file: "locales/**"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"

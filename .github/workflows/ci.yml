@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run tests
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(tests/*.test.js)
+          if (( ${#files[@]} == 0 )); then
+            echo "No tests/*.test.js files found." >&2
+            exit 1
+          fi
+
+          PASS=0
+          FAIL=0
+          for f in "${files[@]}"; do
+            echo "RUN: $f"
+            if node "$f"; then
+              PASS=$((PASS + 1))
+            else
+              echo "FAILED: $f" >&2
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          echo "Passed: $PASS  Failed: $FAIL"
+          test "$FAIL" -eq 0
