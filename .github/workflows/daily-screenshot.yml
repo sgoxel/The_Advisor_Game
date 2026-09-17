@@ -1,154 +1,197 @@
-name: Daily Visual Review Screenshot
+name: Visual Review Capture
 
 on:
   schedule:
-    # Run daily at 08:00 UTC (adjustable)
-    - cron: '0 8 * * *'
+    - cron: "0 8 * * *"
   workflow_dispatch:
-    # Allow manual trigger from GitHub Actions UI
+    inputs:
+      capture_mode:
+        description: Capture mode
+        required: true
+        default: standard
+        type: choice
+        options:
+          - standard
+          - npc_action
+      target_url:
+        description: Page to capture
+        required: true
+        default: https://sgoxel.github.io/The_Advisor_Game/
+        type: string
+      wait_seconds:
+        description: Initialization wait before first frame
+        required: true
+        default: "20"
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  DEFAULT_URL: https://sgoxel.github.io/The_Advisor_Game/
 
 jobs:
-  screenshot:
+  capture:
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: write
-      issues: write
-    
+    timeout-minutes: 8
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-          cache: 'pip'
-      
-      - name: Install dependencies
+          python-version: "3.12"
+
+      - name: Install capture dependency
+        run: python -m pip install --disable-pip-version-check selenium
+
+      - name: Resolve capture settings
+        id: settings
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install selenium webdriver-manager
-      
-      - name: Capture screenshot
-        run: |
-          TIMESTAMP=$(date +%Y%m%d)
-          python3 tools/screenshot_tool.py \
-            "https://sgoxel.github.io/The_Advisor_Game/" \
-            "daily-${TIMESTAMP}.png" \
-            --wait-min 15 \
-            --wait-max 60
-      
-      - name: Configure git
-        run: |
-          git config --global user.name "copilot-swe-agent[bot]"
-          git config --global user.email "198982749+Copilot@users.noreply.github.com"
-      
-      - name: Commit and push screenshot
-        run: |
-          TIMESTAMP=$(date +%Y%m%d)
-          if git add tools/screenshots/daily-${TIMESTAMP}.png; then
-            git commit -m "Daily screenshot: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)"
-            git push origin HEAD:main
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            MODE="${{ inputs.capture_mode }}"
+            TARGET="${{ inputs.target_url }}"
+            WAIT="${{ inputs.wait_seconds }}"
           else
-            echo "No new screenshot to commit"
+            MODE="standard"
+            TARGET="$DEFAULT_URL"
+            WAIT="20"
           fi
-        continue-on-error: true
-      
-      - name: Create or update issue
+
+          if [[ "$MODE" != "standard" && "$MODE" != "npc_action" ]]; then
+            echo "Unsupported capture mode: $MODE" >&2
+            exit 1
+          fi
+          if ! [[ "$WAIT" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            echo "wait_seconds must be numeric" >&2
+            exit 1
+          fi
+
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "wait=$WAIT" >> "$GITHUB_OUTPUT"
+
+      - name: Capture phone and tablet
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODE="${{ steps.settings.outputs.mode }}"
+          TARGET="${{ steps.settings.outputs.target }}"
+          WAIT="${{ steps.settings.outputs.wait }}"
+
+          if [[ "$MODE" == "npc_action" ]]; then
+            SHOTS=2
+          else
+            SHOTS=1
+          fi
+
+          python tools/screenshot_tool.py "$TARGET" phone.png \
+            --profile phone --shots "$SHOTS" --interval 0.2 \
+            --wait-min "$WAIT" --wait-max "$WAIT"
+
+          python tools/screenshot_tool.py "$TARGET" tablet.png \
+            --profile tablet --shots "$SHOTS" --interval 0.2 \
+            --wait-min "$WAIT" --wait-max "$WAIT"
+
+      - name: Write evidence metadata
+        shell: bash
+        run: |
+          CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          MODE="${{ steps.settings.outputs.mode }}"
+          {
+            echo "commit_sha=${{ github.sha }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "run_attempt=${{ github.run_attempt }}"
+            echo "capture_mode=$MODE"
+            echo "captured_at=$CAPTURED_AT"
+            echo "target=${{ steps.settings.outputs.target }}"
+            echo "phone_viewport=720x1280"
+            echo "tablet_viewport=1280x800"
+            if [[ "$MODE" == "npc_action" ]]; then
+              echo "frames_per_viewport=2"
+              echo "frame_interval_seconds=0.2"
+            else
+              echo "frames_per_viewport=1"
+              echo "frame_interval_seconds=0"
+            fi
+          } > tools/screenshots/metadata.txt
+
+          find tools/screenshots -maxdepth 1 -type f -printf "%f\n" | sort >> tools/screenshots/metadata.txt
+
+      - name: Upload visual evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-review-${{ github.run_id }}
+          path: |
+            tools/screenshots/*.png
+            tools/screenshots/metadata.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish latest visual-review run
         uses: actions/github-script@v7
+        env:
+          CAPTURE_MODE: ${{ steps.settings.outputs.mode }}
+          TARGET_URL: ${{ steps.settings.outputs.target }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const path = require('path');
-            const { execSync } = require('child_process');
-            
-            // Get today's date
-            const today = new Date();
-            const dateStr = today.toISOString().split('T')[0];
-            const dateDisplay = today.toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            });
-            
-            // Find the latest screenshot
-            const screenshotsDir = 'tools/screenshots';
-            const files = fs.readdirSync(screenshotsDir)
-              .filter(f => f.startsWith('daily-') && f.endsWith('.png'))
-              .sort()
-              .reverse();
-            
-            if (files.length === 0) {
-              console.log('No screenshot found');
-              return;
-            }
-            
-            const latestScreenshot = files[0];
-            const screenshotPath = path.join(screenshotsDir, latestScreenshot);
-            
-            // Search for existing visual review issue
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runId = context.runId;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
+            const artifactName = `visual-review-${runId}`;
+            const mode = process.env.CAPTURE_MODE;
+            const target = process.env.TARGET_URL;
+            const capturedAt = new Date().toISOString();
+            const imageCount = mode === 'npc_action' ? 4 : 2;
+
+            const body = [
+              '## Automated Visual Review Evidence',
+              '',
+              `- **Commit SHA**: \`${context.sha}\``,
+              `- **Run ID**: \`${runId}\``,
+              `- **Capture mode**: \`${mode}\``,
+              `- **Captured**: ${capturedAt}`,
+              `- **Target**: ${target}`,
+              `- **Artifact**: \`${artifactName}\``,
+              `- **Images**: ${imageCount}`,
+              '',
+              '### Viewports',
+              '- Phone portrait: `720x1280`',
+              '- Tablet landscape: `1280x800`',
+              mode === 'npc_action'
+                ? '- NPC/action pairs: 2 frames per viewport, `0.2s` apart'
+                : '- Standard: 1 frame per viewport',
+              '',
+              `### Evidence`,
+              `[Open workflow run and download artifact](${runUrl})`,
+              '',
+              'Reviewer/Tester must use evidence from the tested commit; stale runs are not proof of current state.'
+            ].join('\n');
+
+            const title = 'Visual Review: Latest Main Branch Release Screenshot';
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
               state: 'open',
-              labels: ['visual-review']
+              per_page: 100
             });
-            
-            let issueNumber = null;
-            if (issues.data.length > 0) {
-              issueNumber = issues.data[0].number;
-            }
-            
-            // Prepare the issue body with screenshot
-            const body = `## Daily Visual Review - ${dateDisplay}
+            const existing = issues.find(i => !i.pull_request && i.title === title);
 
-Automated daily screenshot of the latest public release for visual inspection and audit.
-
-### Screenshot Details
-- **Date**: ${dateDisplay}
-- **Viewport**: 1280x720 (Landscape - Review Standard)
-- **Source**: Public release at https://sgoxel.github.io/The_Advisor_Game/
-- **Captured**: Automatically via GitHub Actions
-
-### What to Look For
-- Overall UI layout and presentation consistency
-- Game rendering and visual effects
-- Character and world rendering quality
-- Menu and panel functionality
-- Any visual regressions or unexpected rendering issues
-- Performance indicators (if visible)
-
-### Screenshot
-![Daily Screenshot - ${dateDisplay}](https://raw.githubusercontent.com/${{ github.repository }}/main/tools/screenshots/${latestScreenshot})
-
-**File**: [\`${latestScreenshot}\`](https://github.com/${{ github.repository }}/blob/main/tools/screenshots/${latestScreenshot})
-
----
-*This issue is automatically updated daily at 08:00 UTC with the latest screenshot.*
-`;
-            
-            if (issueNumber) {
-              // Update existing issue
+            if (existing) {
               await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: body
+                owner,
+                repo,
+                issue_number: existing.number,
+                body
               });
-              console.log(`Updated issue #${issueNumber}`);
+              core.info(`Updated issue #${existing.number}`);
             } else {
-              // Create new issue
-              const newIssue = await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: `Daily Visual Review - ${dateDisplay}`,
-                body: body,
-                labels: ['visual-review', 'automated']
-              });
-              console.log(`Created issue #${newIssue.data.number}`);
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.info(`Created issue #${created.data.number}`);
             }
