@@ -27,13 +27,13 @@ jobs:
             for (const issue of issues) {
               if (issue.pull_request) continue;
               const body = issue.body || '';
+              const status = body.match(/^Status:\s*(.+)$/m)?.[1]?.trim();
               const claim = body.match(/^Claim:\s*(.+)$/m)?.[1]?.trim();
-              if (!claim || claim === 'NONE') continue;
+              if (status !== 'ACTIVE' || !claim || claim === 'NONE') continue;
 
               const at = claim.lastIndexOf('@');
               if (at < 1) continue;
-              const timestamp = claim.slice(at + 1).trim();
-              const claimedAt = Date.parse(timestamp);
+              const claimedAt = Date.parse(claim.slice(at + 1).trim());
               if (!Number.isFinite(claimedAt) || now - claimedAt <= staleMs) continue;
 
               const marker = `<!-- stale-lock-audit:${claim} -->`;
@@ -49,6 +49,6 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
-                body: `${marker}\n⚠️ **Stale lock audit:** \`${claim}\` is older than 3 hours. Audit only; no Issue fields were changed. A routine must recover the stale lock under \`AGENTS.md\`.`
+                body: `${marker}\n⚠️ **Stale lock audit:** active claim \`${claim}\` is older than 3 hours. Audit only; no Issue fields were changed. A routine must recover it under \`AGENTS.md\`.`
               });
             }
