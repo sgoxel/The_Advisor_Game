@@ -7,18 +7,20 @@ Agents, including Planner, must never modify, rename, delete, replace, or create
 
 ## Routine
 1. Read this file and your `.agents/<role>.md` only.
-2. Scan open Issues for your role. Never assign/bind work to a named agent, worker, routine, or session.
-3. Self-repair explicit Issue workflow defects before selection.
-4. Recover stale locks; recheck verifiable `DELAYED` resume conditions.
+2. Scan all open Issues.
+3. Self-repair explicit workflow defects globally; recover stale locks; recheck verifiable `DELAYED` conditions.
+4. Filter repaired Issues to your Role.
 5. Skip `DELAYED`, dependency-blocked, invalid, or locked Issues. Select highest priority eligible; tie -> lowest Issue number.
 6. Read fully; re-read before lock. If changed, restart selection.
 7. Set transient `Claim: <run-id>@<UTC timestamp>` and `Status: ACTIVE`.
-8. Execute only that Issue.
+8. Re-fetch. Execute only if `Claim` still equals your run-id and `Status: ACTIVE`; otherwise rescan.
+
+Never assign/bind work to a named agent, worker, routine, or session.
 
 Do not read `README.md`, ROADMAP, or unrelated/old Issues. Inspect repository code/assets/tests only as needed. Dependency Issues: workflow state only.
 
 ## Self-repair
-Any routine may repair an Issue without claiming it when product intent is unchanged. Repair the Issue itself, then rescan.
+Any routine may repair an Issue without claiming it when product intent is unchanged. Repair, then rescan.
 
 May repair: workflow fields, legacy role/state/claim formats, stale locks, dependencies/handoffs, obsolete worker ownership, removed-governance references, and operational instructions contradicted by this file.
 
@@ -32,9 +34,11 @@ Safe role mappings:
 
 Legacy `WAITING` -> `DELAYED`. `Claim` is only a run lock. Locks older than 3 hours are stale. Stale `ACTIVE`: clear `Claim`; Tester/Reviewer -> `VERIFY`; others -> `READY`.
 
-Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, record exact resume condition, continue scanning. When condition is verifiably resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
+Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, record exact resume condition, continue scanning. When verifiably resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
 
 Removed legacy governance references are historical only. Do not recreate/require them.
+
+Dependency is satisfied by `Status: DONE`, or by a closed-completed legacy Issue whose recorded outcome clearly satisfies it. Closed duplicate/not-planned/ambiguous dependencies are not satisfied; delay only that branch.
 
 ## Workflow
 - `Role`: Coder | Designer | Tester | Reviewer
@@ -48,7 +52,7 @@ Eligible:
 - workflow fields valid
 - `Role` matches
 - `Status: READY`, or `VERIFY` for Tester/Reviewer
-- dependencies `DONE`
+- dependencies satisfied
 - `Claim: NONE`
 
 `DELAYED`, unresolved dependencies, active locks, invalid Issues, and Admin-attention Issues delay only themselves. They never stop the queue. If no eligible Issue exists, end the run cleanly.
