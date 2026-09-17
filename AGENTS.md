@@ -14,7 +14,7 @@ Admin instructions override this file.
 9. Claim it and set `Status: ACTIVE`.
 10. Execute only that Issue.
 
-Do not read `README.md`, ROADMAP files, old Issues, or other project-planning documents unless the selected Issue explicitly requires a specific file. Repository code/assets/tests may be inspected as needed to execute the Issue.
+Do not read `README.md`, ROADMAP files, old Issues, or other project-planning documents unless the selected Issue explicitly requires a specific file. Repository code/assets/tests may be inspected as needed. Dependency Issues may be inspected only for workflow state.
 
 Issues are execution contracts. Do not infer missing requirements. If an Issue is not self-contained, report the exact gap for Planner correction.
 
@@ -36,8 +36,8 @@ Claims older than 3 hours are stale and must be cleared. One active Issue per ag
 
 Completion:
 - If `Handoff: NONE`, set `Status: DONE`.
-- If handing to Tester or Reviewer, set `Status: VERIFY`.
-- Otherwise set `Status: READY` for the next role.
+- Otherwise set `Role` to `Handoff`.
+- If new `Role` is Tester or Reviewer, set `Status: VERIFY`; otherwise set `Status: READY`.
 - Clear `Claim`.
 
 Record only real actions, checks, tests, uploads, commits, and results. Never invent evidence.
