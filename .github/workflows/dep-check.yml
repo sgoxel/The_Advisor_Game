@@ -59,6 +59,6 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
-                body: `${marker}\n✅ **Dependency audit:** recorded dependencies (${raw}) are completed. Audit only; Status and Claim were not changed. A routine must verify the full resume condition before reactivating this Issue.`
+                body: `${marker}\n✅ **Dependency audit:** recorded dependencies (${raw}) are completed. Audit only; Status and Claim were not changed. A routine must verify every resume condition before reactivating this Issue.`
               });
             }
