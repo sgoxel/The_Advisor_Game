@@ -6,7 +6,6 @@ Use this order when rules conflict:
 
 **Admin > README.md > ROADMAP.md > TODO > issues > code/assets > tests**
 
-- Read `README.md` first every run.
 - `README.md` is product truth.
 - Do not edit `README.md` unless Admin explicitly asks.
 - Core rule: **Player advises -> AI Character decides -> Simulation validates -> World reacts.**
