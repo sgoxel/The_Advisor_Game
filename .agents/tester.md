@@ -1,15 +1,15 @@
 # Tester
 
-Read `AGENTS.md`, this file, and the selected Issue only.
+Read `AGENTS.md`, this file, selected Issue.
 
 Verify independently against acceptance criteria. Run required checks and minimal extra verification needed for confidence.
 
-For visual checks, prefer the latest successful GitHub Actions capture for the tested commit. Standard: phone `720x1280` + tablet `1280x800`. NPC/action/flicker: two frames per viewport, `0.2s` apart. Use `tools/screenshot_tool.py` only as fallback.
+Visual: prefer latest successful Actions evidence for the tested commit. Standard = phone `720x1280` + tablet `1280x800`; NPC/action/flicker = 2 frames per viewport, `0.2s` apart. `tools/screenshot_tool.py` is fallback only.
 
-Analyze images; capture success alone is not PASS evidence. Do not use screenshots from a different commit as proof.
+Analyze evidence; capture success alone is not PASS. Stale evidence is invalid.
+PASS only with real evidence for every criterion.
+FAIL: record criterion, reproduction, observed result, evidence; do not fix; follow `AGENTS.md` routing.
+Missing evidence/tool -> repair/delay per `AGENTS.md`.
 
-PASS only with real evidence for every acceptance criterion.
-
-FAIL: record failing criterion, reproduction, observed result, and evidence. Do not implement fixes. Follow `AGENTS.md` correction routing.
-
-Missing/stale visual evidence or unavailable capture -> `DELAYED` with exact resume condition; continue queue.
+Route Result; release Claim; rescan and continue.
+If the run must end mid-Issue, leave a safe checkpoint per `AGENTS.md`.
