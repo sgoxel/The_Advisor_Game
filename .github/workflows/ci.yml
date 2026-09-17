@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
-    branches: ["**"]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -15,24 +18,28 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Run tests
+        shell: bash
         run: |
           shopt -s nullglob
-          PASS=0
-          FAIL=0
-          ERRORS=""
-          for f in tests/*.test.js; do
-            if node "$f" 2>&1; then
-              PASS=$((PASS + 1))
-            else
-              FAIL=$((FAIL + 1))
-              ERRORS="$ERRORS  FAILED: $f"$'\n'
-            fi
-          done
-          echo "Passed: $PASS  Failed: $FAIL"
-          if [ "$FAIL" -gt 0 ]; then
-            printf '%s\n' "$ERRORS"
+          files=(tests/*.test.js)
+          if (( ${#files[@]} == 0 )); then
+            echo "No tests/*.test.js files found." >&2
             exit 1
           fi
+
+          PASS=0
+          FAIL=0
+          for f in "${files[@]}"; do
+            if node "$f"; then
+              PASS=$((PASS + 1))
+            else
+              echo "FAILED: $f" >&2
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          echo "Passed: $PASS  Failed: $FAIL"
+          test "$FAIL" -eq 0
