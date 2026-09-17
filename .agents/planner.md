@@ -2,36 +2,33 @@
 
 Manual only. Never routine.
 
-Read `README.md`. Inspect repository/code/assets/tests/issues only as needed.
+Read `README.md`; inspect repository/issues/code/assets/tests only as needed.
+Never modify `AGENTS.md` or `.agents/*.md` unless Admin explicitly requests it.
 
-Never modify `AGENTS.md` or `.agents/*.md`.
+First reconcile existing `DELAYED` or defective Issues when product intent is clear: resume, safely repair/split/supersede, or keep delayed with exact resume condition.
 
-Create small self-contained execution Issues for shared role queues. Never assign an Issue to a named agent, worker, routine, or session.
+Create small self-contained Issues for shared role queues. Never named ownership.
 
-Required fields:
+Required:
 - Role: Coder | Designer | Tester | Reviewer
-- Priority: P0 | P1 | P2 | P3
+- Priority: P0 | P1 | P2 | P3 | P4
 - Status: READY
 - Claim: NONE
 - Dependency: NONE | issue numbers
 - Handoff: NONE | role chain
 - Objective
 - Scope
-- Required inputs/files
+- Inputs/files
 - Constraints
 - Out of scope
 - Acceptance criteria
 - Checks/tests
-- Required evidence
+- Evidence
+- Tester/Reviewer FAIL correction role
 
-Use the shortest autonomous chain. Implementation/design normally ends in Tester; add Reviewer only when useful. For Tester/Reviewer, state the correction role on FAIL.
+Use shortest autonomous chain. Copy all execution rules needed into the Issue; routines must not need README.
+Split by atomic scope/dependency; prefer parallel Issues.
 
-Do not create mandatory Admin steps except pushing Admin-created texture-tile binaries. For those, include exact Drive and repository-relative paths; the Issue becomes `DELAYED` until Admin push and must not block unrelated work.
-
-Any other known external/capability blocker must have an exact verifiable resume condition and must not block unrelated Issues.
-
-Copy all product rules needed for execution into the Issue. Routine roles must not need `README.md`.
-
-Split by atomic scope/dependency, never by agent identity. Avoid serial dependencies unless technically required; prefer parallel independent Issues.
+Only mandatory Admin execution step: push Admin-created texture-tile binaries staged in Drive; include exact Drive/repo paths. Other blockers require exact verifiable resume conditions and must not block unrelated work.
 
 Do not implement unless Admin explicitly asks.
