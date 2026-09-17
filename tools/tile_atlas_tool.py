@@ -36,7 +36,7 @@ GRID = 10
 CELL_SIZE = 100
 SCHEMA_VERSION = 3
 QA_SCHEMA_VERSION = 1
-TOOL_VERSION = "5.0.0"
+TOOL_VERSION = "5.1.0"
 RESAMPLE = Image.Resampling.LANCZOS
 EDGES = ("left", "top", "right", "bottom")
 MANUAL_REVIEW_ITEMS = [
@@ -150,7 +150,7 @@ def save_metadata_template(path: Path) -> None:
             "category examples: terrain, floor, structure, wall, threshold, cutaway, prop, furniture, overlay",
             "fit_policy: auto | fill | preserve | contain",
             "edge_policy: all | none | [left, top, right, bottom]",
-            "margin_px applies to contain policy",
+            "margin_px applies to contain/preserve policies",
             "unused=true forces true transparency in canonical reconstruction",
         ],
         "cells": default_cells(),
@@ -298,8 +298,19 @@ def _infer_allowed_edges(cell: dict[str, Any], source_tile: Image.Image, metadat
     return {edge for edge, ratio in contact.items() if ratio >= 0.08}
 
 
-def _resize_fill(tile: Image.Image) -> Image.Image:
-    return tile.convert("RGBA").resize((CELL_SIZE, CELL_SIZE), RESAMPLE)
+def _resize_fill(tile: Image.Image) -> tuple[Image.Image, list[str]]:
+    source = tile.convert("RGBA")
+    bbox = _alpha_bbox(source)
+    actions: list[str] = []
+    if bbox is None:
+        return Image.new("RGBA", (CELL_SIZE, CELL_SIZE), (0, 0, 0, 0)), ["empty_cell_preserved"]
+    if bbox != (0, 0, source.width, source.height):
+        source = source.crop(bbox)
+        actions.append("alpha_bbox_crop")
+    if source.size != (CELL_SIZE, CELL_SIZE):
+        source = source.resize((CELL_SIZE, CELL_SIZE), RESAMPLE)
+        actions.append("alpha_crop_filled_to_cell")
+    return source, actions
 
 
 def _contain_rgba(tile: Image.Image, margin_px: int, allowed_edges: set[str], source_contact: dict[str, float]) -> tuple[Image.Image, list[str]]:
@@ -358,12 +369,14 @@ def _render_cell(source_tile: Image.Image, cell: dict[str, Any], metadata_explic
         output = Image.new("RGBA", (CELL_SIZE, CELL_SIZE), (0, 0, 0, 0))
         if source_bbox is not None:
             actions.append("unused_cell_forced_transparent")
-    elif fit_policy == "contain":
+    elif fit_policy == "fill":
+        output, actions = _resize_fill(source)
+    elif fit_policy in {"contain", "preserve"}:
         output, actions = _contain_rgba(source, margin, allowed_edges, source_contact)
+        if fit_policy == "preserve" and output.getchannel("A").getbbox() is not None:
+            actions.append("semantic_edges_anchored")
     else:
-        output = _resize_fill(source)
-        if source.size != (CELL_SIZE, CELL_SIZE):
-            actions.append("source_cell_resized_to_100x100")
+        output, actions = _contain_rgba(source, margin, allowed_edges, source_contact)
 
     if output.size != (CELL_SIZE, CELL_SIZE):
         output = output.crop((0, 0, CELL_SIZE, CELL_SIZE))
@@ -517,7 +530,7 @@ def _build_canonical_atlas(source: Image.Image, meta: list[dict[str, Any]], meta
     return atlas, rendered_tiles, cell_infos, source_cells
 
 
-def _qa_report(input_path: Path, original_size: tuple[int, int], original_mode: str, family: str, profile: str, meta: list[dict[str, Any]], metadata_explicit: bool, source_cells: list[Image.Image], cell_infos: list[dict[str, Any]], strict_unused_transparency: bool) -> dict[str, Any]:
+def _qa_report(input_path: Path, original_size: tuple[int, int], original_mode: str, family: str, profile: str, meta: list[dict[str, Any]], metadata_explicit: bool, source_cells: list[Image.Image], rendered_tiles: list[Image.Image], cell_infos: list[dict[str, Any]], strict_unused_transparency: bool) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
     repairs: list[str] = []
@@ -552,7 +565,6 @@ def _qa_report(input_path: Path, original_size: tuple[int, int], original_mode: 
         info["fakeCheckerboardScore"] = score
 
     separators = _detect_separator_candidates(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
-    # Use source reconstructed from logical source cells for separator inspection.
     source_canvas = Image.new("RGBA", (ATLAS_SIZE, ATLAS_SIZE), (0, 0, 0, 0))
     for i, tile in enumerate(source_cells):
         r, c = divmod(i, GRID)
@@ -561,10 +573,11 @@ def _qa_report(input_path: Path, original_size: tuple[int, int], original_mode: 
     if separators:
         warnings.append(f"Detected {len(separators)} possible visible source grid/separator line(s); review required.")
 
-    boundary = _detect_cross_boundary_candidates(source_cells, meta, metadata_explicit, profile)
+    source_boundary = _detect_cross_boundary_candidates(source_cells, meta, metadata_explicit, profile)
+    boundary = _detect_cross_boundary_candidates(rendered_tiles, meta, metadata_explicit, profile)
     unexplained = [f for f in boundary if not f["declaredOrInferredSeam"]]
     if unexplained:
-        warnings.append(f"Detected {len(unexplained)} suspicious cross-cell source-boundary continuation(s) not explained by edge policy; review for split/bleeding assets.")
+        warnings.append(f"Detected {len(unexplained)} suspicious canonical cross-cell continuation(s) after per-cell normalization; review for split/bleeding assets.")
 
     status = "FAIL" if errors else ("REPAIRED" if repairs or warnings else "PASS")
     return {
@@ -602,6 +615,7 @@ def _qa_report(input_path: Path, original_size: tuple[int, int], original_mode: 
         "warnings": warnings,
         "repairs": sorted(set(repairs)),
         "separatorCandidates": separators,
+        "sourceCrossBoundaryCandidates": source_boundary,
         "crossBoundaryCandidates": boundary,
         "cells": cell_infos,
     }
@@ -648,7 +662,7 @@ def process_atlas(
         source = image.convert("RGBA")
 
     canonical_atlas, rendered_tiles, cell_infos, source_cells = _build_canonical_atlas(source, meta, metadata_explicit, default_margin_px, profile)
-    qa = _qa_report(input_path, original_size, original_mode, family, profile, meta, metadata_explicit, source_cells, cell_infos, strict_unused_transparency)
+    qa = _qa_report(input_path, original_size, original_mode, family, profile, meta, metadata_explicit, source_cells, rendered_tiles, cell_infos, strict_unused_transparency)
 
     _clean_output(output_dir, family)
 
@@ -710,7 +724,7 @@ def process_atlas(
             "sourceCellSize": "variable logical source grid cell",
             "outputSize": [CELL_SIZE, CELL_SIZE],
             "borderTrimPx": 0,
-            "reconstruction": "canonical_cell_repack",
+            "reconstruction": "alpha_crop_normalize_then_canonical_cell_repack",
         },
         "tiles": manifest_tiles,
     }
