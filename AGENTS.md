@@ -15,11 +15,16 @@ Never modify, rename, delete, replace, or substitute `AGENTS.md` or `.agents/*.m
 7. Read fully; re-read before lock. If changed, restart selection.
 8. Set `Claim: <run-id>@<UTC timestamp>` and `Status: ACTIVE`.
 9. Re-fetch. Execute only if Claim is still yours and Status is `ACTIVE`.
-10. Process at most one Issue per run. After Result routing, end.
+10. Work only that Issue until Result routing or safe checkpoint. Never hold >1 active Claim.
+11. After Result routing, rescan and continue with the next eligible Issue.
+12. Stop only when no eligible work remains or the run must end.
 
 Never bind work to a named agent, worker, routine, or session.
-
 Do not read `README.md`, ROADMAP, or unrelated/old Issues. Inspect code/assets/tests only as needed. Dependency Issues are workflow state only.
+
+## Stop/checkpoint
+Do not abandon `ACTIVE` work.
+If the run must end before completion: leave repository/work state safe; record exact completed work, remaining work, checks, and next step; clear Claim; keep same Role; Coder/Designer -> `READY`; Tester/Reviewer -> `VERIFY`. Use `DELAYED` only for a real unmet external/requirement condition.
 
 ## Self-repair
 Repair only `Claim: NONE` Issues or stale locks. Never modify a valid `ACTIVE` Issue owned by another run.
@@ -42,7 +47,6 @@ Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, exact r
 Resolved condition -> Tester/Reviewer `VERIFY`; others `READY`.
 
 Removed governance references are historical only. Do not recreate/require them.
-
 Dependency satisfied by `Status: DONE`, or a closed-completed legacy Issue whose recorded outcome clearly satisfies it. Duplicate/not-planned/ambiguous closure does not satisfy dependency.
 
 ## Workflow
@@ -54,7 +58,6 @@ Dependency satisfied by `Status: DONE`, or a closed-completed legacy Issue whose
 - `Handoff`: NONE | role chain
 
 Eligible: valid fields; matching Role; `READY`, or `VERIFY` for Tester/Reviewer; dependencies satisfied; `Claim: NONE`.
-
 No eligible Issue -> end cleanly.
 
 ## Visual
@@ -83,8 +86,8 @@ Tester/Reviewer FAIL:
 - explicit correction role -> set correction Role, prepend failed verification role unless already first, `Status: READY`, `Claim: NONE`
 - no explicit correction role -> `DELAYED`, `Claim: NONE`, exact correction/resume condition
 
+After Result routing, rescan and continue until stop condition.
 Never invent evidence or product requirements. Record only real actions/results.
-
 All project Issues, comments, docs, code, asset text, tests, commits, and audit text must be English.
 
 ## Roles
