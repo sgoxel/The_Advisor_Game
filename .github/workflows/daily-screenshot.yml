@@ -83,6 +83,10 @@ jobs:
           TARGET="${{ steps.settings.outputs.target }}"
           WAIT="${{ steps.settings.outputs.wait }}"
 
+          rm -f tools/screenshots/phone.png tools/screenshots/phone_*.png
+          rm -f tools/screenshots/tablet.png tools/screenshots/tablet_*.png
+          rm -f tools/screenshots/metadata.txt
+
           if [[ "$MODE" == "npc_action" ]]; then
             SHOTS=2
           else
@@ -118,16 +122,19 @@ jobs:
               echo "frames_per_viewport=1"
               echo "frame_interval_seconds=0"
             fi
+            echo "files:"
+            find tools/screenshots -maxdepth 1 -type f \
+              \( -name 'phone*.png' -o -name 'tablet*.png' \) \
+              -printf "- %f\n" | sort
           } > tools/screenshots/metadata.txt
-
-          find tools/screenshots -maxdepth 1 -type f -printf "%f\n" | sort >> tools/screenshots/metadata.txt
 
       - name: Upload visual evidence
         uses: actions/upload-artifact@v4
         with:
           name: visual-review-${{ github.run_id }}
           path: |
-            tools/screenshots/*.png
+            tools/screenshots/phone*.png
+            tools/screenshots/tablet*.png
             tools/screenshots/metadata.txt
           if-no-files-found: error
           retention-days: 30
@@ -168,7 +175,7 @@ jobs:
                 ? '- NPC/action pairs: 2 frames per viewport, `0.2s` apart'
                 : '- Standard: 1 frame per viewport',
               '',
-              `### Evidence`,
+              '### Evidence',
               `[Open workflow run and download artifact](${runUrl})`,
               '',
               'Reviewer/Tester must use evidence from the tested commit; stale runs are not proof of current state.'
