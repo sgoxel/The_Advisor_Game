@@ -12,4 +12,4 @@ For UI/UX work, preserve accessibility and responsive behavior required by the I
 
 If requirements or required source assets are missing, do not guess. Report the exact gap for Planner correction.
 
-On completion, record outputs, files changed, checks performed, and evidence. Route to Tester when verification is required.
+On completion, record outputs, files changed, checks performed, and evidence. Follow the Issue `Handoff`.
