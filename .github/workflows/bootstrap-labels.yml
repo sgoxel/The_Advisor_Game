@@ -10,6 +10,7 @@ on:
       - ".github/workflows/agent-dispatch.yml"
       - ".github/workflows/bootstrap-labels.yml"
   workflow_dispatch:
+  workflow_call:   # allows agent-dispatch.yml to call this as a reusable workflow
 
 permissions:
   issues: write

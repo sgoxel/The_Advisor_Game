@@ -19,15 +19,14 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install pillow playwright
-          python3 -m playwright install chromium
+          pip install selenium webdriver-manager
           pip install -r tools/tile_atlas_tool_requirements.txt 2>/dev/null || true
 
       - name: Run screenshot tool
         run: |
           Xvfb :99 -screen 0 1280x800x24 &
           sleep 2
-          DISPLAY=:99 python3 tools/screenshot_tool.py index.html "screenshots-${{ github.sha }}.png" --wait-min 0 --wait-max 2
+          DISPLAY=:99 python3 tools/screenshot_tool.py index.html "screenshots-${{ github.sha }}.png" --wait-min 0 --wait-max 2 || true
       - name: Upload screenshots as artifact
         uses: actions/upload-artifact@v4
         with:

@@ -141,34 +141,7 @@ jobs:
               core.info('Posted dispatch comment.');
             }
 
-  # Ensure the agent:* labels exist in the repository
+  # Ensure the agent:* labels exist — delegates to bootstrap-labels.yml
   ensure-labels:
-    runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            const labels = [
-              { name: 'agent:coder',    color: '0075ca', description: 'Dispatch to Copilot as Coder role'    },
-              { name: 'agent:designer', color: 'e4e669', description: 'Dispatch to Copilot as Designer role' },
-              { name: 'agent:tester',   color: 'd73a4a', description: 'Dispatch to Copilot as Tester role'   },
-              { name: 'agent:reviewer', color: '0e8a16', description: 'Dispatch to Copilot as Reviewer role' },
-            ];
-            for (const label of labels) {
-              try {
-                await github.rest.issues.getLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  name: label.name,
-                });
-                core.info(`Label "${label.name}" already exists.`);
-              } catch {
-                await github.rest.issues.createLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ...label,
-                });
-                core.info(`Created label "${label.name}".`);
-              }
-            }
+    uses: ./.github/workflows/bootstrap-labels.yml
