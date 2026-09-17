@@ -1,0 +1,174 @@
+name: Copilot Agent Dispatcher
+
+# Triggers the GitHub Copilot coding agent when an issue is labeled
+# with an agent role label (agent:coder, agent:designer, agent:tester,
+# agent:reviewer). The agent is activated by assigning the issue to
+# the @copilot user, which is the API equivalent of "Assign to Copilot"
+# in the GitHub UI. A context comment is also posted so Copilot
+# immediately reads AGENTS.md protocol and picks up the correct Role.
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to dispatch to Copilot"
+        required: true
+        type: number
+      role:
+        description: "Agent role (Coder | Designer | Tester | Reviewer)"
+        required: true
+        type: choice
+        options:
+          - Coder
+          - Designer
+          - Tester
+          - Reviewer
+
+permissions:
+  issues: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+
+    # For the labeled trigger: only proceed if the label starts with "agent:"
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.label.name, 'agent:')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read AGENTS.md
+        id: agents_md
+        run: |
+          # Read the file and base64-encode it to pass safely through env
+          CONTENT=$(cat AGENTS.md)
+          echo "content<<AGENTS_EOF" >> "$GITHUB_OUTPUT"
+          echo "$CONTENT" >> "$GITHUB_OUTPUT"
+          echo "AGENTS_EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch to Copilot
+        uses: actions/github-script@v7
+        env:
+          AGENTS_MD: ${{ steps.agents_md.outputs.content }}
+        with:
+          script: |
+            const isManual = context.eventName === 'workflow_dispatch';
+
+            // Resolve issue number and role
+            let issueNumber, role;
+            if (isManual) {
+              issueNumber = parseInt(context.payload.inputs.issue_number, 10);
+              role = context.payload.inputs.role;
+            } else {
+              issueNumber = context.payload.issue.number;
+              // Derive role from label name: "agent:coder" -> "Coder"
+              const label = context.payload.label.name; // e.g. "agent:coder"
+              const rawRole = label.replace(/^agent:/, '');
+              role = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+            }
+
+            const validRoles = ['Coder', 'Designer', 'Tester', 'Reviewer'];
+            if (!validRoles.includes(role)) {
+              core.info(`Label "${context.payload.label?.name}" does not map to a valid role. Skipping.`);
+              return;
+            }
+
+            // Assign the issue to @copilot — this triggers the Copilot coding agent
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                assignees: ['copilot'],
+              });
+              core.info(`Assigned issue #${issueNumber} to @copilot`);
+            } catch (err) {
+              core.warning(`Could not assign to @copilot: ${err.message}`);
+            }
+
+            // Post a context comment so Copilot picks up AGENTS.md protocol
+            const agentsMd = process.env.AGENTS_MD;
+            const commentBody = [
+              `<!-- agent-dispatch -->`,
+              `🤖 **Copilot Agent Dispatch — Role: \`${role}\`**`,
+              ``,
+              `This issue has been assigned to @copilot as a **${role}** task.`,
+              `Please follow the workflow defined in \`AGENTS.md\` (reproduced below) and proceed with the routine:`,
+              ``,
+              `1. Read \`AGENTS.md\` and your \`.agents/${role.toLowerCase()}.md\` role file.`,
+              `2. Scan open Issues, self-repair stale locks, filter to \`Role: ${role}\`.`,
+              `3. Select the highest-priority eligible Issue (READY, Claim: NONE, dependencies satisfied).`,
+              `4. Set \`Claim: <run-id>@<UTC timestamp>\` and \`Status: ACTIVE\`.`,
+              `5. Re-fetch the Issue; proceed only if your Claim is still present.`,
+              `6. Complete the work, then update Status per the Result rules in AGENTS.md.`,
+              ``,
+              `<details>`,
+              `<summary>📄 AGENTS.md (current)</summary>`,
+              ``,
+              `\`\`\`markdown`,
+              agentsMd,
+              `\`\`\``,
+              `</details>`,
+            ].join('\n');
+
+            // Avoid duplicate dispatch comments
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            const already = comments.find(c => c.body.includes('<!-- agent-dispatch -->'));
+            if (already) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: already.id,
+                body: commentBody,
+              });
+              core.info('Updated existing dispatch comment.');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: commentBody,
+              });
+              core.info('Posted dispatch comment.');
+            }
+
+  # Ensure the agent:* labels exist in the repository
+  ensure-labels:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = [
+              { name: 'agent:coder',    color: '0075ca', description: 'Dispatch to Copilot as Coder role'    },
+              { name: 'agent:designer', color: 'e4e669', description: 'Dispatch to Copilot as Designer role' },
+              { name: 'agent:tester',   color: 'd73a4a', description: 'Dispatch to Copilot as Tester role'   },
+              { name: 'agent:reviewer', color: '0e8a16', description: 'Dispatch to Copilot as Reviewer role' },
+            ];
+            for (const label of labels) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                });
+                core.info(`Label "${label.name}" already exists.`);
+              } catch {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ...label,
+                });
+                core.info(`Created label "${label.name}".`);
+              }
+            }
