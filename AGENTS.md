@@ -3,28 +3,30 @@
 Admin instructions override this file.
 
 ## Protected
-Agents, including Planner, must never modify, rename, delete, replace, or create substitutes for `AGENTS.md` or `.agents/*.md`.
+Never modify, rename, delete, replace, or substitute `AGENTS.md` or `.agents/*.md` unless Admin explicitly requests it.
 
 ## Routine
 1. Read this file and your `.agents/<role>.md` only.
 2. Scan all open Issues.
-3. Self-repair explicit workflow defects globally; recover stale locks; recheck verifiable `DELAYED` conditions.
-4. Filter repaired Issues to your Role.
-5. Skip `DELAYED`, dependency-blocked, invalid, or locked Issues. Select highest priority eligible; tie -> lowest Issue number.
-6. Read fully; re-read before lock. If changed, restart selection.
-7. Set transient `Claim: <run-id>@<UTC timestamp>` and `Status: ACTIVE`.
-8. Re-fetch. Execute only if `Claim` still equals your run-id and `Status: ACTIVE`; otherwise rescan.
+3. Repair safe workflow defects globally; recover stale locks; recheck verifiable `DELAYED` conditions.
+4. Filter to your Role.
+5. Skip invalid, locked, delayed, or dependency-blocked Issues.
+6. Select highest priority; tie -> lowest Issue number.
+7. Read fully; re-read before lock. If changed, restart selection.
+8. Set `Claim: <run-id>@<UTC timestamp>` and `Status: ACTIVE`.
+9. Re-fetch. Execute only if Claim is still yours and Status is `ACTIVE`.
+10. Process at most one Issue per run. After Result routing, end.
 
 Never bind work to a named agent, worker, routine, or session.
 
-Do not read `README.md`, ROADMAP, or unrelated/old Issues. Inspect repository code/assets/tests only as needed. Dependency Issues: workflow state only.
+Do not read `README.md`, ROADMAP, or unrelated/old Issues. Inspect code/assets/tests only as needed. Dependency Issues are workflow state only.
 
 ## Self-repair
 Repair only `Claim: NONE` Issues or stale locks. Never modify a valid `ACTIVE` Issue owned by another run.
 
 May repair workflow fields, legacy roles/states/claims, stale locks, dependencies/handoffs, obsolete worker ownership, removed-governance references, and conflicting operational instructions when product intent is unchanged. Record one compact `Repair:` note only when metadata changes.
 
-Never change Objective, acceptance-criteria meaning, product intent, or technical requirements unless the Issue itself makes the correction explicit.
+Never change Objective, acceptance-criteria meaning, product intent, or technical requirements unless the Issue makes the correction explicit.
 
 Safe roles:
 - Game Programmer -> Coder
@@ -32,13 +34,16 @@ Safe roles:
 - Test | Tester -> Tester
 - Review | Reviewer -> Reviewer
 
-Legacy `WAITING` -> `DELAYED`. Locks >3h are stale. Stale `ACTIVE`: clear `Claim`; Tester/Reviewer -> `VERIFY`; others -> `READY`.
+Legacy `WAITING` -> `DELAYED`.
+Locks >3h are stale.
+Stale `ACTIVE`: clear Claim; Tester/Reviewer -> `VERIFY`; others -> `READY`.
 
-Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, exact resume condition, continue queue. Resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
+Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, exact resume condition, continue queue.
+Resolved condition -> Tester/Reviewer `VERIFY`; others `READY`.
 
 Removed governance references are historical only. Do not recreate/require them.
 
-Dependency satisfied by `Status: DONE`, or a closed-completed legacy Issue whose recorded outcome clearly satisfies it. Duplicate/not-planned/ambiguous closure does not satisfy dependency; delay only that branch.
+Dependency satisfied by `Status: DONE`, or a closed-completed legacy Issue whose recorded outcome clearly satisfies it. Duplicate/not-planned/ambiguous closure does not satisfy dependency.
 
 ## Workflow
 - `Role`: Coder | Designer | Tester | Reviewer
@@ -46,41 +51,36 @@ Dependency satisfied by `Status: DONE`, or a closed-completed legacy Issue whose
 - `Status`: READY | ACTIVE | VERIFY | DELAYED | DONE
 - `Claim`: NONE | `<run-id>@<UTC timestamp>`
 - `Dependency`: NONE | issue numbers
-- `Handoff`: NONE | role chain, e.g. `Reviewer > Tester`
+- `Handoff`: NONE | role chain
 
 Eligible: valid fields; matching Role; `READY`, or `VERIFY` for Tester/Reviewer; dependencies satisfied; `Claim: NONE`.
 
-`DELAYED`, unresolved dependencies, active locks, invalid Issues, and Admin-attention Issues delay only themselves. If no eligible Issue exists, end cleanly.
+No eligible Issue -> end cleanly.
 
 ## Visual
 Primary evidence: latest successful GitHub Actions visual-review capture for the tested main commit. `tools/screenshot_tool.py` is fallback only.
 
-Standard capture = 2 images:
-- phone portrait: `720x1280`
-- tablet landscape: `1280x800`
+Standard: phone `720x1280` + tablet `1280x800`.
+NPC/action/flicker: 2 frames per viewport, `0.2s` apart.
+Evidence must identify commit SHA, viewport, mode, and capture time/run. Stale evidence is invalid.
 
-NPC/action/flicker capture = 2 frames per viewport, `0.2s` apart; 4 images total. Compare each pair for transient UI/NPC rendering defects.
+Reviewer with no eligible Reviewer Issue may inspect latest valid visual evidence. Search open Issues first. Existing defect -> add only materially new evidence. New concrete defect -> one atomic Coder or Designer Issue, normally `Handoff: Tester`.
 
-Evidence must identify commit SHA, viewport, capture mode, and capture time/run. Stale evidence must not prove current state.
-
-Reviewer with no eligible Reviewer Issue may inspect latest valid visual evidence. Search open Issues first. Existing defect -> add only materially new evidence. New concrete defect -> one atomic self-contained Issue: functional/runtime -> Coder; visual/UI -> Designer; normally `Handoff: Tester`. Never create feature/roadmap/speculative/duplicate Issues.
-
-Capture/evidence failure never blocks the queue. Use Actions artifacts; never commit review screenshots to repository history.
+Capture failure never blocks the queue. Use Actions artifacts; never commit review screenshots.
 
 ## Admin
 Admin action is allowed only for pushing Admin-created texture-tile binaries already staged in the configured Drive mirror.
 
-Texture-tile push needed -> stage exact files/paths in Drive, set `DELAYED`, `Claim: NONE`, record exact push action, continue queue. Any routine may verify later and resume.
-
-Any other unresolved external condition -> `DELAYED`, `Claim: NONE`, record exact reason/resume condition, continue queue. Do not require Admin action.
+Texture push needed -> stage exact Drive/repo paths, set `DELAYED`, `Claim: NONE`, record exact push action, continue queue.
+Any other unresolved external condition -> `DELAYED`, `Claim: NONE`, exact resume condition, continue queue. Do not require Admin action.
 
 ## Result
 PASS:
 - `Handoff: NONE` -> `DONE`, `Claim: NONE`, close Issue
-- otherwise consume first Handoff role; set `Role`; remove it; empty chain -> `NONE`; Tester/Reviewer -> `VERIFY`; others -> `READY`; `Claim: NONE`
+- otherwise consume first Handoff role; set Role; remove it; empty -> `NONE`; Tester/Reviewer -> `VERIFY`; others -> `READY`; `Claim: NONE`
 
 Tester/Reviewer FAIL:
-- explicit correction role -> set correction `Role`, prepend failed verification role to current `Handoff`, `Status: READY`, `Claim: NONE`
+- explicit correction role -> set correction Role, prepend failed verification role unless already first, `Status: READY`, `Claim: NONE`
 - no explicit correction role -> `DELAYED`, `Claim: NONE`, exact correction/resume condition
 
 Never invent evidence or product requirements. Record only real actions/results.
