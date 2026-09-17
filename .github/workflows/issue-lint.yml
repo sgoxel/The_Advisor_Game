@@ -25,17 +25,16 @@ jobs:
               Dependency: /^(NONE|#?\d+(?:[ ,]+#?\d+)*)$/,
               Handoff: new RegExp(`^(NONE|${roles}(?: > ${roles})*)$`),
             };
-            const required = Object.keys(valid);
             const errors = [];
 
-            for (const field of required) {
+            for (const [field, rule] of Object.entries(valid)) {
               const match = body.match(new RegExp(`^${field}:\\s*(.+)$`, 'm'));
               if (!match) {
                 errors.push(`Missing \`${field}:\``);
                 continue;
               }
               const value = match[1].trim();
-              if (!valid[field].test(value)) errors.push(`Invalid \`${field}\`: \`${value}\``);
+              if (!rule.test(value)) errors.push(`Invalid \`${field}\`: \`${value}\``);
             }
 
             const tag = '<!-- agent-issue-lint -->';
@@ -53,7 +52,7 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   comment_id: previous.id,
-                  body: `${tag}\n✅ Workflow-field validation passed.`
+                  body: `${tag}\n✅ Workflow-field validation passed. Audit only; no Issue fields were changed.`
                 });
               }
               return;
