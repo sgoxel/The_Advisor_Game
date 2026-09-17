@@ -53,13 +53,19 @@ Eligible: valid fields; matching Role; `READY`, or `VERIFY` for Tester/Reviewer;
 `DELAYED`, unresolved dependencies, active locks, invalid Issues, and Admin-attention Issues delay only themselves. If no eligible Issue exists, end cleanly.
 
 ## Visual
-`tools/screenshot_tool.py` is a shared verification tool.
+Primary evidence: latest successful GitHub Actions visual-review capture for the tested main commit. `tools/screenshot_tool.py` is fallback only.
 
-Tester may capture/analyze screenshots when visual acceptance is relevant.
+Standard capture = 2 images:
+- phone portrait: `720x1280`
+- tablet landscape: `1280x800`
 
-Reviewer with no eligible Reviewer Issue may capture the latest playable state, inspect for concrete regressions, then search open Issues. Existing defect -> add only materially new evidence. New defect -> create one atomic self-contained Issue only when correction Role is clear: functional/runtime -> Coder; visual/UI presentation -> Designer; normally `Handoff: Tester`. Never create feature/roadmap Issues from visual audit.
+NPC/action/flicker capture = 2 frames per viewport, `0.2s` apart; 4 images total. Compare each pair for transient UI/NPC rendering defects.
 
-Screenshot/tool failure delays only that audit attempt. Never block the queue. Screenshot binaries go to the configured Drive mirror when durable evidence is needed; never upload binaries directly to GitHub.
+Evidence must identify commit SHA, viewport, capture mode, and capture time/run. Stale evidence must not prove current state.
+
+Reviewer with no eligible Reviewer Issue may inspect latest valid visual evidence. Search open Issues first. Existing defect -> add only materially new evidence. New concrete defect -> one atomic self-contained Issue: functional/runtime -> Coder; visual/UI -> Designer; normally `Handoff: Tester`. Never create feature/roadmap/speculative/duplicate Issues.
+
+Capture/evidence failure never blocks the queue. Use Actions artifacts; never commit review screenshots to repository history.
 
 ## Admin
 Admin action is allowed only for pushing Admin-created texture-tile binaries already staged in the configured Drive mirror.
