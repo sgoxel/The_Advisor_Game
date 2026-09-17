@@ -15,30 +15,30 @@ Agents, including Planner, must never modify, rename, delete, replace, or create
 7. Set transient `Claim: <run-id>@<UTC timestamp>` and `Status: ACTIVE`.
 8. Re-fetch. Execute only if `Claim` still equals your run-id and `Status: ACTIVE`; otherwise rescan.
 
-Never assign/bind work to a named agent, worker, routine, or session.
+Never bind work to a named agent, worker, routine, or session.
 
 Do not read `README.md`, ROADMAP, or unrelated/old Issues. Inspect repository code/assets/tests only as needed. Dependency Issues: workflow state only.
 
 ## Self-repair
-Any routine may repair an Issue without claiming it when product intent is unchanged. Repair, then rescan.
+Repair only `Claim: NONE` Issues or stale locks. Never modify a valid `ACTIVE` Issue owned by another run.
 
-May repair: workflow fields, legacy role/state/claim formats, stale locks, dependencies/handoffs, obsolete worker ownership, removed-governance references, and operational instructions contradicted by this file.
+May repair workflow fields, legacy roles/states/claims, stale locks, dependencies/handoffs, obsolete worker ownership, removed-governance references, and conflicting operational instructions when product intent is unchanged. Record one compact `Repair:` note only when metadata changes.
 
 Never change Objective, acceptance-criteria meaning, product intent, or technical requirements unless the Issue itself makes the correction explicit.
 
-Safe role mappings:
+Safe roles:
 - Game Programmer -> Coder
 - Game Designer | UX Designer | Texture Artist -> Designer
 - Test | Tester -> Tester
 - Review | Reviewer -> Reviewer
 
-Legacy `WAITING` -> `DELAYED`. `Claim` is only a run lock. Locks older than 3 hours are stale. Stale `ACTIVE`: clear `Claim`; Tester/Reviewer -> `VERIFY`; others -> `READY`.
+Legacy `WAITING` -> `DELAYED`. Locks >3h are stale. Stale `ACTIVE`: clear `Claim`; Tester/Reviewer -> `VERIFY`; others -> `READY`.
 
-Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, record exact resume condition, continue scanning. When verifiably resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
+Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, exact resume condition, continue queue. Resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
 
-Removed legacy governance references are historical only. Do not recreate/require them.
+Removed governance references are historical only. Do not recreate/require them.
 
-Dependency is satisfied by `Status: DONE`, or by a closed-completed legacy Issue whose recorded outcome clearly satisfies it. Closed duplicate/not-planned/ambiguous dependencies are not satisfied; delay only that branch.
+Dependency satisfied by `Status: DONE`, or a closed-completed legacy Issue whose recorded outcome clearly satisfies it. Duplicate/not-planned/ambiguous closure does not satisfy dependency; delay only that branch.
 
 ## Workflow
 - `Role`: Coder | Designer | Tester | Reviewer
@@ -48,32 +48,34 @@ Dependency is satisfied by `Status: DONE`, or by a closed-completed legacy Issue
 - `Dependency`: NONE | issue numbers
 - `Handoff`: NONE | role chain, e.g. `Reviewer > Tester`
 
-Eligible:
-- workflow fields valid
-- `Role` matches
-- `Status: READY`, or `VERIFY` for Tester/Reviewer
-- dependencies satisfied
-- `Claim: NONE`
+Eligible: valid fields; matching Role; `READY`, or `VERIFY` for Tester/Reviewer; dependencies satisfied; `Claim: NONE`.
 
-`DELAYED`, unresolved dependencies, active locks, invalid Issues, and Admin-attention Issues delay only themselves. They never stop the queue. If no eligible Issue exists, end the run cleanly.
+`DELAYED`, unresolved dependencies, active locks, invalid Issues, and Admin-attention Issues delay only themselves. If no eligible Issue exists, end cleanly.
+
+## Visual
+`tools/screenshot_tool.py` is a shared verification tool.
+
+Tester may capture/analyze screenshots when visual acceptance is relevant.
+
+Reviewer with no eligible Reviewer Issue may capture the latest playable state, inspect for concrete regressions, then search open Issues. Existing defect -> add only materially new evidence. New defect -> create one atomic self-contained Issue only when correction Role is clear: functional/runtime -> Coder; visual/UI presentation -> Designer; normally `Handoff: Tester`. Never create feature/roadmap Issues from visual audit.
+
+Screenshot/tool failure delays only that audit attempt. Never block the queue. Screenshot binaries go to the configured Drive mirror when durable evidence is needed; never upload binaries directly to GitHub.
 
 ## Admin
 Admin action is allowed only for pushing Admin-created texture-tile binaries already staged in the configured Drive mirror.
 
-Texture-tile push needed -> stage exact files/paths in Drive, set `DELAYED`, `Claim: NONE`, record exact Admin push action, continue other work. Any routine may verify the push later and resume the Issue.
+Texture-tile push needed -> stage exact files/paths in Drive, set `DELAYED`, `Claim: NONE`, record exact push action, continue queue. Any routine may verify later and resume.
 
-Any other Admin attention needed -> `DELAYED`, `Claim: NONE`, record exact reason, continue other work. Never stop a routine or queue for Admin.
-
-Never upload texture-tile binaries directly to GitHub.
+Any other unresolved external condition -> `DELAYED`, `Claim: NONE`, record exact reason/resume condition, continue queue. Do not require Admin action.
 
 ## Result
 PASS:
 - `Handoff: NONE` -> `DONE`, `Claim: NONE`, close Issue
-- otherwise consume first Handoff role; set `Role`; remove consumed role; empty chain -> `NONE`; Tester/Reviewer -> `VERIFY`; others -> `READY`; `Claim: NONE`
+- otherwise consume first Handoff role; set `Role`; remove it; empty chain -> `NONE`; Tester/Reviewer -> `VERIFY`; others -> `READY`; `Claim: NONE`
 
 Tester/Reviewer FAIL:
-- explicit correction role -> set that `Role`, `Status: READY`, `Claim: NONE`
-- no explicit correction role -> `DELAYED`, `Claim: NONE`, record exact correction/resume condition
+- explicit correction role -> set correction `Role`, prepend failed verification role to current `Handoff`, `Status: READY`, `Claim: NONE`
+- no explicit correction role -> `DELAYED`, `Claim: NONE`, exact correction/resume condition
 
 Never invent evidence or product requirements. Record only real actions/results.
 
