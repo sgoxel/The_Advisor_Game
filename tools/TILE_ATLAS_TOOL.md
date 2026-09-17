@@ -8,9 +8,9 @@ Use `tools/tile_atlas_tool.py` for production atlas processing.
 - Grid: `10x10`.
 - Cell/runtime tile: exact `100x100 RGBA PNG`.
 - Order: row-major.
+- Border trim: `0`.
 - No visible grid, labels, numbers, or borders in source artwork.
-- Normalize the whole source to 1000x1000 before slicing when needed.
-- Slice directly with border trim `0`.
+- Normalize/repack the logical source grid into the canonical 1000x1000 master before output.
 
 ## Output
 
@@ -24,31 +24,35 @@ Outputs:
 - `<family>_<semantic>_100px.png`
 - `<family>_tiles.manifest.json`
 - `<family>_tiles.descriptions.json`
+- `<family>_atlas.qa.json`
 
 Default semantic IDs are `r00_c00` through `r09_c09`.
 
 ## Commands
 
-Export to a folder:
+Export locally:
 
-`python tools/tile_atlas_tool.py INPUT --family grass --output OUTPUT --mode fit`
+`python tools/tile_atlas_tool.py INPUT --family grass --output OUTPUT`
 
-Process directly into a checked-out project:
+Stage exact outputs into the configured Google Drive repository mirror:
 
-`python tools/tile_atlas_tool.py INPUT --family grass --project-root PROJECT --mode fit`
+`python tools/tile_atlas_tool.py INPUT --family grass --output OUTPUT --stage-drive-root DRIVE_MIRROR`
 
-## Do not use the GitHub publish option for binary files
+Use `--stage-prefix` only when the repository-relative destination differs from `textures/tiles/<family>`.
 
-**Do not use `--github-publish` for PNG or other binary output. Do not use GitHub Blob, Create Blob, base64 upload, Git trees, or similar GitHub binary-upload methods.**
+## Binary publication
 
-For binary output, copy/stage the exact tool outputs into the Google Drive `The_Advisor_Game/` repository mirror at their exact repository-relative paths. Admin then commits/pushes the mirrored files.
+Workers do not publish PNG or other binary outputs through GitHub APIs. Stage the exact tool outputs in the configured Google Drive `The_Advisor_Game/` repository mirror at their repository-relative paths. Admin performs the GitHub binary push. After that push, verify the expected GitHub paths and hashes.
 
-See `WORKFLOW.md` and `.github/DRIVE_BINARY_FALLBACK.md`.
+Current authority is `AGENTS.md`, README product invariants, ROADMAP, the selected Issue, and actual current tool behavior/tests. Deleted historical governance files are not prerequisites and must not be restored for this workflow.
 
 ## Verify
 
 - Master is exact 1000x1000 RGBA.
-- Every emitted tile is exact 100x100 RGBA.
+- Grid is exactly 10x10 and ordering is row-major.
+- Every emitted runtime tile is exact 100x100 RGBA with trim 0.
 - Occupied tile count matches the manifest.
 - SHA-256 values match the files where checked.
+- Drive staging preserves exact repository-relative paths and bytes.
+- No worker-facing GitHub binary publication option exists.
 - After Admin push, expected paths exist in GitHub.
