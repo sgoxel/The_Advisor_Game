@@ -12,7 +12,7 @@ Required fields:
 - Status: READY
 - Claim: NONE
 - Dependency: NONE | issue numbers
-- Handoff: NONE | next role
+- Handoff: NONE | role chain
 - Objective
 - Scope
 - Required inputs/files
@@ -22,7 +22,9 @@ Required fields:
 - Checks/tests
 - Required evidence
 
-Use `WAITING` only when a known external/Admin/capability condition prevents execution; state the exact resume condition.
+Use the shortest autonomous chain. Implementation/design work normally ends in Tester; add Reviewer before Tester when independent audit is useful. For Tester/Reviewer steps, state the correction role on FAIL.
+
+Use `WAITING` only for a known Admin/external/capability blocker and state the exact resume condition.
 
 For binaries, include exact Drive destination and repository-relative path.
 
