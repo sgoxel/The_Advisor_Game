@@ -5,49 +5,59 @@ Admin instructions override this file.
 ## Routine
 1. Read this file and your `.agents/<role>.md` only.
 2. Scan open GitHub Issues.
-3. Repair workflow metadata when the correct mapping is explicit.
+3. Repair workflow metadata when the mapping is explicit.
 4. Clear stale claims.
-5. Select the highest-priority eligible Issue; tie -> lowest Issue number.
-6. Read it fully, then re-read before claim. If state changed, restart.
+5. Select highest priority; tie -> lowest Issue number.
+6. Read fully, re-read before claim; if changed, restart.
 7. Set `Claim: <agent-id>@<UTC timestamp>` and `Status: ACTIVE`.
 8. Execute only that Issue.
 
-Do not read `README.md`, ROADMAP, or unrelated/old Issues. Repository code/assets/tests may be inspected as needed. Dependency Issues may be read only for workflow state.
+Do not read `README.md`, ROADMAP, or unrelated/old Issues. Repository code/assets/tests may be inspected as needed. Dependency Issues: workflow state only.
 
 ## Repair
-Repair workflow metadata only; never change task meaning, Objective, Scope, constraints, acceptance criteria, or technical requirements.
+Workflow metadata only. Never change task meaning, Objective, Scope, constraints, acceptance criteria, or technical requirements.
 
-Safe mappings:
+Safe role mappings:
 - Game Programmer -> Coder
 - Game Designer | UX Designer | Texture Artist -> Designer
 - Test | Tester -> Tester
 - Review | Reviewer -> Reviewer
 
-Legacy lane/state fields may be converted only when the intended current `Role` and `Status` are explicit. Normalize stale/legacy claims to `NONE`. Infer missing `Handoff` only from explicit issue text. If safe repair is impossible, leave unclaimed and report the exact Planner correction needed.
+Legacy lane/state fields may be converted only when intended current `Role`/`Status` are explicit. Normalize stale/legacy claims to `NONE`. Infer missing `Handoff` only from explicit issue text.
 
-## Workflow fields
+If the Issue explicitly proves an unresolved Admin/external/capability blocker, set `Status: WAITING`. When resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
+
+References to removed legacy governance files are historical only. Do not recreate or require them. If missing content is needed and not stated in the Issue, leave unclaimed and report Planner correction.
+
+## Workflow
 - `Role`: Coder | Designer | Tester | Reviewer
-- `Priority`: P0 | P1 | P2 | P3
+- `Priority`: P0 | P1 | P2 | P3 | P4
 - `Status`: READY | ACTIVE | VERIFY | WAITING | DONE
 - `Claim`: NONE | `<agent-id>@<UTC timestamp>`
 - `Dependency`: NONE | issue numbers
 - `Handoff`: NONE | next role
 
-Claims older than 3 hours are stale and must be cleared.
+Claims older than 3 hours are stale.
 
 Eligible:
-- all workflow fields valid
+- workflow fields valid
 - `Role` matches
-- `Status` is `READY`, or `VERIFY` for Tester/Reviewer
-- all dependencies are `DONE`
-- `Claim` is `NONE`
+- `Status: READY`, or `VERIFY` for Tester/Reviewer
+- dependencies `DONE`
+- `Claim: NONE`
 
-`WAITING` is not eligible. Use it only for explicit external/Admin/capability conditions. When the stated condition is resolved, restore the Issue to its executable `Role` and `Status`.
+`WAITING` is not eligible.
 
-## Completion
-- `Handoff: NONE` -> `Status: DONE`.
-- Otherwise set `Role` = `Handoff`; Tester/Reviewer -> `VERIFY`, else -> `READY`.
-- Clear `Claim`.
+## Result
+PASS/completion:
+- `Handoff: NONE` -> `DONE`
+- else `Role = Handoff`; Tester/Reviewer -> `VERIFY`; others -> `READY`
+
+Tester/Reviewer FAIL:
+- use explicit correction role from the Issue -> `Role` = correction role, `Status: READY`
+- if none explicit -> `Status: WAITING` and report Planner correction
+
+Always clear `Claim` after PASS, FAIL, or WAITING transition.
 
 Issues are execution contracts. Do not infer missing product requirements. Record only real actions/evidence.
 
