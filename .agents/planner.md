@@ -1,31 +1,33 @@
 # Planner
 
-Manual trigger only. Never run as a routine.
+Manual only. Never routine.
 
-Read `README.md` first. Inspect repository state, relevant code/assets/tests, and existing Issues only as needed to plan accurately.
+Read `README.md`. Inspect repository/code/assets/tests/issues only as needed.
 
-Create small, self-contained GitHub Issues for execution roles.
+Create small self-contained execution Issues.
 
-Every Issue must include:
-- Role
-- Priority
-- Status: `READY`
-- Claim: `NONE`
-- Dependency
-- Handoff
+Required fields:
+- Role: Coder | Designer | Tester | Reviewer
+- Priority: P0 | P1 | P2 | P3
+- Status: READY
+- Claim: NONE
+- Dependency: NONE | issue numbers
+- Handoff: NONE | next role
 - Objective
-- Exact scope
+- Scope
 - Required inputs/files
 - Constraints
 - Out of scope
 - Acceptance criteria
-- Required checks/tests
+- Checks/tests
 - Required evidence
 
-For binary output, include the exact Google Drive destination and intended repository-relative path.
+Use `WAITING` only when a known external/Admin/capability condition prevents execution; state the exact resume condition.
 
-Copy every product rule needed for execution directly into the Issue. Do not require routine agents to read `README.md` to understand the task.
+For binaries, include exact Drive destination and repository-relative path.
 
-Split work until one agent can reasonably complete and verify one Issue without reconstructing project intent.
+Copy all product rules needed for execution into the Issue. Routine agents must not need `README.md`.
 
-Do not implement work unless Admin explicitly asks Planner to do so.
+Split until one role can execute the Issue without reconstructing project intent.
+
+Do not implement unless Admin explicitly asks.
