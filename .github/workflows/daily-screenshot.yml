@@ -2,22 +2,17 @@ name: Visual Review Capture
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   schedule:
     - cron: "0 8 * * *"
   workflow_dispatch:
     inputs:
       capture_mode:
-        description: Capture mode
         required: true
         default: standard
         type: choice
-        options:
-          - standard
-          - npc_action
+        options: [standard, npc_action]
       wait_seconds:
-        description: Initialization wait before first frame
         required: true
         default: "20"
         type: string
@@ -31,101 +26,61 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 8
-
     steps:
-      - name: Checkout exact commit
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install capture dependency
-        run: python -m pip install --disable-pip-version-check selenium
+      - run: python -m pip install --disable-pip-version-check selenium
 
-      - name: Resolve capture settings
-        id: settings
+      - id: settings
         shell: bash
         run: |
+          MODE="standard"; WAIT="20"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            MODE="${{ inputs.capture_mode }}"
-            WAIT="${{ inputs.wait_seconds }}"
-          else
-            MODE="standard"
-            WAIT="20"
+            MODE="${{ inputs.capture_mode }}"; WAIT="${{ inputs.wait_seconds }}"
           fi
-
-          if [[ "$MODE" != "standard" && "$MODE" != "npc_action" ]]; then
-            echo "Unsupported capture mode: $MODE" >&2
-            exit 1
-          fi
-          if ! [[ "$WAIT" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-            echo "wait_seconds must be numeric" >&2
-            exit 1
-          fi
-
+          [[ "$MODE" == "standard" || "$MODE" == "npc_action" ]] || exit 1
+          [[ "$WAIT" =~ ^[0-9]+([.][0-9]+)?$ ]] || exit 1
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "wait=$WAIT" >> "$GITHUB_OUTPUT"
 
-      - name: Start exact-commit web server
+      - name: Serve exact commit
         shell: bash
         run: |
-          set -euo pipefail
-          python -m http.server 8000 --bind 127.0.0.1 > /tmp/visual-review-http.log 2>&1 &
-          echo $! > /tmp/visual-review-http.pid
-
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/visual-review-http.log 2>&1 &
           for _ in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:8000/ > /dev/null; then
-              exit 0
-            fi
+            curl -fsS http://127.0.0.1:8000/ >/dev/null && exit 0
             sleep 1
           done
-
           cat /tmp/visual-review-http.log >&2 || true
-          echo "Local review server did not become ready" >&2
           exit 1
 
-      - name: Capture phone and tablet
+      - name: Capture
         shell: bash
         run: |
           set -euo pipefail
           MODE="${{ steps.settings.outputs.mode }}"
           WAIT="${{ steps.settings.outputs.wait }}"
-          TARGET="http://127.0.0.1:8000/"
+          SHOTS=1; [[ "$MODE" == "npc_action" ]] && SHOTS=2
+          rm -f tools/screenshots/phone*.png tools/screenshots/tablet*.png tools/screenshots/metadata.txt
 
-          rm -f tools/screenshots/phone.png tools/screenshots/phone_*.png
-          rm -f tools/screenshots/tablet.png tools/screenshots/tablet_*.png
-          rm -f tools/screenshots/metadata.txt
-
-          if [[ "$MODE" == "npc_action" ]]; then
-            SHOTS=2
-          else
-            SHOTS=1
-          fi
-
-          python tools/screenshot_tool.py "$TARGET" phone.png \
-            --profile phone --shots "$SHOTS" --interval 0.2 \
-            --wait-min "$WAIT" --wait-max "$WAIT"
-
-          python tools/screenshot_tool.py "$TARGET" tablet.png \
-            --profile tablet --shots "$SHOTS" --interval 0.2 \
-            --wait-min "$WAIT" --wait-max "$WAIT"
+          python tools/screenshot_tool.py http://127.0.0.1:8000/ phone.png \
+            --profile phone --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT"
+          python tools/screenshot_tool.py http://127.0.0.1:8000/ tablet.png \
+            --profile tablet --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT"
 
           EXPECTED=$((SHOTS * 2))
-          ACTUAL=$(find tools/screenshots -maxdepth 1 -type f \
-            \( -name 'phone*.png' -o -name 'tablet*.png' \) | wc -l)
-          if [[ "$ACTUAL" -ne "$EXPECTED" ]]; then
-            echo "Expected $EXPECTED screenshots, found $ACTUAL" >&2
-            exit 1
-          fi
+          ACTUAL=$(find tools/screenshots -maxdepth 1 -type f \( -name 'phone*.png' -o -name 'tablet*.png' \) | wc -l)
+          [[ "$ACTUAL" -eq "$EXPECTED" ]]
 
-      - name: Write evidence metadata
+      - name: Metadata
         shell: bash
         run: |
-          CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           MODE="${{ steps.settings.outputs.mode }}"
           {
             echo "commit_sha=${{ github.sha }}"
@@ -133,25 +88,14 @@ jobs:
             echo "run_id=${{ github.run_id }}"
             echo "run_attempt=${{ github.run_attempt }}"
             echo "capture_mode=$MODE"
-            echo "captured_at=$CAPTURED_AT"
-            echo "target=local exact-commit server"
+            echo "captured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "phone_viewport=720x1280"
             echo "tablet_viewport=1280x800"
-            if [[ "$MODE" == "npc_action" ]]; then
-              echo "frames_per_viewport=2"
-              echo "frame_interval_seconds=0.2"
-            else
-              echo "frames_per_viewport=1"
-              echo "frame_interval_seconds=0"
-            fi
-            echo "files:"
-            find tools/screenshots -maxdepth 1 -type f \
-              \( -name 'phone*.png' -o -name 'tablet*.png' \) \
-              -printf "- %f\n" | sort
+            [[ "$MODE" == "npc_action" ]] && echo "frames_per_viewport=2" || echo "frames_per_viewport=1"
+            [[ "$MODE" == "npc_action" ]] && echo "frame_interval_seconds=0.2" || echo "frame_interval_seconds=0"
           } > tools/screenshots/metadata.txt
 
-      - name: Upload visual evidence
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: visual-review-${{ github.run_id }}
           path: |
@@ -161,65 +105,39 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish latest visual-review run
+      - name: Publish evidence pointer
         uses: actions/github-script@v7
         env:
           CAPTURE_MODE: ${{ steps.settings.outputs.mode }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const runId = context.runId;
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
-            const artifactName = `visual-review-${runId}`;
             const mode = process.env.CAPTURE_MODE;
-            const capturedAt = new Date().toISOString();
-            const imageCount = mode === 'npc_action' ? 4 : 2;
-
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
             const body = [
+              '<!-- non-workflow-issue -->',
               '## Automated Visual Review Evidence',
               '',
-              `- **Commit SHA**: \`${context.sha}\``,
-              '- **Branch**: `main`',
-              `- **Run ID**: \`${runId}\``,
-              `- **Capture mode**: \`${mode}\``,
-              `- **Captured**: ${capturedAt}`,
-              '- **Source**: checked-out commit served locally by the workflow',
-              `- **Artifact**: \`${artifactName}\``,
-              `- **Images**: ${imageCount}`,
+              `- Commit: \`${context.sha}\``,
+              `- Run: \`${context.runId}\``,
+              `- Mode: \`${mode}\``,
+              `- Captured: ${new Date().toISOString()}`,
+              `- Artifact: \`visual-review-${context.runId}\``,
+              '- Phone: `720x1280`',
+              '- Tablet: `1280x800`',
+              mode === 'npc_action' ? '- Pair interval: `0.2s`' : '- Frames per viewport: `1`',
               '',
-              '### Viewports',
-              '- Phone portrait: `720x1280`',
-              '- Tablet landscape: `1280x800`',
-              mode === 'npc_action'
-                ? '- NPC/action pairs: 2 frames per viewport, `0.2s` apart'
-                : '- Standard: 1 frame per viewport',
+              `[Open run](${runUrl})`,
               '',
-              '### Evidence',
-              `[Open workflow run and download artifact](${runUrl})`,
-              '',
-              'Reviewer/Tester must use evidence from the tested commit; stale runs are not proof of current state.'
+              'Only evidence matching the tested commit is valid.'
             ].join('\n');
 
             const title = 'Visual Review: Latest Main Branch Release Screenshot';
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner,
-              repo,
-              state: 'open',
-              per_page: 100
-            });
+            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
             const existing = issues.find(i => !i.pull_request && i.title === title);
-
             if (existing) {
-              await github.rest.issues.update({
-                owner,
-                repo,
-                issue_number: existing.number,
-                body
-              });
-              core.info(`Updated issue #${existing.number}`);
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
             } else {
-              const created = await github.rest.issues.create({ owner, repo, title, body });
-              core.info(`Created issue #${created.data.number}`);
+              await github.rest.issues.create({ owner, repo, title, body });
             }
