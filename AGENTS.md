@@ -5,14 +5,14 @@ Admin instructions override this file.
 ## Routine
 1. Read this file and your `.agents/<role>.md` only.
 2. Scan open GitHub Issues.
-3. Repair workflow metadata when the mapping is explicit.
-4. Clear stale claims.
-5. Select highest priority; tie -> lowest Issue number.
-6. Read fully, re-read before claim; if changed, restart.
+3. Repair explicit workflow metadata; clear stale claims.
+4. Recheck `WAITING` resume conditions when verifiable.
+5. Select highest priority eligible Issue; tie -> lowest Issue number.
+6. Read fully; re-read before claim. If changed, restart.
 7. Set `Claim: <agent-id>@<UTC timestamp>` and `Status: ACTIVE`.
 8. Execute only that Issue.
 
-Do not read `README.md`, ROADMAP, or unrelated/old Issues. Repository code/assets/tests may be inspected as needed. Dependency Issues: workflow state only.
+Do not read `README.md`, ROADMAP, or unrelated/old Issues. Inspect repository code/assets/tests only as needed. Dependency Issues: workflow state only.
 
 ## Repair
 Workflow metadata only. Never change task meaning, Objective, Scope, constraints, acceptance criteria, or technical requirements.
@@ -23,11 +23,11 @@ Safe role mappings:
 - Test | Tester -> Tester
 - Review | Reviewer -> Reviewer
 
-Legacy lane/state fields may be converted only when intended current `Role`/`Status` are explicit. Normalize stale/legacy claims to `NONE`. Infer missing `Handoff` only from explicit issue text.
+Convert legacy lane/state only when intended current state is explicit. Normalize stale/legacy claims to `NONE`. Infer missing `Handoff` only from explicit Issue text.
 
-If the Issue explicitly proves an unresolved Admin/external/capability blocker, set `Status: WAITING`. When resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
+Explicit unresolved Admin/external/capability blocker -> `WAITING`. If its stated resume condition is verifiably resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
 
-References to removed legacy governance files are historical only. Do not recreate or require them. If missing content is needed and not stated in the Issue, leave unclaimed and report Planner correction.
+Removed legacy governance references are historical only. Do not recreate/require them. If required task information is missing, leave unclaimed and report Planner correction.
 
 ## Workflow
 - `Role`: Coder | Designer | Tester | Reviewer
@@ -35,7 +35,7 @@ References to removed legacy governance files are historical only. Do not recrea
 - `Status`: READY | ACTIVE | VERIFY | WAITING | DONE
 - `Claim`: NONE | `<agent-id>@<UTC timestamp>`
 - `Dependency`: NONE | issue numbers
-- `Handoff`: NONE | next role
+- `Handoff`: NONE | role chain, e.g. `Reviewer > Tester`
 
 Claims older than 3 hours are stale.
 
@@ -46,20 +46,18 @@ Eligible:
 - dependencies `DONE`
 - `Claim: NONE`
 
-`WAITING` is not eligible.
+`WAITING` is not executable.
 
 ## Result
 PASS/completion:
-- `Handoff: NONE` -> `DONE`
-- else `Role = Handoff`; Tester/Reviewer -> `VERIFY`; others -> `READY`
+- If `Handoff: NONE`: set `DONE`, clear `Claim`, close Issue.
+- Else consume first Handoff role: set `Role` to it, remove it from `Handoff`; if chain empty set `Handoff: NONE`; Tester/Reviewer -> `VERIFY`, others -> `READY`; clear `Claim`.
 
 Tester/Reviewer FAIL:
-- use explicit correction role from the Issue -> `Role` = correction role, `Status: READY`
-- if none explicit -> `Status: WAITING` and report Planner correction
+- explicit correction role in Issue -> set that `Role`, `Status: READY`, clear `Claim`
+- no explicit correction role -> `WAITING`, clear `Claim`, report Planner correction
 
-Always clear `Claim` after PASS, FAIL, or WAITING transition.
-
-Issues are execution contracts. Do not infer missing product requirements. Record only real actions/evidence.
+Never invent evidence or product requirements. Record only real actions/results.
 
 Never upload binaries directly to GitHub. Use the exact Drive destination defined by the Issue.
 
