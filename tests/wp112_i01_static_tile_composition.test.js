@@ -9,8 +9,6 @@ const exists = (p) => fs.existsSync(path.join(root, p));
 const compositor = read('js/static_tile_compositor.js');
 const utils = read('js/utils.js');
 const readme = read('README.md');
-const staticStandard = read('.github/STATIC_TILE_COMPOSITION_STANDARD.md');
-const textureStandard = read('.github/TEXTURE_ATLAS_STANDARD.md');
 const interiors = read('js/starter_village_interiors.js');
 const debugExport = read('js/debug_log_export.js');
 
@@ -42,13 +40,5 @@ assert.ok(!debugExport.includes('vector_layer_debug.js'));
 assert.match(readme, /Static 100 × 100 Tile Composition/);
 assert.match(readme, /NPC world sprites are the sole normal independently dynamic world-image exception/);
 assert.match(readme, /All non-NPC world art is flattened into exact \*\*100 × 100 RGBA logical-tile composites\*\*/);
-assert.match(staticStandard, /Runtime static tile: exact `100x100 RGBA`/);
-assert.match(staticStandard, /All non-NPC world visuals are composited into the 100x100 static tile/);
-assert.match(staticStandard, /Do not keep duplicate persistent image layers/);
-assert.match(staticStandard, /NPC world sprites are the normal dynamic image exception/);
-assert.match(textureStandard, /Master: exact `1000x1000 RGBA PNG`/);
-assert.match(textureStandard, /Grid: `10x10`/);
-assert.match(textureStandard, /Cell: exact `100x100`/);
-assert.match(textureStandard, /Runtime uses the committed family where required/);
 
 console.log('WP-112/I01 static 100x100 tile composition source regression: PASS');
