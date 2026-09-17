@@ -4,12 +4,12 @@ Admin instructions override this file.
 
 ## Routine
 1. Read this file and your `.agents/<role>.md` only.
-2. Scan open GitHub Issues.
-3. Repair explicit workflow metadata; clear stale claims.
-4. Recheck `WAITING` resume conditions when verifiable.
-5. Select highest priority eligible Issue; tie -> lowest Issue number.
-6. Read fully; re-read before claim. If changed, restart.
-7. Set `Claim: <agent-id>@<UTC timestamp>` and `Status: ACTIVE`.
+2. Scan open Issues for your role. Never bind work to a named/specific agent.
+3. Repair explicit workflow metadata and recover stale locks.
+4. Recheck verifiable `WAITING` resume conditions.
+5. Ignore blocked, waiting, invalid, or locked Issues. Select highest priority eligible; tie -> lowest Issue number.
+6. Read fully; re-read before lock. If changed, restart selection.
+7. Set transient `Claim: <run-id>@<UTC timestamp>` and `Status: ACTIVE`.
 8. Execute only that Issue.
 
 Do not read `README.md`, ROADMAP, or unrelated/old Issues. Inspect repository code/assets/tests only as needed. Dependency Issues: workflow state only.
@@ -23,21 +23,21 @@ Safe role mappings:
 - Test | Tester -> Tester
 - Review | Reviewer -> Reviewer
 
-Convert legacy lane/state only when intended current state is explicit. Normalize stale/legacy claims to `NONE`. Infer missing `Handoff` only from explicit Issue text.
+Convert legacy lane/state only when intended current state is explicit. Infer missing `Handoff` only from explicit Issue text.
 
-Explicit unresolved Admin/external/capability blocker -> `WAITING`. If its stated resume condition is verifiably resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
+`Claim` is a temporary lock, never ownership. Locks older than 3 hours are stale. For stale `ACTIVE`: clear `Claim`; Tester/Reviewer -> `VERIFY`; others -> `READY`.
 
-Removed legacy governance references are historical only. Do not recreate/require them. If required task information is missing, leave unclaimed and report Planner correction.
+Explicit unresolved Admin/external/capability blocker -> `WAITING`, `Claim: NONE`. When its stated resume condition is verifiably resolved: Tester/Reviewer -> `VERIFY`; others -> `READY`.
+
+Removed legacy governance references are historical only. Do not recreate/require them. Missing required task information -> `WAITING`, `Claim: NONE`, report Planner correction.
 
 ## Workflow
 - `Role`: Coder | Designer | Tester | Reviewer
 - `Priority`: P0 | P1 | P2 | P3 | P4
 - `Status`: READY | ACTIVE | VERIFY | WAITING | DONE
-- `Claim`: NONE | `<agent-id>@<UTC timestamp>`
+- `Claim`: NONE | `<run-id>@<UTC timestamp>`
 - `Dependency`: NONE | issue numbers
 - `Handoff`: NONE | role chain, e.g. `Reviewer > Tester`
-
-Claims older than 3 hours are stale.
 
 Eligible:
 - workflow fields valid
@@ -46,16 +46,16 @@ Eligible:
 - dependencies `DONE`
 - `Claim: NONE`
 
-`WAITING` is not executable.
+`WAITING`, unresolved dependencies, active locks, and invalid Issues never block other work. If no eligible Issue exists, end the run cleanly.
 
 ## Result
 PASS/completion:
-- If `Handoff: NONE`: set `DONE`, clear `Claim`, close Issue.
-- Else consume first Handoff role: set `Role` to it, remove it from `Handoff`; if chain empty set `Handoff: NONE`; Tester/Reviewer -> `VERIFY`, others -> `READY`; clear `Claim`.
+- `Handoff: NONE` -> `DONE`, `Claim: NONE`, close Issue
+- otherwise consume first Handoff role; set `Role` to it; remove it from chain; empty chain -> `NONE`; Tester/Reviewer -> `VERIFY`; others -> `READY`; `Claim: NONE`
 
 Tester/Reviewer FAIL:
-- explicit correction role in Issue -> set that `Role`, `Status: READY`, clear `Claim`
-- no explicit correction role -> `WAITING`, clear `Claim`, report Planner correction
+- explicit correction role -> set that `Role`, `Status: READY`, `Claim: NONE`
+- no explicit correction role -> `WAITING`, `Claim: NONE`, report Planner correction
 
 Never invent evidence or product requirements. Record only real actions/results.
 
