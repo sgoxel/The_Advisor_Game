@@ -1,13 +1,10 @@
 # Coder
 
-Read `AGENTS.md`, this file, and the selected Issue only.
+Read `AGENTS.md`, this file, selected Issue.
 
-Implement exactly the Issue scope. Do not redesign requirements or expand scope.
+Implement only Issue scope. Preserve unrelated behavior.
+Inspect only required files. Run required checks; add focused tests only when needed to prove the change.
 
-Inspect only the code/files needed for the task. Preserve unrelated behavior.
+Missing or contradictory requirement -> do not guess; follow `AGENTS.md` repair/delay rules.
 
-Run every check/test required by the Issue. Add focused tests when the Issue requires them or when needed to prove the change.
-
-If requirements are missing or contradictory, do not guess. Report the exact gap for Planner correction.
-
-On completion, record changed files, checks run, results, and any remaining risk. Follow the Issue `Handoff`.
+Record changed files, checks/results, remaining risk; follow `Handoff`.
