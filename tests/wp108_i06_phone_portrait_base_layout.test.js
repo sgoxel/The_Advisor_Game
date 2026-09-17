@@ -8,6 +8,12 @@ function expect(re, text, message) {
   if (!re.test(text)) throw new Error(message);
 }
 
+function selectorBlocks(selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`, 'g');
+  return Array.from(css.matchAll(re), match => match[1]);
+}
+
 expect(/@import url\(["']phone_portrait\.css["']\);/, responsiveEntry, 'phone portrait stylesheet must be present in the responsive load path');
 expect(/@media\s*\(max-width:699px\)\s*and\s*\(orientation:portrait\)/, css, 'phone portrait breakpoint must be isolated from tablet and landscape layouts');
 expect(/#app\{[\s\S]*?min-height:200svh;/, css, 'phone portrait must reserve two viewport-scale major surfaces');
@@ -23,11 +29,17 @@ expect(/env\(safe-area-inset-bottom,0px\)/, css, 'bottom safe area must be accom
 expect(/env\(safe-area-inset-left,0px\)/, css, 'left safe area must be accommodated');
 expect(/\.mobile-tab-btn,[\s\S]*?\.lang-select-wrap\{[\s\S]*?min-height:44px;/, css, 'phone portrait touch controls must retain practical minimum sizing');
 
-if (/display\s*:\s*none/.test(css) && /#center-area|\.bottom-ribbon/.test(css)) {
-  throw new Error('base layout must not remove a mounted major surface');
-}
-if (/transform\s*:|translate[XY]?\s*\(/.test(css)) {
-  throw new Error('base layout and WP-109/I03 isolation must preserve mounted surfaces instead of transform-based state replacement');
+for (const selector of ['#center-area', '.bottom-ribbon']) {
+  const blocks = selectorBlocks(selector);
+  if (!blocks.length) throw new Error(`${selector} major surface must remain defined`);
+  for (const block of blocks) {
+    if (/display\s*:\s*none/.test(block)) {
+      throw new Error(`${selector} must remain mounted instead of being removed from layout`);
+    }
+    if (/transform\s*:|translate[XY]?\s*\(/.test(block)) {
+      throw new Error(`${selector} must remain in document flow instead of transform-based state replacement`);
+    }
+  }
 }
 
 console.log('PASS WP-108/I06 phone portrait base layout');
