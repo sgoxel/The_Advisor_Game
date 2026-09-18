@@ -85,8 +85,13 @@ Tester/Reviewer FAIL:
 After routing, rescan immediately.
 
 ## Visual
-Primary evidence: latest successful Actions visual-review artifact for tested `main`. Fallback: `tools/screenshot_tool.py`.
-Standard: phone `1080x1920` + tablet `1920x1080`. NPC/action/flicker: 2 frames/view, `0.2s` apart. Evidence must match commit and identify viewport/mode/run/time.
+Use the cheapest deterministic evidence that proves the selected Issue criterion. Prefer GitHub Actions output from `tools/screenshot_tool.py`; local capture is fallback.
+- Static appearance/layout: one current tested-commit screenshot at each viewport explicitly required by the criterion is sufficient. Do not require unrelated phone/tablet/desktop views.
+- Interaction/responsive behavior: a matching `screenshot_tool.py --scenario` run with before/after or multi-frame evidence is valid runtime evidence. Manual browser operation, video, or human replay is not additionally required when the automated scenario covers the criterion.
+- Motion/flicker/culling: 2+ timestamped frames from a relevant scenario/sequence are sufficient unless the Issue explicitly requires a longer observation.
+- Runtime state/performance: the screenshot evidence JSON/telemetry plus relevant focused regression/CI result is sufficient when it directly proves the criterion.
+- A successful GitHub Actions run on the tested commit counts as executable runtime evidence; do not require a second local checkout merely to repeat equivalent proof.
+Evidence must identify tested commit, viewport, scenario/mode, run/time. Do not demand stronger visual evidence than the acceptance criterion requires.
 
 ### Visual Idle Audit
 Only with no claimable Issue. Inspect newest valid current-main phone/tablet evidence first.
