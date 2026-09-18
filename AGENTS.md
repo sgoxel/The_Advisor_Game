@@ -86,7 +86,7 @@ After routing, rescan immediately.
 
 ## Visual
 Primary evidence: latest successful Actions visual-review artifact for tested `main`. Fallback: `tools/screenshot_tool.py`.
-Standard: phone `720x1280` + tablet `1280x800`. NPC/action/flicker: 2 frames/view, `0.2s` apart. Evidence must match commit and identify viewport/mode/run/time.
+Standard: phone `1080x1920` + tablet `1920x1080`. NPC/action/flicker: 2 frames/view, `0.2s` apart. Evidence must match commit and identify viewport/mode/run/time.
 
 ### Visual Idle Audit
 Only with no claimable Issue. Inspect newest valid current-main phone/tablet evidence first.
