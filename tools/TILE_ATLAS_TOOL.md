@@ -1,6 +1,6 @@
 # Tile Atlas Tool
 
-Use `tools/tile_atlas_tool.py` for production atlas processing.
+Use `tools/tile_atlas_tool.py` for production atlas processing. The canonical production contract is `.github/TEXTURE_ATLAS_STANDARD.md`.
 
 ## Required format
 
@@ -44,7 +44,7 @@ Use `--stage-prefix` only when the repository-relative destination differs from 
 
 Workers do not publish PNG or other binary outputs through GitHub APIs. Stage the exact tool outputs in the configured Google Drive `The_Advisor_Game/` repository mirror at their repository-relative paths. Admin performs the GitHub binary push. After that push, verify the expected GitHub paths and hashes.
 
-Current authority is `AGENTS.md`, README product invariants, ROADMAP, the selected Issue, and actual current tool behavior/tests. Deleted historical governance files are not prerequisites and must not be restored for this workflow.
+Canonical atlas geometry and binary publication rules are defined by `.github/TEXTURE_ATLAS_STANDARD.md`. Agent operating behavior is defined by `AGENTS.md` and the applicable `.agents/<role>.md`. Task Issues may add task-specific requirements but do not replace the canonical atlas standard.
 
 ## Verify
 
