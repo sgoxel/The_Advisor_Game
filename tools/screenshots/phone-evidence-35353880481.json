@@ -1,0 +1,1077 @@
+{
+  "captured_at": "2026-09-18T14:04:30.247443+00:00",
+  "frames": [
+    {
+      "action": "save-baseline",
+      "captured_at": "2026-09-18T14:04:07.775816+00:00",
+      "file": "phone-1-20260918T140339813Z.png",
+      "index": 1,
+      "runtime": {
+        "activePanel": "dialog-panel",
+        "camera": {
+          "dragActive": false,
+          "maxZoom": 5,
+          "minZoom": 2,
+          "x": 1049.6134079860528,
+          "y": 367.47705740743066,
+          "zoom": 2
+        },
+        "canvas": {
+          "height": 1557,
+          "width": 1217.96875,
+          "x": 0,
+          "y": 48
+        },
+        "controlledActionResult": {
+          "action": "save-baseline",
+          "bytes": 1098713,
+          "ok": true,
+          "region": {
+            "activeCols": 100,
+            "activeRegionWindow": null,
+            "activeRows": 100,
+            "currentRegion": {
+              "authority": "simulation",
+              "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|0|0",
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0",
+              "regionSize": 100,
+              "rulesVersion": "r02-region-v1",
+              "schemaVersion": 1,
+              "seed": "ISOMETRIC_MAP_30032026",
+              "theme": "village",
+              "x": 0,
+              "y": 0
+            },
+            "player": {
+              "col": 39,
+              "regionX": 0,
+              "regionY": 0,
+              "row": 49,
+              "worldX": 0,
+              "worldY": 0
+            }
+          },
+          "time": {
+            "authority": "simulation",
+            "day": 1,
+            "daylight": true,
+            "hour": 14,
+            "minute": 20,
+            "minuteOfDay": 860,
+            "phase": "daylight",
+            "totalGameMinutes": 860.57064,
+            "version": "r02-game-time-v1"
+          }
+        },
+        "gameTime": {
+          "authority": "simulation",
+          "day": 1,
+          "daylight": true,
+          "hour": 14,
+          "minute": 23,
+          "minuteOfDay": 863,
+          "phase": "daylight",
+          "totalGameMinutes": 863.35876,
+          "version": "r02-game-time-v1"
+        },
+        "npcConversationGuard": null,
+        "npcPresentation": {
+          "edgeNpcId": null,
+          "sample": [
+            {
+              "activity": "returning-home",
+              "col": 0,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 0,
+              "screen": {
+                "x": 696.0528939589551,
+                "y": 13.005888473344765
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 726.2692384382402,
+                "y": 207.80544443616003
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 13,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 680.0859083362648,
+                "y": 186.02588280108105
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 16,
+              "screen": {
+                "x": 711.8559927356808,
+                "y": 215.23003750745
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 10,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 6,
+              "screen": {
+                "x": 758.5919779711342,
+                "y": 105.70401181136714
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 12,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 665.0311573921894,
+                "y": 178.9262242151094
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 14,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 695.3086106808704,
+                "y": 193.20474546071878
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 15,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 710.7020906997776,
+                "y": 200.46414503432837
+              }
+            }
+          ],
+          "totalNpcCount": 24,
+          "visibleNpcCount": null
+        },
+        "npcRuntime": {
+          "invalidRecoveryRuns": 0,
+          "queued": true,
+          "reconcileRequests": 86,
+          "reconcileRuns": 0
+        },
+        "ok": true,
+        "readyState": "complete",
+        "region": {
+          "activeCols": 100,
+          "activeRegionWindow": null,
+          "activeRows": 100,
+          "currentRegion": {
+            "authority": "simulation",
+            "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|0|0",
+            "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0",
+            "regionSize": 100,
+            "rulesVersion": "r02-region-v1",
+            "schemaVersion": 1,
+            "seed": "ISOMETRIC_MAP_30032026",
+            "theme": "village",
+            "x": 0,
+            "y": 0
+          },
+          "player": {
+            "col": 39,
+            "regionX": 0,
+            "regionY": 0,
+            "row": 45,
+            "worldX": 0,
+            "worldY": 0
+          }
+        },
+        "scheduler": {
+          "authority": "scheduling-only",
+          "completedJobs": 0,
+          "deferredJobs": 1038,
+          "executedSlices": 0,
+          "failedJobs": 0,
+          "frameTargetMs": 16.67,
+          "frames": 86,
+          "interactionActive": false,
+          "interactionFrames": 0,
+          "interactionRenderP50Ms": 0,
+          "interactionRenderP95Ms": 0,
+          "interactionRenderWorstMs": 0,
+          "jobP95Ms": 0,
+          "jobWorstMs": 0,
+          "lastRenderStartedAt": 25523,
+          "queueDepth": 15,
+          "queuedKeys": [
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:10",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:8",
+            "npc-runtime-reconcile",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:23",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:12",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:13",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:14",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:15"
+          ],
+          "renderP50Ms": 147,
+          "renderP95Ms": 230.6999999999971,
+          "renderWorstMs": 645.5999999999985,
+          "yieldedJobs": 0
+        },
+        "title": "The Advisor Game (Under Development)",
+        "url": "http://127.0.0.1:8000/",
+        "viewport": {
+          "devicePixelRatio": 1,
+          "height": 1777,
+          "width": 1080
+        }
+      }
+    },
+    {
+      "action": "save-mutate",
+      "captured_at": "2026-09-18T14:04:22.744600+00:00",
+      "file": "phone-2-20260918T140339813Z.png",
+      "index": 2,
+      "runtime": {
+        "activePanel": "dialog-panel",
+        "camera": {
+          "dragActive": false,
+          "maxZoom": 5,
+          "minZoom": 2,
+          "x": 364.1203274144584,
+          "y": 55.38609212233245,
+          "zoom": 2
+        },
+        "canvas": {
+          "height": 1557,
+          "width": 1217.96875,
+          "x": 0,
+          "y": 48
+        },
+        "controlledActionResult": {
+          "action": "save-mutate",
+          "ok": true,
+          "region": {
+            "activeCols": 100,
+            "activeRegionWindow": {
+              "activeCols": 100,
+              "activeRows": 100,
+              "authority": "simulation",
+              "cachedCols": 100,
+              "cachedRows": 100,
+              "centerRegion": {
+                "authority": "simulation",
+                "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+                "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+                "regionFootprint": {
+                  "anchorRegionX": 1,
+                  "anchorRegionY": 0,
+                  "regionCount": 1,
+                  "regionsHigh": 1,
+                  "regionsWide": 1,
+                  "totalLogicalTiles": 10000
+                },
+                "regionSize": 100,
+                "rulesVersion": "r02-region-v1",
+                "schemaVersion": 1,
+                "seed": "ISOMETRIC_MAP_30032026",
+                "settlementId": null,
+                "theme": "coast",
+                "x": 1,
+                "y": 0
+              },
+              "lazyNeighborPrefetch": true,
+              "radius": 1,
+              "regionSize": 100,
+              "regions": [
+                {
+                  "fingerprint": "coast:fffffrffffffggggdddddddrddddddddddddddddddddddlllllrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrggggffdddddllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrgggdddddlllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddllrrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddddrrddddddddddrdddddllllllllllllllllllllllllllllllll|fffffrffffgggggggdddddddddddddddddddddddddddddddddrrdddddddddddddddlllllllllllllllllllllllllllllllll|fffffrffgggggggggggggdddddddddddddddddddddddddddddrrddddddddddrggggdddddllllllllllllllllllllllllllll|ggggrrggggggggggggggggggdmmmdddddddddddddddddddddddrdddddgggggrggggggdddddllllllllllllllllllllllllll|gggrrrggggggggggggggggggmmmmdddggggggggggggddddddddrrdddggggggrgggggdddddlllllllllllllllllllllllllll|rrrrrggggggggggggggggggggmmmggggggggggggggggggggggdrrddgggggggrggggggggdddddllllllllllllllllllllllll|rdddddddddgggggggggggggggmmmgggggggggggggggggggggggrrgggggggggrgggggdddddlllllllllllllllllllllllllll|dddddddddddgggggggggrrggggmmmggggggggggggggggggggggrrgggggggggrggggdddddllllllllllllllllllllllllllll|ddddddddddrrrrrrrrrrrrrgggmmmgggggggrggggggggggggggrrrggggggggrggdddddlllllllllllllllllllllllllllllr|ddddddddddrrrrrrrrrrrrrgggmmmmggggggrrggggggggggggggrrggggggggrgggggggdddddlllllllllllllllllllllllll|ddddddmdddgggggggfffrrrffgmmmmmmmggggrrgggggggggggggrrggggggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggffffrfffmmmmmmmmmggggrgggggggggggggrrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggfffffffmmmmmmmmmmggggrggggggggggggggrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggffffffmmmmmmmmmmmgggggrgggggggggggggrrrggggggrgggggggdddddlllllllllllllllllllllllll|dddddmmmddgggggggffmmmmmmmmmmmmmmggggggggggggggggggggrrrrgggggrggggggrrdddddllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmmggmmmmmmgggggggggggggrrrrggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmggggggggggggrrrrrgggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmgggggggggggggrrrrrggrggrrrrrgdddddllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmggmmmmmmmgggggggggggggrrrrrrrrrdddddlllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrdddddllllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrrrrrrdddddlllllllllllllllllllllllllll|ddddddmmmdgggggmmmmmmmmmmmmmmmmmmmmmmmmmmgggggggggggggggrrrrrrrrrdddddllllllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmmmmmmmmmmgggggfffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmggggmmmgggggfffffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddgggggggmmmmmmmmmmmmmmgggggggggggggfffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|dddddddddggggggggggggggmmmmmmggggggggggggggffffffffffffffrrrrrrrrrrffdddddllllllllllllllllllllllllll|ddddddddgggggggggggggggggggggggggggggggggggffffffffffffffrrrrrrrrrrdddddllllllllllllllllllllllllllll|gggggggggggggggggggggrrrggggggggggggggggggfffffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggggggggrrggggggggggggggggggfffffffrrrrrrrrrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggdddddgrrggggggggggggggggggffffrrrrfffffffrrrrrdddddlllllllllllllllllllllllllllllllll|gggggggggggggggddddddgrrggggggggggggggggggfffrrrffffffffffrrrrdddddlllllllllllllllllllllllllllllllll|ggggggggggggggddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggddddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrrfffdddddlllllllllllllllllllllllll|ggggggggddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrrrfdddddlllllllllllllllllllllllllll|gdddddddddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrdddddllllllllllllllllllllllllllllll|ldddddddddddddddddddddrrgggggggggggggggggggfrrfffffffffffffrrrrrrrggdddddlllllllllllllllllllllllllll|llddddddddddddddddddddrrgggggggggggggggggggfrrffffffffffffffrrrrrrgggdddddllllllllllllllllllllllllll|llddddddddddddddddddddrddgggggggggggggggggggrrffffffffffffggrrrrrrgdddddllllllllllllllllllllllllllll|lldddddddddddddddddddrrddgggggggggggggggggggrrrgggggggggggggrrrrrggggggdddddllllllllllllllllllllllll|llddddddddddddddddddrrrddllggggggggfffffgggggrrrgggggggggggggrrrrgdddddlllllllllllllllllllllllllllll|llddddddddddddddddrrrrrddlllggggggfffffffgggggrrrrrrrrrrrggggrrrgdddddllllllllllllllllllllllllllllll|dddddddddrrrrrrrrrrrrdddllllgggggffffffffgggggggggggggrrrrrrgggggdddddllllllllllllllllllllllllllllll|dddddddrrrdddddddddddddlllllgggggffffffffgggggggggggggggggrrrdddddddddddddddllllllllllllllllllllllll|ddddddrrdddddddddddlddllllllrrrrrrrrrrrrfggggggggggddddddddrrddddddlllllllllllllllllllllllllllllllll|dddddrrdddddddddddllllllllrrrgggffffffrrrfgggggggdddddddddddrrddddddddddddllllllllllllllllllllllllll|ddddrrdddddddddddddddddddrrgggggffffffffrrgggggggddddddddddddrdddddddddddddlllllllllllllllllllllllll|ddddrddddddddddddddddddddrggggggffffffffrrggggggdddddddddddddrddddddddddddddllllllllllllllllllllllll|dddrrddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrddddddddddllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddddddlllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddlllllllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdgggggggffffffffrgggggggdddddddddddddddddddddddddddllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggffffffggggggggggddddddddddddddddddddddllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggddddddddddddddddddddddllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggggggggggggdddddlllllllllllllllllllllllllllllllll|ggrdddddddddddddddddddddrggggggggggggggggggggggggggggggggggggggggggdddddllllllllllllllllllllllllllll|ggrggggggggddddddddddddddgggggggggggggggggrggggggggggggggggggggdddddllllllllllllllllllllllllllllllll|ggrggggggggggggdddddddddgrggggggggggggggggrggggggggggggggggggrgggggdddddllllllllllllllllllllllllllll|gggggggggggggggggggggggggrgggggggggggggggggggggggggggggggggggrgggggggdddddllllllllllllllllllllllllll|ggmmmmmmmggggggggggggggggrgggggggggggggmmmmmggggggggggggggggfrffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmgggggggmmmgggggrgggdddddddddmmmmmmmggggggfffffffffrfdddddlllllllllllllllllllllllllllllllll|mmmmmmmmmmmgggggmmmmmgggggrgddddddddddmmmmmmmmggmmmffffffffrrfffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmmmggmmmmmmmgggggrgdddddddddddmmmmmmmmmmmmmfffffffrffffffffdddddlllllllllllllllllllllllllll|fmmmmmmmmmmmmmmmmmmmmggggggrddddddddddddddgmmmmmmmmmffffffffffffffdddddlllllllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmmggggggrrdddddddddddddggmmmmmmmffffffffffffffffffffdddddllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmgggggggdrrddmmmdddddddgggmmmmmmffffffffmmmffffffdddddlllllllllllllllllllllllllll|fffmmmmmmmmmmmmmmmmmgggggggddrdmmmmmddddddgggmmmmmmfffffffmmmmmmffffffdddddlllllllllllllllllllllllll|ffffmmmmmmmmmmmmmmmggggggggddddmmmmmddddddgggmmmmmmfffffffmmmmmmfffffffdddddllllllllllllllllllllllll|fffffffmmmmmmmmmgggggggggggddddmmmmmdrddddgggmmmmmmfffffffmmmmmmffdddddlllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddmmmmddrrddddggmmmmmmfffffffmmmmmdddddllllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggmmmfffffffmmmmmmfdddddlllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggggggfffffmmmmmmmfffffdddddlllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddgggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddggggggggmmmmmmmmmmgggggdddddllllllllllllllllllllllllllll|ffffffffffgggggggggggggggmmmdddddddddrdddddddggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffggggggggggggggggmmdddddddddrddddddddgggggggmmmmmmmmggggdddddllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddrrrdddddddgggggggmmmmmmgggggdddddlllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddrrrrrrdddddddddggggggmmmmgggggggggddddddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddddddddddddddggggggggggggggddddddddddddddllllllllllllllllllllllll|fffffffffffggggggggggggggggddddddddddddddddddddddgggggggggggddddddddddllllllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmgggggggdddddddddddddddlllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmggggggddddddddddddddlllllllllllllllllllllllllllll|fffffffffffggggggggggggrrggdddddddddddddddddddmmmmdgggggddddddddddddddddddddllllllllllllllllllllllll|rrrffffffffgggggggggggrrgggddddmmmmddddddddddddddddggggggdrrrrrrrrrrrdddddllllllllllllllllllllllllll|ffrrrrffffggggggggggrrgggggdddmmmmmmmddddddddddddddggggggdddddddddddddddllllllllllllllllllllllllllll|fffffrrrrfggggggggrrrggggggddmmmmmmmmmmmmddddddrddggggggggddddddddddddddllllllllllllllllllllllllllll|ffffffffrrrrrrrrrrrgggggggdddmmmmmmmmmmmmmmddrrdddgggggggggddddddddddddlllllllllllllllllllllllllllll|ffffffffggggrrrrggggggggggdddmmmmmmmmmmmmmmddrdddgggggggggggddddddddllllllllllllllllllllllllllllllll|fffffffggggggggggggggggggddddmmmmmmmmmmmmmmddddddggggggggggggdddddddddddddllllllllllllllllllllllllll|fffffggggggggggggggggggggdddddmmmmmmmmmmmmmdddddggggggggggggggddddddddddllllllllllllllllllllllllllll|ggggggggggggggggggggggggdddddrrmmmmmmmmmmmmdddddgggggggggggggggdddddddddddddllllllllllllllllllllllll|ggggggggggggggggggggggddddddrrrrddddmmmmmmmddddgggggggggggggggggdddddlllllllllllllllllllllllllllllll|ggggggggggggggggggdddddddddrrrrddddddddmmmmrdddggggggggggggggggggdddddddllllllllllllllllllllllllllll|ggggggggggggggggdddddddddddrrrdddddddddddrrrrdmmggggggggggggggggggdddddddlllllllllllllllllllllllllll|gggggggggggggggdddddddddddrrrdddddddddddddrrmmmmmgggggggggggggggggdddddlllllllllllllllllllllllllllll|ggggggggggggggdddddddddddrrrdddddddddddddddrmmmmmggggggggggggggggggggdddddllllllllllllllllllllllllll|gggggggggggggdddddddddddrrrdddddddddddddddddrrmmmgggggggggggggdddddlllllllllllllllllllllllllllllllll",
+                  "regionFootprint": {
+                    "anchorRegionX": 1,
+                    "anchorRegionY": 0,
+                    "regionCount": 1,
+                    "regionsHigh": 1,
+                    "regionsWide": 1,
+                    "totalLogicalTiles": 10000
+                  },
+                  "settlementId": null,
+                  "theme": "coast",
+                  "x": 1,
+                  "y": 0
+                }
+              ],
+              "seed": "ISOMETRIC_MAP_30032026",
+              "version": "admin-100x100-region-navigation-v4-compact-lazy-prefetch"
+            },
+            "activeRows": 100,
+            "currentRegion": {
+              "authority": "simulation",
+              "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+              "regionFootprint": {
+                "anchorRegionX": 1,
+                "anchorRegionY": 0,
+                "regionCount": 1,
+                "regionsHigh": 1,
+                "regionsWide": 1,
+                "totalLogicalTiles": 10000
+              },
+              "regionSize": 100,
+              "rulesVersion": "r02-region-v1",
+              "schemaVersion": 1,
+              "seed": "ISOMETRIC_MAP_30032026",
+              "settlementId": null,
+              "theme": "coast",
+              "x": 1,
+              "y": 0
+            },
+            "player": {
+              "col": 50,
+              "regionX": 1,
+              "regionY": 0,
+              "row": 50,
+              "worldX": 150,
+              "worldY": 50
+            }
+          },
+          "time": {
+            "authority": "simulation",
+            "day": 1,
+            "daylight": true,
+            "hour": 14,
+            "minute": 24,
+            "minuteOfDay": 864,
+            "phase": "daylight",
+            "totalGameMinutes": 864.10732,
+            "version": "r02-game-time-v1"
+          }
+        },
+        "gameTime": {
+          "authority": "simulation",
+          "day": 1,
+          "daylight": true,
+          "hour": 14,
+          "minute": 34,
+          "minuteOfDay": 874,
+          "phase": "daylight",
+          "totalGameMinutes": 874.70392,
+          "version": "r02-game-time-v1"
+        },
+        "npcConversationGuard": null,
+        "npcPresentation": {
+          "edgeNpcId": null,
+          "sample": [
+            {
+              "activity": "returning-home",
+              "col": 0,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 0,
+              "screen": {
+                "x": 646.5991298809722,
+                "y": -37.91164342805778
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 18,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 580.3187286218129,
+                "y": 207.9838364197706
+              }
+            },
+            {
+              "activity": "local-errand",
+              "col": 19,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 595.2365741726414,
+                "y": 215.4104593813506
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 24,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 19,
+              "screen": {
+                "x": 731.6576784206262,
+                "y": 222.92183650773464
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 10,
+              "screen": {
+                "x": 734.6370390442628,
+                "y": 105.85565412476058
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 13,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 624.1910649879387,
+                "y": 118.54227823600537
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 17,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 565.5682633570495,
+                "y": 200.6405411928542
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 14,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 638.3159968214331,
+                "y": 124.98614428361714
+              }
+            }
+          ],
+          "totalNpcCount": 24,
+          "visibleNpcCount": null
+        },
+        "npcRuntime": {
+          "invalidRecoveryRuns": 0,
+          "queued": true,
+          "reconcileRequests": 108,
+          "reconcileRuns": 0
+        },
+        "ok": true,
+        "readyState": "complete",
+        "region": {
+          "activeCols": 100,
+          "activeRegionWindow": {
+            "activeCols": 100,
+            "activeRows": 100,
+            "authority": "simulation",
+            "cachedCols": 100,
+            "cachedRows": 100,
+            "centerRegion": {
+              "authority": "simulation",
+              "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+              "regionFootprint": {
+                "anchorRegionX": 1,
+                "anchorRegionY": 0,
+                "regionCount": 1,
+                "regionsHigh": 1,
+                "regionsWide": 1,
+                "totalLogicalTiles": 10000
+              },
+              "regionSize": 100,
+              "rulesVersion": "r02-region-v1",
+              "schemaVersion": 1,
+              "seed": "ISOMETRIC_MAP_30032026",
+              "settlementId": null,
+              "theme": "coast",
+              "x": 1,
+              "y": 0
+            },
+            "lazyNeighborPrefetch": true,
+            "radius": 1,
+            "regionSize": 100,
+            "regions": [
+              {
+                "fingerprint": "coast:fffffrffffffggggdddddddrddddddddddddddddddddddlllllrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrggggffdddddllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrgggdddddlllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddllrrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddddrrddddddddddrdddddllllllllllllllllllllllllllllllll|fffffrffffgggggggdddddddddddddddddddddddddddddddddrrdddddddddddddddlllllllllllllllllllllllllllllllll|fffffrffgggggggggggggdddddddddddddddddddddddddddddrrddddddddddrggggdddddllllllllllllllllllllllllllll|ggggrrggggggggggggggggggdmmmdddddddddddddddddddddddrdddddgggggrggggggdddddllllllllllllllllllllllllll|gggrrrggggggggggggggggggmmmmdddggggggggggggddddddddrrdddggggggrgggggdddddlllllllllllllllllllllllllll|rrrrrggggggggggggggggggggmmmggggggggggggggggggggggdrrddgggggggrggggggggdddddllllllllllllllllllllllll|rdddddddddgggggggggggggggmmmgggggggggggggggggggggggrrgggggggggrgggggdddddlllllllllllllllllllllllllll|dddddddddddgggggggggrrggggmmmggggggggggggggggggggggrrgggggggggrggggdddddllllllllllllllllllllllllllll|ddddddddddrrrrrrrrrrrrrgggmmmgggggggrggggggggggggggrrrggggggggrggdddddlllllllllllllllllllllllllllllr|ddddddddddrrrrrrrrrrrrrgggmmmmggggggrrggggggggggggggrrggggggggrgggggggdddddlllllllllllllllllllllllll|ddddddmdddgggggggfffrrrffgmmmmmmmggggrrgggggggggggggrrggggggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggffffrfffmmmmmmmmmggggrgggggggggggggrrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggfffffffmmmmmmmmmmggggrggggggggggggggrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggffffffmmmmmmmmmmmgggggrgggggggggggggrrrggggggrgggggggdddddlllllllllllllllllllllllll|dddddmmmddgggggggffmmmmmmmmmmmmmmggggggggggggggggggggrrrrgggggrggggggrrdddddllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmmggmmmmmmgggggggggggggrrrrggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmggggggggggggrrrrrgggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmgggggggggggggrrrrrggrggrrrrrgdddddllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmggmmmmmmmgggggggggggggrrrrrrrrrdddddlllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrdddddllllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrrrrrrdddddlllllllllllllllllllllllllll|ddddddmmmdgggggmmmmmmmmmmmmmmmmmmmmmmmmmmgggggggggggggggrrrrrrrrrdddddllllllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmmmmmmmmmmgggggfffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmggggmmmgggggfffffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddgggggggmmmmmmmmmmmmmmgggggggggggggfffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|dddddddddggggggggggggggmmmmmmggggggggggggggffffffffffffffrrrrrrrrrrffdddddllllllllllllllllllllllllll|ddddddddgggggggggggggggggggggggggggggggggggffffffffffffffrrrrrrrrrrdddddllllllllllllllllllllllllllll|gggggggggggggggggggggrrrggggggggggggggggggfffffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggggggggrrggggggggggggggggggfffffffrrrrrrrrrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggdddddgrrggggggggggggggggggffffrrrrfffffffrrrrrdddddlllllllllllllllllllllllllllllllll|gggggggggggggggddddddgrrggggggggggggggggggfffrrrffffffffffrrrrdddddlllllllllllllllllllllllllllllllll|ggggggggggggggddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggddddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrrfffdddddlllllllllllllllllllllllll|ggggggggddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrrrfdddddlllllllllllllllllllllllllll|gdddddddddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrdddddllllllllllllllllllllllllllllll|ldddddddddddddddddddddrrgggggggggggggggggggfrrfffffffffffffrrrrrrrggdddddlllllllllllllllllllllllllll|llddddddddddddddddddddrrgggggggggggggggggggfrrffffffffffffffrrrrrrgggdddddllllllllllllllllllllllllll|llddddddddddddddddddddrddgggggggggggggggggggrrffffffffffffggrrrrrrgdddddllllllllllllllllllllllllllll|lldddddddddddddddddddrrddgggggggggggggggggggrrrgggggggggggggrrrrrggggggdddddllllllllllllllllllllllll|llddddddddddddddddddrrrddllggggggggfffffgggggrrrgggggggggggggrrrrgdddddlllllllllllllllllllllllllllll|llddddddddddddddddrrrrrddlllggggggfffffffgggggrrrrrrrrrrrggggrrrgdddddllllllllllllllllllllllllllllll|dddddddddrrrrrrrrrrrrdddllllgggggffffffffgggggggggggggrrrrrrgggggdddddllllllllllllllllllllllllllllll|dddddddrrrdddddddddddddlllllgggggffffffffgggggggggggggggggrrrdddddddddddddddllllllllllllllllllllllll|ddddddrrdddddddddddlddllllllrrrrrrrrrrrrfggggggggggddddddddrrddddddlllllllllllllllllllllllllllllllll|dddddrrdddddddddddllllllllrrrgggffffffrrrfgggggggdddddddddddrrddddddddddddllllllllllllllllllllllllll|ddddrrdddddddddddddddddddrrgggggffffffffrrgggggggddddddddddddrdddddddddddddlllllllllllllllllllllllll|ddddrddddddddddddddddddddrggggggffffffffrrggggggdddddddddddddrddddddddddddddllllllllllllllllllllllll|dddrrddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrddddddddddllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddddddlllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddlllllllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdgggggggffffffffrgggggggdddddddddddddddddddddddddddllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggffffffggggggggggddddddddddddddddddddddllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggddddddddddddddddddddddllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggggggggggggdddddlllllllllllllllllllllllllllllllll|ggrdddddddddddddddddddddrggggggggggggggggggggggggggggggggggggggggggdddddllllllllllllllllllllllllllll|ggrggggggggddddddddddddddgggggggggggggggggrggggggggggggggggggggdddddllllllllllllllllllllllllllllllll|ggrggggggggggggdddddddddgrggggggggggggggggrggggggggggggggggggrgggggdddddllllllllllllllllllllllllllll|gggggggggggggggggggggggggrgggggggggggggggggggggggggggggggggggrgggggggdddddllllllllllllllllllllllllll|ggmmmmmmmggggggggggggggggrgggggggggggggmmmmmggggggggggggggggfrffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmgggggggmmmgggggrgggdddddddddmmmmmmmggggggfffffffffrfdddddlllllllllllllllllllllllllllllllll|mmmmmmmmmmmgggggmmmmmgggggrgddddddddddmmmmmmmmggmmmffffffffrrfffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmmmggmmmmmmmgggggrgdddddddddddmmmmmmmmmmmmmfffffffrffffffffdddddlllllllllllllllllllllllllll|fmmmmmmmmmmmmmmmmmmmmggggggrddddddddddddddgmmmmmmmmmffffffffffffffdddddlllllllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmmggggggrrdddddddddddddggmmmmmmmffffffffffffffffffffdddddllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmgggggggdrrddmmmdddddddgggmmmmmmffffffffmmmffffffdddddlllllllllllllllllllllllllll|fffmmmmmmmmmmmmmmmmmgggggggddrdmmmmmddddddgggmmmmmmfffffffmmmmmmffffffdddddlllllllllllllllllllllllll|ffffmmmmmmmmmmmmmmmggggggggddddmmmmmddddddgggmmmmmmfffffffmmmmmmfffffffdddddllllllllllllllllllllllll|fffffffmmmmmmmmmgggggggggggddddmmmmmdrddddgggmmmmmmfffffffmmmmmmffdddddlllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddmmmmddrrddddggmmmmmmfffffffmmmmmdddddllllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggmmmfffffffmmmmmmfdddddlllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggggggfffffmmmmmmmfffffdddddlllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddgggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddggggggggmmmmmmmmmmgggggdddddllllllllllllllllllllllllllll|ffffffffffgggggggggggggggmmmdddddddddrdddddddggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffggggggggggggggggmmdddddddddrddddddddgggggggmmmmmmmmggggdddddllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddrrrdddddddgggggggmmmmmmgggggdddddlllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddrrrrrrdddddddddggggggmmmmgggggggggddddddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddddddddddddddggggggggggggggddddddddddddddllllllllllllllllllllllll|fffffffffffggggggggggggggggddddddddddddddddddddddgggggggggggddddddddddllllllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmgggggggdddddddddddddddlllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmggggggddddddddddddddlllllllllllllllllllllllllllll|fffffffffffggggggggggggrrggdddddddddddddddddddmmmmdgggggddddddddddddddddddddllllllllllllllllllllllll|rrrffffffffgggggggggggrrgggddddmmmmddddddddddddddddggggggdrrrrrrrrrrrdddddllllllllllllllllllllllllll|ffrrrrffffggggggggggrrgggggdddmmmmmmmddddddddddddddggggggdddddddddddddddllllllllllllllllllllllllllll|fffffrrrrfggggggggrrrggggggddmmmmmmmmmmmmddddddrddggggggggddddddddddddddllllllllllllllllllllllllllll|ffffffffrrrrrrrrrrrgggggggdddmmmmmmmmmmmmmmddrrdddgggggggggddddddddddddlllllllllllllllllllllllllllll|ffffffffggggrrrrggggggggggdddmmmmmmmmmmmmmmddrdddgggggggggggddddddddllllllllllllllllllllllllllllllll|fffffffggggggggggggggggggddddmmmmmmmmmmmmmmddddddggggggggggggdddddddddddddllllllllllllllllllllllllll|fffffggggggggggggggggggggdddddmmmmmmmmmmmmmdddddggggggggggggggddddddddddllllllllllllllllllllllllllll|ggggggggggggggggggggggggdddddrrmmmmmmmmmmmmdddddgggggggggggggggdddddddddddddllllllllllllllllllllllll|ggggggggggggggggggggggddddddrrrrddddmmmmmmmddddgggggggggggggggggdddddlllllllllllllllllllllllllllllll|ggggggggggggggggggdddddddddrrrrddddddddmmmmrdddggggggggggggggggggdddddddllllllllllllllllllllllllllll|ggggggggggggggggdddddddddddrrrdddddddddddrrrrdmmggggggggggggggggggdddddddlllllllllllllllllllllllllll|gggggggggggggggdddddddddddrrrdddddddddddddrrmmmmmgggggggggggggggggdddddlllllllllllllllllllllllllllll|ggggggggggggggdddddddddddrrrdddddddddddddddrmmmmmggggggggggggggggggggdddddllllllllllllllllllllllllll|gggggggggggggdddddddddddrrrdddddddddddddddddrrmmmgggggggggggggdddddlllllllllllllllllllllllllllllllll",
+                "regionFootprint": {
+                  "anchorRegionX": 1,
+                  "anchorRegionY": 0,
+                  "regionCount": 1,
+                  "regionsHigh": 1,
+                  "regionsWide": 1,
+                  "totalLogicalTiles": 10000
+                },
+                "settlementId": null,
+                "theme": "coast",
+                "x": 1,
+                "y": 0
+              }
+            ],
+            "seed": "ISOMETRIC_MAP_30032026",
+            "version": "admin-100x100-region-navigation-v4-compact-lazy-prefetch"
+          },
+          "activeRows": 100,
+          "currentRegion": {
+            "authority": "simulation",
+            "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+            "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+            "regionFootprint": {
+              "anchorRegionX": 1,
+              "anchorRegionY": 0,
+              "regionCount": 1,
+              "regionsHigh": 1,
+              "regionsWide": 1,
+              "totalLogicalTiles": 10000
+            },
+            "regionSize": 100,
+            "rulesVersion": "r02-region-v1",
+            "schemaVersion": 1,
+            "seed": "ISOMETRIC_MAP_30032026",
+            "settlementId": null,
+            "theme": "coast",
+            "x": 1,
+            "y": 0
+          },
+          "player": {
+            "col": 45,
+            "regionX": 1,
+            "regionY": 0,
+            "row": 48,
+            "worldX": 150,
+            "worldY": 50
+          }
+        },
+        "scheduler": {
+          "authority": "scheduling-only",
+          "completedJobs": 0,
+          "deferredJobs": 1496,
+          "executedSlices": 0,
+          "failedJobs": 0,
+          "frameTargetMs": 16.67,
+          "frames": 108,
+          "interactionActive": false,
+          "interactionFrames": 0,
+          "interactionRenderP50Ms": 0,
+          "interactionRenderP95Ms": 0,
+          "interactionRenderWorstMs": 0,
+          "jobP95Ms": 0,
+          "jobWorstMs": 0,
+          "lastRenderStartedAt": 39442.799999999996,
+          "queueDepth": 23,
+          "queuedKeys": [
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:10",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:8",
+            "npc-runtime-reconcile",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:23",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:12",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:13",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:14",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:15",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|0,-1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|0,0|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|0,1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|1,-1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|1,1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|2,-1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|2,0|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|2,1|admin-100x100-spatial-v1"
+          ],
+          "renderP50Ms": 152.5,
+          "renderP95Ms": 700.8999999999942,
+          "renderWorstMs": 775.0999999999913,
+          "yieldedJobs": 0
+        },
+        "title": "The Advisor Game (Under Development)",
+        "url": "http://127.0.0.1:8000/",
+        "viewport": {
+          "devicePixelRatio": 1,
+          "height": 1777,
+          "width": 1080
+        }
+      }
+    },
+    {
+      "action": "save-restore",
+      "captured_at": "2026-09-18T14:04:30.247248+00:00",
+      "file": "phone-3-20260918T140339813Z.png",
+      "index": 3,
+      "runtime": {
+        "activePanel": "dialog-panel",
+        "camera": {
+          "dragActive": false,
+          "maxZoom": 5,
+          "minZoom": 2,
+          "x": 853.6130219642747,
+          "y": 51.39787311393199,
+          "zoom": 2
+        },
+        "canvas": {
+          "height": 1557,
+          "width": 1217.96875,
+          "x": 0,
+          "y": 48
+        },
+        "controlledActionResult": {
+          "action": "save-restore",
+          "ok": true,
+          "region": {
+            "activeCols": 100,
+            "activeRegionWindow": {
+              "activeCols": 100,
+              "activeRows": 100,
+              "authority": "simulation",
+              "cachedCols": 100,
+              "cachedRows": 100,
+              "centerRegion": {
+                "authority": "simulation",
+                "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+                "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+                "regionFootprint": {
+                  "anchorRegionX": 1,
+                  "anchorRegionY": 0,
+                  "regionCount": 1,
+                  "regionsHigh": 1,
+                  "regionsWide": 1,
+                  "totalLogicalTiles": 10000
+                },
+                "regionSize": 100,
+                "rulesVersion": "r02-region-v1",
+                "schemaVersion": 1,
+                "seed": "ISOMETRIC_MAP_30032026",
+                "settlementId": null,
+                "theme": "coast",
+                "x": 0,
+                "y": 0
+              },
+              "lazyNeighborPrefetch": true,
+              "radius": 1,
+              "regionSize": 100,
+              "regions": [
+                {
+                  "fingerprint": "coast:fffffrffffffggggdddddddrddddddddddddddddddddddlllllrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrggggffdddddllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrgggdddddlllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddllrrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddddrrddddddddddrdddddllllllllllllllllllllllllllllllll|fffffrffffgggggggdddddddddddddddddddddddddddddddddrrdddddddddddddddlllllllllllllllllllllllllllllllll|fffffrffgggggggggggggdddddddddddddddddddddddddddddrrddddddddddrggggdddddllllllllllllllllllllllllllll|ggggrrggggggggggggggggggdmmmdddddddddddddddddddddddrdddddgggggrggggggdddddllllllllllllllllllllllllll|gggrrrggggggggggggggggggmmmmdddggggggggggggddddddddrrdddggggggrgggggdddddlllllllllllllllllllllllllll|rrrrrggggggggggggggggggggmmmggggggggggggggggggggggdrrddgggggggrggggggggdddddllllllllllllllllllllllll|rdddddddddgggggggggggggggmmmgggggggggggggggggggggggrrgggggggggrgggggdddddlllllllllllllllllllllllllll|dddddddddddgggggggggrrggggmmmggggggggggggggggggggggrrgggggggggrggggdddddllllllllllllllllllllllllllll|ddddddddddrrrrrrrrrrrrrgggmmmgggggggrggggggggggggggrrrggggggggrggdddddlllllllllllllllllllllllllllllr|ddddddddddrrrrrrrrrrrrrgggmmmmggggggrrggggggggggggggrrggggggggrgggggggdddddlllllllllllllllllllllllll|ddddddmdddgggggggfffrrrffgmmmmmmmggggrrgggggggggggggrrggggggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggffffrfffmmmmmmmmmggggrgggggggggggggrrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggfffffffmmmmmmmmmmggggrggggggggggggggrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggffffffmmmmmmmmmmmgggggrgggggggggggggrrrggggggrgggggggdddddlllllllllllllllllllllllll|dddddmmmddgggggggffmmmmmmmmmmmmmmggggggggggggggggggggrrrrgggggrggggggrrdddddllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmmggmmmmmmgggggggggggggrrrrggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmggggggggggggrrrrrgggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmgggggggggggggrrrrrggrggrrrrrgdddddllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmggmmmmmmmgggggggggggggrrrrrrrrrdddddlllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrdddddllllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrrrrrrdddddlllllllllllllllllllllllllll|ddddddmmmdgggggmmmmmmmmmmmmmmmmmmmmmmmmmmgggggggggggggggrrrrrrrrrdddddllllllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmmmmmmmmmmgggggfffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmggggmmmgggggfffffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddgggggggmmmmmmmmmmmmmmgggggggggggggfffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|dddddddddggggggggggggggmmmmmmggggggggggggggffffffffffffffrrrrrrrrrrffdddddllllllllllllllllllllllllll|ddddddddgggggggggggggggggggggggggggggggggggffffffffffffffrrrrrrrrrrdddddllllllllllllllllllllllllllll|gggggggggggggggggggggrrrggggggggggggggggggfffffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggggggggrrggggggggggggggggggfffffffrrrrrrrrrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggdddddgrrggggggggggggggggggffffrrrrfffffffrrrrrdddddlllllllllllllllllllllllllllllllll|gggggggggggggggddddddgrrggggggggggggggggggfffrrrffffffffffrrrrdddddlllllllllllllllllllllllllllllllll|ggggggggggggggddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggddddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrrfffdddddlllllllllllllllllllllllll|ggggggggddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrrrfdddddlllllllllllllllllllllllllll|gdddddddddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrdddddllllllllllllllllllllllllllllll|ldddddddddddddddddddddrrgggggggggggggggggggfrrfffffffffffffrrrrrrrggdddddlllllllllllllllllllllllllll|llddddddddddddddddddddrrgggggggggggggggggggfrrffffffffffffffrrrrrrgggdddddllllllllllllllllllllllllll|llddddddddddddddddddddrddgggggggggggggggggggrrffffffffffffggrrrrrrgdddddllllllllllllllllllllllllllll|lldddddddddddddddddddrrddgggggggggggggggggggrrrgggggggggggggrrrrrggggggdddddllllllllllllllllllllllll|llddddddddddddddddddrrrddllggggggggfffffgggggrrrgggggggggggggrrrrgdddddlllllllllllllllllllllllllllll|llddddddddddddddddrrrrrddlllggggggfffffffgggggrrrrrrrrrrrggggrrrgdddddllllllllllllllllllllllllllllll|dddddddddrrrrrrrrrrrrdddllllgggggffffffffgggggggggggggrrrrrrgggggdddddllllllllllllllllllllllllllllll|dddddddrrrdddddddddddddlllllgggggffffffffgggggggggggggggggrrrdddddddddddddddllllllllllllllllllllllll|ddddddrrdddddddddddlddllllllrrrrrrrrrrrrfggggggggggddddddddrrddddddlllllllllllllllllllllllllllllllll|dddddrrdddddddddddllllllllrrrgggffffffrrrfgggggggdddddddddddrrddddddddddddllllllllllllllllllllllllll|ddddrrdddddddddddddddddddrrgggggffffffffrrgggggggddddddddddddrdddddddddddddlllllllllllllllllllllllll|ddddrddddddddddddddddddddrggggggffffffffrrggggggdddddddddddddrddddddddddddddllllllllllllllllllllllll|dddrrddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrddddddddddllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddddddlllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddlllllllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdgggggggffffffffrgggggggdddddddddddddddddddddddddddllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggffffffggggggggggddddddddddddddddddddddllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggddddddddddddddddddddddllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggggggggggggdddddlllllllllllllllllllllllllllllllll|ggrdddddddddddddddddddddrggggggggggggggggggggggggggggggggggggggggggdddddllllllllllllllllllllllllllll|ggrggggggggddddddddddddddgggggggggggggggggrggggggggggggggggggggdddddllllllllllllllllllllllllllllllll|ggrggggggggggggdddddddddgrggggggggggggggggrggggggggggggggggggrgggggdddddllllllllllllllllllllllllllll|gggggggggggggggggggggggggrgggggggggggggggggggggggggggggggggggrgggggggdddddllllllllllllllllllllllllll|ggmmmmmmmggggggggggggggggrgggggggggggggmmmmmggggggggggggggggfrffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmgggggggmmmgggggrgggdddddddddmmmmmmmggggggfffffffffrfdddddlllllllllllllllllllllllllllllllll|mmmmmmmmmmmgggggmmmmmgggggrgddddddddddmmmmmmmmggmmmffffffffrrfffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmmmggmmmmmmmgggggrgdddddddddddmmmmmmmmmmmmmfffffffrffffffffdddddlllllllllllllllllllllllllll|fmmmmmmmmmmmmmmmmmmmmggggggrddddddddddddddgmmmmmmmmmffffffffffffffdddddlllllllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmmggggggrrdddddddddddddggmmmmmmmffffffffffffffffffffdddddllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmgggggggdrrddmmmdddddddgggmmmmmmffffffffmmmffffffdddddlllllllllllllllllllllllllll|fffmmmmmmmmmmmmmmmmmgggggggddrdmmmmmddddddgggmmmmmmfffffffmmmmmmffffffdddddlllllllllllllllllllllllll|ffffmmmmmmmmmmmmmmmggggggggddddmmmmmddddddgggmmmmmmfffffffmmmmmmfffffffdddddllllllllllllllllllllllll|fffffffmmmmmmmmmgggggggggggddddmmmmmdrddddgggmmmmmmfffffffmmmmmmffdddddlllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddmmmmddrrddddggmmmmmmfffffffmmmmmdddddllllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggmmmfffffffmmmmmmfdddddlllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggggggfffffmmmmmmmfffffdddddlllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddgggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddggggggggmmmmmmmmmmgggggdddddllllllllllllllllllllllllllll|ffffffffffgggggggggggggggmmmdddddddddrdddddddggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffggggggggggggggggmmdddddddddrddddddddgggggggmmmmmmmmggggdddddllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddrrrdddddddgggggggmmmmmmgggggdddddlllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddrrrrrrdddddddddggggggmmmmgggggggggddddddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddddddddddddddggggggggggggggddddddddddddddllllllllllllllllllllllll|fffffffffffggggggggggggggggddddddddddddddddddddddgggggggggggddddddddddllllllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmgggggggdddddddddddddddlllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmggggggddddddddddddddlllllllllllllllllllllllllllll|fffffffffffggggggggggggrrggdddddddddddddddddddmmmmdgggggddddddddddddddddddddllllllllllllllllllllllll|rrrffffffffgggggggggggrrgggddddmmmmddddddddddddddddggggggdrrrrrrrrrrrdddddllllllllllllllllllllllllll|ffrrrrffffggggggggggrrgggggdddmmmmmmmddddddddddddddggggggdddddddddddddddllllllllllllllllllllllllllll|fffffrrrrfggggggggrrrggggggddmmmmmmmmmmmmddddddrddggggggggddddddddddddddllllllllllllllllllllllllllll|ffffffffrrrrrrrrrrrgggggggdddmmmmmmmmmmmmmmddrrdddgggggggggddddddddddddlllllllllllllllllllllllllllll|ffffffffggggrrrrggggggggggdddmmmmmmmmmmmmmmddrdddgggggggggggddddddddllllllllllllllllllllllllllllllll|fffffffggggggggggggggggggddddmmmmmmmmmmmmmmddddddggggggggggggdddddddddddddllllllllllllllllllllllllll|fffffggggggggggggggggggggdddddmmmmmmmmmmmmmdddddggggggggggggggddddddddddllllllllllllllllllllllllllll|ggggggggggggggggggggggggdddddrrmmmmmmmmmmmmdddddgggggggggggggggdddddddddddddllllllllllllllllllllllll|ggggggggggggggggggggggddddddrrrrddddmmmmmmmddddgggggggggggggggggdddddlllllllllllllllllllllllllllllll|ggggggggggggggggggdddddddddrrrrddddddddmmmmrdddggggggggggggggggggdddddddllllllllllllllllllllllllllll|ggggggggggggggggdddddddddddrrrdddddddddddrrrrdmmggggggggggggggggggdddddddlllllllllllllllllllllllllll|gggggggggggggggdddddddddddrrrdddddddddddddrrmmmmmgggggggggggggggggdddddlllllllllllllllllllllllllllll|ggggggggggggggdddddddddddrrrdddddddddddddddrmmmmmggggggggggggggggggggdddddllllllllllllllllllllllllll|gggggggggggggdddddddddddrrrdddddddddddddddddrrmmmgggggggggggggdddddlllllllllllllllllllllllllllllllll",
+                  "regionFootprint": {
+                    "anchorRegionX": 1,
+                    "anchorRegionY": 0,
+                    "regionCount": 1,
+                    "regionsHigh": 1,
+                    "regionsWide": 1,
+                    "totalLogicalTiles": 10000
+                  },
+                  "settlementId": null,
+                  "theme": "coast",
+                  "x": 1,
+                  "y": 0
+                }
+              ],
+              "seed": "ISOMETRIC_MAP_30032026",
+              "version": "admin-100x100-region-navigation-v4-compact-lazy-prefetch"
+            },
+            "activeRows": 100,
+            "currentRegion": {
+              "authority": "simulation",
+              "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+              "regionFootprint": {
+                "anchorRegionX": 1,
+                "anchorRegionY": 0,
+                "regionCount": 1,
+                "regionsHigh": 1,
+                "regionsWide": 1,
+                "totalLogicalTiles": 10000
+              },
+              "regionSize": 100,
+              "rulesVersion": "r02-region-v1",
+              "schemaVersion": 1,
+              "seed": "ISOMETRIC_MAP_30032026",
+              "settlementId": null,
+              "theme": "coast",
+              "x": 0,
+              "y": 0
+            },
+            "player": {
+              "col": 39,
+              "regionX": 1,
+              "regionY": 0,
+              "row": 49,
+              "worldX": 150,
+              "worldY": 50
+            }
+          },
+          "time": {
+            "authority": "simulation",
+            "day": 1,
+            "daylight": true,
+            "hour": 14,
+            "minute": 38,
+            "minuteOfDay": 878,
+            "phase": "daylight",
+            "totalGameMinutes": 878.13024,
+            "version": "r02-game-time-v1"
+          }
+        },
+        "gameTime": {
+          "authority": "simulation",
+          "day": 1,
+          "daylight": true,
+          "hour": 14,
+          "minute": 41,
+          "minuteOfDay": 881,
+          "phase": "daylight",
+          "totalGameMinutes": 881.6158,
+          "version": "r02-game-time-v1"
+        },
+        "npcConversationGuard": null,
+        "npcPresentation": {
+          "edgeNpcId": null,
+          "sample": [
+            {
+              "activity": "returning-home",
+              "col": 0,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 0,
+              "screen": {
+                "x": 708.9204291370951,
+                "y": -13.725721116563864
+              }
+            },
+            {
+              "activity": "local-errand",
+              "col": 19,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 671.3745838763493,
+                "y": 252.6987816090596
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 24,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 19,
+              "screen": {
+                "x": 812.1295240034344,
+                "y": 260.6430116245267
+              }
+            },
+            {
+              "activity": "local-errand",
+              "col": 71,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 16,
+              "screen": {
+                "x": 1934.2860316744225,
+                "y": 734.6360248077201
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 12,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 10,
+              "screen": {
+                "x": 748.1803123312229,
+                "y": 111.24703552254746
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 17,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 639.9973696144955,
+                "y": 237.0852149493955
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 18,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 655.5949733731615,
+                "y": 244.8467142330661
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 13,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 695.337826170792,
+                "y": 150.47807978093073
+              }
+            }
+          ],
+          "totalNpcCount": 24,
+          "visibleNpcCount": null
+        },
+        "npcRuntime": {
+          "invalidRecoveryRuns": 0,
+          "queued": true,
+          "reconcileRequests": 130,
+          "reconcileRuns": 0
+        },
+        "ok": true,
+        "readyState": "complete",
+        "region": {
+          "activeCols": 100,
+          "activeRegionWindow": {
+            "activeCols": 100,
+            "activeRows": 100,
+            "authority": "simulation",
+            "cachedCols": 100,
+            "cachedRows": 100,
+            "centerRegion": {
+              "authority": "simulation",
+              "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+              "regionFootprint": {
+                "anchorRegionX": 1,
+                "anchorRegionY": 0,
+                "regionCount": 1,
+                "regionsHigh": 1,
+                "regionsWide": 1,
+                "totalLogicalTiles": 10000
+              },
+              "regionSize": 100,
+              "rulesVersion": "r02-region-v1",
+              "schemaVersion": 1,
+              "seed": "ISOMETRIC_MAP_30032026",
+              "settlementId": null,
+              "theme": "coast",
+              "x": 0,
+              "y": 0
+            },
+            "lazyNeighborPrefetch": true,
+            "radius": 1,
+            "regionSize": 100,
+            "regions": [
+              {
+                "fingerprint": "coast:fffffrffffffggggdddddddrddddddddddddddddddddddlllllrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrggggffdddddllllllllllllllllllllllllll|fffffrffffffggggdddddddrdddddddddddddddddddddddllllrddddddddddrgggdddddlllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddllrrddddddddddrggggdddddllllllllllllllllllllllllllll|fffffrfffffgggggdddddddrddddddddddddddddddddddddddrrddddddddddrdddddllllllllllllllllllllllllllllllll|fffffrffffgggggggdddddddddddddddddddddddddddddddddrrdddddddddddddddlllllllllllllllllllllllllllllllll|fffffrffgggggggggggggdddddddddddddddddddddddddddddrrddddddddddrggggdddddllllllllllllllllllllllllllll|ggggrrggggggggggggggggggdmmmdddddddddddddddddddddddrdddddgggggrggggggdddddllllllllllllllllllllllllll|gggrrrggggggggggggggggggmmmmdddggggggggggggddddddddrrdddggggggrgggggdddddlllllllllllllllllllllllllll|rrrrrggggggggggggggggggggmmmggggggggggggggggggggggdrrddgggggggrggggggggdddddllllllllllllllllllllllll|rdddddddddgggggggggggggggmmmgggggggggggggggggggggggrrgggggggggrgggggdddddlllllllllllllllllllllllllll|dddddddddddgggggggggrrggggmmmggggggggggggggggggggggrrgggggggggrggggdddddllllllllllllllllllllllllllll|ddddddddddrrrrrrrrrrrrrgggmmmgggggggrggggggggggggggrrrggggggggrggdddddlllllllllllllllllllllllllllllr|ddddddddddrrrrrrrrrrrrrgggmmmmggggggrrggggggggggggggrrggggggggrgggggggdddddlllllllllllllllllllllllll|ddddddmdddgggggggfffrrrffgmmmmmmmggggrrgggggggggggggrrggggggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggffffrfffmmmmmmmmmggggrgggggggggggggrrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggfffffffmmmmmmmmmmggggrggggggggggggggrrgggggggrggggggggdddddllllllllllllllllllllllll|dddddmmmddgggggggffffffmmmmmmmmmmmgggggrgggggggggggggrrrggggggrgggggggdddddlllllllllllllllllllllllll|dddddmmmddgggggggffmmmmmmmmmmmmmmggggggggggggggggggggrrrrgggggrggggggrrdddddllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmmggmmmmmmgggggggggggggrrrrggggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmggggggggggggrrrrrgggrgggdddddlllllllllllllllllllllllllllll|dddddmmmddgggggggmmmmmmmmmmmmmmmgggmmmmmmmgggggggggggggrrrrrggrggrrrrrgdddddllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmggmmmmmmmgggggggggggggrrrrrrrrrdddddlllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrdddddllllllllllllllllllllllllllllllll|dddddmmmmdggggggmmmmmmmmmmmmmmmmmmmmmmmmmmggggggggggggggrrrrrrrrrrrrdddddlllllllllllllllllllllllllll|ddddddmmmdgggggmmmmmmmmmmmmmmmmmmmmmmmmmmgggggggggggggggrrrrrrrrrdddddllllllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmmmmmmmmmmgggggfffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddggggmmmmmmmmmmmmmmmmmmggggmmmgggggfffffffffffffrrrrrrrrrrfdddddlllllllllllllllllllllllllll|ddddddddddgggggggmmmmmmmmmmmmmmgggggggggggggfffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|dddddddddggggggggggggggmmmmmmggggggggggggggffffffffffffffrrrrrrrrrrffdddddllllllllllllllllllllllllll|ddddddddgggggggggggggggggggggggggggggggggggffffffffffffffrrrrrrrrrrdddddllllllllllllllllllllllllllll|gggggggggggggggggggggrrrggggggggggggggggggfffffffffffffffrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggggggggrrggggggggggggggggggfffffffrrrrrrrrrrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggggggdddddgrrggggggggggggggggggffffrrrrfffffffrrrrrdddddlllllllllllllllllllllllllllllllll|gggggggggggggggddddddgrrggggggggggggggggggfffrrrffffffffffrrrrdddddlllllllllllllllllllllllllllllllll|ggggggggggggggddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrdddddlllllllllllllllllllllllllllll|ggggggggggggddddddddddrrggggggggggggggggggffrrffffffffffffrrrrrrrrrfffdddddlllllllllllllllllllllllll|ggggggggddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrrrfdddddlllllllllllllllllllllllllll|gdddddddddddddddddddddrrggggggggggggggggggffrrfffffffffffffrrrrrrdddddllllllllllllllllllllllllllllll|ldddddddddddddddddddddrrgggggggggggggggggggfrrfffffffffffffrrrrrrrggdddddlllllllllllllllllllllllllll|llddddddddddddddddddddrrgggggggggggggggggggfrrffffffffffffffrrrrrrgggdddddllllllllllllllllllllllllll|llddddddddddddddddddddrddgggggggggggggggggggrrffffffffffffggrrrrrrgdddddllllllllllllllllllllllllllll|lldddddddddddddddddddrrddgggggggggggggggggggrrrgggggggggggggrrrrrggggggdddddllllllllllllllllllllllll|llddddddddddddddddddrrrddllggggggggfffffgggggrrrgggggggggggggrrrrgdddddlllllllllllllllllllllllllllll|llddddddddddddddddrrrrrddlllggggggfffffffgggggrrrrrrrrrrrggggrrrgdddddllllllllllllllllllllllllllllll|dddddddddrrrrrrrrrrrrdddllllgggggffffffffgggggggggggggrrrrrrgggggdddddllllllllllllllllllllllllllllll|dddddddrrrdddddddddddddlllllgggggffffffffgggggggggggggggggrrrdddddddddddddddllllllllllllllllllllllll|ddddddrrdddddddddddlddllllllrrrrrrrrrrrrfggggggggggddddddddrrddddddlllllllllllllllllllllllllllllllll|dddddrrdddddddddddllllllllrrrgggffffffrrrfgggggggdddddddddddrrddddddddddddllllllllllllllllllllllllll|ddddrrdddddddddddddddddddrrgggggffffffffrrgggggggddddddddddddrdddddddddddddlllllllllllllllllllllllll|ddddrddddddddddddddddddddrggggggffffffffrrggggggdddddddddddddrddddddddddddddllllllllllllllllllllllll|dddrrddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrddddddddddllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddddddlllllllllllllllllllllllllllll|dddrdddddddddddddddddddddrggggggfffffffffrggggggdddddddddddddrdddddlllllllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdgggggggffffffffrgggggggdddddddddddddddddddddddddddllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggffffffggggggggggddddddddddddddddddddddllllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggddddddddddddddddddddddllllllllllllllllllllllllll|dddrddddddddddddddddddddrdggggggggggggggggggggggggggggggggggggdddddlllllllllllllllllllllllllllllllll|ggrdddddddddddddddddddddrggggggggggggggggggggggggggggggggggggggggggdddddllllllllllllllllllllllllllll|ggrggggggggddddddddddddddgggggggggggggggggrggggggggggggggggggggdddddllllllllllllllllllllllllllllllll|ggrggggggggggggdddddddddgrggggggggggggggggrggggggggggggggggggrgggggdddddllllllllllllllllllllllllllll|gggggggggggggggggggggggggrgggggggggggggggggggggggggggggggggggrgggggggdddddllllllllllllllllllllllllll|ggmmmmmmmggggggggggggggggrgggggggggggggmmmmmggggggggggggggggfrffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmgggggggmmmgggggrgggdddddddddmmmmmmmggggggfffffffffrfdddddlllllllllllllllllllllllllllllllll|mmmmmmmmmmmgggggmmmmmgggggrgddddddddddmmmmmmmmggmmmffffffffrrfffffffffdddddlllllllllllllllllllllllll|mmmmmmmmmmmmggmmmmmmmgggggrgdddddddddddmmmmmmmmmmmmmfffffffrffffffffdddddlllllllllllllllllllllllllll|fmmmmmmmmmmmmmmmmmmmmggggggrddddddddddddddgmmmmmmmmmffffffffffffffdddddlllllllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmmggggggrrdddddddddddddggmmmmmmmffffffffffffffffffffdddddllllllllllllllllllllllll|ffmmmmmmmmmmmmmmmmmmgggggggdrrddmmmdddddddgggmmmmmmffffffffmmmffffffdddddlllllllllllllllllllllllllll|fffmmmmmmmmmmmmmmmmmgggggggddrdmmmmmddddddgggmmmmmmfffffffmmmmmmffffffdddddlllllllllllllllllllllllll|ffffmmmmmmmmmmmmmmmggggggggddddmmmmmddddddgggmmmmmmfffffffmmmmmmfffffffdddddllllllllllllllllllllllll|fffffffmmmmmmmmmgggggggggggddddmmmmmdrddddgggmmmmmmfffffffmmmmmmffdddddlllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddmmmmddrrddddggmmmmmmfffffffmmmmmdddddllllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggmmmfffffffmmmmmmfdddddlllllllllllllllllllllllllllllll|fffffffffggggggggggggggggggddddddddddrrddddggggggggfffffmmmmmmmfffffdddddlllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddgggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggddddddddddrrdddddggggggggmmmmmmmmmmgggggdddddllllllllllllllllllllllllllll|ffffffffffgggggggggggggggmmmdddddddddrdddddddggggggggmmmmmmmmmgggggggdddddllllllllllllllllllllllllll|ffffffffffggggggggggggggggmmdddddddddrddddddddgggggggmmmmmmmmggggdddddllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddrrrdddddddgggggggmmmmmmgggggdddddlllllllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddrrrrrrdddddddddggggggmmmmgggggggggddddddddllllllllllllllllllllllllll|ffffffffffgggggggggggggggggdddddddddddddddddddddggggggggggggggddddddddddddddllllllllllllllllllllllll|fffffffffffggggggggggggggggddddddddddddddddddddddgggggggggggddddddddddllllllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmgggggggdddddddddddddddlllllllllllllllllllllllllll|fffffffffffggggggggggggggggdddddddddddddddddddmmmmmggggggddddddddddddddlllllllllllllllllllllllllllll|fffffffffffggggggggggggrrggdddddddddddddddddddmmmmdgggggddddddddddddddddddddllllllllllllllllllllllll|rrrffffffffgggggggggggrrgggddddmmmmddddddddddddddddggggggdrrrrrrrrrrrdddddllllllllllllllllllllllllll|ffrrrrffffggggggggggrrgggggdddmmmmmmmddddddddddddddggggggdddddddddddddddllllllllllllllllllllllllllll|fffffrrrrfggggggggrrrggggggddmmmmmmmmmmmmddddddrddggggggggddddddddddddddllllllllllllllllllllllllllll|ffffffffrrrrrrrrrrrgggggggdddmmmmmmmmmmmmmmddrrdddgggggggggddddddddddddlllllllllllllllllllllllllllll|ffffffffggggrrrrggggggggggdddmmmmmmmmmmmmmmddrdddgggggggggggddddddddllllllllllllllllllllllllllllllll|fffffffggggggggggggggggggddddmmmmmmmmmmmmmmddddddggggggggggggdddddddddddddllllllllllllllllllllllllll|fffffggggggggggggggggggggdddddmmmmmmmmmmmmmdddddggggggggggggggddddddddddllllllllllllllllllllllllllll|ggggggggggggggggggggggggdddddrrmmmmmmmmmmmmdddddgggggggggggggggdddddddddddddllllllllllllllllllllllll|ggggggggggggggggggggggddddddrrrrddddmmmmmmmddddgggggggggggggggggdddddlllllllllllllllllllllllllllllll|ggggggggggggggggggdddddddddrrrrddddddddmmmmrdddggggggggggggggggggdddddddllllllllllllllllllllllllllll|ggggggggggggggggdddddddddddrrrdddddddddddrrrrdmmggggggggggggggggggdddddddlllllllllllllllllllllllllll|gggggggggggggggdddddddddddrrrdddddddddddddrrmmmmmgggggggggggggggggdddddlllllllllllllllllllllllllllll|ggggggggggggggdddddddddddrrrdddddddddddddddrmmmmmggggggggggggggggggggdddddllllllllllllllllllllllllll|gggggggggggggdddddddddddrrrdddddddddddddddddrrmmmgggggggggggggdddddlllllllllllllllllllllllllllllllll",
+                "regionFootprint": {
+                  "anchorRegionX": 1,
+                  "anchorRegionY": 0,
+                  "regionCount": 1,
+                  "regionsHigh": 1,
+                  "regionsWide": 1,
+                  "totalLogicalTiles": 10000
+                },
+                "settlementId": null,
+                "theme": "coast",
+                "x": 1,
+                "y": 0
+              }
+            ],
+            "seed": "ISOMETRIC_MAP_30032026",
+            "version": "admin-100x100-region-navigation-v4-compact-lazy-prefetch"
+          },
+          "activeRows": 100,
+          "currentRegion": {
+            "authority": "simulation",
+            "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|1|0",
+            "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:1:0",
+            "regionFootprint": {
+              "anchorRegionX": 1,
+              "anchorRegionY": 0,
+              "regionCount": 1,
+              "regionsHigh": 1,
+              "regionsWide": 1,
+              "totalLogicalTiles": 10000
+            },
+            "regionSize": 100,
+            "rulesVersion": "r02-region-v1",
+            "schemaVersion": 1,
+            "seed": "ISOMETRIC_MAP_30032026",
+            "settlementId": null,
+            "theme": "coast",
+            "x": 0,
+            "y": 0
+          },
+          "player": {
+            "col": 41,
+            "regionX": 1,
+            "regionY": 0,
+            "row": 49,
+            "worldX": 150,
+            "worldY": 50
+          }
+        },
+        "scheduler": {
+          "authority": "scheduling-only",
+          "completedJobs": 0,
+          "deferredJobs": 2002,
+          "executedSlices": 0,
+          "failedJobs": 0,
+          "frameTargetMs": 16.67,
+          "frames": 130,
+          "interactionActive": false,
+          "interactionFrames": 0,
+          "interactionRenderP50Ms": 0,
+          "interactionRenderP95Ms": 0,
+          "interactionRenderWorstMs": 0,
+          "jobP95Ms": 0,
+          "jobWorstMs": 0,
+          "lastRenderStartedAt": 48052.299999999996,
+          "queueDepth": 23,
+          "queuedKeys": [
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:10",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:8",
+            "npc-runtime-reconcile",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:23",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:12",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:13",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:14",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:15",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|0,-1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|0,0|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|0,1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|1,-1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|1,1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|2,-1|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|2,0|admin-100x100-spatial-v1",
+            "environment-prefetch:ISOMETRIC_MAP_30032026|2,1|admin-100x100-spatial-v1"
+          ],
+          "renderP50Ms": 152.40000000000146,
+          "renderP95Ms": 700.8999999999942,
+          "renderWorstMs": 775.0999999999913,
+          "yieldedJobs": 0
+        },
+        "title": "The Advisor Game (Under Development)",
+        "url": "http://127.0.0.1:8000/",
+        "viewport": {
+          "devicePixelRatio": 1,
+          "height": 1777,
+          "width": 1080
+        }
+      }
+    }
+  ],
+  "issue": "415",
+  "scenario": "save-load",
+  "schema": 1,
+  "target": "http://127.0.0.1:8000/"
+}

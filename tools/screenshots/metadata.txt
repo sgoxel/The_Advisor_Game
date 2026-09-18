@@ -1,10 +1,10 @@
-commit_sha=31bd36da0a74eac46cb7ca6a310e264fa3dae427
+commit_sha=3404d883e0e86571a50a905849462920ffbd22d3
 branch=main
-run_id=35353484682
+run_id=35353880481
 run_attempt=1
-captured_at=2026-09-18T14:01:25Z
-scenario=npc-conversation-state
-issue_number=347
+captured_at=2026-09-18T14:05:17Z
+scenario=save-load
+issue_number=415
 portrait_viewport=1080x1920
 landscape_viewport=1920x1080
 requested_frames_per_viewport=2
