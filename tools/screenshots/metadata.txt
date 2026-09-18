@@ -1,10 +1,10 @@
-commit_sha=95b34b716baf394e8e51eef4dbcca70ae7020a99
+commit_sha=48a203dccb940f914f853e266556d926d4da9469
 branch=main
-run_id=35347730256
+run_id=35348028084
 run_attempt=1
-captured_at=2026-09-18T13:01:50Z
+captured_at=2026-09-18T13:06:10Z
 scenario=static
-issue_number=521
+issue_number=
 portrait_viewport=1080x1920
 landscape_viewport=1920x1080
 requested_frames_per_viewport=2
