@@ -1,0 +1,14 @@
+commit_sha=0c378b29e755648bf5957b0233da8dc23e585ccd
+branch=main
+run_id=35368597037
+run_attempt=1
+captured_at=2026-09-18T16:29:20Z
+scenario=village-reference
+issue_number=474
+portrait_viewport=1080x1920
+landscape_viewport=1920x1080
+requested_frames_per_viewport=2
+frame_interval_seconds=0.2
+camera_zoom=max_out
+max_repository_screenshots=20
+schedule=every_30_minutes
