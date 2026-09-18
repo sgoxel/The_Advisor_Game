@@ -24,6 +24,8 @@ Never modify `AGENTS.md` or `.agents/*.md` unless Admin explicitly requests it.
 
 Never bind work to a named worker/session. Do not read README/ROADMAP/unrelated Issues. Inspect only files required by the selected Issue. Dependency Issues are workflow state only.
 
+`AGENTS.md` and the applicable `.agents/<role>.md` are the sole authority for agent operating behavior. Issues define task-specific work, constraints, acceptance, checks, and evidence only. Generic workflow/role instructions embedded in legacy Issues are non-authoritative and may be removed as a safe Repair when task intent and acceptance meaning stay unchanged.
+
 ## Checkpoint
 Never abandon `ACTIVE` work. If the run must end mid-Issue: leave work safe; record done/remaining/checks/next step; clear Claim; keep Role; Coder/Designer -> `READY`; Tester/Reviewer -> `VERIFY`. Use `DELAYED` only for a real unmet external/requirement condition.
 
