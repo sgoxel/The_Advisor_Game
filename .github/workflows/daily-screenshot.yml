@@ -226,6 +226,22 @@ jobs:
           print(f"Repository screenshot count after retention: {len(remaining)}")
           PY
 
+      - name: Report artifact contributors
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifact-reports
+          python tools/artifact_size_report.py \
+            'tools/screenshots/phone-*.png' \
+            'tools/screenshots/tablet-*.png' \
+            "tools/screenshots/*-evidence-${{ github.run_id }}.json" \
+            'tools/screenshots/metadata*.txt' \
+            --root . \
+            --top 20 \
+            --require-files \
+            --json ".artifact-reports/artifact-size-${{ github.run_id }}.json" \
+            --text ".artifact-reports/artifact-size-${{ github.run_id }}.txt"
+
       - uses: actions/upload-artifact@v4
         with:
           name: visual-review-${{ github.run_id }}
@@ -234,6 +250,7 @@ jobs:
             tools/screenshots/tablet-*.png
             tools/screenshots/*-evidence-${{ github.run_id }}.json
             tools/screenshots/metadata*.txt
+            .artifact-reports/artifact-size-${{ github.run_id }}.*
           if-no-files-found: error
           retention-days: 30
 
