@@ -1,0 +1,14 @@
+commit_sha=271a347267f3f833c0f2c6808d1fc05d4628b942
+branch=main
+run_id=35364946380
+run_attempt=1
+captured_at=2026-09-18T15:52:52Z
+scenario=responsive-cycle
+issue_number=445
+portrait_viewport=1080x1920
+landscape_viewport=1920x1080
+requested_frames_per_viewport=2
+frame_interval_seconds=0.2
+camera_zoom=max_out
+max_repository_screenshots=20
+schedule=every_30_minutes
