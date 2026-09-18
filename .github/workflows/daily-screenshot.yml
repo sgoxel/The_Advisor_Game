@@ -226,16 +226,42 @@ jobs:
           print(f"Repository screenshot count after retention: {len(remaining)}")
           PY
 
+      - name: Stage current-run artifact files
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE=".artifact-staging/${{ github.run_id }}"
+          mkdir -p "$STAGE"
+
+          git ls-files --others --exclude-standard -- 'tools/screenshots/phone-*.png' 'tools/screenshots/tablet-*.png' |
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            cp "$file" "$STAGE/"
+          done
+
+          for file in tools/screenshots/*-evidence-${{ github.run_id }}.json; do
+            [[ -f "$file" ]] && cp "$file" "$STAGE/"
+          done
+
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            cp "tools/screenshots/metadata-${{ github.run_id }}.txt" "$STAGE/"
+          else
+            cp "tools/screenshots/metadata.txt" "$STAGE/"
+          fi
+
+          COUNT=$(find "$STAGE" -maxdepth 1 -type f | wc -l)
+          [[ "$COUNT" -ge 3 ]] || {
+            echo "Current-run artifact staging is unexpectedly small: $COUNT files" >&2
+            exit 1
+          }
+
       - name: Report artifact contributors
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .artifact-reports
           python tools/artifact_size_report.py \
-            'tools/screenshots/phone-*.png' \
-            'tools/screenshots/tablet-*.png' \
-            "tools/screenshots/*-evidence-${{ github.run_id }}.json" \
-            'tools/screenshots/metadata*.txt' \
+            ".artifact-staging/${{ github.run_id }}" \
             --root . \
             --top 20 \
             --require-files \
@@ -246,10 +272,7 @@ jobs:
         with:
           name: visual-review-${{ github.run_id }}
           path: |
-            tools/screenshots/phone-*.png
-            tools/screenshots/tablet-*.png
-            tools/screenshots/*-evidence-${{ github.run_id }}.json
-            tools/screenshots/metadata*.txt
+            .artifact-staging/${{ github.run_id }}/
             .artifact-reports/artifact-size-${{ github.run_id }}.*
           if-no-files-found: error
           retention-days: 30
