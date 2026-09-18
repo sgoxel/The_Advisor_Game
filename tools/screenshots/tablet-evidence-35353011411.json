@@ -1,0 +1,39 @@
+{
+  "captured_at": "2026-09-18T13:56:21.765653+00:00",
+  "frames": [
+    {
+      "action": "reference-day-wide",
+      "captured_at": "2026-09-18T13:56:14.074890+00:00",
+      "file": "tablet-1-20260918T135547595Z.png",
+      "index": 1,
+      "runtime": {
+        "ok": false,
+        "reason": "ReferenceError: world is not defined"
+      }
+    },
+    {
+      "action": "reference-close",
+      "captured_at": "2026-09-18T13:56:17.588630+00:00",
+      "file": "tablet-2-20260918T135547595Z.png",
+      "index": 2,
+      "runtime": {
+        "ok": false,
+        "reason": "ReferenceError: world is not defined"
+      }
+    },
+    {
+      "action": "reference-night-wide",
+      "captured_at": "2026-09-18T13:56:21.765470+00:00",
+      "file": "tablet-3-20260918T135547595Z.png",
+      "index": 3,
+      "runtime": {
+        "ok": false,
+        "reason": "ReferenceError: world is not defined"
+      }
+    }
+  ],
+  "issue": "474",
+  "scenario": "village-reference",
+  "schema": 1,
+  "target": "http://127.0.0.1:8000/"
+}
