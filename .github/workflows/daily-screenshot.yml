@@ -2,7 +2,6 @@ name: Visual Review Capture
 
 on:
   push:
-    branches: [main]
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
@@ -18,12 +17,11 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
   capture:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
