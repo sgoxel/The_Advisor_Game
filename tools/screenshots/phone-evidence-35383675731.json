@@ -1,0 +1,955 @@
+{
+  "captured_at": "2026-09-18T19:03:44.602003+00:00",
+  "frames": [
+    {
+      "action": "initial",
+      "captured_at": "2026-09-18T19:03:29.360823+00:00",
+      "file": "phone-1-20260918T190254645Z.png",
+      "index": 1,
+      "runtime": {
+        "activePanel": "dialog-panel",
+        "camera": {
+          "dragActive": false,
+          "maxZoom": 5,
+          "minZoom": 2,
+          "x": 1043.7823475977882,
+          "y": 173.73709764250052,
+          "zoom": 2
+        },
+        "canvas": {
+          "height": 1557,
+          "width": 1217.96875,
+          "x": 0,
+          "y": 48
+        },
+        "controlledActionResult": null,
+        "gameTime": {
+          "authority": "simulation",
+          "day": 1,
+          "daylight": true,
+          "hour": 19,
+          "minute": 22,
+          "minuteOfDay": 1162,
+          "phase": "daylight",
+          "totalGameMinutes": 1162.72696,
+          "version": "r02-game-time-v1"
+        },
+        "npcConversationGuard": null,
+        "npcPresentation": {
+          "edgeNpcId": null,
+          "sample": [
+            {
+              "activity": "returning-home",
+              "col": 0,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 0,
+              "screen": {
+                "x": 718.9795951003659,
+                "y": 2.433090468877793
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 21,
+              "screen": {
+                "x": 665.7647351664651,
+                "y": 238.05120859373127
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 22,
+              "screen": {
+                "x": 650.6652493723429,
+                "y": 245.82395057048547
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 13,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 706.7093797383113,
+                "y": 171.93448368372856
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 10,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 8,
+              "screen": {
+                "x": 756.9238024591762,
+                "y": 105.73099545681569
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 635.3894406443882,
+                "y": 253.68745806654002
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 18,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 667.1061297135217,
+                "y": 269.69320419458234
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 17,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 651.1546491646657,
+                "y": 261.643330278838
+              }
+            }
+          ],
+          "totalNpcCount": 24,
+          "visibleNpcCount": null
+        },
+        "npcRuntime": {
+          "invalidRecoveryRuns": 0,
+          "queued": true,
+          "reconcileRequests": 65,
+          "reconcileRuns": 0
+        },
+        "ok": true,
+        "readyState": "complete",
+        "region": {
+          "activeCols": 100,
+          "activeRegionWindow": null,
+          "activeRows": 100,
+          "currentRegion": {
+            "authority": "simulation",
+            "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|0|0",
+            "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0",
+            "regionSize": 100,
+            "rulesVersion": "r02-region-v1",
+            "schemaVersion": 1,
+            "seed": "ISOMETRIC_MAP_30032026",
+            "theme": "village",
+            "x": 0,
+            "y": 0
+          },
+          "player": {
+            "col": 39,
+            "regionX": 0,
+            "regionY": 0,
+            "row": 47,
+            "worldX": 0,
+            "worldY": 0
+          }
+        },
+        "scheduler": {
+          "authority": "scheduling-only",
+          "completedJobs": 0,
+          "deferredJobs": 600,
+          "executedSlices": 0,
+          "failedJobs": 0,
+          "frameTargetMs": 16.67,
+          "frames": 64,
+          "interactionActive": false,
+          "interactionFrames": 0,
+          "interactionRenderP50Ms": 0,
+          "interactionRenderP95Ms": 0,
+          "interactionRenderWorstMs": 0,
+          "jobP95Ms": 0,
+          "jobWorstMs": 0,
+          "lastRenderStartedAt": 25134.699999999997,
+          "queueDepth": 14,
+          "queuedKeys": [
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:10",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+            "npc-runtime-reconcile",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:8",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:23",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:11",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:14",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:15",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6"
+          ],
+          "renderP50Ms": 190.6999999999971,
+          "renderP95Ms": 290.90000000000146,
+          "renderWorstMs": 1113.1000000000058,
+          "yieldedJobs": 0
+        },
+        "title": "The Advisor Game (Under Development)",
+        "url": "http://127.0.0.1:8000/",
+        "viewport": {
+          "devicePixelRatio": 1,
+          "height": 1777,
+          "width": 1080
+        }
+      }
+    },
+    {
+      "action": "drag-canvas:120,0",
+      "captured_at": "2026-09-18T19:03:35.589097+00:00",
+      "file": "phone-2-20260918T190254645Z.png",
+      "index": 2,
+      "runtime": {
+        "activePanel": "dialog-panel",
+        "camera": {
+          "dragActive": false,
+          "maxZoom": 5,
+          "minZoom": 2,
+          "x": 1627.592904262319,
+          "y": -91.03766925366368,
+          "zoom": 2
+        },
+        "canvas": {
+          "height": 1557,
+          "width": 1217.96875,
+          "x": 0,
+          "y": 48
+        },
+        "controlledActionResult": null,
+        "gameTime": {
+          "authority": "simulation",
+          "day": 1,
+          "daylight": true,
+          "hour": 19,
+          "minute": 27,
+          "minuteOfDay": 1167,
+          "phase": "daylight",
+          "totalGameMinutes": 1167.74628,
+          "version": "r02-game-time-v1"
+        },
+        "npcConversationGuard": null,
+        "npcPresentation": {
+          "edgeNpcId": null,
+          "sample": [
+            {
+              "activity": "returning-home",
+              "col": 0,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 0,
+              "screen": {
+                "x": 829.5935586564732,
+                "y": 19.43241126087033
+              }
+            },
+            {
+              "activity": "social",
+              "col": 47,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 27,
+              "screen": {
+                "x": 1351.7080914060898,
+                "y": 642.434821726738
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 883.5255330894041,
+                "y": 216.68504605466285
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 30,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 12,
+              "screen": {
+                "x": 1175.53585691149,
+                "y": 304.48560215424976
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 10,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 3,
+              "screen": {
+                "x": 940.2356928005697,
+                "y": 94.47949450032239
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 17,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 25,
+              "screen": {
+                "x": 756.9090319030205,
+                "y": 304.4856021542496
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 18,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 804.0306988125394,
+                "y": 296.0231308363219
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 19,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 821.3131588274005,
+                "y": 304.4856021542496
+              }
+            }
+          ],
+          "totalNpcCount": 24,
+          "visibleNpcCount": null
+        },
+        "npcRuntime": {
+          "invalidRecoveryRuns": 0,
+          "queued": true,
+          "reconcileRequests": 106,
+          "reconcileRuns": 0
+        },
+        "ok": true,
+        "readyState": "complete",
+        "region": {
+          "activeCols": 100,
+          "activeRegionWindow": null,
+          "activeRows": 100,
+          "currentRegion": {
+            "authority": "simulation",
+            "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|0|0",
+            "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0",
+            "regionSize": 100,
+            "rulesVersion": "r02-region-v1",
+            "schemaVersion": 1,
+            "seed": "ISOMETRIC_MAP_30032026",
+            "theme": "village",
+            "x": 0,
+            "y": 0
+          },
+          "player": {
+            "col": 39,
+            "regionX": 0,
+            "regionY": 0,
+            "row": 42,
+            "worldX": 0,
+            "worldY": 0
+          }
+        },
+        "scheduler": {
+          "authority": "scheduling-only",
+          "completedJobs": 0,
+          "deferredJobs": 1215,
+          "executedSlices": 0,
+          "failedJobs": 0,
+          "frameTargetMs": 16.67,
+          "frames": 105,
+          "interactionActive": true,
+          "interactionFrames": 25,
+          "interactionRenderP50Ms": 23.80000000000291,
+          "interactionRenderP95Ms": 30.5,
+          "interactionRenderWorstMs": 31.29999999998836,
+          "jobP95Ms": 0,
+          "jobWorstMs": 0,
+          "lastRenderStartedAt": 31731.5,
+          "queueDepth": 16,
+          "queuedKeys": [
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:10",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+            "npc-runtime-reconcile",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:8",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:23",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:19",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:11",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:12",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:14",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:15",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1"
+          ],
+          "renderP50Ms": 187.5,
+          "renderP95Ms": 264,
+          "renderWorstMs": 1113.1000000000058,
+          "yieldedJobs": 0
+        },
+        "title": "The Advisor Game (Under Development)",
+        "url": "http://127.0.0.1:8000/",
+        "viewport": {
+          "devicePixelRatio": 1,
+          "height": 1777,
+          "width": 1080
+        }
+      }
+    },
+    {
+      "action": "wheel-canvas:-500",
+      "captured_at": "2026-09-18T19:03:39.407702+00:00",
+      "file": "phone-3-20260918T190254645Z.png",
+      "index": 3,
+      "runtime": {
+        "activePanel": "dialog-panel",
+        "camera": {
+          "dragActive": false,
+          "maxZoom": 5,
+          "minZoom": 2,
+          "x": 1658.6152945331207,
+          "y": -122.06005952446542,
+          "zoom": 2.1
+        },
+        "canvas": {
+          "height": 1557,
+          "width": 1217.96875,
+          "x": 0,
+          "y": 48
+        },
+        "controlledActionResult": null,
+        "gameTime": {
+          "authority": "simulation",
+          "day": 1,
+          "daylight": true,
+          "hour": 19,
+          "minute": 30,
+          "minuteOfDay": 1170,
+          "phase": "daylight",
+          "totalGameMinutes": 1170.65256,
+          "version": "r02-game-time-v1"
+        },
+        "npcConversationGuard": null,
+        "npcPresentation": {
+          "edgeNpcId": null,
+          "sample": [
+            {
+              "activity": "returning-home",
+              "col": 0,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 0,
+              "screen": {
+                "x": 844.2348688083125,
+                "y": -2.7447324315093846
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 20,
+              "screen": {
+                "x": 831.1393527524888,
+                "y": 236.57396710520158
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 18,
+              "screen": {
+                "x": 860.2756688083748,
+                "y": 220.57489010636323
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 19,
+              "screen": {
+                "x": 845.7951640748416,
+                "y": 228.5262972015316
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 10,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 1,
+              "screen": {
+                "x": 983.6091323270247,
+                "y": 60.76891596729163
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 22,
+              "screen": {
+                "x": 801.288920313613,
+                "y": 252.9651733964209
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 21,
+              "screen": {
+                "x": 816.3050319596413,
+                "y": 244.71965855552088
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 14,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 15,
+              "screen": {
+                "x": 868.4148689802281,
+                "y": 182.2031006254973
+              }
+            }
+          ],
+          "totalNpcCount": 24,
+          "visibleNpcCount": null
+        },
+        "npcRuntime": {
+          "invalidRecoveryRuns": 0,
+          "queued": true,
+          "reconcileRequests": 129,
+          "reconcileRuns": 0
+        },
+        "ok": true,
+        "readyState": "complete",
+        "region": {
+          "activeCols": 100,
+          "activeRegionWindow": null,
+          "activeRows": 100,
+          "currentRegion": {
+            "authority": "simulation",
+            "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|0|0",
+            "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0",
+            "regionSize": 100,
+            "rulesVersion": "r02-region-v1",
+            "schemaVersion": 1,
+            "seed": "ISOMETRIC_MAP_30032026",
+            "theme": "village",
+            "x": 0,
+            "y": 0
+          },
+          "player": {
+            "col": 39,
+            "regionX": 0,
+            "regionY": 0,
+            "row": 40,
+            "worldX": 0,
+            "worldY": 0
+          }
+        },
+        "scheduler": {
+          "authority": "scheduling-only",
+          "completedJobs": 0,
+          "deferredJobs": 1611,
+          "executedSlices": 0,
+          "failedJobs": 0,
+          "frameTargetMs": 16.67,
+          "frames": 128,
+          "interactionActive": false,
+          "interactionFrames": 38,
+          "interactionRenderP50Ms": 23.80000000000291,
+          "interactionRenderP95Ms": 31.29999999998836,
+          "interactionRenderWorstMs": 48.90000000000873,
+          "jobP95Ms": 0,
+          "jobWorstMs": 0,
+          "lastRenderStartedAt": 35316.100000000006,
+          "queueDepth": 19,
+          "queuedKeys": [
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:10",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:8",
+            "npc-runtime-reconcile",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:11",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:12",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:15",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:14",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:23",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:22",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:13",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:18",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:19"
+          ],
+          "renderP50Ms": 185.90000000000873,
+          "renderP95Ms": 263.20000000000437,
+          "renderWorstMs": 1113.1000000000058,
+          "yieldedJobs": 0
+        },
+        "title": "The Advisor Game (Under Development)",
+        "url": "http://127.0.0.1:8000/",
+        "viewport": {
+          "devicePixelRatio": 1,
+          "height": 1777,
+          "width": 1080
+        }
+      }
+    },
+    {
+      "action": "wheel-canvas:500",
+      "captured_at": "2026-09-18T19:03:44.601747+00:00",
+      "file": "phone-4-20260918T190254645Z.png",
+      "index": 4,
+      "runtime": {
+        "activePanel": "dialog-panel",
+        "camera": {
+          "dragActive": false,
+          "maxZoom": 5,
+          "minZoom": 2,
+          "x": 1658.6152945331207,
+          "y": -122.06005952446542,
+          "zoom": 2
+        },
+        "canvas": {
+          "height": 1557,
+          "width": 1217.96875,
+          "x": 0,
+          "y": 48
+        },
+        "controlledActionResult": null,
+        "gameTime": {
+          "authority": "simulation",
+          "day": 1,
+          "daylight": true,
+          "hour": 19,
+          "minute": 34,
+          "minuteOfDay": 1174,
+          "phase": "daylight",
+          "totalGameMinutes": 1174.7032,
+          "version": "r02-game-time-v1"
+        },
+        "npcConversationGuard": null,
+        "npcPresentation": {
+          "edgeNpcId": null,
+          "sample": [
+            {
+              "activity": "returning-home",
+              "col": 0,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 0,
+              "screen": {
+                "x": 837.5572718013113,
+                "y": 19.43241126087033
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 22,
+              "screen": {
+                "x": 794.6036575812387,
+                "y": 271.2363165549946
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 19,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 23,
+              "screen": {
+                "x": 831.3030112028142,
+                "y": 304.4856021542496
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 21,
+              "screen": {
+                "x": 809.1400836526951,
+                "y": 263.16835957141495
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 10,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 5,
+              "screen": {
+                "x": 924.5946926951125,
+                "y": 106.92683008884336
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:5",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 20,
+              "screen": {
+                "x": 823.5065729830197,
+                "y": 255.19472029086913
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 24,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 19,
+              "screen": {
+                "x": 978.4502984650193,
+                "y": 313.0512237490734
+              }
+            },
+            {
+              "activity": "returning-home",
+              "col": 16,
+              "conversationState": null,
+              "dialogueWith": null,
+              "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+              "regionX": 0,
+              "regionY": 0,
+              "row": 19,
+              "screen": {
+                "x": 837.7060881996249,
+                "y": 247.3137544061247
+              }
+            }
+          ],
+          "totalNpcCount": 24,
+          "visibleNpcCount": null
+        },
+        "npcRuntime": {
+          "invalidRecoveryRuns": 0,
+          "queued": true,
+          "reconcileRequests": 153,
+          "reconcileRuns": 0
+        },
+        "ok": true,
+        "readyState": "complete",
+        "region": {
+          "activeCols": 100,
+          "activeRegionWindow": null,
+          "activeRows": 100,
+          "currentRegion": {
+            "authority": "simulation",
+            "generationSeed": "ISOMETRIC_MAP_30032026|world-region|r02-region-v1|0|0",
+            "id": "region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0",
+            "regionSize": 100,
+            "rulesVersion": "r02-region-v1",
+            "schemaVersion": 1,
+            "seed": "ISOMETRIC_MAP_30032026",
+            "theme": "village",
+            "x": 0,
+            "y": 0
+          },
+          "player": {
+            "col": 39,
+            "regionX": 0,
+            "regionY": 0,
+            "row": 45,
+            "worldX": 0,
+            "worldY": 0
+          }
+        },
+        "scheduler": {
+          "authority": "scheduling-only",
+          "completedJobs": 0,
+          "deferredJobs": 2107,
+          "executedSlices": 0,
+          "failedJobs": 0,
+          "frameTargetMs": 16.67,
+          "frames": 152,
+          "interactionActive": false,
+          "interactionFrames": 41,
+          "interactionRenderP50Ms": 24,
+          "interactionRenderP95Ms": 30.5,
+          "interactionRenderWorstMs": 48.90000000000873,
+          "jobP95Ms": 0,
+          "jobWorstMs": 0,
+          "lastRenderStartedAt": 40499.7,
+          "queueDepth": 21,
+          "queuedKeys": [
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:8",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:3",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:10",
+            "npc-runtime-reconcile",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:13",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:1",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:17",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:18",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:19",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:12",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:22",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:21",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:4",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:0",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:11",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:14",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:6",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:7",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:15",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:2",
+            "npc-detail:region:r02-region-v1:ISOMETRIC_MAP_30032026:0:0:person:23"
+          ],
+          "renderP50Ms": 188.5,
+          "renderP95Ms": 259.59999999999854,
+          "renderWorstMs": 1113.1000000000058,
+          "yieldedJobs": 0
+        },
+        "title": "The Advisor Game (Under Development)",
+        "url": "http://127.0.0.1:8000/",
+        "viewport": {
+          "devicePixelRatio": 1,
+          "height": 1777,
+          "width": 1080
+        }
+      }
+    }
+  ],
+  "issue": "498",
+  "scenario": "camera-pan-zoom",
+  "schema": 1,
+  "target": "http://127.0.0.1:8000/"
+}
