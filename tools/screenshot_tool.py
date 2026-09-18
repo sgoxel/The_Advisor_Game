@@ -24,6 +24,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import subprocess
 import sys
@@ -46,6 +47,26 @@ PROFILES = {
 
 DEFAULT_WIDTH = 1920
 DEFAULT_HEIGHT = 1080
+
+SCENARIOS = {
+    "static",
+    "panel-cycle",
+    "camera-pan",
+    "camera-zoom",
+    "camera-pan-zoom",
+    "responsive-cycle",
+    "motion-sequence",
+}
+
+SCENARIO_MIN_SHOTS = {
+    "static": 1,
+    "panel-cycle": 4,
+    "camera-pan": 3,
+    "camera-zoom": 3,
+    "camera-pan-zoom": 4,
+    "responsive-cycle": 3,
+    "motion-sequence": 6,
+}
 
 MAX_ZOOM_OUT_SCRIPT = r"""
 const done = arguments[arguments.length - 1];
@@ -77,6 +98,50 @@ const done = arguments[arguments.length - 1];
     done({ok: true, zoom: camera.zoom, minZoom: camera.minZoom});
   } catch (error) {
     done({ok: false, reason: String(error)});
+  }
+})();
+"""
+
+RUNTIME_SNAPSHOT_SCRIPT = r"""
+return (() => {
+  try {
+    const game = window.Game || {};
+    const state = game.State || {};
+    const camera = state.camera || {};
+    const activePanel = document.querySelector('.bottom-ribbon .panel.active-panel');
+    const canvas = document.querySelector('#gameCanvas');
+    const rect = canvas?.getBoundingClientRect?.();
+    let scheduler = null;
+    try {
+      scheduler = game.FrameBudgetScheduler?.metrics?.() || null;
+    } catch (_) {}
+    let npcRuntime = null;
+    try {
+      npcRuntime = game.NPCRuntimeBridge?.metrics?.() || game.NPCRelevanceRuntime?.metrics?.() || null;
+    } catch (_) {}
+    return {
+      ok: true,
+      url: location.href,
+      title: document.title,
+      readyState: document.readyState,
+      viewport: { width: innerWidth, height: innerHeight, devicePixelRatio },
+      camera: {
+        x: Number.isFinite(camera.x) ? camera.x : null,
+        y: Number.isFinite(camera.y) ? camera.y : null,
+        zoom: Number.isFinite(camera.zoom) ? camera.zoom : null,
+        minZoom: Number.isFinite(camera.minZoom) ? camera.minZoom : null,
+        maxZoom: Number.isFinite(camera.maxZoom) ? camera.maxZoom : null,
+        dragActive: Boolean(camera.dragActive),
+      },
+      activePanel: activePanel?.dataset?.panelName || null,
+      canvas: rect ? {
+        x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+      } : null,
+      scheduler,
+      npcRuntime,
+    };
+  } catch (error) {
+    return { ok: false, reason: String(error) };
   }
 })();
 """
@@ -162,6 +227,121 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
     print(f"Zoom-out step skipped: {reason}")
 
 
+def runtime_snapshot(driver) -> dict:
+    """Return a JSON-safe read-only runtime evidence snapshot."""
+    result = driver.execute_script(RUNTIME_SNAPSHOT_SCRIPT)
+    if not isinstance(result, dict):
+        return {"ok": False, "reason": "unexpected-runtime-snapshot"}
+    return result
+
+
+def _scenario_required_shots(scenario: str, requested: int) -> int:
+    return max(requested, SCENARIO_MIN_SHOTS.get(scenario, 1))
+
+
+def _safe_click(driver, selector: str) -> str:
+    from selenium.webdriver.common.by import By
+
+    elements = driver.find_elements(By.CSS_SELECTOR, selector)
+    if not elements:
+        return f"click-skipped:{selector}"
+    driver.execute_script("arguments[0].click()", elements[0])
+    return f"click:{selector}"
+
+
+def _drag_canvas(driver, dx: int, dy: int) -> str:
+    from selenium.webdriver.common.action_chains import ActionChains
+    from selenium.webdriver.common.by import By
+
+    canvas = driver.find_element(By.ID, "gameCanvas")
+    ActionChains(driver).move_to_element(canvas).click_and_hold().move_by_offset(dx, dy).release().perform()
+    return f"drag-canvas:{dx},{dy}"
+
+
+def _wheel_canvas(driver, delta_y: int) -> str:
+    from selenium.webdriver.common.by import By
+
+    canvas = driver.find_element(By.ID, "gameCanvas")
+    driver.execute_script(
+        """
+        const target = arguments[0];
+        const deltaY = arguments[1];
+        target.dispatchEvent(new WheelEvent('wheel', {
+          deltaY,
+          bubbles: true,
+          cancelable: true,
+          clientX: Math.round(innerWidth / 2),
+          clientY: Math.round(innerHeight / 2)
+        }));
+        """,
+        canvas,
+        delta_y,
+    )
+    return f"wheel-canvas:{delta_y}"
+
+
+def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    """Run one deterministic presentation-only step before a scenario frame."""
+    if scenario == "static" or frame_index == 0:
+        return "initial"
+
+    if scenario == "panel-cycle":
+        selectors = [
+            '.mobile-tab-btn[data-panel-target="character-panel"]',
+            '.mobile-tab-btn[data-panel-target="dialog-panel"]',
+            '.mobile-tab-btn[data-panel-target="minimap-panel"]',
+        ]
+        return _safe_click(driver, selectors[(frame_index - 1) % len(selectors)])
+
+    if scenario == "camera-pan":
+        return _drag_canvas(driver, 120 if frame_index % 2 else -120, 0)
+
+    if scenario == "camera-zoom":
+        return _wheel_canvas(driver, -500 if frame_index % 2 else 500)
+
+    if scenario == "camera-pan-zoom":
+        actions = (
+            lambda: _drag_canvas(driver, 120, 0),
+            lambda: _wheel_canvas(driver, -500),
+            lambda: _wheel_canvas(driver, 500),
+        )
+        return actions[(frame_index - 1) % len(actions)]()
+
+    if scenario == "responsive-cycle":
+        sizes = [(1080, 1920), (1920, 1080), (base_width, base_height)]
+        width, height = sizes[(frame_index - 1) % len(sizes)]
+        driver.set_window_size(width, height)
+        return f"resize:{width}x{height}"
+
+    if scenario == "motion-sequence":
+        # Alternating bounded camera drags create a short temporal sequence without
+        # mutating Simulation/world authority.
+        dx = 72 if frame_index % 2 else -72
+        return _drag_canvas(driver, dx, 0)
+
+    return "no-op"
+
+
+def _write_evidence_manifest(
+    path: Path,
+    *,
+    target: str,
+    scenario: str,
+    issue: str | None,
+    frames: list[dict],
+) -> None:
+    payload = {
+        "schema": 1,
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "target": target,
+        "scenario": scenario,
+        "issue": issue or None,
+        "frames": frames,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    print(f"Evidence: {path}")
+
+
 def take_screenshots(
     target: str,
     output_file: str,
@@ -175,6 +355,9 @@ def take_screenshots(
     ready_timeout: float = 20.0,
     timestamp_names: bool = False,
     force_max_zoom: bool = True,
+    scenario: str = "static",
+    evidence_json: str | None = None,
+    issue: str | None = None,
 ) -> bool:
     if width <= 0 or height <= 0:
         print("Error: width and height must be positive.", file=sys.stderr)
@@ -182,6 +365,10 @@ def take_screenshots(
     if shots < 1:
         print("Error: shots must be >= 1.", file=sys.stderr)
         return False
+    if scenario not in SCENARIOS:
+        print(f"Error: unknown scenario: {scenario}", file=sys.stderr)
+        return False
+    shots = _scenario_required_shots(scenario, shots)
     if interval < 0:
         print("Error: interval must be >= 0.", file=sys.stderr)
         return False
@@ -216,12 +403,38 @@ def take_screenshots(
             if force_max_zoom:
                 force_max_zoom_out(driver)
 
+            # Non-static scenarios need enough frame paths for their evidence contract.
+            if len(paths) != shots:
+                paths = output_paths(output_file, shots, timestamp_names)
+
+            frames: list[dict] = []
             for index, path in enumerate(paths):
                 if index:
+                    action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
+                else:
+                    action = "initial"
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
-                print(f"Saved: {path}")
+                snapshot = runtime_snapshot(driver)
+                frames.append({
+                    "index": index + 1,
+                    "file": path.name,
+                    "action": action,
+                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "runtime": snapshot,
+                })
+                print(f"Saved: {path} [{scenario}:{action}]")
+
+            if evidence_json:
+                manifest_path = screenshots_directory() / Path(evidence_json).name
+                _write_evidence_manifest(
+                    manifest_path,
+                    target=browser_url,
+                    scenario=scenario,
+                    issue=issue,
+                    frames=frames,
+                )
             return True
         finally:
             driver.quit()
@@ -366,6 +579,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--wait-max", type=float, default=60.0)
     parser.add_argument("--ready-timeout", type=float, default=20.0)
     parser.add_argument(
+        "--scenario",
+        choices=sorted(SCENARIOS),
+        default="static",
+        help="Optional deterministic runtime evidence scenario; default keeps legacy static capture",
+    )
+    parser.add_argument(
+        "--evidence-json",
+        help="Optional JSON evidence manifest filename saved under tools/screenshots/",
+    )
+    parser.add_argument(
+        "--issue",
+        help="Optional GitHub Issue number/reference recorded in the evidence manifest",
+    )
+    parser.add_argument(
         "--no-force-max-zoom",
         action="store_false",
         dest="force_max_zoom",
@@ -394,19 +621,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     width, height = PROFILES.get(args.profile, (args.width, args.height))
-    paths = output_paths(args.filename, args.shots, args.timestamp_names)
+    effective_shots = _scenario_required_shots(args.scenario, args.shots)
+    paths = output_paths(args.filename, effective_shots, args.timestamp_names)
     ok = take_screenshots(
         args.target,
         args.filename,
         width=width,
         height=height,
-        shots=args.shots,
+        shots=effective_shots,
         interval=args.interval,
         wait_min=args.wait_min,
         wait_max=args.wait_max,
         ready_timeout=args.ready_timeout,
         timestamp_names=args.timestamp_names,
         force_max_zoom=args.force_max_zoom,
+        scenario=args.scenario,
+        evidence_json=args.evidence_json,
+        issue=args.issue,
     )
     if not ok:
         return 1
