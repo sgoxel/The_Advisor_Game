@@ -95,6 +95,22 @@ jobs:
             [[ "$MODE" == "npc_action" ]] && echo "frame_interval_seconds=0.2" || echo "frame_interval_seconds=0"
           } > tools/screenshots/metadata.txt
 
+      - name: Archive newest screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools/screenshots/archive
+          timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          archive_dir="tools/screenshots/archive/${timestamp}"
+          mkdir -p "$archive_dir"
+          cp -f tools/screenshots/phone*.png "$archive_dir/phone.png"
+          cp -f tools/screenshots/tablet*.png "$archive_dir/tablet.png"
+
+          while [[ "$(find tools/screenshots/archive -mindepth 1 -maxdepth 1 -type d | wc -l)" -gt 20 ]]; do
+            oldest="$(find tools/screenshots/archive -mindepth 1 -maxdepth 1 -type d | sort | head -n 1)"
+            rm -rf "$oldest"
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: visual-review-${{ github.run_id }}
@@ -102,6 +118,7 @@ jobs:
             tools/screenshots/phone*.png
             tools/screenshots/tablet*.png
             tools/screenshots/metadata.txt
+            tools/screenshots/archive/**
           if-no-files-found: error
           retention-days: 30
 
@@ -121,7 +138,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add "${pngs[@]}" "${meta[@]}" 2>/dev/null || true
+          git add tools/screenshots
 
           if git diff --cached --quiet; then
             echo "No screenshot changes to commit."
