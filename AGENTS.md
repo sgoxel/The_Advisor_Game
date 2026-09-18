@@ -102,6 +102,14 @@ Scenarios:
 - `camera-pan-zoom`: render/camera priority, composition, scheduler/runtime metrics.
 - `responsive-cycle`: resize/orientation/responsive behavior.
 - `motion-sequence`: flicker/culling/interpolation/motion continuity.
+- `time-of-day`: deterministic daylight/night/dawn presentation.
+- `village-reference`: daylight wide, daylight close, legitimate night Starting Village references.
+- `region-transition`: current -> east neighbor -> return transition continuity.
+- `save-load`: baseline -> authoritative mutation -> save restore continuity.
+- `npc-conversation-state`: isolated -> valid adjacent -> invalid same-tile/nonadjacent/missing-partner conversation states.
+- `npc-edge-crossing`: controlled visible NPC plus camera edge-crossing/culling sequence.
+
+Controlled scenarios mutate only the disposable Actions test runtime through existing game/test APIs; they never authorize production-state mutation or substitute for a focused regression when acceptance requires one.
 
 Evidence standard:
 - Static/layout: one relevant tested-commit screenshot per viewport explicitly required.
