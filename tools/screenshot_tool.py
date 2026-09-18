@@ -19,6 +19,14 @@ Examples:
   python tools/screenshot_tool.py https://sgoxel.github.io/The_Advisor_Game/ landscape --profile landscape --shots 2 --interval 0.2 --timestamp-names
   python tools/screenshot_tool.py https://sgoxel.github.io/The_Advisor_Game/ phone --profile portrait --shots 2 --interval 0.2 --timestamp-names
   python tools/screenshot_tool.py index.html local-check.png --no-publish
+  python tools/screenshot_tool.py http://127.0.0.1:8000/ issue-350 --scenario camera-pan-zoom --evidence-json issue-350.json --issue 350 --no-publish
+
+GitHub-agent trigger:
+  Comment on the selected Issue: /visual-evidence <scenario>
+
+Supported scenarios:
+  static, panel-cycle, camera-pan, camera-zoom, camera-pan-zoom,
+  responsive-cycle, motion-sequence
 """
 
 from __future__ import annotations
