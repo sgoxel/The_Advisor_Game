@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """Capture and publish visual-review screenshots for The Advisor Game.
 
-Screenshots are always written under ``tools/screenshots/``. By default, a
-successful capture is committed and pushed to the repository's ``main`` branch
-so the images can be reviewed directly at:
-https://github.com/sgoxel/The_Advisor_Game/tree/main/tools/screenshots
+This is the shared screenshot utility for all project AI agents.
 
-Use ``--no-publish`` for local-only/debug captures.
+Defaults:
+- landscape: 1920x1080
+- portrait: 1080x1920
+- maximum camera zoom-out before capture when the game exposes
+  window.Game.State.camera.minZoom
+- screenshots saved under tools/screenshots/
+- successful local/manual captures publish to GitHub main unless --no-publish
+
+Multi-shot timestamp naming:
+  phone-1-20260918T145912123Z.png
+  phone-2-20260918T145912123Z.png
+
+Examples:
+  python tools/screenshot_tool.py https://sgoxel.github.io/The_Advisor_Game/ landscape --profile landscape --shots 2 --interval 0.2 --timestamp-names
+  python tools/screenshot_tool.py https://sgoxel.github.io/The_Advisor_Game/ phone --profile portrait --shots 2 --interval 0.2 --timestamp-names
+  python tools/screenshot_tool.py index.html local-check.png --no-publish
 """
 
 from __future__ import annotations
@@ -16,6 +28,7 @@ import random
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -24,12 +37,53 @@ DEFAULT_PUBLISH_BRANCH = "main"
 GITHUB_BASE_URL = f"https://github.com/{REPOSITORY_SLUG}"
 
 PROFILES = {
-    "phone": (720, 1280),
-    "tablet": (1280, 800),
+    "landscape": (1920, 1080),
+    "portrait": (1080, 1920),
+    # Backward-compatible aliases used by existing project automation/agents.
+    "tablet": (1920, 1080),
+    "phone": (1080, 1920),
 }
+
+DEFAULT_WIDTH = 1920
+DEFAULT_HEIGHT = 1080
+
+MAX_ZOOM_OUT_SCRIPT = r"""
+const done = arguments[arguments.length - 1];
+(async () => {
+  try {
+    const game = window.Game;
+    const state = game?.State;
+    const camera = state?.camera;
+    const renderer = game?.Renderer;
+
+    if (!camera) {
+      done({ok: false, reason: 'camera-not-found'});
+      return;
+    }
+    if (typeof camera.minZoom !== 'number') {
+      done({ok: false, reason: 'minZoom-not-found'});
+      return;
+    }
+
+    camera.zoom = camera.minZoom;
+    if (typeof renderer?.centerCamera === 'function') {
+      try { renderer.centerCamera(); } catch (_) {}
+    }
+    if (typeof renderer?.markDirty === 'function') {
+      try { renderer.markDirty(true, true); } catch (_) {}
+    }
+
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    done({ok: true, zoom: camera.zoom, minZoom: camera.minZoom});
+  } catch (error) {
+    done({ok: false, reason: String(error)});
+  }
+})();
+"""
 
 
 def normalize_target(target: str) -> str:
+    """Return a browser-ready URL for a local path or supported URL."""
     value = target.strip()
     parsed = urlparse(value)
     if parsed.scheme in {"http", "https", "file"}:
@@ -43,6 +97,7 @@ def normalize_target(target: str) -> str:
 
 
 def create_driver(width: int, height: int):
+    """Create headless Chrome."""
     try:
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
@@ -64,23 +119,47 @@ def screenshots_directory() -> Path:
     return directory
 
 
-def output_paths(filename: str, shots: int) -> list[Path]:
-    directory = screenshots_directory()
+def utc_timestamp_ms() -> str:
+    """Return a UTC timestamp including milliseconds, filename-safe."""
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")[:-3] + "Z"
 
+
+def output_paths(filename: str, shots: int, timestamp_names: bool = False) -> list[Path]:
+    """Build output paths under tools/screenshots/."""
+    directory = screenshots_directory()
     name = Path(filename).name
     if not name:
         raise ValueError("Output filename is empty")
+
     path = Path(name)
-    if path.suffix.lower() != ".png":
-        path = path.with_suffix(".png")
+    stem = path.stem if path.suffix else path.name
+    if not stem:
+        raise ValueError("Output filename stem is empty")
+
+    if timestamp_names:
+        stamp = utc_timestamp_ms()
+        return [directory / f"{stem}-{index}-{stamp}.png" for index in range(1, shots + 1)]
 
     if shots == 1:
+        if path.suffix.lower() != ".png":
+            path = path.with_suffix(".png")
         return [directory / path.name]
 
-    return [
-        directory / f"{path.stem}_{index:02d}.png"
-        for index in range(1, shots + 1)
-    ]
+    return [directory / f"{stem}_{index:02d}.png" for index in range(1, shots + 1)]
+
+
+def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
+    """Force the game camera to its minimum zoom value, if supported."""
+    result = driver.execute_async_script(MAX_ZOOM_OUT_SCRIPT)
+    if isinstance(result, dict) and result.get("ok"):
+        print(
+            "Forced maximum zoom-out before capture "
+            f"(zoom={result.get('zoom')}, minZoom={result.get('minZoom')})."
+        )
+        time.sleep(max(0.0, settle_seconds))
+        return
+    reason = result.get("reason", "unknown-reason") if isinstance(result, dict) else "unexpected-result"
+    print(f"Zoom-out step skipped: {reason}")
 
 
 def take_screenshots(
@@ -94,6 +173,8 @@ def take_screenshots(
     wait_min: float = 15.0,
     wait_max: float = 60.0,
     ready_timeout: float = 20.0,
+    timestamp_names: bool = False,
+    force_max_zoom: bool = True,
 ) -> bool:
     if width <= 0 or height <= 0:
         print("Error: width and height must be positive.", file=sys.stderr)
@@ -110,7 +191,7 @@ def take_screenshots(
 
     try:
         browser_url = normalize_target(target)
-        paths = output_paths(output_file, shots)
+        paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
         try:
             from selenium.webdriver.common.by import By
@@ -131,6 +212,9 @@ def take_screenshots(
             print(f"Viewport: {width}x{height}")
             print(f"Waiting {delay:.1f}s before capture")
             time.sleep(delay)
+
+            if force_max_zoom:
+                force_max_zoom_out(driver)
 
             for index, path in enumerate(paths):
                 if index:
@@ -180,10 +264,9 @@ def _repository_root() -> Path:
 
 def _validate_publish_checkout(repo_root: Path, branch: str) -> None:
     expected_screenshots_dir = (repo_root / "tools" / "screenshots").resolve()
-    actual_screenshots_dir = screenshots_directory().resolve()
-    if actual_screenshots_dir != expected_screenshots_dir:
+    if screenshots_directory().resolve() != expected_screenshots_dir:
         raise RuntimeError(
-            "Refusing to publish: screenshot output is not the repository tools/screenshots directory"
+            "Refusing to publish: screenshot output is not repository tools/screenshots"
         )
 
     remote = _run_git(repo_root, "remote", "get-url", "origin").stdout.strip()
@@ -193,16 +276,12 @@ def _validate_publish_checkout(repo_root: Path, branch: str) -> None:
         or normalized_remote.endswith(f"github.com:{REPOSITORY_SLUG}")
     )
     if not valid_remote:
-        raise RuntimeError(
-            f"Refusing to publish to unexpected origin remote: {remote or '<empty>'}"
-        )
+        raise RuntimeError(f"Refusing to publish to unexpected origin remote: {remote or '<empty>'}")
 
     current_branch = _run_git(repo_root, "branch", "--show-current").stdout.strip()
     if current_branch != branch:
         shown = current_branch or "detached HEAD"
-        raise RuntimeError(
-            f"Refusing to publish from {shown}; checkout {branch!r} before publishing"
-        )
+        raise RuntimeError(f"Refusing to publish from {shown}; checkout {branch!r} first")
 
 
 def _github_file_url(relative_path: Path, branch: str) -> str:
@@ -224,24 +303,21 @@ def publish_screenshots(
     try:
         repo_root = _repository_root()
         _validate_publish_checkout(repo_root, branch)
-
-        relative_paths: list[Path] = []
         screenshots_dir = (repo_root / "tools" / "screenshots").resolve()
+        relative_paths: list[Path] = []
+
         for path in paths:
             resolved = path.resolve()
             try:
                 resolved.relative_to(screenshots_dir)
             except ValueError as exc:
-                raise RuntimeError(
-                    f"Refusing to publish file outside tools/screenshots: {resolved}"
-                ) from exc
+                raise RuntimeError(f"Refusing to publish outside tools/screenshots: {resolved}") from exc
             if not resolved.is_file():
                 raise FileNotFoundError(f"Screenshot does not exist: {resolved}")
             relative_paths.append(resolved.relative_to(repo_root))
 
         git_paths = [path.as_posix() for path in relative_paths]
         _run_git(repo_root, "add", "--", *git_paths)
-
         staged = _run_git(
             repo_root,
             "diff",
@@ -256,15 +332,13 @@ def publish_screenshots(
             raise RuntimeError(f"git diff --cached failed: {detail}")
 
         if staged.returncode == 1:
-            # Pathspec keeps unrelated staged/worktree changes out of this commit.
             _run_git(repo_root, "commit", "--only", "-m", commit_message, "--", *git_paths)
             _run_git(repo_root, "push", "origin", f"HEAD:{branch}")
             print(f"Published {len(relative_paths)} screenshot(s) to GitHub.")
         else:
             print("Screenshot content is unchanged; no new commit was needed.")
 
-        folder_url = f"{GITHUB_BASE_URL}/tree/{quote(branch)}/tools/screenshots"
-        print(f"GitHub screenshots: {folder_url}")
+        print(f"GitHub screenshots: {GITHUB_BASE_URL}/tree/{quote(branch)}/tools/screenshots")
         for relative_path in relative_paths:
             print(f"GitHub file: {_github_file_url(relative_path, branch)}")
         return True
@@ -276,20 +350,27 @@ def publish_screenshots(
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Capture headless Chrome review screenshots under tools/screenshots/ "
-            "and publish them to GitHub by default."
+            "Shared AI-agent screenshot tool. Capture under tools/screenshots/ "
+            "and publish to GitHub by default."
         )
     )
     parser.add_argument("target", help="Local HTML path, file:// URL, or http(s) URL")
-    parser.add_argument("filename", help="Base PNG filename saved under tools/screenshots/")
+    parser.add_argument("filename", help="PNG filename or base stem saved under tools/screenshots/")
     parser.add_argument("--profile", choices=sorted(PROFILES), help="Viewport profile")
-    parser.add_argument("--width", type=int, default=1280)
-    parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--width", type=int, default=DEFAULT_WIDTH)
+    parser.add_argument("--height", type=int, default=DEFAULT_HEIGHT)
     parser.add_argument("--shots", type=int, default=1)
     parser.add_argument("--interval", type=float, default=0.2)
+    parser.add_argument("--timestamp-names", action="store_true")
     parser.add_argument("--wait-min", type=float, default=15.0)
     parser.add_argument("--wait-max", type=float, default=60.0)
     parser.add_argument("--ready-timeout", type=float, default=20.0)
+    parser.add_argument(
+        "--no-force-max-zoom",
+        action="store_false",
+        dest="force_max_zoom",
+        help="Do not force game camera to maximum zoom-out before capture",
+    )
     parser.add_argument(
         "--publish-branch",
         default=DEFAULT_PUBLISH_BRANCH,
@@ -306,14 +387,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="publish",
         help="Capture locally without committing/pushing screenshots",
     )
-    parser.set_defaults(publish=True)
+    parser.set_defaults(publish=True, force_max_zoom=True)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     width, height = PROFILES.get(args.profile, (args.width, args.height))
-    paths = output_paths(args.filename, args.shots)
+    paths = output_paths(args.filename, args.shots, args.timestamp_names)
     ok = take_screenshots(
         args.target,
         args.filename,
@@ -324,6 +405,8 @@ def main(argv: list[str] | None = None) -> int:
         wait_min=args.wait_min,
         wait_max=args.wait_max,
         ready_timeout=args.ready_timeout,
+        timestamp_names=args.timestamp_names,
+        force_max_zoom=args.force_max_zoom,
     )
     if not ok:
         return 1
@@ -334,7 +417,6 @@ def main(argv: list[str] | None = None) -> int:
         commit_message=args.commit_message,
     ):
         return 1
-
     return 0
 
 
