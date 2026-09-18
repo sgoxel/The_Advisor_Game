@@ -1,10 +1,13 @@
-commit_sha=25706273d3357d175c7dbf125b829d4463ee5ee1
+commit_sha=beafe118dd0e4a71c8f465d4d2cdaa62904fab6b
 branch=main
-run_id=35327732255
+run_id=35330311894
 run_attempt=1
 capture_mode=standard
-captured_at=2026-09-18T09:06:51Z
+capture_prefix=review_20260918T093531Z_35330311894
+captured_at=2026-09-18T09:36:38Z
 phone_viewport=720x1280
 tablet_viewport=1280x800
+max_repository_screenshots=20
+schedule=every_30_minutes
 frames_per_viewport=1
 frame_interval_seconds=0
