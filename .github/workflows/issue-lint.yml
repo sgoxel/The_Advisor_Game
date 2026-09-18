@@ -20,11 +20,11 @@ jobs:
             const number = context.payload.issue.number;
             const roles = '(Coder|Designer|Tester|Reviewer)';
 
-            const roleValue = body.match(/^Role:\\s*(.+)$/m)?.[1]?.trim();
-            const statusValue = body.match(/^Status:\\s*(.+)$/m)?.[1]?.trim();
+            const roleValue = body.match(/^Role:\s*(.+)$/m)?.[1]?.trim();
+            const statusValue = body.match(/^Status:\s*(.+)$/m)?.[1]?.trim();
             if (statusValue === 'DELAYED' || statusValue === 'WAITING') {
               const replacement = (roleValue === 'Tester' || roleValue === 'Reviewer') ? 'VERIFY' : 'READY';
-              const repaired = body.replace(/^Status:\\s*(DELAYED|WAITING)\\s*$/m, `Status: ${replacement}`);
+              const repaired = body.replace(/^Status:\s*(DELAYED|WAITING)\s*$/m, `Status: ${replacement}`);
               await github.rest.issues.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
