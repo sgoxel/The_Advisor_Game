@@ -84,14 +84,32 @@ Tester/Reviewer FAIL:
 
 After routing, rescan immediately.
 
-## Visual
-Use the cheapest deterministic evidence that proves the selected Issue criterion. Prefer GitHub Actions output from `tools/screenshot_tool.py`; local capture is fallback.
-- Static appearance/layout: one current tested-commit screenshot at each viewport explicitly required by the criterion is sufficient. Do not require unrelated phone/tablet/desktop views.
-- Interaction/responsive behavior: a matching `screenshot_tool.py --scenario` run with before/after or multi-frame evidence is valid runtime evidence. Manual browser operation, video, or human replay is not additionally required when the automated scenario covers the criterion.
-- Motion/flicker/culling: 2+ timestamped frames from a relevant scenario/sequence are sufficient unless the Issue explicitly requires a longer observation.
-- Runtime state/performance: the screenshot evidence JSON/telemetry plus relevant focused regression/CI result is sufficient when it directly proves the criterion.
-- A successful GitHub Actions run on the tested commit counts as executable runtime evidence; do not require a second local checkout merely to repeat equivalent proof.
-Evidence must identify tested commit, viewport, scenario/mode, run/time. Do not demand stronger visual evidence than the acceptance criterion requires.
+## Visual Evidence
+Use the cheapest deterministic evidence that proves the selected criterion. Prefer GitHub Actions; local `tools/screenshot_tool.py` is fallback.
+
+Before checkpointing for missing runtime/visual evidence:
+1. Reuse an existing successful current-main evidence run if it covers the criterion.
+2. Otherwise comment on the selected Issue: `/visual-evidence <scenario>`.
+3. Inspect the resulting Visual Review Capture run, screenshots and evidence JSON; run success alone is not PASS.
+4. Record run ID, tested commit, scenario, required viewport(s), and criterion-relevant result/metrics. PASS/FAIL normally.
+5. Trigger again only if prior evidence is stale, failed, or does not cover the criterion.
+
+Scenarios:
+- `static`: appearance/layout.
+- `panel-cycle`: Character/Dialogue/Minimap switching, clipping, mounted-state presentation.
+- `camera-pan`: camera movement, duplicate/missing render layers.
+- `camera-zoom`: zoom presentation.
+- `camera-pan-zoom`: render/camera priority, composition, scheduler/runtime metrics.
+- `responsive-cycle`: resize/orientation/responsive behavior.
+- `motion-sequence`: flicker/culling/interpolation/motion continuity.
+
+Evidence standard:
+- Static/layout: one relevant tested-commit screenshot per viewport explicitly required.
+- Interaction/responsive: matching scripted before/after or multi-frame run is sufficient.
+- Motion/flicker/culling: 2+ relevant timestamped frames are sufficient unless acceptance explicitly requires longer.
+- Runtime/performance: relevant evidence JSON/telemetry plus focused regression/CI is sufficient.
+- Exact-commit successful Actions runtime evidence does not require duplicate local/manual replay.
+Do not require unrelated viewports, video, or stronger evidence than acceptance requires.
 
 ### Visual Idle Audit
 Only with no claimable Issue. Inspect newest valid current-main phone/tablet evidence first.
