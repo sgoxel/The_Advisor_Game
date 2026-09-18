@@ -3,6 +3,8 @@ name: Visual Review Capture
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "tools/screenshots/**"
   schedule:
     - cron: "0 8 * * *"
   workflow_dispatch:
@@ -18,7 +20,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -70,9 +72,9 @@ jobs:
           rm -f tools/screenshots/phone*.png tools/screenshots/tablet*.png tools/screenshots/metadata.txt
 
           python tools/screenshot_tool.py http://127.0.0.1:8000/ phone.png \
-            --profile phone --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT"
+            --profile phone --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT" --no-publish
           python tools/screenshot_tool.py http://127.0.0.1:8000/ tablet.png \
-            --profile tablet --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT"
+            --profile tablet --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT" --no-publish
 
           EXPECTED=$((SHOTS * 2))
           ACTUAL=$(find tools/screenshots -maxdepth 1 -type f \( -name 'phone*.png' -o -name 'tablet*.png' \) | wc -l)
@@ -95,6 +97,20 @@ jobs:
             [[ "$MODE" == "npc_action" ]] && echo "frame_interval_seconds=0.2" || echo "frame_interval_seconds=0"
           } > tools/screenshots/metadata.txt
 
+      - name: Publish screenshots to repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- tools/screenshots/phone*.png tools/screenshots/tablet*.png tools/screenshots/metadata.txt
+          if git diff --cached --quiet -- tools/screenshots; then
+            echo "Screenshot evidence is unchanged; nothing to publish."
+            exit 0
+          fi
+          git commit -m "[visual-review] publish screenshots for ${{ github.sha }}"
+          git push origin HEAD:main
+
       - uses: actions/upload-artifact@v4
         with:
           name: visual-review-${{ github.run_id }}
@@ -115,6 +131,7 @@ jobs:
             const repo = context.repo.repo;
             const mode = process.env.CAPTURE_MODE;
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const folderUrl = `${context.serverUrl}/${owner}/${repo}/tree/main/tools/screenshots`;
             const body = [
               '<!-- non-workflow-issue -->',
               '## Automated Visual Review Evidence',
@@ -124,10 +141,11 @@ jobs:
               `- Mode: \`${mode}\``,
               `- Captured: ${new Date().toISOString()}`,
               `- Artifact: \`visual-review-${context.runId}\``,
-              '- Phone: `720x1280`',
-              '- Tablet: `1280x800`',
-              mode === 'npc_action' ? '- Pair interval: `0.2s`' : '- Frames per viewport: `1`',
+              '- Phone: \`720x1280\`',
+              '- Tablet: \`1280x800\`',
+              mode === 'npc_action' ? '- Pair interval: \`0.2s\`' : '- Frames per viewport: \`1\`',
               '',
+              `[Open screenshots](${folderUrl})`,
               `[Open run](${runUrl})`,
               '',
               'Only evidence matching the tested commit is valid.'
