@@ -10,19 +10,42 @@ on:
         default: ""
         type: string
         description: "Optional fixed pre-capture wait; empty uses random 15-60 seconds"
+      scenario:
+        required: false
+        default: "static"
+        type: choice
+        options:
+          - static
+          - panel-cycle
+          - camera-pan
+          - camera-zoom
+          - camera-pan-zoom
+          - responsive-cycle
+          - motion-sequence
+        description: "Optional deterministic runtime visual-evidence scenario"
+      issue_number:
+        required: false
+        default: ""
+        type: string
+        description: "Optional GitHub Issue number recorded in evidence"
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   capture:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.actor == 'sgoxel' && startsWith(github.event.comment.body, '/visual-evidence'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: main
 
       - uses: actions/setup-python@v5
         with:
@@ -36,19 +59,42 @@ jobs:
           set -euo pipefail
           WAIT_MIN="15"
           WAIT_MAX="60"
+          SCENARIO="static"
+          ISSUE_NUMBER=""
           MANUAL_WAIT="${{ inputs.wait_seconds }}"
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "$MANUAL_WAIT" ]]; then
-            [[ "$MANUAL_WAIT" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
-              echo "wait_seconds must be numeric" >&2
-              exit 1
-            }
-            WAIT_MIN="$MANUAL_WAIT"
-            WAIT_MAX="$MANUAL_WAIT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            SCENARIO="${{ inputs.scenario }}"
+            ISSUE_NUMBER="${{ inputs.issue_number }}"
+            if [[ -n "$MANUAL_WAIT" ]]; then
+              [[ "$MANUAL_WAIT" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
+                echo "wait_seconds must be numeric" >&2
+                exit 1
+              }
+              WAIT_MIN="$MANUAL_WAIT"
+              WAIT_MAX="$MANUAL_WAIT"
+            fi
+          elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            read -r COMMAND REQUESTED_SCENARIO _ <<< "${{ github.event.comment.body }}"
+            SCENARIO="${REQUESTED_SCENARIO:-static}"
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+            WAIT_MIN="15"
+            WAIT_MAX="15"
           fi
+
+          case "$SCENARIO" in
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence) ;;
+            *)
+              echo "Unsupported scenario: $SCENARIO" >&2
+              exit 1
+              ;;
+          esac
 
           echo "wait_min=$WAIT_MIN" >> "$GITHUB_OUTPUT"
           echo "wait_max=$WAIT_MAX" >> "$GITHUB_OUTPUT"
+          echo "scenario=$SCENARIO" >> "$GITHUB_OUTPUT"
+          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Serve exact commit
         shell: bash
@@ -61,12 +107,22 @@ jobs:
           cat /tmp/visual-review-http.log >&2 || true
           exit 1
 
-      - name: Capture four timestamped screenshots
+      - name: Capture visual evidence
         shell: bash
         run: |
           set -euo pipefail
           WAIT_MIN="${{ steps.settings.outputs.wait_min }}"
           WAIT_MAX="${{ steps.settings.outputs.wait_max }}"
+          SCENARIO="${{ steps.settings.outputs.scenario }}"
+          ISSUE_NUMBER="${{ steps.settings.outputs.issue_number }}"
+
+          EXTRA_ARGS=(--scenario "$SCENARIO")
+          if [[ -n "$ISSUE_NUMBER" ]]; then
+            EXTRA_ARGS+=(--issue "$ISSUE_NUMBER")
+          fi
+          if [[ "$SCENARIO" != "static" ]]; then
+            EXTRA_ARGS+=(--evidence-json "phone-evidence-${{ github.run_id }}.json")
+          fi
 
           python tools/screenshot_tool.py http://127.0.0.1:8000/ phone \
             --profile portrait \
@@ -75,7 +131,16 @@ jobs:
             --timestamp-names \
             --wait-min "$WAIT_MIN" \
             --wait-max "$WAIT_MAX" \
-            --no-publish
+            --no-publish \
+            "${EXTRA_ARGS[@]}"
+
+          EXTRA_ARGS=(--scenario "$SCENARIO")
+          if [[ -n "$ISSUE_NUMBER" ]]; then
+            EXTRA_ARGS+=(--issue "$ISSUE_NUMBER")
+          fi
+          if [[ "$SCENARIO" != "static" ]]; then
+            EXTRA_ARGS+=(--evidence-json "tablet-evidence-${{ github.run_id }}.json")
+          fi
 
           python tools/screenshot_tool.py http://127.0.0.1:8000/ tablet \
             --profile landscape \
@@ -84,14 +149,15 @@ jobs:
             --timestamp-names \
             --wait-min "$WAIT_MIN" \
             --wait-max "$WAIT_MAX" \
-            --no-publish
+            --no-publish \
+            "${EXTRA_ARGS[@]}"
 
       - name: Verify new capture set
         shell: bash
         run: |
           set -euo pipefail
-          PHONE_COUNT=$(find tools/screenshots -maxdepth 1 -type f -name 'phone-[12]-*.png' | wc -l)
-          TABLET_COUNT=$(find tools/screenshots -maxdepth 1 -type f -name 'tablet-[12]-*.png' | wc -l)
+          PHONE_COUNT=$(find tools/screenshots -maxdepth 1 -type f -name 'phone-*.png' | wc -l)
+          TABLET_COUNT=$(find tools/screenshots -maxdepth 1 -type f -name 'tablet-*.png' | wc -l)
           [[ "$PHONE_COUNT" -ge 2 ]]
           [[ "$TABLET_COUNT" -ge 2 ]]
 
@@ -99,17 +165,18 @@ jobs:
         shell: bash
         run: |
           {
-            echo "commit_sha=${{ github.sha }}"
+            echo "commit_sha=${{ steps.settings.outputs.commit_sha }}"
             echo "branch=main"
             echo "run_id=${{ github.run_id }}"
             echo "run_attempt=${{ github.run_attempt }}"
             echo "captured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "scenario=${{ steps.settings.outputs.scenario }}"
+            echo "issue_number=${{ steps.settings.outputs.issue_number }}"
             echo "portrait_viewport=1080x1920"
             echo "landscape_viewport=1920x1080"
-            echo "frames_per_viewport=2"
+            echo "requested_frames_per_viewport=2"
             echo "frame_interval_seconds=0.2"
             echo "camera_zoom=max_out"
-            echo "scheduled_wait=random_15_60_seconds"
             echo "max_repository_screenshots=20"
             echo "schedule=every_30_minutes"
           } > tools/screenshots/metadata.txt
@@ -148,6 +215,17 @@ jobs:
           print(f"Repository screenshot count after retention: {len(remaining)}")
           PY
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-review-${{ github.run_id }}
+          path: |
+            tools/screenshots/phone-*.png
+            tools/screenshots/tablet-*.png
+            tools/screenshots/*-evidence-${{ github.run_id }}.json
+            tools/screenshots/metadata.txt
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publish screenshots to repository
         shell: bash
         run: |
@@ -159,15 +237,31 @@ jobs:
             echo "Screenshot evidence is unchanged; nothing to publish."
             exit 0
           fi
-          git commit -m "[visual-review] publish four-frame screenshot set for ${{ github.sha }}"
-          git push origin HEAD:main
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: visual-review-${{ github.run_id }}
-          path: |
-            tools/screenshots/phone-[12]-*.png
-            tools/screenshots/tablet-[12]-*.png
-            tools/screenshots/metadata.txt
-          if-no-files-found: error
-          retention-days: 30
+          git commit -m "[visual-review] publish screenshot evidence for ${{ steps.settings.outputs.commit_sha }}"
+
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push attempt $attempt raced with main; rebasing and retrying."
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::warning::Evidence artifact succeeded, but repository screenshot publication conflicted with newer main."
+              exit 0
+            fi
+          done
+
+          echo "::warning::Evidence artifact succeeded, but repository screenshot publication could not update main after retries."
+          exit 0
+
+      - name: Report issue evidence run
+        if: always() && github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --body "Visual evidence run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} · scenario \`${{ steps.settings.outputs.scenario }}\` · commit \`${{ steps.settings.outputs.commit_sha }}\` · job status \`${{ job.status }}\`."
