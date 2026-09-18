@@ -105,6 +105,32 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Commit refreshed screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          pngs=(tools/screenshots/*.png)
+          meta=(tools/screenshots/metadata.txt)
+
+          if (( ${#pngs[@]} == 0 )) && [[ ! -f "${meta[0]}" ]]; then
+            echo "No screenshot files were produced."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${pngs[@]}" "${meta[@]}" 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No screenshot changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update visual review screenshots"
+          git push origin HEAD:${{ github.ref_name }}
+
       - name: Publish evidence pointer
         uses: actions/github-script@v7
         env:
