@@ -62,13 +62,14 @@ Primary evidence: latest successful Actions visual-review artifact for current t
 Standard: phone `720x1280` + tablet `1280x800`. NPC/action/flicker: 2 frames/view, `0.2s` apart. Evidence must match commit and identify viewport/mode/run/time; stale evidence invalid.
 
 ### Visual Idle Audit
-When no Issue is claimable, any worker may act as Reviewer for the latest valid visual run.
-1. Read tracking Issue `Visual Review: Latest Main Branch Release Screenshot`; get Run ID.
-2. If a comment contains `Visual-Audit: <run-id>`, skip this audit.
-3. Inspect evidence; search open Issues for same defect.
-4. Existing defect -> add only new evidence. New concrete defect -> one atomic Coder/Designer Issue, normally `Handoff: Tester`.
-5. Comment on tracking Issue: `Visual-Audit: <run-id>` plus concise result.
-No features, roadmap work, speculation, or duplicates. Capture/audit failure never blocks queue. Never commit review screenshots.
+When no Issue is claimable, any worker may act as Reviewer and must use the idle time for a fresh visual QA pass.
+1. Run `tools/screenshot_tool.py` against the latest current-main/public build using the repository-supported capture flow. If fresh capture is unavailable, use the latest valid current-main visual evidence instead.
+2. Inspect the newest screenshots for concrete bugs or worthwhile visual/UX improvements. Record commit/build, viewport, mode, run/time when available.
+3. Search all open Issues for the same or substantially similar finding before creating anything.
+4. Existing finding -> add only genuinely new evidence when useful. New concrete finding -> open one small atomic Coder/Designer bug-fix or improvement Issue, normally `Handoff: Tester`, with factual screenshot evidence, observation/reproduction details, acceptance criteria, and valid workflow fields.
+5. Do not create duplicate, speculative, unsupported, roadmap/feature-expansion, or cosmetic-only Issues.
+6. If a tracking visual-review Issue/run exists, comment with `Visual-Audit: <run-id>` plus the concise result so the same evidence is not audited repeatedly.
+Capture/audit failure never blocks queue. Never commit review screenshots. Never invent evidence.
 
 ## Admin
 Only mandatory Admin execution step: push Admin-created texture-tile binaries already staged in configured Drive mirror.
