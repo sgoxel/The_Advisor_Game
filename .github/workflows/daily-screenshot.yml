@@ -41,10 +41,6 @@ permissions:
   contents: write
   issues: write
 
-concurrency:
-  group: visual-review-capture-main
-  cancel-in-progress: false
-
 jobs:
   capture:
     if: >-
@@ -174,6 +170,10 @@ jobs:
       - name: Metadata
         shell: bash
         run: |
+          META="tools/screenshots/metadata.txt"
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            META="tools/screenshots/metadata-${{ github.run_id }}.txt"
+          fi
           {
             echo "commit_sha=${{ steps.settings.outputs.commit_sha }}"
             echo "branch=main"
@@ -189,9 +189,10 @@ jobs:
             echo "camera_zoom=max_out"
             echo "max_repository_screenshots=20"
             echo "schedule=every_30_minutes"
-          } > tools/screenshots/metadata.txt
+          } > "$META"
 
       - name: Keep newest 20 screenshots
+        if: github.event_name != 'issue_comment'
         shell: bash
         run: |
           set -euo pipefail
@@ -232,7 +233,7 @@ jobs:
             tools/screenshots/phone-*.png
             tools/screenshots/tablet-*.png
             tools/screenshots/*-evidence-${{ github.run_id }}.json
-            tools/screenshots/metadata.txt
+            tools/screenshots/metadata*.txt
           if-no-files-found: error
           retention-days: 30
 
