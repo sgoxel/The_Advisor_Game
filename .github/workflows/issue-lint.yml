@@ -19,6 +19,26 @@ jobs:
 
             const number = context.payload.issue.number;
             const roles = '(Coder|Designer|Tester|Reviewer)';
+
+            const roleValue = body.match(/^Role:\\s*(.+)$/m)?.[1]?.trim();
+            const statusValue = body.match(/^Status:\\s*(.+)$/m)?.[1]?.trim();
+            if (statusValue === 'DELAYED' || statusValue === 'WAITING') {
+              const replacement = (roleValue === 'Tester' || roleValue === 'Reviewer') ? 'VERIFY' : 'READY';
+              const repaired = body.replace(/^Status:\\s*(DELAYED|WAITING)\\s*$/m, `Status: ${replacement}`);
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                body: repaired,
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                body: `<!-- agent-issue-lint -->\n⚠️ Forbidden workflow status \`${statusValue}\` was automatically normalized to \`${replacement}\`. Valid statuses are \`READY | ACTIVE | VERIFY | DONE\`.`,
+              });
+              return;
+            }
             const valid = {
               Role: new RegExp(`^${roles}$`),
               Priority: /^(P0|P1|P2|P3|P4)$/,
