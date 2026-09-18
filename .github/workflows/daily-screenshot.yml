@@ -5,15 +5,11 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
-      capture_mode:
-        required: true
-        default: standard
-        type: choice
-        options: [standard, npc_action]
       wait_seconds:
-        required: true
-        default: "20"
+        required: false
+        default: ""
         type: string
+        description: "Optional fixed pre-capture wait; empty uses random 15-60 seconds"
 
 permissions:
   contents: write
@@ -22,7 +18,7 @@ jobs:
   capture:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,14 +33,22 @@ jobs:
       - id: settings
         shell: bash
         run: |
-          MODE="standard"; WAIT="20"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            MODE="${{ inputs.capture_mode }}"; WAIT="${{ inputs.wait_seconds }}"
+          set -euo pipefail
+          WAIT_MIN="15"
+          WAIT_MAX="60"
+          MANUAL_WAIT="${{ inputs.wait_seconds }}"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "$MANUAL_WAIT" ]]; then
+            [[ "$MANUAL_WAIT" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
+              echo "wait_seconds must be numeric" >&2
+              exit 1
+            }
+            WAIT_MIN="$MANUAL_WAIT"
+            WAIT_MAX="$MANUAL_WAIT"
           fi
-          [[ "$MODE" == "standard" || "$MODE" == "npc_action" ]] || exit 1
-          [[ "$WAIT" =~ ^[0-9]+([.][0-9]+)?$ ]] || exit 1
-          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
-          echo "wait=$WAIT" >> "$GITHUB_OUTPUT"
+
+          echo "wait_min=$WAIT_MIN" >> "$GITHUB_OUTPUT"
+          echo "wait_max=$WAIT_MAX" >> "$GITHUB_OUTPUT"
 
       - name: Serve exact commit
         shell: bash
@@ -57,46 +61,57 @@ jobs:
           cat /tmp/visual-review-http.log >&2 || true
           exit 1
 
-      - id: capture
-        name: Capture timestamped screenshots
+      - name: Capture four timestamped screenshots
         shell: bash
         run: |
           set -euo pipefail
-          MODE="${{ steps.settings.outputs.mode }}"
-          WAIT="${{ steps.settings.outputs.wait }}"
-          SHOTS=1; [[ "$MODE" == "npc_action" ]] && SHOTS=2
-          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-          PREFIX="review_${STAMP}_${GITHUB_RUN_ID}"
-          echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+          WAIT_MIN="${{ steps.settings.outputs.wait_min }}"
+          WAIT_MAX="${{ steps.settings.outputs.wait_max }}"
 
-          python tools/screenshot_tool.py http://127.0.0.1:8000/ "${PREFIX}_phone.png" \
-            --profile phone --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT" --no-publish
-          python tools/screenshot_tool.py http://127.0.0.1:8000/ "${PREFIX}_tablet.png" \
-            --profile tablet --shots "$SHOTS" --interval 0.2 --wait-min "$WAIT" --wait-max "$WAIT" --no-publish
+          python tools/screenshot_tool.py http://127.0.0.1:8000/ phone \
+            --profile portrait \
+            --shots 2 \
+            --interval 0.2 \
+            --timestamp-names \
+            --wait-min "$WAIT_MIN" \
+            --wait-max "$WAIT_MAX" \
+            --no-publish
 
-          EXPECTED=$((SHOTS * 2))
-          ACTUAL=$(find tools/screenshots -maxdepth 1 -type f -name "${PREFIX}_*.png" | wc -l)
-          [[ "$ACTUAL" -eq "$EXPECTED" ]]
-          echo "count=$ACTUAL" >> "$GITHUB_OUTPUT"
+          python tools/screenshot_tool.py http://127.0.0.1:8000/ tablet \
+            --profile landscape \
+            --shots 2 \
+            --interval 0.2 \
+            --timestamp-names \
+            --wait-min "$WAIT_MIN" \
+            --wait-max "$WAIT_MAX" \
+            --no-publish
+
+      - name: Verify new capture set
+        shell: bash
+        run: |
+          set -euo pipefail
+          PHONE_COUNT=$(find tools/screenshots -maxdepth 1 -type f -name 'phone-[12]-*.png' | wc -l)
+          TABLET_COUNT=$(find tools/screenshots -maxdepth 1 -type f -name 'tablet-[12]-*.png' | wc -l)
+          [[ "$PHONE_COUNT" -ge 2 ]]
+          [[ "$TABLET_COUNT" -ge 2 ]]
 
       - name: Metadata
         shell: bash
         run: |
-          MODE="${{ steps.settings.outputs.mode }}"
           {
             echo "commit_sha=${{ github.sha }}"
             echo "branch=main"
             echo "run_id=${{ github.run_id }}"
             echo "run_attempt=${{ github.run_attempt }}"
-            echo "capture_mode=$MODE"
-            echo "capture_prefix=${{ steps.capture.outputs.prefix }}"
             echo "captured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "phone_viewport=720x1280"
-            echo "tablet_viewport=1280x800"
+            echo "portrait_viewport=1080x1920"
+            echo "landscape_viewport=1920x1080"
+            echo "frames_per_viewport=2"
+            echo "frame_interval_seconds=0.2"
+            echo "camera_zoom=max_out"
+            echo "scheduled_wait=random_15_60_seconds"
             echo "max_repository_screenshots=20"
             echo "schedule=every_30_minutes"
-            [[ "$MODE" == "npc_action" ]] && echo "frames_per_viewport=2" || echo "frames_per_viewport=1"
-            [[ "$MODE" == "npc_action" ]] && echo "frame_interval_seconds=0.2" || echo "frame_interval_seconds=0"
           } > tools/screenshots/metadata.txt
 
       - name: Keep newest 20 screenshots
@@ -144,15 +159,15 @@ jobs:
             echo "Screenshot evidence is unchanged; nothing to publish."
             exit 0
           fi
-          git commit -m "[visual-review] publish retained screenshots for ${{ github.sha }}"
+          git commit -m "[visual-review] publish four-frame screenshot set for ${{ github.sha }}"
           git push origin HEAD:main
 
       - uses: actions/upload-artifact@v4
         with:
           name: visual-review-${{ github.run_id }}
           path: |
-            tools/screenshots/${{ steps.capture.outputs.prefix }}*.png
+            tools/screenshots/phone-[12]-*.png
+            tools/screenshots/tablet-[12]-*.png
             tools/screenshots/metadata.txt
           if-no-files-found: error
           retention-days: 30
-
