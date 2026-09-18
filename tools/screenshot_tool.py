@@ -26,7 +26,8 @@ GitHub-agent trigger:
 
 Supported scenarios:
   static, panel-cycle, camera-pan, camera-zoom, camera-pan-zoom,
-  responsive-cycle, motion-sequence
+  responsive-cycle, motion-sequence, time-of-day, village-reference,
+  region-transition, save-load, npc-conversation-state, npc-edge-crossing
 """
 
 from __future__ import annotations
@@ -64,6 +65,12 @@ SCENARIOS = {
     "camera-pan-zoom",
     "responsive-cycle",
     "motion-sequence",
+    "time-of-day",
+    "village-reference",
+    "region-transition",
+    "save-load",
+    "npc-conversation-state",
+    "npc-edge-crossing",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -74,6 +81,12 @@ SCENARIO_MIN_SHOTS = {
     "camera-pan-zoom": 4,
     "responsive-cycle": 3,
     "motion-sequence": 6,
+    "time-of-day": 3,
+    "village-reference": 3,
+    "region-transition": 3,
+    "save-load": 3,
+    "npc-conversation-state": 5,
+    "npc-edge-crossing": 5,
 }
 
 MAX_ZOOM_OUT_SCRIPT = r"""
@@ -110,6 +123,157 @@ const done = arguments[arguments.length - 1];
 })();
 """
 
+CONTROLLED_STATE_SCRIPT = r"""
+const action = arguments[0];
+return (() => {
+  const game = window.Game || {};
+  const state = game.State || {};
+  const world = state.world || {};
+  const bag = window.__advisorVisualEvidence = window.__advisorVisualEvidence || {};
+
+  const rerender = () => {
+    try { game.Renderer?.invalidateAll?.(); } catch (_) {}
+    try { game.Renderer?.markDirty?.(true, true); } catch (_) {}
+    try { game.Renderer?.renderWorld?.(true); } catch (_) {}
+    try { game.Minimap?.render?.(); } catch (_) {}
+    try { game.Minimap?.renderMinimap?.(); } catch (_) {}
+  };
+  const time = (minutes) => {
+    if (typeof game.GameTime?.setForTest !== 'function') throw new Error('GameTime.setForTest unavailable');
+    const result = game.GameTime.setForTest(minutes);
+    rerender();
+    return result;
+  };
+  const setZoom = (value) => {
+    const camera = state.camera;
+    if (!camera) throw new Error('camera unavailable');
+    camera.zoom = Math.max(
+      Number(camera.minZoom ?? value),
+      Math.min(Number(camera.maxZoom ?? value), Number(value))
+    );
+    try { game.Renderer?.centerCamera?.(); } catch (_) {}
+    rerender();
+    return camera.zoom;
+  };
+  const requireNpcs = () => {
+    const npcs = Array.isArray(world.npcs) ? world.npcs.filter(n => n && n.active !== false && n.removed !== true) : [];
+    if (npcs.length < 2) throw new Error('at least two active NPCs required');
+    return npcs;
+  };
+  const conversationPair = () => {
+    const npcs = requireNpcs();
+    const ids = bag.conversationNpcIds || [String(npcs[0].id), String(npcs[1].id)];
+    bag.conversationNpcIds = ids;
+    const a = world.npcs.find(n => String(n.id) === ids[0]);
+    const b = world.npcs.find(n => String(n.id) === ids[1]);
+    if (!a || !b) throw new Error('controlled conversation NPCs unavailable');
+    return [a, b];
+  };
+  const placePair = (mode) => {
+    const [a, b] = conversationPair();
+    const player = world.player || {};
+    const rows = Math.max(6, Number(world.rows || 100));
+    const cols = Math.max(8, Number(world.cols || 100));
+    const row = Math.max(1, Math.min(rows - 2, Number(player.row || 10)));
+    const col = Math.max(1, Math.min(cols - 5, Number(player.col || 10) + 2));
+    const region = world.currentRegion || {};
+    const rx = Number(region.x ?? player.regionX ?? 0);
+    const ry = Number(region.y ?? player.regionY ?? 0);
+    Object.assign(a, { row, col, regionX: rx, regionY: ry, active: true, removed: false });
+    Object.assign(b, { row, col: col + 1, regionX: rx, regionY: ry, active: true, removed: false });
+    if (mode === 'isolated') {
+      b.col = col + 4;
+      a.dialogueWith = null; b.dialogueWith = null;
+      a.activity = 'social'; b.activity = 'social';
+    } else {
+      a.dialogueWith = b.id; b.dialogueWith = a.id;
+      a.activity = 'talking'; b.activity = 'talking';
+      if (mode === 'same-tile') b.col = a.col;
+      if (mode === 'nonadjacent') b.col = Math.min(cols - 1, a.col + 3);
+      if (mode === 'missing-partner') {
+        a.dialogueWith = '__missing_visual_evidence_partner__';
+        b.dialogueWith = null;
+      }
+    }
+    game.NPCIndoorWorkAnchors?.reconcileConversations?.();
+    rerender();
+    return { ids: [a.id, b.id], mode };
+  };
+
+  try {
+    switch (action) {
+      case 'time-day': return { ok: true, action, time: time(8 * 60) };
+      case 'time-night': return { ok: true, action, time: time(23 * 60) };
+      case 'time-dawn': return { ok: true, action, time: time(6 * 60) };
+
+      case 'reference-day-wide':
+        time(8 * 60);
+        return { ok: true, action, zoom: setZoom(state.camera?.minZoom ?? state.camera?.zoom ?? 2) };
+      case 'reference-close':
+        time(8 * 60);
+        return { ok: true, action, zoom: setZoom(Number(state.camera?.minZoom ?? 2) + 1) };
+      case 'reference-night-wide':
+        time(23 * 60);
+        return { ok: true, action, zoom: setZoom(state.camera?.minZoom ?? state.camera?.zoom ?? 2) };
+
+      case 'region-baseline':
+        if (typeof game.RegionNavigation?.capture !== 'function') throw new Error('RegionNavigation.capture unavailable');
+        return { ok: true, action, region: game.RegionNavigation.capture() };
+      case 'region-east':
+        if (typeof game.RegionNavigation?.activateNeighbor !== 'function') throw new Error('RegionNavigation.activateNeighbor unavailable');
+        return { ok: true, action, region: game.RegionNavigation.activateNeighbor('east') };
+      case 'region-west':
+        if (typeof game.RegionNavigation?.activateNeighbor !== 'function') throw new Error('RegionNavigation.activateNeighbor unavailable');
+        return { ok: true, action, region: game.RegionNavigation.activateNeighbor('west') };
+
+      case 'save-baseline':
+        if (typeof game.CampaignPersistence?.serializeSave !== 'function') throw new Error('CampaignPersistence.serializeSave unavailable');
+        bag.savedCampaign = game.CampaignPersistence.serializeSave();
+        return { ok: true, action, bytes: bag.savedCampaign.length };
+      case 'save-mutate':
+        if (typeof game.RegionNavigation?.activateNeighbor === 'function') game.RegionNavigation.activateNeighbor('east');
+        else if (typeof game.GameTime?.advanceGameMinutes === 'function') game.GameTime.advanceGameMinutes(90);
+        rerender();
+        return { ok: true, action };
+      case 'save-restore':
+        if (!bag.savedCampaign || typeof game.CampaignPersistence?.loadSave !== 'function') throw new Error('saved campaign/loadSave unavailable');
+        const loaded = game.CampaignPersistence.loadSave(bag.savedCampaign);
+        if (!loaded?.ok) throw new Error('CampaignPersistence.loadSave rejected controlled save');
+        rerender();
+        return { ok: true, action };
+
+      case 'npc-isolated': return { ok: true, action, state: placePair('isolated') };
+      case 'npc-adjacent': return { ok: true, action, state: placePair('adjacent') };
+      case 'npc-same-tile': return { ok: true, action, state: placePair('same-tile') };
+      case 'npc-nonadjacent': return { ok: true, action, state: placePair('nonadjacent') };
+      case 'npc-missing-partner': return { ok: true, action, state: placePair('missing-partner') };
+
+      case 'npc-edge-baseline': {
+        const npcs = requireNpcs();
+        const npc = npcs[0];
+        const player = world.player || {};
+        const rows = Math.max(6, Number(world.rows || 100));
+        const cols = Math.max(8, Number(world.cols || 100));
+        npc.row = Math.max(1, Math.min(rows - 2, Number(player.row || 10)));
+        npc.col = Math.max(1, Math.min(cols - 2, Number(player.col || 10) + 3));
+        npc.regionX = Number(world.currentRegion?.x ?? player.regionX ?? 0);
+        npc.regionY = Number(world.currentRegion?.y ?? player.regionY ?? 0);
+        npc.active = true;
+        npc.removed = false;
+        bag.edgeNpcId = String(npc.id);
+        try { game.Renderer?.centerCamera?.(); } catch (_) {}
+        rerender();
+        return { ok: true, action, npcId: bag.edgeNpcId };
+      }
+
+      default: return { ok: true, action: 'no-controlled-setup' };
+    }
+  } catch (error) {
+    return { ok: false, action, reason: String(error) };
+  }
+})();
+"""
+
 RUNTIME_SNAPSHOT_SCRIPT = r"""
 return (() => {
   try {
@@ -127,6 +291,29 @@ return (() => {
     try {
       npcRuntime = game.NPCRuntimeBridge?.metrics?.() || game.NPCRelevanceRuntime?.metrics?.() || null;
     } catch (_) {}
+    let gameTime = null;
+    try { gameTime = game.GameTime?.capture?.() || world.gameTime || null; } catch (_) {}
+    let region = null;
+    try { region = game.RegionNavigation?.capture?.() || world.currentRegion || null; } catch (_) {}
+    const visibleNpcCount = canvas?.dataset?.visibleNpcCount ?? null;
+    const npcs = Array.isArray(world.npcs) ? world.npcs.slice(0, 8).map((npc) => {
+      let screen = null;
+      try {
+        const point = game.Renderer?.gridToScreen?.(Number(npc.row), Number(npc.col), 0, 0);
+        if (point) screen = { x: Number(point.x), y: Number(point.y) };
+      } catch (_) {}
+      return {
+        id: npc?.id ?? null,
+        row: Number.isFinite(Number(npc?.row)) ? Number(npc.row) : null,
+        col: Number.isFinite(Number(npc?.col)) ? Number(npc.col) : null,
+        regionX: Number.isFinite(Number(npc?.regionX)) ? Number(npc.regionX) : null,
+        regionY: Number.isFinite(Number(npc?.regionY)) ? Number(npc.regionY) : null,
+        activity: npc?.activity ?? null,
+        dialogueWith: npc?.dialogueWith ?? null,
+        conversationState: npc?.conversationState ?? null,
+        screen,
+      };
+    }) : [];
     return {
       ok: true,
       url: location.href,
@@ -142,6 +329,15 @@ return (() => {
         dragActive: Boolean(camera.dragActive),
       },
       activePanel: activePanel?.dataset?.panelName || null,
+      gameTime,
+      region,
+      npcConversationGuard: world.npcConversationGuard || null,
+      npcPresentation: {
+        visibleNpcCount,
+        totalNpcCount: Array.isArray(world.npcs) ? world.npcs.length : 0,
+        edgeNpcId: window.__advisorVisualEvidence?.edgeNpcId || null,
+        sample: npcs,
+      },
       canvas: rect ? {
         x: rect.x, y: rect.y, width: rect.width, height: rect.height,
       } : null,
@@ -247,6 +443,26 @@ def _scenario_required_shots(scenario: str, requested: int) -> int:
     return max(requested, SCENARIO_MIN_SHOTS.get(scenario, 1))
 
 
+def _controlled_state(driver, action: str) -> str:
+    result = driver.execute_script(CONTROLLED_STATE_SCRIPT, action)
+    if not isinstance(result, dict) or not result.get("ok"):
+        reason = result.get("reason", "unexpected-result") if isinstance(result, dict) else "unexpected-result"
+        raise RuntimeError(f"Controlled state action {action!r} failed: {reason}")
+    return action
+
+
+def _prepare_scenario(driver, scenario: str) -> str:
+    setup = {
+        "time-of-day": "time-day",
+        "village-reference": "reference-day-wide",
+        "region-transition": "region-baseline",
+        "save-load": "save-baseline",
+        "npc-conversation-state": "npc-isolated",
+        "npc-edge-crossing": "npc-edge-baseline",
+    }.get(scenario)
+    return _controlled_state(driver, setup) if setup else "initial"
+
+
 def _safe_click(driver, selector: str) -> str:
     from selenium.webdriver.common.by import By
 
@@ -326,6 +542,30 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         # mutating Simulation/world authority.
         dx = 72 if frame_index % 2 else -72
         return _drag_canvas(driver, dx, 0)
+
+    if scenario == "time-of-day":
+        actions = ("time-night", "time-dawn")
+        return _controlled_state(driver, actions[(frame_index - 1) % len(actions)])
+
+    if scenario == "village-reference":
+        actions = ("reference-close", "reference-night-wide")
+        return _controlled_state(driver, actions[(frame_index - 1) % len(actions)])
+
+    if scenario == "region-transition":
+        actions = ("region-east", "region-west")
+        return _controlled_state(driver, actions[(frame_index - 1) % len(actions)])
+
+    if scenario == "save-load":
+        actions = ("save-mutate", "save-restore")
+        return _controlled_state(driver, actions[(frame_index - 1) % len(actions)])
+
+    if scenario == "npc-conversation-state":
+        actions = ("npc-adjacent", "npc-same-tile", "npc-nonadjacent", "npc-missing-partner")
+        return _controlled_state(driver, actions[(frame_index - 1) % len(actions)])
+
+    if scenario == "npc-edge-crossing":
+        drags = (480, 140, -140, -480)
+        return _drag_canvas(driver, drags[(frame_index - 1) % len(drags)], 0)
 
     return "no-op"
 
@@ -411,6 +651,8 @@ def take_screenshots(
             if force_max_zoom:
                 force_max_zoom_out(driver)
 
+            setup_action = _prepare_scenario(driver, scenario)
+
             # Non-static scenarios need enough frame paths for their evidence contract.
             if len(paths) != shots:
                 paths = output_paths(output_file, shots, timestamp_names)
@@ -421,7 +663,7 @@ def take_screenshots(
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 else:
-                    action = "initial"
+                    action = setup_action
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
