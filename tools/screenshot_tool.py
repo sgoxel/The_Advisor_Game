@@ -279,6 +279,7 @@ return (() => {
   try {
     const game = window.Game || {};
     const state = game.State || {};
+    const world = state.world || {};
     const camera = state.camera || {};
     const activePanel = document.querySelector('.bottom-ribbon .panel.active-panel');
     const canvas = document.querySelector('#gameCanvas');
