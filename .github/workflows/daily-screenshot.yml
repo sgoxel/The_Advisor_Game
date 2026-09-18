@@ -22,6 +22,12 @@ on:
           - camera-pan-zoom
           - responsive-cycle
           - motion-sequence
+          - time-of-day
+          - village-reference
+          - region-transition
+          - save-load
+          - npc-conversation-state
+          - npc-edge-crossing
         description: "Optional deterministic runtime visual-evidence scenario"
       issue_number:
         required: false
@@ -83,7 +89,7 @@ jobs:
           fi
 
           case "$SCENARIO" in
-            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence) ;;
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing) ;;
             *)
               echo "Unsupported scenario: $SCENARIO" >&2
               exit 1
