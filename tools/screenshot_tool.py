@@ -196,8 +196,18 @@ return (() => {
       }
     }
     game.NPCIndoorWorkAnchors?.reconcileConversations?.();
+    const validityA = game.NPCIndoorWorkAnchors?.conversationValidity?.(a, world) || null;
+    const validityB = game.NPCIndoorWorkAnchors?.conversationValidity?.(b, world) || null;
     rerender();
-    return { ids: [a.id, b.id], mode };
+    return {
+      ids: [a.id, b.id],
+      mode,
+      a: { id: a.id, row: a.row, col: a.col, activity: a.activity, dialogueWith: a.dialogueWith, conversationState: a.conversationState || null },
+      b: { id: b.id, row: b.row, col: b.col, activity: b.activity, dialogueWith: b.dialogueWith, conversationState: b.conversationState || null },
+      validityA: validityA ? { valid: validityA.valid, reason: validityA.reason, separation: validityA.separation ?? null } : null,
+      validityB: validityB ? { valid: validityB.valid, reason: validityB.reason, separation: validityB.separation ?? null } : null,
+      guard: world.npcConversationGuard || null
+    };
   };
 
   try {
@@ -229,18 +239,30 @@ return (() => {
       case 'save-baseline':
         if (typeof game.CampaignPersistence?.serializeSave !== 'function') throw new Error('CampaignPersistence.serializeSave unavailable');
         bag.savedCampaign = game.CampaignPersistence.serializeSave();
-        return { ok: true, action, bytes: bag.savedCampaign.length };
+        bag.savedRegion = game.RegionNavigation?.capture?.() || world.currentRegion || null;
+        bag.savedTime = game.GameTime?.capture?.() || world.gameTime || null;
+        return { ok: true, action, bytes: bag.savedCampaign.length, region: bag.savedRegion, time: bag.savedTime };
       case 'save-mutate':
         if (typeof game.RegionNavigation?.activateNeighbor === 'function') game.RegionNavigation.activateNeighbor('east');
         else if (typeof game.GameTime?.advanceGameMinutes === 'function') game.GameTime.advanceGameMinutes(90);
         rerender();
-        return { ok: true, action };
+        return {
+          ok: true,
+          action,
+          region: game.RegionNavigation?.capture?.() || world.currentRegion || null,
+          time: game.GameTime?.capture?.() || world.gameTime || null
+        };
       case 'save-restore':
         if (!bag.savedCampaign || typeof game.CampaignPersistence?.loadSave !== 'function') throw new Error('saved campaign/loadSave unavailable');
         const loaded = game.CampaignPersistence.loadSave(bag.savedCampaign);
         if (!loaded?.ok) throw new Error('CampaignPersistence.loadSave rejected controlled save');
         rerender();
-        return { ok: true, action };
+        return {
+          ok: true,
+          action,
+          region: game.RegionNavigation?.capture?.() || world.currentRegion || null,
+          time: game.GameTime?.capture?.() || world.gameTime || null
+        };
 
       case 'npc-isolated': return { ok: true, action, state: placePair('isolated') };
       case 'npc-adjacent': return { ok: true, action, state: placePair('adjacent') };
@@ -333,6 +355,7 @@ return (() => {
       gameTime,
       region,
       npcConversationGuard: world.npcConversationGuard || null,
+      controlledActionResult: window.__advisorVisualEvidence?.lastActionResult || null,
       npcPresentation: {
         visibleNpcCount,
         totalNpcCount: Array.isArray(world.npcs) ? world.npcs.length : 0,
@@ -449,6 +472,11 @@ def _controlled_state(driver, action: str) -> str:
     if not isinstance(result, dict) or not result.get("ok"):
         reason = result.get("reason", "unexpected-result") if isinstance(result, dict) else "unexpected-result"
         raise RuntimeError(f"Controlled state action {action!r} failed: {reason}")
+    driver.execute_script(
+        "window.__advisorVisualEvidence = window.__advisorVisualEvidence || {}; "
+        "window.__advisorVisualEvidence.lastActionResult = arguments[0];",
+        result,
+    )
     return action
 
 
