@@ -10,9 +10,9 @@ Never modify `AGENTS.md` or `.agents/*.md` unless Admin explicitly requests it.
 
 ## Loop
 1. Read this file.
-2. Scan all open Issues; repair safe workflow defects, stale locks, and verifiable `DELAYED` conditions.
+2. Scan all open Issues; repair safe workflow defects, stale locks, and legacy invalid states.
 3. Eligible: valid fields; `Claim: NONE`; dependencies satisfied; `READY`, or `VERIFY` for Tester/Reviewer.
-4. Select highest Priority globally; tie -> lowest Issue number.
+4. Select highest Priority globally; tie -> lowest Issue number. Skip any Issue already attempted without material progress during this run.
 5. Adopt Issue `Role`; read `.agents/<role>.md` + selected Issue only.
 6. Re-read Issue; changed -> restart selection.
 7. Set `Claim: <run-id>@<UTC timestamp>` + `Status: ACTIVE`; wait random 2-8s; re-fetch; continue only if Claim is yours and Status `ACTIVE`.
@@ -25,8 +25,12 @@ Never bind work to a named worker/session. Do not read README/ROADMAP/unrelated 
 
 `AGENTS.md` and the applicable `.agents/<role>.md` are the sole authority for agent operating behavior. Issues define task-specific work, constraints, acceptance, checks, and evidence only. Generic workflow/role instructions embedded in legacy Issues are non-authoritative and may be removed as a safe Repair when task intent and acceptance meaning stay unchanged.
 
+`DELAYED` and `WAITING` are forbidden workflow statuses. Never assign, create, preserve, or route an Issue to either status.
+
 ## Checkpoint
-Never abandon `ACTIVE` work. If the run must end mid-Issue: leave work safe; record done/remaining/checks/next step; clear Claim; keep Role; Coder/Designer -> `READY`; Tester/Reviewer -> `VERIFY`. Use `DELAYED` only for a real unmet external/requirement condition.
+Never abandon `ACTIVE` work. If the run must end mid-Issue: leave work safe; record done/remaining/checks/next step; clear Claim; keep Role; Coder/Designer -> `READY`; Tester/Reviewer -> `VERIFY`.
+
+If required source material, evidence, tooling, execution capability, or another external condition is unavailable, do not invent progress and do not create a blocked status. Record the exact missing condition when useful, clear Claim, restore Coder/Designer to `READY` or Tester/Reviewer to `VERIFY`, mark the Issue as attempted-without-progress for this run only, and continue the queue. The attempted-without-progress set is ephemeral and must never be persisted as project state.
 
 ## Repair
 Repair only `Claim: NONE` or stale locks. Never alter a valid `ACTIVE` Issue owned by another run.
@@ -34,15 +38,15 @@ May repair workflow fields, legacy roles/states/claims, stale locks, dependencie
 Never change Objective, acceptance meaning, product intent, or technical requirements unless the Issue explicitly defines the correction.
 
 Aliases: Game Programmer -> Coder; Game Designer | UX Designer | Texture Artist -> Designer; Test | Tester -> Tester; Review | Reviewer -> Reviewer.
-`WAITING` -> `DELAYED`. Locks >3h are stale. Stale `ACTIVE`: clear Claim; Tester/Reviewer -> `VERIFY`; others -> `READY`.
-Missing requirement/tool/external condition -> `DELAYED`, `Claim: NONE`, exact resume condition; continue queue.
-Resolved condition -> Tester/Reviewer `VERIFY`; others `READY`.
+Legacy `WAITING` or `DELAYED`: clear Claim; Tester/Reviewer -> `VERIFY`; Coder/Designer -> `READY`.
+Locks >3h are stale. Stale `ACTIVE`: clear Claim; Tester/Reviewer -> `VERIFY`; others -> `READY`.
+Missing requirement/source/tool/evidence/external condition: never change to a blocked status; checkpoint as defined above and continue queue.
 Dependency satisfied by `Status: DONE`, or closed-completed legacy Issue whose outcome clearly satisfies it. Duplicate/not-planned/ambiguous closure does not satisfy dependency.
 
 ## Workflow
 - `Role`: Coder | Designer | Tester | Reviewer
 - `Priority`: P0 | P1 | P2 | P3 | P4
-- `Status`: READY | ACTIVE | VERIFY | DELAYED | DONE
+- `Status`: READY | ACTIVE | VERIFY | DONE
 - `Claim`: NONE | `<run-id>@<UTC timestamp>`
 - `Dependency`: NONE | issue numbers
 - `Handoff`: NONE | role chain
@@ -54,8 +58,8 @@ PASS:
 - else consume first Handoff role; set Role; remove it; empty -> `NONE`; Tester/Reviewer -> `VERIFY`; others -> `READY`; `Claim: NONE`
 
 Tester/Reviewer FAIL:
-- explicit correction role -> set correction Role; prepend failed verification role unless already first; `READY`; `Claim: NONE`
-- no explicit correction role -> `DELAYED`; `Claim: NONE`; exact correction/resume condition
+- explicit correction role, or a smallest responsible correction role proven by the concrete failure -> set correction Role; prepend failed verification role unless already first; `READY`; `Claim: NONE`
+- correction role cannot be determined truthfully -> record the exact missing routing fact; keep Tester/Reviewer role; `VERIFY`; `Claim: NONE`; mark attempted-without-progress for this run only; continue queue
 
 After routing, rescan immediately.
 
@@ -75,8 +79,8 @@ Capture/audit failure never blocks queue. Never commit ad-hoc review screenshots
 
 ## Admin
 Only mandatory Admin execution step: push Admin-created texture-tile binaries already staged in configured Drive mirror.
-Texture push -> exact Drive/repo paths; `DELAYED`; `Claim: NONE`; exact action; continue queue.
-Other external blockers -> `DELAYED`; `Claim: NONE`; exact resume condition; continue queue. Do not require Admin action.
+Texture push pending -> record exact Drive/repo paths; clear Claim; keep Coder/Designer `READY` or Tester/Reviewer `VERIFY`; mark attempted-without-progress for this run only; continue queue.
+Other external conditions -> use the same no-progress checkpoint rule. Do not require Admin action.
 
 Never invent evidence or requirements. Record only real actions/results. All project Issues, comments, docs, code, asset text, tests, commits, and audit text must be English.
 
