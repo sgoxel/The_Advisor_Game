@@ -1,0 +1,14 @@
+commit_sha=dc694d67629c6153559fe6ebc9fec47daefb0ae8
+branch=main
+run_id=35357583340
+run_attempt=1
+captured_at=2026-09-18T14:41:06Z
+scenario=camera-pan-zoom
+issue_number=496
+portrait_viewport=1080x1920
+landscape_viewport=1920x1080
+requested_frames_per_viewport=2
+frame_interval_seconds=0.2
+camera_zoom=max_out
+max_repository_screenshots=20
+schedule=every_30_minutes
