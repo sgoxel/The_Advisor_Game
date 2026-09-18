@@ -1,8 +1,8 @@
-commit_sha=99d4d964a03643ed78989c0cb6eecca998b62363
+commit_sha=44fc0dbc923e08c1a50773cb0dc57aed5ac7f9bc
 branch=main
-run_id=35381142035
+run_id=35383781209
 run_attempt=1
-captured_at=2026-09-18T18:38:48Z
+captured_at=2026-09-18T19:05:26Z
 scenario=static
 issue_number=
 portrait_viewport=1080x1920
