@@ -17,7 +17,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
 
 jobs:
   capture:
@@ -157,48 +156,3 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish evidence pointer
-        uses: actions/github-script@v7
-        env:
-          CAPTURE_MODE: ${{ steps.settings.outputs.mode }}
-          CAPTURE_PREFIX: ${{ steps.capture.outputs.prefix }}
-          CAPTURE_COUNT: ${{ steps.capture.outputs.count }}
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const mode = process.env.CAPTURE_MODE;
-            const prefix = process.env.CAPTURE_PREFIX;
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const folderUrl = `${context.serverUrl}/${owner}/${repo}/tree/main/tools/screenshots`;
-            const body = [
-              '<!-- non-workflow-issue -->',
-              '## Automated Visual Review Evidence',
-              '',
-              `- Commit: \`${context.sha}\``,
-              `- Run: \`${context.runId}\``,
-              `- Mode: \`${mode}\``,
-              `- Capture prefix: \`${prefix}\``,
-              `- New screenshots: \`${process.env.CAPTURE_COUNT}\``,
-              '- Repository retention: newest `20` PNG screenshots maximum',
-              '- Automated schedule: every `30 minutes`',
-              `- Captured: ${new Date().toISOString()}`,
-              `- Artifact: \`visual-review-${context.runId}\``,
-              '- Phone: `720x1280`',
-              '- Tablet: `1280x800`',
-              mode === 'npc_action' ? '- Pair interval: `0.2s`' : '- Frames per viewport: `1`',
-              '',
-              `[Open screenshots](${folderUrl})`,
-              `[Open run](${runUrl})`,
-              '',
-              'Only evidence matching the tested commit is valid.'
-            ].join('\n');
-
-            const title = 'Visual Review: Latest Main Branch Release Screenshot';
-            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
-            const existing = issues.find(i => !i.pull_request && i.title === title);
-            if (existing) {
-              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
-            } else {
-              await github.rest.issues.create({ owner, repo, title, body });
-            }
