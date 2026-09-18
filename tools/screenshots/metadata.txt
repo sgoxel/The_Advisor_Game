@@ -1,10 +1,10 @@
-commit_sha=755da25ee72ae7812739d3f4b71c8627805aa0f4
+commit_sha=fd0d425437b2c478a61a2f3cc64b08d7236e70ee
 branch=main
-run_id=35350900987
+run_id=35351098622
 run_attempt=1
-captured_at=2026-09-18T13:35:11Z
-scenario=static
-issue_number=
+captured_at=2026-09-18T13:37:16Z
+scenario=camera-pan-zoom
+issue_number=454
 portrait_viewport=1080x1920
 landscape_viewport=1920x1080
 requested_frames_per_viewport=2
