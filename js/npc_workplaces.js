@@ -2,7 +2,7 @@
 (function installNpcWorkplaces() {
   window.Game = window.Game || {};
   const Game = window.Game;
-  const VERSION = 'r04-npc-workplaces-v1';
+  const VERSION = 'r04-npc-workplaces-v2';
 
   const OUTDOOR_PROFESSIONS = new Set(['farmer', 'hunter', 'fisher', 'woodcutter', 'forager', 'herder']);
   const NON_WORKING = new Set(['child', 'dependent', 'retired', 'unemployed', 'none']);
@@ -10,14 +10,17 @@
     guard: ['guard-post', 'barracks', 'watch', 'keep'],
     blacksmith: ['smithy', 'forge', 'workshop'],
     smith: ['smithy', 'forge', 'workshop'],
+    miller: ['mill'],
     innkeeper: ['inn', 'tavern'],
     barkeep: ['inn', 'tavern'],
+    trader: ['market', 'shop', 'trade'],
     merchant: ['market', 'shop', 'trade', 'inn'],
     shopkeeper: ['shop', 'market', 'trade'],
     healer: ['healer', 'clinic', 'temple'],
     priest: ['temple', 'shrine'],
     artisan: ['workshop', 'craft'],
     carpenter: ['workshop', 'carpenter'],
+    laborer: ['workshop', 'labor'],
     mason: ['workshop', 'mason'],
     baker: ['bakery', 'oven', 'inn'],
     cook: ['inn', 'tavern', 'kitchen'],
