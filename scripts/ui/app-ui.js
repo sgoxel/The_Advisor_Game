@@ -248,6 +248,7 @@ function renderWalkability(){
   }
 
   const proof=Walkability.proof(campaign.seed);
+  const structure=proof.structure;
   e.walkSampleCount.textContent=String(proof.sampleCount);
   e.walkClassCount.textContent=String(proof.categories.length);
   e.walkBlockedCount.textContent=String(proof.blockedCount);
@@ -255,9 +256,25 @@ function renderWalkability(){
 
   setCheck(e.vWalkDeterministic,proof.deterministic,"FAIL");
   setCheck(e.vWalkCoverage,proof.classificationCoverage,"FAIL");
-  setCheck(e.vWalkWalls,proof.structure.wallsPass&&proof.structure.interiorsPass,"FAIL");
-  setCheck(e.vWalkWater,proof.waterRulePass&&(proof.waterSamples===0||proof.waterBlocked===proof.waterSamples),"FAIL");
-  setCheck(e.vWalkEntrances,proof.structure.entrancesPass&&proof.structure.workyardPass,"FAIL");
+  setCheck(
+    e.vWalkWalls,
+    structure.outerWallsPass&&structure.interiorWallsPass,
+    "FAIL"
+  );
+  setCheck(
+    e.vWalkWater,
+    proof.waterRulePass&&(proof.waterSamples===0||proof.waterBlocked===proof.waterSamples),
+    "FAIL"
+  );
+  setCheck(
+    e.vWalkEntrances,
+    structure.exteriorDoorsPass&&
+    structure.interiorDoorsPass&&
+    structure.interiorsPass&&
+    structure.workyardPass&&
+    structure.accessTargetsPass,
+    "FAIL"
+  );
   setCheck(e.vWalkRoutes,proof.routeRulesPass&&proof.difficultRulesPass,"FAIL");
 }
 
@@ -433,17 +450,16 @@ function renderTerrain(){
       const pos=WorldCoordinates.add(center,String(dx),String(dy));
       const tile=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
       const repeated=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
+      const movement=Walkability.classify(campaign.seed,pos.x,pos.y);
+      const repeatedMovement=Walkability.classify(campaign.seed,pos.x,pos.y);
       if(
         tile.type!==repeated.type||
         tile.color!==repeated.color||
         tile.texture!==repeated.texture||
         tile.overlayTexture!==repeated.overlayTexture||
         tile.specialKind!==repeated.specialKind||
-        Walkability.classifyTile(tile).category!==Walkability.classifyTile(repeated).category||
-        Walkability.classifyTile(tile).walkable!==Walkability.classifyTile(repeated).walkable
+        JSON.stringify(movement)!==JSON.stringify(repeatedMovement)
       )deterministic=false;
-
-      const movement=Walkability.classifyTile(tile);
       const node=document.createElement("div");
       node.className="terrain-tile";
       node.style.backgroundColor=tile.color;
@@ -454,7 +470,11 @@ function renderTerrain(){
       node.dataset.y=pos.y;
       node.dataset.walkability=movement.category;
       node.dataset.walkable=movement.walkable?"true":"false";
+      node.dataset.blocksMovement=movement.blocksMovement?"true":"false";
+      node.dataset.movementSpeedKmh=String(movement.speedKmh);
       node.dataset.movementSeconds=Number.isFinite(movement.secondsPerTile)?movement.secondsPerTile.toFixed(3):"Infinity";
+      if(movement.barrierKind)node.dataset.barrierKind=movement.barrierKind;
+      if(movement.doorwayKind)node.dataset.doorwayKind=movement.doorwayKind;
       node.dataset.origin=(pos.x===center.x&&pos.y===center.y)?"true":"false";
       if(tile.buildingId)node.dataset.buildingId=tile.buildingId;
       if(tile.room)node.dataset.room=tile.room;
@@ -463,7 +483,7 @@ function renderTerrain(){
         node.classList.add("special-lot-cell");
       }
       if(tile.overlayTexture)node.appendChild(tileOverlay(tile.overlayTexture,"building-tile-overlay",0));
-      node.title=tile.label+" · "+movement.category+" ("+pos.x+","+pos.y+")";
+      node.title=tile.label+" · "+movement.category+" · "+(movement.walkable?"walkable":"blocked")+" ("+pos.x+","+pos.y+")";
       e.terrainGrid.appendChild(node);
     }
   }
