@@ -161,6 +161,10 @@ Settlement appearance, population, buildings, professions, roads, resources, def
 
 The overall world is continuous and unbounded from the player's perspective. The Protagonist begins every new campaign at world coordinate **(0,0)**, and that origin is the initial center of the gameplay view. Both X and Y may extend without a gameplay-defined boundary in negative or positive directions. Large settlements may extend across multiple local areas while remaining one coherent place.
 
+## World Planning Order
+
+World generation uses a permanent reservation order: **roads/public infrastructure → buildings → important objects → terrain fill**. This is a planning rule, not just drawing order. Buildings must query the already-planned road/path/public-space reservations and choose another deterministic placement if they overlap. Important objects then avoid both infrastructure and buildings. Terrain is the final fill and cannot erase planned infrastructure or structures.
+
 ## World Scale and Travel
 
 The authoritative world grid uses **1 tile = 2 meters × 2 meters**. Pixel size is only camera presentation and does not change physical distance.
