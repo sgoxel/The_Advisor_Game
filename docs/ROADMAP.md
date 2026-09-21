@@ -223,7 +223,74 @@ After starting a campaign, the Protagonist marker appears at the exact center of
 
 ---
 
-## WP-004 — Viewport-Filling Solid-Color Tiles
+## WP-004 — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing
+
+### Goal
+
+Define a realistic, deterministic geographic structure before rendering terrain.
+
+### Geographic hierarchy
+
+The Campaign SEED determines the fixed world foundation from general to specific:
+
+- continent;
+- country / realm;
+- region / province;
+- city;
+- district;
+- town where applicable;
+- village;
+- avenue / major road;
+- street / local road;
+- terrain and elevation;
+- rivers, lakes, coastline and water;
+- biome and vegetation;
+- climate and local environmental conditions;
+- settlement placement;
+- roads, paths and travel connections;
+- other fixed geographic/environmental details.
+
+The same Campaign SEED and the same structural location must reproduce the same geographic foundation.
+
+### Realism constraints
+
+SEED generation is not allowed to ignore world-scale realism.
+
+For distinct villages:
+
+- village centers must not be connected by any valid walking route requiring less than **1 fantasy game hour**;
+- this is based on the **shortest valid walkable route**, not straight-line distance;
+- terrain, elevation, rivers, bridges, roads, paths and other movement constraints must affect travel time;
+- if a generated candidate violates the minimum travel-time rule, deterministic generation must reject it and choose the next deterministic candidate from the same SEED process;
+- the result must remain fully reproducible from the same Campaign SEED.
+
+The minimum is therefore:
+
+**Village A center → shortest valid walking route → Village B center >= 1 fantasy hour**
+
+### Generation rule
+
+This WP uses **foundation randomness only**.
+
+Fantasy time must not influence continent, country, region, settlement, street, terrain, environment, or initial geographic generation.
+
+### In-game proof
+
+A development accordion will show the generated starting geographic hierarchy around **(0,0)** and a deterministic nearest-village spacing check.
+
+### Pass condition
+
+- same SEED reproduces the same hierarchy;
+- starting coordinate belongs to a deterministic geographic chain;
+- geography ranges from continent-level down to street-level structure;
+- environmental foundation is SEED-generated;
+- nearest distinct village has no valid walking route under 1 fantasy hour;
+- no real-random source is used;
+- changing fantasy time alone does not alter the world foundation.
+
+---
+
+## WP-005 — Viewport-Filling Solid-Color Tiles
 
 ### Goal
 
@@ -249,7 +316,7 @@ If the Gameplay Area currently shows **16 × 9 tiles**, at least **144 visible t
 
 ---
 
-## WP-005 — Camera Movement Through the Infinite World
+## WP-006 — Camera Movement Through the Infinite World
 
 ### Goal
 
@@ -269,6 +336,6 @@ Panning reveals newly required solid-color tiles.
 
 # Stage 1 Review Gate
 
-Do not introduce textures, settlements, NPC populations, economy, combat or external LLM integration until WP-001 through WP-005 are implemented and reviewed.
+Do not introduce textures, settlements, NPC populations, economy, combat or external LLM integration until WP-001 through WP-006 are implemented and reviewed.
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
