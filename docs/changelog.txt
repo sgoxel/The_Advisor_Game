@@ -1,3 +1,15 @@
+2026-09-21 22:22:00 +03:00
+- WP-S003-001 GPU 2.5D Gameplay Renderer Foundation completed and Issue #24 closed.
+- Replaced per-tile DOM gameplay terrain with one PixiJS 8 WebGL canvas while keeping terrain generation, walkability, coordinates and route planning Simulation-owned.
+- Added logical texture keys and a reusable GPU texture cache; current SVG draft assets are rasterized once to transparent 100x100 texture sources and then reused by the renderer.
+- Standard production terrain texture size is now 100x100 px; final PNG assets can later replace draft SVG sources without changing world/render code.
+- Updated screenshot_tool.py so visual evidence validates GPU canvas output instead of legacy DOM terrain nodes.
+- First visual pass exposed black SVG texture uploads; corrected by rasterizing SVG drafts before GPU texture creation.
+- Final exact-main commit 2c37af68eb339b52fa4489815d775046f090569f passed Visual Evidence run 35644258002 and Pages deployment run 35644256625.
+- Final evidence: WebGL PASS, 1 gameplay canvas, 0 DOM terrain tiles, 67 logical texture keys / 64 unique sources, 63 SVG draft sources + 1 PNG, 253/253 cells at 1.0x and 779/779 at 0.5x.
+- Artifact visual-evidence-starting-village-35644258002: 452,132 bytes.
+- Final visual/function review score: 8.8/10 PASS.
+
 2026-09-21 21:54:00 +03:00
 - Refined Stage 3 around the final rendering/performance direction.
 - WP-S003-001 Issue #24 now fixes the terrain production target at 100x100 px and requires a format-independent logical texture interface.
