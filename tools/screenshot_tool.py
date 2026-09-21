@@ -734,6 +734,16 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Starting Village bridge limit failed: {proof}")
         if int(proof.get("plotCount") or 0) < 6:
             raise RuntimeError(f"Starting Village lacks reserved plots: {proof}")
+        if proof.get("planningOrder") != ["roads", "buildings", "important-objects", "terrain"]:
+            raise RuntimeError(f"World planning order is invalid: {proof}")
+        if not proof.get("buildingReservationPass"):
+            raise RuntimeError(f"Building/road reservation overlap detected: {proof}")
+        if int(proof.get("plotRoadOverlapCount") or 0) != 0:
+            raise RuntimeError(f"Road destroys building plot cells: {proof}")
+        if int(proof.get("plotSquareOverlapCount") or 0) != 0:
+            raise RuntimeError(f"Public square overlaps building plot cells: {proof}")
+        if int(proof.get("plotPathOverlapCount") or 0) != 0:
+            raise RuntimeError(f"Local path overlaps building plot cells: {proof}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):
