@@ -1,1 +1,186 @@
-name: Visual Evidence\n\non:\n  workflow_dispatch:\n    inputs:\n      target:\n        description: URL to capture\n        required: true\n        default: https://sgoxel.github.io/The_Advisor_Game/\n        type: string\n      profile:\n        description: Viewport profile\n        required: true\n        default: landscape\n        type: choice\n        options:\n          - landscape\n          - portrait\n      scenario:\n        description: Evidence scenario\n        required: true\n        default: static\n        type: choice\n        options:\n          - static\n          - panel-cycle\n          - responsive-cycle\n          - camera-pan\n          - camera-zoom\n          - camera-pan-zoom\n          - motion-sequence\n          - time-of-day\n          - village-reference\n          - region-transition\n          - save-load\n          - npc-conversation-state\n          - npc-edge-crossing\n      shots:\n        description: Requested screenshot count; scenario minimums still apply\n        required: true\n        default: '1'\n        type: string\n      publish_to_main:\n        description: Commit tools/screenshots output to main\n        required: true\n        default: false\n        type: boolean\n  issue_comment:\n    types: [created]\n\npermissions:\n  contents: write\n  issues: write\n\nconcurrency:\n  group: visual-evidence-${{ github.repository }}\n  cancel-in-progress: false\n\njobs:\n  capture:\n    if: >-\n      github.event_name == 'workflow_dispatch' ||\n      (github.event_name == 'issue_comment' &&\n       github.event.issue.pull_request == null &&\n       startsWith(github.event.comment.body, '/visual-evidence'))\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n\n    steps:\n      - name: Checkout main\n        uses: actions/checkout@v4\n        with:\n          ref: main\n          fetch-depth: 0\n\n      - name: Set up Python\n        uses: actions/setup-python@v5\n        with:\n          python-version: '3.11'\n\n      - name: Install screenshot dependencies\n        run: python -m pip install -r tools/requirements.txt\n\n      - name: Verify browser\n        run: |\n          google-chrome --version || google-chrome-stable --version || chromium --version\n\n      - name: Configure Git identity\n        run: |\n          git config user.name 'github-actions[bot]'\n          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'\n\n      - name: Resolve capture inputs\n        id: resolve\n        shell: bash\n        env:\n          EVENT_NAME: ${{ github.event_name }}\n          INPUT_TARGET: ${{ inputs.target }}\n          INPUT_PROFILE: ${{ inputs.profile }}\n          INPUT_SCENARIO: ${{ inputs.scenario }}\n          INPUT_SHOTS: ${{ inputs.shots }}\n          INPUT_PUBLISH: ${{ inputs.publish_to_main }}\n          COMMENT_BODY: ${{ github.event.comment.body || '' }}\n          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}\n        run: |\n          target='https://sgoxel.github.io/The_Advisor_Game/'\n          profile='landscape'\n          scenario='static'\n          shots='1'\n          publish='false'\n          issue=''\n\n          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then\n            target="${INPUT_TARGET:-$target}"\n            profile="${INPUT_PROFILE:-$profile}"\n            scenario="${INPUT_SCENARIO:-$scenario}"\n            shots="${INPUT_SHOTS:-$shots}"\n            publish="${INPUT_PUBLISH:-false}"\n          else\n            requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"\n            [ -n "$requested" ] && scenario="$requested"\n            issue="$ISSUE_NUMBER"\n          fi\n\n          case "$scenario" in\n            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing) ;;\n            *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;\n          esac\n          case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac\n          case "$shots" in ''|*[!0-9]*) echo "shots must be an integer" >&2; exit 2 ;; esac\n\n          echo "target=$target" >> "$GITHUB_OUTPUT"\n          echo "profile=$profile" >> "$GITHUB_OUTPUT"\n          echo "scenario=$scenario" >> "$GITHUB_OUTPUT"\n          echo "shots=$shots" >> "$GITHUB_OUTPUT"\n          echo "publish=$publish" >> "$GITHUB_OUTPUT"\n          echo "issue=$issue" >> "$GITHUB_OUTPUT"\n\n      - name: Capture screenshots\n        shell: bash\n        env:\n          TARGET: ${{ steps.resolve.outputs.target }}\n          PROFILE: ${{ steps.resolve.outputs.profile }}\n          SCENARIO: ${{ steps.resolve.outputs.scenario }}\n          SHOTS: ${{ steps.resolve.outputs.shots }}\n          PUBLISH: ${{ steps.resolve.outputs.publish }}\n          ISSUE: ${{ steps.resolve.outputs.issue }}\n        run: |\n          args=(\n            "$TARGET"\n            "visual-${SCENARIO}"\n            --profile "$PROFILE"\n            --scenario "$SCENARIO"\n            --shots "$SHOTS"\n            --timestamp-names\n            --wait-min 1\n            --wait-max 1\n            --evidence-json "evidence-${SCENARIO}-${GITHUB_RUN_ID}.json"\n          )\n          if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi\n          if [ "$PUBLISH" != 'true' ]; then args+=(--no-publish); fi\n          python tools/screenshot_tool.py "${args[@]}"\n\n      - name: Upload visual evidence artifact\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: visual-evidence-${{ steps.resolve.outputs.scenario }}-${{ github.run_id }}\n          path: tools/screenshots/\n          if-no-files-found: warn\n          retention-days: 14\n\n      - name: Comment run link on Issue\n        if: github.event_name == 'issue_comment' && success()\n        uses: actions/github-script@v7\n        env:\n          SCENARIO: ${{ steps.resolve.outputs.scenario }}\n        with:\n          script: |\n            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;\n            await github.rest.issues.createComment({\n              owner: context.repo.owner,\n              repo: context.repo.repo,\n              issue_number: context.issue.number,\n              body: `Visual evidence completed for **${process.env.SCENARIO}**. [Open workflow run and artifact](${url}).`\n            });\n
+name: Visual Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: URL to capture
+        required: true
+        default: https://sgoxel.github.io/The_Advisor_Game/
+        type: string
+      profile:
+        description: Viewport profile
+        required: true
+        default: landscape
+        type: choice
+        options:
+          - landscape
+          - portrait
+      scenario:
+        description: Evidence scenario
+        required: true
+        default: static
+        type: choice
+        options:
+          - static
+          - panel-cycle
+          - responsive-cycle
+          - camera-pan
+          - camera-zoom
+          - camera-pan-zoom
+          - motion-sequence
+          - time-of-day
+          - village-reference
+          - region-transition
+          - save-load
+          - npc-conversation-state
+          - npc-edge-crossing
+      shots:
+        description: Requested screenshot count; scenario minimums still apply
+        required: true
+        default: '1'
+        type: string
+      publish_to_main:
+        description: Commit tools/screenshots output to main
+        required: true
+        default: false
+        type: boolean
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: visual-evidence-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request == null &&
+       startsWith(github.event.comment.body, '/visual-evidence'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install screenshot dependencies
+        run: python -m pip install -r tools/requirements.txt
+
+      - name: Verify browser
+        run: |
+          google-chrome --version || google-chrome-stable --version || chromium --version
+
+      - name: Configure Git identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Resolve capture inputs
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_PROFILE: ${{ inputs.profile }}
+          INPUT_SCENARIO: ${{ inputs.scenario }}
+          INPUT_SHOTS: ${{ inputs.shots }}
+          INPUT_PUBLISH: ${{ inputs.publish_to_main }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        run: |
+          target='https://sgoxel.github.io/The_Advisor_Game/'
+          profile='landscape'
+          scenario='static'
+          shots='1'
+          publish='false'
+          issue=''
+
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            target="${INPUT_TARGET:-$target}"
+            profile="${INPUT_PROFILE:-$profile}"
+            scenario="${INPUT_SCENARIO:-$scenario}"
+            shots="${INPUT_SHOTS:-$shots}"
+            publish="${INPUT_PUBLISH:-false}"
+          else
+            requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
+            [ -n "$requested" ] && scenario="$requested"
+            issue="$ISSUE_NUMBER"
+          fi
+
+          case "$scenario" in
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing) ;;
+            *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
+          esac
+          case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac
+          case "$shots" in ''|*[!0-9]*) echo "shots must be an integer" >&2; exit 2 ;; esac
+
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+          echo "scenario=$scenario" >> "$GITHUB_OUTPUT"
+          echo "shots=$shots" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "issue=$issue" >> "$GITHUB_OUTPUT"
+
+      - name: Capture screenshots
+        shell: bash
+        env:
+          TARGET: ${{ steps.resolve.outputs.target }}
+          PROFILE: ${{ steps.resolve.outputs.profile }}
+          SCENARIO: ${{ steps.resolve.outputs.scenario }}
+          SHOTS: ${{ steps.resolve.outputs.shots }}
+          PUBLISH: ${{ steps.resolve.outputs.publish }}
+          ISSUE: ${{ steps.resolve.outputs.issue }}
+        run: |
+          args=(
+            "$TARGET"
+            "visual-${SCENARIO}"
+            --profile "$PROFILE"
+            --scenario "$SCENARIO"
+            --shots "$SHOTS"
+            --timestamp-names
+            --wait-min 1
+            --wait-max 1
+            --evidence-json "evidence-${SCENARIO}-${GITHUB_RUN_ID}.json"
+          )
+          if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi
+          if [ "$PUBLISH" != 'true' ]; then args+=(--no-publish); fi
+          python tools/screenshot_tool.py "${args[@]}"
+
+      - name: Upload visual evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-evidence-${{ steps.resolve.outputs.scenario }}-${{ github.run_id }}
+          path: tools/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Comment run link on Issue
+        if: github.event_name == 'issue_comment' && success()
+        uses: actions/github-script@v7
+        env:
+          SCENARIO: ${{ steps.resolve.outputs.scenario }}
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Visual evidence completed for **${process.env.SCENARIO}**. [Open workflow run and artifact](${url}).`
+            });
