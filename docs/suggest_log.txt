@@ -1,3 +1,6 @@
+2026-09-21 18:51:00 +03:00 | Stage 2 / WP-007C
+Suggestion: later add a small deterministic A/B mask variant set for long shorelines and long terrain borders so repeated neighboring tiles can vary the curve subtly while keeping border endpoints aligned and fully deterministic.
+
 2026-09-21 18:27:00 +03:00 | Stage 2 / WP-007B
 Suggestion: in a later art-refinement WP, replace the neutral L/C/U boundary contour overlays with two-material SVG masks that visually blend the actual adjoining terrain textures while preserving the same deterministic neighbor-shape selection.
 
