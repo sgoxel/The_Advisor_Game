@@ -191,15 +191,20 @@ Compatible seeds should reproduce the same unchanged foundations of the world, w
 
 There is **no real randomness** in the Simulation.
 
-Every random result uses exactly two authoritative inputs:
+Two deterministic modes are used:
 
-**Campaign SEED + Fantasy Game Timestamp**
+**World foundation generation** — terrain, environment, initial NPC generation and other fixed starting-world generation use Campaign-SEED-based deterministic randomness and do **not** use fantasy time. Stable structural locations or slots may be used to address a deterministic SEED-based sample, such as tile coordinates or an NPC generation slot.
 
-If both values are the same, the random result must be exactly the same.
+**Live simulation actions** — NPC actions, decisions, dynamic events and other changing behavior use:
 
-The random function does not read real-world time directly and may not use `Math.random()`, browser/OS cryptographic randomness, device state, mutable PRNG state, call order, hidden counters, system-specific sub-seeds, or other random inputs. The authoritative fantasy timestamp is supplied by the game-time system.
+**Random(Campaign SEED, Fantasy Game Timestamp)**
 
-This rule exists so later simulation runs can be reproduced and compared from fixed campaign state.
+If the Campaign SEED and Fantasy Game Timestamp are the same, the live result must be exactly the same.
+
+Neither mode may use `Math.random()`, browser/OS cryptographic randomness, device entropy, uncontrolled real randomness, or real-world time as a random input. The authoritative fantasy timestamp for live actions is supplied by the game-time system.
+
+This split keeps the generated world stable across time while still making later live simulation runs reproducible.
+
 
 Procedural generation may shape terrain, elevation, biomes, water and vegetation; roads, paths and bridges; settlement archetypes and layouts; buildings, landmarks and important locations; local population and home/work relationships; ecology and habitat foundations; and base political geography.
 
