@@ -14,7 +14,7 @@ const STRUCTURE_TYPES=Object.freeze([
 
 const LOT_TYPES=Object.freeze([
   Object.freeze({kind:"market-yard",label:"Market Yard",w:4,h:3,nearKind:"shop",maxTargetDistance:14,minRadius:6,maxRadius:21}),
-  Object.freeze({kind:"timber-yard",label:"Timber / Work Yard",w:5,h:3,nearKind:"workshop",maxTargetDistance:12,minRadius:13,maxRadius:22})
+  Object.freeze({kind:"timber-yard",label:"Timber / Work Yard",w:4,h:3,nearKind:"workshop",maxTargetDistance:16,minRadius:10,maxRadius:23})
 ]);
 
 function bounds(cx,cy,w,h){
