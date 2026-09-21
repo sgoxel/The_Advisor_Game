@@ -30,10 +30,13 @@ function getTile(seedValue,xValue,yValue){
   const cell=building?building.cell:null;
   const textureVariant=cell?cell.textureVariant:null;
   const overlayVariant=cell?cell.overlayVariant:null;
+  const presentationColor=(type==="wall"||type==="door")
+    ?TerrainPalette.get("floor").color
+    :palette.color;
   return Object.freeze({
     x,y,type,
     label:palette.label,
-    color:palette.color,
+    color:presentationColor,
     texture:TileTextures.asset(type,textureVariant),
     overlayTexture:overlayVariant?TileTextures.asset(type,overlayVariant):null,
     buildingId:cell?cell.plan.id:null,
