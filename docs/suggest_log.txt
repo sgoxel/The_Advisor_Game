@@ -1,3 +1,6 @@
+2026-09-21 21:30:00 +03:00 | Stage 3/4 rendering and interior architecture
+Suggestion: after the Stage 3 performance baseline is stable, keep future visual richness primarily in reusable sprite/texture layers, pre-baked shadows and selective animation. Avoid introducing real-time 3D lighting or per-building 3D geometry unless measured profiling later proves there is enough headroom.
+
 2026-09-21 21:25:00 +03:00 | Stage 3 planning
 Suggestion: keep transient visitors, richer social interaction and economy out of Stage 3 until the 12 persistent Starting Village residents can be generated, assigned, scheduled and visibly routed reliably. This preserves a small testable population foundation before adding simulation breadth.
 
