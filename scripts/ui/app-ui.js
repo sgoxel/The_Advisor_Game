@@ -75,6 +75,48 @@ function renderPRNG(fantasyTimestampMs){
     "FAIL"
   );
 }
+function renderGeography(){
+  const campaign=SeedSystem.getCampaign();
+  const position=Protagonist.getPosition();
+  if(!campaign||!position){
+    ["geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
+     "geoBiome","geoClimate","geoElevation","geoTerrain","nearestVillage","nearestVillageWalk"].forEach(id=>e[id].textContent="—");
+    setCheck(e.vGeoDeterministic,false,"WAITING");
+    setCheck(e.vVillageSpacing,false,"WAITING");
+    return;
+  }
+
+  const first=GeographyFoundation.location(campaign.seed,position.x,position.y);
+  const second=GeographyFoundation.location(campaign.seed,position.x,position.y);
+  const h=first.hierarchy;
+  const env=first.environment;
+  e.geoContinent.textContent=h.continent;
+  e.geoCountry.textContent=h.country;
+  e.geoRegion.textContent=h.region;
+  e.geoCity.textContent=h.city;
+  e.geoDistrict.textContent=h.district;
+  e.geoVillage.textContent=h.village;
+  e.geoAvenue.textContent=h.avenue;
+  e.geoStreet.textContent=h.street;
+  e.geoBiome.textContent=env.biome;
+  e.geoClimate.textContent=env.climate;
+  e.geoElevation.textContent=env.elevationMeters+" m";
+  e.geoTerrain.textContent=TerrainPalette.get(first.terrain).label;
+
+  const same=JSON.stringify(first)===JSON.stringify(second);
+  setCheck(e.vGeoDeterministic,same,"FAIL");
+
+  const proof=GeographyFoundation.villageSpacingProof(campaign.seed);
+  if(proof.nearest){
+    e.nearestVillage.textContent=proof.nearest.name+" ("+proof.nearest.x+","+proof.nearest.y+")";
+    e.nearestVillageWalk.textContent=Number.isFinite(proof.minutes)?proof.minutes.toFixed(1)+" fantasy minutes":"No valid walking route";
+  }else{
+    e.nearestVillage.textContent="—";
+    e.nearestVillageWalk.textContent="—";
+  }
+  setCheck(e.vVillageSpacing,proof.pass,"FAIL");
+}
+
 function renderTerrainLegend(){
   e.terrainLegend.innerHTML="";
   TerrainPalette.all().forEach(item=>{
@@ -177,6 +219,7 @@ function renderStatic(){
   setCheck(e.vDate,!!campaign&&GameTime.validateStartYear(),campaign?"FAIL":"WAITING");
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
   renderWorldCoordinates();
+  renderGeography();
 }
 
 function renderClock(){
