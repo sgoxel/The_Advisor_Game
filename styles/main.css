@@ -165,3 +165,10 @@ details[open] summary{border-bottom:1px solid #343a30}
   .status-item,.status-message{padding:5px 8px}
   .gameplay-placeholder{gap:4px}.gameplay-placeholder strong{font-size:17px}.gameplay-placeholder span{font-size:11px}
 }
+
+.geography-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0 14px}
+.geography-grid>div{display:grid;gap:4px;min-width:0;padding:9px;border:1px solid #343a30;border-radius:7px}
+.geography-grid span{font-size:10px;text-transform:uppercase;color:#929b8c}
+.geography-grid strong{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:720px){.geography-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:460px){.geography-grid{grid-template-columns:1fr}}
