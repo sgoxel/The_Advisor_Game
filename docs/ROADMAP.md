@@ -412,7 +412,8 @@ Move through the unbounded tile world without creating a finite full map.
 - the terrain renderer generates only the current viewport-sized tile window plus its existing edge buffer around the camera center;
 - the Protagonist sprite is positioned relative to the camera and may move off-screen while the Protagonist world coordinate remains unchanged;
 - camera coordinates use the same arbitrary-size signed integer coordinate system as the world;
-- deterministic terrain signatures verify that revisiting the same camera coordinate reproduces the same SEED terrain.
+- deterministic terrain signatures verify that revisiting the same camera coordinate reproduces the same SEED terrain;
+- visual-evidence `camera-pan` automatically asserts that Camera moves, Protagonist Simulation coordinates remain unchanged, Camera returns to its starting coordinate, and returned terrain evidence matches the starting terrain.
 
 ### In-game proof
 
