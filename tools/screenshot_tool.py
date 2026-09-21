@@ -146,6 +146,9 @@ return (() => {
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
+        cameraCoordinate: document.querySelector('#cameraCoordinate')?.textContent?.trim() || null,
+        cameraX: document.querySelector('#cameraX')?.textContent?.trim() || null,
+        cameraY: document.querySelector('#cameraY')?.textContent?.trim() || null,
         protagonistSpriteLoaded: Boolean(sprite?.complete && sprite?.naturalWidth > 0),
         protagonistSpriteSize: sprite ? {
           naturalWidth: sprite.naturalWidth || 0,
@@ -412,10 +415,16 @@ def _drag_canvas(driver, dx: int, dy: int) -> str:
     from selenium.webdriver.common.by import By
 
     elements = driver.find_elements(By.ID, "gameCanvas")
-    if not elements:
-        return "camera-drag-skipped:no-gameCanvas"
-    ActionChains(driver).move_to_element(elements[0]).click_and_hold().move_by_offset(dx, dy).release().perform()
-    return f"drag-canvas:{dx},{dy}"
+    target = elements[0] if elements else None
+    target_name = "gameCanvas"
+    if target is None:
+        current = driver.find_elements(By.ID, "gameplayArea")
+        target = current[0] if current else None
+        target_name = "gameplayArea"
+    if target is None:
+        return "camera-drag-skipped:no-camera-surface"
+    ActionChains(driver).move_to_element(target).click_and_hold().move_by_offset(dx, dy).release().perform()
+    return f"drag-{target_name}:{dx},{dy}"
 
 
 def _wheel_canvas(driver, delta_y: int) -> str:
