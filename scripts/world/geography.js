@@ -95,6 +95,48 @@ function broadCell(x,y,size){
   const s=BigInt(size);
   return Object.freeze({x:floorDiv(toBig(x),s),y:floorDiv(toBig(y),s)});
 }
+
+function smoothstep(value){
+  const t=Math.max(0,Math.min(1,value));
+  return t*t*(3-2*t);
+}
+
+function lerp(a,b,t){
+  return a+(b-a)*t;
+}
+
+function valueNoise(seed,label,x,y,scale){
+  const px=toBig(x);
+  const py=toBig(y);
+  const s=BigInt(scale);
+  const gx=floorDiv(px,s);
+  const gy=floorDiv(py,s);
+  const localX=Number(px-gx*s)/Number(s);
+  const localY=Number(py-gy*s)/Number(s);
+  const tx=smoothstep(localX);
+  const ty=smoothstep(localY);
+
+  const n00=unit(seed,label+":"+cellKey(gx,gy));
+  const n10=unit(seed,label+":"+cellKey(gx+1n,gy));
+  const n01=unit(seed,label+":"+cellKey(gx,gy+1n));
+  const n11=unit(seed,label+":"+cellKey(gx+1n,gy+1n));
+
+  return lerp(lerp(n00,n10,tx),lerp(n01,n11,tx),ty);
+}
+
+function layeredNoise(seed,label,x,y,layers){
+  let value=0;
+  let total=0;
+  for(const layer of layers){
+    value+=valueNoise(seed,label+":"+layer[0],x,y,layer[0])*layer[1];
+    total+=layer[1];
+  }
+  return total>0?value/total:0.5;
+}
+
+function naturalField(seed,label,x,y){
+  return layeredNoise(seed,label,x,y,[[96,0.48],[42,0.32],[17,0.20]]);
+}
 function hierarchy(seed,x,y){
   const continent=broadCell(x,y,131072);
   const country=broadCell(x,y,32768);
@@ -118,11 +160,15 @@ function hierarchy(seed,x,y){
 }
 
 function environment(seed,x,y){
-  const macro=broadCell(x,y,24);
-  const key=cellKey(macro.x,macro.y);
-  const elevation=integer(seed,"env:elevation:"+key,20,1850);
-  const moisture=integer(seed,"env:moisture:"+key,18,92);
-  const temp=integer(seed,"env:temperature:"+key,2,26);
+  const elevationField=layeredNoise(seed,"env:elevation",x,y,[[192,0.50],[72,0.30],[24,0.20]]);
+  const moistureField=layeredNoise(seed,"env:moisture",x,y,[[144,0.50],[54,0.30],[18,0.20]]);
+  const temperatureField=layeredNoise(seed,"env:temperature",x,y,[[256,0.60],[96,0.25],[32,0.15]]);
+
+  const elevation=Math.round(20+1830*Math.pow(elevationField,1.28));
+  const moisture=Math.round(12+84*moistureField);
+  const altitudeCooling=Math.min(11,elevation/240);
+  const temp=Math.max(-6,Math.min(30,Math.round(5+27*temperatureField-altitudeCooling)));
+
   let climate="Temperate";
   if(temp<=7)climate="Cold";
   else if(temp>=22)climate="Warm";
@@ -152,21 +198,39 @@ function villageInfluence(seed,x,y){
 
 function baseTerrain(seed,x,y){
   const env=environment(seed,x,y);
-  const block=broadCell(x,y,12);
-  const key=cellKey(block.x,block.y);
-  const local=unit(seed,"terrain:local:"+WorldCoordinates.normalize(x)+":"+WorldCoordinates.normalize(y));
-  const waterChance=unit(seed,"terrain:water:"+key);
+  const elevation=env.elevationMeters/1850;
+  const moisture=env.moisturePercent/100;
+  const hydro=naturalField(seed,"terrain:hydro",x,y);
+  const vegetation=naturalField(seed,"terrain:vegetation",x,y);
+  const soil=layeredNoise(seed,"terrain:soil",x,y,[[58,0.52],[27,0.30],[11,0.18]]);
+  const cultivation=layeredNoise(seed,"terrain:cultivation",x,y,[[44,0.58],[19,0.27],[8,0.15]]);
 
-  if(waterChance<0.085)return "water";
-  if(env.elevationMeters>1450)return local<0.72?"rock":"grass";
-  if(env.moisturePercent>76)return local<0.70?"forest":"mud";
-  if(env.moisturePercent<27)return local<0.60?"sand":"dirt";
-  if(env.biome==="Woodland")return local<0.72?"forest":"grass";
-  if(local<0.58)return "grass";
-  if(local<0.72)return "farmland";
-  if(local<0.84)return "dirt";
-  if(local<0.92)return "forest";
-  return "mud";
+  // Smooth fields create irregular coastlines/lakes instead of rectangular macro cells.
+  const waterScore=hydro*0.68+(1-elevation)*0.32;
+  if(waterScore>0.705&&elevation<0.62)return "water";
+
+  if(elevation>0.77){
+    return soil>0.43?"rock":"grass";
+  }
+
+  if(moisture>0.76&&elevation<0.54&&soil>0.50)return "mud";
+  if(moisture>0.62&&vegetation>0.50)return "forest";
+  if(moisture<0.29){
+    return soil>0.48?"sand":"dirt";
+  }
+
+  if(cultivation>0.69&&moisture>0.38&&moisture<0.72&&elevation<0.58)return "farmland";
+  if(soil>0.69&&moisture<0.58)return "dirt";
+  if(vegetation>0.74&&moisture>0.50)return "forest";
+  return "grass";
+}
+
+function roadOffset(seed,village,axis,progress){
+  const key="village-road:"+axis+":"+village.x+":"+village.y;
+  const field=axis==="vertical"
+    ? valueNoise(seed,key,"0",progress,7)
+    : valueNoise(seed,key,progress,"0",7);
+  return Math.round((field-0.5)*4);
 }
 
 function getTerrainType(seed,x,y){
@@ -175,13 +239,29 @@ function getTerrainType(seed,x,y){
   if(influence&&influence.distance<=14n){
     const vx=toBig(influence.village.x),vy=toBig(influence.village.y);
     const dx=px-vx,dy=py-vy;
-    if(dx===0n||dy===0n)return "road";
-    const nearRoad=absBig(dx)<=1n||absBig(dy)<=1n;
+
+    const verticalOffset=BigInt(roadOffset(seed,influence.village,"vertical",dy.toString()));
+    const horizontalOffset=BigInt(roadOffset(seed,influence.village,"horizontal",dx.toString()));
+    const verticalDistance=absBig(dx-verticalOffset);
+    const horizontalDistance=absBig(dy-horizontalOffset);
+    const onRoad=verticalDistance===0n||horizontalDistance===0n;
+
+    if(onRoad)return "road";
+
+    const nearRoad=verticalDistance<=1n||horizontalDistance<=1n;
     if(nearRoad&&absBig(dx)<=8n&&absBig(dy)<=8n){
       return unit(seed,"building:"+px+":"+py)<0.36?"building":"dirt";
     }
+
     if(absBig(dx)<=12n&&absBig(dy)<=12n){
-      return unit(seed,"village-ground:"+px+":"+py)<0.58?"grass":"farmland";
+      const villageGround=layeredNoise(
+        seed,
+        "village-ground:"+influence.village.x+":"+influence.village.y,
+        dx.toString(),
+        dy.toString(),
+        [[10,0.65],[4,0.35]]
+      );
+      return villageGround>0.57?"farmland":"grass";
     }
   }
   return baseTerrain(seed,x,y);
