@@ -1,3 +1,13 @@
+2026-09-21 17:56:00 +03:00
+- Added authoritative world-planning order: roads/public infrastructure -> buildings -> important objects -> terrain fill.
+- This is now a reservation/planning rule, not a rendering-priority workaround.
+- Replaced fixed Starting Village plot positions with deterministic road-aware plot planning.
+- Building plots are accepted only when every plot cell is outside main roads, local paths and the public square.
+- Plot candidates require road/path adjacency and cannot overlap another plot with its safety spacing.
+- TerrainFoundation now explicitly queries road reservations first, building reservations second, important-object reservations third, and computes terrain/background last.
+- Added proof metrics for plot-road, plot-path and plot-square overlap; all must be zero.
+- Updated ROADMAP.md and README.md.
+
 2026-09-21 17:48:03 +03:00
 - WP-007A Starting Village Core + Mainland Connection completed and verified.
 - GitHub Actions run 35614323669 passed the final 3-frame Starting Village scenario.
