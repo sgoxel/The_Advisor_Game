@@ -16,6 +16,7 @@ const BASE=Object.freeze({
   rock:"rock.svg",
   sand:"sand.svg",
   farmland:"farmland.svg",
+  yard:"yard.svg",
   floor:"floor_wood.svg",
   wall:"wall_n.svg",
   door:"door_s.svg"
@@ -23,6 +24,14 @@ const BASE=Object.freeze({
 
 const VARIANTS=Object.freeze({
   "floor-wood":"floor_wood.svg",
+  "floor-stone":"floor_stone.svg",
+  "floor-workshop":"floor_workshop.svg",
+  "floor-barn":"floor_barn.svg",
+  "marker-tavern":"marker_tavern.svg",
+  "marker-shop":"marker_shop.svg",
+  "marker-workshop":"marker_workshop.svg",
+  "marker-barn":"marker_barn.svg",
+  "marker-civic":"marker_civic.svg",
   "wall-n":"wall_n.svg",
   "wall-e":"wall_e.svg",
   "wall-s":"wall_s.svg",
