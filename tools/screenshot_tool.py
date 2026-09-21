@@ -71,7 +71,7 @@ SCENARIO_MIN_SHOTS = {
     "static": 1,
     "panel-cycle": 4,
     "camera-pan": 3,
-    "camera-zoom": 3,
+    "camera-zoom": 5,
     "camera-pan-zoom": 4,
     "responsive-cycle": 3,
     "motion-sequence": 6,
@@ -456,6 +456,51 @@ def _wheel_canvas(driver, delta_y: int) -> str:
     return f"wheel-{target_name}:{delta_y}"
 
 
+
+def _pinch_gameplay(driver, scale: float) -> str:
+    from selenium.webdriver.common.by import By
+
+    elements = driver.find_elements(By.ID, "gameplayArea")
+    if not elements:
+        return "pinch-skipped:no-gameplayArea"
+
+    target = elements[0]
+    result = driver.execute_script(
+        """
+        const target = arguments[0];
+        const scale = Number(arguments[1]);
+        const rect = target.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const startHalf = 50;
+        const endHalf = startHalf * scale;
+
+        const fire = (type, id, x, y) => target.dispatchEvent(new PointerEvent(type, {
+          pointerId: id,
+          pointerType: 'touch',
+          isPrimary: id === 101,
+          clientX: x,
+          clientY: y,
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          buttons: type === 'pointerup' ? 0 : 1
+        }));
+
+        fire('pointerdown', 101, cx - startHalf, cy);
+        fire('pointerdown', 102, cx + startHalf, cy);
+        fire('pointermove', 101, cx - endHalf, cy);
+        fire('pointermove', 102, cx + endHalf, cy);
+        fire('pointerup', 101, cx - endHalf, cy);
+        fire('pointerup', 102, cx + endHalf, cy);
+        return true;
+        """,
+        target,
+        scale,
+    )
+    return f"pinch-gameplay:{scale:.3f}" if result else "pinch-failed"
+
+
 def _legacy_control(driver, action: str) -> str:
     result = driver.execute_script(
         """
@@ -493,7 +538,13 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "camera-pan":
         return _drag_canvas(driver, 120 if frame_index % 2 else -120, 0)
     if scenario == "camera-zoom":
-        return _wheel_canvas(driver, -500 if frame_index % 2 else 500)
+        actions = (
+            lambda: _wheel_canvas(driver, -500),
+            lambda: _wheel_canvas(driver, 500),
+            lambda: _pinch_gameplay(driver, 1.5),
+            lambda: _pinch_gameplay(driver, 2.0 / 3.0),
+        )
+        return actions[(frame_index - 1) % len(actions)]()
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -521,27 +572,46 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "camera-zoom":
-        if len(frames) < 3:
-            raise RuntimeError("camera-zoom requires at least three evidence frames")
-        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
-        start, zoomed, returned = builds
+        if len(frames) < 5:
+            raise RuntimeError("camera-zoom requires five evidence frames")
+
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:5]]
+        start, wheel_zoomed, wheel_returned, pinch_zoomed, pinch_returned = builds
+
         start_zoom = start.get("cameraZoom")
-        zoomed_zoom = zoomed.get("cameraZoom")
-        returned_zoom = returned.get("cameraZoom")
-        if not start_zoom or zoomed_zoom == start_zoom:
+        wheel_zoom = wheel_zoomed.get("cameraZoom")
+        wheel_return = wheel_returned.get("cameraZoom")
+        pinch_zoom = pinch_zoomed.get("cameraZoom")
+        pinch_return = pinch_returned.get("cameraZoom")
+
+        if not start_zoom or wheel_zoom == start_zoom:
             raise RuntimeError(
-                f"camera-zoom did not change zoom: start={start_zoom}, zoomed={zoomed_zoom}"
+                f"mouse wheel did not change zoom: start={start_zoom}, zoomed={wheel_zoom}"
             )
-        if returned_zoom != start_zoom:
+        if wheel_return != start_zoom:
             raise RuntimeError(
-                f"camera-zoom did not return to start zoom: start={start_zoom}, returned={returned_zoom}"
+                f"mouse wheel did not return to start zoom: start={start_zoom}, returned={wheel_return}"
             )
+        if pinch_zoom == start_zoom:
+            raise RuntimeError(
+                f"touch pinch did not change zoom: start={start_zoom}, zoomed={pinch_zoom}"
+            )
+        if pinch_return != start_zoom:
+            raise RuntimeError(
+                f"touch pinch did not return to start zoom: start={start_zoom}, returned={pinch_return}"
+            )
+
         positions = [item.get("protagonistLocation") for item in builds]
         cameras = [item.get("cameraCoordinate") for item in builds]
         if len(set(positions)) != 1 or len(set(cameras)) != 1:
             raise RuntimeError(
-                f"camera-zoom changed world coordinates: protagonist={positions}, camera={cameras}"
+                f"camera zoom changed world coordinates: protagonist={positions}, camera={cameras}"
             )
+
+        for index, item in enumerate(builds, start=1):
+            grid = item.get("terrainGrid") or {}
+            if not grid.get("coveragePass"):
+                raise RuntimeError(f"zoom frame {index} lost terrain coverage: {grid}")
         return
 
     if scenario != "camera-pan":
