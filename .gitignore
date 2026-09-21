@@ -16,3 +16,31 @@ _site/
 # counterproductive to check this file into the repository.
 # Details at https://github.com/github/pages-gem/issues/768
 Gemfile.lock
+
+
+# Google Drive temporary upload files
+.tmp.driveupload/
+**/.tmp.driveupload/
+
+# Windows metadata
+desktop.ini
+Desktop.ini
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+*.bak
+*.swp
+*.swo
+
+# Google Drive / sync temporary files
+*.gdoc
+*.gsheet
+*.gslides
+*.part
+*.crdownload
+
+# Common OS metadata
+.DS_Store
