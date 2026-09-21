@@ -29,9 +29,9 @@ function makeSprite(texture,width,height){
 }
 
 function makeColorSprite(color,width,height){
-  const sprite=makeSprite(PIXI.Texture.WHITE,width,height);
-  sprite.tint=colorNumber(color);
-  return sprite;
+  const graphic=new PIXI.Graphics();
+  graphic.rect(0,0,width,height).fill({color:colorNumber(color)});
+  return graphic;
 }
 
 function destroyLayer(container){
