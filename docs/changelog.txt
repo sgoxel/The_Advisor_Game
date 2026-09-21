@@ -1,3 +1,11 @@
+2026-09-21 16:42:34 +03:00
+- Final natural-terrain presentation refinement.
+- Removed normal per-tile grid seams so adjacent same-color terrain reads as one continuous region instead of a field of squares.
+- Kept only diagnostic hover/origin outlines.
+- Increased temporary village-road deterministic meander amplitude so roads are less visually rigid.
+- Visual-evidence workflow now reruns terrain-natural checks when geography.js or main.css changes.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 16:35:00 +03:00
 - Corrected unnatural square/rectangular terrain regions visible in the WP-006 public build.
 - Replaced fixed 24x24 environment blocks and 12x12 terrain blocks with deterministic interpolated multi-scale SEED fields.
