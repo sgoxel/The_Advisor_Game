@@ -1,3 +1,12 @@
+2026-09-21 14:42:07 +03:00
+- Corrected WP-002 deterministic randomness contract.
+- Random results now use ONLY Campaign SEED + authoritative fantasy game timestamp.
+- Replaced stateful SEED-only PRNG stream with stateless PRNG.randomUint32(seed, fantasyTimestampMs).
+- Removed sub-SEED design from the roadmap because extra random inputs are not allowed.
+- Added authoritative fantasy timestamp access in scripts/core/game-time.js.
+- Updated WP-002 in-game verification, docs/ROADMAP.md and docs/README.md.
+- No real-random source, mutable PRNG state or call-order dependency is permitted.
+
 2026-09-21 14:45:00 +03:00
 - WP-002 Deterministic PRNG implemented.
 - Added scripts/core/prng.js with stable SEED hashing and deterministic 32-bit output.
