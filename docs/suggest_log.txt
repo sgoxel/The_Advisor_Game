@@ -1,3 +1,6 @@
+2026-09-21 17:34:00 +03:00 | Stage 2 / WP-007B
+Suggestion: keep room area in square meters as authoritative metadata in addition to tile count. With 2m tiles, one floor tile is 4m². This makes future housing quality, rent, capacity and furniture rules much easier to balance.
+
 2026-09-21 16:55:00 +03:00 | Stage 2 / WP-007
 Suggestion: when WP-007 creates secondary village roads and footpaths, attach every branch to the authoritative main-road network rather than generating isolated road-colored cells. Secondary roads should inherit narrower width and must never sever the main road.
 
