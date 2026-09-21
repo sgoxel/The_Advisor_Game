@@ -323,7 +323,7 @@ The WP-004 accordion shows the generated starting geographic hierarchy around **
 
 ---
 
-## WP-005 — Viewport-Filling Solid-Color Tiles
+## WP-005 — Viewport-Filling Solid-Color Tiles — COMPLETE
 
 ### Goal
 
@@ -346,7 +346,7 @@ Before production textures exist, terrain and structural tiles use distinct mute
 
 These colors are presentation-only. Terrain identity remains Simulation/world-foundation data.
 
-The palette is implemented in `scripts/data/terrain-palette.js`. The current renderer now consumes the completed WP-004 geography foundation. WP-005 remains incomplete until viewport-fill behavior is reviewed as its own Work Package.
+The palette is implemented in `scripts/data/terrain-palette.js`. The renderer consumes the completed WP-004 geography foundation and WP-005 now owns viewport-fill behavior.
 
 ### Rules
 
@@ -361,10 +361,22 @@ Example:
 
 If the Gameplay Area currently shows **16 × 9 tiles**, at least **144 visible tiles** are generated.
 
+### Implemented
+
+- logical terrain tiles remain **100×100 px** in the current presentation layer;
+- row/column counts derive from the actual Gameplay Area size with an additional edge buffer;
+- row/column counts are forced odd so the authoritative world-center coordinate remains the exact center tile;
+- a `ResizeObserver` recalculates terrain when the Gameplay Area dimensions change;
+- terrain-grid runtime metadata exposes viewport size, rows, columns, tile size, total grid coverage and center validity;
+- GitHub visual evidence records the same coverage metrics for landscape and portrait verification;
+- no terrain textures or tile atlas are used.
+
 ### Pass condition
 
 - no blank gameplay area is visible;
 - resizing recalculates required rows and columns;
+- rendered grid dimensions are at least as large as the Gameplay Area in both axes;
+- the world-center tile remains exactly centered;
 - same SEED and coordinates reproduce the same terrain type and color;
 - every supported basic terrain type has a distinct solid color.
 
