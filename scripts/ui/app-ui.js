@@ -188,7 +188,6 @@ function renderWorldCoordinates(){
     e.gameplayPlaceholder.hidden=true;
     renderTerrain();
     e.protagonistMarker.hidden=false;
-    e.protagonistMarkerCoords.textContent=label;
     e.protagonistLocation.textContent=label;
     e.detailProtagonistX.textContent=position.x;
     e.detailProtagonistY.textContent=position.y;
@@ -268,6 +267,14 @@ function init(){
   e.newCampaignButton.onclick=startNewCampaign;
   e.restartCampaignButton.onclick=restartCampaign;
   e.saveSettingsButton.onclick=saveSettings;
+  const updateSpriteCheck=()=>{
+    const loaded=e.protagonistSprite.complete&&e.protagonistSprite.naturalWidth>0;
+    e.protagonistFallback.hidden=loaded;
+    setCheck(e.vProtagonistSprite,loaded,"FAIL");
+  };
+  e.protagonistSprite.addEventListener("load",updateSpriteCheck);
+  e.protagonistSprite.addEventListener("error",updateSpriteCheck);
+  updateSpriteCheck();
   document.querySelectorAll("[data-close-popup]").forEach(btn=>btn.onclick=()=>closePopup(btn.dataset.closePopup));
   document.addEventListener("keydown",event=>{if(event.key==="Escape")closeAll()});
 
