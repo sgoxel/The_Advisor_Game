@@ -537,3 +537,19 @@
 - Added docs/ROADMAP.md aligned with current WP-001 and the next narrow work packages.
 - Removed unused scripts/ui/seed-ui.js.
 - Root-file rule restored: index.html is the only root file.
+
+
+2026-09-21 23:30:16 +03:00
+- WP-S003-004 Layered 2.5D Building Presentation + Interior Visibility completed.
+- Added ordered PixiJS/WebGL presentation layers for ground/floor, lower structures and authoritative interior objects, lightweight shadows, Y-sorted characters/entities, upper walls/foreground structures, roofs/ceilings, and route verification.
+- Added raised wall/door presentation and lightweight furniture presentation without changing authoritative collision, routing, coordinates, or interior-object data.
+- Added roof visibility behavior: full roof outdoors, partial fade while entering, interior cutaway while inside/behind foreground objects, and roof restoration when leaving.
+- Added a renderer-only five-state proof character sequence: outside → entering → inside → behind foreground object → leaving.
+- Extended tools/screenshot_tool.py with the reusable building-presentation scenario and a --pause-seconds inspection option.
+- Updated the Visual Evidence workflow so Issue-triggered evidence tests the exact checked-out main branch through a local repository server.
+- Authoritative GitHub Actions run 35651233954 passed on commit 9ea02629c6a778d5087ab46a540fa2766cd91e51.
+- Evidence artifact visual-evidence-building-presentation-35651233954 (ID 10662765291, 1,025,968 bytes) contains five screenshots plus runtime JSON.
+- Runtime proof kept Camera and Protagonist at (0,0) through all five visual states; 7 ordered presentation layers, 5 visible roofs, 12 visible interior objects, 5 foreground objects, and 65 raised wall caps were reported.
+- Roof alpha proof: outside 0.84 → entering 0.42 → inside 0.15 → behind 0.15 → leaving 0.84; foreground proof used S2:counter:01.
+- Final visual/function score: 8.3/10 PASS.
+- Updated docs/ROADMAP.md and marked WP-S003-004 COMPLETED.
