@@ -7,6 +7,10 @@ const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
+  "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
+  "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
+  "geoBiome","geoClimate","geoElevation","geoTerrain","nearestVillage","nearestVillageWalk",
+  "vGeoDeterministic","vGeoTimeFree","vVillageSpacing","vTerrainGeography",
   "gameplayPlaceholder","protagonistMarker","protagonistSprite","protagonistFallback","protagonistLocation","wp3Position","vOrigin","vCenter","vProtagonistSprite","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
