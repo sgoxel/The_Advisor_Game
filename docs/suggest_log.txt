@@ -1,3 +1,6 @@
+2026-09-21 21:54:00 +03:00 | Stage 3 / asset preparation and performance
+Suggestion: after WP-S003-006 establishes measured cache/render metrics, tune the coordinate prefetch-buffer size from actual camera speed and device memory instead of hard-coding a large universal buffer. Keep the initial implementation intentionally small and measurable.
+
 2026-09-21 21:30:00 +03:00 | Stage 3/4 rendering and interior architecture
 Suggestion: after the Stage 3 performance baseline is stable, keep future visual richness primarily in reusable sprite/texture layers, pre-baked shadows and selective animation. Avoid introducing real-time 3D lighting or per-building 3D geometry unless measured profiling later proves there is enough headroom.
 
