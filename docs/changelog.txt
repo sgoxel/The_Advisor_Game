@@ -1,3 +1,14 @@
+2026-09-21 21:25:00 +03:00
+- Stage 2 review completed after WP-S002-004 passed GitHub Actions and Issue #23 was closed.
+- Re-read docs/README.md and confirmed the next practical layer is the Starting Village population foundation.
+- Added Stage 3 to docs/ROADMAP.md using WP codes + titles only, with no WP execution details in ROADMAP.
+- Created WP-S003-001 Issue #24: Deterministic Starting Village Resident Roster.
+- Created WP-S003-002 Issue #25: Homes, Professions + Workplace Assignment.
+- Created WP-S003-003 Issue #26: Deterministic Daily Activity Schedules.
+- Created WP-S003-004 Issue #27: Autonomous NPC Route Execution + Visible Movement.
+- Detailed Goal, Scope, Rules, In-Game Proof and Pass Condition are stored only in the corresponding GitHub Issues.
+- Stage 3 intentionally stops before Advisor conversation, economy, combat, social-interaction systems and external LLM integration.
+
 2026-09-21 21:21:00 +03:00
 - WP-S002-004 Deterministic Local Route Planning completed.
 - Added scripts/world/route-planner.js with deterministic bounded A* route planning using authoritative WP-S002-003 walkability and movement costs.
