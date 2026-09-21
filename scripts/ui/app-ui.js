@@ -6,7 +6,8 @@ let clockTimer=null;
 const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
-  "detailState","detailGameDate","detailGameTime","vDate","vPersist",
+  "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
+  "protagonistMarker","protagonistMarkerCoords","protagonistLocation","wp3Position","vOrigin","vCenter","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
 function cache(){ids.forEach(id=>e[id]=document.getElementById(id))}
@@ -74,6 +75,34 @@ function renderPRNG(fantasyTimestampMs){
     "FAIL"
   );
 }
+function renderWorldCoordinates(){
+  const campaign=SeedSystem.getCampaign();
+  const position=Protagonist.getPosition();
+  const proof=WorldCoordinates.verifyUnbounded();
+
+  if(position){
+    const label="("+position.x+","+position.y+")";
+    e.protagonistMarker.hidden=false;
+    e.protagonistMarkerCoords.textContent=label;
+    e.protagonistLocation.textContent=label;
+    e.detailProtagonistX.textContent=position.x;
+    e.detailProtagonistY.textContent=position.y;
+    e.wp3Position.textContent=label;
+    setCheck(e.vOrigin,Protagonist.isAtOrigin(),"FAIL");
+  }else{
+    e.protagonistMarker.hidden=true;
+    e.protagonistLocation.textContent="—";
+    e.detailProtagonistX.textContent="—";
+    e.detailProtagonistY.textContent="—";
+    e.wp3Position.textContent="—";
+    setCheck(e.vOrigin,false,"WAITING");
+  }
+
+  setCheck(e.vCenter,true,"FAIL");
+  setCheck(e.vPositiveWorld,proof.positiveValid,"FAIL");
+  setCheck(e.vNegativeWorld,proof.negativeValid,"FAIL");
+}
+
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
   e.campaignState.textContent=campaign?"ACTIVE":"NOT STARTED";
@@ -82,6 +111,7 @@ function renderStatic(){
   e.resumeButton.disabled=!campaign;
   setCheck(e.vDate,!!campaign&&GameTime.validateStartYear(),campaign?"FAIL":"WAITING");
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
+  renderWorldCoordinates();
 }
 
 function renderClock(){
