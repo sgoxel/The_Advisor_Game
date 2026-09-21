@@ -7,7 +7,7 @@ const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
-  "protagonistMarker","protagonistMarkerCoords","protagonistLocation","wp3Position","vOrigin","vCenter","vPositiveWorld","vNegativeWorld",
+  "gameplayPlaceholder","protagonistMarker","protagonistMarkerCoords","protagonistLocation","wp3Position","vOrigin","vCenter","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
 function cache(){ids.forEach(id=>e[id]=document.getElementById(id))}
@@ -82,6 +82,7 @@ function renderWorldCoordinates(){
 
   if(position){
     const label="("+position.x+","+position.y+")";
+    e.gameplayPlaceholder.hidden=true;
     e.protagonistMarker.hidden=false;
     e.protagonistMarkerCoords.textContent=label;
     e.protagonistLocation.textContent=label;
@@ -90,6 +91,7 @@ function renderWorldCoordinates(){
     e.wp3Position.textContent=label;
     setCheck(e.vOrigin,Protagonist.isAtOrigin(),"FAIL");
   }else{
+    e.gameplayPlaceholder.hidden=false;
     e.protagonistMarker.hidden=true;
     e.protagonistLocation.textContent="—";
     e.detailProtagonistX.textContent="—";
