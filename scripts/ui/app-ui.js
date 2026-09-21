@@ -7,7 +7,7 @@ const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","vDate","vPersist",
-  "prngSeed","prngTimestamp","prngValue","vPrngRepeat","vPrngTime","vPrngSource"
+  "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vPrngSource"
 ];
 function cache(){ids.forEach(id=>e[id]=document.getElementById(id))}
 function openPopup(id){document.getElementById(id).hidden=false;document.body.style.overflow="hidden"}
@@ -17,22 +17,47 @@ function setCheck(node,pass,waiting){node.textContent=pass?"PASS":waiting;node.c
 
 function renderPRNG(fantasyTimestampMs){
   const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  e.prngSeed.textContent=seed;
+
+  const foundationKey="wp002:foundation-proof";
+  const foundationValue=PRNG.foundationUint32(seed,foundationKey);
+  e.foundationKey.textContent=foundationKey;
+  e.foundationValue.textContent=String(foundationValue);
+  setCheck(
+    e.vFoundationRepeat,
+    foundationValue===PRNG.foundationUint32(seed,foundationKey),
+    "FAIL"
+  );
+  setCheck(
+    e.vFoundationTimeFree,
+    PRNG.foundationUint32.length===2,
+    "FAIL"
+  );
+
   if(!campaign||fantasyTimestampMs==null){
-    e.prngSeed.textContent=campaign?campaign.seed:"—";
     e.prngTimestamp.textContent="—";
-    e.prngValue.textContent="—";
-    setCheck(e.vPrngRepeat,false,"WAITING");
-    setCheck(e.vPrngTime,false,"WAITING");
-    setCheck(e.vPrngSource,PRNG.randomUint32.length===2,"FAIL");
+    e.liveValue.textContent="—";
+    setCheck(e.vLiveRepeat,false,"WAITING");
+    setCheck(e.vLiveTime,false,"WAITING");
+    setCheck(
+      e.vPrngSource,
+      PRNG.foundationUint32.length===2&&PRNG.liveUint32.length===2,
+      "FAIL"
+    );
     return;
   }
+
   const proof=PRNG.verify(campaign.seed,fantasyTimestampMs);
-  e.prngSeed.textContent=campaign.seed;
   e.prngTimestamp.textContent=GameTime.formatTimestamp(GameTime.fromTimestampMs(proof.timestamp));
-  e.prngValue.textContent=String(proof.value);
-  setCheck(e.vPrngRepeat,proof.repeatable,"FAIL");
-  setCheck(e.vPrngTime,proof.timeSensitive,"FAIL");
-  setCheck(e.vPrngSource,PRNG.randomUint32.length===2&&PRNG.random.length===2,"FAIL");
+  e.liveValue.textContent=String(proof.liveValue);
+  setCheck(e.vLiveRepeat,proof.liveRepeatable,"FAIL");
+  setCheck(e.vLiveTime,proof.liveTimeSensitive,"FAIL");
+  setCheck(
+    e.vPrngSource,
+    PRNG.foundationUint32.length===2&&PRNG.liveUint32.length===2,
+    "FAIL"
+  );
 }
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
