@@ -323,6 +323,31 @@ return (() => {
             return {error: String(error)};
           }
         })(),
+        specialBuildings: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const specials = window.SpecialBuildings;
+            if (!campaign || !specials?.proof) return null;
+            const proof = specials.proof(campaign.seed);
+            const specialTiles = [...document.querySelectorAll('.terrain-tile[data-special-kind]')];
+            const lotTiles = [...document.querySelectorAll('.terrain-tile[data-functional-lot-kind]')];
+            const visibleKinds = [...new Set(
+              specialTiles.map(tile => tile.dataset?.specialKind).filter(Boolean)
+            )].sort();
+            const visibleLotKinds = [...new Set(
+              lotTiles.map(tile => tile.dataset?.functionalLotKind).filter(Boolean)
+            )].sort();
+            return {
+              ...proof,
+              visibleSpecialTileCount:specialTiles.length,
+              visibleLotTileCount:lotTiles.length,
+              visibleKinds,
+              visibleLotKinds,
+            };
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
         roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
@@ -840,6 +865,23 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-007D deterministic blend variation failed: {house}")
         if house.get("registryVariants") != ["a", "b"]:
             raise RuntimeError(f"WP-007D A/B blend variants are not both reachable: {house}")
+        special = current.get("specialBuildings") or {}
+        if not special.get("pass") or not special.get("deterministic"):
+            raise RuntimeError(f"WP-008 special building proof failed: {special}")
+        if int(special.get("structureCount") or 0) != 5:
+            raise RuntimeError(f"WP-008 special structure count failed: {special}")
+        if int(special.get("lotCount") or 0) != 2:
+            raise RuntimeError(f"WP-008 functional lot count failed: {special}")
+        if special.get("kinds") != ["barn", "civic", "shop", "tavern", "workshop"]:
+            raise RuntimeError(f"WP-008 special structure kinds failed: {special}")
+        if special.get("lotKinds") != ["market-yard", "timber-yard"]:
+            raise RuntimeError(f"WP-008 functional lot kinds failed: {special}")
+        if not special.get("entrancePass") or not special.get("lotAccessPass"):
+            raise RuntimeError(f"WP-008 access verification failed: {special}")
+        if int(special.get("visibleSpecialTileCount") or 0) <= 0:
+            raise RuntimeError(f"WP-008 special structures are not visible in broad village evidence: {special}")
+        if int(special.get("visibleLotTileCount") or 0) <= 0:
+            raise RuntimeError(f"WP-008 functional lots are not visible in broad village evidence: {special}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):
