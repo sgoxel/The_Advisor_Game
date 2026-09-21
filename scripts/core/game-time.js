@@ -2,6 +2,7 @@
 "use strict";
 
 function pad2(n){return String(n).padStart(2,"0")}
+function pad3(n){return String(n).padStart(3,"0")}
 function padYear(n){return String(n).padStart(4,"0")}
 
 function fantasyStartToMs(start){
@@ -16,19 +17,29 @@ function fantasyStartToMs(start){
   );
 }
 
-function getNow(){
+function getTimestampMs(){
   const campaign=SeedSystem.getCampaign();
   if(!campaign)return null;
   const elapsedRealMs=Math.max(0,Date.now()-campaign.realStartMs);
-  const fantasyMs=fantasyStartToMs(campaign.fantasyStart)+(elapsedRealMs*GameConfig.gameTimeMultiplier);
-  const d=new Date(fantasyMs);
+  return fantasyStartToMs(campaign.fantasyStart)+(elapsedRealMs*GameConfig.gameTimeMultiplier);
+}
+
+function fromTimestampMs(fantasyTimestampMs){
+  if(fantasyTimestampMs==null)return null;
+  const d=new Date(fantasyTimestampMs);
   return {
     year:d.getUTCFullYear(),month:d.getUTCMonth()+1,day:d.getUTCDate(),
-    hour:d.getUTCHours(),minute:d.getUTCMinutes(),second:d.getUTCSeconds()
+    hour:d.getUTCHours(),minute:d.getUTCMinutes(),second:d.getUTCSeconds(),
+    millisecond:d.getUTCMilliseconds()
   };
 }
+
+function getNow(){return fromTimestampMs(getTimestampMs())}
 function formatDate(t){return t?`${pad2(t.day)}.${pad2(t.month)}.${padYear(t.year)}`:"—"}
 function formatTime(t){return t?`${pad2(t.hour)}:${pad2(t.minute)}`:"—"}
+function formatTimestamp(t){
+  return t?`${pad2(t.day)}.${pad2(t.month)}.${padYear(t.year)} ${pad2(t.hour)}:${pad2(t.minute)}:${pad2(t.second)}.${pad3(t.millisecond)}`:"—";
+}
 function validateStartYear(){
   const c=SeedSystem.getCampaign();
   if(!c)return false;
@@ -36,5 +47,7 @@ function validateStartYear(){
   return c.fantasyStart.year===realStart.getFullYear()+GameConfig.fantasyYearOffset;
 }
 
-window.GameTime=Object.freeze({getNow,formatDate,formatTime,validateStartYear});
+window.GameTime=Object.freeze({
+  getTimestampMs,fromTimestampMs,getNow,formatDate,formatTime,formatTimestamp,validateStartYear
+});
 })();
