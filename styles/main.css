@@ -57,8 +57,8 @@ input:focus{border-color:#92ad83}
 }
 .terrain-grid[hidden]{display:none}
 .terrain-tile{
-  width:100px;
-  height:100px;
+  width:var(--tile-size,100px);
+  height:var(--tile-size,100px);
   border:0;
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);
 }
@@ -216,3 +216,16 @@ details[open] summary{border-bottom:1px solid #343a30}
 }
 .gameplay-area.camera-dragging{cursor:grabbing}
 .gameplay-area.camera-ready{cursor:grab}
+
+.gameplay-area{
+  touch-action:none;
+  overscroll-behavior:contain;
+}
+.protagonist-marker{
+  width:var(--camera-tile-size,100px);
+  height:var(--camera-tile-size,100px);
+}
+.protagonist-sprite{
+  height:calc(var(--camera-tile-size,100px) * .94);
+  max-width:calc(var(--camera-tile-size,100px) * .90);
+}
