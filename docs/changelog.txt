@@ -1,3 +1,18 @@
+2026-09-21 20:45:00 +03:00
+- Updated the ROADMAP Work Package code standard to zero-padded sortable numeric segments.
+- New format: WP-S###-### for main WPs and WP-S###-###-### for sub-WPs.
+- Renamed all 14 current Stage 1 and Stage 2 ROADMAP WP codes.
+- Stage 1 now uses WP-S001-001 through WP-S001-006.
+- Stage 2 subpackages now use WP-S002-001-001 through WP-S002-001-005.
+- Remaining Stage 2 WPs now use WP-S002-002, WP-S002-003, and WP-S002-004.
+- Added an explicit Work Package Code Rule section to docs/ROADMAP.md.
+- Updated canonical GitHub Issues #9–#17 and #19–#23 so titles and bodies exactly match the newly renamed ROADMAP sections.
+- Completed issues remain CLOSED / completed; WP-S002-004 Issue #23 remains OPEN.
+- Updated duplicate Issue #18 and legacy verification Issue #2 to the new zero-padded code references.
+- Verified no previous WP-S1/WP-S2 or legacy WP-### codes remain in ROADMAP.md or current Issue titles/bodies.
+- Exact ROADMAP ↔ canonical Issue verification: 14/14 PASS.
+- Verification score: 10/10 PASS.
+
 2026-09-21 20:40:00 +03:00
 - Completed full ROADMAP → GitHub Issue migration for all 14 current Work Packages.
 - Every canonical WP Issue body was copied exactly from its current docs/ROADMAP.md section.
