@@ -90,11 +90,21 @@ The player can start a campaign, see the fantasy clock advance, open Settings, s
 
 ---
 
-## WP-002 — Deterministic PRNG
+## WP-002 — Deterministic PRNG — COMPLETE
 
 ### Goal
 
 Create the deterministic random generator used by all future procedural systems.
+
+### Implemented
+
+- deterministic string-to-32-bit SEED hash;
+- deterministic 32-bit PRNG stream;
+- PRNG module: `scripts/core/prng.js`;
+- active campaign SEED is used when a campaign exists;
+- configured Settings SEED is used before a campaign starts;
+- development accordion displays the current six-value sequence;
+- automatic same-SEED and different-SEED checks are visible in the game.
 
 ### In-game proof
 
