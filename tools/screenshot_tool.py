@@ -327,7 +327,9 @@ def prepare_current_build(driver, timeout: float = 10.0) -> str:
                 )
             )
         except Exception as exc:
-            print(f"Current-build readiness check continued with warning: {exc}")
+            raise RuntimeError(
+                "Current build detected but terrain/protagonist readiness did not complete"
+            ) from exc
     return action
 
 
