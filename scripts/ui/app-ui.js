@@ -10,6 +10,8 @@ const ids=[
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
   "rendererBackend","rendererCanvasCount","rendererTextureCount","rendererSourceMode",
   "vRendererWebGL","vRendererCanvas","vRendererNoDomTiles","vRendererLogicalTextures","vRendererSvgCache","vRendererSimulation",
+  "interiorBuildingCount","interiorHouseCount","interiorSpecialCount","interiorLevel","interiorHouseProof","interiorSpecialProof",
+  "vInteriorDeterministic","vInteriorCoverage","vInteriorCollision","vInteriorForward","vInteriorReverse","vInteriorLevel",
   "cameraHud","cameraCoordinate","cameraZoom","centerCameraButton","resetZoomButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY","cameraZoomDetail","cameraTileSize",
   "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn","vCameraWheelZoom","vCameraPinchZoom",
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
@@ -313,6 +315,52 @@ function renderRoutePlanning(){
   setCheck(e.vRouteWalkability,proof.obeysWalkability&&proof.movementCostPass,"FAIL");
   setCheck(e.vRouteEntrance,proof.usesExteriorEntrance,"FAIL");
   setCheck(e.vRouteLocal,proof.localEvaluationPass,"FAIL");
+}
+
+function formatInteriorRepresentative(item){
+  if(!item)return "—";
+  const door=item.entrance?.door;
+  const inside=item.interiorTarget;
+  const roomText=(item.rooms||[]).map(room=>room.label+" "+room.plannedAreaM2+"m²").join(", ");
+  return item.label+
+    " · door ("+(door?.x||"?")+","+(door?.y||"?")+")"+
+    " · target ("+(inside?.x||"?")+","+(inside?.y||"?")+")"+
+    " · "+roomText+
+    " · out→in "+item.forwardSteps+" steps / in→out "+item.reverseSteps+" steps";
+}
+
+function renderBuildingInteriors(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    ["interiorBuildingCount","interiorHouseCount","interiorSpecialCount","interiorLevel","interiorHouseProof","interiorSpecialProof"]
+      .forEach(id=>e[id].textContent="—");
+    ["vInteriorDeterministic","vInteriorCoverage","vInteriorCollision","vInteriorForward","vInteriorReverse","vInteriorLevel"]
+      .forEach(id=>setCheck(e[id],false,"WAITING"));
+    return;
+  }
+
+  const proof=BuildingInteriors.proof(campaign.seed);
+  e.interiorBuildingCount.textContent=String(proof.buildingCount);
+  e.interiorHouseCount.textContent=String(proof.houseCount);
+  e.interiorSpecialCount.textContent=String(proof.specialBuildingCount);
+  e.interiorLevel.textContent="level = "+String(proof.level);
+  e.interiorHouseProof.textContent=formatInteriorRepresentative(proof.representativeHouse);
+  e.interiorSpecialProof.textContent=formatInteriorRepresentative(proof.representativeSpecial);
+
+  setCheck(e.vInteriorDeterministic,proof.deterministic,"FAIL");
+  setCheck(
+    e.vInteriorCoverage,
+    proof.buildingCount===12&&proof.houseCount===6&&proof.specialBuildingCount===6&&proof.allConnected,
+    "FAIL"
+  );
+  setCheck(
+    e.vInteriorCollision,
+    proof.allWallsBlocked&&proof.allFloorsDoorsWalkable,
+    "FAIL"
+  );
+  setCheck(e.vInteriorForward,proof.allForward,"FAIL");
+  setCheck(e.vInteriorReverse,proof.allReverse,"FAIL");
+  setCheck(e.vInteriorLevel,proof.allLevelZero&&proof.level===0,"FAIL");
 }
 
 function renderGeography(){
@@ -875,6 +923,7 @@ function renderStatic(){
   renderSpecialLots();
   renderWalkability();
   renderRoutePlanning();
+  renderBuildingInteriors();
   renderRendererProof();
 }
 
