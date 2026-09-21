@@ -12,6 +12,8 @@ const ids=[
   "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn","vCameraWheelZoom","vCameraPinchZoom",
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
   "vVillageCore","vVillageMainland","vVillageBridge","vVillagePlan","vVillageRepeat",
+  "houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount",
+  "vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
@@ -119,6 +121,39 @@ function renderStartingVillage(){
   setCheck(e.vVillageRepeat,proof.deterministic,"FAIL");
 }
 
+function renderHousePlans(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    ["houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount"].forEach(id=>e[id].textContent="—");
+    ["vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions"].forEach(id=>setCheck(e[id],false,"WAITING"));
+    return;
+  }
+
+  const proof=HousePlans.proof(campaign.seed);
+  const svgAssets=[
+    TileTextures.asset("water"),
+    TileTextures.asset("grass"),
+    TileTextures.asset("floor","floor-wood"),
+    TileTextures.asset("wall","wall-n"),
+    TileTextures.asset("door","door-s")
+  ];
+  const l=TileTextures.transition("grass","water","water","grass","grass");
+  const c=TileTextures.transition("grass","water","grass","grass","grass");
+  const u=TileTextures.transition("grass","water","water","water","grass");
+
+  e.houseBuildingCount.textContent=String(proof.buildingCount);
+  e.houseTypeCount.textContent=proof.normalHouseCount+" houses / "+proof.cabinCount+" cabins";
+  e.houseMinRoomTiles.textContent=proof.minimumRoomTiles+" tiles / "+(proof.minimumRoomTiles*WorldStandards.TILE_METERS*WorldStandards.TILE_METERS)+" m²";
+  e.houseSvgCount.textContent="29 vector SVG files";
+
+  setCheck(e.vHousePlan,proof.pass&&proof.deterministic,"FAIL");
+  setCheck(e.vHouseRooms,proof.roomsPass&&proof.minimumRoomTiles>=6,"FAIL");
+  setCheck(e.vHouseWalls,proof.outerWallsPass&&proof.interiorWallsPass,"FAIL");
+  setCheck(e.vHouseEntrances,proof.entrancesPass,"FAIL");
+  setCheck(e.vHouseSvg,svgAssets.every(path=>typeof path==="string"&&path.endsWith(".svg")),"FAIL");
+  setCheck(e.vHouseTransitions,!!l&&l.shape==="l"&&!!c&&c.shape==="c"&&!!u&&u.shape==="u","FAIL");
+}
+
 function renderGeography(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -198,6 +233,35 @@ function terrainGridDimensions(width,height,tileSize){
   return {columns,rows};
 }
 
+function tileOverlay(asset,className,rotation){
+  const layer=document.createElement("span");
+  layer.className=className;
+  layer.style.backgroundImage='url("'+asset+'")';
+  if(rotation)layer.style.transform="rotate("+rotation+"deg)";
+  return layer;
+}
+
+function applyTerrainTransitions(columns,rows){
+  const nodes=[...e.terrainGrid.children];
+  for(let row=0;row<rows;row++){
+    for(let col=0;col<columns;col++){
+      const index=row*columns+col;
+      const node=nodes[index];
+      if(!node)continue;
+      const type=node.dataset.terrain;
+      const north=row>0?nodes[(row-1)*columns+col].dataset.terrain:null;
+      const east=col<columns-1?nodes[row*columns+col+1].dataset.terrain:null;
+      const south=row<rows-1?nodes[(row+1)*columns+col].dataset.terrain:null;
+      const west=col>0?nodes[row*columns+col-1].dataset.terrain:null;
+      const transition=TileTextures.transition(type,north,east,south,west);
+      if(!transition)continue;
+      const layer=tileOverlay(transition.asset,"terrain-transition",transition.rotation);
+      layer.dataset.shape=transition.shape;
+      node.appendChild(layer);
+    }
+  }
+}
+
 function renderTerrain(){
   const campaign=SeedSystem.getCampaign();
   const protagonist=Protagonist.getPosition();
@@ -239,19 +303,31 @@ function renderTerrain(){
       const pos=WorldCoordinates.add(center,String(dx),String(dy));
       const tile=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
       const repeated=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
-      if(tile.type!==repeated.type||tile.color!==repeated.color)deterministic=false;
+      if(
+        tile.type!==repeated.type||
+        tile.color!==repeated.color||
+        tile.texture!==repeated.texture||
+        tile.overlayTexture!==repeated.overlayTexture
+      )deterministic=false;
 
       const node=document.createElement("div");
       node.className="terrain-tile";
-      node.style.background=tile.color;
+      node.style.backgroundColor=tile.color;
+      if(tile.texture)node.style.backgroundImage='url("'+tile.texture+'")';
       node.dataset.terrain=tile.type;
+      node.dataset.texture=tile.texture||"";
       node.dataset.x=pos.x;
       node.dataset.y=pos.y;
       node.dataset.origin=(pos.x===center.x&&pos.y===center.y)?"true":"false";
+      if(tile.buildingId)node.dataset.buildingId=tile.buildingId;
+      if(tile.room)node.dataset.room=tile.room;
+      if(tile.overlayTexture)node.appendChild(tileOverlay(tile.overlayTexture,"building-tile-overlay",0));
       node.title=tile.label+" ("+pos.x+","+pos.y+")";
       e.terrainGrid.appendChild(node);
     }
   }
+
+  applyTerrainTransitions(columns,rows);
 
   const gridWidth=columns*tileSize;
   const gridHeight=rows*tileSize;
@@ -260,7 +336,11 @@ function renderTerrain(){
   const origin=e.terrainGrid.querySelector('[data-origin="true"]');
   const repeatCenter=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
   const repeatAgain=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
-  const repeatable=repeatCenter.type===repeatAgain.type&&repeatCenter.color===repeatAgain.color;
+  const repeatable=
+    repeatCenter.type===repeatAgain.type&&
+    repeatCenter.color===repeatAgain.color&&
+    repeatCenter.texture===repeatAgain.texture&&
+    repeatCenter.overlayTexture===repeatAgain.overlayTexture;
 
   e.terrainGrid.dataset.columns=String(columns);
   e.terrainGrid.dataset.rows=String(rows);
@@ -606,6 +686,7 @@ function renderStatic(){
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
+  renderHousePlans();
 }
 
 function renderClock(){

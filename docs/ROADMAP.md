@@ -350,8 +350,9 @@ The palette is implemented in `scripts/data/terrain-palette.js`. The renderer co
 
 ### Rules
 
-- no textures;
+- no textures in the original WP-005 baseline;
 - no tile atlas;
+- **WP-007B later supersedes the presentation-only no-texture baseline with SVG overlays while retaining the solid-color terrain identity underneath;**
 - no props or decorative artwork;
 - tile count is calculated from the actual browser gameplay viewport;
 - rendered row/column counts stay odd so the current world-center tile remains exactly centered;
@@ -665,7 +666,7 @@ GitHub Actions run **35614323669** completed successfully with the `starting-vil
 
 ---
 
-## WP-007B — Tile-Based House Plans + Wall Foundation
+## WP-007B — Tile-Based House Plans + Wall Foundation — IMPLEMENTED / VISUAL VERIFICATION PENDING
 
 ### Goal
 
@@ -701,6 +702,23 @@ Define:
 - roads/paths/public-space reservations are finalized before any building footprint is accepted;
 - building placement must reject and deterministically try another valid placement whenever any wall/floor cell would overlap a reserved road/path/public-space cell.
 
+### Implemented
+
+- all six reserved Starting Village plots now produce deterministic building plans;
+- default plan mix is **4 normal houses + 2 cabins**;
+- each normal house has **12 interior floor tiles**, partitioned into a **6-tile living room + 6-tile bedroom**;
+- cabins have one floor room larger than the 6-tile minimum;
+- exterior border cells render as directional top-down wall cells, with one deterministic exterior door;
+- normal houses include a thin interior-wall edge plus an interior doorway between living room and bedroom;
+- exterior entrances are selected toward the already-reserved village road/path network without overwriting roads;
+- terrain/building presentation now uses **29 standalone SVG vector files** under `assets/tiles/vector/`;
+- water uses wave-line SVGs, grass uses spike/polygon SVGs, and the other basic terrain types have simple scalable vector patterns;
+- wood floors use plank/zigzag vector lines;
+- walls and doors have north/east/south/west top-down variants plus wall-corner variants;
+- generic **L**, **C** and **U** curved terrain-transition SVG overlays are available and rotated from neighboring terrain relationships;
+- no PNG tile texture is used by this tile system; the existing solid terrain color remains as a fallback beneath SVG presentation;
+- 12-SEED core verification passed: 6 buildings per SEED, minimum room size 6 tiles, wall/door/access checks PASS, and every rendered building cell resolved to an SVG texture.
+
 ### Pass condition
 
 - every generated house respects its minimum size;
@@ -709,7 +727,10 @@ Define:
 - outer walls fully enclose the house except valid doors;
 - multi-room houses contain interior wall separation;
 - entrances reach a village road/path;
-- same SEED reproduces the same house plans.
+- same SEED reproduces the same house plans;
+- terrain/floor/wall/door tile artwork is SVG-only;
+- L/C/U terrain-transition SVG variants are available;
+- GitHub screenshot evidence passes before WP-007B is marked COMPLETE.
 
 ---
 

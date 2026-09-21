@@ -8,7 +8,7 @@ function getType(seedValue,xValue,yValue){
 
   // Planning order is authoritative. Terrain is intentionally calculated last.
   const infrastructure=StartingVillage.infrastructureAt(seedValue,local);
-  const building=StartingVillage.buildingAt(seedValue,local);
+  const building=HousePlans.buildingAt(seedValue,local);
   const importantObject=StartingVillage.importantObjectAt(seedValue,local);
   const baseTerrain=GeographyFoundation.getTerrainType(seedValue,x,y);
 
@@ -25,7 +25,20 @@ function getTile(seedValue,xValue,yValue){
   const y=WorldCoordinates.normalize(yValue);
   const type=getType(seedValue,x,y);
   const palette=TerrainPalette.get(type);
-  return Object.freeze({x,y,type,label:palette.label,color:palette.color});
+  const local=StartingVillage.local(seedValue,x,y);
+  const building=HousePlans.buildingAt(seedValue,local);
+  const cell=building?building.cell:null;
+  const textureVariant=cell?cell.textureVariant:null;
+  const overlayVariant=cell?cell.overlayVariant:null;
+  return Object.freeze({
+    x,y,type,
+    label:palette.label,
+    color:palette.color,
+    texture:TileTextures.asset(type,textureVariant),
+    overlayTexture:overlayVariant?TileTextures.asset(type,overlayVariant):null,
+    buildingId:cell?cell.plan.id:null,
+    room:cell?cell.room:null
+  });
 }
 
 window.TerrainFoundation=Object.freeze({getType,getTile});

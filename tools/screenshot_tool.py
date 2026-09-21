@@ -250,6 +250,35 @@ return (() => {
             return {error: String(error)};
           }
         })(),
+        housePlans: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const houses = window.HousePlans;
+            const textures = window.TileTextures;
+            if (!campaign || !houses?.proof || !textures) return null;
+            const proof = houses.proof(campaign.seed);
+            const rendered = [...document.querySelectorAll('.terrain-tile')];
+            const transitionShapes = [...new Set(
+              [...document.querySelectorAll('.terrain-transition')]
+                .map(layer => layer.dataset?.shape)
+                .filter(Boolean)
+            )].sort();
+            const registryShapes = [
+              textures.transition("grass","water","water","grass","grass")?.shape,
+              textures.transition("grass","water","grass","grass","grass")?.shape,
+              textures.transition("grass","water","water","water","grass")?.shape,
+            ].filter(Boolean).sort();
+            return {
+              ...proof,
+              svgTileCount: rendered.filter(tile => (tile.dataset?.texture || "").endsWith(".svg")).length,
+              pngTileCount: rendered.filter(tile => (tile.dataset?.texture || "").toLowerCase().endsWith(".png")).length,
+              transitionShapes,
+              registryShapes,
+            };
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
         roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
@@ -744,6 +773,21 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Public square overlaps building plot cells: {proof}")
         if int(proof.get("plotPathOverlapCount") or 0) != 0:
             raise RuntimeError(f"Local path overlaps building plot cells: {proof}")
+        house = current.get("housePlans") or {}
+        if not house.get("pass") or not house.get("deterministic"):
+            raise RuntimeError(f"WP-007B house plan proof failed: {house}")
+        if int(house.get("buildingCount") or 0) < 6:
+            raise RuntimeError(f"WP-007B building count is incomplete: {house}")
+        if int(house.get("minimumRoomTiles") or 0) < 6:
+            raise RuntimeError(f"WP-007B room minimum failed: {house}")
+        if not house.get("outerWallsPass") or not house.get("interiorWallsPass"):
+            raise RuntimeError(f"WP-007B wall plan failed: {house}")
+        if not house.get("entrancesPass"):
+            raise RuntimeError(f"WP-007B entrance access failed: {house}")
+        if int(house.get("svgTileCount") or 0) <= 0 or int(house.get("pngTileCount") or 0) != 0:
+            raise RuntimeError(f"WP-007B vector tile rendering failed: {house}")
+        if house.get("registryShapes") != ["c", "l", "u"]:
+            raise RuntimeError(f"WP-007B L/C/U transition registry failed: {house}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):

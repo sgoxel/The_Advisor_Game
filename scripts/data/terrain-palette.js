@@ -12,6 +12,9 @@ const TYPES=Object.freeze({
   path:Object.freeze({id:"path",label:"Path",color:"#A58D67"}),
   plot:Object.freeze({id:"plot",label:"Reserved Plot",color:"#856B4F"}),
   building:Object.freeze({id:"building",label:"Building",color:"#7C6252"}),
+  floor:Object.freeze({id:"floor",label:"Wood Floor",color:"#9A7955"}),
+  wall:Object.freeze({id:"wall",label:"Top-down Wall",color:"#766555"}),
+  door:Object.freeze({id:"door",label:"Door",color:"#8A6847"}),
   water:Object.freeze({id:"water",label:"Water",color:"#3F7190"}),
   rock:Object.freeze({id:"rock",label:"Rock",color:"#74756F"}),
   sand:Object.freeze({id:"sand",label:"Sand",color:"#BDA66F"}),
@@ -19,7 +22,7 @@ const TYPES=Object.freeze({
 });
 
 const ORDER=Object.freeze([
-  "grass","forest","dirt","mud","road","bridge","square","path","plot","building","water","rock","sand","farmland"
+  "grass","forest","dirt","mud","road","bridge","square","path","plot","building","floor","wall","door","water","rock","sand","farmland"
 ]);
 
 function get(type){
