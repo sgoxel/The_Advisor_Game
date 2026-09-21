@@ -1,3 +1,11 @@
+2026-09-21 14:57:00 +03:00
+- Added reusable solid-color terrain palette without textures.
+- Added distinct colors for grass, forest, dirt, mud, road, building, water, rock, sand and farmland.
+- Added deterministic SEED + coordinate terrain preview in the Gameplay Area.
+- Added responsive 100x100 logical tile grid and terrain legend.
+- Terrain colors are presentation-only and do not replace the pending WP-004 realistic geographic foundation.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 14:58:12 +03:00
 - Added WP-004 for SEED-generated realistic geographic hierarchy before tile rendering.
 - Geographic foundation now explicitly covers continent, country/realm, region/province, city, district, town, village, avenue/major road, street/local road, terrain and environmental conditions.
