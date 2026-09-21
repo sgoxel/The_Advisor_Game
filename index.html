@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-006</title>
+<title>The Advisor Game — WP-007A</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-006</span>
+      <span class="build-badge">WP-007A</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -262,10 +262,33 @@
     </div>
   </details>
 
+
+  <details>
+    <summary>WP-007A Starting Village + Mainland</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>World Scale</span><strong id="villageWorldScale">—</strong></div>
+        <div><span>Starting Village</span><strong id="startingVillageName">—</strong></div>
+        <div><span>Gateway</span><strong id="villageGateway">—</strong></div>
+        <div><span>Core Diameter</span><strong id="villageCoreDiameter">—</strong></div>
+        <div><span>Reserved Plots</span><strong id="villagePlotCount">—</strong></div>
+        <div><span>Mainland Edge</span><strong id="villageMainlandEdge">—</strong></div>
+        <div><span>Bridge Max</span><strong id="villageBridgeMax">—</strong></div>
+        <div><span>Village Spacing</span><strong id="villageSpacingStandard">—</strong></div>
+      </div>
+      <div class="check"><span>Protagonist starts inside the Starting Village core</span><b id="vVillageCore">WAITING</b></div>
+      <div class="check"><span>Gateway main road reaches mainland without a gap</span><b id="vVillageMainland">WAITING</b></div>
+      <div class="check"><span>Bridge spans obey physical and fantasy-time limits</span><b id="vVillageBridge">WAITING</b></div>
+      <div class="check"><span>Public square, reserved plots and farms are generated from the SEED</span><b id="vVillagePlan">WAITING</b></div>
+      <div class="check"><span>Same SEED reproduces the same village plan</span><b id="vVillageRepeat">WAITING</b></div>
+      <p>WP-007A reserves building plots only. House rooms, border walls and interior walls are WP-007B.</p>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-006 camera movement through the infinite world.</p>
+      <p><strong>Current Work Package:</strong> WP-007A Starting Village core + mainland connection.</p>
       <p><strong>Current world rendering:</strong> Deterministic solid-color terrain fills the Gameplay Area.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
@@ -274,6 +297,7 @@
 </section>
 
 <script src="scripts/data/config.js"></script>
+<script src="scripts/data/world-standards.js"></script>
 <script src="scripts/world/coordinates.js"></script>
 <script src="scripts/world/camera.js"></script>
 <script src="scripts/core/seed.js"></script>
@@ -281,6 +305,7 @@
 <script src="scripts/core/prng.js"></script>
 <script src="scripts/data/terrain-palette.js"></script>
 <script src="scripts/world/geography.js"></script>
+<script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
