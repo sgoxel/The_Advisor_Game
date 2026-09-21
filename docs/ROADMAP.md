@@ -828,7 +828,7 @@ GitHub Actions run **35621550722** completed successfully against the exact merg
 
 ---
 
-## WP-007D — Deterministic Terrain Blend Variation — IMPLEMENTED / VISUAL VERIFICATION PENDING
+## WP-007D — Deterministic Terrain Blend Variation — COMPLETE
 
 ### Goal
 
@@ -874,6 +874,22 @@ Default-SEED sampling across **400 coordinates** passed:
 - A variant reachable: PASS;
 - B variant reachable: PASS;
 - mask selection remains SVG-only: PASS.
+
+### Verified evidence
+
+GitHub Actions run **35624048867** completed successfully against the exact merged `main` checkout using the `starting-village` scenario.
+
+- runtime blend layers: **76 / 318 / 284** across the three evidence frames;
+- rendered blend shapes included edge, corner and peninsula cases;
+- rendered A variant: PASS;
+- rendered B variant: PASS;
+- deterministic repeat proof: PASS;
+- both A and B remained reachable from the registry sample;
+- long grass/dirt/farmland borders visibly vary instead of repeating one identical curve stamp;
+- rounded water shoreline remained continuous in the gateway frame;
+- existing building, road, camera and viewport checks remained PASS;
+- artifact: `visual-evidence-starting-village-35624048867` (**515,252 bytes**);
+- manual review of all three screenshots: **8.8/10 PASS**.
 
 ### Pass condition
 
