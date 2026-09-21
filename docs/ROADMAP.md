@@ -715,7 +715,7 @@ Define:
 - water uses wave-line SVGs, grass uses spike/polygon SVGs, and the other basic terrain types have simple scalable vector patterns;
 - wood floors use plank/zigzag vector lines;
 - walls and doors have north/east/south/west top-down variants plus wall-corner variants;
-- generic **L**, **C** and **U** curved terrain-transition SVG overlays are available and rotated from neighboring terrain relationships;
+- the first generic **L/C/U contour-overlay prototype** was implemented here, then superseded by WP-007C because visible contour loops did not actually blend terrain materials;
 - no PNG tile texture is used by this tile system; the existing solid terrain color remains as a fallback beneath SVG presentation;
 - 12-SEED core verification passed: 6 buildings per SEED, minimum room size 6 tiles, wall/door/access checks PASS, and every rendered building cell resolved to an SVG texture.
 
@@ -749,8 +749,70 @@ The earlier issue-triggered run **35618602851** failed only because it targeted 
 - entrances reach a village road/path;
 - same SEED reproduces the same house plans;
 - terrain/floor/wall/door tile artwork is SVG-only;
-- L/C/U terrain-transition SVG variants are available;
+- SVG terrain transition capability is available; WP-007C owns the corrected rounded material-blending behavior;
 - GitHub screenshot evidence passes before WP-007B is marked COMPLETE.
+
+---
+
+## WP-007C — Rounded Terrain Border Blending — IMPLEMENTED / VISUAL VERIFICATION PENDING
+
+### Goal
+
+Replace decorative transition contours with real rounded terrain-material borders so adjacent tiles read as one smooth region instead of square cells with loop-shaped overlays.
+
+### Scope
+
+Add SVG mask-based border presentation for blendable terrain pairs, including:
+
+- grass ↔ water;
+- grass ↔ dirt / mud;
+- grass ↔ forest / rock / sand / farmland;
+- grass ↔ road / path where physically appropriate;
+- equivalent compatible pairings governed by deterministic presentation priority.
+
+### Border shapes
+
+The border system must support actual rounded material geometry rather than letter-like visible lines:
+
+- one-sided rounded edge;
+- rounded 90-degree outer corner;
+- three-sided rounded peninsula / inlet;
+- rounded isolated island;
+- opposite-side transitions composed from two compatible rounded edges.
+
+### Rules
+
+- the neighboring terrain's **real color + SVG texture** is revealed through the mask;
+- no visible L/C/U outline symbol is drawn on top of terrain;
+- transition shape is presentation-only and does not change authoritative terrain identity;
+- infrastructure-to-water blending is suppressed so roads are not visually painted into unreserved water;
+- higher-priority presentation material blends into the lower-priority boundary tile only, preventing both sides from painting over each other;
+- masks are standalone SVG vector files;
+- same terrain neighborhood always selects the same mask set;
+- no PNG transition texture is used.
+
+### Implemented
+
+- added **13 rounded SVG mask files**: 4 side edges, 4 corners, 4 peninsula/inlet orientations and 1 rounded island mask;
+- `TileTextures.blendSpecs()` converts cardinal terrain neighbors into deterministic material-blend mask specifications;
+- the renderer now paints the neighboring terrain's actual color and SVG pattern through the selected vector mask;
+- the old visible generic transition-contour renderer is no longer used for terrain presentation;
+- opposite-side borders use two edge masks rather than a loop symbol;
+- road/path versus water is explicitly excluded from presentation blending to preserve planned bridge/road semantics;
+- static verification passed for edge, corner, peninsula, island, opposite-edge, dirt/grass and water-priority cases.
+
+### Initial score
+
+The superseded contour-overlay release scored **5/10** for terrain-border quality because tile boundaries remained visually blocky and the curves appeared as repeated loop symbols rather than true border geometry.
+
+### Pass condition
+
+- water/grass boundaries visibly use the water material itself to form a rounded shoreline;
+- common land/land boundaries are rounded rather than square;
+- no decorative L/C/U contour loops remain in normal terrain rendering;
+- edge, corner, peninsula/inlet and island cases all render;
+- terrain identity and deterministic world generation remain unchanged;
+- screenshot review scores **above 7/10**.
 
 ---
 

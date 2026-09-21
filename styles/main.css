@@ -242,7 +242,8 @@ details[open] summary{border-bottom:1px solid #343a30}
   background-size:100% 100%;
 }
 .building-tile-overlay,
-.terrain-transition{
+.terrain-transition,
+.terrain-blend{
   position:absolute;
   inset:0;
   display:block;
@@ -256,3 +257,12 @@ details[open] summary{border-bottom:1px solid #343a30}
 }
 .building-tile-overlay{z-index:1}
 .terrain-transition{z-index:2}
+.terrain-blend{
+  z-index:2;
+  mask-repeat:no-repeat;
+  mask-position:center;
+  mask-size:100% 100%;
+  -webkit-mask-repeat:no-repeat;
+  -webkit-mask-position:center;
+  -webkit-mask-size:100% 100%;
+}

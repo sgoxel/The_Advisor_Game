@@ -39,6 +39,110 @@ const VARIANTS=Object.freeze({
 
 const NATURAL=new Set(["grass","forest","dirt","mud","water","rock","sand","farmland"]);
 
+const BLENDABLE=new Set([
+  "grass","forest","dirt","mud","water","rock","sand","farmland","road","path"
+]);
+
+const BLEND_PRIORITY=Object.freeze({
+  grass:10,
+  farmland:20,
+  forest:30,
+  rock:40,
+  sand:50,
+  dirt:60,
+  mud:70,
+  path:80,
+  road:90,
+  water:100
+});
+
+const BLEND_MASKS=Object.freeze({
+  edge:Object.freeze({
+    n:"blend_edge_n.svg",
+    e:"blend_edge_e.svg",
+    s:"blend_edge_s.svg",
+    w:"blend_edge_w.svg"
+  }),
+  corner:Object.freeze({
+    ne:"blend_corner_ne.svg",
+    se:"blend_corner_se.svg",
+    sw:"blend_corner_sw.svg",
+    nw:"blend_corner_nw.svg"
+  }),
+  peninsula:Object.freeze({
+    n:"blend_peninsula_n.svg",
+    e:"blend_peninsula_e.svg",
+    s:"blend_peninsula_s.svg",
+    w:"blend_peninsula_w.svg"
+  }),
+  island:"blend_island.svg"
+});
+
+const INFRA_BLEND_TYPES=new Set(["road","path"]);
+
+function canBlend(base,target){
+  if(!BLENDABLE.has(base)||!BLENDABLE.has(target)||base===target)return false;
+  if((base==="water"&&INFRA_BLEND_TYPES.has(target))||(target==="water"&&INFRA_BLEND_TYPES.has(base))){
+    return false;
+  }
+  return (BLEND_PRIORITY[target]||0)>(BLEND_PRIORITY[base]||0);
+}
+
+function blendMaskSpec(target,shape,key){
+  let file=null;
+  if(shape==="island")file=BLEND_MASKS.island;
+  else file=BLEND_MASKS[shape]&&BLEND_MASKS[shape][key];
+  return file?Object.freeze({
+    terrain:target,
+    shape,
+    orientation:key||"all",
+    mask:ROOT+file
+  }):null;
+}
+
+function specsForSides(target,sides){
+  if(sides.length===4)return [blendMaskSpec(target,"island","all")];
+  if(sides.length===3){
+    const missing=["n","e","s","w"].find(side=>!sides.includes(side));
+    return [blendMaskSpec(target,"peninsula",missing)];
+  }
+  if(sides.length===2){
+    const key=sides.slice().sort().join("");
+    const corners={
+      en:"ne",
+      es:"se",
+      sw:"sw",
+      nw:"nw"
+    };
+    if(corners[key])return [blendMaskSpec(target,"corner",corners[key])];
+    return sides.map(side=>blendMaskSpec(target,"edge",side));
+  }
+  return sides.map(side=>blendMaskSpec(target,"edge",side));
+}
+
+function blendSpecs(type,neighbors){
+  if(!BLENDABLE.has(type)||!neighbors)return [];
+  const groups=new Map();
+  for(const side of ["n","e","s","w"]){
+    const target=neighbors[side];
+    if(!canBlend(type,target))continue;
+    if(!groups.has(target))groups.set(target,[]);
+    groups.get(target).push(side);
+  }
+
+  const ordered=[...groups.entries()].sort(
+    (a,b)=>(BLEND_PRIORITY[a[0]]||0)-(BLEND_PRIORITY[b[0]]||0)
+  );
+  const specs=[];
+  for(const [target,sides] of ordered){
+    for(const spec of specsForSides(target,sides)){
+      if(spec)specs.push(spec);
+    }
+  }
+  return specs;
+}
+
+
 function asset(type,variant){
   const file=(variant&&VARIANTS[variant])||BASE[type];
   return file?ROOT+file:null;
@@ -82,5 +186,9 @@ function transition(type,north,east,south,west){
   return Object.freeze({shape:"u",rotation:0,asset:ROOT+"transition_u.svg"});
 }
 
-window.TileTextures=Object.freeze({ROOT,BASE,VARIANTS,asset,transition});
+window.TileTextures=Object.freeze({
+  ROOT,BASE,VARIANTS,
+  BLEND_MASKS,BLEND_PRIORITY,
+  asset,transition,blendSpecs
+});
 })();
