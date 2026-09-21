@@ -6,14 +6,14 @@ const lotCache=new Map();
 
 const STRUCTURE_TYPES=Object.freeze([
   Object.freeze({kind:"civic",label:"Village Hall",w:5,h:5,minRadius:6,maxRadius:13,floorVariant:"floor-stone",markerVariant:"marker-civic",room:"hall"}),
-  Object.freeze({kind:"shop",label:"Market Shop",w:6,h:5,minRadius:8,maxRadius:17,floorVariant:"floor-stone",markerVariant:"marker-shop",room:"shop-floor"}),
+  Object.freeze({kind:"shop",label:"Market Shop",w:6,h:5,minRadius:7,maxRadius:20,floorVariant:"floor-stone",markerVariant:"marker-shop",room:"shop-floor"}),
   Object.freeze({kind:"tavern",label:"Tavern / Lodging",w:7,h:6,minRadius:8,maxRadius:19,floorVariant:"floor-wood",markerVariant:"marker-tavern",room:"common-room"}),
   Object.freeze({kind:"workshop",label:"Craft Workshop",w:6,h:5,minRadius:12,maxRadius:21,floorVariant:"floor-workshop",markerVariant:"marker-workshop",room:"work-floor"}),
   Object.freeze({kind:"barn",label:"Barn / Storage",w:7,h:5,minRadius:15,maxRadius:22,floorVariant:"floor-barn",markerVariant:"marker-barn",room:"storage"})
 ]);
 
 const LOT_TYPES=Object.freeze([
-  Object.freeze({kind:"market-yard",label:"Market Yard",w:4,h:3,nearKind:"shop",maxTargetDistance:10,minRadius:7,maxRadius:18}),
+  Object.freeze({kind:"market-yard",label:"Market Yard",w:4,h:3,nearKind:"shop",maxTargetDistance:14,minRadius:6,maxRadius:21}),
   Object.freeze({kind:"timber-yard",label:"Timber / Work Yard",w:5,h:3,nearKind:"workshop",maxTargetDistance:12,minRadius:13,maxRadius:22})
 ]);
 
@@ -144,8 +144,8 @@ function buildStructures(seed){
     let chosen=null;
     for(const candidate of candidates){
       if(!candidateCellsValid(seed,candidate.b))continue;
-      if(!plotPaddingClear(seed,candidate.b,1))continue;
-      if(accepted.some(plan=>overlap(candidate.b,plan.bounds,1)))continue;
+      if(!plotPaddingClear(seed,candidate.b,0))continue;
+      if(accepted.some(plan=>overlap(candidate.b,plan.bounds,0)))continue;
       const entrance=chooseEntrance(seed,def.kind,candidate.b);
       if(!entrance)continue;
       chosen=Object.freeze({
@@ -205,9 +205,9 @@ function buildLots(seed){
     let chosen=null;
     for(const candidate of candidates){
       if(!candidateCellsValid(seed,candidate.b))continue;
-      if(!plotPaddingClear(seed,candidate.b,1))continue;
-      if(structures.some(plan=>overlap(candidate.b,plan.bounds,1)))continue;
-      if(accepted.some(lot=>overlap(candidate.b,lot.bounds,1)))continue;
+      if(!plotPaddingClear(seed,candidate.b,0))continue;
+      if(structures.some(plan=>overlap(candidate.b,plan.bounds,0)))continue;
+      if(accepted.some(lot=>overlap(candidate.b,lot.bounds,0)))continue;
       const targets=roadTargets(seed,candidate.b);
       if(!targets.length)continue;
       const nearest=Math.min(...targets.map(point=>{
