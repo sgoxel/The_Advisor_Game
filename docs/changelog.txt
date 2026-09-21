@@ -1,3 +1,20 @@
+2026-09-21 20:14:53 +03:00
+- WP-009 Authoritative Walkability and Collision Foundation completed.
+- Added scripts/world/walkability.js as authoritative Simulation movement classification.
+- Every visible tile now exposes deterministic movement category, walkable/blocked state, speed and per-tile movement cost.
+- Roads/bridges/squares/paths are walkable route cells; forest/mud/rock/sand are difficult but walkable; water is blocked.
+- Outer building walls are blocked; ordinary interior floors are walkable.
+- Fixed an important collision gap: interior partition-wall overlays are now authoritative blocked-wall cells instead of remaining walkable floor.
+- Exterior and interior doorways are authoritative walkable building-entrance cells.
+- House/special-lot road-access targets and the outdoor workyard are verified walkable.
+- Default-SEED full proof classified 4,761 / 4,761 cells; 428 / 428 water cells blocked; 192 / 192 outer walls blocked; 8 / 8 interior walls blocked; 12 / 12 exterior doors and 4 / 4 interior doors walkable.
+- Separate structure/terrain stress verification passed 41 / 41 SEEDs.
+- GitHub Actions run 35630499582 passed on exact merged main.
+- Visible classification coverage was 253/253, 779/779 and 779/779 across the three evidence frames.
+- Artifact visual-evidence-starting-village-35630499582: 542,512 bytes.
+- Manual screenshot review score: 8.8/10 PASS.
+- Updated docs/ROADMAP.md and marked WP-009 COMPLETE.
+
 2026-09-21 19:59:00 +03:00
 - WP-008 Special Buildings + Functional Lots completed.
 - Added deterministic tavern/lodging, shop, craft workshop, storehouse, farm barn, village meeting hall, and outdoor workyard foundations.
