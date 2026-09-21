@@ -441,8 +441,182 @@ GitHub Actions run **35602541946** completed successfully with strict `camera-pa
 
 ---
 
-# Stage 1 Review Gate
+# Stage 1 Review — COMPLETE
 
-Do not introduce textures, settlements, NPC populations, economy, combat or external LLM integration until WP-001 through WP-006 are implemented and reviewed.
+WP-001 through WP-006 are implemented and verified. The project now has:
+
+- deterministic Campaign SEED foundation;
+- deterministic live-randomness rules;
+- unbounded signed world coordinates;
+- Protagonist origin at **(0,0)**;
+- deterministic geography/environment foundation;
+- responsive viewport-filling terrain;
+- independent infinite-world camera movement;
+- GitHub Actions visual-evidence testing.
+
+The next stage may now introduce the physical starting settlement foundation, but not autonomous NPC population, economy, combat or external LLM behavior yet.
+
+---
+
+# Stage 2 — Starting Village Physical Foundation
+
+The README requires every new campaign to begin with the Protagonist as an ordinary low-rank character in a **SEED-generated inhabited village**. Before population behavior is introduced, the village needs one coherent physical world layout that future homes, workplaces, NPCs and interactions can use.
+
+All Stage 2 generation remains **foundation randomness only**. Fantasy time does not alter the generated starting layout.
+
+## WP-007 — Deterministic Starting Village Spatial Plan
+
+### Goal
+
+Turn the abstract starting village at **(0,0)** into a coherent physical settlement layout using the existing solid-color presentation.
+
+### Scope
+
+Generate from the Campaign SEED:
+
+- deterministic village extent around its village center;
+- primary road through the settlement;
+- secondary roads and footpaths;
+- village center / gathering area;
+- building parcels;
+- farm / work parcels;
+- surrounding transition into normal terrain.
+
+The village plan must respect the existing terrain/environment foundation instead of replacing it with an unrelated random map.
+
+### Rules
+
+- **(0,0)** remains the starting village center for the default starting village;
+- village generation uses Campaign-SEED foundation randomness only;
+- same SEED + same coordinates reproduce exactly the same village layout;
+- no textures or tile atlas yet;
+- no NPC population yet;
+- roads and parcels must form connected, plausible settlement structure rather than isolated random cells;
+- the existing >= 1 fantasy-hour village-spacing rule remains valid.
+
+### In-game proof
+
+The starting Gameplay Area visibly reads as a settlement rather than only a road cross through generic terrain.
+
+### Pass condition
+
+- deterministic village boundary exists;
+- roads/paths form a connected local network;
+- public-center and parcel areas are visible;
+- village layout transitions into surrounding environment;
+- repeated generation from the same SEED is identical;
+- no real randomness or fantasy-time input is used.
+
+---
+
+## WP-008 — Building Footprints, Entrances and Functional Lots
+
+### Goal
+
+Create deterministic physical structures that future residents and workplaces can occupy.
+
+### Scope
+
+Add foundation data for:
+
+- houses;
+- tavern / lodging;
+- shop / market structure;
+- craft / work buildings;
+- storage / service structures;
+- barns or farm-related structures where appropriate;
+- public or civic structure where appropriate;
+- outdoor functional lots.
+
+### Rules
+
+- every building has a stable world footprint;
+- every enterable building has at least one reachable entrance;
+- building footprints do not overlap roads, water or each other;
+- building type must be plausible for the generated village/environment;
+- no resident/NPC ownership is assigned yet;
+- presentation remains solid-color/simple geometry until later art stages.
+
+### Pass condition
+
+- same SEED reproduces the same structures;
+- structures occupy coherent parcels;
+- entrances face reachable walkable space;
+- no invalid overlap exists.
+
+---
+
+## WP-009 — Authoritative Walkability and Collision Foundation
+
+### Goal
+
+Define what physical space can and cannot be traversed before any autonomous character movement is implemented.
+
+### Scope
+
+Classify world positions as:
+
+- walkable ground;
+- road/path;
+- difficult but walkable terrain;
+- building interior/entrance;
+- solid building footprint/wall;
+- blocked water or impassable terrain where applicable.
+
+### Rules
+
+- walkability is authoritative Simulation data, not inferred only from color;
+- terrain and building rules remain deterministic from the Campaign SEED;
+- camera movement remains presentation-only and ignores collision;
+- later Protagonist/NPC movement must obey this layer.
+
+### Pass condition
+
+- every visible tile has an authoritative movement classification;
+- building walls/blocked water cannot be traversed;
+- entrances and roads are reachable;
+- same SEED + coordinate reproduces the same classification.
+
+---
+
+## WP-010 — Deterministic Local Route Planning
+
+### Goal
+
+Provide the route-planning foundation needed by future autonomous Protagonist/NPC movement.
+
+### Scope
+
+Find valid walking routes between local world coordinates using:
+
+- WP-009 walkability;
+- existing terrain movement costs;
+- roads and paths;
+- building entrances;
+- deterministic tie-breaking.
+
+### Rules
+
+- this WP plans routes but does **not** give the player direct control of the Protagonist;
+- identical world state + identical start/destination produce the same route;
+- route planning may cross current camera boundaries;
+- only required local route-search data should be evaluated.
+
+### In-game proof
+
+A development verification can display a deterministic route from the starting point to a valid SEED-generated village destination without actually moving the Protagonist.
+
+### Pass condition
+
+- valid reachable destinations receive a route;
+- blocked destinations are rejected;
+- routes obey WP-009 collision/walkability;
+- repeated route calculation is identical.
+
+---
+
+# Stage 2 Review Gate
+
+Do not add autonomous NPC population, resident schedules, Advisor conversation, economy, combat or external LLM integration until WP-007 through WP-010 are implemented and reviewed.
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
