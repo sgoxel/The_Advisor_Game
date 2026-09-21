@@ -413,7 +413,12 @@ Move through the unbounded tile world without creating a finite full map.
 - the Protagonist sprite is positioned relative to the camera and may move off-screen while the Protagonist world coordinate remains unchanged;
 - camera coordinates use the same arbitrary-size signed integer coordinate system as the world;
 - deterministic terrain signatures verify that revisiting the same camera coordinate reproduces the same SEED terrain;
-- visual-evidence `camera-pan` automatically asserts that Camera moves, Protagonist Simulation coordinates remain unchanged, Camera returns to its starting coordinate, and returned terrain evidence matches the starting terrain.
+- visual-evidence `camera-pan` automatically asserts that Camera moves, Protagonist Simulation coordinates remain unchanged, Camera returns to its starting coordinate, and returned terrain evidence matches the starting terrain;
+- camera zoom is presentation-only with a supported range of **0.5× to 2.0×** and default **1.0×**;
+- desktop mouse wheel: wheel up zooms in, wheel down zooms out;
+- touch screens support two-finger pinch: fingers apart zoom in, fingers together zoom out;
+- zoom dynamically changes rendered tile size and visible tile count while Camera world coordinate, Protagonist world coordinate and SEED terrain identity remain unchanged;
+- `touch-action:none` is scoped to the Gameplay Area so browser pinch/scroll gestures do not steal in-game camera interaction.
 
 ### In-game proof
 
@@ -437,7 +442,8 @@ GitHub Actions run **35602541946** completed successfully with strict `camera-pa
 - only the visible area and a small edge buffer are required;
 - Protagonist world coordinates do not change when the camera pans;
 - camera coordinates can move in positive or negative X/Y directions;
-- returning to the same coordinates reproduces the same SEED foundation.
+- returning to the same coordinates reproduces the same SEED foundation;
+- wheel and pinch zoom change only presentation scale and do not change Simulation/world coordinates.
 
 ---
 
