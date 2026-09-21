@@ -183,3 +183,36 @@ details[open] summary{border-bottom:1px solid #343a30}
 .geography-grid strong{font-size:12px;overflow-wrap:anywhere}
 @media(max-width:720px){.geography-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:460px){.geography-grid{grid-template-columns:1fr}}
+
+.camera-hud{
+  position:absolute;
+  left:10px;
+  top:10px;
+  z-index:5;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  max-width:min(560px,calc(100% - 20px));
+  padding:7px 9px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:8px;
+  background:rgba(20,24,18,.80);
+  backdrop-filter:blur(4px);
+  font-size:11px;
+  color:#c6cec0;
+  pointer-events:auto;
+}
+.camera-hud[hidden]{display:none}
+.camera-hud strong{color:#eef1e9}
+.camera-hud code{color:#d5decc}
+.camera-hud button{
+  border:1px solid #51594c;
+  border-radius:6px;
+  padding:5px 8px;
+  background:#30372d;
+  color:#e5e9df;
+  cursor:pointer;
+}
+.gameplay-area.camera-dragging{cursor:grabbing}
+.gameplay-area.camera-ready{cursor:grab}
