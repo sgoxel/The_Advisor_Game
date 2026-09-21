@@ -1,0 +1,7 @@
+2026-09-21 14:30:20 +03:00
+- Repository cleanup and documentation alignment.
+- Moved README into docs/README.md.
+- Updated fantasy calendar rule to real year - 900.
+- Added docs/ROADMAP.md aligned with current WP-001 and the next narrow work packages.
+- Removed unused scripts/ui/seed-ui.js.
+- Root-file rule restored: index.html is the only root file.
