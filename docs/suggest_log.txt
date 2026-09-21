@@ -1,3 +1,6 @@
+2026-09-21 20:52:00 +03:00 | ROADMAP detail separation
+Suggestion: later add a lightweight repository check that rejects WP detail headings such as Goal, Scope, Rules, In-Game Proof, Pass Condition, Implemented, or Verified Evidence inside docs/ROADMAP.md and confirms each ROADMAP WP code has a corresponding GitHub Issue.
+
 2026-09-21 20:45:00 +03:00 | Global WP code standard
 Suggestion: keep every future Stage, Work Package, and optional Sub Package numeric segment fixed at three digits from creation time so GitHub title sorting and ROADMAP sorting remain identical without later renaming.
 
