@@ -419,6 +419,18 @@ Move through the unbounded tile world without creating a finite full map.
 
 Panning changes the Camera coordinate and reveals newly required solid-color tiles while the Protagonist remains at its Simulation coordinate.
 
+### Verified evidence
+
+GitHub Actions run **35602541946** completed successfully with strict `camera-pan` assertions:
+
+- Camera started at **(0,0)**;
+- automated drag moved Camera away from the starting coordinate;
+- Protagonist Simulation coordinate remained **(0,0)**;
+- reverse drag returned Camera to **(0,0)**;
+- terrain evidence after returning matched the starting terrain;
+- viewport coverage and centered-camera-tile checks remained valid throughout;
+- only the viewport-sized terrain window plus its existing edge buffer was rendered.
+
 ### Pass condition
 
 - no gaps appear while moving;
