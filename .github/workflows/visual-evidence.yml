@@ -56,9 +56,15 @@ on:
       - tools/screenshot_tool.py
       - tools/requirements.txt
       - .github/workflows/visual-evidence.yml
+      - index.html
       - scripts/world/geography.js
       - scripts/world/starting-village.js
+      - scripts/world/house-plans.js
+      - scripts/world/terrain.js
       - scripts/data/world-standards.js
+      - scripts/data/terrain-palette.js
+      - scripts/data/tile-textures.js
+      - assets/tiles/vector/**
       - styles/main.css
 
 permissions:
