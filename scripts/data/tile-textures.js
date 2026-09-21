@@ -58,24 +58,24 @@ const BLEND_PRIORITY=Object.freeze({
 
 const BLEND_MASKS=Object.freeze({
   edge:Object.freeze({
-    n:"blend_edge_n.svg",
-    e:"blend_edge_e.svg",
-    s:"blend_edge_s.svg",
-    w:"blend_edge_w.svg"
+    n:Object.freeze(["blend_edge_n.svg","blend_edge_n_b.svg"]),
+    e:Object.freeze(["blend_edge_e.svg","blend_edge_e_b.svg"]),
+    s:Object.freeze(["blend_edge_s.svg","blend_edge_s_b.svg"]),
+    w:Object.freeze(["blend_edge_w.svg","blend_edge_w_b.svg"])
   }),
   corner:Object.freeze({
-    ne:"blend_corner_ne.svg",
-    se:"blend_corner_se.svg",
-    sw:"blend_corner_sw.svg",
-    nw:"blend_corner_nw.svg"
+    ne:Object.freeze(["blend_corner_ne.svg","blend_corner_ne_b.svg"]),
+    se:Object.freeze(["blend_corner_se.svg","blend_corner_se_b.svg"]),
+    sw:Object.freeze(["blend_corner_sw.svg","blend_corner_sw_b.svg"]),
+    nw:Object.freeze(["blend_corner_nw.svg","blend_corner_nw_b.svg"])
   }),
   peninsula:Object.freeze({
-    n:"blend_peninsula_n.svg",
-    e:"blend_peninsula_e.svg",
-    s:"blend_peninsula_s.svg",
-    w:"blend_peninsula_w.svg"
+    n:Object.freeze(["blend_peninsula_n.svg","blend_peninsula_n_b.svg"]),
+    e:Object.freeze(["blend_peninsula_e.svg","blend_peninsula_e_b.svg"]),
+    s:Object.freeze(["blend_peninsula_s.svg","blend_peninsula_s_b.svg"]),
+    w:Object.freeze(["blend_peninsula_w.svg","blend_peninsula_w_b.svg"])
   }),
-  island:"blend_island.svg"
+  island:Object.freeze(["blend_island.svg","blend_island_b.svg"])
 });
 
 const INFRA_BLEND_TYPES=new Set(["road","path"]);
@@ -88,23 +88,41 @@ function canBlend(base,target){
   return (BLEND_PRIORITY[target]||0)>(BLEND_PRIORITY[base]||0);
 }
 
-function blendMaskSpec(target,shape,key){
-  let file=null;
-  if(shape==="island")file=BLEND_MASKS.island;
-  else file=BLEND_MASKS[shape]&&BLEND_MASKS[shape][key];
-  return file?Object.freeze({
+function blendVariantIndex(context,target,shape,key,count){
+  if(count<=1||!context||!context.seed)return 0;
+  const stableKey=[
+    "terrain-blend",
+    String(context.x),
+    String(context.y),
+    String(context.base||""),
+    String(target),
+    String(shape),
+    String(key||"all")
+  ].join(":");
+  return PRNG.foundationUint32(context.seed,stableKey)%count;
+}
+
+function blendMaskSpec(target,shape,key,context){
+  let files=null;
+  if(shape==="island")files=BLEND_MASKS.island;
+  else files=BLEND_MASKS[shape]&&BLEND_MASKS[shape][key];
+  if(!files||!files.length)return null;
+  const variantIndex=blendVariantIndex(context,target,shape,key,files.length);
+  return Object.freeze({
     terrain:target,
     shape,
     orientation:key||"all",
-    mask:ROOT+file
-  }):null;
+    variant:variantIndex===0?"a":"b",
+    variantIndex,
+    mask:ROOT+files[variantIndex]
+  });
 }
 
-function specsForSides(target,sides){
-  if(sides.length===4)return [blendMaskSpec(target,"island","all")];
+function specsForSides(target,sides,context){
+  if(sides.length===4)return [blendMaskSpec(target,"island","all",context)];
   if(sides.length===3){
     const missing=["n","e","s","w"].find(side=>!sides.includes(side));
-    return [blendMaskSpec(target,"peninsula",missing)];
+    return [blendMaskSpec(target,"peninsula",missing,context)];
   }
   if(sides.length===2){
     const key=sides.slice().sort().join("");
@@ -114,13 +132,13 @@ function specsForSides(target,sides){
       sw:"sw",
       nw:"nw"
     };
-    if(corners[key])return [blendMaskSpec(target,"corner",corners[key])];
-    return sides.map(side=>blendMaskSpec(target,"edge",side));
+    if(corners[key])return [blendMaskSpec(target,"corner",corners[key],context)];
+    return sides.map(side=>blendMaskSpec(target,"edge",side,context));
   }
-  return sides.map(side=>blendMaskSpec(target,"edge",side));
+  return sides.map(side=>blendMaskSpec(target,"edge",side,context));
 }
 
-function blendSpecs(type,neighbors){
+function blendSpecs(type,neighbors,context){
   if(!BLENDABLE.has(type)||!neighbors)return [];
   const groups=new Map();
   for(const side of ["n","e","s","w"]){
@@ -134,8 +152,9 @@ function blendSpecs(type,neighbors){
     (a,b)=>(BLEND_PRIORITY[a[0]]||0)-(BLEND_PRIORITY[b[0]]||0)
   );
   const specs=[];
+  const resolvedContext=context?Object.freeze({...context,base:type}):null;
   for(const [target,sides] of ordered){
-    for(const spec of specsForSides(target,sides)){
+    for(const spec of specsForSides(target,sides,resolvedContext)){
       if(spec)specs.push(spec);
     }
   }
