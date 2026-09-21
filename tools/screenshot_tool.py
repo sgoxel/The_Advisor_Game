@@ -323,7 +323,30 @@ return (() => {
             return {error: String(error)};
           }
         })(),
-        roadNetwork: (() => {
+        specialLots: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const lots = window.SpecialLots;
+            if (!campaign || !lots?.proof) return null;
+            const proof = lots.proof(campaign.seed);
+            const rendered = [...document.querySelectorAll('.terrain-tile[data-special-kind]')];
+            const visibleKinds = [...new Set(
+              rendered.map(tile => tile.dataset?.specialKind).filter(Boolean)
+            )].sort();
+            const visibleIds = [...new Set(
+              rendered.map(tile => tile.dataset?.buildingId).filter(Boolean)
+            )].sort();
+            return {
+              ...proof,
+              visibleSpecialCellCount:rendered.length,
+              visibleKinds,
+              visibleIds,
+            };
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
+                roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
             const foundation = window.GeographyFoundation;
@@ -840,6 +863,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-007D deterministic blend variation failed: {house}")
         if house.get("registryVariants") != ["a", "b"]:
             raise RuntimeError(f"WP-007D A/B blend variants are not both reachable: {house}")
+        special = current.get("specialLots") or {}
+        if not special.get("pass") or not special.get("deterministic"):
+            raise RuntimeError(f"WP-008 special lot proof failed: {special}")
+        if int(special.get("lotCount") or 0) != 7:
+            raise RuntimeError(f"WP-008 special lot count is invalid: {special}")
+        if int(special.get("enterableCount") or 0) != 6 or int(special.get("outdoorCount") or 0) != 1:
+            raise RuntimeError(f"WP-008 enterable/outdoor mix is invalid: {special}")
+        if not special.get("typeCoveragePass") or not special.get("entrancesPass") or not special.get("overlapPass"):
+            raise RuntimeError(f"WP-008 lot coverage/access/overlap proof failed: {special}")
+        for key in ("roadOverlapCount","waterOverlapCount","houseOverlapCount","lotOverlapCount"):
+            if int(special.get(key) or 0) != 0:
+                raise RuntimeError(f"WP-008 invalid overlap {key}: {special}")
+        if int(special.get("visibleSpecialCellCount") or 0) <= 0:
+            raise RuntimeError(f"WP-008 special lots are not visible in broad village evidence: {special}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):

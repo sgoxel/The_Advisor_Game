@@ -384,6 +384,6 @@ window.StartingVillage=Object.freeze({
   GATEWAY_MAINLAND_EDGE_TILES,GATEWAY_ROAD_WIDTH_TILES,SECONDARY_PATH_WIDTH_TILES,
   direction,local,getType,plan,proof,
   infrastructureAt,buildingAt,importantObjectAt,resolveInfrastructure,resolveTerrain,
-  buildPlots,plotAt,isRoadReserved
+  buildPlots,plotAt,isRoadReserved,isVillageLand,isPublicSquare,farmParcel
 });
 })();

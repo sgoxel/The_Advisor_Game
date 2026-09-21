@@ -15,6 +15,8 @@ const ids=[
   "houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount",
   "blendVariantMode","blendJunctionMode","vBlendVariantDeterministic","vBlendVariantAB","vBlendDiagonal","vBlendJunctionPriority",
   "vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions",
+  "specialLotCount","specialEnterableCount","specialOutdoorCount","specialLotKinds",
+  "vSpecialDeterministic","vSpecialCoverage","vSpecialEntrances","vSpecialOverlap",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
@@ -211,6 +213,30 @@ function renderHousePlans(){
   );
 }
 
+function renderSpecialLots(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    ["specialLotCount","specialEnterableCount","specialOutdoorCount","specialLotKinds"].forEach(id=>e[id].textContent="—");
+    ["vSpecialDeterministic","vSpecialCoverage","vSpecialEntrances","vSpecialOverlap"].forEach(id=>setCheck(e[id],false,"WAITING"));
+    return;
+  }
+
+  const proof=SpecialLots.proof(campaign.seed);
+  e.specialLotCount.textContent=String(proof.lotCount);
+  e.specialEnterableCount.textContent=String(proof.enterableCount);
+  e.specialOutdoorCount.textContent=String(proof.outdoorCount);
+  e.specialLotKinds.textContent=proof.kinds.join(", ");
+
+  setCheck(e.vSpecialDeterministic,proof.deterministic,"FAIL");
+  setCheck(
+    e.vSpecialCoverage,
+    proof.lotCount===7&&proof.typeCoveragePass&&proof.enterableCount===6&&proof.outdoorCount===1,
+    "FAIL"
+  );
+  setCheck(e.vSpecialEntrances,proof.entrancesPass,"FAIL");
+  setCheck(e.vSpecialOverlap,proof.overlapPass,"FAIL");
+}
+
 function renderGeography(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -387,7 +413,8 @@ function renderTerrain(){
         tile.type!==repeated.type||
         tile.color!==repeated.color||
         tile.texture!==repeated.texture||
-        tile.overlayTexture!==repeated.overlayTexture
+        tile.overlayTexture!==repeated.overlayTexture||
+        tile.specialKind!==repeated.specialKind
       )deterministic=false;
 
       const node=document.createElement("div");
@@ -401,6 +428,10 @@ function renderTerrain(){
       node.dataset.origin=(pos.x===center.x&&pos.y===center.y)?"true":"false";
       if(tile.buildingId)node.dataset.buildingId=tile.buildingId;
       if(tile.room)node.dataset.room=tile.room;
+      if(tile.specialKind){
+        node.dataset.specialKind=tile.specialKind;
+        node.classList.add("special-lot-cell");
+      }
       if(tile.overlayTexture)node.appendChild(tileOverlay(tile.overlayTexture,"building-tile-overlay",0));
       node.title=tile.label+" ("+pos.x+","+pos.y+")";
       e.terrainGrid.appendChild(node);
@@ -767,6 +798,7 @@ function renderStatic(){
   renderGeography();
   renderStartingVillage();
   renderHousePlans();
+  renderSpecialLots();
 }
 
 function renderClock(){
