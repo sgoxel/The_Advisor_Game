@@ -512,6 +512,40 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     return "no-op"
 
 
+def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario != "camera-pan":
+        return
+    if len(frames) < 3:
+        raise RuntimeError("camera-pan requires at least three evidence frames")
+
+    builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
+    start, moved, returned = builds
+    start_camera = start.get("cameraCoordinate")
+    moved_camera = moved.get("cameraCoordinate")
+    returned_camera = returned.get("cameraCoordinate")
+    protagonist_positions = [item.get("protagonistLocation") for item in builds]
+
+    if not start_camera or moved_camera == start_camera:
+        raise RuntimeError(
+            f"camera-pan did not move camera: start={start_camera}, moved={moved_camera}"
+        )
+    if returned_camera != start_camera:
+        raise RuntimeError(
+            f"camera-pan did not return to start: start={start_camera}, returned={returned_camera}"
+        )
+    if len(set(protagonist_positions)) != 1:
+        raise RuntimeError(
+            f"camera-pan moved Protagonist Simulation coordinate: {protagonist_positions}"
+        )
+
+    start_types = start.get("terrainTypes") or {}
+    returned_types = returned.get("terrainTypes") or {}
+    if start_types != returned_types:
+        raise RuntimeError(
+            "camera-pan returned to the start coordinate but terrain evidence changed"
+        )
+
+
 def _write_evidence_manifest(
     path: Path,
     *,
@@ -615,6 +649,8 @@ def take_screenshots(
                     }
                 )
                 print(f"Saved: {path} [{scenario}:{action}]")
+
+            validate_scenario_frames(scenario, frames)
 
             if evidence_json:
                 manifest_path = screenshots_directory() / Path(evidence_json).name
