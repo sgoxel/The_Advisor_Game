@@ -46,6 +46,24 @@ input:focus{border-color:#92ad83}
 
 /* ROW 2 — GAMEPLAY */
 .gameplay-area{position:relative;min-height:0;overflow:hidden;background:#20251d}
+.terrain-grid{
+  position:absolute;
+  inset:0;
+  overflow:hidden;
+  display:grid;
+  align-content:center;
+  justify-content:center;
+  z-index:0;
+}
+.terrain-grid[hidden]{display:none}
+.terrain-tile{
+  width:100px;
+  height:100px;
+  border:0;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);
+}
+.terrain-tile[data-origin="true"]{box-shadow:inset 0 0 0 2px rgba(255,255,255,.35)}
+
 .gameplay-placeholder{position:absolute;inset:0;display:grid;place-content:center;gap:8px;padding:20px;text-align:center;color:#9da697}
 .gameplay-placeholder strong{color:#dfe4da;font-size:22px}
 .gameplay-placeholder span{font-size:13px}
@@ -113,6 +131,10 @@ details[open] summary{border-bottom:1px solid #343a30}
 .check{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #30362d}
 .check:last-child{border-bottom:0}.check b{color:#d7c882;font-size:12px}.check b.pass{color:#9bd18c}
 .technical-info{color:#abb2a5;font-size:14px}.technical-info p{margin:0 0 10px}.technical-info p:last-child{margin-bottom:0}
+.terrain-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:12px 0 14px}
+.terrain-legend-item{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #343a30;border-radius:7px}
+.terrain-swatch{width:22px;height:22px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.22);flex:0 0 auto}
+.terrain-legend-item code{margin-left:auto;font-size:10px;color:#9da697}
 
 @media(max-width:720px){
   .top-ribbon{grid-template-columns:auto minmax(0,1fr) auto;gap:6px;padding:6px}
