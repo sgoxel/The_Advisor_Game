@@ -2,7 +2,8 @@
 "use strict";
 
 function getType(seedValue,xValue,yValue){
-  return GeographyFoundation.getTerrainType(seedValue,xValue,yValue);
+  const base=GeographyFoundation.getTerrainType(seedValue,xValue,yValue);
+  return StartingVillage.getType(seedValue,xValue,yValue,base);
 }
 
 function getTile(seedValue,xValue,yValue){
