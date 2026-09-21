@@ -2,13 +2,13 @@
 "use strict";
 
 const LOT_DEFINITIONS=Object.freeze([
-  Object.freeze({kind:"tavern",label:"Tavern & Lodging",w:6,h:5,enterable:true,function:"lodging"}),
-  Object.freeze({kind:"shop",label:"Village Shop",w:5,h:4,enterable:true,function:"market"}),
-  Object.freeze({kind:"workshop",label:"Craft Workshop",w:5,h:4,enterable:true,function:"craft"}),
-  Object.freeze({kind:"storehouse",label:"Storehouse",w:5,h:4,enterable:true,function:"storage"}),
-  Object.freeze({kind:"barn",label:"Farm Barn",w:6,h:5,enterable:true,function:"farm"}),
-  Object.freeze({kind:"meeting-hall",label:"Village Meeting Hall",w:6,h:5,enterable:true,function:"civic"}),
-  Object.freeze({kind:"workyard",label:"Outdoor Workyard",w:5,h:4,enterable:false,function:"outdoor-work"})
+  Object.freeze({kind:"tavern",label:"Tavern & Lodging",w:6,h:5,enterable:true,function:"lodging",color:"#9A6A4A"}),
+  Object.freeze({kind:"shop",label:"Village Shop",w:5,h:4,enterable:true,function:"market",color:"#9A8058"}),
+  Object.freeze({kind:"workshop",label:"Craft Workshop",w:5,h:4,enterable:true,function:"craft",color:"#826B58"}),
+  Object.freeze({kind:"storehouse",label:"Storehouse",w:5,h:4,enterable:true,function:"storage",color:"#74654D"}),
+  Object.freeze({kind:"barn",label:"Farm Barn",w:6,h:5,enterable:true,function:"farm",color:"#806044"}),
+  Object.freeze({kind:"meeting-hall",label:"Village Meeting Hall",w:6,h:5,enterable:true,function:"civic",color:"#8C785E"}),
+  Object.freeze({kind:"workyard",label:"Outdoor Workyard",w:5,h:4,enterable:false,function:"outdoor-work",color:"#756448"})
 ]);
 
 const planCache=new Map();
@@ -145,6 +145,7 @@ function build(seed){
         label:definition.label,
         function:definition.function,
         enterable:definition.enterable,
+        color:definition.color,
         cx:candidate.x,
         cy:candidate.y,
         w,h,
@@ -197,6 +198,7 @@ function cellAt(seed,l){
       textureVariant:null,
       overlayVariant:null,
       room:"workyard",
+      presentationColor:lot.color,
       lot
     });
   }
@@ -210,6 +212,7 @@ function cellAt(seed,l){
         textureVariant:"door-"+lot.access.side.toLowerCase(),
         overlayVariant:null,
         room:null,
+        presentationColor:lot.color,
         lot
       });
     }
@@ -218,6 +221,7 @@ function cellAt(seed,l){
       textureVariant:wallVariant(b,l.x,l.y),
       overlayVariant:null,
       room:null,
+      presentationColor:lot.color,
       lot
     });
   }
@@ -227,6 +231,7 @@ function cellAt(seed,l){
     textureVariant:"floor-wood",
     overlayVariant:null,
     room:lot.function,
+    presentationColor:lot.color,
     lot
   });
 }
