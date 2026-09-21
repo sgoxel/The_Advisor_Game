@@ -955,7 +955,7 @@ GitHub Actions run **35625806201** completed successfully against the exact merg
 
 ---
 
-## WP-008 — Special Buildings + Functional Lots
+## WP-008 — Special Buildings + Functional Lots — IMPLEMENTED / VISUAL VERIFICATION PENDING
 
 ### Goal
 
@@ -973,6 +973,44 @@ Add foundation data for:
 - public or civic structure where appropriate;
 - outdoor functional lots.
 
+### Implemented
+
+- added deterministic **Village Hall**, **Market Shop**, **Tavern / Lodging**, **Craft Workshop**, and **Barn / Storage** structures;
+- added deterministic **Market Yard** and **Timber / Work Yard** outdoor functional lots;
+- all structures use stable world footprints generated from Campaign SEED foundation randomness only;
+- each enterable special structure gets a deterministic exterior door facing a reachable existing road/path within 5 tiles;
+- functional lots are placed near their related shop/workshop and within 4 tiles of road/path access;
+- special structures avoid all existing residential plots, roads/public space, water, and one another;
+- outdoor lots avoid roads, homes, water, special structures, and one another;
+- special structures reuse the existing thin top-down wall/door system;
+- added simple SVG presentation for stone/workshop/barn floors, functional yards, and five building identity pictograms;
+- the current village therefore contains **5 special structures + 2 functional lots** in addition to the 6 residential buildings;
+- no NPC owner, worker, inventory, economy, or autonomous behavior is assigned yet.
+
+### Verification
+
+A deterministic stress test across the default Campaign SEED plus **50 additional SEEDs** passed:
+
+- 5/5 special structures generated for every tested SEED;
+- 2/2 functional lots generated for every tested SEED;
+- structure-road overlap: 0;
+- structure-home overlap: 0;
+- structure-water overlap: 0;
+- structure-structure overlap: 0;
+- lot-road overlap: 0;
+- lot-home overlap: 0;
+- lot-water overlap: 0;
+- lot-structure overlap: 0;
+- reachable structure entrances: PASS;
+- functional-lot road access: PASS.
+
+Default-SEED render verification also passed:
+
+- **162** special-building cells resolved to SVG presentation;
+- all **162 / 162** special-building cells used SVG textures;
+- all **5** building identity marker SVGs rendered at the intended interior center cells;
+- both functional lots rendered with the SVG yard texture.
+
 ### Rules
 
 - every building has a stable world footprint;
@@ -980,14 +1018,16 @@ Add foundation data for:
 - building footprints do not overlap roads, water or each other;
 - building type must be plausible for the generated village/environment;
 - no resident/NPC ownership is assigned yet;
-- presentation remains solid-color/simple geometry until later art stages.
+- presentation remains simple vector geometry until later art stages.
 
 ### Pass condition
 
 - same SEED reproduces the same structures;
 - structures occupy coherent parcels;
 - entrances face reachable walkable space;
-- no invalid overlap exists.
+- no invalid overlap exists;
+- both outdoor functional lots are present and road-accessible;
+- screenshot evidence scores above 7/10 before WP-008 is marked COMPLETE.
 
 ---
 
