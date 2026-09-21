@@ -1,3 +1,14 @@
+2026-09-21 17:12:00 +03:00
+- Final main-road/bridge refinement completed after screenshot review.
+- Replaced the visually artificial global cross-road with a deterministic connected starting-village main-road network: irregular ring road + connected central avenues.
+- Main roads no longer cross wide open water as fake highways and cannot be cut by terrain/building overlays.
+- Current bridge rule is enforced by construction: maximum 9 consecutive 100 m tiles at 5.5 km/h = ~9.82 fantasy walking minutes, below the 10-minute limit.
+- Multi-SEED stress test passed for continuity and bridge limits.
+- GitHub Actions run 35610364649 passed the main-road visual/regression scenario.
+- Road-width policy retained: rough 1, wilderness 2, village up to 3, town up to 4, city up to 6, capital-city main road up to 10; capital 10-tile width is not a general long-distance road width.
+- Updated WP-007 roadmap so future secondary roads must connect to and preserve the authoritative main road.
+- Updated docs/README.md and docs/ROADMAP.md.
+
 2026-09-21 16:55:00 +03:00
 - Added authoritative continuous main-road foundation before WP-007.
 - Main roads can no longer disappear because of water, forest, mountain, parcels or buildings.
