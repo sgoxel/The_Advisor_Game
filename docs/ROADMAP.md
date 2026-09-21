@@ -461,6 +461,15 @@ Additional camera-zoom acceptance passed on GitHub Actions run **35606140004**:
 - temporary village roads use deterministic meandering offsets instead of a perfect axis-aligned cross;
 - visible per-tile grid seams are removed during normal play so same-type neighboring cells read as one continuous terrain region; the hovered cell and authoritative center cell may still show a diagnostic outline.
 - verified natural-terrain evidence: GitHub Actions run **35607407473** passed at **0.50×** zoom with **0 suspicious large rectangular natural-terrain components**; the largest large interior natural component filled only **0.555** of its bounding box, confirming an irregular boundary rather than a rectangle.
+- main roads are authoritative infrastructure and cannot be removed by water, forest, mountain, settlement parcels or buildings;
+- the current main-road foundation uses deterministic continuous east-west and north-south regional corridors through the starting village;
+- road centerlines are planned in deterministic 32-tile chunks whose shared anchors keep adjacent chunks connected;
+- wide water is avoided by the road planner; only short consecutive water spans become **Bridge** tiles;
+- bridge walking speed uses the current main-road walking speed of **5.5 km/h**;
+- with **100 meters per logical tile**, the **10 fantasy-minute maximum bridge time** permits at most **9 consecutive bridge tiles** (about **9.82 fantasy minutes**);
+- current village main roads widen up to **3 tiles** near the settlement, then narrow toward **2 tiles** in ordinary wilderness and **1 tile** through rough forest/mountain/mud terrain;
+- the road-width policy reserves up to **4 tiles for towns**, **6 for cities**, and **10 tiles for capital-city main roads** when those settlement scales are physically implemented;
+- current main bridges inherit the road corridor but are capped to a practical **2-tile width** outside future major-city infrastructure.
 
 ---
 
