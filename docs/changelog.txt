@@ -1,3 +1,12 @@
+2026-09-21 20:23:24 +03:00
+- Started full ROADMAP → GitHub Issue migration using the one-WP-per-command workflow.
+- Migrated WP-001 exactly as written in docs/ROADMAP.md to GitHub Issue #9.
+- Verified issue body is an exact character-for-character match with the current WP-001 ROADMAP section.
+- Applied existing GitHub labels: documentation, enhancement.
+- Closed Issue #9 with state reason completed because WP-001 is already COMPLETE.
+- Migration verification score: 10/10 PASS.
+- Updated docs/ROADMAP.md with separate migration tracking without changing the WP-001 source content.
+
 2026-09-21 20:14:53 +03:00
 - WP-009 Authoritative Walkability and Collision Foundation completed.
 - Added scripts/world/walkability.js as authoritative Simulation movement classification.
