@@ -8,6 +8,8 @@ const ids=[
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
+  "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
+  "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
   "geoBiome","geoClimate","geoElevation","geoTerrain","nearestVillage","nearestVillageWalk",
   "vGeoDeterministic","vGeoTimeFree","vVillageSpacing","vTerrainGeography",
@@ -138,25 +140,47 @@ function renderTerrainLegend(){
   });
 }
 
+let lastTerrainViewportKey="";
+let terrainResizeObserver=null;
+let terrainRenderFrame=0;
+
+function terrainGridDimensions(width,height,tileSize){
+  let columns=Math.max(3,Math.ceil(width/tileSize)+2);
+  let rows=Math.max(3,Math.ceil(height/tileSize)+2);
+  if(columns%2===0)columns+=1;
+  if(rows%2===0)rows+=1;
+  return {columns,rows};
+}
+
 function renderTerrain(){
   const campaign=SeedSystem.getCampaign();
   const center=Protagonist.getPosition();
   if(!campaign||!center){
     e.terrainGrid.hidden=true;
+    e.tileViewportSize.textContent="—";
+    e.tileGridSize.textContent="—";
+    e.tileCount.textContent="—";
+    e.tileCenterCoordinate.textContent="—";
     setCheck(e.vTerrainDeterministic,false,"WAITING");
+    setCheck(e.vTileCoverage,false,"WAITING");
+    setCheck(e.vTileResponsive,false,"WAITING");
+    setCheck(e.vTileOddGrid,false,"WAITING");
+    setCheck(e.vTileRepeat,false,"WAITING");
     return;
   }
 
   const tileSize=100;
-  let columns=Math.max(3,Math.ceil(e.terrainGrid.parentElement.clientWidth/tileSize)+2);
-  let rows=Math.max(3,Math.ceil(e.terrainGrid.parentElement.clientHeight/tileSize)+2);
-  if(columns%2===0)columns+=1;
-  if(rows%2===0)rows+=1;
+  const viewport=e.terrainGrid.parentElement;
+  const width=Math.max(1,viewport.clientWidth);
+  const height=Math.max(1,viewport.clientHeight);
+  const {columns,rows}=terrainGridDimensions(width,height,tileSize);
   const halfCols=Math.floor(columns/2);
   const halfRows=Math.floor(rows/2);
+  const viewportKey=width+"x"+height;
+  const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
 
-  e.terrainGrid.style.gridTemplateColumns="repeat("+columns+",100px)";
-  e.terrainGrid.style.gridTemplateRows="repeat("+rows+",100px)";
+  e.terrainGrid.style.gridTemplateColumns="repeat("+columns+","+tileSize+"px)";
+  e.terrainGrid.style.gridTemplateRows="repeat("+rows+","+tileSize+"px)";
   e.terrainGrid.innerHTML="";
 
   let deterministic=true;
@@ -173,13 +197,64 @@ function renderTerrain(){
       node.className="terrain-tile";
       node.style.background=tile.color;
       node.dataset.terrain=tile.type;
-      node.dataset.origin=(pos.x==="0"&&pos.y==="0")?"true":"false";
+      node.dataset.x=pos.x;
+      node.dataset.y=pos.y;
+      node.dataset.origin=(pos.x===center.x&&pos.y===center.y)?"true":"false";
       node.title=tile.label+" ("+pos.x+","+pos.y+")";
       e.terrainGrid.appendChild(node);
     }
   }
+
+  const gridWidth=columns*tileSize;
+  const gridHeight=rows*tileSize;
+  const coverage=gridWidth>=width&&gridHeight>=height;
+  const oddGrid=columns%2===1&&rows%2===1;
+  const origin=e.terrainGrid.querySelector('[data-origin="true"]');
+  const repeatCenter=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
+  const repeatAgain=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
+  const repeatable=repeatCenter.type===repeatAgain.type&&repeatCenter.color===repeatAgain.color;
+
+  e.terrainGrid.dataset.columns=String(columns);
+  e.terrainGrid.dataset.rows=String(rows);
+  e.terrainGrid.dataset.tileSize=String(tileSize);
+  e.terrainGrid.dataset.viewportWidth=String(width);
+  e.terrainGrid.dataset.viewportHeight=String(height);
+  e.terrainGrid.dataset.gridWidth=String(gridWidth);
+  e.terrainGrid.dataset.gridHeight=String(gridHeight);
+  e.terrainGrid.dataset.viewportKey=viewportKey;
+  e.terrainGrid.dataset.coveragePass=coverage?"true":"false";
+  e.terrainGrid.dataset.centerPass=(!!origin&&oddGrid)?"true":"false";
   e.terrainGrid.hidden=false;
+
+  e.tileViewportSize.textContent=width+" × "+height+" px";
+  e.tileGridSize.textContent=columns+" × "+rows;
+  e.tileCount.textContent=String(columns*rows);
+  e.tileCenterCoordinate.textContent="("+center.x+","+center.y+")";
+
   setCheck(e.vTerrainDeterministic,deterministic,"FAIL");
+  setCheck(e.vTileCoverage,coverage,"FAIL");
+  setCheck(e.vTileResponsive,responsive,"FAIL");
+  setCheck(e.vTileOddGrid,oddGrid&&!!origin,"FAIL");
+  setCheck(e.vTileRepeat,repeatable,"FAIL");
+  lastTerrainViewportKey=viewportKey;
+}
+
+function scheduleTerrainRender(){
+  if(terrainRenderFrame)cancelAnimationFrame(terrainRenderFrame);
+  terrainRenderFrame=requestAnimationFrame(()=>{
+    terrainRenderFrame=0;
+    renderTerrain();
+  });
+}
+
+function observeTerrainViewport(){
+  if(terrainResizeObserver)terrainResizeObserver.disconnect();
+  if("ResizeObserver" in window){
+    terrainResizeObserver=new ResizeObserver(()=>scheduleTerrainRender());
+    terrainResizeObserver.observe(e.terrainGrid.parentElement);
+  }else{
+    window.addEventListener("resize",scheduleTerrainRender);
+  }
 }
 
 function renderWorldCoordinates(){
@@ -287,7 +362,7 @@ function init(){
 
   renderTerrainLegend();
   renderStatic();startClock();
-  window.addEventListener("resize",()=>renderTerrain());
+  observeTerrainViewport();
 }
 window.AppUI=Object.freeze({init});
 })();
