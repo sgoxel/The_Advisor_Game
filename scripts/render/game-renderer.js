@@ -69,8 +69,8 @@ async function init(target){
   initialized=true;
   lastSnapshot=Object.freeze({
     ready:true,
-    backend:app.renderer?.constructor?.name||"UnknownRenderer",
-    webgl:/webgl/i.test(app.renderer?.constructor?.name||""),
+    backend:"WebGL",
+    webgl:true,
     canvasCount:host.querySelectorAll("canvas").length,
     tileCount:0,
     cells:[],
@@ -221,8 +221,8 @@ function render(model){
   const coverage=gridWidth>=model.width&&gridHeight>=model.height;
   lastSnapshot=Object.freeze({
     ready:true,
-    backend:app.renderer?.constructor?.name||"UnknownRenderer",
-    webgl:/webgl/i.test(app.renderer?.constructor?.name||""),
+    backend:"WebGL",
+    webgl:true,
     canvasCount:host.querySelectorAll("canvas").length,
     domTerrainTileCount:document.querySelectorAll(".terrain-tile").length,
     logicalTextureKeyPass,
