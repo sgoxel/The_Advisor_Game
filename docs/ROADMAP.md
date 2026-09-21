@@ -52,6 +52,23 @@ The game must remain playable in portrait and landscape layouts.
 
 ---
 
+## Development Tooling — GitHub Visual Evidence — COMPLETE
+
+- `tools/screenshot_tool.py` is adapted from the prior project screenshot utility.
+- Selenium/headless Chrome captures landscape or portrait screenshots into `tools/screenshots/`.
+- The current game is auto-started for evidence when no campaign is active.
+- Runtime evidence records campaign state, game date/time, protagonist sprite/load state, terrain counts/types and geographic hierarchy.
+- GitHub Actions workflow: `.github/workflows/visual-evidence.yml`.
+- Manual workflow runs and authorized Issue comments support visual evidence capture.
+- Issue trigger syntax: `/visual-evidence <scenario>`.
+- Pushes that change the screenshot tool/workflow self-test against a local HTTP server using the exact checked-out commit.
+- GitHub Actions uploads screenshots/evidence as a 14-day artifact by default.
+- Publishing screenshots into `main` remains an explicit trusted/manual option.
+- Current-build readiness failures are test failures rather than successful blank screenshots.
+- Legacy camera/NPC scenario names remain available and safely degrade until those runtime APIs exist.
+
+---
+
 # Stage 1 — Deterministic World Foundation
 
 ## WP-001 — Base Game, Campaign SEED and Game Clock — COMPLETE
