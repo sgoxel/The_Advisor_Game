@@ -1,3 +1,15 @@
+2026-09-21 16:00:00 +03:00
+- WP-006 Camera Movement Through the Infinite World implemented.
+- Added scripts/world/camera.js with arbitrary-size signed camera coordinates.
+- Camera state is independent from Protagonist world position.
+- Added drag-to-pan and Arrow/WASD camera controls plus Center on Protagonist.
+- Terrain rendering now centers its visible window on Camera coordinates rather than always on the Protagonist.
+- Protagonist sprite position is derived from its world offset relative to Camera center and may move off-screen without changing Simulation position.
+- Added deterministic return-to-coordinate terrain signature verification.
+- Updated screenshot_tool.py to drag the current #gameplayArea when legacy #gameCanvas is absent.
+- Push visual-evidence self-test changed to camera-pan.
+- Updated build marker/UI to WP-006 and marked WP-006 COMPLETE in docs/ROADMAP.md.
+
 2026-09-21 15:50:44 +03:00
 - WP-005 final responsive acceptance passed on GitHub Actions run 35601738723.
 - Landscape Gameplay Area 1920x839 used 23x11 = 253 tiles with 2300x1100 grid coverage.
