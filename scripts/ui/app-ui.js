@@ -13,7 +13,7 @@ const ids=[
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
   "vVillageCore","vVillageMainland","vVillageBridge","vVillagePlan","vVillageRepeat",
   "houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount",
-  "blendVariantMode","vBlendVariantDeterministic","vBlendVariantAB",
+  "blendVariantMode","blendJunctionMode","vBlendVariantDeterministic","vBlendVariantAB","vBlendDiagonal","vBlendJunctionPriority",
   "vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
@@ -125,8 +125,8 @@ function renderStartingVillage(){
 function renderHousePlans(){
   const campaign=SeedSystem.getCampaign();
   if(!campaign){
-    ["houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount","blendVariantMode"].forEach(id=>e[id].textContent="—");
-    ["vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions","vBlendVariantDeterministic","vBlendVariantAB"].forEach(id=>setCheck(e[id],false,"WAITING"));
+    ["houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount","blendVariantMode","blendJunctionMode"].forEach(id=>e[id].textContent="—");
+    ["vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions","vBlendVariantDeterministic","vBlendVariantAB","vBlendDiagonal","vBlendJunctionPriority"].forEach(id=>setCheck(e[id],false,"WAITING"));
     return;
   }
 
@@ -144,6 +144,22 @@ function renderHousePlans(){
   const variantNeighbors={n:"water",e:"grass",s:"grass",w:"grass"};
   const stableA=TileTextures.blendSpecs("grass",variantNeighbors,{seed:campaign.seed,x:"17",y:"23"});
   const stableB=TileTextures.blendSpecs("grass",variantNeighbors,{seed:campaign.seed,x:"17",y:"23"});
+  const diagonal=TileTextures.blendSpecs("grass",{
+    n:"grass",e:"grass",s:"grass",w:"grass",
+    ne:"water",se:"grass",sw:"grass",nw:"grass"
+  },{seed:campaign.seed,x:"31",y:"41"});
+  const cardinalOwnsCorner=TileTextures.blendSpecs("grass",{
+    n:"water",e:"grass",s:"grass",w:"grass",
+    ne:"water",se:"grass",sw:"grass",nw:"grass"
+  },{seed:campaign.seed,x:"31",y:"41"});
+  const highPriorityJunction=TileTextures.blendSpecs("grass",{
+    n:"dirt",e:"forest",s:"grass",w:"grass",
+    ne:"water",se:"grass",sw:"grass",nw:"grass"
+  },{seed:campaign.seed,x:"32",y:"41"});
+  const lowPriorityJunction=TileTextures.blendSpecs("grass",{
+    n:"water",e:"dirt",s:"grass",w:"grass",
+    ne:"forest",se:"grass",sw:"grass",nw:"grass"
+  },{seed:campaign.seed,x:"33",y:"41"});
   const observedVariants=new Set();
   for(let y=0;y<12;y++){
     for(let x=0;x<12;x++){
@@ -155,8 +171,9 @@ function renderHousePlans(){
   e.houseBuildingCount.textContent=String(proof.buildingCount);
   e.houseTypeCount.textContent=proof.normalHouseCount+" houses / "+proof.cabinCount+" cabins";
   e.houseMinRoomTiles.textContent=proof.minimumRoomTiles+" tiles / "+(proof.minimumRoomTiles*WorldStandards.TILE_METERS*WorldStandards.TILE_METERS)+" m²";
-  e.houseSvgCount.textContent="55 vector SVG files";
+  e.houseSvgCount.textContent="63 vector SVG files";
   e.blendVariantMode.textContent=[...observedVariants].sort().join(" / ").toUpperCase()+" deterministic";
+  e.blendJunctionMode.textContent="8-neighbor + priority";
 
   setCheck(e.vHousePlan,proof.pass&&proof.deterministic,"FAIL");
   setCheck(e.vHouseRooms,proof.roomsPass&&proof.minimumRoomTiles>=6,"FAIL");
@@ -178,6 +195,18 @@ function renderHousePlans(){
   setCheck(
     e.vBlendVariantAB,
     observedVariants.has("a")&&observedVariants.has("b"),
+    "FAIL"
+  );
+  setCheck(
+    e.vBlendDiagonal,
+    diagonal.some(spec=>spec.shape==="diagonal"&&spec.orientation==="ne"&&spec.terrain==="water")&&
+    !cardinalOwnsCorner.some(spec=>spec.shape==="diagonal"&&spec.orientation==="ne"),
+    "FAIL"
+  );
+  setCheck(
+    e.vBlendJunctionPriority,
+    highPriorityJunction.some(spec=>spec.shape==="diagonal"&&spec.terrain==="water")&&
+    !lowPriorityJunction.some(spec=>spec.shape==="diagonal"&&spec.terrain==="forest"),
     "FAIL"
   );
 }
