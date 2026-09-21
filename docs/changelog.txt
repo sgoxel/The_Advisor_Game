@@ -1,3 +1,14 @@
+2026-09-21 17:34:00 +03:00
+- Updated Stage 2 roadmap before implementation.
+- Adopted authoritative world scale: 1 logical tile = 2m x 2m = 4m².
+- Set conservative NPC walking standards: road 3.6 km/h, open grass 3.0 km/h, slower forest/mud/rock speeds.
+- Recalculated one-fantasy-hour village-spacing lower bound to 3.6 km = 1,800 tiles.
+- Added practical rural bridge cap: 120m = 60 tiles, while retaining <=10 fantasy-minute bridge-time rule.
+- Converted road-width policy to physical dimensions: rough 2m, rural 4m, village 4–6m, town <=8m, city <=12m, capital <=20m.
+- Updated WP-007A mainland/village dimensions and WP-007B house/room/wall rules.
+- Clarified wall tiles are occupancy/art cells with thin wall artwork, not literal 2m-thick masonry.
+- Updated docs/README.md.
+
 2026-09-21 17:12:00 +03:00
 - Final main-road/bridge refinement completed after screenshot review.
 - Replaced the visually artificial global cross-road with a deterministic connected starting-village main-road network: irregular ring road + connected central avenues.
