@@ -226,7 +226,7 @@ function buildLots(seed){
         h:candidate.h,
         bounds:candidate.b,
         nearKind:def.nearKind,
-        targetDistance:target?centerDistance({cx:x,cy:y},target):null,
+        targetDistance:target?centerDistance({cx:candidate.x,cy:candidate.y},target):null,
         roadAccessTiles:nearest,
         phase:"buildings"
       });
