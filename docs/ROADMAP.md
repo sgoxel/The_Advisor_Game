@@ -1192,3 +1192,18 @@ Do not add autonomous NPC population, resident schedules, Advisor conversation, 
 # GitHub WP Issue Migration Tracking
 
 - WP-S1-1 → Issue #9 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S1-2 → Issue #10 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S1-3 → Issue #11 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S1-4 → Issue #12 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S1-5 → Issue #13 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S1-6 → Issue #14 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-1-1 → Issue #15 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-1-2 → Issue #16 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-1-3 → Issue #17 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-1-4 → Issue #19 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-1-5 → Issue #20 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-2 → Issue #21 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-3 → Issue #22 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S2-4 → Issue #23 — OPEN — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+
+Migration note: Issue #18 was created twice during connector batching and is closed with reason `duplicate`; canonical WP-S2-1-4 tracking remains Issue #19.
