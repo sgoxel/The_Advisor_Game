@@ -65,6 +65,7 @@ SCENARIOS = {
     "save-load",
     "npc-conversation-state",
     "npc-edge-crossing",
+    "terrain-natural",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -81,6 +82,7 @@ SCENARIO_MIN_SHOTS = {
     "save-load": 3,
     "npc-conversation-state": 5,
     "npc-edge-crossing": 5,
+    "terrain-natural": 2,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -173,7 +175,67 @@ return (() => {
             centerPass: data.centerPass === 'true',
           };
         })(),
-        terrainTypes,
+        terrainNaturalness: (() => {
+          const grid = document.querySelector('#terrainGrid');
+          if (!grid) return null;
+          const columns = Number(grid.dataset?.columns || 0);
+          const rows = Number(grid.dataset?.rows || 0);
+          const cells = [...grid.children].map(node => node.dataset?.terrain || 'unknown');
+          if (!columns || !rows || cells.length !== columns * rows) return null;
+
+          const naturalTypes = new Set(['water','forest','mud','rock','sand','dirt','farmland']);
+          const visited = new Uint8Array(cells.length);
+          const components = [];
+          const directions = [[-1,0],[1,0],[0,-1],[0,1]];
+
+          for (let index = 0; index < cells.length; index++) {
+            const type = cells[index];
+            if (visited[index] || !naturalTypes.has(type)) continue;
+
+            const queue = [index];
+            visited[index] = 1;
+            let size = 0;
+            let minX = columns, maxX = -1, minY = rows, maxY = -1;
+
+            while (queue.length) {
+              const current = queue.pop();
+              const x = current % columns;
+              const y = Math.floor(current / columns);
+              size++;
+              minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+              minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+
+              for (const [dx,dy] of directions) {
+                const nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= columns || ny < 0 || ny >= rows) continue;
+                const next = ny * columns + nx;
+                if (!visited[next] && cells[next] === type) {
+                  visited[next] = 1;
+                  queue.push(next);
+                }
+              }
+            }
+
+            const width = maxX - minX + 1;
+            const height = maxY - minY + 1;
+            const area = width * height;
+            const fillRatio = area ? size / area : 0;
+            const interior = minX > 0 && minY > 0 && maxX < columns - 1 && maxY < rows - 1;
+            components.push({type,size,width,height,fillRatio,interior});
+          }
+
+          const largeInterior = components.filter(c => c.interior && c.size >= 12 && c.width >= 3 && c.height >= 3);
+          const suspicious = largeInterior.filter(c => c.fillRatio >= 0.92);
+          return {
+            componentCount: components.length,
+            largeInteriorCount: largeInterior.length,
+            suspiciousRectangleCount: suspicious.length,
+            maxLargeInteriorFillRatio: largeInterior.length
+              ? Math.max(...largeInterior.map(c => c.fillRatio))
+              : 0,
+            suspicious,
+          };
+        })(),
         geography: {
           continent: document.querySelector('#geoContinent')?.textContent?.trim() || null,
           country: document.querySelector('#geoCountry')?.textContent?.trim() || null,
@@ -552,6 +614,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             lambda: _wheel_canvas(driver, 500),
         )
         return actions[(frame_index - 1) % len(actions)]()
+    if scenario == "terrain-natural":
+        for _ in range(5):
+            _wheel_canvas(driver, 500)
+        return "zoom-out-naturalness:0.5x"
     if scenario == "responsive-cycle":
         sizes = [(1080, 1920), (1920, 1080), (base_width, base_height)]
         width, height = sizes[(frame_index - 1) % len(sizes)]
@@ -571,6 +637,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "terrain-natural":
+        if len(frames) < 2:
+            raise RuntimeError("terrain-natural requires two evidence frames")
+        current = frames[1].get("runtime", {}).get("currentBuild", {})
+        naturalness = current.get("terrainNaturalness") or {}
+        zoom = current.get("cameraZoom")
+        if zoom != "0.50×":
+            raise RuntimeError(f"terrain-natural expected 0.50× zoom, got {zoom}")
+        if naturalness.get("suspiciousRectangleCount", 1) != 0:
+            raise RuntimeError(f"large rectangular natural-terrain component detected: {naturalness}")
+        return
+
     if scenario == "camera-zoom":
         if len(frames) < 5:
             raise RuntimeError("camera-zoom requires five evidence frames")
