@@ -120,8 +120,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-      - name: Start local game server for push self-test
-        if: github.event_name == 'push'
+      - name: Start local game server for repository evidence
+        if: github.event_name != 'workflow_dispatch'
         run: |
           python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
           echo $! >/tmp/advisor-http.pid
@@ -157,6 +157,7 @@ jobs:
             target='http://127.0.0.1:8000/'
             scenario='starting-village'
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
+            target='http://127.0.0.1:8000/'
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             [ -n "$requested" ] && scenario="$requested"
             issue="$ISSUE_NUMBER"
