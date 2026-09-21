@@ -90,57 +90,76 @@ The player can start a campaign, see the fantasy clock advance, open Settings, s
 
 ---
 
-## WP-002 — Deterministic SEED + Fantasy-Time Randomness — COMPLETE
+## WP-002 — Deterministic Foundation and Live Randomness — COMPLETE
 
 ### Goal
 
-Provide reproducible simulation randomness with exactly two authoritative inputs.
+Provide reproducible randomness while keeping static world generation independent from game time.
 
-### Core rule
+### Core rules
 
-Every random result is:
+There are two deterministic random modes.
+
+#### A. World Foundation Randomness
+
+Used only for:
+
+- terrain generation;
+- environment generation;
+- initial NPC generation;
+- other fixed world-foundation generation.
+
+The random source is **Campaign SEED based** and must never use fantasy time.
+
+Stable structural keys such as tile coordinates or an NPC generation slot may select a deterministic sample, but they are not entropy sources and may not introduce real randomness.
+
+Examples:
+
+- `terrain:x:y`
+- `environment:x:y`
+- `npc:0001`
+
+The same Campaign SEED and same structural location/slot must always reproduce the same foundation result.
+
+#### B. Live Simulation Randomness
+
+Used for:
+
+- NPC live actions;
+- NPC decisions;
+- dynamic events;
+- changing simulation behavior;
+- other actions resolved during active simulation.
+
+Every live random result is:
 
 **Random Result = Random(Campaign SEED, Fantasy Game Timestamp)**
 
-No other random input is allowed.
+If the SEED and FantasyTimestamp are the same, the result must be exactly the same.
 
-The random function must not read or depend on:
+### Forbidden everywhere
 
-- real-world time;
 - `Math.random()`;
-- browser or OS cryptographic randomness;
-- device state;
-- mutable PRNG state;
-- call order;
-- hidden counters;
-- system keys;
-- sub-seeds;
-- entity IDs;
-- coordinates.
-
-The authoritative fantasy timestamp is supplied by the game-time system. The random module never reads the real clock itself.
+- browser/OS cryptographic randomness;
+- device randomness;
+- uncontrolled entropy;
+- real-world time as a random input.
 
 ### Implemented
 
-- stateless deterministic 32-bit random function;
-- exact API: `PRNG.randomUint32(seed, fantasyTimestampMs)`;
-- normalized fantasy timestamp uses integer fantasy milliseconds;
-- same SEED + same fantasy timestamp always returns the same value;
-- changing the fantasy timestamp can change the value;
-- random output is unavailable before a campaign has an authoritative fantasy timestamp;
-- development accordion displays the active SEED, fantasy timestamp and deterministic value.
-
-### In-game proof
-
-The WP-002 accordion displays one deterministic value tied to the campaign's current fantasy timestamp.
+- `PRNG.foundationUint32(seed, stableKey)` for time-independent world foundation generation;
+- `PRNG.liveUint32(seed, fantasyTimestampMs)` for live simulation actions;
+- both functions are stateless and deterministic;
+- the random module never reads the real clock itself;
+- the WP-002 accordion verifies both modes separately.
 
 ### Pass condition
 
-- same SEED + same fantasy timestamp produces exactly the same result;
-- result does not depend on previous random calls;
-- no real-random source exists;
-- no hidden random state exists;
-- the random function accepts only SEED and fantasy timestamp.
+- terrain/environment/initial NPC generation can use deterministic SEED-based foundation values without fantasy time;
+- same foundation SEED + same stable structural key gives the same result;
+- same live SEED + same FantasyTimestamp gives the same result;
+- changing FantasyTimestamp can change a live result;
+- no real-random source exists.
 
 ---
 
@@ -155,6 +174,8 @@ Define an unbounded tile-coordinate world.
 Every base tile is identified by:
 
 **Campaign SEED + tileX + tileY**
+
+Tile generation uses **foundation randomness only**. Fantasy time must not affect terrain or environment generation.
 
 Positive and negative integer coordinates must work.
 
