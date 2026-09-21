@@ -9,8 +9,6 @@ const MAX_WALK_SPEED_KMH=5.5;
 const MAIN_ROAD_WALK_SPEED_KMH=5.5;
 const MAX_BRIDGE_WALK_MINUTES=10;
 const MAX_BRIDGE_TILES=Math.floor((MAIN_ROAD_WALK_SPEED_KMH*1000/60*MAX_BRIDGE_WALK_MINUTES)/TILE_METERS);
-const MAIN_ROAD_WAVE_SCALE=20;
-const MAIN_ROAD_WAVE_AMPLITUDE=8;
 const BRIDGE_BLOCK_SIZE=24;
 const ROAD_WIDTH_POLICY=Object.freeze({
   capital:10,
@@ -251,24 +249,15 @@ function positiveModBig(value,divisor){
   return r<0n?r+divisor:r;
 }
 
-function mainRoadCenter(seed,axis,progressValue){
-  const progress=toBig(progressValue);
-  const label="main-road-wave:"+axis;
-  const current=axis==="horizontal"
-    ? valueNoise(seed,label,progress.toString(),"0",MAIN_ROAD_WAVE_SCALE)
-    : valueNoise(seed,label,"0",progress.toString(),MAIN_ROAD_WAVE_SCALE);
-  const origin=valueNoise(seed,label,"0","0",MAIN_ROAD_WAVE_SCALE);
-  return Math.round((current-origin)*MAIN_ROAD_WAVE_AMPLITUDE);
-}
-
-function bridgeWindow(seed,axis,progressValue){
+function bridgeWindow(seed,axis,progressValue,scope){
   const progress=toBig(progressValue);
   const blockSize=BigInt(BRIDGE_BLOCK_SIZE);
   const block=floorDiv(progress,blockSize);
   const local=Number(positiveModBig(progress,blockSize));
-  const length=3+(PRNG.foundationUint32(seed,"bridge-length:"+axis+":"+block)%7); // 3..9
+  const prefix=(scope||"road")+":"+axis+":"+block;
+  const length=3+(PRNG.foundationUint32(seed,"bridge-length:"+prefix)%7); // 3..9
   const available=BRIDGE_BLOCK_SIZE-length-8;
-  const start=4+(PRNG.foundationUint32(seed,"bridge-start:"+axis+":"+block)%Math.max(1,available+1));
+  const start=4+(PRNG.foundationUint32(seed,"bridge-start:"+prefix)%Math.max(1,available+1));
   return Object.freeze({
     active:local>=start&&local<start+length,
     length,
@@ -290,8 +279,6 @@ function roadWidthForContext(context,terrain,distanceFromSettlement){
     }
   }
 
-  // Main roads narrow gradually away from settlement centers.
-  // Rough terrain only forces the narrowest width once outside the core village road.
   if(terrain==="forest"||terrain==="rock"||terrain==="mud"){
     if(context==="village"&&distanceFromSettlement<=4n){
       width=Math.min(width,ROAD_WIDTH_POLICY.village);
@@ -319,124 +306,116 @@ function roadContext(seed,x,y){
   return Object.freeze({kind:"wilderness",distance:999999n,village:null});
 }
 
-function mainRoadCandidate(seed,axis,x,y){
+function withinRoadWidth(signedDistance,width){
+  const low=Math.floor((width-1)/2);
+  const high=Math.ceil((width-1)/2);
+  return signedDistance>=-low&&signedDistance<=high;
+}
+
+function villageRoadInfo(seed,x,y){
+  const influence=villageInfluence(seed,x,y);
+  if(!influence||influence.distance>15n)return null;
+
   const px=toBig(x),py=toBig(y);
-  const progress=axis==="horizontal"?px:py;
-  const lateral=axis==="horizontal"?py:px;
-  const center=mainRoadCenter(seed,axis,progress);
-  const centerCoord=roadCoordinate(axis,progress,center);
-  const rawTerrain=rawBaseTerrain(seed,centerCoord.x,centerCoord.y);
-  const context=roadContext(seed,centerCoord.x,centerCoord.y);
-  const width=roadWidthForContext(context.kind,rawTerrain,context.distance);
-  const halfLow=Math.floor((width-1)/2);
-  const halfHigh=Math.ceil((width-1)/2);
-  const distance=Number(lateral)-center;
+  const vx=toBig(influence.village.x),vy=toBig(influence.village.y);
+  const dx=Number(px-vx),dy=Number(py-vy);
+  if(!Number.isSafeInteger(dx)||!Number.isSafeInteger(dy))return null;
 
-  if(distance < -halfLow || distance > halfHigh)return null;
+  const raw=rawBaseTerrain(seed,x,y);
+  const contextDistance=influence.distance;
+  const branchWidth=roadWidthForContext("village",raw,contextDistance);
+  const scope=influence.village.x+":"+influence.village.y;
 
-  const bridge=rawTerrain==="water"&&bridgeWindow(seed,axis,progress).active;
+  const horizontalBase=valueNoise(seed,"village-main-h:"+scope,String(dx),"0",7);
+  const horizontalZero=valueNoise(seed,"village-main-h:"+scope,"0","0",7);
+  const horizontalY=Math.round((horizontalBase-horizontalZero)*4);
+  const horizontalSigned=dy-horizontalY;
+  const horizontalActive=Math.abs(dx)<=11&&withinRoadWidth(horizontalSigned,branchWidth);
+
+  const verticalBase=valueNoise(seed,"village-main-v:"+scope,"0",String(dy),7);
+  const verticalZero=valueNoise(seed,"village-main-v:"+scope,"0","0",7);
+  const verticalX=Math.round((verticalBase-verticalZero)*4);
+  const verticalSigned=dx-verticalX;
+  const verticalActive=Math.abs(dy)<=11&&withinRoadWidth(verticalSigned,branchWidth);
+
+  const radial=Math.hypot(dx,dy);
+  const ringNoise=layeredNoise(
+    seed,
+    "village-main-ring:"+scope,
+    String(dx),
+    String(dy),
+    [[12,0.65],[5,0.35]]
+  );
+  const ringRadius=9.25+(ringNoise-0.5)*2.2;
+  const ringWidth=2;
+  const ringActive=Math.abs(radial-ringRadius)<=0.9;
+
+  if(!horizontalActive&&!verticalActive&&!ringActive)return null;
+
+  let axis="ring";
+  let bridge=null;
+  if(horizontalActive){
+    axis="horizontal";
+    bridge=bridgeWindow(seed,"horizontal",String(dx),scope);
+  }
+  if(verticalActive&&(!horizontalActive||Math.abs(verticalSigned)<Math.abs(horizontalSigned))){
+    axis="vertical";
+    bridge=bridgeWindow(seed,"vertical",String(dy),scope);
+  }
+
+  const isBridge=axis!=="ring"&&raw==="water"&&bridge&&bridge.active;
   return Object.freeze({
     axis,
-    progress:progress.toString(),
-    center,
-    width,
-    type:bridge?"bridge":"road",
-    underlying:rawTerrain,
-    context:context.kind,
-    bridgeWindow:bridge?bridgeWindow(seed,axis,progress):null
+    width:axis==="ring"?ringWidth:branchWidth,
+    type:isBridge?"bridge":"road",
+    underlying:raw,
+    context:"village",
+    bridgeWindow:isBridge?bridge:null,
+    bridgeLengthTiles:isBridge?bridge.length:0,
+    village:influence.village
   });
 }
 
 function mainRoadInfo(seed,x,y){
-  const horizontal=mainRoadCandidate(seed,"horizontal",x,y);
-  const vertical=mainRoadCandidate(seed,"vertical",x,y);
-  if(!horizontal)return vertical;
-  if(!vertical)return horizontal;
-
-  const type=(horizontal.type==="bridge"||vertical.type==="bridge")?"bridge":"road";
-  return Object.freeze({
-    axis:"intersection",
-    center:0,
-    width:Math.max(horizontal.width,vertical.width),
-    type,
-    underlying:type==="bridge"?"water":horizontal.underlying,
-    context:horizontal.context==="village"||vertical.context==="village"?"village":"wilderness",
-    bridgeWindow:type==="bridge"?(horizontal.bridgeWindow||vertical.bridgeWindow):null
-  });
-}
-
-function roadProtection(seed,x,y){
-  const px=toBig(x),py=toBig(y);
-  const candidates=[];
-  for(const axis of ["horizontal","vertical"]){
-    const progress=axis==="horizontal"?px:py;
-    const lateral=axis==="horizontal"?py:px;
-    const center=mainRoadCenter(seed,axis,progress);
-    const rawCenter=roadCoordinate(axis,progress,center);
-    const rawTerrain=rawBaseTerrain(seed,rawCenter.x,rawCenter.y);
-    const context=roadContext(seed,rawCenter.x,rawCenter.y);
-    const width=roadWidthForContext(context.kind,rawTerrain,context.distance);
-    const protection=Math.max(1,Math.ceil(width/2));
-    const distance=Math.abs(Number(lateral)-center);
-    if(distance<=protection){
-      candidates.push({
-        axis,
-        progress,
-        distance,
-        bridge:bridgeWindow(seed,axis,progress)
-      });
-    }
-  }
-  return candidates;
+  return villageRoadInfo(seed,x,y);
 }
 
 function baseTerrain(seed,x,y){
   const raw=rawBaseTerrain(seed,x,y);
   if(raw!=="water")return raw;
 
-  // Main-road geography is co-generated with hydrography:
-  // wide water cannot erase the road. Outside a short approved bridge window,
-  // a narrow deterministic land corridor is retained so the road remains logical.
-  const protection=roadProtection(seed,x,y);
-  if(protection.length===0)return raw;
-  if(protection.some(item=>item.bridge.active))return raw;
+  const influence=villageInfluence(seed,x,y);
+  if(!influence||influence.distance>14n)return raw;
 
-  const bank=layeredNoise(seed,"road-land-corridor",x,y,[[28,0.65],[9,0.35]]);
-  return bank>0.62?"mud":"grass";
+  const road=villageRoadInfo(seed,x,y);
+  if(road&&road.type==="bridge")return raw;
+
+  // The inhabited village foundation retains coherent buildable land.
+  // The edge remains irregular so the settlement can still border water naturally.
+  const distance=Number(influence.distance);
+  const shore=layeredNoise(
+    seed,
+    "village-land:"+influence.village.x+":"+influence.village.y,
+    x,
+    y,
+    [[18,0.60],[7,0.40]]
+  );
+  if(distance<=10||shore>0.48+(distance-10)*0.055){
+    return shore>0.63?"mud":"grass";
+  }
+  return raw;
 }
 
 function bridgeRunAt(seed,axis,progressValue){
-  const progress=toBig(progressValue);
-  const window=bridgeWindow(seed,axis,progress);
-  if(!window.active)return 0;
-
-  const center=mainRoadCenter(seed,axis,progress);
-  const coord=roadCoordinate(axis,progress,center);
-  if(rawBaseTerrain(seed,coord.x,coord.y)!=="water")return 0;
-
-  let run=1;
-  for(let step=1;step<=MAX_BRIDGE_TILES;step++){
-    const p=progress-BigInt(step);
-    const w=bridgeWindow(seed,axis,p);
-    const c=roadCoordinate(axis,p,mainRoadCenter(seed,axis,p));
-    if(!w.active||rawBaseTerrain(seed,c.x,c.y)!=="water")break;
-    run++;
-  }
-  for(let step=1;step<=MAX_BRIDGE_TILES;step++){
-    const p=progress+BigInt(step);
-    const w=bridgeWindow(seed,axis,p);
-    const c=roadCoordinate(axis,p,mainRoadCenter(seed,axis,p));
-    if(!w.active||rawBaseTerrain(seed,c.x,c.y)!=="water")break;
-    run++;
-  }
-  return run;
+  const origin=villageCenter(seed,0n,0n);
+  const scope=origin.x+":"+origin.y;
+  const window=bridgeWindow(seed,axis,progressValue,scope);
+  return window.active?window.length:0;
 }
 
 function getTerrainType(seed,x,y){
   const px=toBig(x),py=toBig(y);
 
-  // Main infrastructure is authoritative and cannot be erased by terrain,
-  // settlement parcels, buildings, forest, mountain or water.
   const road=mainRoadInfo(seed,x,y);
   if(road)return road.type;
 
@@ -460,63 +439,60 @@ function getTerrainType(seed,x,y){
 }
 
 function mainRoadProof(seed,radiusValue){
-  const radius=BigInt(radiusValue==null?96:radiusValue);
-  let continuous=true;
+  const radius=Math.max(12,Math.min(24,Number(radiusValue==null?16:radiusValue)));
+  const cells=new Map();
   let maxBridgeTiles=0;
   let maxWidth=0;
   let minWidth=ROAD_WIDTH_POLICY.capital;
-  let bridgeCells=0;
-  let sampled=0;
 
-  for(const axis of ["horizontal","vertical"]){
-    let previous=null;
-    let currentBridgeRun=0;
-    for(let progress=-radius;progress<=radius;progress++){
-      const center=mainRoadCenter(seed,axis,progress);
-      if(center==null){
-        continuous=false;
-        continue;
-      }
-      if(previous!=null&&Math.abs(center-previous)>1)continuous=false;
-      previous=center;
-
-      const coord=roadCoordinate(axis,progress,center);
-      const info=mainRoadInfo(seed,coord.x,coord.y);
-      if(!info){
-        continuous=false;
-        continue;
-      }
-
-      sampled++;
+  for(let y=-radius;y<=radius;y++){
+    for(let x=-radius;x<=radius;x++){
+      const info=mainRoadInfo(seed,String(x),String(y));
+      if(!info)continue;
+      const key=x+","+y;
+      cells.set(key,info);
       maxWidth=Math.max(maxWidth,info.width);
       minWidth=Math.min(minWidth,info.width);
+      maxBridgeTiles=Math.max(maxBridgeTiles,info.bridgeLengthTiles||0);
+    }
+  }
 
-      if(info.type==="bridge"){
-        bridgeCells++;
-        currentBridgeRun++;
-        maxBridgeTiles=Math.max(maxBridgeTiles,currentBridgeRun);
-      }else{
-        currentBridgeRun=0;
+  const keys=[...cells.keys()];
+  let connected=keys.length>0;
+  if(keys.length){
+    const visited=new Set([keys[0]]);
+    const queue=[keys[0]];
+    while(queue.length){
+      const current=queue.shift();
+      const [x,y]=current.split(",").map(Number);
+      for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){
+        const next=(x+dx)+","+(y+dy);
+        if(cells.has(next)&&!visited.has(next)){
+          visited.add(next);
+          queue.push(next);
+        }
       }
     }
+    connected=visited.size===cells.size;
   }
 
   const maxBridgeWalkMinutes=
     maxBridgeTiles*TILE_METERS/(MAIN_ROAD_WALK_SPEED_KMH*1000/60);
 
   return Object.freeze({
-    continuous,
-    sampled,
-    minWidth,
+    continuous:connected,
+    sampled:cells.size,
+    minWidth:cells.size?minWidth:0,
     maxWidth,
-    bridgeCells,
+    bridgeCells:[...cells.values()].filter(info=>info.type==="bridge").length,
     maxBridgeTiles,
     maxBridgeWalkMinutes,
     bridgeLimitTiles:MAX_BRIDGE_TILES,
     bridgeLimitMinutes:MAX_BRIDGE_WALK_MINUTES,
     bridgePass:maxBridgeTiles<=MAX_BRIDGE_TILES&&maxBridgeWalkMinutes<=MAX_BRIDGE_WALK_MINUTES+1e-9,
     capitalWidthCap:ROAD_WIDTH_POLICY.capital,
-    villageWidthCap:ROAD_WIDTH_POLICY.village
+    villageWidthCap:ROAD_WIDTH_POLICY.village,
+    networkKind:"village-ring-connected-avenues"
   });
 }
 
@@ -606,7 +582,7 @@ window.GeographyFoundation=Object.freeze({
   TILE_METERS,VILLAGE_CELL_SIZE,MIN_VILLAGE_WALK_MINUTES,MAX_WALK_SPEED_KMH,
   MAIN_ROAD_WALK_SPEED_KMH,MAX_BRIDGE_WALK_MINUTES,MAX_BRIDGE_TILES,ROAD_WIDTH_POLICY,
   hierarchy,environment,getTerrainType,location,
-  mainRoadCenter,mainRoadInfo,mainRoadProof,roadWidthForContext,bridgeRunAt,
+  mainRoadInfo,mainRoadProof,roadWidthForContext,bridgeRunAt,
   villageCenter,villageAtCell,nearestVillage,villageSpacingProof,estimateWalkRoute
 });
 })();
