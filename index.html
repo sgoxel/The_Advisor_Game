@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-007E</title>
+<title>The Advisor Game — WP-008</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-007E</span>
+      <span class="build-badge">WP-008</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -337,10 +337,27 @@
   </details>
 
   <details>
+    <summary>WP-008 Special Buildings + Functional Lots</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Special Lots</span><strong id="specialLotCount">—</strong></div>
+        <div><span>Enterable Structures</span><strong id="specialEnterableCount">—</strong></div>
+        <div><span>Outdoor Lots</span><strong id="specialOutdoorCount">—</strong></div>
+        <div><span>Lot Types</span><strong id="specialLotKinds">—</strong></div>
+      </div>
+      <div class="check"><span>Same SEED reproduces the same special-building plan</span><b id="vSpecialDeterministic">WAITING</b></div>
+      <div class="check"><span>Tavern, shop, workshop, storehouse, barn, meeting hall and workyard are all present</span><b id="vSpecialCoverage">WAITING</b></div>
+      <div class="check"><span>Every lot has reachable road/path access; enterable structures have a usable exterior door</span><b id="vSpecialEntrances">WAITING</b></div>
+      <div class="check"><span>Special lots do not overlap roads, water, houses or each other</span><b id="vSpecialOverlap">WAITING</b></div>
+      <p>WP-008 adds deterministic non-residential settlement foundation only. No NPC ownership, staffing, inventory or economy behavior is assigned yet.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-007E Diagonal + Multi-Terrain Junction Smoothing.</p>
-      <p><strong>Current world rendering:</strong> Deterministic rounded SVG terrain blending with A/B variation, diagonal corner caps and priority-aware multi-material junctions.</p>
+      <p><strong>Current Work Package:</strong> WP-008 Special Buildings + Functional Lots.</p>
+      <p><strong>Current world rendering:</strong> Deterministic rounded SVG terrain plus homes, enterable service/work buildings and one outdoor functional work lot.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
@@ -359,6 +376,7 @@
 <script src="scripts/world/geography.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
+<script src="scripts/world/special-lots.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
