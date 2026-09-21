@@ -1,3 +1,8 @@
+2026-09-21 15:47:00 +03:00
+- WP-005 visual acceptance tightened.
+- Visual-evidence tool now fails when terrain coverage, centered world tile, or rendered tile count evidence is invalid.
+- Push self-tests now use responsive-cycle to capture landscape, portrait and landscape again from the exact checked-out commit.
+
 2026-09-21 15:45:00 +03:00
 - WP-005 Viewport-Filling Solid-Color Tiles implemented.
 - Updated build marker and visible game badge to WP-005.
