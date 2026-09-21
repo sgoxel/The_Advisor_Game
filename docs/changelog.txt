@@ -1,3 +1,18 @@
+2026-09-21 22:31:00 +03:00
+- WP-S003-002 Authoritative Enterable Building Interiors completed and Issue #25 closed.
+- Added scripts/world/building-interiors.js as the authoritative continuous indoor/outdoor navigation model.
+- Unified all 6 houses/cabins and all 6 enterable functional village buildings in the same global X/Y world space.
+- Added discrete level = 0 navigation metadata for current single-floor buildings without introducing true 3D physics or disconnected interior scenes.
+- Interior records expose room identity/area, walkable floor cells, exterior/interior walls, exterior/interior doors, and real entrance connectivity.
+- Reused Walkability.classify() and RoutePlanner.findRoute() for all indoor collision/routing validation; no duplicate movement rules were added.
+- Exact-main Visual Evidence run 35645001915 passed on commit 50b0e35f8c380d71f961618729d9cc3d6c9af75c.
+- GitHub Pages deployment run 35645002261 passed on the same commit.
+- Runtime proof: 12/12 accessible buildings PASS; 6 houses + 6 functional buildings; all level-0, all connected, all walls blocked, all floors/doors walkable, all forward and reverse routes PASS.
+- Representative House H1: 3-step outdoor-to-interior and 3-step reverse route through door (5,-16).
+- Representative Tavern & Lodging: 4-step outdoor-to-interior and 4-step reverse route through door (4,17).
+- Artifact visual-evidence-starting-village-35645001915: 467,101 bytes.
+- Final visual/function review score: 8.8/10 PASS.
+
 2026-09-21 22:22:00 +03:00
 - WP-S003-001 GPU 2.5D Gameplay Renderer Foundation completed and Issue #24 closed.
 - Replaced per-tile DOM gameplay terrain with one PixiJS 8 WebGL canvas while keeping terrain generation, walkability, coordinates and route planning Simulation-owned.
