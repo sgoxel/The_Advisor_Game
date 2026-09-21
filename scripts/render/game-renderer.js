@@ -98,6 +98,9 @@ function addBlend(cell,blend,tileSize){
 
 function render(model){
   if(!initialized)throw new Error("GameRenderer is not initialized");
+  app.renderer.resize(model.width,model.height);
+  app.canvas.style.width=model.width+"px";
+  app.canvas.style.height=model.height+"px";
   destroyLayer(terrainLayer);
   destroyLayer(routeLayer);
   destroyLayer(entityLayer);
