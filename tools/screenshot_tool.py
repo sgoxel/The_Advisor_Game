@@ -67,6 +67,7 @@ SCENARIOS = {
     "npc-edge-crossing",
     "terrain-natural",
     "main-road",
+    "starting-village",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -85,6 +86,7 @@ SCENARIO_MIN_SHOTS = {
     "npc-edge-crossing": 5,
     "terrain-natural": 2,
     "main-road": 2,
+    "starting-village": 2,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -237,6 +239,16 @@ return (() => {
               : 0,
             suspicious,
           };
+        })(),
+        startingVillage: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const village = window.StartingVillage;
+            if (!campaign || !village?.proof) return null;
+            return village.proof(campaign.seed);
+          } catch (error) {
+            return {error: String(error)};
+          }
         })(),
         roadNetwork: (() => {
           try {
@@ -634,6 +646,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         for _ in range(5):
             _wheel_canvas(driver, 500)
         return "zoom-out-main-road:0.5x"
+    if scenario == "starting-village":
+        for _ in range(5):
+            _wheel_canvas(driver, 500)
+        return "zoom-out-starting-village:0.5x"
     if scenario == "responsive-cycle":
         sizes = [(1080, 1920), (1920, 1080), (base_width, base_height)]
         width, height = sizes[(frame_index - 1) % len(sizes)]
@@ -653,6 +669,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "starting-village":
+        if len(frames) < 2:
+            raise RuntimeError("starting-village requires two evidence frames")
+        current = frames[1].get("runtime", {}).get("currentBuild", {})
+        proof = current.get("startingVillage") or {}
+        if not proof.get("deterministic"):
+            raise RuntimeError(f"Starting Village is not deterministic: {proof}")
+        if not proof.get("originInsideVillage"):
+            raise RuntimeError(f"Protagonist origin is not inside Starting Village: {proof}")
+        if not proof.get("mainlandConnected") or int(proof.get("roadGapCount") or 1) != 0:
+            raise RuntimeError(f"Starting Village has no continuous mainland connection: {proof}")
+        if not proof.get("bridgePass"):
+            raise RuntimeError(f"Starting Village bridge limit failed: {proof}")
+        if int(proof.get("plotCount") or 0) < 6:
+            raise RuntimeError(f"Starting Village lacks reserved plots: {proof}")
+        grid = current.get("terrainGrid") or {}
+        if not grid.get("coveragePass"):
+            raise RuntimeError(f"Starting Village frame lost viewport coverage: {grid}")
+        return
+
     if scenario == "main-road":
         if len(frames) < 2:
             raise RuntimeError("main-road requires two evidence frames")
