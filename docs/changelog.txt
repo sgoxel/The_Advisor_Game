@@ -1,3 +1,14 @@
+2026-09-21 16:10:00 +03:00
+- Stage 1 review completed after WP-006 verification.
+- Re-read docs/README.md and designed the next practical development stage.
+- Added Stage 2 — Starting Village Physical Foundation.
+- Added WP-007 Deterministic Starting Village Spatial Plan.
+- Added WP-008 Building Footprints, Entrances and Functional Lots.
+- Added WP-009 Authoritative Walkability and Collision Foundation.
+- Added WP-010 Deterministic Local Route Planning.
+- Stage 2 deliberately stops before autonomous NPC population, Advisor conversation, economy, combat and external LLM integration.
+- No Stage 2 implementation was started.
+
 2026-09-21 16:07:00 +03:00
 - WP-006 final strict camera acceptance passed on GitHub Actions run 35602541946.
 - Automated camera-pan proved Camera moves away from (0,0), Protagonist remains at (0,0), reverse pan returns Camera to (0,0), and returned terrain evidence matches the starting terrain.
