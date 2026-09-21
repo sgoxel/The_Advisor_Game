@@ -1,3 +1,14 @@
+2026-09-21 15:45:00 +03:00
+- WP-005 Viewport-Filling Solid-Color Tiles implemented.
+- Updated build marker and visible game badge to WP-005.
+- Terrain rows and columns now derive from the actual Gameplay Area dimensions with an edge buffer.
+- Added ResizeObserver-based terrain recalculation for responsive viewport changes.
+- Added runtime grid metrics for viewport size, rows, columns, tile count, coverage and centered world coordinate.
+- Added WP-005 in-game verification accordion.
+- Extended visual-evidence JSON with terrain-grid coverage metrics.
+- No terrain textures or tile atlas were introduced.
+- Updated docs/ROADMAP.md and marked WP-005 COMPLETE.
+
 2026-09-21 15:40:05 +03:00
 - Final visual-evidence verification passed on GitHub Actions run 35600673452.
 - Capture step and artifact upload both completed successfully.
