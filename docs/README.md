@@ -161,6 +161,14 @@ Settlement appearance, population, buildings, professions, roads, resources, def
 
 The overall world is continuous and unbounded from the player's perspective. The Protagonist begins every new campaign at world coordinate **(0,0)**, and that origin is the initial center of the gameplay view. Both X and Y may extend without a gameplay-defined boundary in negative or positive directions. Large settlements may extend across multiple local areas while remaining one coherent place.
 
+## World Scale and Travel
+
+The authoritative world grid uses **1 tile = 2 meters × 2 meters**. Pixel size is only camera presentation and does not change physical distance.
+
+Normal NPC walking is intentionally conservative for game readability: about **3.0 km/h** on open ground and **3.6 km/h** on a good road/bridge, with slower speeds in forest, mud and mountain terrain. Village spacing and road/bridge realism use these physical measurements.
+
+Distinct village centers must remain at least one fantasy walking hour apart. Using the fastest normal road speed, that lower bound is **3.6 km = 1,800 tiles**. Rural bridges are practically capped at **120 m = 60 tiles** and must also satisfy the existing 10-fantasy-minute bridge-time limit.
+
 ## SEED-Generated Geographic Hierarchy and Scale
 
 The Campaign SEED deterministically defines the fixed geographic foundation from large scale to small scale, including continent, country or realm, region or province, city, district, town where applicable, village, avenue or major road, street or local road, terrain, elevation, rivers, lakes, coastlines, biome, vegetation, climate, local environmental conditions, settlement placement and travel connections.
@@ -171,7 +179,7 @@ Generated geography must also obey realism constraints rather than placing settl
 
 If a SEED-generated village candidate would violate this minimum travel-time rule, the generator must deterministically reject that candidate and continue to the next deterministic candidate derived from the same SEED process. Therefore the world remains both realistic and reproducible.
 
-The current foundation model treats one logical tile as **100 meters** for world-scale travel calculations. Village placement is structured so neighboring village centers remain far enough apart that even the fastest normal walking speed used by the model (**5.5 km/h**) cannot produce a sub-one-hour village-to-village walk. A terrain-aware route check then verifies the actual shortest valid route around the starting village.
+The current foundation model treats one logical tile as **2 meters** for world-scale travel calculations. Village placement is structured so neighboring village centers remain far enough apart that even the fastest normal road walking speed used by the model (**3.6 km/h**) cannot produce a sub-one-hour village-to-village walk. A terrain-aware route check then verifies the actual shortest valid route around the starting village.
 
 Main roads are persistent geographic infrastructure: terrain generation cannot simply erase or interrupt them. The starting village currently uses a connected irregular main-road ring with connected central avenues. Future secondary roads must connect to this network. Bridges are allowed only for short crossings: at the current **100 m/tile** scale and **5.5 km/h** main-road walking speed, a bridge may span at most **9 consecutive tiles**, keeping the crossing below **10 fantasy walking minutes**. Road width depends on context: village roads are smaller, rough forest/mountain roads narrow further, and only future capital-city main roads may widen as far as **10 tiles**; this is not the default width for long-distance/wilderness roads.
 
