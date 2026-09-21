@@ -49,6 +49,7 @@ input:focus{border-color:#92ad83}
 .gameplay-placeholder{position:absolute;inset:0;display:grid;place-content:center;gap:8px;padding:20px;text-align:center;color:#9da697}
 .gameplay-placeholder strong{color:#dfe4da;font-size:22px}
 .gameplay-placeholder span{font-size:13px}
+.gameplay-placeholder[hidden]{display:none}
 .protagonist-marker{
   position:absolute;
   left:50%;
@@ -119,7 +120,7 @@ details[open] summary{border-bottom:1px solid #343a30}
   .game-clock{justify-self:center;gap:5px;min-width:0}
   .game-clock span{font-size:11px}.game-clock strong{font-size:13px}
   .ribbon-button{padding:8px 9px;font-size:12px}
-  .status-area{grid-template-columns:auto minmax(0,1fr)}
+  .status-area{grid-template-columns:auto auto minmax(0,1fr)}
   .status-item:nth-child(2){display:none}
   .status-message{font-size:11px}
   .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
