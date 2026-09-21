@@ -1,2 +1,5 @@
+2026-09-21 16:55:00 +03:00 | Stage 2 / WP-007
+Suggestion: when WP-007 creates secondary village roads and footpaths, attach every branch to the authoritative main-road network rather than generating isolated road-colored cells. Secondary roads should inherit narrower width and must never sever the main road.
+
 2026-09-21 16:42:34 +03:00 | Stage 2 / WP-007
 Suggestion: build the starting-village boundary, farms and road branches from the same smooth deterministic terrain-field approach so settlement edges also avoid rectangular masks. Keep this as a design constraint for WP-007; do not implement it before the WP-007 command.
