@@ -462,14 +462,16 @@ Additional camera-zoom acceptance passed on GitHub Actions run **35606140004**:
 - visible per-tile grid seams are removed during normal play so same-type neighboring cells read as one continuous terrain region; the hovered cell and authoritative center cell may still show a diagnostic outline.
 - verified natural-terrain evidence: GitHub Actions run **35607407473** passed at **0.50×** zoom with **0 suspicious large rectangular natural-terrain components**; the largest large interior natural component filled only **0.555** of its bounding box, confirming an irregular boundary rather than a rectangle.
 - main roads are authoritative infrastructure and cannot be removed by water, forest, mountain, settlement parcels or buildings;
-- the current main-road foundation uses deterministic continuous east-west and north-south regional corridors through the starting village;
-- road centerlines are planned in deterministic 32-tile chunks whose shared anchors keep adjacent chunks connected;
-- wide water is avoided by the road planner; only short consecutive water spans become **Bridge** tiles;
+- the currently rendered starting-village main road is a deterministic **connected irregular ring road plus connected central avenues**; it has no arbitrary terrain-caused cut or fake regional highway across open water;
+- Stage 2 secondary roads and footpaths must attach to this authoritative main-road network rather than replace or sever it;
+- water inside the inhabited village foundation is shaped around coherent buildable land; only bounded road crossings remain **Bridge** tiles;
 - bridge walking speed uses the current main-road walking speed of **5.5 km/h**;
 - with **100 meters per logical tile**, the **10 fantasy-minute maximum bridge time** permits at most **9 consecutive bridge tiles** (about **9.82 fantasy minutes**);
-- current village main roads widen up to **3 tiles** near the settlement, then narrow toward **2 tiles** in ordinary wilderness and **1 tile** through rough forest/mountain/mud terrain;
-- the road-width policy reserves up to **4 tiles for towns**, **6 for cities**, and **10 tiles for capital-city main roads** when those settlement scales are physically implemented;
-- current main bridges inherit the road corridor but are capped to a practical **2-tile width** outside future major-city infrastructure.
+- current village main roads can widen up to **3 tiles** near the settlement center and narrow gradually as context becomes less urban or more difficult;
+- rough forest/mountain/mud road sections may narrow to **1 tile**, while ordinary non-urban main-road sections use up to **2 tiles**;
+- the width policy reserves up to **4 tiles for towns**, **6 for cities**, and **10 tiles only for capital-city main roads** when those settlement scales are physically implemented; this 10-tile allowance is not a general wilderness/international-road width;
+- current main bridges use a practical maximum width of **2 tiles** outside future major-city infrastructure;
+- verified GitHub Actions run **35610364649**: main-road network connected, bridge limit PASS, maximum bridge **9 tiles / 9.82 fantasy minutes**, current village-road width **2–3 tiles** across multi-SEED stress tests.
 
 ---
 
@@ -507,8 +509,8 @@ Turn the abstract starting village at **(0,0)** into a coherent physical settlem
 Generate from the Campaign SEED:
 
 - deterministic village extent around its village center;
-- primary road through the settlement;
-- secondary roads and footpaths;
+- preserve and integrate the authoritative main-road ring/avenues already created before WP-007;
+- secondary roads and footpaths connected to that main-road network;
 - village center / gathering area;
 - building parcels;
 - farm / work parcels;
@@ -523,7 +525,8 @@ The village plan must respect the existing terrain/environment foundation instea
 - same SEED + same coordinates reproduce exactly the same village layout;
 - no textures or tile atlas yet;
 - no NPC population yet;
-- roads and parcels must form connected, plausible settlement structure rather than isolated random cells;
+- secondary roads and parcels must form connected, plausible settlement structure rather than isolated random cells;
+- WP-007 must not cut, overwrite or disconnect the existing authoritative main road;
 - the existing >= 1 fantasy-hour village-spacing rule remains valid.
 
 ### In-game proof
