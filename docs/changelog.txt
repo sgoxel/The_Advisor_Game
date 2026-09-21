@@ -1,3 +1,8 @@
+2026-09-21 16:30:00 +03:00
+- Strengthened WP-006 zoom acceptance to test both desktop mouse-wheel and phone/tablet two-pointer pinch interaction.
+- camera-zoom evidence now uses five frames: start, wheel zoom-in, wheel return, pinch zoom-in, pinch return.
+- CI fails if either zoom method does not change scale, fails to return to 1.0x, changes Camera/Protagonist world coordinates, or loses terrain viewport coverage.
+
 2026-09-21 16:27:00 +03:00
 - Extended WP-006 with camera zoom controls before starting WP-007.
 - Added Camera zoom state: default 1.0x, minimum 0.5x, maximum 2.0x.
