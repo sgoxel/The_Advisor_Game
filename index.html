@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-007B</title>
+<title>The Advisor Game — WP-007C</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-007B</span>
+      <span class="build-badge">WP-007C</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -299,16 +299,24 @@
       <div class="check"><span>Outer walls, interior walls and interior doorways are present</span><b id="vHouseWalls">WAITING</b></div>
       <div class="check"><span>Each exterior entrance reaches the existing village road/path network</span><b id="vHouseEntrances">WAITING</b></div>
       <div class="check"><span>Terrain, floors, walls and doors use SVG vector assets only</span><b id="vHouseSvg">WAITING</b></div>
-      <div class="check"><span>L, C and U curved terrain-transition SVG overlays are available</span><b id="vHouseTransitions">WAITING</b></div>
       <p>Building floors use a simple wood-plank/zigzag vector pattern. Walls and doors are rendered top-down with edge-oriented SVG variants.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>WP-007C Rounded Terrain Blending</summary>
+    <div class="accordion-content technical-info">
+      <div class="check"><span>Neighbor terrain is revealed through rounded SVG masks instead of decorative contour loops</span><b id="vHouseTransitions">WAITING</b></div>
+      <p>Terrain boundaries now use real material blending shapes: rounded side edges, rounded 90-degree corners, three-sided peninsula/inlet masks and rounded isolated-island masks. The neighboring terrain keeps its own color and SVG texture inside the blend.</p>
+      <p>Water/grass, dirt/grass, forest/grass, farmland/grass and similar terrain pairs therefore meet on a curved material boundary rather than a square tile edge.</p>
     </div>
   </details>
 
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-007B Tile-Based House Plans + Wall Foundation.</p>
-      <p><strong>Current world rendering:</strong> Deterministic solid-color terrain identity with scalable SVG vector textures and curved terrain-transition overlays.</p>
+      <p><strong>Current Work Package:</strong> WP-007C Rounded Terrain Border Blending.</p>
+      <p><strong>Current world rendering:</strong> Deterministic SVG terrain with neighboring materials blended through rounded vector masks.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
