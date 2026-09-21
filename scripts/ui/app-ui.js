@@ -8,8 +8,8 @@ const ids=[
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
-  "cameraHud","cameraCoordinate","centerCameraButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY",
-  "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn",
+  "cameraHud","cameraCoordinate","cameraZoom","centerCameraButton","resetZoomButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY","cameraZoomDetail","cameraTileSize",
+  "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn","vCameraWheelZoom","vCameraPinchZoom",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
@@ -150,6 +150,9 @@ let cameraMoved=false;
 let cameraIndependenceProven=false;
 let cameraReturnProof=null;
 let dragState=null;
+let activePointers=new Map();
+let pinchState=null;
+let wheelZoomUsed=false;
 
 function terrainGridDimensions(width,height,tileSize){
   let columns=Math.max(3,Math.ceil(width/tileSize)+2);
@@ -177,7 +180,7 @@ function renderTerrain(){
     return;
   }
 
-  const tileSize=100;
+  const tileSize=Math.max(40,Math.round(100*Camera.getZoom()));
   const viewport=e.terrainGrid.parentElement;
   const width=Math.max(1,viewport.clientWidth);
   const height=Math.max(1,viewport.clientHeight);
@@ -187,6 +190,7 @@ function renderTerrain(){
   const viewportKey=width+"x"+height;
   const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
 
+  e.terrainGrid.style.setProperty("--tile-size",tileSize+"px");
   e.terrainGrid.style.gridTemplateColumns="repeat("+columns+","+tileSize+"px)";
   e.terrainGrid.style.gridTemplateRows="repeat("+rows+","+tileSize+"px)";
   e.terrainGrid.innerHTML="";
@@ -294,18 +298,23 @@ function updateCameraPresentation(){
   const offset=Camera.offsetFrom(protagonist);
   const dx=BigInt(offset.x);
   const dy=BigInt(offset.y);
-  const tileSize=100;
+  const tileSize=Math.max(40,Math.round(100*Camera.getZoom()));
   const maxVisibleX=BigInt(Math.ceil(e.terrainGrid.parentElement.clientWidth/tileSize/2)+1);
   const maxVisibleY=BigInt(Math.ceil(e.terrainGrid.parentElement.clientHeight/tileSize/2)+1);
   const visible=dx>=-maxVisibleX&&dx<=maxVisibleX&&dy>=-maxVisibleY&&dy<=maxVisibleY;
 
   e.cameraHud.hidden=false;
+  const zoom=Camera.getZoom();
   e.cameraCoordinate.textContent="("+center.x+","+center.y+")";
+  e.cameraZoom.textContent=zoom.toFixed(2)+"×";
+  e.cameraZoomDetail.textContent=zoom.toFixed(2)+"×";
+  e.cameraTileSize.textContent=tileSize+" px";
   e.cameraX.textContent=center.x;
   e.cameraY.textContent=center.y;
   e.cameraProtagonistX.textContent=protagonist.x;
   e.cameraProtagonistY.textContent=protagonist.y;
 
+  e.protagonistMarker.style.setProperty("--camera-tile-size",tileSize+"px");
   e.protagonistMarker.hidden=!visible;
   if(visible){
     const px=Number(dx)*tileSize;
@@ -325,6 +334,8 @@ function updateCameraPresentation(){
     expectedTiles>0&&e.terrainGrid.children.length===expectedTiles&&expectedTiles<5000,
     "FAIL"
   );
+
+  setCheck(e.vCameraWheelZoom,wheelZoomUsed,wheelZoomUsed?"FAIL":"WAITING");
 
   if(cameraReturnProof){
     const currentSignature=cameraTerrainSignature(campaign.seed,center);
@@ -371,27 +382,88 @@ function centerCameraOnProtagonist(){
 function resetCameraForCampaign(){
   const protagonist=Protagonist.getPosition();
   Camera.centerOn(protagonist||WorldCoordinates.origin());
+  Camera.setZoom(Camera.DEFAULT_ZOOM);
   cameraInitialized=!!protagonist;
   cameraMoved=false;
   cameraIndependenceProven=false;
   cameraReturnProof=null;
+  wheelZoomUsed=false;
+}
+
+
+function applyCameraZoom(nextZoom,source){
+  if(!SeedSystem.getCampaign())return;
+  const protagonistBefore=Protagonist.getPosition();
+  const centerBefore=Camera.getCenter();
+  const previous=Camera.getZoom();
+  const next=Camera.setZoom(nextZoom);
+  if(next===previous)return;
+
+  const protagonistAfter=Protagonist.getPosition();
+  const centerAfter=Camera.getCenter();
+  if(source==="wheel")wheelZoomUsed=true;
+
+  renderTerrain();
+  updateCameraPresentation();
+
+  const worldStable=sameCoordinate(protagonistBefore,protagonistAfter)&&sameCoordinate(centerBefore,centerAfter);
+  if(source==="wheel")setCheck(e.vCameraWheelZoom,worldStable,"FAIL");
+}
+
+function pointerDistance(){
+  const points=[...activePointers.values()];
+  if(points.length<2)return 0;
+  const dx=points[0].x-points[1].x;
+  const dy=points[0].y-points[1].y;
+  return Math.hypot(dx,dy);
 }
 
 function installCameraControls(){
   const area=e.terrainGrid.parentElement;
   area.classList.add("camera-ready");
   e.centerCameraButton.onclick=centerCameraOnProtagonist;
+  e.resetZoomButton.onclick=()=>applyCameraZoom(Camera.DEFAULT_ZOOM,"button");
+
+  area.addEventListener("wheel",event=>{
+    if(!SeedSystem.getCampaign()||event.target.closest(".camera-hud"))return;
+    event.preventDefault();
+    const direction=event.deltaY<0?1:-1;
+    applyCameraZoom(Camera.getZoom()+direction*Camera.ZOOM_STEP,"wheel");
+  },{passive:false});
 
   area.addEventListener("pointerdown",event=>{
-    if(!SeedSystem.getCampaign()||event.button!==0||event.target.closest(".camera-hud"))return;
-    dragState={x:event.clientX,y:event.clientY,accX:0,accY:0};
+    if(!SeedSystem.getCampaign()||event.target.closest(".camera-hud"))return;
+    if(event.pointerType==="mouse"&&event.button!==0)return;
+
+    activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     area.setPointerCapture?.(event.pointerId);
-    area.classList.add("camera-dragging");
+
+    if(activePointers.size>=2){
+      dragState=null;
+      area.classList.remove("camera-dragging");
+      pinchState={distance:pointerDistance(),zoom:Camera.getZoom()};
+    }else{
+      dragState={pointerId:event.pointerId,x:event.clientX,y:event.clientY,accX:0,accY:0};
+      area.classList.add("camera-dragging");
+    }
     event.preventDefault();
   });
 
   area.addEventListener("pointermove",event=>{
-    if(!dragState)return;
+    if(!activePointers.has(event.pointerId))return;
+    activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+
+    if(activePointers.size>=2){
+      if(!pinchState)pinchState={distance:pointerDistance(),zoom:Camera.getZoom()};
+      const distance=pointerDistance();
+      if(pinchState.distance>0&&distance>0){
+        applyCameraZoom(pinchState.zoom*(distance/pinchState.distance),"pinch");
+      }
+      event.preventDefault();
+      return;
+    }
+
+    if(!dragState||dragState.pointerId!==event.pointerId)return;
     const dx=event.clientX-dragState.x;
     const dy=event.clientY-dragState.y;
     dragState.x=event.clientX;
@@ -411,12 +483,24 @@ function installCameraControls(){
       dragState.accY+=dragState.accY>0?-threshold:threshold;
     }
     if(panX||panY)panCamera(panX,panY);
+    event.preventDefault();
   });
 
   const endDrag=event=>{
-    if(!dragState)return;
-    dragState=null;
-    area.classList.remove("camera-dragging");
+    activePointers.delete(event.pointerId);
+    if(activePointers.size<2)pinchState=null;
+
+    if(dragState&&dragState.pointerId===event.pointerId){
+      dragState=null;
+      area.classList.remove("camera-dragging");
+    }
+
+    if(activePointers.size===1&&!dragState){
+      const [pointerId,point]=activePointers.entries().next().value;
+      dragState={pointerId,x:point.x,y:point.y,accX:0,accY:0};
+      area.classList.add("camera-dragging");
+    }
+
     try{area.releasePointerCapture?.(event.pointerId)}catch(_){}
   };
   area.addEventListener("pointerup",endDrag);
