@@ -1,3 +1,19 @@
+2026-09-21 18:27:00 +03:00
+- WP-007B Tile-Based House Plans + Wall Foundation completed.
+- Added deterministic house plans for all 6 Starting Village plots: 4 normal houses + 2 cabins.
+- Normal houses contain living room + bedroom with minimum 6 floor tiles / 24 m² per room.
+- Added exterior top-down wall edges, wall corners, doors, interior wall/door separation, and road/path-facing entrances.
+- Added 29 standalone SVG vector tile assets under assets/tiles/vector/; no PNG tile texture is used.
+- Added simple vector patterns for water, grass, forest, dirt, mud, road, bridge, square, path, plot, rock, sand, farmland, wood floor, walls and doors.
+- Added reusable L/C/U curved terrain-transition SVG overlays selected from neighboring terrain.
+- Refined wall/door presentation to render thin wall graphics over floor base instead of filling an entire 2m wall cell.
+- Refined road/path/bridge SVG patterns to be direction-neutral.
+- 12-SEED core test passed with deterministic plans, minimum room size, wall, interior-wall, entrance and SVG checks.
+- GitHub Actions run 35618812056 passed the exact-main starting-village screenshot scenario.
+- Runtime evidence: housePlans.pass=true, 6 buildings, minimumRoomTiles=6, 779 SVG-textured rendered tiles at broad zoom, 0 PNG tile textures, L/C/U transition shapes present.
+- Visual review of all 3 screenshots: 8/10 PASS.
+- Updated docs/ROADMAP.md and marked WP-007B COMPLETE.
+
 2026-09-21 18:01:33 +03:00
 - Final road-first/building-second reservation verification passed.
 - Multi-SEED stress test across 12 SEEDs produced all 6 Starting Village plots with zero road, local-path or public-square overlap.
