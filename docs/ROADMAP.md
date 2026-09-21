@@ -66,6 +66,8 @@ The game must remain playable in portrait and landscape layouts.
 - Publishing screenshots into `main` remains an explicit trusted/manual option.
 - Current-build readiness failures are test failures rather than successful blank screenshots.
 - Legacy camera/NPC scenario names remain available and safely degrade until those runtime APIs exist.
+- Verified GitHub Actions self-test: run **35600673452** completed successfully against the local checkout and produced a screenshot plus JSON evidence.
+- Verified evidence contained **253 visible terrain tiles**, loaded Protagonist sprite at **(0,0)**, populated fantasy date/time, and populated continent/realm/region/city/district/village data.
 
 ---
 
