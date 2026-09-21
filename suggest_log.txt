@@ -1,0 +1,1 @@
+2026-09-22 02:38 +03:00 | WP-S003-005 | Phase 1 | Suggestion: derive the required logical texture-key set directly from the prepared coordinate region and call TextureAssets.prepareRegion() before exposing that region to GameRenderer.render(). Do not implement unrelated renderer optimization here; keep it for WP-S003-006.
