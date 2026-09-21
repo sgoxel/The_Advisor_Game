@@ -1,3 +1,6 @@
+2026-09-21 19:59:00 +03:00 | Stage 2 / WP-008
+Suggestion: in a later building-art refinement WP, give each special structure a small function-specific SVG interior marker/pattern (counter, hearth, workbench, storage rows, barn stalls, civic table) while preserving the same authoritative lot footprints and keeping NPC/economy behavior separate.
+
 2026-09-21 19:30:00 +03:00 | Stage 2 / WP-007E
 Suggestion: if terrain art is refined again later, add terrain-pair-specific shoreline/accent SVGs (for example water foam or wet-bank accents) as a decorative layer separate from the geometry masks, so border shape logic stays generic while each material pair gains more visual character.
 
