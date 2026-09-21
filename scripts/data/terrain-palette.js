@@ -7,6 +7,7 @@ const TYPES=Object.freeze({
   dirt:Object.freeze({id:"dirt",label:"Dirt",color:"#9B7448"}),
   mud:Object.freeze({id:"mud",label:"Mud",color:"#66503B"}),
   road:Object.freeze({id:"road",label:"Road",color:"#B09A73"}),
+  bridge:Object.freeze({id:"bridge",label:"Bridge",color:"#8E7048"}),
   building:Object.freeze({id:"building",label:"Building",color:"#7C6252"}),
   water:Object.freeze({id:"water",label:"Water",color:"#3F7190"}),
   rock:Object.freeze({id:"rock",label:"Rock",color:"#74756F"}),
@@ -15,7 +16,7 @@ const TYPES=Object.freeze({
 });
 
 const ORDER=Object.freeze([
-  "grass","forest","dirt","mud","road","building","water","rock","sand","farmland"
+  "grass","forest","dirt","mud","road","bridge","building","water","rock","sand","farmland"
 ]);
 
 function get(type){
