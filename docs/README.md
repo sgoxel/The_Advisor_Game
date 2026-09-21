@@ -173,6 +173,8 @@ If a SEED-generated village candidate would violate this minimum travel-time rul
 
 The current foundation model treats one logical tile as **100 meters** for world-scale travel calculations. Village placement is structured so neighboring village centers remain far enough apart that even the fastest normal walking speed used by the model (**5.5 km/h**) cannot produce a sub-one-hour village-to-village walk. A terrain-aware route check then verifies the actual shortest valid route around the starting village.
 
+Main roads are persistent geographic infrastructure: terrain generation cannot simply erase or interrupt them. The starting village currently uses a connected irregular main-road ring with connected central avenues. Future secondary roads must connect to this network. Bridges are allowed only for short crossings: at the current **100 m/tile** scale and **5.5 km/h** main-road walking speed, a bridge may span at most **9 consecutive tiles**, keeping the crossing below **10 fantasy walking minutes**. Road width depends on context: village roads are smaller, rough forest/mountain roads narrow further, and only future capital-city main roads may widen as far as **10 tiles**; this is not the default width for long-distance/wilderness roads.
+
 
 Settlements are historical entities, not frozen templates. Population, prosperity, security, trade, resources, hazards, construction, destruction, war and other pressures may cause them to grow, decline, fortify, change function, lose structures, become abandoned or ruined, recover, rebuild or be repopulated.
 
