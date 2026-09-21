@@ -330,6 +330,16 @@ return (() => {
             return {error: String(error)};
           }
         })(),
+        buildingInteriors: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const interiors = window.BuildingInteriors;
+            if (!campaign || !interiors?.proof) return null;
+            return interiors.proof(campaign.seed);
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
         roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
@@ -944,6 +954,30 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S002-004 route evidence is empty: {route}")
         if int(route.get("visibleRouteTileCount") or 0) <= 0:
             raise RuntimeError(f"WP-S002-004 route is not visible in broad village evidence: {route}")
+        interiors = current.get("buildingInteriors") or {}
+        if not interiors.get("pass") or not interiors.get("deterministic"):
+            raise RuntimeError(f"WP-S003-002 authoritative interior proof failed: {interiors}")
+        if int(interiors.get("buildingCount") or 0) != 12:
+            raise RuntimeError(f"WP-S003-002 expected 12 accessible interiors: {interiors}")
+        if int(interiors.get("houseCount") or 0) != 6 or int(interiors.get("specialBuildingCount") or 0) != 6:
+            raise RuntimeError(f"WP-S003-002 house/special interior coverage failed: {interiors}")
+        if int(interiors.get("level") if interiors.get("level") is not None else -1) != 0 or not interiors.get("allLevelZero"):
+            raise RuntimeError(f"WP-S003-002 discrete navigation level failed: {interiors}")
+        if not interiors.get("allConnected"):
+            raise RuntimeError(f"WP-S003-002 exterior-door continuity failed: {interiors}")
+        if not interiors.get("allFloorsDoorsWalkable") or not interiors.get("allWallsBlocked"):
+            raise RuntimeError(f"WP-S003-002 interior collision/walkability failed: {interiors}")
+        if not interiors.get("allForward") or not interiors.get("allReverse"):
+            raise RuntimeError(f"WP-S003-002 bidirectional interior routing failed: {interiors}")
+        for building in interiors.get("buildings") or []:
+            if not building.get("pass"):
+                raise RuntimeError(f"WP-S003-002 building interior failed: {building}")
+            if not building.get("forwardPass") or not building.get("reversePass"):
+                raise RuntimeError(f"WP-S003-002 building route failed: {building}")
+            if not building.get("continuousDoor"):
+                raise RuntimeError(f"WP-S003-002 building door continuity failed: {building}")
+            if not building.get("wallsBlocked") or not building.get("floorsWalkable") or not building.get("doorsWalkable"):
+                raise RuntimeError(f"WP-S003-002 building collision proof failed: {building}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):
