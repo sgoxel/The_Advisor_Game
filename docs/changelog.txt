@@ -1,3 +1,19 @@
+2026-09-21 19:59:00 +03:00
+- WP-008 Special Buildings + Functional Lots completed.
+- Added deterministic tavern/lodging, shop, craft workshop, storehouse, farm barn, village meeting hall, and outdoor workyard foundations.
+- Six special lots are enterable top-down structures using the existing SVG floor/wall/door system; one is an outdoor functional workyard.
+- Every lot receives deterministic road/path access; enterable structures place an exterior door on the selected access edge.
+- Placement rejects roads/paths/public space, water, existing house plots, and other special lots.
+- Added muted function-specific presentation tints so special structures remain visually distinguishable without creating a new art pipeline.
+- 31-SEED stress verification passed with all seven required lot types on every tested SEED.
+- Across the 31-SEED stress set: road overlap 0, water overlap 0, house overlap 0, special-lot overlap 0.
+- Integrated terrain verification confirmed all planned special-lot cells render with their authoritative lot ID/kind.
+- GitHub Actions run 35628895648 passed on exact merged main.
+- Visual evidence rendered 15 / 29 / 106 visible special-lot cells across the three frames.
+- Artifact visual-evidence-starting-village-35628895648: 542,368 bytes.
+- Manual screenshot review score: 8.7/10 PASS.
+- Updated docs/ROADMAP.md and marked WP-008 COMPLETE.
+
 2026-09-21 19:30:00 +03:00
 - WP-007E Diagonal + Multi-Terrain Junction Smoothing completed.
 - Terrain renderer now reads all 8 neighboring cells instead of only N/E/S/W.
