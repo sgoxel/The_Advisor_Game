@@ -1,3 +1,6 @@
+2026-09-21 20:45:00 +03:00 | Global WP code standard
+Suggestion: keep every future Stage, Work Package, and optional Sub Package numeric segment fixed at three digits from creation time so GitHub title sorting and ROADMAP sorting remain identical without later renaming.
+
 2026-09-21 20:40:00 +03:00 | ROADMAP → GitHub Issues migration
 Suggestion: create dedicated GitHub labels or milestones for Stage 1 and Stage 2 later, so Issue filtering mirrors the ROADMAP hierarchy while each WP body remains an exact copy of ROADMAP.md.
 
