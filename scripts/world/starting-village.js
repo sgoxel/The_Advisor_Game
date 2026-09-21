@@ -116,8 +116,8 @@ function plotAt(l){
   }
   return null;
 }
-function isSecondaryPath(l){
-  if(!l||!isVillageLand("",l))return false;
+function isSecondaryPath(seed,l){
+  if(!l||!isVillageLand(seed,l))return false;
   // Short connectors from plot rows/columns to the nearest central avenue.
   const horizontal=(Math.abs(l.y-7)<=0&&Math.abs(l.x)<=5)||
     (Math.abs(l.y+7)<=0&&Math.abs(l.x)<=5);
@@ -147,7 +147,7 @@ function getType(seed,x,y,underlying){
 
   const plot=plotAt(l);
   if(plot&&villageLand)return "plot";
-  if(villageLand&&isSecondaryPath(l))return "path";
+  if(villageLand&&isSecondaryPath(seed,l))return "path";
   if(farmParcel(seed,l))return "farmland";
 
   if((villageLand||mainland||shoulder)&&underlying==="water"){
