@@ -2,8 +2,22 @@
 "use strict";
 
 function getType(seedValue,xValue,yValue){
-  const base=GeographyFoundation.getTerrainType(seedValue,xValue,yValue);
-  return StartingVillage.getType(seedValue,xValue,yValue,base);
+  const x=WorldCoordinates.normalize(xValue);
+  const y=WorldCoordinates.normalize(yValue);
+  const local=StartingVillage.local(seedValue,x,y);
+
+  // Planning order is authoritative. Terrain is intentionally calculated last.
+  const infrastructure=StartingVillage.infrastructureAt(seedValue,local);
+  const building=StartingVillage.buildingAt(seedValue,local);
+  const importantObject=StartingVillage.importantObjectAt(seedValue,local);
+  const baseTerrain=GeographyFoundation.getTerrainType(seedValue,x,y);
+
+  if(infrastructure){
+    return StartingVillage.resolveInfrastructure(seedValue,local,infrastructure,baseTerrain);
+  }
+  if(building)return building.type;
+  if(importantObject)return importantObject.type;
+  return StartingVillage.resolveTerrain(seedValue,local,baseTerrain);
 }
 
 function getTile(seedValue,xValue,yValue){
