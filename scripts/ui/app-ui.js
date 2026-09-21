@@ -143,7 +143,7 @@ function renderHousePlans(){
 
   e.houseBuildingCount.textContent=String(proof.buildingCount);
   e.houseTypeCount.textContent=proof.normalHouseCount+" houses / "+proof.cabinCount+" cabins";
-  e.houseMinRoomTiles.textContent=proof.minimumRoomTiles+" tiles / "+(proof.minimumRoomTiles*WorldStandards.TILE_AREA_SQM)+" m²";
+  e.houseMinRoomTiles.textContent=proof.minimumRoomTiles+" tiles / "+(proof.minimumRoomTiles*WorldStandards.TILE_METERS*WorldStandards.TILE_METERS)+" m²";
   e.houseSvgCount.textContent="29 vector SVG files";
 
   setCheck(e.vHousePlan,proof.pass&&proof.deterministic,"FAIL");
