@@ -206,7 +206,8 @@ Examples of valid coordinates:
 - coordinates use arbitrary-size integer handling;
 - campaign state stores the Protagonist coordinate;
 - `scripts/entities/protagonist.js` exposes the authoritative Protagonist position;
-- the gameplay area visibly centers the Protagonist at **(0,0)** before terrain rendering exists.
+- the gameplay area visibly centers the Protagonist at **(0,0)**;
+- the transparent male protagonist asset `assets/characters/protagonist_male.png` is rendered inside the centered 100×100 origin-tile footprint.
 
 ### In-game proof
 
@@ -219,7 +220,8 @@ After starting a campaign, the Protagonist marker appears at the exact center of
 - coordinate system accepts positive arbitrary-size X/Y values;
 - coordinate system accepts negative arbitrary-size X/Y values;
 - no gameplay-defined outer coordinate boundary exists;
-- saved/reloaded campaigns preserve the Protagonist coordinate.
+- saved/reloaded campaigns preserve the Protagonist coordinate;
+- the male protagonist PNG renders on the **(0,0)** tile without replacing terrain identity.
 
 ---
 
