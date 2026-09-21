@@ -33,6 +33,13 @@ function setSettingsSeed(value){
 }
 function getSettings(){return {seed:settings.seed}}
 
+function originProtagonist(){return WorldCoordinates.origin()}
+function normalizeProtagonist(value){
+  try{
+    if(value&&value.x!=null&&value.y!=null)return WorldCoordinates.position(value.x,value.y);
+  }catch(e){}
+  return originProtagonist();
+}
 function saveCampaign(){
   try{localStorage.setItem(CAMPAIGN_KEY,JSON.stringify(campaign));return true}catch(e){return false}
 }
@@ -44,6 +51,7 @@ function loadCampaign(){
         seed:normalize(raw.seed),
         realStartMs:Number(raw.realStartMs),
         fantasyStart:raw.fantasyStart,
+        protagonist:normalizeProtagonist(raw.protagonist),
         restartCount:Number.isInteger(raw.restartCount)?raw.restartCount:0
       };
       return {ok:true,campaign};
@@ -68,7 +76,13 @@ function startNewCampaign(seedOverride){
   const checked=validate(candidate);
   if(!checked.ok)return checked;
   const now=new Date();
-  campaign={seed:checked.seed,realStartMs:now.getTime(),fantasyStart:makeFantasyStart(now),restartCount:0};
+  campaign={
+    seed:checked.seed,
+    realStartMs:now.getTime(),
+    fantasyStart:makeFantasyStart(now),
+    protagonist:originProtagonist(),
+    restartCount:0
+  };
   const stored=saveCampaign();
   return {ok:true,campaign,stored,message:"New campaign started."};
 }
@@ -76,7 +90,13 @@ function restartCampaign(){
   if(!campaign)return {ok:false,message:"No active campaign exists."};
   const sameSeed=campaign.seed;
   const now=new Date();
-  campaign={seed:sameSeed,realStartMs:now.getTime(),fantasyStart:makeFantasyStart(now),restartCount:campaign.restartCount+1};
+  campaign={
+    seed:sameSeed,
+    realStartMs:now.getTime(),
+    fantasyStart:makeFantasyStart(now),
+    protagonist:originProtagonist(),
+    restartCount:campaign.restartCount+1
+  };
   saveCampaign();
   return {ok:true,campaign,message:"Campaign restarted with the same SEED."};
 }
