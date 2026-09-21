@@ -6,7 +6,8 @@ let clockTimer=null;
 const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
-  "detailState","detailGameDate","detailGameTime","vDate","vPersist"
+  "detailState","detailGameDate","detailGameTime","vDate","vPersist",
+  "prngSeed","prngSequence","vPrngRepeat","vPrngDifferent","vPrngSource"
 ];
 function cache(){ids.forEach(id=>e[id]=document.getElementById(id))}
 function openPopup(id){document.getElementById(id).hidden=false;document.body.style.overflow="hidden"}
@@ -14,6 +15,16 @@ function closePopup(id){document.getElementById(id).hidden=true;document.body.st
 function closeAll(){document.querySelectorAll(".fullscreen-popup").forEach(p=>p.hidden=true);document.body.style.overflow=""}
 function setCheck(node,pass,waiting){node.textContent=pass?"PASS":waiting;node.classList.toggle("pass",pass)}
 
+function renderPRNG(){
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  const proof=PRNG.verify(seed);
+  e.prngSeed.textContent=seed;
+  e.prngSequence.textContent=proof.sequence.join(" · ");
+  setCheck(e.vPrngRepeat,proof.repeatable,"FAIL");
+  setCheck(e.vPrngDifferent,proof.different,"FAIL");
+  setCheck(e.vPrngSource,typeof PRNG.create==="function"&&typeof PRNG.sequence==="function","FAIL");
+}
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
   e.campaignState.textContent=campaign?"ACTIVE":"NOT STARTED";
@@ -22,6 +33,7 @@ function renderStatic(){
   e.resumeButton.disabled=!campaign;
   setCheck(e.vDate,!!campaign&&GameTime.validateStartYear(),campaign?"FAIL":"WAITING");
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
+  renderPRNG();
 }
 function renderClock(){
   const t=GameTime.getNow();
@@ -52,7 +64,10 @@ function restartCampaign(){
 function saveSettings(){
   const result=SeedSystem.setSettingsSeed(e.seedInput.value);
   e.settingsMessage.textContent=result.message;
-  if(result.ok)e.seedInput.value=result.seed;
+  if(result.ok){
+    e.seedInput.value=result.seed;
+    renderPRNG();
+  }
 }
 function init(){
   cache();
