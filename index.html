@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-002</title>
+<title>The Advisor Game — WP-003</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-002</span>
+      <span class="build-badge">WP-003</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -30,7 +30,12 @@
   <main id="gameplayArea" class="gameplay-area" aria-label="Gameplay Area">
     <div class="gameplay-placeholder">
       <strong>Gameplay Area</strong>
-      <span>SEED-generated world begins in the next Work Packages.</span>
+      <span>World origin is centered at (0,0). Terrain begins in WP-004.</span>
+    </div>
+    <div id="protagonistMarker" class="protagonist-marker" hidden aria-label="Protagonist at world origin">
+      <span class="protagonist-dot"></span>
+      <strong>Protagonist</strong>
+      <code id="protagonistMarkerCoords">(0,0)</code>
     </div>
   </main>
 
@@ -44,6 +49,11 @@
     <div class="status-item">
       <span>Game Time Rate</span>
       <strong>1 real hour = 1 game day</strong>
+    </div>
+
+    <div class="status-item">
+      <span>Location</span>
+      <strong id="protagonistLocation">—</strong>
     </div>
 
     <div class="status-message" id="statusMessage" role="status" aria-live="polite">
@@ -116,6 +126,8 @@
         <div><span>Game Date</span><strong id="detailGameDate">—</strong></div>
         <div><span>Game Time</span><strong id="detailGameTime">—</strong></div>
         <div><span>Time Scale</span><strong>24× real time</strong></div>
+        <div><span>Protagonist X</span><strong id="detailProtagonistX">—</strong></div>
+        <div><span>Protagonist Y</span><strong id="detailProtagonistY">—</strong></div>
       </div>
     </div>
   </details>
@@ -151,10 +163,24 @@
     </div>
   </details>
 
+
+  <details>
+    <summary>WP-003 Infinite World Coordinates</summary>
+    <div class="accordion-content technical-info">
+      <p><strong>Initial world center:</strong> <code>(0,0)</code></p>
+      <p><strong>Protagonist position:</strong> <code id="wp3Position">—</code></p>
+      <div class="check"><span>Protagonist is created at (0,0) when campaign starts</span><b id="vOrigin">WAITING</b></div>
+      <div class="check"><span>(0,0) is the initial gameplay-view center</span><b id="vCenter">PASS</b></div>
+      <div class="check"><span>Positive X/Y coordinates have no gameplay-defined boundary</span><b id="vPositiveWorld">WAITING</b></div>
+      <div class="check"><span>Negative X/Y coordinates have no gameplay-defined boundary</span><b id="vNegativeWorld">WAITING</b></div>
+      <p>World coordinates are signed arbitrary-size integers. The game does not define a minimum or maximum X/Y coordinate.</p>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-002 split deterministic foundation/live randomness.</p>
+      <p><strong>Current Work Package:</strong> WP-003 infinite world coordinates + Protagonist origin.</p>
       <p><strong>Current world rendering:</strong> Not implemented yet.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
@@ -163,7 +189,9 @@
 </section>
 
 <script src="scripts/data/config.js"></script>
+<script src="scripts/world/coordinates.js"></script>
 <script src="scripts/core/seed.js"></script>
+<script src="scripts/entities/protagonist.js"></script>
 <script src="scripts/core/prng.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
