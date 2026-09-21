@@ -207,7 +207,8 @@ Examples of valid coordinates:
 - campaign state stores the Protagonist coordinate;
 - `scripts/entities/protagonist.js` exposes the authoritative Protagonist position;
 - the gameplay area visibly centers the Protagonist at **(0,0)**;
-- the transparent male protagonist asset `assets/characters/protagonist_male.png` is rendered inside the centered 100×100 origin-tile footprint.
+- the transparent male protagonist asset `assets/characters/protagonist_male.png` is rendered inside the centered 100×100 origin-tile footprint;
+- runtime UI verification confirms the PNG loads, with a small fallback marker only if the asset fails to load.
 
 ### In-game proof
 
