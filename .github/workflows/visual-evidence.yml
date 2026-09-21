@@ -133,7 +133,7 @@ jobs:
             publish="${INPUT_PUBLISH:-false}"
           elif [ "$EVENT_NAME" = 'push' ]; then
             target='http://127.0.0.1:8000/'
-            scenario='camera-pan'
+            scenario='camera-zoom'
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             [ -n "$requested" ] && scenario="$requested"
