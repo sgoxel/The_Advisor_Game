@@ -666,7 +666,7 @@ GitHub Actions run **35614323669** completed successfully with the `starting-vil
 
 ---
 
-## WP-007B — Tile-Based House Plans + Wall Foundation — IMPLEMENTED / VISUAL VERIFICATION PENDING
+## WP-007B — Tile-Based House Plans + Wall Foundation — COMPLETE
 
 ### Goal
 
@@ -718,6 +718,26 @@ Define:
 - generic **L**, **C** and **U** curved terrain-transition SVG overlays are available and rotated from neighboring terrain relationships;
 - no PNG tile texture is used by this tile system; the existing solid terrain color remains as a fallback beneath SVG presentation;
 - 12-SEED core verification passed: 6 buildings per SEED, minimum room size 6 tiles, wall/door/access checks PASS, and every rendered building cell resolved to an SVG texture.
+
+### Verified evidence
+
+GitHub Actions run **35618812056** completed successfully against the exact current `main` checkout using the `starting-village` scenario:
+
+- WP-007B deterministic house-plan proof PASS;
+- **6 buildings** generated: **4 normal houses + 2 cabins**;
+- minimum room size: **6 tiles = 24 m²**;
+- exterior walls PASS;
+- interior walls/doorways PASS;
+- exterior road/path access PASS;
+- visible frame at 0.50× included floor, wall and door cells;
+- **779 rendered tiles used SVG texture paths** in the broad village frame;
+- **0 PNG tile textures** were used;
+- runtime transition registry and rendered evidence included **L, C and U** shapes;
+- viewport coverage remained PASS;
+- artifact: `visual-evidence-starting-village-35618812056` (**766,432 bytes**);
+- manual review of all three evidence screenshots: **8/10 PASS**.
+
+The earlier issue-triggered run **35618602851** failed only because it targeted the not-yet-updated GitHub Pages deployment; it did not test the merged local checkout. The push-triggered run above is the authoritative WP-007B verification.
 
 ### Pass condition
 
