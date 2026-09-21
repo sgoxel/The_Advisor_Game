@@ -31,11 +31,20 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation
 - `WP-S002-004` — Deterministic Local Route Planning
 
-# Stage 3 — Starting Village Population Foundation
+# Stage 3 — GPU 2.5D World + Enterable Building Foundation
 
-- `WP-S003-001` — Deterministic Starting Village Resident Roster
-- `WP-S003-002` — Homes, Professions + Workplace Assignment
-- `WP-S003-003` — Deterministic Daily Activity Schedules
-- `WP-S003-004` — Autonomous NPC Route Execution + Visible Movement
+- `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation
+- `WP-S003-002` — Authoritative Enterable Building Interiors
+- `WP-S003-003` — Interior Objects + Interaction Points
+- `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility
+- `WP-S003-005` — Viewport Culling, Batching + Performance Baseline
+
+# Stage 4 — Starting Village Population + Indoor Activity Foundation
+
+- `WP-S004-001` — Deterministic Starting Village Resident Roster
+- `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment
+- `WP-S004-003` — Deterministic Daily Activity + Action Targets
+- `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement
+- `WP-S004-005` — Interior Action Execution + Character State Presentation
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
