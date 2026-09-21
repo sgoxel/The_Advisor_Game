@@ -1,3 +1,6 @@
+2026-09-21 22:31:00 +03:00 | Stage 3 / WP-S003-002
+Suggestion: WP-S003-003 should define interior objects as Simulation-owned footprints plus generic interaction points layered onto the existing BuildingInteriors model. Keep object collision/action authority separate from decorative sprite presentation so furniture can later change art without changing routing semantics.
+
 2026-09-21 22:22:00 +03:00 | Stage 3 / WP-S003-001
 Suggestion: WP-S003-002 should keep building/interior topology entirely Simulation-owned and expose only render-ready room/wall/door state to GameRenderer. Do not let future roof, wall-height or other 2.5D presentation layers become collision or route authority.
 
