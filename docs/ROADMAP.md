@@ -90,59 +90,61 @@ The player can start a campaign, see the fantasy clock advance, open Settings, s
 
 ---
 
-## WP-002 — Deterministic PRNG — COMPLETE
+## WP-002 — Deterministic SEED + Fantasy-Time Randomness — COMPLETE
 
 ### Goal
 
-Create the deterministic random generator used by all future procedural systems.
+Provide reproducible simulation randomness with exactly two authoritative inputs.
+
+### Core rule
+
+Every random result is:
+
+**Random Result = Random(Campaign SEED, Fantasy Game Timestamp)**
+
+No other random input is allowed.
+
+The random function must not read or depend on:
+
+- real-world time;
+- `Math.random()`;
+- browser or OS cryptographic randomness;
+- device state;
+- mutable PRNG state;
+- call order;
+- hidden counters;
+- system keys;
+- sub-seeds;
+- entity IDs;
+- coordinates.
+
+The authoritative fantasy timestamp is supplied by the game-time system. The random module never reads the real clock itself.
 
 ### Implemented
 
-- deterministic string-to-32-bit SEED hash;
-- deterministic 32-bit PRNG stream;
-- PRNG module: `scripts/core/prng.js`;
-- active campaign SEED is used when a campaign exists;
-- configured Settings SEED is used before a campaign starts;
-- development accordion displays the current six-value sequence;
-- automatic same-SEED and different-SEED checks are visible in the game.
+- stateless deterministic 32-bit random function;
+- exact API: `PRNG.randomUint32(seed, fantasyTimestampMs)`;
+- normalized fantasy timestamp uses integer fantasy milliseconds;
+- same SEED + same fantasy timestamp always returns the same value;
+- changing the fantasy timestamp can change the value;
+- random output is unavailable before a campaign has an authoritative fantasy timestamp;
+- development accordion displays the active SEED, fantasy timestamp and deterministic value.
 
 ### In-game proof
 
-A development accordion shows a short repeatable sequence produced from the Campaign SEED.
+The WP-002 accordion displays one deterministic value tied to the campaign's current fantasy timestamp.
 
 ### Pass condition
 
-- same SEED produces the same sequence;
-- different SEED produces a different sequence;
-- no procedural system uses uncontrolled randomness.
+- same SEED + same fantasy timestamp produces exactly the same result;
+- result does not depend on previous random calls;
+- no real-random source exists;
+- no hidden random state exists;
+- the random function accepts only SEED and fantasy timestamp.
 
 ---
 
-## WP-003 — Deterministic Sub-SEED Function
-
-### Goal
-
-Keep procedural systems independent from each other.
-
-### Rule
-
-Derive stable sub-seeds from:
-
-**Campaign SEED + system key + stable identifier**
-
-Examples:
-
-- `terrain`
-- `settlement:001`
-- `npc:001`
-
-### Pass condition
-
-Adding random calls to one system does not change another system's generated results.
-
----
-
-## WP-004 — Infinite Tile Coordinates
+## WP-003 — Infinite Tile Coordinates
 
 ### Goal
 
@@ -166,7 +168,7 @@ The same SEED and coordinate always resolve to the same base tile result.
 
 ---
 
-## WP-005 — Viewport-Filling Solid-Color Tiles
+## WP-004 — Viewport-Filling Solid-Color Tiles
 
 ### Goal
 
@@ -192,7 +194,7 @@ If the Gameplay Area currently shows **16 × 9 tiles**, at least **144 visible t
 
 ---
 
-## WP-006 — Camera Movement Through the Infinite World
+## WP-005 — Camera Movement Through the Infinite World
 
 ### Goal
 
@@ -212,6 +214,6 @@ Panning reveals newly required solid-color tiles.
 
 # Stage 1 Review Gate
 
-Do not introduce textures, settlements, NPC populations, economy, combat or external LLM integration until WP-001 through WP-006 are implemented and reviewed.
+Do not introduce textures, settlements, NPC populations, economy, combat or external LLM integration until WP-001 through WP-005 are implemented and reviewed.
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
