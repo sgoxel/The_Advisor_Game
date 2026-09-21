@@ -171,6 +171,8 @@ Generated geography must also obey realism constraints rather than placing settl
 
 If a SEED-generated village candidate would violate this minimum travel-time rule, the generator must deterministically reject that candidate and continue to the next deterministic candidate derived from the same SEED process. Therefore the world remains both realistic and reproducible.
 
+The current foundation model treats one logical tile as **100 meters** for world-scale travel calculations. Village placement is structured so neighboring village centers remain far enough apart that even the fastest normal walking speed used by the model (**5.5 km/h**) cannot produce a sub-one-hour village-to-village walk. A terrain-aware route check then verifies the actual shortest valid route around the starting village.
+
 
 Settlements are historical entities, not frozen templates. Population, prosperity, security, trade, resources, hazards, construction, destruction, war and other pressures may cause them to grow, decline, fortify, change function, lose structures, become abandoned or ruined, recover, rebuild or be repopulated.
 
