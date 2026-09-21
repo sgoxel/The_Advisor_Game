@@ -363,6 +363,18 @@ return (() => {
             const visibleWalkableCount = classified.filter(
               tile => tile.dataset?.walkable === "true"
             ).length;
+            const visibleOuterWalls = classified.filter(
+              tile => tile.dataset?.barrierKind === "outer-wall"
+            ).length;
+            const visibleInteriorWalls = classified.filter(
+              tile => tile.dataset?.barrierKind === "interior-wall"
+            ).length;
+            const visibleExteriorDoors = classified.filter(
+              tile => tile.dataset?.doorwayKind === "exterior-door"
+            ).length;
+            const visibleInteriorDoors = classified.filter(
+              tile => tile.dataset?.doorwayKind === "interior-door"
+            ).length;
             return {
               ...proof,
               visibleTileCount:rendered.length,
@@ -371,6 +383,10 @@ return (() => {
               visibleCategories,
               visibleBlockedCount,
               visibleWalkableCount,
+              visibleOuterWalls,
+              visibleInteriorWalls,
+              visibleExteriorDoors,
+              visibleInteriorDoors,
             };
           } catch (error) {
             return {error: String(error)};
@@ -915,8 +931,21 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(walk.get("visibleClassifiedCount") or 0) != int(walk.get("visibleTileCount") or 0):
             raise RuntimeError(f"WP-009 visible tile classification mismatch: {walk}")
         structure = walk.get("structure") or {}
-        if not structure.get("wallsPass") or not structure.get("entrancesPass") or not structure.get("interiorsPass") or not structure.get("workyardPass"):
+        required_structure_checks = (
+            "outerWallsPass",
+            "exteriorDoorsPass",
+            "interiorsPass",
+            "interiorWallsPass",
+            "interiorDoorsPass",
+            "workyardPass",
+            "accessTargetsPass",
+        )
+        if not all(structure.get(key) for key in required_structure_checks):
             raise RuntimeError(f"WP-009 building collision rules failed: {walk}")
+        if int(structure.get("interiorWallSamples") or 0) <= 0:
+            raise RuntimeError(f"WP-009 did not verify interior wall barriers: {walk}")
+        if int(structure.get("interiorDoorSamples") or 0) <= 0:
+            raise RuntimeError(f"WP-009 did not verify interior door passages: {walk}")
         if not walk.get("waterRulePass") or not walk.get("routeRulesPass") or not walk.get("difficultRulesPass"):
             raise RuntimeError(f"WP-009 terrain movement rules failed: {walk}")
         grid = current.get("terrainGrid") or {}
