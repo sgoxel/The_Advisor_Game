@@ -126,17 +126,70 @@ const done = arguments[arguments.length - 1];
 RUNTIME_SNAPSHOT_SCRIPT = r"""
 return (() => {
   try {
-    const tiles = [...document.querySelectorAll('.terrain-tile')];
-    const terrainTypes = {};
-    for (const tile of tiles) {
-      const type = tile.dataset?.terrain || 'unknown';
-      terrainTypes[type] = (terrainTypes[type] || 0) + 1;
-    }
-    const sprite = document.querySelector('#protagonistSprite');
+    const renderer = window.GameRenderer?.snapshot?.() || {};
+    const assets = window.TextureAssets?.stats?.() || {};
+    const cells = Array.isArray(renderer.cells) ? renderer.cells : [];
+    const terrainTypes = renderer.terrainTypes || {};
+    const grid = renderer.grid || null;
+    const protagonistTexture = window.TextureAssets?.get?.('character:protagonist-male') || null;
     const legacy = window.Game || null;
     const camera = legacy?.State?.camera || null;
     const canvas = document.querySelector('#gameCanvas');
     const canvasRect = canvas?.getBoundingClientRect?.() || null;
+
+    const naturalness = (() => {
+      if (!grid) return null;
+      const columns = Number(grid.columns || 0);
+      const rows = Number(grid.rows || 0);
+      if (!columns || !rows || cells.length !== columns * rows) return null;
+      const naturalTypes = new Set(['water','forest','mud','rock','sand','dirt','farmland']);
+      const visited = new Uint8Array(cells.length);
+      const components = [];
+      const directions = [[-1,0],[1,0],[0,-1],[0,1]];
+      for (let index = 0; index < cells.length; index++) {
+        const type = cells[index];
+        if (visited[index] || !naturalTypes.has(type)) continue;
+        const queue = [index];
+        visited[index] = 1;
+        let size = 0;
+        let minX = columns, maxX = -1, minY = rows, maxY = -1;
+        while (queue.length) {
+          const current = queue.pop();
+          const x = current % columns;
+          const y = Math.floor(current / columns);
+          size++;
+          minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+          for (const [dx,dy] of directions) {
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || nx >= columns || ny < 0 || ny >= rows) continue;
+            const next = ny * columns + nx;
+            if (!visited[next] && cells[next] === type) {
+              visited[next] = 1;
+              queue.push(next);
+            }
+          }
+        }
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+        const area = width * height;
+        const fillRatio = area ? size / area : 0;
+        const interior = minX > 0 && minY > 0 && maxX < columns - 1 && maxY < rows - 1;
+        components.push({type,size,width,height,fillRatio,interior});
+      }
+      const largeInterior = components.filter(c => c.interior && c.size >= 12 && c.width >= 3 && c.height >= 3);
+      const suspicious = largeInterior.filter(c => c.fillRatio >= 0.92);
+      return {
+        componentCount: components.length,
+        largeInteriorCount: largeInterior.length,
+        suspiciousRectangleCount: suspicious.length,
+        maxLargeInteriorFillRatio: largeInterior.length
+          ? Math.max(...largeInterior.map(c => c.fillRatio))
+          : 0,
+        suspicious,
+      };
+    })();
+
     return {
       ok: true,
       url: location.href,
@@ -156,90 +209,26 @@ return (() => {
         cameraX: document.querySelector('#cameraX')?.textContent?.trim() || null,
         cameraY: document.querySelector('#cameraY')?.textContent?.trim() || null,
         cameraZoom: document.querySelector('#cameraZoom')?.textContent?.trim() || null,
-        protagonistSpriteLoaded: Boolean(sprite?.complete && sprite?.naturalWidth > 0),
-        protagonistSpriteSize: sprite ? {
-          naturalWidth: sprite.naturalWidth || 0,
-          naturalHeight: sprite.naturalHeight || 0,
+        protagonistSpriteLoaded: Boolean(protagonistTexture),
+        protagonistSpriteSize: protagonistTexture ? {
+          naturalWidth: Number(protagonistTexture.width || 0),
+          naturalHeight: Number(protagonistTexture.height || 0),
         } : null,
-        terrainTileCount: tiles.length,
+        terrainTileCount: Number(renderer.tileCount || 0),
         terrainTypes,
-        terrainGrid: (() => {
-          const grid = document.querySelector('#terrainGrid');
-          if (!grid) return null;
-          const data = grid.dataset || {};
-          return {
-            columns: Number(data.columns || 0),
-            rows: Number(data.rows || 0),
-            tileSize: Number(data.tileSize || 0),
-            viewportWidth: Number(data.viewportWidth || 0),
-            viewportHeight: Number(data.viewportHeight || 0),
-            gridWidth: Number(data.gridWidth || 0),
-            gridHeight: Number(data.gridHeight || 0),
-            coveragePass: data.coveragePass === 'true',
-            centerPass: data.centerPass === 'true',
-          };
-        })(),
-        terrainNaturalness: (() => {
-          const grid = document.querySelector('#terrainGrid');
-          if (!grid) return null;
-          const columns = Number(grid.dataset?.columns || 0);
-          const rows = Number(grid.dataset?.rows || 0);
-          const cells = [...grid.children].map(node => node.dataset?.terrain || 'unknown');
-          if (!columns || !rows || cells.length !== columns * rows) return null;
-
-          const naturalTypes = new Set(['water','forest','mud','rock','sand','dirt','farmland']);
-          const visited = new Uint8Array(cells.length);
-          const components = [];
-          const directions = [[-1,0],[1,0],[0,-1],[0,1]];
-
-          for (let index = 0; index < cells.length; index++) {
-            const type = cells[index];
-            if (visited[index] || !naturalTypes.has(type)) continue;
-
-            const queue = [index];
-            visited[index] = 1;
-            let size = 0;
-            let minX = columns, maxX = -1, minY = rows, maxY = -1;
-
-            while (queue.length) {
-              const current = queue.pop();
-              const x = current % columns;
-              const y = Math.floor(current / columns);
-              size++;
-              minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-              minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-
-              for (const [dx,dy] of directions) {
-                const nx = x + dx, ny = y + dy;
-                if (nx < 0 || nx >= columns || ny < 0 || ny >= rows) continue;
-                const next = ny * columns + nx;
-                if (!visited[next] && cells[next] === type) {
-                  visited[next] = 1;
-                  queue.push(next);
-                }
-              }
-            }
-
-            const width = maxX - minX + 1;
-            const height = maxY - minY + 1;
-            const area = width * height;
-            const fillRatio = area ? size / area : 0;
-            const interior = minX > 0 && minY > 0 && maxX < columns - 1 && maxY < rows - 1;
-            components.push({type,size,width,height,fillRatio,interior});
-          }
-
-          const largeInterior = components.filter(c => c.interior && c.size >= 12 && c.width >= 3 && c.height >= 3);
-          const suspicious = largeInterior.filter(c => c.fillRatio >= 0.92);
-          return {
-            componentCount: components.length,
-            largeInteriorCount: largeInterior.length,
-            suspiciousRectangleCount: suspicious.length,
-            maxLargeInteriorFillRatio: largeInterior.length
-              ? Math.max(...largeInterior.map(c => c.fillRatio))
-              : 0,
-            suspicious,
-          };
-        })(),
+        terrainGrid: grid,
+        gpuRenderer: {
+          ready: Boolean(renderer.ready),
+          backend: renderer.backend || null,
+          webgl: Boolean(renderer.webgl),
+          canvasCount: Number(renderer.canvasCount || 0),
+          domTerrainTileCount: Number(renderer.domTerrainTileCount || 0),
+          logicalTextureKeyPass: Boolean(renderer.logicalTextureKeyPass),
+          protagonistVisible: Boolean(renderer.protagonistVisible),
+          standardTerrainTexturePx: Number(renderer.standardTerrainTexturePx || 0),
+          textureCache: assets,
+        },
+        terrainNaturalness: naturalness,
         startingVillage: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
@@ -257,14 +246,7 @@ return (() => {
             const textures = window.TileTextures;
             if (!campaign || !houses?.proof || !textures) return null;
             const proof = houses.proof(campaign.seed);
-            const rendered = [...document.querySelectorAll('.terrain-tile')];
-            const blendLayers = [...document.querySelectorAll('.terrain-blend')];
-            const blendShapes = [...new Set(
-              blendLayers.map(layer => layer.dataset?.blendShape).filter(Boolean)
-            )].sort();
-            const blendVariants = [...new Set(
-              blendLayers.map(layer => layer.dataset?.blendVariant).filter(Boolean)
-            )].sort();
+            const renderProof = renderer.housePlans || {};
             const sampleNeighbors = {n:"water",e:"grass",s:"grass",w:"grass"};
             const stableOne = textures.blendSpecs(
               "grass", sampleNeighbors,
@@ -305,12 +287,7 @@ return (() => {
             ].filter(Boolean).sort();
             return {
               ...proof,
-              svgTileCount: rendered.filter(tile => (tile.dataset?.texture || "").endsWith(".svg")).length,
-              pngTileCount: rendered.filter(tile => (tile.dataset?.texture || "").toLowerCase().endsWith(".png")).length,
-              blendLayerCount: blendLayers.length,
-              diagonalBlendLayerCount:blendLayers.filter(layer=>layer.dataset?.blendShape==="diagonal").length,
-              blendShapes,
-              blendVariants,
+              ...renderProof,
               registryVariants:[...registryVariants].sort(),
               blendDeterministic:JSON.stringify(stableOne)===JSON.stringify(stableTwo),
               diagonalRegistryPass:diagonalOnly.some(spec=>spec.shape==="diagonal"&&spec.orientation==="ne"&&spec.terrain==="water"),
@@ -328,66 +305,17 @@ return (() => {
             const campaign = window.SeedSystem?.getCampaign?.();
             const lots = window.SpecialLots;
             if (!campaign || !lots?.proof) return null;
-            const proof = lots.proof(campaign.seed);
-            const rendered = [...document.querySelectorAll('.terrain-tile[data-special-kind]')];
-            const visibleKinds = [...new Set(
-              rendered.map(tile => tile.dataset?.specialKind).filter(Boolean)
-            )].sort();
-            const visibleIds = [...new Set(
-              rendered.map(tile => tile.dataset?.buildingId).filter(Boolean)
-            )].sort();
-            return {
-              ...proof,
-              visibleSpecialCellCount:rendered.length,
-              visibleKinds,
-              visibleIds,
-            };
+            return {...lots.proof(campaign.seed), ...(renderer.specialLots || {})};
           } catch (error) {
             return {error: String(error)};
           }
         })(),
-                walkability: (() => {
+        walkability: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
             const walkability = window.Walkability;
             if (!campaign || !walkability?.proof) return null;
-            const proof = walkability.proof(campaign.seed);
-            const rendered = [...document.querySelectorAll('.terrain-tile')];
-            const classified = rendered.filter(tile => Boolean(tile.dataset?.walkability));
-            const visibleCategories = [...new Set(
-              classified.map(tile => tile.dataset?.walkability).filter(Boolean)
-            )].sort();
-            const visibleBlockedCount = classified.filter(
-              tile => tile.dataset?.walkable === "false"
-            ).length;
-            const visibleWalkableCount = classified.filter(
-              tile => tile.dataset?.walkable === "true"
-            ).length;
-            const visibleOuterWalls = classified.filter(
-              tile => tile.dataset?.barrierKind === "outer-wall"
-            ).length;
-            const visibleInteriorWalls = classified.filter(
-              tile => tile.dataset?.barrierKind === "interior-wall"
-            ).length;
-            const visibleExteriorDoors = classified.filter(
-              tile => tile.dataset?.doorwayKind === "exterior-door"
-            ).length;
-            const visibleInteriorDoors = classified.filter(
-              tile => tile.dataset?.doorwayKind === "interior-door"
-            ).length;
-            return {
-              ...proof,
-              visibleTileCount:rendered.length,
-              visibleClassifiedCount:classified.length,
-              visibleCoveragePass:rendered.length>0&&classified.length===rendered.length,
-              visibleCategories,
-              visibleBlockedCount,
-              visibleWalkableCount,
-              visibleOuterWalls,
-              visibleInteriorWalls,
-              visibleExteriorDoors,
-              visibleInteriorDoors,
-            };
+            return {...walkability.proof(campaign.seed), ...(renderer.walkability || {})};
           } catch (error) {
             return {error: String(error)};
           }
@@ -397,14 +325,7 @@ return (() => {
             const campaign = window.SeedSystem?.getCampaign?.();
             const planner = window.RoutePlanner;
             if (!campaign || !planner?.proof) return null;
-            const proof = planner.proof(campaign.seed);
-            const visibleRouteTiles = [...document.querySelectorAll('.terrain-tile.route-proof')];
-            const visibleDestinationTiles = [...document.querySelectorAll('.terrain-tile.route-proof-destination')];
-            return {
-              ...proof,
-              visibleRouteTileCount: visibleRouteTiles.length,
-              visibleDestinationTileCount: visibleDestinationTiles.length,
-            };
+            return {...planner.proof(campaign.seed), ...(renderer.route || {})};
           } catch (error) {
             return {error: String(error)};
           }
@@ -477,7 +398,9 @@ def create_driver(width: int, height: int):
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
+    options.add_argument("--enable-webgl")
+    options.add_argument("--ignore-gpu-blocklist")
+    options.add_argument("--use-angle=swiftshader")
     options.add_argument("--hide-scrollbars")
     options.add_argument(f"--window-size={width},{height}")
     return webdriver.Chrome(options=options)
@@ -584,10 +507,14 @@ def prepare_current_build(driver, timeout: float = 10.0) -> str:
                 lambda d: d.execute_script(
                     """
                     const grid = document.querySelector('#terrainGrid');
-                    const sprite = document.querySelector('#protagonistSprite');
+                    const renderer = window.GameRenderer?.snapshot?.();
+                    const assets = window.TextureAssets?.stats?.();
                     return Boolean(
                       grid && !grid.hidden &&
-                      sprite && sprite.complete && sprite.naturalWidth > 0
+                      renderer?.ready && renderer?.webgl &&
+                      Number(renderer?.tileCount || 0) > 0 &&
+                      renderer?.protagonistVisible &&
+                      assets?.ready
                     );
                     """
                 )
@@ -882,6 +809,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError("starting-village requires three evidence frames")
         current = frames[1].get("runtime", {}).get("currentBuild", {})
         gateway_frame = frames[2].get("runtime", {}).get("currentBuild", {})
+        gpu = current.get("gpuRenderer") or {}
+        cache = gpu.get("textureCache") or {}
+        if not gpu.get("webgl"):
+            raise RuntimeError(f"WP-S003-001 is not using WebGL: {gpu}")
+        if int(gpu.get("canvasCount") or 0) != 1:
+            raise RuntimeError(f"WP-S003-001 expected one gameplay canvas: {gpu}")
+        if int(gpu.get("domTerrainTileCount") or 0) != 0:
+            raise RuntimeError(f"WP-S003-001 still renders DOM terrain tiles: {gpu}")
+        if not gpu.get("logicalTextureKeyPass"):
+            raise RuntimeError(f"WP-S003-001 logical texture-key resolution failed: {gpu}")
+        if int(gpu.get("standardTerrainTexturePx") or 0) != 100:
+            raise RuntimeError(f"WP-S003-001 terrain texture standard is not 100px: {gpu}")
+        if not cache.get("ready") or int(cache.get("svgSourceCount") or 0) <= 0:
+            raise RuntimeError(f"WP-S003-001 SVG draft texture cache is not ready: {gpu}")
         proof = current.get("startingVillage") or {}
         if not proof.get("deterministic"):
             raise RuntimeError(f"Starting Village is not deterministic: {proof}")
