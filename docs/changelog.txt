@@ -1,4 +1,14 @@
-2026-09-21 17:50:00 +03:00
+2026-09-21 17:48:03 +03:00
+- WP-007A Starting Village Core + Mainland Connection completed and verified.
+- GitHub Actions run 35614323669 passed the final 3-frame Starting Village scenario.
+- Starting Village is deterministic around (0,0), with 104m approximate core diameter, 14m public square, 6 reserved plots, connected road/path network and deterministic gateway.
+- Default gateway is South; mainland begins at roughly 58m and the gateway road reaches it with roadGapCount=0.
+- Default bridge proof is 3 tiles = 6m = 0.1 fantasy minutes; practical cap remains 60 tiles / 120m and <=10 fantasy minutes.
+- Default nearest distinct village is ~4.53km away with >=75.6 fantasy-minute fastest-walk lower bound.
+- Visual review score: 8/10 PASS.
+- Updated docs/ROADMAP.md and docs/README.md; WP-007B was not started.
+
+2026-09-21 17:47:30 +03:00
 - WP-007A visual evidence expanded to three frames.
 - Frame 1 shows the starting center, frame 2 zooms to 0.5x, and frame 3 shifts the camera toward the deterministic village gateway/mainland connection.
 - This avoids treating an off-screen numeric mainland proof as sufficient visual evidence.
