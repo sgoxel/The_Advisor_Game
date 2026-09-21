@@ -296,6 +296,25 @@ A development accordion will show the generated starting geographic hierarchy ar
 
 Fill the complete Gameplay Area around the current world center with SEED-generated tiles using solid colors only.
 
+### Basic terrain color palette
+
+Before production textures exist, terrain and structural tiles use distinct muted colors:
+
+- grass — #6F8A4C;
+- forest — #315B3A;
+- dirt — #9B7448;
+- mud — #66503B;
+- road — #B09A73;
+- building — #7C6252;
+- water — #3F7190;
+- rock — #74756F;
+- sand — #BDA66F;
+- farmland — #7C8147.
+
+These colors are presentation-only. Terrain identity remains Simulation/world-foundation data.
+
+The palette is already implemented in `scripts/data/terrain-palette.js` and can be used before WP-004 geographic hierarchy is complete. The current renderer is a deterministic preview; WP-005 remains incomplete until it consumes the completed WP-004 geographic foundation.
+
 ### Rules
 
 - no textures;
@@ -312,7 +331,8 @@ If the Gameplay Area currently shows **16 × 9 tiles**, at least **144 visible t
 
 - no blank gameplay area is visible;
 - resizing recalculates required rows and columns;
-- same SEED and coordinates reproduce the same colors.
+- same SEED and coordinates reproduce the same terrain type and color;
+- every supported basic terrain type has a distinct solid color.
 
 ---
 
