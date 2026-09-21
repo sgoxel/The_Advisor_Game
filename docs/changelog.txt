@@ -1,4 +1,12 @@
 2026-09-21 16:33:00 +03:00
+- WP-006 wheel + touch-pinch zoom final acceptance passed on GitHub Actions run 35606140004.
+- Evidence: 1.00x start -> 1.10x mouse-wheel zoom-in -> 1.00x wheel return -> 1.20x two-finger pinch-open -> 0.96x pinch-close.
+- Camera and Protagonist world coordinates remained (0,0) through all five frames.
+- Terrain coverage remained valid at every zoom level and visible tile count adapted to scale.
+- Visual inspection confirmed the terrain and Protagonist scale correctly with zoom.
+- Updated docs/ROADMAP.md with verified zoom evidence.
+
+2026-09-21 16:33:00 +03:00
 - Refined synthetic touch-pinch CI acceptance after a strict-run failure.
 - Headless Chrome pointer rounding returned 0.96x after the inverse pinch instead of exactly 1.00x.
 - Acceptance now verifies the actual requirements: pinch-open increases zoom, pinch-close decreases zoom and returns near the starting scale, world coordinates remain unchanged, and terrain coverage stays valid.
