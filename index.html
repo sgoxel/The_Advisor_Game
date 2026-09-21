@@ -143,9 +143,11 @@
       <div class="check"><span>Foundation generation does not use fantasy time</span><b id="vFoundationTimeFree">WAITING</b></div>
       <div class="check"><span>Same SEED + same fantasy timestamp = same live result</span><b id="vLiveRepeat">WAITING</b></div>
       <div class="check"><span>Fantasy timestamp participates in live actions</span><b id="vLiveTime">WAITING</b></div>
+      <div class="check"><span>FantasyTimestamp uses date, hour, minute and second only</span><b id="vNoMilliseconds">WAITING</b></div>
       <div class="check"><span>No real-random source exists</span><b id="vPrngSource">WAITING</b></div>
       <p><strong>Foundation systems:</strong> terrain, environment, initial NPC generation.</p>
       <p><strong>Live systems:</strong> NPC actions, decisions, events and other changing simulation behavior.</p>
+      <p><strong>FantasyTimestamp precision:</strong> <code>YYYY-MM-DD HH:MM:SS</code>. Milliseconds are never used.</p>
     </div>
   </details>
 
