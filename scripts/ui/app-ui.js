@@ -297,7 +297,11 @@ function applyTerrainTransitions(columns,rows,seed){
         n:row>0?nodes[(row-1)*columns+col].dataset.terrain:null,
         e:col<columns-1?nodes[row*columns+col+1].dataset.terrain:null,
         s:row<rows-1?nodes[(row+1)*columns+col].dataset.terrain:null,
-        w:col>0?nodes[row*columns+col-1].dataset.terrain:null
+        w:col>0?nodes[row*columns+col-1].dataset.terrain:null,
+        ne:row>0&&col<columns-1?nodes[(row-1)*columns+col+1].dataset.terrain:null,
+        se:row<rows-1&&col<columns-1?nodes[(row+1)*columns+col+1].dataset.terrain:null,
+        sw:row<rows-1&&col>0?nodes[(row+1)*columns+col-1].dataset.terrain:null,
+        nw:row>0&&col>0?nodes[(row-1)*columns+col-1].dataset.terrain:null
       };
       const blends=TileTextures.blendSpecs(type,neighbors,{
         seed,
