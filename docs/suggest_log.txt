@@ -1,3 +1,6 @@
+2026-09-21 19:30:00 +03:00 | Stage 2 / WP-007E
+Suggestion: if terrain art is refined again later, add terrain-pair-specific shoreline/accent SVGs (for example water foam or wet-bank accents) as a decorative layer separate from the geometry masks, so border shape logic stays generic while each material pair gains more visual character.
+
 2026-09-21 19:13:00 +03:00 | Stage 2 / WP-007D
 Suggestion: next terrain-art refinement should target diagonal/multi-terrain junction continuity. Add deterministic diagonal-neighbor awareness so four-way and three-material junctions avoid small square notches or abrupt micro-corners while keeping the current cardinal mask system intact.
 
