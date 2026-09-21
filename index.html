@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-004</title>
+<title>The Advisor Game — WP-005</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-004</span>
+      <span class="build-badge">WP-005</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -28,7 +28,7 @@
 
   <!-- ROW 2: GAMEPLAY AREA -->
   <main id="gameplayArea" class="gameplay-area" aria-label="Gameplay Area">
-    <div id="terrainGrid" class="terrain-grid" hidden aria-label="Solid-color terrain preview"></div>
+    <div id="terrainGrid" class="terrain-grid" hidden aria-label="Viewport-filling solid-color terrain"></div>
     <div id="gameplayPlaceholder" class="gameplay-placeholder">
       <strong>Gameplay Area</strong>
       <span>Start a campaign to generate deterministic solid-color terrain.</span>
@@ -207,6 +207,23 @@
   </details>
 
   <details>
+    <summary>WP-005 Viewport-Filling Tiles</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Gameplay viewport</span><strong id="tileViewportSize">—</strong></div>
+        <div><span>Rendered grid</span><strong id="tileGridSize">—</strong></div>
+        <div><span>Rendered tiles</span><strong id="tileCount">—</strong></div>
+        <div><span>Center coordinate</span><strong id="tileCenterCoordinate">—</strong></div>
+      </div>
+      <div class="check"><span>Terrain grid fully covers the Gameplay Area</span><b id="vTileCoverage">WAITING</b></div>
+      <div class="check"><span>Rows and columns recalculate from the current Gameplay Area size</span><b id="vTileResponsive">WAITING</b></div>
+      <div class="check"><span>Rendered row and column counts stay odd to preserve exact center</span><b id="vTileOddGrid">WAITING</b></div>
+      <div class="check"><span>Same SEED + coordinate reproduces the same terrain type and color</span><b id="vTileRepeat">WAITING</b></div>
+      <div class="check"><span>Only solid colors are used; no terrain texture or tile atlas is required</span><b id="vTileSolidOnly">PASS</b></div>
+    </div>
+  </details>
+
+  <details>
     <summary>Basic Terrain Colors</summary>
     <div class="accordion-content technical-info">
       <p>Temporary solid colors distinguish terrain until production textures are introduced.</p>
@@ -219,8 +236,8 @@
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-004 deterministic geographic foundation.</p>
-      <p><strong>Current world rendering:</strong> Not implemented yet.</p>
+      <p><strong>Current Work Package:</strong> WP-005 viewport-filling solid-color tiles.</p>
+      <p><strong>Current world rendering:</strong> Deterministic solid-color terrain fills the Gameplay Area.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
