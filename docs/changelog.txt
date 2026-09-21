@@ -1,3 +1,16 @@
+2026-09-21 21:54:00 +03:00
+- Refined Stage 3 around the final rendering/performance direction.
+- WP-S003-001 Issue #24 now fixes the terrain production target at 100x100 px and requires a format-independent logical texture interface.
+- Current SVG files remain valid draft assets and are loaded once as reusable GPU textures; final PNG assets can replace them later without renderer changes.
+- Reworked WP-S003-005 Issue #28 into Coordinate-Aware Asset Preparation + PNG/SVG Texture Cache.
+- Asset preparation is coordinate-driven: startup prepares only assets that may be required around the initial generated coordinates, not the whole game asset library.
+- Approaching coordinates/chunks are prefetched before they become visible or interactable.
+- Permanent source priority is PNG first, SVG fallback when PNG is unavailable or fails.
+- Render loop is forbidden from loading, decoding, rasterizing or waiting for assets.
+- Created WP-S003-006 Issue #34 for viewport culling, chunk/render-object reuse and the performance baseline.
+- WP-S003-006 explicitly removes current hot-path costs: full DOM terrain rebuilds on pan/zoom, duplicate terrain/walkability verification calls, RoutePlanner proof execution during rendering, and per-frame SVG/CSS masking.
+- ROADMAP still contains WP codes/titles only; detailed execution rules remain in GitHub Issues.
+
 2026-09-21 21:30:00 +03:00
 - Replanned development before population work because gameplay performance and freely enterable buildings are architectural prerequisites.
 - Stage 3 is now GPU 2.5D World + Enterable Building Foundation.
