@@ -1,3 +1,12 @@
+2026-09-21 16:35:00 +03:00
+- Corrected unnatural square/rectangular terrain regions visible in the WP-006 public build.
+- Replaced fixed 24x24 environment blocks and 12x12 terrain blocks with deterministic interpolated multi-scale SEED fields.
+- Water, forest, mud, rock, sand, dirt and farmland now form irregular contiguous regions with smoother natural boundaries.
+- Temporary village roads now use deterministic meandering offsets instead of a perfect axis-aligned cross.
+- Added terrain-natural GitHub Actions scenario at 0.5x zoom.
+- Added visual evidence metric that rejects large interior natural-terrain components that are near-perfect rectangles.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 16:33:00 +03:00
 - WP-006 wheel + touch-pinch zoom final acceptance passed on GitHub Actions run 35606140004.
 - Evidence: 1.00x start -> 1.10x mouse-wheel zoom-in -> 1.00x wheel return -> 1.20x two-finger pinch-open -> 0.96x pinch-close.
