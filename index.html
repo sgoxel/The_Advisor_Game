@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-S002-004</title>
+<title>The Advisor Game — WP-S003-001</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-S002-004</span>
+      <span class="build-badge">WP-S003-001</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -28,7 +28,7 @@
 
   <!-- ROW 2: GAMEPLAY AREA -->
   <main id="gameplayArea" class="gameplay-area" aria-label="Gameplay Area">
-    <div id="terrainGrid" class="terrain-grid" hidden aria-label="Viewport-filling vector-textured terrain"></div>
+    <div id="terrainGrid" class="terrain-grid" hidden aria-label="GPU-rendered gameplay terrain"></div>
     <div id="cameraHud" class="camera-hud" hidden>
       <strong>Camera <code id="cameraCoordinate">(0,0)</code></strong>
       <strong>Zoom <code id="cameraZoom">1.00×</code></strong>
@@ -38,7 +38,7 @@
     </div>
     <div id="gameplayPlaceholder" class="gameplay-placeholder">
       <strong>Gameplay Area</strong>
-      <span>Start a campaign to generate deterministic vector-textured terrain.</span>
+      <span>Start a campaign to generate the deterministic GPU-rendered world.</span>
     </div>
     <div id="protagonistMarker" class="protagonist-marker" hidden aria-label="Protagonist on world coordinate (0,0)">
       <img id="protagonistSprite" class="protagonist-sprite" src="assets/characters/protagonist_male.png" alt="Male protagonist">
@@ -231,9 +231,9 @@
   </details>
 
   <details>
-    <summary>Basic Terrain + SVG Textures</summary>
+    <summary>Draft Terrain Texture Sources</summary>
     <div class="accordion-content technical-info">
-      <p>Terrain keeps its deterministic solid-color identity while simple scalable SVG artwork provides the current visual texture layer.</p>
+      <p>Terrain keeps its deterministic solid-color identity. Current SVG artwork is draft source material loaded once into reusable GPU textures; final 100×100 PNG artwork can later replace it through the same logical asset keys.</p>
       <div id="terrainLegend" class="terrain-legend"></div>
       <div class="check"><span>Terrain type is deterministic from Campaign SEED + coordinate</span><b id="vTerrainDeterministic">WAITING</b></div>
       <div class="check"><span>Terrain keeps a solid-color fallback under the SVG vector texture</span><b id="vTerrainSolidOnly">PASS</b></div>
@@ -298,8 +298,8 @@
       <div class="check"><span>Cabins and normal-house rooms respect the 6-floor-tile minimum</span><b id="vHouseRooms">WAITING</b></div>
       <div class="check"><span>Outer walls, interior walls and interior doorways are present</span><b id="vHouseWalls">WAITING</b></div>
       <div class="check"><span>Each exterior entrance reaches the existing village road/path network</span><b id="vHouseEntrances">WAITING</b></div>
-      <div class="check"><span>Terrain, floors, walls and doors use SVG vector assets only</span><b id="vHouseSvg">WAITING</b></div>
-      <p>Building floors use a simple wood-plank/zigzag vector pattern. Walls and doors are rendered top-down with edge-oriented SVG variants.</p>
+      <div class="check"><span>Current draft terrain/building art resolves through logical texture sources</span><b id="vHouseSvg">WAITING</b></div>
+      <p>Current SVG files remain draft sources. The GPU renderer consumes cached logical textures so production PNG artwork can replace them later without changing world/render logic.</p>
     </div>
   </details>
 
@@ -373,7 +373,7 @@
   </details>
 
   <details>
-    <summary>WP-S002-004 Deterministic Local Route Planning</summary>
+    <summary>WP-S003-001 Deterministic Local Route Planning</summary>
     <div class="accordion-content technical-info">
       <div class="detail-grid">
         <div><span>Village Destination</span><strong id="routeDestination">—</strong></div>
@@ -393,10 +393,29 @@
   </details>
 
   <details>
+    <summary>WP-S003-001 GPU 2.5D Renderer Verification</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Renderer Backend</span><strong id="rendererBackend">—</strong></div>
+        <div><span>Gameplay Canvases</span><strong id="rendererCanvasCount">—</strong></div>
+        <div><span>Cached Textures</span><strong id="rendererTextureCount">—</strong></div>
+        <div><span>Current Sources</span><strong id="rendererSourceMode">—</strong></div>
+      </div>
+      <div class="check"><span>Gameplay renderer is PixiJS WebGL</span><b id="vRendererWebGL">WAITING</b></div>
+      <div class="check"><span>Gameplay Area owns one GPU canvas</span><b id="vRendererCanvas">WAITING</b></div>
+      <div class="check"><span>No per-tile DOM terrain elements are rendered</span><b id="vRendererNoDomTiles">WAITING</b></div>
+      <div class="check"><span>Renderer consumes logical cached texture keys instead of source URLs</span><b id="vRendererLogicalTextures">WAITING</b></div>
+      <div class="check"><span>Current SVG draft assets are loaded once as reusable texture sources</span><b id="vRendererSvgCache">WAITING</b></div>
+      <div class="check"><span>Terrain, walkability and routing remain authoritative Simulation systems</span><b id="vRendererSimulation">WAITING</b></div>
+      <p><strong>Production terrain standard:</strong> 100×100 px per logical tile texture. SVG is draft source art; final PNG replacement does not change rendering or Simulation code.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-S002-004 Deterministic Local Route Planning.</p>
-      <p><strong>Current world rendering:</strong> Deterministic village presentation with authoritative walkability plus visible route-planning proof; no direct Protagonist movement control.</p>
+      <p><strong>Current Work Package:</strong> WP-S003-001 GPU 2.5D Gameplay Renderer Foundation.</p>
+      <p><strong>Current world rendering:</strong> PixiJS/WebGL canvas presentation consuming the existing deterministic Simulation, walkability and route-planning world state.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
@@ -411,7 +430,10 @@
 <script src="scripts/entities/protagonist.js"></script>
 <script src="scripts/core/prng.js"></script>
 <script src="scripts/data/terrain-palette.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8.12.0/dist/pixi.min.js"></script>
 <script src="scripts/data/tile-textures.js"></script>
+<script src="scripts/render/texture-assets.js"></script>
+<script src="scripts/render/game-renderer.js"></script>
 <script src="scripts/world/geography.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
