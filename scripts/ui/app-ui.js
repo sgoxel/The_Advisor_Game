@@ -13,6 +13,8 @@ const ids=[
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
   "vVillageCore","vVillageMainland","vVillageBridge","vVillagePlan","vVillageRepeat",
   "houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount",
+  "specialStructureCount","specialLotCount","specialKinds","specialSvgCount",
+  "vSpecialDeterministic","vSpecialEntrances","vSpecialOverlap","vSpecialLots","vSpecialSvg",
   "blendVariantMode","blendJunctionMode","vBlendVariantDeterministic","vBlendVariantAB","vBlendDiagonal","vBlendJunctionPriority",
   "vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
@@ -211,6 +213,50 @@ function renderHousePlans(){
   );
 }
 
+function renderSpecialBuildings(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    ["specialStructureCount","specialLotCount","specialKinds","specialSvgCount"].forEach(id=>e[id].textContent="—");
+    ["vSpecialDeterministic","vSpecialEntrances","vSpecialOverlap","vSpecialLots","vSpecialSvg"].forEach(id=>setCheck(e[id],false,"WAITING"));
+    return;
+  }
+
+  const proof=SpecialBuildings.proof(campaign.seed);
+  const svgAssets=[
+    TileTextures.asset("floor","floor-stone"),
+    TileTextures.asset("floor","floor-workshop"),
+    TileTextures.asset("floor","floor-barn"),
+    TileTextures.asset("floor","marker-tavern"),
+    TileTextures.asset("floor","marker-shop"),
+    TileTextures.asset("floor","marker-workshop"),
+    TileTextures.asset("floor","marker-barn"),
+    TileTextures.asset("floor","marker-civic"),
+    TileTextures.asset("yard")
+  ];
+
+  e.specialStructureCount.textContent=String(proof.structureCount);
+  e.specialLotCount.textContent=String(proof.lotCount);
+  e.specialKinds.textContent=proof.kinds.join(" / ");
+  e.specialSvgCount.textContent="9 WP-008 SVGs";
+
+  setCheck(e.vSpecialDeterministic,proof.pass&&proof.deterministic,"FAIL");
+  setCheck(e.vSpecialEntrances,proof.entrancePass,"FAIL");
+  setCheck(
+    e.vSpecialOverlap,
+    proof.structureRoadOverlapCount===0&&
+    proof.structureHouseOverlapCount===0&&
+    proof.structureWaterOverlapCount===0&&
+    proof.structurePairOverlapCount===0&&
+    proof.lotRoadOverlapCount===0&&
+    proof.lotHouseOverlapCount===0&&
+    proof.lotWaterOverlapCount===0&&
+    proof.lotStructureOverlapCount===0,
+    "FAIL"
+  );
+  setCheck(e.vSpecialLots,proof.lotCount===2&&proof.lotAccessPass,"FAIL");
+  setCheck(e.vSpecialSvg,svgAssets.every(path=>typeof path==="string"&&path.endsWith(".svg")),"FAIL");
+}
+
 function renderGeography(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -387,7 +433,9 @@ function renderTerrain(){
         tile.type!==repeated.type||
         tile.color!==repeated.color||
         tile.texture!==repeated.texture||
-        tile.overlayTexture!==repeated.overlayTexture
+        tile.overlayTexture!==repeated.overlayTexture||
+        tile.specialKind!==repeated.specialKind||
+        tile.functionalLotId!==repeated.functionalLotId
       )deterministic=false;
 
       const node=document.createElement("div");
@@ -401,8 +449,12 @@ function renderTerrain(){
       node.dataset.origin=(pos.x===center.x&&pos.y===center.y)?"true":"false";
       if(tile.buildingId)node.dataset.buildingId=tile.buildingId;
       if(tile.room)node.dataset.room=tile.room;
+      if(tile.specialKind)node.dataset.specialKind=tile.specialKind;
+      if(tile.functionalLotId)node.dataset.functionalLotId=tile.functionalLotId;
+      if(tile.functionalLotKind)node.dataset.functionalLotKind=tile.functionalLotKind;
       if(tile.overlayTexture)node.appendChild(tileOverlay(tile.overlayTexture,"building-tile-overlay",0));
-      node.title=tile.label+" ("+pos.x+","+pos.y+")";
+      const identity=tile.specialKind||tile.functionalLotKind||tile.label;
+      node.title=identity+" · "+tile.label+" ("+pos.x+","+pos.y+")";
       e.terrainGrid.appendChild(node);
     }
   }
@@ -767,6 +819,7 @@ function renderStatic(){
   renderGeography();
   renderStartingVillage();
   renderHousePlans();
+  renderSpecialBuildings();
 }
 
 function renderClock(){
