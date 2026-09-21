@@ -1,3 +1,11 @@
+2026-09-21 15:23:55 +03:00
+- Integrated assets/characters/protagonist_male.png into the Gameplay Area.
+- Verified the GitHub asset matches the generated 1086x1448 RGBA transparent PNG byte-for-byte.
+- Replaced the temporary Protagonist dot with the male character sprite.
+- Sprite is centered inside the 100x100 world tile at (0,0) and rendered above terrain.
+- Added runtime sprite-load verification with a fallback marker if the asset cannot load.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 15:04:00 +03:00
 - WP-004 SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing implemented.
 - Added scripts/world/geography.js for deterministic continent, realm, region, city, district, village, avenue, street and environmental foundation.
