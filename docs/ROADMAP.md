@@ -525,6 +525,28 @@ These measurements are authoritative for all Stage 2+ world geometry and travel 
 
 ---
 
+# Authoritative World Planning Order
+
+All generated settlements and world cells must use this reservation order:
+
+1. **Roads and public infrastructure first**
+   - main roads;
+   - bridges/causeways;
+   - local roads and paths;
+   - public squares/gate corridors.
+2. **Buildings second**
+   - building plots and footprints may use only cells not reserved by Step 1;
+   - a generated building is never cut, replaced or overwritten by a later road.
+3. **Important objects third**
+   - wells, monuments, gates, market objects and similar important objects may use only cells not reserved by roads or buildings.
+4. **Terrain/background fill last**
+   - grass, forest, dirt, farmland, water and other terrain fill all remaining unreserved cells;
+   - terrain may influence material/bridge presentation, but it may not erase an already planned road, building or important object.
+
+This is a **planning rule**, not merely a render z-index. Later systems must query earlier reservations before accepting a placement.
+
+---
+
 # Stage 2 — Starting Village Physical Foundation
 
 The README requires every new campaign to begin with the Protagonist as an ordinary low-rank character in a **SEED-generated inhabited village**. Before population behavior is introduced, the village needs one coherent physical world layout that future homes, workplaces, NPCs and interactions can use.
@@ -664,7 +686,9 @@ Define:
 - doorway/entrance placement;
 - plot-to-road access;
 - deterministic room metadata;
-- house generation starts from a deterministic plot boundary and entrance side, then places the building plan inside it so walls/rooms never block the road.
+- house generation starts from a deterministic plot boundary and entrance side, then places the building plan inside it so walls/rooms never block the road;
+- roads/paths/public-space reservations are finalized before any building footprint is accepted;
+- building placement must reject and deterministically try another valid placement whenever any wall/floor cell would overlap a reserved road/path/public-space cell.
 
 ### Pass condition
 
