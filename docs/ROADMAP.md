@@ -498,63 +498,129 @@ The README requires every new campaign to begin with the Protagonist as an ordin
 
 All Stage 2 generation remains **foundation randomness only**. Fantasy time does not alter the generated starting layout.
 
-## WP-007 — Deterministic Starting Village Spatial Plan
+## WP-007A — Starting Village Core + Mainland Connection
 
 ### Goal
 
-Turn the abstract starting village at **(0,0)** into a coherent physical settlement layout using the existing solid-color presentation.
+Make the default campaign visibly begin inside a real **Starting Village** around the Protagonist at **(0,0)**, with one authoritative main-road connection to a broader mainland land mass.
 
 ### Scope
 
 Generate from the Campaign SEED:
 
-- deterministic village extent around its village center;
-- preserve and integrate the authoritative main-road ring/avenues already created before WP-007;
-- secondary roads and footpaths connected to that main-road network;
-- village center / gathering area;
-- building parcels;
-- farm / work parcels;
-- surrounding transition into normal terrain.
+- deterministic Starting Village boundary around **(0,0)**;
+- central public/gathering square around the Protagonist;
+- connected authoritative village main-road ring/avenues;
+- secondary local paths attached to the main-road network;
+- reserved house/building plots;
+- farm/work parcels near the village edge;
+- one deterministic village gateway;
+- one continuous main-road connection from the village gateway to mainland;
+- a deterministic mainland land mass beyond the gateway connection;
+- short bridges only when a water crossing is necessary.
 
-The village plan must respect the existing terrain/environment foundation instead of replacing it with an unrelated random map.
+### Mainland and road rules
+
+- the Starting Village must never be visually isolated with its main road ending in water;
+- the gateway main road must reach mainland continuously;
+- terrain, parcels and later buildings may not cut the main road;
+- wide water must be avoided or reshaped into a logical land/causeway connection;
+- a bridge is allowed only when the crossing is short enough;
+- bridge walking time must be **<= 10 fantasy game minutes**;
+- with the current **100 m/tile** and **5.5 km/h** main-road walking speed, a bridge may use at most **9 consecutive tiles**;
+- village main roads may be up to **3 tiles** wide;
+- wilderness/rough-terrain roads narrow naturally;
+- the width policy reserves up to **4 tiles for towns**, **6 for cities**, and **10 for capital-city main roads** in future settlement-scale WPs.
 
 ### Rules
 
-- **(0,0)** remains the starting village center for the default starting village;
-- village generation uses Campaign-SEED foundation randomness only;
-- same SEED + same coordinates reproduce exactly the same village layout;
-- no textures or tile atlas yet;
+- **(0,0)** remains the Starting Village center;
+- the Protagonist starts inside the visible village core;
+- generation uses Campaign-SEED foundation randomness only;
+- same SEED + same coordinates reproduce exactly the same village layout and mainland connection;
+- no production textures or tile atlas yet;
 - no NPC population yet;
-- secondary roads and parcels must form connected, plausible settlement structure rather than isolated random cells;
-- WP-007 must not cut, overwrite or disconnect the existing authoritative main road;
+- house interiors and wall plans are **not** implemented in WP-007A;
 - the existing >= 1 fantasy-hour village-spacing rule remains valid.
 
 ### In-game proof
 
-The starting Gameplay Area visibly reads as a settlement rather than only a road cross through generic terrain.
+At broad zoom the player can clearly identify:
+
+- the Starting Village around the Protagonist;
+- the public center;
+- reserved plots/parcels;
+- a connected village road network;
+- a continuous gateway road reaching mainland;
+- no road ending arbitrarily in water.
 
 ### Pass condition
 
-- deterministic village boundary exists;
-- roads/paths form a connected local network;
-- public-center and parcel areas are visible;
-- village layout transitions into surrounding environment;
+- Starting Village boundary exists around **(0,0)**;
+- Protagonist is inside the village core;
+- public center and reserved plots are visible;
+- all local roads attach to the authoritative main-road network;
+- gateway road reaches deterministic mainland;
+- no main-road gap exists;
+- all bridge spans remain within the 10-fantasy-minute cap;
 - repeated generation from the same SEED is identical;
 - no real randomness or fantasy-time input is used.
 
 ---
 
-## WP-008 — Building Footprints, Entrances and Functional Lots
+## WP-007B — Tile-Based House Plans + Wall Foundation
 
 ### Goal
 
-Create deterministic physical structures that future residents and workplaces can occupy.
+Turn reserved village plots into old-school RPG top-down building plans using tile-based walls and rooms.
+
+### Minimum building rules
+
+- smallest basic cabin: at least **3x2 interior/floor tiles = 6 tiles**;
+- normal house: at least **1 bedroom + 1 living room**;
+- no room may be smaller than **6 floor tiles**;
+- every house has an outer border-wall tile layer;
+- multi-room houses have interior wall tiles;
+- doors/entrances must connect building interior to reachable village ground;
+- building walls, floors and rooms are deterministic from the Campaign SEED;
+- top-down presentation must be compatible with later border-wall / floor / roofless interior textures.
+
+### Scope
+
+Define:
+
+- cabin footprint;
+- normal-house footprints;
+- room partition rules;
+- border-wall tiles;
+- interior-wall tiles;
+- floor tiles;
+- doorway/entrance placement;
+- plot-to-road access;
+- deterministic room metadata.
+
+### Pass condition
+
+- every generated house respects its minimum size;
+- every normal house contains a bedroom and living room;
+- every room is at least 6 tiles;
+- outer walls fully enclose the house except valid doors;
+- multi-room houses contain interior wall separation;
+- entrances reach a village road/path;
+- same SEED reproduces the same house plans.
+
+---
+
+## WP-008 — Special Buildings + Functional Lots
+
+### Goal
+
+Extend the WP-007B house-plan foundation to deterministic non-residential structures and work lots that future residents and workplaces can occupy.
 
 ### Scope
 
 Add foundation data for:
 
-- houses;
 - tavern / lodging;
 - shop / market structure;
 - craft / work buildings;
@@ -652,6 +718,6 @@ A development verification can display a deterministic route from the starting p
 
 # Stage 2 Review Gate
 
-Do not add autonomous NPC population, resident schedules, Advisor conversation, economy, combat or external LLM integration until WP-007 through WP-010 are implemented and reviewed.
+Do not add autonomous NPC population, resident schedules, Advisor conversation, economy, combat or external LLM integration until WP-007A, WP-007B and WP-008 through WP-010 are implemented and reviewed.
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
