@@ -1,3 +1,8 @@
+2026-09-21 14:53:34 +03:00
+- WP-003 presentation cleanup after verification.
+- Gameplay placeholder now hides when the Protagonist is created at (0,0).
+- Mobile Status Area keeps Campaign, Location and status message on one compact row.
+
 2026-09-21 14:51:35 +03:00
 - WP-003 Infinite World Coordinates + Protagonist Origin implemented.
 - New and restarted campaigns create the Protagonist at world coordinate (0,0).
