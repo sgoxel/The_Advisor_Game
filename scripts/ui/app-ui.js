@@ -8,6 +8,8 @@ const ids=[
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
+  "rendererBackend","rendererCanvasCount","rendererTextureCount","rendererSourceMode",
+  "vRendererWebGL","vRendererCanvas","vRendererNoDomTiles","vRendererLogicalTextures","vRendererSvgCache","vRendererSimulation",
   "cameraHud","cameraCoordinate","cameraZoom","centerCameraButton","resetZoomButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY","cameraZoomDetail","cameraTileSize",
   "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn","vCameraWheelZoom","vCameraPinchZoom",
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
@@ -392,64 +394,13 @@ function terrainGridDimensions(width,height,tileSize){
   return {columns,rows};
 }
 
-function tileOverlay(asset,className,rotation){
-  const layer=document.createElement("span");
-  layer.className=className;
-  layer.style.backgroundImage='url("'+asset+'")';
-  if(rotation)layer.style.transform="rotate("+rotation+"deg)";
-  return layer;
-}
-
-function terrainBlendLayer(spec){
-  const layer=document.createElement("span");
-  const palette=TerrainPalette.get(spec.terrain);
-  const texture=TileTextures.asset(spec.terrain);
-  layer.className="terrain-blend";
-  layer.style.backgroundColor=palette.color;
-  if(texture)layer.style.backgroundImage='url("'+texture+'")';
-  layer.style.maskImage='url("'+spec.mask+'")';
-  layer.style.webkitMaskImage='url("'+spec.mask+'")';
-  layer.dataset.blendShape=spec.shape;
-  layer.dataset.blendTerrain=spec.terrain;
-  layer.dataset.blendOrientation=spec.orientation;
-  layer.dataset.blendVariant=spec.variant||"a";
-  return layer;
-}
-
-function applyTerrainTransitions(columns,rows,seed){
-  const nodes=[...e.terrainGrid.children];
-  for(let row=0;row<rows;row++){
-    for(let col=0;col<columns;col++){
-      const index=row*columns+col;
-      const node=nodes[index];
-      if(!node)continue;
-      const type=node.dataset.terrain;
-      const neighbors={
-        n:row>0?nodes[(row-1)*columns+col].dataset.terrain:null,
-        e:col<columns-1?nodes[row*columns+col+1].dataset.terrain:null,
-        s:row<rows-1?nodes[(row+1)*columns+col].dataset.terrain:null,
-        w:col>0?nodes[row*columns+col-1].dataset.terrain:null,
-        ne:row>0&&col<columns-1?nodes[(row-1)*columns+col+1].dataset.terrain:null,
-        se:row<rows-1&&col<columns-1?nodes[(row+1)*columns+col+1].dataset.terrain:null,
-        sw:row<rows-1&&col>0?nodes[(row+1)*columns+col-1].dataset.terrain:null,
-        nw:row>0&&col>0?nodes[(row-1)*columns+col-1].dataset.terrain:null
-      };
-      const blends=TileTextures.blendSpecs(type,neighbors,{
-        seed,
-        x:node.dataset.x,
-        y:node.dataset.y
-      });
-      for(const blend of blends)node.appendChild(terrainBlendLayer(blend));
-    }
-  }
-}
-
 function renderTerrain(){
   const campaign=SeedSystem.getCampaign();
   const protagonist=Protagonist.getPosition();
   const center=campaign?Camera.getCenter():null;
   if(!campaign||!center){
     e.terrainGrid.hidden=true;
+    GameRenderer.clear();
     e.tileViewportSize.textContent="—";
     e.tileGridSize.textContent="—";
     e.tileCount.textContent="—";
@@ -477,11 +428,7 @@ function renderTerrain(){
   );
   const routeLastIndex=routeProof.route?.path?.length?routeProof.route.path.length-1:-1;
 
-  e.terrainGrid.style.setProperty("--tile-size",tileSize+"px");
-  e.terrainGrid.style.gridTemplateColumns="repeat("+columns+","+tileSize+"px)";
-  e.terrainGrid.style.gridTemplateRows="repeat("+rows+","+tileSize+"px)";
-  e.terrainGrid.innerHTML="";
-
+  const tiles=[];
   let deterministic=true;
   for(let row=0;row<rows;row++){
     for(let col=0;col<columns;col++){
@@ -495,59 +442,70 @@ function renderTerrain(){
       if(
         tile.type!==repeated.type||
         tile.color!==repeated.color||
-        tile.texture!==repeated.texture||
-        tile.overlayTexture!==repeated.overlayTexture||
+        tile.textureKey!==repeated.textureKey||
+        tile.overlayTextureKey!==repeated.overlayTextureKey||
         tile.specialKind!==repeated.specialKind||
         JSON.stringify(movement)!==JSON.stringify(repeatedMovement)
       )deterministic=false;
-      const node=document.createElement("div");
-      node.className="terrain-tile";
-      node.style.backgroundColor=tile.color;
-      if(tile.texture)node.style.backgroundImage='url("'+tile.texture+'")';
-      node.dataset.terrain=tile.type;
-      node.dataset.texture=tile.texture||"";
-      node.dataset.x=pos.x;
-      node.dataset.y=pos.y;
       const routeStep=routeIndex.get(pos.x+","+pos.y);
-      if(routeStep!==undefined){
-        node.classList.add("route-proof");
-        node.dataset.routeStep=String(routeStep);
-        if(routeStep===routeLastIndex)node.classList.add("route-proof-destination");
-      }
-      node.dataset.walkability=movement.category;
-      node.dataset.walkable=movement.walkable?"true":"false";
-      node.dataset.blocksMovement=movement.blocksMovement?"true":"false";
-      node.dataset.movementSpeedKmh=String(movement.speedKmh);
-      node.dataset.movementSeconds=Number.isFinite(movement.secondsPerTile)?movement.secondsPerTile.toFixed(3):"Infinity";
-      if(movement.barrierKind)node.dataset.barrierKind=movement.barrierKind;
-      if(movement.doorwayKind)node.dataset.doorwayKind=movement.doorwayKind;
-      node.dataset.origin=(pos.x===center.x&&pos.y===center.y)?"true":"false";
-      if(tile.buildingId)node.dataset.buildingId=tile.buildingId;
-      if(tile.room)node.dataset.room=tile.room;
-      if(tile.specialKind){
-        node.dataset.specialKind=tile.specialKind;
-        node.classList.add("special-lot-cell");
-      }
-      if(tile.overlayTexture)node.appendChild(tileOverlay(tile.overlayTexture,"building-tile-overlay",0));
-      node.title=tile.label+" · "+movement.category+" · "+(movement.walkable?"walkable":"blocked")+" ("+pos.x+","+pos.y+")";
-      e.terrainGrid.appendChild(node);
+      tiles.push({
+        row,col,
+        x:pos.x,
+        y:pos.y,
+        type:tile.type,
+        color:tile.color,
+        textureKey:tile.textureKey,
+        overlayTextureKey:tile.overlayTextureKey,
+        buildingId:tile.buildingId,
+        room:tile.room,
+        specialKind:tile.specialKind,
+        movement,
+        routeStep:routeStep===undefined?null:routeStep,
+        blends:[]
+      });
     }
   }
 
-  applyTerrainTransitions(columns,rows,campaign.seed);
+  const tileAt=(row,col)=>(row<0||row>=rows||col<0||col>=columns)?null:tiles[row*columns+col];
+  for(const item of tiles){
+    const row=item.row,col=item.col;
+    const neighbors={
+      n:tileAt(row-1,col)?.type||null,
+      e:tileAt(row,col+1)?.type||null,
+      s:tileAt(row+1,col)?.type||null,
+      w:tileAt(row,col-1)?.type||null,
+      ne:tileAt(row-1,col+1)?.type||null,
+      se:tileAt(row+1,col+1)?.type||null,
+      sw:tileAt(row+1,col-1)?.type||null,
+      nw:tileAt(row-1,col-1)?.type||null
+    };
+    item.blends=TileTextures.blendSpecs(item.type,neighbors,{
+      seed:campaign.seed,
+      x:item.x,
+      y:item.y
+    });
+  }
+
+  e.terrainGrid.hidden=false;
+  const rendererSnapshot=GameRenderer.render({
+    width,height,columns,rows,tileSize,
+    center,
+    tiles,
+    routeLastIndex,
+    protagonistOffset:protagonist?Camera.offsetFrom(protagonist):null
+  });
 
   const gridWidth=columns*tileSize;
   const gridHeight=rows*tileSize;
   const coverage=gridWidth>=width&&gridHeight>=height;
   const oddGrid=columns%2===1&&rows%2===1;
-  const origin=e.terrainGrid.querySelector('[data-origin="true"]');
   const repeatCenter=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
   const repeatAgain=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
   const repeatable=
     repeatCenter.type===repeatAgain.type&&
     repeatCenter.color===repeatAgain.color&&
-    repeatCenter.texture===repeatAgain.texture&&
-    repeatCenter.overlayTexture===repeatAgain.overlayTexture;
+    repeatCenter.textureKey===repeatAgain.textureKey&&
+    repeatCenter.overlayTextureKey===repeatAgain.overlayTextureKey;
 
   e.terrainGrid.dataset.columns=String(columns);
   e.terrainGrid.dataset.rows=String(rows);
@@ -558,18 +516,17 @@ function renderTerrain(){
   e.terrainGrid.dataset.gridHeight=String(gridHeight);
   e.terrainGrid.dataset.viewportKey=viewportKey;
   e.terrainGrid.dataset.coveragePass=coverage?"true":"false";
-  e.terrainGrid.dataset.centerPass=(!!origin&&oddGrid)?"true":"false";
-  e.terrainGrid.hidden=false;
+  e.terrainGrid.dataset.centerPass=(oddGrid&&rendererSnapshot.tileCount===columns*rows)?"true":"false";
 
   e.tileViewportSize.textContent=width+" × "+height+" px";
   e.tileGridSize.textContent=columns+" × "+rows;
-  e.tileCount.textContent=String(columns*rows);
+  e.tileCount.textContent=String(rendererSnapshot.tileCount);
   e.tileCenterCoordinate.textContent="("+center.x+","+center.y+")";
 
   setCheck(e.vTerrainDeterministic,deterministic,"FAIL");
   setCheck(e.vTileCoverage,coverage,"FAIL");
   setCheck(e.vTileResponsive,responsive,"FAIL");
-  setCheck(e.vTileOddGrid,oddGrid&&!!origin,"FAIL");
+  setCheck(e.vTileOddGrid,oddGrid&&rendererSnapshot.tileCount===columns*rows,"FAIL");
   setCheck(e.vTileRepeat,repeatable,"FAIL");
   lastTerrainViewportKey=viewportKey;
 }
@@ -653,8 +610,9 @@ function updateCameraPresentation(){
   );
 
   const expectedTiles=Number(e.terrainGrid.dataset.columns||0)*Number(e.terrainGrid.dataset.rows||0);
+  const rendererTiles=GameRenderer.snapshot().tileCount||0;
   setCheck(e.vCameraWindow,
-    expectedTiles>0&&e.terrainGrid.children.length===expectedTiles&&expectedTiles<5000,
+    expectedTiles>0&&rendererTiles===expectedTiles&&expectedTiles<5000,
     "FAIL"
   );
 
@@ -882,6 +840,26 @@ function renderWorldCoordinates(){
   setCheck(e.vNegativeWorld,proof.negativeValid,"FAIL");
 }
 
+function renderRendererProof(){
+  const renderer=GameRenderer.snapshot();
+  const assets=TextureAssets.stats();
+  e.rendererBackend.textContent=renderer.backend||"—";
+  e.rendererCanvasCount.textContent=String(renderer.canvasCount||0);
+  e.rendererTextureCount.textContent=String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources";
+  e.rendererSourceMode.textContent=(assets.svgSourceCount||0)+" SVG draft / "+(assets.pngSourceCount||0)+" PNG";
+  setCheck(e.vRendererWebGL,Boolean(renderer.webgl),"FAIL");
+  setCheck(e.vRendererCanvas,renderer.canvasCount===1,"FAIL");
+  setCheck(e.vRendererNoDomTiles,(renderer.domTerrainTileCount||0)===0,"FAIL");
+  setCheck(e.vRendererLogicalTextures,Boolean(renderer.logicalTextureKeyPass)&&assets.loadedKeyCount>0,"FAIL");
+  setCheck(e.vRendererSvgCache,assets.svgSourceCount>0&&assets.ready,"FAIL");
+  setCheck(e.vRendererSimulation,
+    typeof TerrainFoundation?.getTile==="function"&&
+    typeof Walkability?.classify==="function"&&
+    typeof RoutePlanner?.findRoute==="function",
+    "FAIL"
+  );
+}
+
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
   e.campaignState.textContent=campaign?"ACTIVE":"NOT STARTED";
@@ -897,6 +875,7 @@ function renderStatic(){
   renderSpecialLots();
   renderWalkability();
   renderRoutePlanning();
+  renderRendererProof();
 }
 
 function renderClock(){
@@ -934,7 +913,7 @@ function saveSettings(){
   e.settingsMessage.textContent=result.message;
   if(result.ok)e.seedInput.value=result.seed;
 }
-function init(){
+async function init(){
   cache();
   SeedSystem.loadSettings();
   e.seedInput.value=SeedSystem.getSettings().seed;
@@ -964,6 +943,15 @@ function init(){
 
   renderTerrainLegend();
   installCameraControls();
+  e.statusMessage.textContent="Loading GPU renderer and draft textures…";
+  try{
+    await GameRenderer.init(e.terrainGrid);
+    await TextureAssets.preloadAll();
+  }catch(error){
+    console.error(error);
+    e.statusMessage.textContent="Renderer startup failed: "+String(error);
+    throw error;
+  }
   renderStatic();startClock();
   observeTerrainViewport();
 }
