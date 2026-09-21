@@ -337,10 +337,28 @@
   </details>
 
   <details>
+    <summary>WP-008 Special Buildings + Functional Lots</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Special Structures</span><strong id="specialStructureCount">—</strong></div>
+        <div><span>Functional Lots</span><strong id="specialLotCount">—</strong></div>
+        <div><span>Structure Types</span><strong id="specialKinds">—</strong></div>
+        <div><span>New SVG Assets</span><strong id="specialSvgCount">—</strong></div>
+      </div>
+      <div class="check"><span>Same SEED reproduces the same special structures and functional lots</span><b id="vSpecialDeterministic">WAITING</b></div>
+      <div class="check"><span>Every enterable special building has a reachable road/path-facing entrance</span><b id="vSpecialEntrances">WAITING</b></div>
+      <div class="check"><span>Special structures/lots do not overlap roads, homes, water, or one another</span><b id="vSpecialOverlap">WAITING</b></div>
+      <div class="check"><span>Outdoor market and timber/work yards are both generated with road access</span><b id="vSpecialLots">WAITING</b></div>
+      <div class="check"><span>Special floors, markers, and yard presentation remain SVG vector assets</span><b id="vSpecialSvg">WAITING</b></div>
+      <p>The Starting Village now includes a deterministic tavern/lodging, market shop, craft workshop, barn/storage building, village hall, market yard, and timber/work yard. Ownership and NPC staffing remain for later WPs.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-007E Diagonal + Multi-Terrain Junction Smoothing.</p>
-      <p><strong>Current world rendering:</strong> Deterministic rounded SVG terrain blending with A/B variation, diagonal corner caps and priority-aware multi-material junctions.</p>
+      <p><strong>Current Work Package:</strong> WP-008 Special Buildings + Functional Lots.</p>
+      <p><strong>Current world rendering:</strong> Deterministic rounded SVG terrain plus residential homes, special-purpose buildings, and outdoor functional lots.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
