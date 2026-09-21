@@ -137,21 +137,27 @@ function renderHousePlans(){
     TileTextures.asset("wall","wall-n"),
     TileTextures.asset("door","door-s")
   ];
-  const l=TileTextures.transition("grass","water","water","grass","grass");
-  const c=TileTextures.transition("grass","water","grass","grass","grass");
-  const u=TileTextures.transition("grass","water","water","water","grass");
+  const edge=TileTextures.blendSpecs("grass",{n:"water",e:"grass",s:"grass",w:"grass"});
+  const corner=TileTextures.blendSpecs("grass",{n:"water",e:"water",s:"grass",w:"grass"});
+  const peninsula=TileTextures.blendSpecs("grass",{n:"water",e:"water",s:"water",w:"grass"});
 
   e.houseBuildingCount.textContent=String(proof.buildingCount);
   e.houseTypeCount.textContent=proof.normalHouseCount+" houses / "+proof.cabinCount+" cabins";
   e.houseMinRoomTiles.textContent=proof.minimumRoomTiles+" tiles / "+(proof.minimumRoomTiles*WorldStandards.TILE_METERS*WorldStandards.TILE_METERS)+" m²";
-  e.houseSvgCount.textContent="29 vector SVG files";
+  e.houseSvgCount.textContent="42 vector SVG files";
 
   setCheck(e.vHousePlan,proof.pass&&proof.deterministic,"FAIL");
   setCheck(e.vHouseRooms,proof.roomsPass&&proof.minimumRoomTiles>=6,"FAIL");
   setCheck(e.vHouseWalls,proof.outerWallsPass&&proof.interiorWallsPass,"FAIL");
   setCheck(e.vHouseEntrances,proof.entrancesPass,"FAIL");
   setCheck(e.vHouseSvg,svgAssets.every(path=>typeof path==="string"&&path.endsWith(".svg")),"FAIL");
-  setCheck(e.vHouseTransitions,!!l&&l.shape==="l"&&!!c&&c.shape==="c"&&!!u&&u.shape==="u","FAIL");
+  setCheck(
+    e.vHouseTransitions,
+    edge.some(spec=>spec.shape==="edge")&&
+    corner.some(spec=>spec.shape==="corner")&&
+    peninsula.some(spec=>spec.shape==="peninsula"),
+    "FAIL"
+  );
 }
 
 function renderGeography(){
@@ -241,6 +247,21 @@ function tileOverlay(asset,className,rotation){
   return layer;
 }
 
+function terrainBlendLayer(spec){
+  const layer=document.createElement("span");
+  const palette=TerrainPalette.get(spec.terrain);
+  const texture=TileTextures.asset(spec.terrain);
+  layer.className="terrain-blend";
+  layer.style.backgroundColor=palette.color;
+  if(texture)layer.style.backgroundImage='url("'+texture+'")';
+  layer.style.maskImage='url("'+spec.mask+'")';
+  layer.style.webkitMaskImage='url("'+spec.mask+'")';
+  layer.dataset.blendShape=spec.shape;
+  layer.dataset.blendTerrain=spec.terrain;
+  layer.dataset.blendOrientation=spec.orientation;
+  return layer;
+}
+
 function applyTerrainTransitions(columns,rows){
   const nodes=[...e.terrainGrid.children];
   for(let row=0;row<rows;row++){
@@ -249,15 +270,14 @@ function applyTerrainTransitions(columns,rows){
       const node=nodes[index];
       if(!node)continue;
       const type=node.dataset.terrain;
-      const north=row>0?nodes[(row-1)*columns+col].dataset.terrain:null;
-      const east=col<columns-1?nodes[row*columns+col+1].dataset.terrain:null;
-      const south=row<rows-1?nodes[(row+1)*columns+col].dataset.terrain:null;
-      const west=col>0?nodes[row*columns+col-1].dataset.terrain:null;
-      const transition=TileTextures.transition(type,north,east,south,west);
-      if(!transition)continue;
-      const layer=tileOverlay(transition.asset,"terrain-transition",transition.rotation);
-      layer.dataset.shape=transition.shape;
-      node.appendChild(layer);
+      const neighbors={
+        n:row>0?nodes[(row-1)*columns+col].dataset.terrain:null,
+        e:col<columns-1?nodes[row*columns+col+1].dataset.terrain:null,
+        s:row<rows-1?nodes[(row+1)*columns+col].dataset.terrain:null,
+        w:col>0?nodes[row*columns+col-1].dataset.terrain:null
+      };
+      const blends=TileTextures.blendSpecs(type,neighbors);
+      for(const blend of blends)node.appendChild(terrainBlendLayer(blend));
     }
   }
 }
