@@ -1,3 +1,6 @@
+2026-09-21 20:14:53 +03:00 | Stage 2 / WP-009
+Suggestion: WP-010 route planning should consume Walkability.classify()/movementSeconds() directly and never duplicate terrain collision rules. Route tests should include exterior doors, interior doorways, blocked interior walls, water avoidance, and route-cost preference for roads over difficult terrain.
+
 2026-09-21 19:59:00 +03:00 | Stage 2 / WP-008
 Suggestion: in a later building-art refinement WP, give each special structure a small function-specific SVG interior marker/pattern (counter, hearth, workbench, storage rows, barn stalls, civic table) while preserving the same authoritative lot footprints and keeping NPC/economy behavior separate.
 
