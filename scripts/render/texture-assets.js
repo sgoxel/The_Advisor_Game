@@ -8,6 +8,9 @@ const lastUsed=new Map();
 const pinned=new Set();
 let ready=false;
 let loadingPromise=null;
+let preparationSerial=0;
+let preparedRegionKey=null;
+let preparedKeys=[];
 const MAX_CACHED_KEYS=160;
 
 function catalog(){
@@ -119,6 +122,29 @@ async function preloadKeys(keys,{pin=false}={}){
   return unique.map(key=>textures.get(key));
 }
 
+async function prepareRegion(regionKey,keys){
+  const serial=++preparationSerial;
+  const unique=[...new Set((keys||[]).filter(Boolean))];
+  await preloadKeys(unique,{pin:false});
+  if(serial!==preparationSerial){
+    return Object.freeze({ready:false,stale:true,regionKey:String(regionKey||""),keyCount:unique.length});
+  }
+  pinKeys(unique);
+  preparedRegionKey=String(regionKey||"");
+  preparedKeys=unique.slice();
+  ready=true;
+  evict();
+  return Object.freeze({ready:true,stale:false,regionKey:preparedRegionKey,keyCount:preparedKeys.length});
+}
+
+function invalidatePreparation(){
+  preparationSerial++;
+  preparedRegionKey=null;
+  preparedKeys=[];
+  ready=false;
+  pinKeys([]);
+}
+
 async function preloadAll(){
   if(ready)return stats();
   if(loadingPromise)return loadingPromise;
@@ -126,6 +152,8 @@ async function preloadAll(){
     const manifest=catalog();
     await preloadKeys(Object.keys(manifest),{pin:true});
     ready=true;
+    preparedRegionKey="legacy:all";
+    preparedKeys=Object.keys(manifest);
     return stats();
   })();
   try{return await loadingPromise}
@@ -145,6 +173,11 @@ function source(key){
 
 function has(key){return textures.has(key)}
 
+function isRegionPrepared(regionKey,keys){
+  const required=[...new Set((keys||[]).filter(Boolean))];
+  return ready&&preparedRegionKey===String(regionKey||"")&&required.every(key=>textures.has(key));
+}
+
 function stats(){
   const manifest=catalog();
   const loadedKeys=[...textures.keys()];
@@ -159,12 +192,16 @@ function stats(){
     pngPreferredCount:loadedKeys.filter(key=>/\.png(?:$|[?#])/i.test(resolvedSources.get(key)||"")).length,
     fallbackSvgCount:loadedKeys.filter(key=>/\.svg(?:$|[?#])/i.test(resolvedSources.get(key)||"")).length,
     pinnedKeyCount:pinned.size,
+    preparedRegionKey,
+    preparedKeyCount:preparedKeys.length,
+    preparationSerial,
     cacheLimit:MAX_CACHED_KEYS,
     standardTerrainTexturePx:100
   });
 }
 
 window.TextureAssets=Object.freeze({
-  catalog,candidates,preloadKeys,preloadAll,pinKeys,evict,get,source,has,stats
+  catalog,candidates,preloadKeys,prepareRegion,invalidatePreparation,isRegionPrepared,
+  preloadAll,pinKeys,evict,get,source,has,stats
 });
 })();
