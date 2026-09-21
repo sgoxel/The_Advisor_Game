@@ -403,6 +403,7 @@ def create_driver(width: int, height: int):
     options.add_argument("--use-angle=swiftshader")
     options.add_argument("--hide-scrollbars")
     options.add_argument(f"--window-size={width},{height}")
+    options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     return webdriver.Chrome(options=options)
 
 
@@ -520,8 +521,30 @@ def prepare_current_build(driver, timeout: float = 10.0) -> str:
                 )
             )
         except Exception as exc:
+            diagnostic = {}
+            try:
+                diagnostic = driver.execute_script(
+                    """
+                    return {
+                      campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
+                      statusMessage: document.querySelector('#statusMessage')?.textContent?.trim() || null,
+                      pixi: Boolean(window.PIXI),
+                      renderer: window.GameRenderer?.snapshot?.() || null,
+                      assets: window.TextureAssets?.stats?.() || null,
+                      terrainHidden: document.querySelector('#terrainGrid')?.hidden ?? null,
+                      canvasCount: document.querySelectorAll('#gameCanvas').length
+                    };
+                    """
+                )
+            except Exception as diag_exc:
+                diagnostic = {"diagnosticError": str(diag_exc)}
+            try:
+                browser_logs = driver.get_log("browser")
+            except Exception as log_exc:
+                browser_logs = [{"message": f"browser-log-error: {log_exc}"}]
             raise RuntimeError(
-                "Current build detected but terrain/protagonist readiness did not complete"
+                "Current build detected but terrain/protagonist readiness did not complete. "
+                f"diagnostic={diagnostic}; browserLogs={browser_logs[-20:]}"
             ) from exc
     return action
 
