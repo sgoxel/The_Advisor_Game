@@ -194,7 +194,7 @@ function proof(seed){
     const y=forward*dir.dy+center*dir.dx;
     const underlying=GeographyFoundation.getTerrainType(seed,String(x),String(y));
     const type=getType(seed,String(x),String(y),underlying);
-    if(type!=="road"&&type!=="bridge")roadGapCount++;
+    if(type!=="road"&&type!=="bridge"&&type!=="square")roadGapCount++;
     if(type==="bridge"){
       currentBridgeRun++;
       maxBridgeRun=Math.max(maxBridgeRun,currentBridgeRun);
