@@ -754,7 +754,7 @@ The earlier issue-triggered run **35618602851** failed only because it targeted 
 
 ---
 
-## WP-007C — Rounded Terrain Border Blending — IMPLEMENTED / VISUAL VERIFICATION PENDING
+## WP-007C — Rounded Terrain Border Blending — COMPLETE
 
 ### Goal
 
@@ -804,6 +804,18 @@ The border system must support actual rounded material geometry rather than lett
 ### Initial score
 
 The superseded contour-overlay release scored **5/10** for terrain-border quality because tile boundaries remained visually blocky and the curves appeared as repeated loop symbols rather than true border geometry.
+
+### Verified evidence
+
+GitHub Actions run **35621550722** completed successfully against the exact merged `main` checkout using the existing `starting-village` screenshot scenario.
+
+- three evidence frames rendered successfully at 1.00× and 0.50× zoom;
+- visible land/land boundaries now form continuous rounded silhouettes instead of square stair-step edges;
+- the gateway frame visibly shows the water material itself forming a rounded grass/water shoreline;
+- old repeated L/C/U contour-loop symbols are absent from normal terrain rendering;
+- building, road, camera and viewport verification remained PASS;
+- artifact: `visual-evidence-starting-village-35621550722` (**499,570 bytes**);
+- manual visual score: **8.5/10 PASS**.
 
 ### Pass condition
 
