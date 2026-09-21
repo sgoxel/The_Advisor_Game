@@ -902,7 +902,7 @@ GitHub Actions run **35624048867** completed successfully against the exact merg
 
 ---
 
-## WP-007E — Diagonal + Multi-Terrain Junction Smoothing — IMPLEMENTED / VISUAL VERIFICATION PENDING
+## WP-007E — Diagonal + Multi-Terrain Junction Smoothing — COMPLETE
 
 ### Goal
 
@@ -928,6 +928,22 @@ Smooth diagonal-only contacts and three-material corners that can still appear a
 - low-priority corner rejection: PASS;
 - road/water leakage protection: PASS;
 - diagonal A/B determinism and reachability: PASS.
+
+### Verified evidence
+
+GitHub Actions run **35625806201** completed successfully against the exact merged `main` checkout using the `starting-village` scenario.
+
+- rendered blend layers: **98 / 436 / 398** across the three evidence frames;
+- rendered diagonal smoothing layers: **22 / 118 / 114**;
+- visible blend shapes included edge, corner, peninsula and diagonal cases;
+- both A and B variants remained active;
+- diagonal registry proof: PASS;
+- multi-terrain priority proof: PASS;
+- the broad frames show fewer square point notches where irregular terrain regions meet diagonally;
+- the gateway water shoreline remains rounded and continuous;
+- existing building, road, camera and viewport checks remained PASS;
+- artifact: `visual-evidence-starting-village-35625806201` (**543,053 bytes**);
+- manual review of all three screenshots: **9.0/10 PASS**.
 
 ### Pass condition
 
