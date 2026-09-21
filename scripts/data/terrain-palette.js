@@ -1,0 +1,30 @@
+(function(){
+"use strict";
+
+const TYPES=Object.freeze({
+  grass:Object.freeze({id:"grass",label:"Grass",color:"#6F8A4C"}),
+  forest:Object.freeze({id:"forest",label:"Forest",color:"#315B3A"}),
+  dirt:Object.freeze({id:"dirt",label:"Dirt",color:"#9B7448"}),
+  mud:Object.freeze({id:"mud",label:"Mud",color:"#66503B"}),
+  road:Object.freeze({id:"road",label:"Road",color:"#B09A73"}),
+  building:Object.freeze({id:"building",label:"Building",color:"#7C6252"}),
+  water:Object.freeze({id:"water",label:"Water",color:"#3F7190"}),
+  rock:Object.freeze({id:"rock",label:"Rock",color:"#74756F"}),
+  sand:Object.freeze({id:"sand",label:"Sand",color:"#BDA66F"}),
+  farmland:Object.freeze({id:"farmland",label:"Farmland",color:"#7C8147"})
+});
+
+const ORDER=Object.freeze([
+  "grass","forest","dirt","mud","road","building","water","rock","sand","farmland"
+]);
+
+function get(type){
+  return TYPES[type]||TYPES.grass;
+}
+
+function all(){
+  return ORDER.map(id=>TYPES[id]);
+}
+
+window.TerrainPalette=Object.freeze({TYPES,ORDER,get,all});
+})();
