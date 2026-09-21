@@ -17,6 +17,8 @@ const ids=[
   "vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions",
   "specialLotCount","specialEnterableCount","specialOutdoorCount","specialLotKinds",
   "vSpecialDeterministic","vSpecialCoverage","vSpecialEntrances","vSpecialOverlap",
+  "walkSampleCount","walkClassCount","walkBlockedCount","walkWaterSamples",
+  "vWalkDeterministic","vWalkCoverage","vWalkWalls","vWalkWater","vWalkEntrances","vWalkRoutes",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
@@ -237,6 +239,28 @@ function renderSpecialLots(){
   setCheck(e.vSpecialOverlap,proof.overlapPass,"FAIL");
 }
 
+function renderWalkability(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    ["walkSampleCount","walkClassCount","walkBlockedCount","walkWaterSamples"].forEach(id=>e[id].textContent="—");
+    ["vWalkDeterministic","vWalkCoverage","vWalkWalls","vWalkWater","vWalkEntrances","vWalkRoutes"].forEach(id=>setCheck(e[id],false,"WAITING"));
+    return;
+  }
+
+  const proof=Walkability.proof(campaign.seed);
+  e.walkSampleCount.textContent=String(proof.sampleCount);
+  e.walkClassCount.textContent=String(proof.categories.length);
+  e.walkBlockedCount.textContent=String(proof.blockedCount);
+  e.walkWaterSamples.textContent=String(proof.waterSamples);
+
+  setCheck(e.vWalkDeterministic,proof.deterministic,"FAIL");
+  setCheck(e.vWalkCoverage,proof.classificationCoverage,"FAIL");
+  setCheck(e.vWalkWalls,proof.structure.wallsPass&&proof.structure.interiorsPass,"FAIL");
+  setCheck(e.vWalkWater,proof.waterRulePass&&(proof.waterSamples===0||proof.waterBlocked===proof.waterSamples),"FAIL");
+  setCheck(e.vWalkEntrances,proof.structure.entrancesPass&&proof.structure.workyardPass,"FAIL");
+  setCheck(e.vWalkRoutes,proof.routeRulesPass&&proof.difficultRulesPass,"FAIL");
+}
+
 function renderGeography(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -414,9 +438,12 @@ function renderTerrain(){
         tile.color!==repeated.color||
         tile.texture!==repeated.texture||
         tile.overlayTexture!==repeated.overlayTexture||
-        tile.specialKind!==repeated.specialKind
+        tile.specialKind!==repeated.specialKind||
+        Walkability.classifyTile(tile).category!==Walkability.classifyTile(repeated).category||
+        Walkability.classifyTile(tile).walkable!==Walkability.classifyTile(repeated).walkable
       )deterministic=false;
 
+      const movement=Walkability.classifyTile(tile);
       const node=document.createElement("div");
       node.className="terrain-tile";
       node.style.backgroundColor=tile.color;
@@ -425,6 +452,9 @@ function renderTerrain(){
       node.dataset.texture=tile.texture||"";
       node.dataset.x=pos.x;
       node.dataset.y=pos.y;
+      node.dataset.walkability=movement.category;
+      node.dataset.walkable=movement.walkable?"true":"false";
+      node.dataset.movementSeconds=Number.isFinite(movement.secondsPerTile)?movement.secondsPerTile.toFixed(3):"Infinity";
       node.dataset.origin=(pos.x===center.x&&pos.y===center.y)?"true":"false";
       if(tile.buildingId)node.dataset.buildingId=tile.buildingId;
       if(tile.room)node.dataset.room=tile.room;
@@ -433,7 +463,7 @@ function renderTerrain(){
         node.classList.add("special-lot-cell");
       }
       if(tile.overlayTexture)node.appendChild(tileOverlay(tile.overlayTexture,"building-tile-overlay",0));
-      node.title=tile.label+" ("+pos.x+","+pos.y+")";
+      node.title=tile.label+" · "+movement.category+" ("+pos.x+","+pos.y+")";
       e.terrainGrid.appendChild(node);
     }
   }
@@ -799,6 +829,7 @@ function renderStatic(){
   renderStartingVillage();
   renderHousePlans();
   renderSpecialLots();
+  renderWalkability();
 }
 
 function renderClock(){
