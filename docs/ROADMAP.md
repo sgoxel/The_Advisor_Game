@@ -955,7 +955,7 @@ GitHub Actions run **35625806201** completed successfully against the exact merg
 
 ---
 
-## WP-008 — Special Buildings + Functional Lots
+## WP-008 — Special Buildings + Functional Lots — IMPLEMENTED / VISUAL VERIFICATION PENDING
 
 ### Goal
 
@@ -982,12 +982,39 @@ Add foundation data for:
 - no resident/NPC ownership is assigned yet;
 - presentation remains solid-color/simple geometry until later art stages.
 
+### Implemented
+
+- added deterministic **tavern/lodging**, **shop**, **craft workshop**, **storehouse**, **barn**, **village meeting hall**, and **outdoor workyard** foundations;
+- six of the seven special lots are enterable structures with top-down wall/floor/door cells;
+- the workyard remains an outdoor functional parcel;
+- each lot has a stable SEED-generated footprint and muted presentation tint while reusing the existing SVG floor/wall/door system;
+- every special lot is placed inside Starting Village land and receives deterministic road/path access;
+- enterable structures place their exterior door on the selected access edge;
+- placement rejects road/path/public-space cells, water cells, existing house plots, and already accepted special lots;
+- no NPC ownership, staffing, inventory, trade, production, or economy behavior is assigned yet;
+- 31-SEED stress verification passed with all 7 required lot types generated on every tested SEED;
+- across the same stress set, road overlap, water overlap, house overlap, and special-lot overlap all remained **0**;
+- integrated terrain rendering verification confirmed every special-lot cell resolves to its authoritative lot ID/kind.
+
+### Static verification
+
+- deterministic repeat: PASS;
+- required lot-type coverage: PASS;
+- **7** functional lots total: PASS;
+- **6** enterable structures + **1** outdoor work lot: PASS;
+- road/path access: PASS;
+- road overlap: **0**;
+- water overlap: **0**;
+- house overlap: **0**;
+- special-lot overlap: **0**.
+
 ### Pass condition
 
 - same SEED reproduces the same structures;
 - structures occupy coherent parcels;
 - entrances face reachable walkable space;
-- no invalid overlap exists.
+- no invalid overlap exists;
+- screenshot evidence scores **above 7/10** before WP-008 is marked COMPLETE.
 
 ---
 
