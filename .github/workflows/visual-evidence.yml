@@ -67,6 +67,9 @@ on:
       - scripts/data/world-standards.js
       - scripts/data/terrain-palette.js
       - scripts/data/tile-textures.js
+      - scripts/ui/app-ui.js
+      - scripts/render/texture-assets.js
+      - scripts/render/game-renderer.js
       - assets/tiles/vector/**
       - styles/main.css
 
