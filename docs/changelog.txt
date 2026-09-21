@@ -1,3 +1,12 @@
+2026-09-21 14:51:35 +03:00
+- WP-003 Infinite World Coordinates + Protagonist Origin implemented.
+- New and restarted campaigns create the Protagonist at world coordinate (0,0).
+- (0,0) is the initial center of the gameplay view.
+- Added arbitrary-size signed integer world coordinates with no gameplay-defined X/Y boundary.
+- Added centered Protagonist marker and visible coordinate verification.
+- Added scripts/world/coordinates.js and scripts/entities/protagonist.js.
+- Updated docs/ROADMAP.md and docs/README.md.
+
 2026-09-21 14:48:09 +03:00
 - FantasyTimestamp precision changed to whole fantasy seconds.
 - Live deterministic randomness now uses date + hour + minute + second only.
