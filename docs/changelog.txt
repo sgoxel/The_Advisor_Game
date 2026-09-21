@@ -1,3 +1,8 @@
+2026-09-21 17:50:00 +03:00
+- WP-007A visual evidence expanded to three frames.
+- Frame 1 shows the starting center, frame 2 zooms to 0.5x, and frame 3 shifts the camera toward the deterministic village gateway/mainland connection.
+- This avoids treating an off-screen numeric mainland proof as sufficient visual evidence.
+
 2026-09-21 17:47:00 +03:00
 - Fixed WP-007A CI assertion bug: roadGapCount=0 was incorrectly treated as a missing value by Python's "or 1" fallback.
 - Game-side proof already reported mainlandConnected=true, roadGapCount=0 and bridgePass=true.
