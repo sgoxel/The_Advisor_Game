@@ -66,6 +66,7 @@ SCENARIOS = {
     "npc-conversation-state",
     "npc-edge-crossing",
     "terrain-natural",
+    "main-road",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -83,6 +84,7 @@ SCENARIO_MIN_SHOTS = {
     "npc-conversation-state": 5,
     "npc-edge-crossing": 5,
     "terrain-natural": 2,
+    "main-road": 2,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -235,6 +237,16 @@ return (() => {
               : 0,
             suspicious,
           };
+        })(),
+        roadNetwork: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const foundation = window.GeographyFoundation;
+            if (!campaign || !foundation?.mainRoadProof) return null;
+            return foundation.mainRoadProof(campaign.seed, 96);
+          } catch (error) {
+            return {error: String(error)};
+          }
         })(),
         geography: {
           continent: document.querySelector('#geoContinent')?.textContent?.trim() || null,
@@ -618,6 +630,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         for _ in range(5):
             _wheel_canvas(driver, 500)
         return "zoom-out-naturalness:0.5x"
+    if scenario == "main-road":
+        for _ in range(5):
+            _wheel_canvas(driver, 500)
+        return "zoom-out-main-road:0.5x"
     if scenario == "responsive-cycle":
         sizes = [(1080, 1920), (1920, 1080), (base_width, base_height)]
         width, height = sizes[(frame_index - 1) % len(sizes)]
@@ -637,6 +653,24 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "main-road":
+        if len(frames) < 2:
+            raise RuntimeError("main-road requires two evidence frames")
+        current = frames[1].get("runtime", {}).get("currentBuild", {})
+        proof = current.get("roadNetwork") or {}
+        if not proof.get("continuous"):
+            raise RuntimeError(f"main road continuity failed: {proof}")
+        if not proof.get("bridgePass"):
+            raise RuntimeError(f"main road bridge limit failed: {proof}")
+        if int(proof.get("maxWidth") or 0) > int(proof.get("capitalWidthCap") or 10):
+            raise RuntimeError(f"main road width exceeds capital cap: {proof}")
+        if int(proof.get("villageWidthCap") or 0) > 3:
+            raise RuntimeError(f"village road width cap invalid: {proof}")
+        grid = current.get("terrainGrid") or {}
+        if not grid.get("coveragePass"):
+            raise RuntimeError(f"main-road frame lost viewport coverage: {grid}")
+        return
+
     if scenario == "terrain-natural":
         if len(frames) < 2:
             raise RuntimeError("terrain-natural requires two evidence frames")
