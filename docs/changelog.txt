@@ -1,3 +1,9 @@
+2026-09-21 16:04:00 +03:00
+- WP-006 verification refinement after visual review.
+- Fixed the in-game camera-independence check so it remains PASS after the camera returns to the Protagonist.
+- camera-pan evidence now automatically fails if Camera does not move, Protagonist coordinates change, Camera does not return, or returned terrain differs from starting terrain.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 16:00:00 +03:00
 - WP-006 Camera Movement Through the Infinite World implemented.
 - Added scripts/world/camera.js with arbitrary-size signed camera coordinates.
