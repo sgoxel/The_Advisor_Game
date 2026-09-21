@@ -223,7 +223,7 @@ After starting a campaign, the Protagonist marker appears at the exact center of
 
 ---
 
-## WP-004 — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing
+## WP-004 — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing — COMPLETE
 
 ### Goal
 
@@ -274,9 +274,20 @@ This WP uses **foundation randomness only**.
 
 Fantasy time must not influence continent, country, region, settlement, street, terrain, environment, or initial geographic generation.
 
+### Implemented
+
+- `scripts/world/geography.js` provides deterministic geographic hierarchy and environment foundation;
+- starting world coordinate **(0,0)** belongs to a deterministic continent → realm → region → city → district → village → avenue → street chain;
+- terrain classification now consumes the geography foundation;
+- village centers use deterministic spatial cells with bounded jitter;
+- every village pair has a geometric minimum separation that cannot be walked in under 1 fantasy hour even at the fastest walking speed;
+- a terrain-aware A* walking-route check verifies the nearest distinct village from the starting village;
+- tile scale for the current foundation model is **100 meters per logical tile**;
+- maximum normal walking speed used by the spacing proof is **5.5 km/h**.
+
 ### In-game proof
 
-A development accordion will show the generated starting geographic hierarchy around **(0,0)** and a deterministic nearest-village spacing check.
+The WP-004 accordion shows the generated starting geographic hierarchy around **(0,0)**, environmental conditions, nearest distinct village, and deterministic shortest valid walking time.
 
 ### Pass condition
 
@@ -313,7 +324,7 @@ Before production textures exist, terrain and structural tiles use distinct mute
 
 These colors are presentation-only. Terrain identity remains Simulation/world-foundation data.
 
-The palette is already implemented in `scripts/data/terrain-palette.js` and can be used before WP-004 geographic hierarchy is complete. The current renderer is a deterministic preview; WP-005 remains incomplete until it consumes the completed WP-004 geographic foundation.
+The palette is implemented in `scripts/data/terrain-palette.js`. The current renderer now consumes the completed WP-004 geography foundation. WP-005 remains incomplete until viewport-fill behavior is reviewed as its own Work Package.
 
 ### Rules
 
