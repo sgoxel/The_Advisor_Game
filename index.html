@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-003</title>
+<title>The Advisor Game — WP-004</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-003</span>
+      <span class="build-badge">WP-004</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -179,6 +179,33 @@
   </details>
 
 
+
+  <details>
+    <summary>WP-004 Geographic Foundation</summary>
+    <div class="accordion-content technical-info">
+      <div class="geography-grid">
+        <div><span>Continent</span><strong id="geoContinent">—</strong></div>
+        <div><span>Country / Realm</span><strong id="geoCountry">—</strong></div>
+        <div><span>Region</span><strong id="geoRegion">—</strong></div>
+        <div><span>City</span><strong id="geoCity">—</strong></div>
+        <div><span>District</span><strong id="geoDistrict">—</strong></div>
+        <div><span>Village</span><strong id="geoVillage">—</strong></div>
+        <div><span>Avenue</span><strong id="geoAvenue">—</strong></div>
+        <div><span>Street</span><strong id="geoStreet">—</strong></div>
+        <div><span>Biome</span><strong id="geoBiome">—</strong></div>
+        <div><span>Climate</span><strong id="geoClimate">—</strong></div>
+        <div><span>Elevation</span><strong id="geoElevation">—</strong></div>
+        <div><span>Terrain</span><strong id="geoTerrain">—</strong></div>
+      </div>
+      <p><strong>Nearest distinct village:</strong> <code id="nearestVillage">—</code></p>
+      <p><strong>Shortest valid walking time:</strong> <code id="nearestVillageWalk">—</code></p>
+      <div class="check"><span>Same SEED reproduces the same geographic hierarchy</span><b id="vGeoDeterministic">WAITING</b></div>
+      <div class="check"><span>Geographic foundation does not use fantasy time</span><b id="vGeoTimeFree">PASS</b></div>
+      <div class="check"><span>Nearest distinct village is not walkable under 1 fantasy hour</span><b id="vVillageSpacing">WAITING</b></div>
+      <div class="check"><span>Terrain renderer consumes the WP-004 geography foundation</span><b id="vTerrainGeography">PASS</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Basic Terrain Colors</summary>
     <div class="accordion-content technical-info">
@@ -192,7 +219,7 @@
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-003 infinite world coordinates + Protagonist origin.</p>
+      <p><strong>Current Work Package:</strong> WP-004 deterministic geographic foundation.</p>
       <p><strong>Current world rendering:</strong> Not implemented yet.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
@@ -206,6 +233,7 @@
 <script src="scripts/entities/protagonist.js"></script>
 <script src="scripts/core/prng.js"></script>
 <script src="scripts/data/terrain-palette.js"></script>
+<script src="scripts/world/geography.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
