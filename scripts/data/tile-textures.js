@@ -75,7 +75,13 @@ const BLEND_MASKS=Object.freeze({
     s:Object.freeze(["blend_peninsula_s.svg","blend_peninsula_s_b.svg"]),
     w:Object.freeze(["blend_peninsula_w.svg","blend_peninsula_w_b.svg"])
   }),
-  island:Object.freeze(["blend_island.svg","blend_island_b.svg"])
+  island:Object.freeze(["blend_island.svg","blend_island_b.svg"]),
+  diagonal:Object.freeze({
+    ne:Object.freeze(["blend_diagonal_ne.svg","blend_diagonal_ne_b.svg"]),
+    se:Object.freeze(["blend_diagonal_se.svg","blend_diagonal_se_b.svg"]),
+    sw:Object.freeze(["blend_diagonal_sw.svg","blend_diagonal_sw_b.svg"]),
+    nw:Object.freeze(["blend_diagonal_nw.svg","blend_diagonal_nw_b.svg"])
+  })
 });
 
 const INFRA_BLEND_TYPES=new Set(["road","path"]);
@@ -148,17 +154,62 @@ function blendSpecs(type,neighbors,context){
     groups.get(target).push(side);
   }
 
-  const ordered=[...groups.entries()].sort(
-    (a,b)=>(BLEND_PRIORITY[a[0]]||0)-(BLEND_PRIORITY[b[0]]||0)
-  );
-  const specs=[];
   const resolvedContext=context?Object.freeze({...context,base:type}):null;
-  for(const [target,sides] of ordered){
+  const layers=[];
+  for(const [target,sides] of groups.entries()){
     for(const spec of specsForSides(target,sides,resolvedContext)){
-      if(spec)specs.push(spec);
+      if(spec)layers.push({
+        priority:BLEND_PRIORITY[target]||0,
+        order:0,
+        spec
+      });
     }
   }
-  return specs;
+
+  const diagonalSides=Object.freeze({
+    ne:Object.freeze(["n","e"]),
+    se:Object.freeze(["s","e"]),
+    sw:Object.freeze(["s","w"]),
+    nw:Object.freeze(["n","w"])
+  });
+
+  for(const corner of ["ne","se","sw","nw"]){
+    const target=neighbors[corner];
+    if(!canBlend(type,target))continue;
+    const sides=diagonalSides[corner];
+
+    // A cardinal neighbor of the same material already carries the blend into
+    // this corner. Adding another cap would make the corner too heavy.
+    if(sides.some(side=>neighbors[side]===target))continue;
+
+    // At a three-material junction only the strongest compatible material may
+    // claim the tiny diagonal corner. This prevents lower-priority patches from
+    // punching square holes through a higher-priority shoreline/border.
+    const adjacentPriority=Math.max(
+      0,
+      ...sides.map(side=>{
+        const adjacent=neighbors[side];
+        return canBlend(type,adjacent)?(BLEND_PRIORITY[adjacent]||0):0;
+      })
+    );
+    const targetPriority=BLEND_PRIORITY[target]||0;
+    if(targetPriority<adjacentPriority)continue;
+
+    const spec=blendMaskSpec(target,"diagonal",corner,resolvedContext);
+    if(spec)layers.push({
+      priority:targetPriority,
+      order:1,
+      spec
+    });
+  }
+
+  layers.sort((a,b)=>
+    a.priority-b.priority||
+    a.order-b.order||
+    a.spec.terrain.localeCompare(b.spec.terrain)||
+    a.spec.orientation.localeCompare(b.spec.orientation)
+  );
+  return layers.map(layer=>layer.spec);
 }
 
 

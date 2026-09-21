@@ -902,6 +902,43 @@ GitHub Actions run **35624048867** completed successfully against the exact merg
 
 ---
 
+## WP-007E — Diagonal + Multi-Terrain Junction Smoothing — IMPLEMENTED / VISUAL VERIFICATION PENDING
+
+### Goal
+
+Smooth diagonal-only contacts and three-material corners that can still appear as square point notches after WP-007D.
+
+### Implemented
+
+- renderer now reads N/E/S/W plus NE/SE/SW/NW terrain neighbors;
+- added **8 SVG diagonal corner masks**: NE/SE/SW/NW with deterministic A/B variants;
+- `TileTextures.blendSpecs()` can emit `diagonal` blend layers;
+- a diagonal cap is skipped when the same terrain already owns an adjacent cardinal edge;
+- at three-material corners, only the strongest compatible presentation material may claim the tiny corner;
+- lower-priority materials cannot punch through a stronger shoreline/border;
+- road/path ↔ water blend protection remains unchanged;
+- same SEED + coordinate reproduces the same diagonal A/B mask;
+- total simple vector presentation assets are now **63 SVG files**.
+
+### Static verification
+
+- diagonal-only corner cap: PASS;
+- duplicate cap suppression: PASS;
+- high-priority three-material corner ownership: PASS;
+- low-priority corner rejection: PASS;
+- road/water leakage protection: PASS;
+- diagonal A/B determinism and reachability: PASS.
+
+### Pass condition
+
+- diagonal contacts no longer read as square point notches;
+- common three-material junctions avoid abrupt micro-corners;
+- existing rounded borders remain continuous;
+- Starting Village/building/road/camera checks remain PASS;
+- screenshot review scores **above 7/10**.
+
+---
+
 ## WP-008 — Special Buildings + Functional Lots
 
 ### Goal
