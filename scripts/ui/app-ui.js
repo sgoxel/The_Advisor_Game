@@ -12,6 +12,8 @@ const ids=[
   "vRendererWebGL","vRendererCanvas","vRendererNoDomTiles","vRendererLogicalTextures","vRendererSvgCache","vRendererSimulation",
   "interiorBuildingCount","interiorHouseCount","interiorSpecialCount","interiorLevel","interiorHouseProof","interiorSpecialProof",
   "vInteriorDeterministic","vInteriorCoverage","vInteriorCollision","vInteriorForward","vInteriorReverse","vInteriorLevel",
+  "buildingLayerCount","buildingRoofCount","buildingObjectCount","buildingProofState",
+  "vBuildingLayers","vBuildingObjects","vBuildingWallDepth","vBuildingRoofCutaway","vBuildingDepthSort","vBuildingSimulation",
   "cameraHud","cameraCoordinate","cameraZoom","centerCameraButton","resetZoomButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY","cameraZoomDetail","cameraTileSize",
   "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn","vCameraWheelZoom","vCameraPinchZoom",
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
@@ -535,12 +537,17 @@ function renderTerrain(){
   }
 
   e.terrainGrid.hidden=false;
+  const buildingInteriors=BuildingInteriors.build(campaign.seed);
+  const interiorObjects=window.InteriorObjects?.build?InteriorObjects.build(campaign.seed):[];
   const rendererSnapshot=GameRenderer.render({
     width,height,columns,rows,tileSize,
     center,
     tiles,
     routeLastIndex,
-    protagonistOffset:protagonist?Camera.offsetFrom(protagonist):null
+    protagonistWorld:protagonist||null,
+    protagonistOffset:protagonist?Camera.offsetFrom(protagonist):null,
+    buildingInteriors,
+    interiorObjects
   });
 
   const gridWidth=columns*tileSize;
@@ -576,6 +583,7 @@ function renderTerrain(){
   setCheck(e.vTileResponsive,responsive,"FAIL");
   setCheck(e.vTileOddGrid,oddGrid&&rendererSnapshot.tileCount===columns*rows,"FAIL");
   setCheck(e.vTileRepeat,repeatable,"FAIL");
+  renderBuildingPresentationProof(rendererSnapshot);
   lastTerrainViewportKey=viewportKey;
 }
 
@@ -888,6 +896,58 @@ function renderWorldCoordinates(){
   setCheck(e.vNegativeWorld,proof.negativeValid,"FAIL");
 }
 
+function renderBuildingPresentationProof(renderer=GameRenderer.snapshot()){
+  const presentation=renderer?.buildingPresentation||{};
+  const layers=Array.isArray(presentation.layerOrder)?presentation.layerOrder:[];
+  const expected=[
+    "ground-floor",
+    "lower-structure-objects",
+    "shadows",
+    "characters-entities",
+    "upper-walls-foreground",
+    "roof-ceiling",
+    "verification-route"
+  ];
+  e.buildingLayerCount.textContent=layers.length?layers.length+" ordered layers":"—";
+  e.buildingRoofCount.textContent=String(presentation.roofCount??0);
+  e.buildingObjectCount.textContent=String(presentation.visibleInteriorObjectCount??0);
+  e.buildingProofState.textContent=presentation.proofState||"normal gameplay";
+
+  setCheck(
+    e.vBuildingLayers,
+    expected.every((name,index)=>layers[index]===name),
+    "FAIL"
+  );
+  setCheck(
+    e.vBuildingObjects,
+    typeof window.InteriorObjects?.build==="function"&&
+      Number.isFinite(Number(presentation.visibleInteriorObjectCount??0)),
+    "FAIL"
+  );
+  setCheck(
+    e.vBuildingWallDepth,
+    Number(presentation.visibleWallCapCount||0)>0,
+    "WAITING FOR VISIBLE BUILDING"
+  );
+  const roofProof=presentation.proofState==="inside"||presentation.proofState==="behind"
+    ?Boolean(presentation.cutawayActive)&&Number(presentation.roofAlpha)<0.5
+    :Number(presentation.roofCount||0)>0;
+  setCheck(e.vBuildingRoofCutaway,roofProof,"WAITING FOR VISIBLE BUILDING");
+  setCheck(
+    e.vBuildingDepthSort,
+    Boolean(presentation.ySortedEntities)&&Number.isFinite(Number(presentation.foregroundObjectCount??0)),
+    "FAIL"
+  );
+  setCheck(
+    e.vBuildingSimulation,
+    presentation.simulationAuthorityPreserved===true&&
+      typeof BuildingInteriors?.build==="function"&&
+      typeof Walkability?.classify==="function"&&
+      typeof RoutePlanner?.findRoute==="function",
+    "FAIL"
+  );
+}
+
 function renderRendererProof(){
   const renderer=GameRenderer.snapshot();
   const assets=TextureAssets.stats();
@@ -924,6 +984,7 @@ function renderStatic(){
   renderWalkability();
   renderRoutePlanning();
   renderBuildingInteriors();
+  renderBuildingPresentationProof();
   renderRendererProof();
 }
 
@@ -1004,5 +1065,8 @@ async function init(){
   renderStatic();startClock();
   observeTerrainViewport();
 }
-window.AppUI=Object.freeze({init});
+window.AppUI=Object.freeze({
+  init,
+  refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot())
+});
 })();
