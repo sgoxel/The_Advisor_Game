@@ -1,3 +1,7 @@
+2026-09-21 17:47:00 +03:00
+- Fixed WP-007A CI assertion bug: roadGapCount=0 was incorrectly treated as a missing value by Python's "or 1" fallback.
+- Game-side proof already reported mainlandConnected=true, roadGapCount=0 and bridgePass=true.
+
 2026-09-21 17:45:00 +03:00
 - WP-007A verifier correction: the central Public Square is now treated as a valid continuous main-road node rather than a road gap.
 - Default SEED measurement check: nearest distinct village is ~4.53 km away with a >=75.6 fantasy-minute fastest-walk lower bound.
