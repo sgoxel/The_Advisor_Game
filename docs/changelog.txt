@@ -1,3 +1,8 @@
+2026-09-21 15:00:00 +03:00
+- Corrected terrain-grid centering after verification.
+- Rendered terrain rows and columns are now forced to odd counts so world coordinate (0,0) stays exactly under the centered Protagonist marker.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 14:57:00 +03:00
 - Added reusable solid-color terrain palette without textures.
 - Added distinct colors for grass, forest, dirt, mud, road, building, water, rock, sand and farmland.
