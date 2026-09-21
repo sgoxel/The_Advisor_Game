@@ -1,3 +1,14 @@
+2026-09-21 16:55:00 +03:00
+- Added authoritative continuous main-road foundation before WP-007.
+- Main roads can no longer disappear because of water, forest, mountain, parcels or buildings.
+- Added deterministic chunked road planning with shared anchors and gradual one-tile lateral movement.
+- Wide water is routed around; only short water spans become Bridge terrain.
+- Bridge maximum is 10 fantasy walking minutes. At 100 m/tile and 5.5 km/h this is capped at 9 consecutive bridge tiles (~9.82 fantasy minutes).
+- Added contextual road-width policy: rough terrain 1 tile, wilderness 2, village up to 3, town up to 4, city up to 6, capital-city main road up to 10.
+- Added Bridge terrain color and 2-tile practical main-bridge cap outside future major-city infrastructure.
+- Added main-road GitHub Actions visual/regression scenario and runtime roadNetwork proof.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 16:44:50 +03:00
 - Final natural-terrain verification passed on GitHub Actions run 35607407473.
 - At 0.50x zoom, evidence found 0 suspicious large rectangular natural-terrain components.
