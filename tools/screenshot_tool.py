@@ -392,6 +392,23 @@ return (() => {
             return {error: String(error)};
           }
         })(),
+        routePlanner: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const planner = window.RoutePlanner;
+            if (!campaign || !planner?.proof) return null;
+            const proof = planner.proof(campaign.seed);
+            const visibleRouteTiles = [...document.querySelectorAll('.terrain-tile.route-proof')];
+            const visibleDestinationTiles = [...document.querySelectorAll('.terrain-tile.route-proof-destination')];
+            return {
+              ...proof,
+              visibleRouteTileCount: visibleRouteTiles.length,
+              visibleDestinationTileCount: visibleDestinationTiles.length,
+            };
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
         roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
@@ -948,6 +965,21 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-009 did not verify interior door passages: {walk}")
         if not walk.get("waterRulePass") or not walk.get("routeRulesPass") or not walk.get("difficultRulesPass"):
             raise RuntimeError(f"WP-009 terrain movement rules failed: {walk}")
+        route = current.get("routePlanner") or {}
+        if not route.get("pass") or not route.get("deterministic"):
+            raise RuntimeError(f"WP-S002-004 route-planning proof failed: {route}")
+        if not route.get("obeysWalkability") or not route.get("movementCostPass"):
+            raise RuntimeError(f"WP-S002-004 route violates authoritative walkability/costs: {route}")
+        if not route.get("blockedDestinationRejected"):
+            raise RuntimeError(f"WP-S002-004 blocked destination was not rejected: {route}")
+        if not route.get("usesExteriorEntrance") or not route.get("destinationInterior"):
+            raise RuntimeError(f"WP-S002-004 proof route did not enter a building correctly: {route}")
+        if not route.get("localEvaluationPass"):
+            raise RuntimeError(f"WP-S002-004 route search exceeded local bounded-search rules: {route}")
+        if int(route.get("stepCount") or 0) <= 0 or int(route.get("evaluatedCount") or 0) <= 0:
+            raise RuntimeError(f"WP-S002-004 route evidence is empty: {route}")
+        if int(route.get("visibleRouteTileCount") or 0) <= 0:
+            raise RuntimeError(f"WP-S002-004 route is not visible in broad village evidence: {route}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):

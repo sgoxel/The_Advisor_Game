@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-009</title>
+<title>The Advisor Game — WP-S002-004</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-009</span>
+      <span class="build-badge">WP-S002-004</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -373,10 +373,30 @@
   </details>
 
   <details>
+    <summary>WP-S002-004 Deterministic Local Route Planning</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Village Destination</span><strong id="routeDestination">—</strong></div>
+        <div><span>Route Steps</span><strong id="routeStepCount">—</strong></div>
+        <div><span>Travel Time</span><strong id="routeTravelTime">—</strong></div>
+        <div><span>Evaluated Cells</span><strong id="routeEvaluatedCount">—</strong></div>
+      </div>
+      <p><strong>Route preview:</strong> <code id="routePathPreview">—</code></p>
+      <div class="check"><span>A valid SEED-generated village destination receives a walking route</span><b id="vRouteFound">WAITING</b></div>
+      <div class="check"><span>Repeated route calculation produces the identical path and cost</span><b id="vRouteDeterministic">WAITING</b></div>
+      <div class="check"><span>Blocked building-wall destinations are rejected before route search</span><b id="vRouteBlocked">WAITING</b></div>
+      <div class="check"><span>Every route step obeys authoritative WP-S002-003 walkability and movement costs</span><b id="vRouteWalkability">WAITING</b></div>
+      <div class="check"><span>The proof route uses a real exterior entrance to reach building interior</span><b id="vRouteEntrance">WAITING</b></div>
+      <div class="check"><span>Search is bounded/local and evaluates only required cells rather than a full map</span><b id="vRouteLocal">WAITING</b></div>
+      <p>The highlighted dots in the Gameplay Area are verification only. They display the planned route without moving or directly controlling the Protagonist.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-009 Authoritative Walkability + Collision Foundation.</p>
-      <p><strong>Current world rendering:</strong> Deterministic village presentation with authoritative per-tile Simulation walkability and movement-cost metadata.</p>
+      <p><strong>Current Work Package:</strong> WP-S002-004 Deterministic Local Route Planning.</p>
+      <p><strong>Current world rendering:</strong> Deterministic village presentation with authoritative walkability plus visible route-planning proof; no direct Protagonist movement control.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
@@ -398,6 +418,7 @@
 <script src="scripts/world/special-lots.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/world/walkability.js"></script>
+<script src="scripts/world/route-planner.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/main.js"></script>

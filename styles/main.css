@@ -65,6 +65,28 @@ input:focus{border-color:#92ad83}
 .terrain-tile[data-origin="true"]{box-shadow:inset 0 0 0 2px rgba(255,255,255,.38)}
 .terrain-tile:hover{box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
 .terrain-tile[data-origin="true"]:hover{box-shadow:inset 0 0 0 2px rgba(255,255,255,.38)}
+.terrain-tile.route-proof::after{
+  content:"";
+  position:absolute;
+  left:35%;
+  top:35%;
+  width:30%;
+  height:30%;
+  border-radius:50%;
+  background:rgba(255,222,112,.92);
+  box-shadow:0 0 0 2px rgba(73,54,16,.8),0 0 8px rgba(255,225,120,.72);
+  z-index:4;
+  pointer-events:none;
+}
+.terrain-tile.route-proof-destination::after{
+  left:27%;
+  top:27%;
+  width:46%;
+  height:46%;
+  border-radius:5px;
+  background:rgba(255,244,181,.96);
+  box-shadow:0 0 0 3px rgba(98,70,16,.9),0 0 10px rgba(255,231,137,.9);
+}
 
 .gameplay-placeholder{position:absolute;inset:0;display:grid;place-content:center;gap:8px;padding:20px;text-align:center;color:#9da697}
 .gameplay-placeholder strong{color:#dfe4da;font-size:22px}

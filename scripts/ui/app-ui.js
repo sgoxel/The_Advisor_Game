@@ -19,6 +19,8 @@ const ids=[
   "vSpecialDeterministic","vSpecialCoverage","vSpecialEntrances","vSpecialOverlap",
   "walkSampleCount","walkClassCount","walkBlockedCount","walkWaterSamples",
   "vWalkDeterministic","vWalkCoverage","vWalkWalls","vWalkWater","vWalkEntrances","vWalkRoutes",
+  "routeDestination","routeStepCount","routeTravelTime","routeEvaluatedCount","routePathPreview",
+  "vRouteFound","vRouteDeterministic","vRouteBlocked","vRouteWalkability","vRouteEntrance","vRouteLocal",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
@@ -278,6 +280,39 @@ function renderWalkability(){
   setCheck(e.vWalkRoutes,proof.routeRulesPass&&proof.difficultRulesPass,"FAIL");
 }
 
+function renderRoutePlanning(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    ["routeDestination","routeStepCount","routeTravelTime","routeEvaluatedCount","routePathPreview"].forEach(id=>e[id].textContent="—");
+    ["vRouteFound","vRouteDeterministic","vRouteBlocked","vRouteWalkability","vRouteEntrance","vRouteLocal"].forEach(id=>setCheck(e[id],false,"WAITING"));
+    return;
+  }
+
+  const proof=RoutePlanner.proof(campaign.seed);
+  if(!proof.route){
+    e.routeDestination.textContent="Unavailable";
+    e.routeStepCount.textContent="—";
+    e.routeTravelTime.textContent="—";
+    e.routeEvaluatedCount.textContent="—";
+    e.routePathPreview.textContent="—";
+    ["vRouteFound","vRouteDeterministic","vRouteBlocked","vRouteWalkability","vRouteEntrance","vRouteLocal"].forEach(id=>setCheck(e[id],false,"FAIL"));
+    return;
+  }
+
+  e.routeDestination.textContent=proof.destinationLabel+" ("+proof.destination.x+","+proof.destination.y+")";
+  e.routeStepCount.textContent=String(proof.stepCount);
+  e.routeTravelTime.textContent=Number.isFinite(proof.totalSeconds)?proof.totalSeconds.toFixed(1)+" s":"—";
+  e.routeEvaluatedCount.textContent=String(proof.evaluatedCount);
+  e.routePathPreview.textContent=proof.routePreview;
+
+  setCheck(e.vRouteFound,proof.route.found&&proof.destinationInterior,"FAIL");
+  setCheck(e.vRouteDeterministic,proof.deterministic,"FAIL");
+  setCheck(e.vRouteBlocked,proof.blockedDestinationRejected,"FAIL");
+  setCheck(e.vRouteWalkability,proof.obeysWalkability&&proof.movementCostPass,"FAIL");
+  setCheck(e.vRouteEntrance,proof.usesExteriorEntrance,"FAIL");
+  setCheck(e.vRouteLocal,proof.localEvaluationPass,"FAIL");
+}
+
 function renderGeography(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -436,6 +471,11 @@ function renderTerrain(){
   const halfRows=Math.floor(rows/2);
   const viewportKey=width+"x"+height;
   const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
+  const routeProof=RoutePlanner.proof(campaign.seed);
+  const routeIndex=new Map(
+    routeProof.route?.path?.map((point,index)=>[point.x+","+point.y,index])||[]
+  );
+  const routeLastIndex=routeProof.route?.path?.length?routeProof.route.path.length-1:-1;
 
   e.terrainGrid.style.setProperty("--tile-size",tileSize+"px");
   e.terrainGrid.style.gridTemplateColumns="repeat("+columns+","+tileSize+"px)";
@@ -468,6 +508,12 @@ function renderTerrain(){
       node.dataset.texture=tile.texture||"";
       node.dataset.x=pos.x;
       node.dataset.y=pos.y;
+      const routeStep=routeIndex.get(pos.x+","+pos.y);
+      if(routeStep!==undefined){
+        node.classList.add("route-proof");
+        node.dataset.routeStep=String(routeStep);
+        if(routeStep===routeLastIndex)node.classList.add("route-proof-destination");
+      }
       node.dataset.walkability=movement.category;
       node.dataset.walkable=movement.walkable?"true":"false";
       node.dataset.blocksMovement=movement.blocksMovement?"true":"false";
@@ -850,6 +896,7 @@ function renderStatic(){
   renderHousePlans();
   renderSpecialLots();
   renderWalkability();
+  renderRoutePlanning();
 }
 
 function renderClock(){
