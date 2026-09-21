@@ -7,7 +7,7 @@ const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","vDate","vPersist",
-  "prngSeed","prngSequence","vPrngRepeat","vPrngDifferent","vPrngSource"
+  "prngSeed","prngTimestamp","prngValue","vPrngRepeat","vPrngTime","vPrngSource"
 ];
 function cache(){ids.forEach(id=>e[id]=document.getElementById(id))}
 function openPopup(id){document.getElementById(id).hidden=false;document.body.style.overflow="hidden"}
@@ -15,15 +15,24 @@ function closePopup(id){document.getElementById(id).hidden=true;document.body.st
 function closeAll(){document.querySelectorAll(".fullscreen-popup").forEach(p=>p.hidden=true);document.body.style.overflow=""}
 function setCheck(node,pass,waiting){node.textContent=pass?"PASS":waiting;node.classList.toggle("pass",pass)}
 
-function renderPRNG(){
+function renderPRNG(fantasyTimestampMs){
   const campaign=SeedSystem.getCampaign();
-  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
-  const proof=PRNG.verify(seed);
-  e.prngSeed.textContent=seed;
-  e.prngSequence.textContent=proof.sequence.join(" · ");
+  if(!campaign||fantasyTimestampMs==null){
+    e.prngSeed.textContent=campaign?campaign.seed:"—";
+    e.prngTimestamp.textContent="—";
+    e.prngValue.textContent="—";
+    setCheck(e.vPrngRepeat,false,"WAITING");
+    setCheck(e.vPrngTime,false,"WAITING");
+    setCheck(e.vPrngSource,PRNG.randomUint32.length===2,"FAIL");
+    return;
+  }
+  const proof=PRNG.verify(campaign.seed,fantasyTimestampMs);
+  e.prngSeed.textContent=campaign.seed;
+  e.prngTimestamp.textContent=GameTime.formatTimestamp(GameTime.fromTimestampMs(proof.timestamp));
+  e.prngValue.textContent=String(proof.value);
   setCheck(e.vPrngRepeat,proof.repeatable,"FAIL");
-  setCheck(e.vPrngDifferent,proof.different,"FAIL");
-  setCheck(e.vPrngSource,typeof PRNG.create==="function"&&typeof PRNG.sequence==="function","FAIL");
+  setCheck(e.vPrngTime,proof.timeSensitive,"FAIL");
+  setCheck(e.vPrngSource,PRNG.randomUint32.length===2&&PRNG.random.length===2,"FAIL");
 }
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -33,14 +42,16 @@ function renderStatic(){
   e.resumeButton.disabled=!campaign;
   setCheck(e.vDate,!!campaign&&GameTime.validateStartYear(),campaign?"FAIL":"WAITING");
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
-  renderPRNG();
 }
+
 function renderClock(){
-  const t=GameTime.getNow();
+  const fantasyTimestampMs=GameTime.getTimestampMs();
+  const t=GameTime.fromTimestampMs(fantasyTimestampMs);
   const date=GameTime.formatDate(t);
   const time=GameTime.formatTime(t);
   e.gameDate.textContent=date;e.gameTime.textContent=time;
   e.detailGameDate.textContent=date;e.detailGameTime.textContent=time;
+  renderPRNG(fantasyTimestampMs);
 }
 function startClock(){
   if(clockTimer)clearInterval(clockTimer);
@@ -64,10 +75,7 @@ function restartCampaign(){
 function saveSettings(){
   const result=SeedSystem.setSettingsSeed(e.seedInput.value);
   e.settingsMessage.textContent=result.message;
-  if(result.ok){
-    e.seedInput.value=result.seed;
-    renderPRNG();
-  }
+  if(result.ok)e.seedInput.value=result.seed;
 }
 function init(){
   cache();
