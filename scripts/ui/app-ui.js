@@ -10,6 +10,8 @@ const ids=[
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
   "cameraHud","cameraCoordinate","cameraZoom","centerCameraButton","resetZoomButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY","cameraZoomDetail","cameraTileSize",
   "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn","vCameraWheelZoom","vCameraPinchZoom",
+  "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
+  "vVillageCore","vVillageMainland","vVillageBridge","vVillagePlan","vVillageRepeat",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
@@ -83,6 +85,40 @@ function renderPRNG(fantasyTimestampMs){
     "FAIL"
   );
 }
+function renderStartingVillage(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    ["villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard"]
+      .forEach(id=>e[id].textContent="—");
+    setCheck(e.vVillageCore,false,"WAITING");
+    setCheck(e.vVillageMainland,false,"WAITING");
+    setCheck(e.vVillageBridge,false,"WAITING");
+    setCheck(e.vVillagePlan,false,"WAITING");
+    setCheck(e.vVillageRepeat,false,"WAITING");
+    return;
+  }
+
+  const plan=StartingVillage.plan(campaign.seed);
+  const proof=StartingVillage.proof(campaign.seed);
+
+  e.villageWorldScale.textContent=WorldStandards.TILE_METERS+" m / tile";
+  e.startingVillageName.textContent=plan.name;
+  e.villageGateway.textContent=plan.gatewayDirection;
+  e.villageCoreDiameter.textContent=plan.approximateCoreDiameterMeters+" m";
+  e.villagePlotCount.textContent=String(plan.plotCount);
+  e.villageMainlandEdge.textContent="~"+plan.gatewayMainlandEdgeMeters+" m";
+  e.villageBridgeMax.textContent=
+    proof.maxBridgeMeters+" m / "+proof.maxBridgeMinutes.toFixed(1)+" fantasy min";
+  e.villageSpacingStandard.textContent=
+    (WorldStandards.MIN_VILLAGE_DISTANCE_METERS/1000).toFixed(1)+" km minimum";
+
+  setCheck(e.vVillageCore,proof.originInsideVillage,"FAIL");
+  setCheck(e.vVillageMainland,proof.mainlandConnected&&proof.roadGapCount===0,"FAIL");
+  setCheck(e.vVillageBridge,proof.bridgePass,"FAIL");
+  setCheck(e.vVillagePlan,proof.plotCount>=6&&proof.mainlandLandSamples>0,"FAIL");
+  setCheck(e.vVillageRepeat,proof.deterministic,"FAIL");
+}
+
 function renderGeography(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -117,7 +153,7 @@ function renderGeography(){
   const proof=GeographyFoundation.villageSpacingProof(campaign.seed);
   if(proof.nearest){
     e.nearestVillage.textContent=proof.nearest.name+" ("+proof.nearest.x+","+proof.nearest.y+")";
-    e.nearestVillageWalk.textContent=Number.isFinite(proof.minutes)?proof.minutes.toFixed(1)+" fantasy minutes":"No valid walking route";
+    e.nearestVillageWalk.textContent=Number.isFinite(proof.minutes)?"≥ "+proof.minutes.toFixed(1)+" fantasy minutes":"No valid walking route";
   }else{
     e.nearestVillage.textContent="—";
     e.nearestVillageWalk.textContent="—";
@@ -569,6 +605,7 @@ function renderStatic(){
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
   renderWorldCoordinates();
   renderGeography();
+  renderStartingVillage();
 }
 
 function renderClock(){
