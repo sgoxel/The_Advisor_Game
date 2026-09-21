@@ -1,3 +1,6 @@
+2026-09-21 18:27:00 +03:00 | Stage 2 / WP-007B
+Suggestion: in a later art-refinement WP, replace the neutral L/C/U boundary contour overlays with two-material SVG masks that visually blend the actual adjoining terrain textures while preserving the same deterministic neighbor-shape selection.
+
 2026-09-21 17:56:00 +03:00 | Stage 2 / WP-007B
 Suggestion: when real house footprints replace reserved plots, keep a one-cell planning clearance around outer walls except at the selected entrance/access side. This will preserve room for yards, wall graphics and path access without allowing roads to touch every exterior wall.
 
