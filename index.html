@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-S003-001</title>
+<title>The Advisor Game — WP-S003-002</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-S003-001</span>
+      <span class="build-badge">WP-S003-002</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -393,6 +393,27 @@
   </details>
 
   <details>
+    <summary>WP-S003-002 Authoritative Enterable Building Interiors</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Accessible Buildings</span><strong id="interiorBuildingCount">—</strong></div>
+        <div><span>House Interiors</span><strong id="interiorHouseCount">—</strong></div>
+        <div><span>Functional Interiors</span><strong id="interiorSpecialCount">—</strong></div>
+        <div><span>Navigation Level</span><strong id="interiorLevel">—</strong></div>
+      </div>
+      <p><strong>Representative house:</strong> <code id="interiorHouseProof">—</code></p>
+      <p><strong>Representative functional building:</strong> <code id="interiorSpecialProof">—</code></p>
+      <div class="check"><span>Same Campaign SEED reproduces the same authoritative interior plans</span><b id="vInteriorDeterministic">WAITING</b></div>
+      <div class="check"><span>All 12 accessible current buildings expose continuous exterior-door-to-interior space</span><b id="vInteriorCoverage">WAITING</b></div>
+      <div class="check"><span>Interior floors and doors are walkable while exterior/interior walls remain blocked</span><b id="vInteriorCollision">WAITING</b></div>
+      <div class="check"><span>Outdoor road/path → real exterior door → interior RoutePlanner routes succeed</span><b id="vInteriorForward">WAITING</b></div>
+      <div class="check"><span>Interior → same exterior door → outdoor RoutePlanner routes succeed</span><b id="vInteriorReverse">WAITING</b></div>
+      <div class="check"><span>All current single-floor building navigation uses discrete level = 0 metadata</span><b id="vInteriorLevel">WAITING</b></div>
+      <p>Interiors use the same global X/Y world coordinates as outdoors. No disconnected interior scene, teleport or true-3D navigation layer is introduced.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>WP-S003-001 GPU 2.5D Renderer Verification</summary>
     <div class="accordion-content technical-info">
       <div class="detail-grid">
@@ -414,8 +435,8 @@
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-S003-001 GPU 2.5D Gameplay Renderer Foundation.</p>
-      <p><strong>Current world rendering:</strong> PixiJS/WebGL canvas presentation consuming the existing deterministic Simulation, walkability and route-planning world state.</p>
+      <p><strong>Current Work Package:</strong> WP-S003-002 Authoritative Enterable Building Interiors.</p>
+      <p><strong>Current world rendering:</strong> PixiJS/WebGL canvas presentation consuming one continuous outdoor + indoor authoritative Simulation space.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
@@ -441,6 +462,7 @@
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/world/walkability.js"></script>
 <script src="scripts/world/route-planner.js"></script>
+<script src="scripts/world/building-interiors.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/main.js"></script>
