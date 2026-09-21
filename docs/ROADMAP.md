@@ -135,6 +135,16 @@ Every live random result is:
 
 **Random Result = Random(Campaign SEED, Fantasy Game Timestamp)**
 
+FantasyTimestamp uses exactly:
+
+**date + hour + minute + second**
+
+Canonical form:
+
+`YYYY-MM-DD HH:MM:SS`
+
+Milliseconds are never part of the random input.
+
 If the SEED and FantasyTimestamp are the same, the result must be exactly the same.
 
 ### Forbidden everywhere
@@ -148,7 +158,9 @@ If the SEED and FantasyTimestamp are the same, the result must be exactly the sa
 ### Implemented
 
 - `PRNG.foundationUint32(seed, stableKey)` for time-independent world foundation generation;
-- `PRNG.liveUint32(seed, fantasyTimestampMs)` for live simulation actions;
+- `PRNG.liveUint32(seed, fantasyTimestamp)` for live simulation actions;
+- live FantasyTimestamp has second precision only: `YYYY-MM-DD HH:MM:SS`;
+- milliseconds are rejected and cannot influence a live random result;
 - both functions are stateless and deterministic;
 - the random module never reads the real clock itself;
 - the WP-002 accordion verifies both modes separately.
@@ -157,8 +169,9 @@ If the SEED and FantasyTimestamp are the same, the result must be exactly the sa
 
 - terrain/environment/initial NPC generation can use deterministic SEED-based foundation values without fantasy time;
 - same foundation SEED + same stable structural key gives the same result;
-- same live SEED + same FantasyTimestamp gives the same result;
-- changing FantasyTimestamp can change a live result;
+- same live SEED + same second-precision FantasyTimestamp gives the same result;
+- milliseconds cannot change a live result;
+- changing the FantasyTimestamp second can change a live result;
 - no real-random source exists.
 
 ---
