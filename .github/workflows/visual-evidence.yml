@@ -98,6 +98,13 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
+      - name: Start local game server for push self-test
+        if: github.event_name == 'push'
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
+          echo $! >/tmp/advisor-http.pid
+          sleep 1
+
       - name: Resolve capture inputs
         id: resolve
         shell: bash
@@ -124,6 +131,8 @@ jobs:
             scenario="${INPUT_SCENARIO:-$scenario}"
             shots="${INPUT_SHOTS:-$shots}"
             publish="${INPUT_PUBLISH:-false}"
+          elif [ "$EVENT_NAME" = 'push' ]; then
+            target='http://127.0.0.1:8000/'
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             [ -n "$requested" ] && scenario="$requested"
