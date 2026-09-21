@@ -38,6 +38,7 @@ on:
           - terrain-natural
           - main-road
           - starting-village
+          - building-presentation
       shots:
         description: Requested screenshot count; scenario minimums still apply
         required: true
@@ -65,6 +66,7 @@ on:
       - scripts/world/walkability.js
       - scripts/world/route-planner.js
       - scripts/world/building-interiors.js
+      - scripts/world/interior-objects.js
       - scripts/data/world-standards.js
       - scripts/data/terrain-palette.js
       - scripts/data/tile-textures.js
@@ -161,7 +163,7 @@ jobs:
           fi
 
           case "$scenario" in
-            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village) ;;
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation) ;;
             *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
           esac
           case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac
