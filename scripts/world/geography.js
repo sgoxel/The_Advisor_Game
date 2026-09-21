@@ -1,24 +1,16 @@
 (function(){
 "use strict";
 
-const TILE_METERS=100;
-const VILLAGE_CELL_SIZE=72;
-const VILLAGE_JITTER=8;
-const MIN_VILLAGE_WALK_MINUTES=60;
-const MAX_WALK_SPEED_KMH=5.5;
-const MAIN_ROAD_WALK_SPEED_KMH=5.5;
-const MAX_BRIDGE_WALK_MINUTES=10;
-const MAX_BRIDGE_TILES=Math.floor((MAIN_ROAD_WALK_SPEED_KMH*1000/60*MAX_BRIDGE_WALK_MINUTES)/TILE_METERS);
+const TILE_METERS=WorldStandards.TILE_METERS;
+const VILLAGE_CELL_SIZE=WorldStandards.VILLAGE_CELL_SIZE_TILES;
+const VILLAGE_JITTER=WorldStandards.VILLAGE_JITTER_TILES;
+const MIN_VILLAGE_WALK_MINUTES=WorldStandards.MIN_VILLAGE_WALK_MINUTES;
+const MAX_WALK_SPEED_KMH=WorldStandards.FASTEST_NORMAL_WALK_KMH;
+const MAIN_ROAD_WALK_SPEED_KMH=WorldStandards.WALK_SPEED_KMH.road;
+const MAX_BRIDGE_WALK_MINUTES=WorldStandards.MAX_BRIDGE_WALK_MINUTES;
+const MAX_BRIDGE_TILES=WorldStandards.MAX_RURAL_BRIDGE_TILES;
 const BRIDGE_BLOCK_SIZE=24;
-const ROAD_WIDTH_POLICY=Object.freeze({
-  capital:10,
-  city:6,
-  town:4,
-  village:3,
-  wilderness:2,
-  rough:1,
-  bridge:2
-});
+const ROAD_WIDTH_POLICY=WorldStandards.ROAD_WIDTH_TILES;
 
 const NAME_START=["Alder","Ash","Black","Bright","Cedar","Dawn","Elder","Falcon","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"];
 const NAME_END=["barrow","bridge","brook","dale","fall","field","ford","gate","haven","hold","keep","mere","moor","port","reach","ridge","stead","ton","vale","watch","wick","wood"];
@@ -496,10 +488,7 @@ function mainRoadProof(seed,radiusValue){
   });
 }
 
-const WALK_SPEED_KMH=Object.freeze({
-  road:5.5,bridge:5.5,dirt:4.8,grass:4.5,farmland:4.2,sand:3.2,forest:3.0,mud:2.5,rock:2.0,
-  water:0,building:0
-});
+const WALK_SPEED_KMH=WorldStandards.WALK_SPEED_KMH;
 function walkMinutesForStep(type,diagonal){
   const speed=WALK_SPEED_KMH[type]||0;
   if(speed<=0)return Infinity;
@@ -560,12 +549,19 @@ function villageSpacingProof(seed){
   const dx=Number(nearest.x)-Number(start.x);
   const dy=Number(nearest.y)-Number(start.y);
   const directTiles=Math.hypot(dx,dy);
-  const fastestPossibleMinutes=(directTiles*TILE_METERS)/(MAX_WALK_SPEED_KMH*1000/60);
-  const route=estimateWalkRoute(seed,start,nearest);
-  const minutes=route.reachable?route.minutes:Infinity;
+  const directMeters=directTiles*TILE_METERS;
+  const fastestPossibleMinutes=WorldStandards.walkMinutes(directMeters,MAX_WALK_SPEED_KMH);
+  const pass=fastestPossibleMinutes>=MIN_VILLAGE_WALK_MINUTES;
   return Object.freeze({
-    pass:fastestPossibleMinutes>=MIN_VILLAGE_WALK_MINUTES && (!route.reachable||minutes>=MIN_VILLAGE_WALK_MINUTES),
-    start,nearest,directTiles,fastestPossibleMinutes,route,minutes
+    pass,start,nearest,directTiles,directMeters,
+    fastestPossibleMinutes,
+    minutes:fastestPossibleMinutes,
+    route:Object.freeze({
+      evaluated:false,
+      reachable:null,
+      reason:"geometric-lower-bound",
+      note:"Straight-line travel at the fastest normal walk is already >= 1 fantasy hour."
+    })
   });
 }
 
