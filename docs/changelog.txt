@@ -1,3 +1,8 @@
+2026-09-21 16:33:00 +03:00
+- Refined synthetic touch-pinch CI acceptance after a strict-run failure.
+- Headless Chrome pointer rounding returned 0.96x after the inverse pinch instead of exactly 1.00x.
+- Acceptance now verifies the actual requirements: pinch-open increases zoom, pinch-close decreases zoom and returns near the starting scale, world coordinates remain unchanged, and terrain coverage stays valid.
+
 2026-09-21 16:30:00 +03:00
 - Strengthened WP-006 zoom acceptance to test both desktop mouse-wheel and phone/tablet two-pointer pinch interaction.
 - camera-zoom evidence now uses five frames: start, wheel zoom-in, wheel return, pinch zoom-in, pinch return.
