@@ -1,3 +1,11 @@
+2026-09-21 15:40:05 +03:00
+- Final visual-evidence verification passed on GitHub Actions run 35600673452.
+- Capture step and artifact upload both completed successfully.
+- Artifact contained one PNG screenshot and one JSON evidence manifest.
+- Evidence confirmed Campaign ACTIVE, fantasy date/time populated, Protagonist at (0,0), protagonist PNG loaded at 1086x1448, 253 visible terrain tiles, and populated geographic hierarchy.
+- Visual inspection confirmed terrain grid and Protagonist render correctly in the captured build.
+- Updated docs/ROADMAP.md with verified tooling status.
+
 2026-09-21 15:37:26 +03:00
 - Integrated the previous screenshot utility as tools/screenshot_tool.py and adapted it to the current game DOM.
 - Added tools/requirements.txt, tools/SCREENSHOT_TOOL.md, tools/screenshots/.gitkeep and .github/workflows/visual-evidence.yml.
