@@ -153,6 +153,23 @@ return (() => {
         } : null,
         terrainTileCount: tiles.length,
         terrainTypes,
+        terrainGrid: (() => {
+          const grid = document.querySelector('#terrainGrid');
+          if (!grid) return null;
+          const data = grid.dataset || {};
+          return {
+            columns: Number(data.columns || 0),
+            rows: Number(data.rows || 0),
+            tileSize: Number(data.tileSize || 0),
+            viewportWidth: Number(data.viewportWidth || 0),
+            viewportHeight: Number(data.viewportHeight || 0),
+            gridWidth: Number(data.gridWidth || 0),
+            gridHeight: Number(data.gridHeight || 0),
+            coveragePass: data.coveragePass === 'true',
+            centerPass: data.centerPass === 'true',
+          };
+        })(),
+        terrainTypes,
         geography: {
           continent: document.querySelector('#geoContinent')?.textContent?.trim() || null,
           country: document.querySelector('#geoCountry')?.textContent?.trim() || null,
