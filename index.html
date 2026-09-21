@@ -136,19 +136,23 @@
     <summary>WP-002 Deterministic Randomness</summary>
     <div class="accordion-content technical-info">
       <p><strong>Campaign SEED:</strong> <code id="prngSeed">—</code></p>
+      <p><strong>Foundation sample:</strong> <code id="foundationKey">—</code> → <code id="foundationValue">—</code></p>
       <p><strong>Fantasy timestamp:</strong> <code id="prngTimestamp">—</code></p>
-      <p><strong>Deterministic value:</strong> <code id="prngValue">—</code></p>
-      <div class="check"><span>Same SEED + same fantasy timestamp = same result</span><b id="vPrngRepeat">WAITING</b></div>
-      <div class="check"><span>Fantasy timestamp participates in the result</span><b id="vPrngTime">WAITING</b></div>
-      <div class="check"><span>Random function accepts only SEED + fantasy timestamp</span><b id="vPrngSource">WAITING</b></div>
-      <p>Randomness is unavailable before a campaign has an authoritative fantasy timestamp. No real-random source or hidden random state is used.</p>
+      <p><strong>Live-action value:</strong> <code id="liveValue">—</code></p>
+      <div class="check"><span>World foundation uses SEED-based deterministic generation only</span><b id="vFoundationRepeat">WAITING</b></div>
+      <div class="check"><span>Foundation generation does not use fantasy time</span><b id="vFoundationTimeFree">WAITING</b></div>
+      <div class="check"><span>Same SEED + same fantasy timestamp = same live result</span><b id="vLiveRepeat">WAITING</b></div>
+      <div class="check"><span>Fantasy timestamp participates in live actions</span><b id="vLiveTime">WAITING</b></div>
+      <div class="check"><span>No real-random source exists</span><b id="vPrngSource">WAITING</b></div>
+      <p><strong>Foundation systems:</strong> terrain, environment, initial NPC generation.</p>
+      <p><strong>Live systems:</strong> NPC actions, decisions, events and other changing simulation behavior.</p>
     </div>
   </details>
 
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-002 deterministic SEED + fantasy-time randomness.</p>
+      <p><strong>Current Work Package:</strong> WP-002 split deterministic foundation/live randomness.</p>
       <p><strong>Current world rendering:</strong> Not implemented yet.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
