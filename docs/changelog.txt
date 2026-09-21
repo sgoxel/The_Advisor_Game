@@ -1,3 +1,12 @@
+2026-09-21 15:50:44 +03:00
+- WP-005 final responsive acceptance passed on GitHub Actions run 35601738723.
+- Landscape Gameplay Area 1920x839 used 23x11 = 253 tiles with 2300x1100 grid coverage.
+- Portrait Gameplay Area 1080x1679 used 13x19 = 247 tiles with 1300x1900 grid coverage.
+- Returning to landscape reproduced the original 23x11 grid.
+- All responsive evidence frames reported coveragePass=true and centerPass=true.
+- Visual inspection confirmed no blank Gameplay Area and Protagonist remained centered at (0,0).
+- Recorded verified evidence in docs/ROADMAP.md.
+
 2026-09-21 15:47:00 +03:00
 - WP-005 visual acceptance tightened.
 - Visual-evidence tool now fails when terrain coverage, centered world tile, or rendered tile count evidence is invalid.
