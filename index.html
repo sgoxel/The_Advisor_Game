@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-007D</title>
+<title>The Advisor Game — WP-007E</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-007D</span>
+      <span class="build-badge">WP-007E</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -325,10 +325,22 @@
   </details>
 
   <details>
+    <summary>WP-007E Diagonal + Multi-Terrain Junction Smoothing</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Junction Mode</span><strong id="blendJunctionMode">—</strong></div>
+      </div>
+      <div class="check"><span>Diagonal-only terrain contact receives a rounded corner cap instead of a square point notch</span><b id="vBlendDiagonal">WAITING</b></div>
+      <div class="check"><span>Three-material junctions let the strongest compatible material own the tiny corner</span><b id="vBlendJunctionPriority">WAITING</b></div>
+      <p>The renderer now reads all eight neighboring cells. Small A/B SVG corner caps repair diagonal-only contacts, while priority rules prevent a lower-priority third material from punching through a stronger shoreline or border.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-007D Deterministic Terrain Blend Variation.</p>
-      <p><strong>Current world rendering:</strong> Deterministic SVG terrain with rounded neighboring-material masks and coordinate-stable A/B curve variation.</p>
+      <p><strong>Current Work Package:</strong> WP-007E Diagonal + Multi-Terrain Junction Smoothing.</p>
+      <p><strong>Current world rendering:</strong> Deterministic rounded SVG terrain blending with A/B variation, diagonal corner caps and priority-aware multi-material junctions.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
