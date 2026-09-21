@@ -139,8 +139,8 @@ function boundsOverlap(a,b,padding){
 function plotCandidateValid(seed,bounds,accepted){
   let roadAdjacent=false;
 
-  for(let y=bounds.minY-1;y<=bounds.maxY+1;y++){
-    for(let x=bounds.minX-1;x<=bounds.maxX+1;x++){
+  for(let y=bounds.minY-2;y<=bounds.maxY+2;y++){
+    for(let x=bounds.minX-2;x<=bounds.maxX+2;x++){
       const l=local(seed,String(x),String(y));
       if(!l)return false;
 
@@ -168,9 +168,11 @@ function buildPlots(seed){
   if(plotPlanCache.has(seed))return plotPlanCache.get(seed);
 
   const candidates=[];
-  for(let y=-11;y<=11;y++){
-    for(let x=-11;x<=11;x++){
-      if(Math.abs(x)<4||Math.abs(y)<4)continue;
+  for(let y=-20;y<=20;y++){
+    for(let x=-20;x<=20;x++){
+      const radius=Math.hypot(x,y);
+      if(radius<7||radius>20)continue;
+      if(Math.abs(x)<3&&Math.abs(y)<3)continue;
       const score=PRNG.foundationUint32(seed,"starting-village:plot-candidate:"+x+":"+y);
       candidates.push({x,y,score});
     }
