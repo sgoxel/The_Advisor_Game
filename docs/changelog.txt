@@ -1,3 +1,14 @@
+2026-09-21 21:30:00 +03:00
+- Replanned development before population work because gameplay performance and freely enterable buildings are architectural prerequisites.
+- Stage 3 is now GPU 2.5D World + Enterable Building Foundation.
+- WP-S003-001 through WP-S003-004 were reassigned to Issues #24-#27: PixiJS/WebGL gameplay renderer, authoritative building interiors, interior interaction points, and layered 2.5D interior visibility.
+- Created WP-S003-005 Issue #28 for viewport culling, batching and performance baseline.
+- Population work moved intact to Stage 4 rather than being implemented on the old DOM renderer.
+- Created Stage 4 Issues #29-#33 for deterministic residents, indoor home/work assignments, activity/action targets, continuous indoor/outdoor movement, and interior action execution.
+- Building interiors are defined as continuous parts of the same authoritative world: outdoor -> real door -> interior floor, with no disconnected scene teleport.
+- All character-facing indoor systems use the same generic interaction-point/action contract so both Protagonist and NPCs can use them.
+- ROADMAP continues to contain codes/titles only; all Goal, Scope, Rules, In-Game Proof and Pass Condition details remain in GitHub Issues.
+
 2026-09-21 21:25:00 +03:00
 - Stage 2 review completed after WP-S002-004 passed GitHub Actions and Issue #23 was closed.
 - Re-read docs/README.md and confirmed the next practical layer is the Starting Village population foundation.
