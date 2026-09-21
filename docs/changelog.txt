@@ -1,3 +1,17 @@
+2026-09-21 18:51:00 +03:00
+- WP-007C Rounded Terrain Border Blending completed.
+- Replaced visible generic L/C/U contour-loop overlays with actual neighboring-material blending.
+- Added 13 standalone SVG vector masks: 4 rounded side edges, 4 rounded corners, 4 peninsula/inlet orientations and 1 rounded island mask.
+- Terrain borders now reveal the neighboring terrain's real color and SVG texture through the selected mask.
+- Grass/water shorelines now use the water material itself to make the rounded shoreline; land/land boundaries are rounded as well.
+- Added deterministic blend priority so only one side paints the material boundary and double-overpainting is avoided.
+- Road/path versus water blending is suppressed to prevent visual roads from leaking into unreserved water.
+- Static edge/corner/peninsula/island/opposite-edge/dirt-water priority tests passed.
+- GitHub Actions run 35621550722 passed on exact merged main.
+- Artifact visual-evidence-starting-village-35621550722: 499,570 bytes.
+- Manual screenshot review score: 8.5/10 PASS.
+- Updated docs/ROADMAP.md and marked WP-007C COMPLETE.
+
 2026-09-21 18:27:00 +03:00
 - WP-007B Tile-Based House Plans + Wall Foundation completed.
 - Added deterministic house plans for all 6 Starting Village plots: 4 normal houses + 2 cabins.
