@@ -161,6 +161,17 @@ Settlement appearance, population, buildings, professions, roads, resources, def
 
 The overall world is continuous and unbounded from the player's perspective. The Protagonist begins every new campaign at world coordinate **(0,0)**, and that origin is the initial center of the gameplay view. Both X and Y may extend without a gameplay-defined boundary in negative or positive directions. Large settlements may extend across multiple local areas while remaining one coherent place.
 
+## SEED-Generated Geographic Hierarchy and Scale
+
+The Campaign SEED deterministically defines the fixed geographic foundation from large scale to small scale, including continent, country or realm, region or province, city, district, town where applicable, village, avenue or major road, street or local road, terrain, elevation, rivers, lakes, coastlines, biome, vegetation, climate, local environmental conditions, settlement placement and travel connections.
+
+The same SEED must reproduce the same unchanged geographic foundation. Fantasy time does not participate in this generation.
+
+Generated geography must also obey realism constraints rather than placing settlements arbitrarily. In particular, two distinct villages must not have a valid walking route between their centers that takes less than **1 fantasy game hour**. This constraint uses the shortest valid walkable route, not straight-line distance. Terrain, elevation, water, bridges, roads, paths and other movement conditions may lengthen the route.
+
+If a SEED-generated village candidate would violate this minimum travel-time rule, the generator must deterministically reject that candidate and continue to the next deterministic candidate derived from the same SEED process. Therefore the world remains both realistic and reproducible.
+
+
 Settlements are historical entities, not frozen templates. Population, prosperity, security, trade, resources, hazards, construction, destruction, war and other pressures may cause them to grow, decline, fortify, change function, lose structures, become abandoned or ruined, recover, rebuild or be repopulated.
 
 Growth from village to town or city is possible but never mandatory. Decline is equally valid.
