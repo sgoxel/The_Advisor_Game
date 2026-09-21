@@ -199,6 +199,8 @@ Two deterministic modes are used:
 
 **Random(Campaign SEED, Fantasy Game Timestamp)**
 
+Fantasy Game Timestamp contains **date, hour, minute and second only**. Its canonical form is `YYYY-MM-DD HH:MM:SS`. Milliseconds are never included.
+
 If the Campaign SEED and Fantasy Game Timestamp are the same, the live result must be exactly the same.
 
 Neither mode may use `Math.random()`, browser/OS cryptographic randomness, device entropy, uncontrolled real randomness, or real-world time as a random input. The authoritative fantasy timestamp for live actions is supplied by the game-time system.
