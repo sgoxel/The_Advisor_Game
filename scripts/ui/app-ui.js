@@ -8,6 +8,8 @@ const ids=[
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
+  "cameraHud","cameraCoordinate","centerCameraButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY",
+  "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
@@ -143,6 +145,10 @@ function renderTerrainLegend(){
 let lastTerrainViewportKey="";
 let terrainResizeObserver=null;
 let terrainRenderFrame=0;
+let cameraInitialized=false;
+let cameraMoved=false;
+let cameraReturnProof=null;
+let dragState=null;
 
 function terrainGridDimensions(width,height,tileSize){
   let columns=Math.max(3,Math.ceil(width/tileSize)+2);
@@ -154,7 +160,8 @@ function terrainGridDimensions(width,height,tileSize){
 
 function renderTerrain(){
   const campaign=SeedSystem.getCampaign();
-  const center=Protagonist.getPosition();
+  const protagonist=Protagonist.getPosition();
+  const center=campaign?Camera.getCenter():null;
   if(!campaign||!center){
     e.terrainGrid.hidden=true;
     e.tileViewportSize.textContent="—";
@@ -257,6 +264,176 @@ function observeTerrainViewport(){
   }
 }
 
+
+function sameCoordinate(a,b){
+  return !!a&&!!b&&a.x===b.x&&a.y===b.y;
+}
+
+function cameraTerrainSignature(seed,center){
+  const samples=[
+    [0,0],[-1,0],[1,0],[0,-1],[0,1],[-2,-2],[2,2]
+  ];
+  return samples.map(([dx,dy])=>{
+    const pos=WorldCoordinates.add(center,String(dx),String(dy));
+    const tile=TerrainFoundation.getTile(seed,pos.x,pos.y);
+    return pos.x+":"+pos.y+":"+tile.type+":"+tile.color;
+  }).join("|");
+}
+
+function updateCameraPresentation(){
+  const campaign=SeedSystem.getCampaign();
+  const protagonist=Protagonist.getPosition();
+  if(!campaign||!protagonist){
+    e.cameraHud.hidden=true;
+    e.protagonistMarker.hidden=true;
+    return;
+  }
+
+  const center=Camera.getCenter();
+  const offset=Camera.offsetFrom(protagonist);
+  const dx=BigInt(offset.x);
+  const dy=BigInt(offset.y);
+  const tileSize=100;
+  const maxVisibleX=BigInt(Math.ceil(e.terrainGrid.parentElement.clientWidth/tileSize/2)+1);
+  const maxVisibleY=BigInt(Math.ceil(e.terrainGrid.parentElement.clientHeight/tileSize/2)+1);
+  const visible=dx>=-maxVisibleX&&dx<=maxVisibleX&&dy>=-maxVisibleY&&dy<=maxVisibleY;
+
+  e.cameraHud.hidden=false;
+  e.cameraCoordinate.textContent="("+center.x+","+center.y+")";
+  e.cameraX.textContent=center.x;
+  e.cameraY.textContent=center.y;
+  e.cameraProtagonistX.textContent=protagonist.x;
+  e.cameraProtagonistY.textContent=protagonist.y;
+
+  e.protagonistMarker.hidden=!visible;
+  if(visible){
+    const px=Number(dx)*tileSize;
+    const py=Number(dy)*tileSize;
+    e.protagonistMarker.style.transform="translate(calc(-50% + "+px+"px),calc(-50% + "+py+"px))";
+  }
+
+  const initial=sameCoordinate(center,protagonist);
+  setCheck(e.vCameraStart,!cameraMoved?initial:true,"FAIL");
+  setCheck(e.vCameraIndependent,
+    !cameraMoved||!sameCoordinate(center,protagonist),
+    cameraMoved?"FAIL":"WAITING"
+  );
+
+  const expectedTiles=Number(e.terrainGrid.dataset.columns||0)*Number(e.terrainGrid.dataset.rows||0);
+  setCheck(e.vCameraWindow,
+    expectedTiles>0&&e.terrainGrid.children.length===expectedTiles&&expectedTiles<5000,
+    "FAIL"
+  );
+
+  if(cameraReturnProof){
+    const currentSignature=cameraTerrainSignature(campaign.seed,center);
+    setCheck(e.vCameraReturn,
+      sameCoordinate(center,cameraReturnProof.center)&&currentSignature===cameraReturnProof.signature,
+      sameCoordinate(center,cameraReturnProof.center)?"FAIL":"WAITING"
+    );
+  }else{
+    setCheck(e.vCameraReturn,false,"WAITING");
+  }
+}
+
+function panCamera(dx,dy){
+  const campaign=SeedSystem.getCampaign();
+  const protagonist=Protagonist.getPosition();
+  if(!campaign||!protagonist)return;
+
+  if(!cameraReturnProof){
+    const center=Camera.getCenter();
+    cameraReturnProof={
+      center,
+      signature:cameraTerrainSignature(campaign.seed,center)
+    };
+  }
+
+  Camera.pan(String(dx),String(dy));
+  cameraMoved=true;
+  renderTerrain();
+  updateCameraPresentation();
+}
+
+function centerCameraOnProtagonist(){
+  const campaign=SeedSystem.getCampaign();
+  const protagonist=Protagonist.getPosition();
+  if(!campaign||!protagonist)return;
+  Camera.centerOn(protagonist);
+  renderTerrain();
+  updateCameraPresentation();
+}
+
+function resetCameraForCampaign(){
+  const protagonist=Protagonist.getPosition();
+  Camera.centerOn(protagonist||WorldCoordinates.origin());
+  cameraInitialized=!!protagonist;
+  cameraMoved=false;
+  cameraReturnProof=null;
+}
+
+function installCameraControls(){
+  const area=e.terrainGrid.parentElement;
+  area.classList.add("camera-ready");
+  e.centerCameraButton.onclick=centerCameraOnProtagonist;
+
+  area.addEventListener("pointerdown",event=>{
+    if(!SeedSystem.getCampaign()||event.button!==0||event.target.closest(".camera-hud"))return;
+    dragState={x:event.clientX,y:event.clientY,accX:0,accY:0};
+    area.setPointerCapture?.(event.pointerId);
+    area.classList.add("camera-dragging");
+    event.preventDefault();
+  });
+
+  area.addEventListener("pointermove",event=>{
+    if(!dragState)return;
+    const dx=event.clientX-dragState.x;
+    const dy=event.clientY-dragState.y;
+    dragState.x=event.clientX;
+    dragState.y=event.clientY;
+    dragState.accX+=dx;
+    dragState.accY+=dy;
+    const threshold=60;
+    let panX=0,panY=0;
+    while(Math.abs(dragState.accX)>=threshold){
+      const step=dragState.accX>0?-1:1;
+      panX+=step;
+      dragState.accX+=dragState.accX>0?-threshold:threshold;
+    }
+    while(Math.abs(dragState.accY)>=threshold){
+      const step=dragState.accY>0?-1:1;
+      panY+=step;
+      dragState.accY+=dragState.accY>0?-threshold:threshold;
+    }
+    if(panX||panY)panCamera(panX,panY);
+  });
+
+  const endDrag=event=>{
+    if(!dragState)return;
+    dragState=null;
+    area.classList.remove("camera-dragging");
+    try{area.releasePointerCapture?.(event.pointerId)}catch(_){}
+  };
+  area.addEventListener("pointerup",endDrag);
+  area.addEventListener("pointercancel",endDrag);
+
+  document.addEventListener("keydown",event=>{
+    if(!SeedSystem.getCampaign())return;
+    if(event.target&&["INPUT","TEXTAREA","SELECT"].includes(event.target.tagName))return;
+    const key=event.key.toLowerCase();
+    const moves={
+      arrowleft:[-1,0],a:[-1,0],
+      arrowright:[1,0],d:[1,0],
+      arrowup:[0,-1],w:[0,-1],
+      arrowdown:[0,1],s:[0,1]
+    };
+    const move=moves[key];
+    if(!move)return;
+    event.preventDefault();
+    panCamera(move[0],move[1]);
+  });
+}
+
 function renderWorldCoordinates(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -264,9 +441,13 @@ function renderWorldCoordinates(){
 
   if(position){
     const label="("+position.x+","+position.y+")";
+    if(!cameraInitialized){
+      Camera.centerOn(position);
+      cameraInitialized=true;
+    }
     e.gameplayPlaceholder.hidden=true;
     renderTerrain();
-    e.protagonistMarker.hidden=false;
+    updateCameraPresentation();
     e.protagonistLocation.textContent=label;
     e.detailProtagonistX.textContent=position.x;
     e.detailProtagonistY.textContent=position.y;
@@ -275,6 +456,7 @@ function renderWorldCoordinates(){
   }else{
     e.gameplayPlaceholder.hidden=false;
     e.terrainGrid.hidden=true;
+    e.cameraHud.hidden=true;
     e.protagonistMarker.hidden=true;
     e.protagonistLocation.textContent="—";
     e.detailProtagonistX.textContent="—";
@@ -317,12 +499,14 @@ function startClock(){
 function startNewCampaign(){
   const result=SeedSystem.startNewCampaign();
   restoredCampaign=false;
+  if(result.ok)resetCameraForCampaign();
   e.menuMessage.textContent=result.message;
   e.statusMessage.textContent="Campaign running. Game time advances 24× real time.";
   renderStatic();startClock();closePopup("mainMenuPopup");
 }
 function restartCampaign(){
   const result=SeedSystem.restartCampaign();
+  if(result.ok)resetCameraForCampaign();
   e.menuMessage.textContent=result.message;
   e.statusMessage.textContent=result.ok?"Campaign restarted with the same SEED.":result.message;
   renderStatic();startClock();
@@ -339,6 +523,7 @@ function init(){
   e.seedInput.value=SeedSystem.getSettings().seed;
   const restored=SeedSystem.loadCampaign();
   restoredCampaign=restored.ok;
+  resetCameraForCampaign();
 
   e.mainMenuButton.onclick=()=>openPopup("mainMenuPopup");
   e.settingsButton.onclick=()=>{e.seedInput.value=SeedSystem.getSettings().seed;openPopup("settingsPopup")};
@@ -361,6 +546,7 @@ function init(){
   else e.statusMessage.textContent="Open Main Menu to start a campaign.";
 
   renderTerrainLegend();
+  installCameraControls();
   renderStatic();startClock();
   observeTerrainViewport();
 }
