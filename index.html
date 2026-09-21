@@ -133,20 +133,22 @@
 
 
   <details>
-    <summary>WP-002 Deterministic PRNG</summary>
+    <summary>WP-002 Deterministic Randomness</summary>
     <div class="accordion-content technical-info">
-      <p><strong>SEED source:</strong> <code id="prngSeed">—</code></p>
-      <p><strong>Repeatable sequence:</strong> <code id="prngSequence">—</code></p>
-      <div class="check"><span>Same SEED produces the same sequence</span><b id="vPrngRepeat">WAITING</b></div>
-      <div class="check"><span>Different SEED produces a different sequence</span><b id="vPrngDifferent">WAITING</b></div>
-      <div class="check"><span>Procedural random source is deterministic PRNG</span><b id="vPrngSource">WAITING</b></div>
+      <p><strong>Campaign SEED:</strong> <code id="prngSeed">—</code></p>
+      <p><strong>Fantasy timestamp:</strong> <code id="prngTimestamp">—</code></p>
+      <p><strong>Deterministic value:</strong> <code id="prngValue">—</code></p>
+      <div class="check"><span>Same SEED + same fantasy timestamp = same result</span><b id="vPrngRepeat">WAITING</b></div>
+      <div class="check"><span>Fantasy timestamp participates in the result</span><b id="vPrngTime">WAITING</b></div>
+      <div class="check"><span>Random function accepts only SEED + fantasy timestamp</span><b id="vPrngSource">WAITING</b></div>
+      <p>Randomness is unavailable before a campaign has an authoritative fantasy timestamp. No real-random source or hidden random state is used.</p>
     </div>
   </details>
 
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-002 Deterministic PRNG.</p>
+      <p><strong>Current Work Package:</strong> WP-002 deterministic SEED + fantasy-time randomness.</p>
       <p><strong>Current world rendering:</strong> Not implemented yet.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
