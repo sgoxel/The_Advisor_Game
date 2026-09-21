@@ -60,6 +60,7 @@ on:
       - scripts/world/geography.js
       - scripts/world/starting-village.js
       - scripts/world/house-plans.js
+      - scripts/world/special-buildings.js
       - scripts/world/terrain.js
       - scripts/data/world-standards.js
       - scripts/data/terrain-palette.js
