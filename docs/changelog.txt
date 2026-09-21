@@ -1,3 +1,12 @@
+2026-09-21 14:58:12 +03:00
+- Added WP-004 for SEED-generated realistic geographic hierarchy before tile rendering.
+- Geographic foundation now explicitly covers continent, country/realm, region/province, city, district, town, village, avenue/major road, street/local road, terrain and environmental conditions.
+- Added deterministic realism constraint: no two distinct village centers may have a valid walking route under 1 fantasy game hour.
+- Village spacing is based on shortest valid walkable route, not straight-line distance.
+- Invalid village candidates must be deterministically rejected and regenerated from the same SEED process.
+- Renumbered solid-color tile rendering to WP-005 and camera movement to WP-006.
+- Updated docs/ROADMAP.md and docs/README.md.
+
 2026-09-21 14:53:34 +03:00
 - WP-003 presentation cleanup after verification.
 - Gameplay placeholder now hides when the Protagonist is created at (0,0).
