@@ -460,6 +460,7 @@ Additional camera-zoom acceptance passed on GitHub Actions run **35606140004**:
 - terrain/environment generation uses deterministic interpolated multi-scale SEED fields instead of fixed rectangular terrain blocks;
 - temporary village roads use deterministic meandering offsets instead of a perfect axis-aligned cross;
 - visible per-tile grid seams are removed during normal play so same-type neighboring cells read as one continuous terrain region; the hovered cell and authoritative center cell may still show a diagnostic outline.
+- verified natural-terrain evidence: GitHub Actions run **35607407473** passed at **0.50×** zoom with **0 suspicious large rectangular natural-terrain components**; the largest large interior natural component filled only **0.555** of its bounding box, confirming an irregular boundary rather than a rectangle.
 
 ---
 
