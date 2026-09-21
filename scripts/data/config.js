@@ -1,5 +1,5 @@
 window.GameConfig=Object.freeze({
-  build:"WP-003",
+  build:"WP-004",
   defaultSeed:"The_Advisor_Game_20260924",
   campaignStorageKey:"theAdvisorGame.wp001.campaign.v2",
   settingsStorageKey:"theAdvisorGame.wp001.settings.v2",
