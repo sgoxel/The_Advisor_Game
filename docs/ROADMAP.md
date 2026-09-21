@@ -31,4 +31,11 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation
 - `WP-S002-004` — Deterministic Local Route Planning
 
+# Stage 3 — Starting Village Population Foundation
+
+- `WP-S003-001` — Deterministic Starting Village Resident Roster
+- `WP-S003-002` — Homes, Professions + Workplace Assignment
+- `WP-S003-003` — Deterministic Daily Activity Schedules
+- `WP-S003-004` — Autonomous NPC Route Execution + Visible Movement
+
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
