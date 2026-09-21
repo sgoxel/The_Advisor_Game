@@ -455,7 +455,10 @@ Additional camera-zoom acceptance passed on GitHub Actions run **35606140004**:
 - Protagonist world coordinates do not change when the camera pans;
 - camera coordinates can move in positive or negative X/Y directions;
 - returning to the same coordinates reproduces the same SEED foundation;
-- wheel and pinch zoom change only presentation scale and do not change Simulation/world coordinates.
+- wheel and pinch zoom change only presentation scale and do not change Simulation/world coordinates;
+- environmental terrain regions must have natural irregular boundaries rather than visible macro-cell rectangles;
+- terrain/environment generation uses deterministic interpolated multi-scale SEED fields instead of fixed rectangular terrain blocks;
+- temporary village roads use deterministic meandering offsets instead of a perfect axis-aligned cross.
 
 ---
 
