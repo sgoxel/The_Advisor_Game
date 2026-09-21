@@ -1,3 +1,13 @@
+2026-09-21 15:04:00 +03:00
+- WP-004 SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing implemented.
+- Added scripts/world/geography.js for deterministic continent, realm, region, city, district, village, avenue, street and environmental foundation.
+- Terrain rendering now consumes the WP-004 geographic foundation instead of the temporary standalone preview classifier.
+- Added deterministic village spatial cells and bounded jitter.
+- Current world-scale model uses 100 meters per logical tile and 5.5 km/h as fastest normal walking speed.
+- Added terrain-aware A* walking-route verification for the nearest distinct village from (0,0).
+- Added in-game WP-004 geography/environment/nearest-village verification panel.
+- Updated build marker to WP-004, docs/ROADMAP.md, docs/README.md and docs/changelog.txt.
+
 2026-09-21 15:00:00 +03:00
 - Corrected terrain-grid centering after verification.
 - Rendered terrain rows and columns are now forced to odd counts so world coordinate (0,0) stays exactly under the centered Protagonist marker.
