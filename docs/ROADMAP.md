@@ -73,7 +73,7 @@ The game must remain playable in portrait and landscape layouts.
 
 # Stage 1 — Deterministic World Foundation
 
-## WP-001 — Base Game, Campaign SEED and Game Clock — COMPLETE
+## WP-S1-1 — Base Game, Campaign SEED and Game Clock — COMPLETE
 
 ### Goal
 
@@ -109,7 +109,7 @@ The player can start a campaign, see the fantasy clock advance, open Settings, s
 
 ---
 
-## WP-002 — Deterministic Foundation and Live Randomness — COMPLETE
+## WP-S1-2 — Deterministic Foundation and Live Randomness — COMPLETE
 
 ### Goal
 
@@ -182,7 +182,7 @@ If the SEED and FantasyTimestamp are the same, the result must be exactly the sa
 - milliseconds are rejected and cannot influence a live random result;
 - both functions are stateless and deterministic;
 - the random module never reads the real clock itself;
-- the WP-002 accordion verifies both modes separately.
+- the WP-S1-2 accordion verifies both modes separately.
 
 ### Pass condition
 
@@ -195,7 +195,7 @@ If the SEED and FantasyTimestamp are the same, the result must be exactly the sa
 
 ---
 
-## WP-003 — Infinite World Coordinates + Protagonist Origin — COMPLETE
+## WP-S1-3 — Infinite World Coordinates + Protagonist Origin — COMPLETE
 
 ### Goal
 
@@ -231,7 +231,7 @@ Examples of valid coordinates:
 
 ### In-game proof
 
-After starting a campaign, the Protagonist marker appears at the exact center of the Gameplay Area and shows **(0,0)**. The WP-003 accordion verifies positive and negative arbitrary-size coordinates.
+After starting a campaign, the Protagonist marker appears at the exact center of the Gameplay Area and shows **(0,0)**. The WP-S1-3 accordion verifies positive and negative arbitrary-size coordinates.
 
 ### Pass condition
 
@@ -245,7 +245,7 @@ After starting a campaign, the Protagonist marker appears at the exact center of
 
 ---
 
-## WP-004 — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing — COMPLETE
+## WP-S1-4 — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing — COMPLETE
 
 ### Goal
 
@@ -309,7 +309,7 @@ Fantasy time must not influence continent, country, region, settlement, street, 
 
 ### In-game proof
 
-The WP-004 accordion shows the generated starting geographic hierarchy around **(0,0)**, environmental conditions, nearest distinct village, and deterministic shortest valid walking time.
+The WP-S1-4 accordion shows the generated starting geographic hierarchy around **(0,0)**, environmental conditions, nearest distinct village, and deterministic shortest valid walking time.
 
 ### Pass condition
 
@@ -323,7 +323,7 @@ The WP-004 accordion shows the generated starting geographic hierarchy around **
 
 ---
 
-## WP-005 — Viewport-Filling Solid-Color Tiles — COMPLETE
+## WP-S1-5 — Viewport-Filling Solid-Color Tiles — COMPLETE
 
 ### Goal
 
@@ -346,13 +346,13 @@ Before production textures exist, terrain and structural tiles use distinct mute
 
 These colors are presentation-only. Terrain identity remains Simulation/world-foundation data.
 
-The palette is implemented in `scripts/data/terrain-palette.js`. The renderer consumes the completed WP-004 geography foundation and WP-005 now owns viewport-fill behavior.
+The palette is implemented in `scripts/data/terrain-palette.js`. The renderer consumes the completed WP-S1-4 geography foundation and WP-S1-5 now owns viewport-fill behavior.
 
 ### Rules
 
-- no textures in the original WP-005 baseline;
+- no textures in the original WP-S1-5 baseline;
 - no tile atlas;
-- **WP-007B later supersedes the presentation-only no-texture baseline with SVG overlays while retaining the solid-color terrain identity underneath;**
+- **WP-S2-1-2 later supersedes the presentation-only no-texture baseline with SVG overlays while retaining the solid-color terrain identity underneath;**
 - no props or decorative artwork;
 - tile count is calculated from the actual browser gameplay viewport;
 - rendered row/column counts stay odd so the current world-center tile remains exactly centered;
@@ -397,7 +397,7 @@ GitHub Actions run **35601738723** used the `responsive-cycle` scenario on the e
 
 ---
 
-## WP-006 — Camera Movement Through the Infinite World — COMPLETE
+## WP-S1-6 — Camera Movement Through the Infinite World — COMPLETE
 
 ### Goal
 
@@ -478,7 +478,7 @@ Additional camera-zoom acceptance passed on GitHub Actions run **35606140004**:
 
 # Stage 1 Review — COMPLETE
 
-WP-001 through WP-006 are implemented and verified. The project now has:
+WP-S1-1 through WP-S1-6 are implemented and verified. The project now has:
 
 - deterministic Campaign SEED foundation;
 - deterministic live-randomness rules;
@@ -565,7 +565,7 @@ The README requires every new campaign to begin with the Protagonist as an ordin
 
 All Stage 2 generation remains **foundation randomness only**. Fantasy time does not alter the generated starting layout.
 
-## WP-007A — Starting Village Core + Mainland Connection — COMPLETE
+## WP-S2-1-1 — Starting Village Core + Mainland Connection — COMPLETE
 
 ### Goal
 
@@ -608,7 +608,7 @@ Generate from the Campaign SEED:
 - same SEED + same coordinates reproduce exactly the same village layout and mainland connection;
 - no production textures or tile atlas yet;
 - no NPC population yet;
-- house interiors and wall plans are **not** implemented in WP-007A;
+- house interiors and wall plans are **not** implemented in WP-S2-1-1;
 - the existing >= 1 fantasy-hour village-spacing rule remains valid.
 
 ### In-game proof
@@ -666,7 +666,7 @@ GitHub Actions run **35614323669** completed successfully with the `starting-vil
 
 ---
 
-## WP-007B — Tile-Based House Plans + Wall Foundation — COMPLETE
+## WP-S2-1-2 — Tile-Based House Plans + Wall Foundation — COMPLETE
 
 ### Goal
 
@@ -715,7 +715,7 @@ Define:
 - water uses wave-line SVGs, grass uses spike/polygon SVGs, and the other basic terrain types have simple scalable vector patterns;
 - wood floors use plank/zigzag vector lines;
 - walls and doors have north/east/south/west top-down variants plus wall-corner variants;
-- the first generic **L/C/U contour-overlay prototype** was implemented here, then superseded by WP-007C because visible contour loops did not actually blend terrain materials;
+- the first generic **L/C/U contour-overlay prototype** was implemented here, then superseded by WP-S2-1-3 because visible contour loops did not actually blend terrain materials;
 - no PNG tile texture is used by this tile system; the existing solid terrain color remains as a fallback beneath SVG presentation;
 - 12-SEED core verification passed: 6 buildings per SEED, minimum room size 6 tiles, wall/door/access checks PASS, and every rendered building cell resolved to an SVG texture.
 
@@ -723,7 +723,7 @@ Define:
 
 GitHub Actions run **35618812056** completed successfully against the exact current `main` checkout using the `starting-village` scenario:
 
-- WP-007B deterministic house-plan proof PASS;
+- WP-S2-1-2 deterministic house-plan proof PASS;
 - **6 buildings** generated: **4 normal houses + 2 cabins**;
 - minimum room size: **6 tiles = 24 m²**;
 - exterior walls PASS;
@@ -737,7 +737,7 @@ GitHub Actions run **35618812056** completed successfully against the exact curr
 - artifact: `visual-evidence-starting-village-35618812056` (**766,432 bytes**);
 - manual review of all three evidence screenshots: **8/10 PASS**.
 
-The earlier issue-triggered run **35618602851** failed only because it targeted the not-yet-updated GitHub Pages deployment; it did not test the merged local checkout. The push-triggered run above is the authoritative WP-007B verification.
+The earlier issue-triggered run **35618602851** failed only because it targeted the not-yet-updated GitHub Pages deployment; it did not test the merged local checkout. The push-triggered run above is the authoritative WP-S2-1-2 verification.
 
 ### Pass condition
 
@@ -749,12 +749,12 @@ The earlier issue-triggered run **35618602851** failed only because it targeted 
 - entrances reach a village road/path;
 - same SEED reproduces the same house plans;
 - terrain/floor/wall/door tile artwork is SVG-only;
-- SVG terrain transition capability is available; WP-007C owns the corrected rounded material-blending behavior;
-- GitHub screenshot evidence passes before WP-007B is marked COMPLETE.
+- SVG terrain transition capability is available; WP-S2-1-3 owns the corrected rounded material-blending behavior;
+- GitHub screenshot evidence passes before WP-S2-1-2 is marked COMPLETE.
 
 ---
 
-## WP-007C — Rounded Terrain Border Blending — COMPLETE
+## WP-S2-1-3 — Rounded Terrain Border Blending — COMPLETE
 
 ### Goal
 
@@ -828,22 +828,22 @@ GitHub Actions run **35621550722** completed successfully against the exact merg
 
 ---
 
-## WP-007D — Deterministic Terrain Blend Variation — COMPLETE
+## WP-S2-1-4 — Deterministic Terrain Blend Variation — COMPLETE
 
 ### Goal
 
-Reduce visible repetition along long rounded terrain boundaries without changing the WP-007C border topology or authoritative terrain identity.
+Reduce visible repetition along long rounded terrain boundaries without changing the WP-S2-1-3 border topology or authoritative terrain identity.
 
 ### Scope
 
-Add a second compatible SVG mask shape for every rounded WP-007C blend family:
+Add a second compatible SVG mask shape for every rounded WP-S2-1-3 blend family:
 
 - 4 side-edge B variants;
 - 4 rounded-corner B variants;
 - 4 peninsula/inlet B variants;
 - 1 rounded-island B variant.
 
-The original WP-007C masks remain the A variants.
+The original WP-S2-1-3 masks remain the A variants.
 
 ### Rules
 
@@ -864,7 +864,7 @@ The original WP-007C masks remain the A variants.
 - rendered blend layers expose their selected A/B variant for verification;
 - both A and B are reachable across deterministic coordinates for the default Campaign SEED;
 - repeated calls with the same SEED/coordinate return byte-identical blend specifications;
-- the existing WP-007C material priority and road/path-versus-water protection remain unchanged.
+- the existing WP-S2-1-3 material priority and road/path-versus-water protection remain unchanged.
 
 ### Static verification
 
@@ -895,18 +895,18 @@ GitHub Actions run **35624048867** completed successfully against the exact merg
 
 - same SEED + same world coordinate reproduces the same A/B mask;
 - both A and B variants appear in a representative terrain-border sample;
-- long boundaries show less obvious repeated stamping than WP-007C;
+- long boundaries show less obvious repeated stamping than WP-S2-1-3;
 - rounded border continuity remains intact;
 - existing Starting Village, buildings, roads and camera verification remain PASS;
 - screenshot review score remains **above 7/10**.
 
 ---
 
-## WP-007E — Diagonal + Multi-Terrain Junction Smoothing — COMPLETE
+## WP-S2-1-5 — Diagonal + Multi-Terrain Junction Smoothing — COMPLETE
 
 ### Goal
 
-Smooth diagonal-only contacts and three-material corners that can still appear as square point notches after WP-007D.
+Smooth diagonal-only contacts and three-material corners that can still appear as square point notches after WP-S2-1-4.
 
 ### Implemented
 
@@ -955,11 +955,11 @@ GitHub Actions run **35625806201** completed successfully against the exact merg
 
 ---
 
-## WP-008 — Special Buildings + Functional Lots — COMPLETE
+## WP-S2-2 — Special Buildings + Functional Lots — COMPLETE
 
 ### Goal
 
-Extend the WP-007B house-plan foundation to deterministic non-residential structures and work lots that future residents and workplaces can occupy.
+Extend the WP-S2-1-2 house-plan foundation to deterministic non-residential structures and work lots that future residents and workplaces can occupy.
 
 ### Scope
 
@@ -1037,7 +1037,7 @@ GitHub Actions run **35628895648** completed successfully against exact merged `
 
 ---
 
-## WP-009 — Authoritative Walkability and Collision Foundation — COMPLETE
+## WP-S2-3 — Authoritative Walkability and Collision Foundation — COMPLETE
 
 ### Goal
 
@@ -1067,7 +1067,7 @@ Classify world positions as:
 - interior partition-wall overlays are also authoritative **blocked-wall** cells rather than presentation-only decoration;
 - water cells classify as **blocked-water**;
 - unknown/solid building fallback classifies as **blocked-solid**;
-- each walkable classification exposes deterministic km/h speed and seconds-per-2m-tile movement cost for later WP-010 route planning;
+- each walkable classification exposes deterministic km/h speed and seconds-per-2m-tile movement cost for later WP-S2-4 route planning;
 - every rendered terrain tile now carries authoritative `data-walkability`, `data-walkable`, `data-blocks-movement`, movement speed/cost metadata, and wall/door semantic metadata where applicable;
 - camera movement remains presentation-only and is not constrained by this collision layer.
 
@@ -1143,11 +1143,11 @@ GitHub Actions run **35630499582** completed successfully against the exact merg
 - building walls/blocked water cannot be traversed;
 - entrances and roads are reachable;
 - same SEED + coordinate reproduces the same classification;
-- screenshot evidence scores above 7/10 before WP-009 is marked COMPLETE.
+- screenshot evidence scores above 7/10 before WP-S2-3 is marked COMPLETE.
 
 ---
 
-## WP-010 — Deterministic Local Route Planning
+## WP-S2-4 — Deterministic Local Route Planning
 
 ### Goal
 
@@ -1157,7 +1157,7 @@ Provide the route-planning foundation needed by future autonomous Protagonist/NP
 
 Find valid walking routes between local world coordinates using:
 
-- WP-009 walkability;
+- WP-S2-3 walkability;
 - existing terrain movement costs;
 - roads and paths;
 - building entrances;
@@ -1178,17 +1178,17 @@ A development verification can display a deterministic route from the starting p
 
 - valid reachable destinations receive a route;
 - blocked destinations are rejected;
-- routes obey WP-009 collision/walkability;
+- routes obey WP-S2-3 collision/walkability;
 - repeated route calculation is identical.
 
 ---
 
 # Stage 2 Review Gate
 
-Do not add autonomous NPC population, resident schedules, Advisor conversation, economy, combat or external LLM integration until WP-007A, WP-007B and WP-008 through WP-010 are implemented and reviewed.
+Do not add autonomous NPC population, resident schedules, Advisor conversation, economy, combat or external LLM integration until WP-S2-1-1, WP-S2-1-2 and WP-S2-2 through WP-S2-4 are implemented and reviewed.
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
 
 # GitHub WP Issue Migration Tracking
 
-- WP-001 → Issue #9 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
+- WP-S1-1 → Issue #9 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
