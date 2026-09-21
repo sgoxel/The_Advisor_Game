@@ -147,6 +147,7 @@ let terrainResizeObserver=null;
 let terrainRenderFrame=0;
 let cameraInitialized=false;
 let cameraMoved=false;
+let cameraIndependenceProven=false;
 let cameraReturnProof=null;
 let dragState=null;
 
@@ -315,7 +316,7 @@ function updateCameraPresentation(){
   const initial=sameCoordinate(center,protagonist);
   setCheck(e.vCameraStart,!cameraMoved?initial:true,"FAIL");
   setCheck(e.vCameraIndependent,
-    !cameraMoved||!sameCoordinate(center,protagonist),
+    cameraIndependenceProven,
     cameraMoved?"FAIL":"WAITING"
   );
 
@@ -349,8 +350,11 @@ function panCamera(dx,dy){
     };
   }
 
+  const protagonistBefore=WorldCoordinates.position(protagonist.x,protagonist.y);
   Camera.pan(String(dx),String(dy));
   cameraMoved=true;
+  const protagonistAfter=Protagonist.getPosition();
+  cameraIndependenceProven=sameCoordinate(protagonistBefore,protagonistAfter);
   renderTerrain();
   updateCameraPresentation();
 }
@@ -369,6 +373,7 @@ function resetCameraForCampaign(){
   Camera.centerOn(protagonist||WorldCoordinates.origin());
   cameraInitialized=!!protagonist;
   cameraMoved=false;
+  cameraIndependenceProven=false;
   cameraReturnProof=null;
 }
 
