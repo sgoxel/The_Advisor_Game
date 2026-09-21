@@ -149,6 +149,7 @@ return (() => {
         cameraCoordinate: document.querySelector('#cameraCoordinate')?.textContent?.trim() || null,
         cameraX: document.querySelector('#cameraX')?.textContent?.trim() || null,
         cameraY: document.querySelector('#cameraY')?.textContent?.trim() || null,
+        cameraZoom: document.querySelector('#cameraZoom')?.textContent?.trim() || null,
         protagonistSpriteLoaded: Boolean(sprite?.complete && sprite?.naturalWidth > 0),
         protagonistSpriteSize: sprite ? {
           naturalWidth: sprite.naturalWidth || 0,
@@ -431,8 +432,14 @@ def _wheel_canvas(driver, delta_y: int) -> str:
     from selenium.webdriver.common.by import By
 
     elements = driver.find_elements(By.ID, "gameCanvas")
-    if not elements:
-        return "camera-wheel-skipped:no-gameCanvas"
+    target = elements[0] if elements else None
+    target_name = "gameCanvas"
+    if target is None:
+        current = driver.find_elements(By.ID, "gameplayArea")
+        target = current[0] if current else None
+        target_name = "gameplayArea"
+    if target is None:
+        return "camera-wheel-skipped:no-camera-surface"
     driver.execute_script(
         """
         arguments[0].dispatchEvent(new WheelEvent('wheel', {
@@ -443,10 +450,10 @@ def _wheel_canvas(driver, delta_y: int) -> str:
           clientY: Math.round(innerHeight / 2)
         }));
         """,
-        elements[0],
+        target,
         delta_y,
     )
-    return f"wheel-canvas:{delta_y}"
+    return f"wheel-{target_name}:{delta_y}"
 
 
 def _legacy_control(driver, action: str) -> str:
@@ -513,6 +520,30 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "camera-zoom":
+        if len(frames) < 3:
+            raise RuntimeError("camera-zoom requires at least three evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
+        start, zoomed, returned = builds
+        start_zoom = start.get("cameraZoom")
+        zoomed_zoom = zoomed.get("cameraZoom")
+        returned_zoom = returned.get("cameraZoom")
+        if not start_zoom or zoomed_zoom == start_zoom:
+            raise RuntimeError(
+                f"camera-zoom did not change zoom: start={start_zoom}, zoomed={zoomed_zoom}"
+            )
+        if returned_zoom != start_zoom:
+            raise RuntimeError(
+                f"camera-zoom did not return to start zoom: start={start_zoom}, returned={returned_zoom}"
+            )
+        positions = [item.get("protagonistLocation") for item in builds]
+        cameras = [item.get("cameraCoordinate") for item in builds]
+        if len(set(positions)) != 1 or len(set(cameras)) != 1:
+            raise RuntimeError(
+                f"camera-zoom changed world coordinates: protagonist={positions}, camera={cameras}"
+            )
+        return
+
     if scenario != "camera-pan":
         return
     if len(frames) < 3:
