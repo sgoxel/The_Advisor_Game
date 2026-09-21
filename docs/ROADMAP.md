@@ -955,7 +955,7 @@ GitHub Actions run **35625806201** completed successfully against the exact merg
 
 ---
 
-## WP-008 — Special Buildings + Functional Lots — IMPLEMENTED / VISUAL VERIFICATION PENDING
+## WP-008 — Special Buildings + Functional Lots — COMPLETE
 
 ### Goal
 
@@ -1008,13 +1008,32 @@ Add foundation data for:
 - house overlap: **0**;
 - special-lot overlap: **0**.
 
+### Verified evidence
+
+GitHub Actions run **35628895648** completed successfully against exact merged `main` using the `starting-village` scenario.
+
+- deterministic special-lot proof: PASS;
+- required types: tavern, shop, workshop, storehouse, barn, meeting hall, workyard: PASS;
+- total special lots: **7**;
+- enterable structures: **6**;
+- outdoor work lots: **1**;
+- road overlap: **0**;
+- water overlap: **0**;
+- house overlap: **0**;
+- special-lot overlap: **0**;
+- broad village frame visibly rendered shop + storehouse;
+- gateway/southern village frame visibly rendered tavern + workshop + storehouse + barn + workyard;
+- visible special cells across the three evidence frames: **15 / 29 / 106**;
+- artifact: `visual-evidence-starting-village-35628895648` (**542,368 bytes**);
+- manual review of all three screenshots: **8.7/10 PASS**.
+
 ### Pass condition
 
 - same SEED reproduces the same structures;
 - structures occupy coherent parcels;
 - entrances face reachable walkable space;
 - no invalid overlap exists;
-- screenshot evidence scores **above 7/10** before WP-008 is marked COMPLETE.
+- screenshot evidence scores **above 7/10**.
 
 ---
 
