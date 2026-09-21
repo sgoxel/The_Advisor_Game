@@ -1,3 +1,13 @@
+2026-09-21 21:21:00 +03:00
+- WP-S002-004 Deterministic Local Route Planning completed.
+- Added scripts/world/route-planner.js with deterministic bounded A* route planning using authoritative WP-S002-003 walkability and movement costs.
+- Added visible non-controlling route proof in the Gameplay Area and a WP-S002-004 technical verification accordion.
+- Extended screenshot_tool.py starting-village evidence with route validation.
+- GitHub Actions run 35637696005 passed on commit 88c064f0dbea0be10824dac1548d7021bce2e541.
+- Verified route to Storehouse (19,8): 27 steps, 56.82 s, 234 evaluated cells, deterministic repeat PASS, blocked destination rejection PASS, entrance/interior proof PASS.
+- Visual review score: 9/10 PASS.
+- WP-S002-004 Issue #23 closed as completed.
+
 2026-09-21 20:52:00 +03:00
 - Simplified docs/ROADMAP.md to Stage headings plus WP codes and titles only.
 - Removed Goal, Scope, Rules, proof, pass-condition, implementation, verification, status, migration-tracking, and other WP detail from ROADMAP.
