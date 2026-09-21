@@ -465,13 +465,13 @@ Additional camera-zoom acceptance passed on GitHub Actions run **35606140004**:
 - the currently rendered starting-village main road is a deterministic **connected irregular ring road plus connected central avenues**; it has no arbitrary terrain-caused cut or fake regional highway across open water;
 - Stage 2 secondary roads and footpaths must attach to this authoritative main-road network rather than replace or sever it;
 - water inside the inhabited village foundation is shaped around coherent buildable land; only bounded road crossings remain **Bridge** tiles;
-- bridge walking speed uses the current main-road walking speed of **5.5 km/h**;
-- with **100 meters per logical tile**, the **10 fantasy-minute maximum bridge time** permits at most **9 consecutive bridge tiles** (about **9.82 fantasy minutes**);
+- the Stage 2 measurement standard supersedes the earlier prototype road scale: road/bridge walking now uses **3.6 km/h** and **1 tile = 2 m**;
+- rural bridges are limited by the stricter **120 m / 60-tile practical cap** as well as the **10 fantasy-minute** time cap;
 - current village main roads can widen up to **3 tiles** near the settlement center and narrow gradually as context becomes less urban or more difficult;
 - rough forest/mountain/mud road sections may narrow to **1 tile**, while ordinary non-urban main-road sections use up to **2 tiles**;
 - the width policy reserves up to **4 tiles for towns**, **6 for cities**, and **10 tiles only for capital-city main roads** when those settlement scales are physically implemented; this 10-tile allowance is not a general wilderness/international-road width;
-- current main bridges use a practical maximum width of **2 tiles** outside future major-city infrastructure;
-- verified GitHub Actions run **35610364649**: main-road network connected, bridge limit PASS, maximum bridge **9 tiles / 9.82 fantasy minutes**, current village-road width **2–3 tiles** across multi-SEED stress tests.
+- starting-village bridges are kept narrower than future city bridges; future normal 2-lane bridges may use about **4 tiles = 8 m** where context supports it;
+- Stage 1 road continuity remained verified, while all physical distances and speeds are now governed by the Stage 2 World Measurement Standard.
 
 ---
 
@@ -531,7 +531,7 @@ The README requires every new campaign to begin with the Protagonist as an ordin
 
 All Stage 2 generation remains **foundation randomness only**. Fantasy time does not alter the generated starting layout.
 
-## WP-007A — Starting Village Core + Mainland Connection
+## WP-007A — Starting Village Core + Mainland Connection — COMPLETE
 
 ### Goal
 
@@ -587,6 +587,36 @@ At broad zoom the player can clearly identify:
 - a connected village road network;
 - a continuous gateway road reaching mainland;
 - no road ending arbitrarily in water.
+
+### Implemented
+
+- authoritative **1 tile = 2 m** world scale is live in code via `scripts/data/world-standards.js`;
+- Starting Village is generated deterministically around **(0,0)**;
+- default small-village core is approximately **104 m across** before irregular edge transition;
+- a **14 m** public square surrounds the initial Protagonist position;
+- six deterministic reserved building plots are visible but contain no house interiors yet;
+- connected ring/avenue roads and local paths form the village circulation foundation;
+- one deterministic gateway direction leads out of the village;
+- the gateway road remains continuous through public square, causeway/short bridge, and into broader mainland terrain;
+- mainland terrain is guaranteed beyond the gateway instead of allowing the road to terminate in open water;
+- default-SEED gateway is **South**, with mainland edge beginning at roughly **58 m** from village center;
+- default generated bridge crossing in proof is only **6 m / 3 tiles / 0.1 fantasy minutes**;
+- village-placement scale changed to a **2,200-tile (4.4 km)** nominal cell with ±100-tile (±200 m) jitter;
+- default nearest distinct village is about **4.53 km** away, giving a **≥75.6 fantasy-minute** straight-line lower bound at the fastest normal 3.6 km/h walk.
+
+### Verified evidence
+
+GitHub Actions run **35614323669** completed successfully with the `starting-village` scenario:
+
+- deterministic Starting Village proof PASS;
+- Protagonist origin inside village PASS;
+- reserved plot count **6**;
+- mainland connection PASS with **roadGapCount = 0**;
+- bridge physical/time limits PASS;
+- viewport coverage PASS;
+- center frame clearly shows public square, road network and reserved plots around the Protagonist;
+- gateway-focused frame moves the camera toward the deterministic mainland connection and shows the road continuing into broad land rather than ending in water;
+- artifact: `visual-evidence-starting-village-35614323669` (**112,079 bytes**).
 
 ### Pass condition
 
