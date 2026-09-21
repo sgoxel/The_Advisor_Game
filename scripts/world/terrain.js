@@ -34,9 +34,11 @@ function getTile(seedValue,xValue,yValue){
   const cell=building?building.cell:null;
   const textureVariant=cell?cell.textureVariant:null;
   const overlayVariant=cell?cell.overlayVariant:null;
-  const presentationColor=(type==="wall"||type==="door")
-    ?TerrainPalette.get("floor").color
-    :palette.color;
+  const presentationColor=cell?.presentationColor||(
+    (type==="wall"||type==="door")
+      ?TerrainPalette.get("floor").color
+      :palette.color
+  );
   const buildingId=cell?(cell.plan?.id||cell.lot?.id||null):null;
   const specialKind=cell?.lot?.kind||null;
   const specialLabel=cell?.lot?.label||null;
