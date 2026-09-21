@@ -1,3 +1,19 @@
+2026-09-21 19:30:00 +03:00
+- WP-007E Diagonal + Multi-Terrain Junction Smoothing completed.
+- Terrain renderer now reads all 8 neighboring cells instead of only N/E/S/W.
+- Added 8 standalone diagonal SVG masks: NE/SE/SW/NW with deterministic A/B variants.
+- Diagonal-only terrain contacts now receive small rounded material caps instead of square point notches.
+- Duplicate diagonal caps are suppressed when the same material already owns an adjacent cardinal edge.
+- Three-material corners now use deterministic material priority so lower-priority terrain cannot punch through a stronger shoreline/border.
+- Existing road/path ↔ water blend protection remains unchanged.
+- Total simple vector presentation assets are now 63 SVG files.
+- Static diagonal/junction tests passed, including A/B determinism and road/water protection.
+- GitHub Actions run 35625806201 passed on exact merged main.
+- Runtime evidence rendered 98 / 436 / 398 blend layers, including 22 / 118 / 114 diagonal layers.
+- Artifact visual-evidence-starting-village-35625806201: 543,053 bytes.
+- Manual screenshot review score: 9.0/10 PASS.
+- Updated docs/ROADMAP.md and marked WP-007E COMPLETE.
+
 2026-09-21 19:13:00 +03:00
 - WP-007D Deterministic Terrain Blend Variation completed.
 - Added 13 second-shape SVG variants for the existing rounded terrain masks: 4 edges, 4 corners, 4 peninsula/inlet masks and 1 island mask.
