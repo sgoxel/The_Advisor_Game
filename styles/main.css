@@ -72,24 +72,35 @@ input:focus{border-color:#92ad83}
   position:absolute;
   left:50%;
   top:50%;
+  width:100px;
+  height:100px;
   transform:translate(-50%,-50%);
-  z-index:2;
-  display:grid;
-  justify-items:center;
-  gap:5px;
+  z-index:3;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
   pointer-events:none;
 }
 .protagonist-marker[hidden]{display:none}
-.protagonist-dot{
+.protagonist-sprite{
+  display:block;
+  width:auto;
+  height:94px;
+  max-width:90px;
+  object-fit:contain;
+  object-position:center bottom;
+  filter:drop-shadow(0 4px 3px rgba(0,0,0,.5));
+  user-select:none;
+}
+.protagonist-fallback{
   width:18px;
   height:18px;
+  margin-bottom:41px;
   border:3px solid #e6eadf;
   border-radius:50%;
   background:#596f4f;
   box-shadow:0 0 0 4px rgba(0,0,0,.35);
 }
-.protagonist-marker strong{font-size:12px}
-.protagonist-marker code{font-size:11px;color:#c7cfc0}
 
 /* ROW 3 — STATUS */
 .status-area{display:grid;grid-template-columns:auto auto auto minmax(220px,1fr);align-items:stretch;border-top:1px solid #3b4237;background:#171b15}
