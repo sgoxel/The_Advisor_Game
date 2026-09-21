@@ -436,6 +436,18 @@ GitHub Actions run **35602541946** completed successfully with strict `camera-pa
 - viewport coverage and centered-camera-tile checks remained valid throughout;
 - only the viewport-sized terrain window plus its existing edge buffer was rendered.
 
+Additional camera-zoom acceptance passed on GitHub Actions run **35606140004**:
+
+- starting zoom: **1.00×**;
+- mouse wheel zoom-in: **1.10×**;
+- mouse wheel reverse returned to **1.00×**;
+- synthetic two-finger pinch-open: **1.20×**;
+- synthetic two-finger pinch-close: **0.96×** after pixel-rounded pointer coordinates;
+- Camera coordinate remained **(0,0)** through all five frames;
+- Protagonist Simulation coordinate remained **(0,0)** through all five frames;
+- terrain viewport coverage remained valid at every zoom level;
+- rendered tile count changed with presentation scale as expected.
+
 ### Pass condition
 
 - no gaps appear while moving;
