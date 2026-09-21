@@ -1,3 +1,6 @@
+2026-09-21 17:56:00 +03:00 | Stage 2 / WP-007B
+Suggestion: when real house footprints replace reserved plots, keep a one-cell planning clearance around outer walls except at the selected entrance/access side. This will preserve room for yards, wall graphics and path access without allowing roads to touch every exterior wall.
+
 2026-09-21 17:48:03 +03:00 | Stage 2 / future movement
 Suggestion: keep physical travel speed and visual animation speed separate from the 24x fantasy clock. Use fantasy-time ETA for off-screen schedules, but cap on-screen walking near the physical 0.3–0.5 tile/s range so NPCs remain readable instead of visually moving 24x faster.
 
