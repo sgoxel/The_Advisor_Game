@@ -1188,3 +1188,7 @@ A development verification can display a deterministic route from the starting p
 Do not add autonomous NPC population, resident schedules, Advisor conversation, economy, combat or external LLM integration until WP-007A, WP-007B and WP-008 through WP-010 are implemented and reviewed.
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
+
+# GitHub WP Issue Migration Tracking
+
+- WP-001 → Issue #9 — CLOSED / completed — exact ROADMAP section copy verified — labels: `documentation`, `enhancement`.
