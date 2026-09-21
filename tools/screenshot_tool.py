@@ -346,7 +346,37 @@ return (() => {
             return {error: String(error)};
           }
         })(),
-                roadNetwork: (() => {
+                walkability: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const walkability = window.Walkability;
+            if (!campaign || !walkability?.proof) return null;
+            const proof = walkability.proof(campaign.seed);
+            const rendered = [...document.querySelectorAll('.terrain-tile')];
+            const classified = rendered.filter(tile => Boolean(tile.dataset?.walkability));
+            const visibleCategories = [...new Set(
+              classified.map(tile => tile.dataset?.walkability).filter(Boolean)
+            )].sort();
+            const visibleBlockedCount = classified.filter(
+              tile => tile.dataset?.walkable === "false"
+            ).length;
+            const visibleWalkableCount = classified.filter(
+              tile => tile.dataset?.walkable === "true"
+            ).length;
+            return {
+              ...proof,
+              visibleTileCount:rendered.length,
+              visibleClassifiedCount:classified.length,
+              visibleCoveragePass:rendered.length>0&&classified.length===rendered.length,
+              visibleCategories,
+              visibleBlockedCount,
+              visibleWalkableCount,
+            };
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
+        roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
             const foundation = window.GeographyFoundation;
@@ -877,6 +907,18 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-008 invalid overlap {key}: {special}")
         if int(special.get("visibleSpecialCellCount") or 0) <= 0:
             raise RuntimeError(f"WP-008 special lots are not visible in broad village evidence: {special}")
+        walk = current.get("walkability") or {}
+        if not walk.get("pass") or not walk.get("deterministic"):
+            raise RuntimeError(f"WP-009 walkability proof failed: {walk}")
+        if not walk.get("classificationCoverage") or not walk.get("visibleCoveragePass"):
+            raise RuntimeError(f"WP-009 classification coverage failed: {walk}")
+        if int(walk.get("visibleClassifiedCount") or 0) != int(walk.get("visibleTileCount") or 0):
+            raise RuntimeError(f"WP-009 visible tile classification mismatch: {walk}")
+        structure = walk.get("structure") or {}
+        if not structure.get("wallsPass") or not structure.get("entrancesPass") or not structure.get("interiorsPass") or not structure.get("workyardPass"):
+            raise RuntimeError(f"WP-009 building collision rules failed: {walk}")
+        if not walk.get("waterRulePass") or not walk.get("routeRulesPass") or not walk.get("difficultRulesPass"):
+            raise RuntimeError(f"WP-009 terrain movement rules failed: {walk}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):
