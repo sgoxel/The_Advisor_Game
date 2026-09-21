@@ -1,3 +1,12 @@
+2026-09-21 18:01:33 +03:00
+- Final road-first/building-second reservation verification passed.
+- Multi-SEED stress test across 12 SEEDs produced all 6 Starting Village plots with zero road, local-path or public-square overlap.
+- GitHub Actions run 35615843410 passed the Starting Village scenario with buildingReservationPass=true.
+- Runtime evidence confirms planning order: roads -> buildings -> important-objects -> terrain.
+- Visual review confirmed reserved building plots are not cut by road cells.
+- Score: 9/10 PASS.
+- Updated docs/ROADMAP.md with verified reservation evidence.
+
 2026-09-21 18:00:00 +03:00
 - Road/building reservation stress test found the first road-aware plot search was too restrictive: collision safety passed, but some SEEDs produced only 3–4 of the required 6 plots.
 - Expanded deterministic plot-candidate search across the village core and allowed road/path access within a two-cell planning margin.
