@@ -396,20 +396,34 @@ GitHub Actions run **35601738723** used the `responsive-cycle` scenario on the e
 
 ---
 
-## WP-006 — Camera Movement Through the Infinite World
+## WP-006 — Camera Movement Through the Infinite World — COMPLETE
 
 ### Goal
 
 Move through the unbounded tile world without creating a finite full map.
 
+### Implemented
+
+- camera state is separate from Protagonist world position;
+- new/restored/restarted campaigns initially center the camera on the Protagonist;
+- drag gestures pan the camera in tile increments;
+- Arrow keys and WASD pan the camera one tile per key press;
+- **Center on Protagonist** returns the camera to the Protagonist coordinate;
+- the terrain renderer generates only the current viewport-sized tile window plus its existing edge buffer around the camera center;
+- the Protagonist sprite is positioned relative to the camera and may move off-screen while the Protagonist world coordinate remains unchanged;
+- camera coordinates use the same arbitrary-size signed integer coordinate system as the world;
+- deterministic terrain signatures verify that revisiting the same camera coordinate reproduces the same SEED terrain.
+
 ### In-game proof
 
-Panning reveals newly required solid-color tiles.
+Panning changes the Camera coordinate and reveals newly required solid-color tiles while the Protagonist remains at its Simulation coordinate.
 
 ### Pass condition
 
 - no gaps appear while moving;
 - only the visible area and a small edge buffer are required;
+- Protagonist world coordinates do not change when the camera pans;
+- camera coordinates can move in positive or negative X/Y directions;
 - returning to the same coordinates reproduces the same SEED foundation.
 
 ---
