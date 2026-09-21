@@ -1037,7 +1037,7 @@ GitHub Actions run **35628895648** completed successfully against exact merged `
 
 ---
 
-## WP-009 — Authoritative Walkability and Collision Foundation — IMPLEMENTED / VISUAL VERIFICATION PENDING
+## WP-009 — Authoritative Walkability and Collision Foundation — COMPLETE
 
 ### Goal
 
@@ -1105,6 +1105,30 @@ Default-SEED full proof sampled **4,761** world cells:
 - all **7** required movement categories were present.
 
 A separate 41-SEED structure/terrain stress pass also verified the corrected interior-wall and interior-door semantics across every generated home and special building: **41 / 41 PASS**.
+
+### Verified evidence
+
+GitHub Actions run **35630499582** completed successfully against the exact merged `main` checkout using the `starting-village` scenario.
+
+- every rendered gameplay tile carried an authoritative movement classification in all three evidence frames;
+- visible classification coverage: **253 / 253**, **779 / 779**, and **779 / 779** tiles;
+- visible blocked cells: **8 / 65 / 78**;
+- visible outer-wall barriers: **8 / 61 / 68**;
+- visible interior-wall barriers: **0 / 4 / 2**;
+- visible exterior doors: **1 / 5 / 4**;
+- visible interior doors: **0 / 2 / 1**;
+- full default-SEED proof classified **4,761 / 4,761** sampled world cells;
+- blocked water: **428 / 428**;
+- outer walls: **192 / 192 blocked**;
+- interior walls: **8 / 8 blocked**;
+- exterior doors: **12 / 12 walkable**;
+- interior doors: **4 / 4 walkable**;
+- ordinary interior floors: **114 / 114 walkable**;
+- road-access targets: **13 / 13 walkable**;
+- outdoor workyard: **20 / 20 walkable**;
+- all **7** movement categories were represented;
+- artifact: `visual-evidence-starting-village-35630499582` (**542,512 bytes**);
+- manual review of all three screenshots: **8.8/10 PASS**.
 
 ### Rules
 
