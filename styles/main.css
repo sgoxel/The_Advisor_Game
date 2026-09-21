@@ -49,9 +49,31 @@ input:focus{border-color:#92ad83}
 .gameplay-placeholder{position:absolute;inset:0;display:grid;place-content:center;gap:8px;padding:20px;text-align:center;color:#9da697}
 .gameplay-placeholder strong{color:#dfe4da;font-size:22px}
 .gameplay-placeholder span{font-size:13px}
+.protagonist-marker{
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  z-index:2;
+  display:grid;
+  justify-items:center;
+  gap:5px;
+  pointer-events:none;
+}
+.protagonist-marker[hidden]{display:none}
+.protagonist-dot{
+  width:18px;
+  height:18px;
+  border:3px solid #e6eadf;
+  border-radius:50%;
+  background:#596f4f;
+  box-shadow:0 0 0 4px rgba(0,0,0,.35);
+}
+.protagonist-marker strong{font-size:12px}
+.protagonist-marker code{font-size:11px;color:#c7cfc0}
 
 /* ROW 3 — STATUS */
-.status-area{display:grid;grid-template-columns:auto auto minmax(220px,1fr);align-items:stretch;border-top:1px solid #3b4237;background:#171b15}
+.status-area{display:grid;grid-template-columns:auto auto auto minmax(220px,1fr);align-items:stretch;border-top:1px solid #3b4237;background:#171b15}
 .status-item,.status-message{min-width:0;padding:8px 12px;border-right:1px solid #30362d}
 .status-item{display:grid;gap:3px}
 .status-item span{color:#8e9788;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
