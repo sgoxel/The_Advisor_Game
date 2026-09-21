@@ -357,6 +357,25 @@ def runtime_snapshot(driver) -> dict:
     return result
 
 
+def validate_current_build_snapshot(snapshot: dict) -> None:
+    current = snapshot.get("currentBuild") if isinstance(snapshot, dict) else None
+    if not isinstance(current, dict):
+        return
+    grid = current.get("terrainGrid")
+    if not isinstance(grid, dict):
+        raise RuntimeError("Current build terrain-grid evidence is missing")
+    if not grid.get("coveragePass"):
+        raise RuntimeError(f"Terrain grid does not cover viewport: {grid}")
+    if not grid.get("centerPass"):
+        raise RuntimeError(f"Terrain grid lost centered world tile: {grid}")
+    expected = int(grid.get("columns") or 0) * int(grid.get("rows") or 0)
+    actual = int(current.get("terrainTileCount") or 0)
+    if expected <= 0 or actual != expected:
+        raise RuntimeError(
+            f"Terrain tile count mismatch: expected {expected}, captured {actual}"
+        )
+
+
 def _scenario_required_shots(scenario: str, requested: int) -> int:
     return max(requested, SCENARIO_MIN_SHOTS.get(scenario, 1))
 
@@ -575,13 +594,15 @@ def take_screenshots(
                     action = prep_action
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
+                snapshot = runtime_snapshot(driver)
+                validate_current_build_snapshot(snapshot)
                 frames.append(
                     {
                         "index": index + 1,
                         "file": path.name,
                         "action": action,
                         "captured_at": datetime.now(timezone.utc).isoformat(),
-                        "runtime": runtime_snapshot(driver),
+                        "runtime": snapshot,
                     }
                 )
                 print(f"Saved: {path} [{scenario}:{action}]")
