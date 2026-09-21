@@ -75,6 +75,65 @@ function renderPRNG(fantasyTimestampMs){
     "FAIL"
   );
 }
+function renderTerrainLegend(){
+  e.terrainLegend.innerHTML="";
+  TerrainPalette.all().forEach(item=>{
+    const row=document.createElement("div");
+    row.className="terrain-legend-item";
+    const swatch=document.createElement("span");
+    swatch.className="terrain-swatch";
+    swatch.style.background=item.color;
+    const label=document.createElement("strong");
+    label.textContent=item.label;
+    const code=document.createElement("code");
+    code.textContent=item.color;
+    row.append(swatch,label,code);
+    e.terrainLegend.appendChild(row);
+  });
+}
+
+function renderTerrain(){
+  const campaign=SeedSystem.getCampaign();
+  const center=Protagonist.getPosition();
+  if(!campaign||!center){
+    e.terrainGrid.hidden=true;
+    setCheck(e.vTerrainDeterministic,false,"WAITING");
+    return;
+  }
+
+  const tileSize=100;
+  const columns=Math.ceil(e.terrainGrid.parentElement.clientWidth/tileSize)+2;
+  const rows=Math.ceil(e.terrainGrid.parentElement.clientHeight/tileSize)+2;
+  const halfCols=Math.floor(columns/2);
+  const halfRows=Math.floor(rows/2);
+
+  e.terrainGrid.style.gridTemplateColumns="repeat("+columns+",100px)";
+  e.terrainGrid.style.gridTemplateRows="repeat("+rows+",100px)";
+  e.terrainGrid.innerHTML="";
+
+  let deterministic=true;
+  for(let row=0;row<rows;row++){
+    for(let col=0;col<columns;col++){
+      const dx=col-halfCols;
+      const dy=row-halfRows;
+      const pos=WorldCoordinates.add(center,String(dx),String(dy));
+      const tile=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
+      const repeated=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
+      if(tile.type!==repeated.type||tile.color!==repeated.color)deterministic=false;
+
+      const node=document.createElement("div");
+      node.className="terrain-tile";
+      node.style.background=tile.color;
+      node.dataset.terrain=tile.type;
+      node.dataset.origin=(pos.x==="0"&&pos.y==="0")?"true":"false";
+      node.title=tile.label+" ("+pos.x+","+pos.y+")";
+      e.terrainGrid.appendChild(node);
+    }
+  }
+  e.terrainGrid.hidden=false;
+  setCheck(e.vTerrainDeterministic,deterministic,"FAIL");
+}
+
 function renderWorldCoordinates(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
@@ -83,6 +142,7 @@ function renderWorldCoordinates(){
   if(position){
     const label="("+position.x+","+position.y+")";
     e.gameplayPlaceholder.hidden=true;
+    renderTerrain();
     e.protagonistMarker.hidden=false;
     e.protagonistMarkerCoords.textContent=label;
     e.protagonistLocation.textContent=label;
@@ -92,6 +152,7 @@ function renderWorldCoordinates(){
     setCheck(e.vOrigin,Protagonist.isAtOrigin(),"FAIL");
   }else{
     e.gameplayPlaceholder.hidden=false;
+    e.terrainGrid.hidden=true;
     e.protagonistMarker.hidden=true;
     e.protagonistLocation.textContent="—";
     e.detailProtagonistX.textContent="—";
@@ -168,7 +229,9 @@ function init(){
   if(restored.ok)e.statusMessage.textContent="Campaign restored. Game time continued while the page was closed.";
   else e.statusMessage.textContent="Open Main Menu to start a campaign.";
 
+  renderTerrainLegend();
   renderStatic();startClock();
+  window.addEventListener("resize",()=>renderTerrain());
 }
 window.AppUI=Object.freeze({init});
 })();
