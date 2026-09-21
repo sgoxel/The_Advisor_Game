@@ -230,7 +230,7 @@ function roadOffset(seed,village,axis,progress){
   const field=axis==="vertical"
     ? valueNoise(seed,key,"0",progress,7)
     : valueNoise(seed,key,progress,"0",7);
-  return Math.round((field-0.5)*4);
+  return Math.round((field-0.5)*7);
 }
 
 function getTerrainType(seed,x,y){
