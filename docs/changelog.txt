@@ -1,3 +1,17 @@
+2026-09-21 19:13:00 +03:00
+- WP-007D Deterministic Terrain Blend Variation completed.
+- Added 13 second-shape SVG variants for the existing rounded terrain masks: 4 edges, 4 corners, 4 peninsula/inlet masks and 1 island mask.
+- Rounded blending now has 26 mask SVGs total and 55 simple presentation SVG assets overall.
+- A/B mask selection uses Campaign SEED + world tile coordinates + terrain pair + blend shape/orientation through foundation randomness.
+- Same SEED/coordinate reproduces the same mask; both A and B variants are reachable.
+- Matching mask edge endpoints preserve continuity across neighboring tiles.
+- Updated screenshot evidence to verify rounded blend shapes, deterministic repeat and A/B reachability.
+- GitHub Actions run 35624048867 passed on exact merged main.
+- Runtime evidence rendered 76 / 318 / 284 blend layers across the three frames; both A and B appeared.
+- Artifact visual-evidence-starting-village-35624048867: 515,252 bytes.
+- Manual screenshot review score: 8.8/10 PASS.
+- Updated docs/ROADMAP.md and marked WP-007D COMPLETE.
+
 2026-09-21 18:51:00 +03:00
 - WP-007C Rounded Terrain Border Blending completed.
 - Replaced visible generic L/C/U contour-loop overlays with actual neighboring-material blending.
