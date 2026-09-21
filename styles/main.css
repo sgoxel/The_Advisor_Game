@@ -1,1 +1,122 @@
-*{box-sizing:border-box}html,body{margin:0;min-width:320px;min-height:100%;background:#151713;color:#f1f2ed;font-family:Arial,sans-serif}body{min-height:100vh}main{width:min(1050px,calc(100% - 24px));margin:auto;padding:18px 0 28px}header,.row,.between,.seed-row,.actions,.check{display:flex;gap:12px;align-items:center}.between,header,.check{justify-content:space-between}header{margin-bottom:14px}h1{margin:0 0 4px;font-size:clamp(26px,5vw,38px)}h2{margin:0 0 6px;font-size:18px}p{margin:0;color:#abb2a5}.badge{border:1px solid #596153;border-radius:999px;padding:7px 10px;background:#242820;font-size:12px;white-space:nowrap}#viewport{height:240px;margin-bottom:14px;border:1px solid #3b4237;border-radius:12px;background:#20251d;display:grid;place-items:center;text-align:center;color:#a8b0a1}#viewport b{color:#e1e5dc}.panel{margin-bottom:14px;padding:18px;border:1px solid #3b4237;border-radius:12px;background:#1c201a}label{display:block;margin-top:14px;margin-bottom:6px}.seed-row{align-items:stretch}.seed-row input{min-width:0;flex:1;border:1px solid #596153;border-radius:8px;background:#121510;color:white;padding:11px;font:inherit}button{border:1px solid #596153;border-radius:8px;background:#30352d;color:#f1f2ed;padding:10px 14px;font:inherit;cursor:pointer}button.primary{background:#4b6642}button:disabled{opacity:.45;cursor:not-allowed}.actions{flex-wrap:wrap;margin-top:16px}small{display:block;margin-top:7px;color:#929b8c}#message{min-height:22px;margin-top:14px}.seed-display{padding:12px;border-radius:8px;background:#11150f}.seed-display span{display:block;color:#929b8c;font-size:12px}.seed-display code{display:block;margin-top:6px;font-size:16px;overflow-wrap:anywhere}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}.stats>div{padding:10px;border:1px solid #343a30;border-radius:8px}.stats small{margin:0}.stats b{display:block;margin-top:5px}.check{padding:10px 0;border-bottom:1px solid #30362d}.check:last-child{border-bottom:0}.check b{font-size:12px;color:#d7c882}.check b.pass{color:#9bd18c}footer{text-align:center;color:#868f80;font-size:13px;padding:5px}@media(max-width:650px){.seed-row{display:grid}.stats{grid-template-columns:1fr}.between{align-items:flex-start}.panel{padding:14px}#viewport{height:180px}}
+*{box-sizing:border-box}
+
+:root{
+  font-family:Arial,Helvetica,sans-serif;
+  color:#f1f2ed;
+  background:#151713;
+}
+
+html,body{margin:0;min-width:320px;min-height:100%;background:#151713}
+body{overflow-x:hidden}
+button,input{font:inherit}
+button{border:1px solid #596153;border-radius:7px;background:#30352d;color:#f1f2ed;padding:9px 12px;cursor:pointer}
+button:hover:not(:disabled){background:#3b4237}
+button.primary{background:#4b6642;border-color:#6b865f}
+button:disabled{opacity:.42;cursor:not-allowed}
+input{width:100%;min-width:0;border:1px solid #596153;border-radius:7px;background:#121510;color:#fff;padding:11px 12px;outline:none}
+input:focus{border-color:#92ad83}
+
+.screen-shell{
+  height:100vh;
+  height:100dvh;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  overflow:hidden;
+  background:#151713;
+}
+
+/* ROW 1 — TOP RIBBON */
+.top-ribbon{
+  min-height:48px;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto auto;
+  gap:10px;
+  align-items:center;
+  padding:7px 10px;
+  border-bottom:1px solid #3b4237;
+  background:#1c201a;
+}
+.ribbon-button{white-space:nowrap}
+.brand-block{min-width:0;display:flex;align-items:center;gap:8px}
+.brand-block strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px}
+.build-badge{border:1px solid #596153;border-radius:999px;padding:5px 7px;background:#242820;font-size:10px;white-space:nowrap}
+.game-clock{display:flex;align-items:baseline;gap:8px;white-space:nowrap;padding:0 4px}
+.game-clock span{color:#adb5a7;font-size:13px}
+.game-clock strong{font-size:15px;font-variant-numeric:tabular-nums}
+
+/* ROW 2 — GAMEPLAY */
+.gameplay-area{position:relative;min-height:0;overflow:hidden;background:#20251d}
+.gameplay-placeholder{position:absolute;inset:0;display:grid;place-content:center;gap:8px;padding:20px;text-align:center;color:#9da697}
+.gameplay-placeholder strong{color:#dfe4da;font-size:22px}
+.gameplay-placeholder span{font-size:13px}
+
+/* ROW 3 — STATUS */
+.status-area{display:grid;grid-template-columns:auto auto minmax(220px,1fr);align-items:stretch;border-top:1px solid #3b4237;background:#171b15}
+.status-item,.status-message{min-width:0;padding:8px 12px;border-right:1px solid #30362d}
+.status-item{display:grid;gap:3px}
+.status-item span{color:#8e9788;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.status-item strong{white-space:nowrap;color:#f0f2ec;font-size:12px}
+.status-message{display:flex;align-items:center;border-right:0;color:#b6beb0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* FULL-SCREEN POPUPS */
+.fullscreen-popup{position:fixed;inset:0;z-index:1000;display:grid;grid-template-rows:auto minmax(0,1fr);background:#151713}
+.fullscreen-popup[hidden]{display:none}
+.popup-ribbon{min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;border-bottom:1px solid #3b4237;background:#1c201a}
+.popup-ribbon h2{margin:0;font-size:20px}
+.popup-body{min-height:0;overflow:auto;padding:clamp(16px,4vw,44px)}
+.menu-body{display:grid;place-items:center}
+.menu-card,.settings-card{width:min(680px,100%);margin:auto;padding:clamp(18px,4vw,34px);border:1px solid #3b4237;border-radius:12px;background:#1c201a}
+.menu-card h3,.settings-card h3{margin:0 0 8px;font-size:24px}
+.menu-card p{color:#aab2a4}
+.menu-actions{display:grid;gap:10px;margin-top:24px}
+.large-button{min-height:48px;font-weight:700}
+.settings-card label{display:block;margin:18px 0 7px;font-weight:700}
+.field-help{margin:8px 0 20px;color:#9fa89a;font-size:13px;line-height:1.45}
+.readonly-setting{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid #30362d}
+.readonly-setting span{color:#9da697}
+.readonly-setting strong{text-align:right}
+.settings-actions{margin-top:22px}
+.popup-note{min-height:20px;margin:14px 0 0;color:#b6beb0}
+
+/* BELOW FIRST VIEWPORT */
+.details-area{width:min(1050px,calc(100% - 24px));margin:0 auto;padding:18px 0 48px}
+details{margin-bottom:10px;border:1px solid #3b4237;border-radius:9px;background:#1c201a;overflow:hidden}
+summary{cursor:pointer;padding:14px 16px;font-weight:700;user-select:none;background:#22271f}
+details[open] summary{border-bottom:1px solid #343a30}
+.accordion-content{padding:14px 16px}
+.detail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.detail-grid>div{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid #343a30;border-radius:7px}
+.detail-grid span{color:#929b8c;font-size:11px;text-transform:uppercase}
+.check{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #30362d}
+.check:last-child{border-bottom:0}.check b{color:#d7c882;font-size:12px}.check b.pass{color:#9bd18c}
+.technical-info{color:#abb2a5;font-size:14px}.technical-info p{margin:0 0 10px}.technical-info p:last-child{margin-bottom:0}
+
+@media(max-width:720px){
+  .top-ribbon{grid-template-columns:auto minmax(0,1fr) auto;gap:6px;padding:6px}
+  .brand-block{display:none}
+  .game-clock{justify-self:center;gap:5px;min-width:0}
+  .game-clock span{font-size:11px}.game-clock strong{font-size:13px}
+  .ribbon-button{padding:8px 9px;font-size:12px}
+  .status-area{grid-template-columns:auto minmax(0,1fr)}
+  .status-item:nth-child(2){display:none}
+  .status-message{font-size:11px}
+  .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media(max-width:460px){
+  .game-clock{display:grid;gap:1px;text-align:center}
+  .game-clock span{font-size:10px}.game-clock strong{font-size:12px}
+  .status-item,.status-message{padding:7px 8px}
+  .status-item strong{font-size:11px}
+  .gameplay-placeholder strong{font-size:18px}
+  .readonly-setting{display:grid;gap:5px}.readonly-setting strong{text-align:left}
+  .detail-grid{grid-template-columns:1fr}
+}
+
+@media(max-height:430px) and (orientation:landscape){
+  .top-ribbon{min-height:42px;padding:4px 7px}
+  .ribbon-button{padding:6px 9px}
+  .game-clock span{font-size:11px}.game-clock strong{font-size:12px}
+  .status-item,.status-message{padding:5px 8px}
+  .gameplay-placeholder{gap:4px}.gameplay-placeholder strong{font-size:17px}.gameplay-placeholder span{font-size:11px}
+}

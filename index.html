@@ -2,70 +2,150 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>The Advisor Game — WP-001</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
-<main>
-  <header>
-    <div><h1>The Advisor Game</h1><p>Base Game · WP-001 Campaign SEED</p></div>
-    <strong class="badge">WP-001</strong>
+
+<section class="screen-shell">
+  <!-- ROW 1: TOP RIBBON BAR -->
+  <header class="top-ribbon" aria-label="Top Ribbon Bar">
+    <button id="mainMenuButton" class="ribbon-button" type="button">Main Menu</button>
+
+    <div class="brand-block" aria-label="Game title">
+      <strong>The Advisor Game</strong>
+      <span class="build-badge">WP-001</span>
+    </div>
+
+    <div class="game-clock" aria-label="Game date and time">
+      <span id="gameDate">—</span>
+      <strong id="gameTime">—</strong>
+    </div>
+
+    <button id="settingsButton" class="ribbon-button" type="button">Settings</button>
   </header>
 
-  <section id="viewport">
-    <div><b>World viewport reserved</b><br><span>Tile generation is not part of WP-001.</span></div>
-  </section>
+  <!-- ROW 2: GAMEPLAY AREA -->
+  <main id="gameplayArea" class="gameplay-area" aria-label="Gameplay Area">
+    <div class="gameplay-placeholder">
+      <strong>Gameplay Area</strong>
+      <span>SEED-generated world begins in the next Work Packages.</span>
+    </div>
+  </main>
 
-  <section class="panel">
-    <div class="row between">
-      <div><h2>Campaign SEED</h2><p>The SEED is the permanent root value of the campaign.</p></div>
-      <strong id="state" class="badge">NOT STARTED</strong>
+  <!-- ROW 3: STATUS AREA -->
+  <section class="status-area" aria-label="Status Area">
+    <div class="status-item">
+      <span>Campaign</span>
+      <strong id="campaignState">NOT STARTED</strong>
     </div>
 
-    <label for="seedInput">SEED value</label>
-    <div class="seed-row">
-      <input id="seedInput" maxlength="64" autocomplete="off" spellcheck="false"
-             placeholder="Example: ADVISOR-7Q4M-9K2P">
-      <button id="generateButton">Generate SEED</button>
+    <div class="status-item">
+      <span>Game Time Rate</span>
+      <strong>1 real hour = 1 game day</strong>
     </div>
-    <small>Allowed: letters, numbers, dash, underscore and period.</small>
 
-    <div class="actions">
-      <button id="startButton" class="primary">Start Campaign</button>
-      <button id="restartButton" disabled>Restart Same SEED</button>
-      <button id="newButton" disabled>New Campaign</button>
-    </div>
-    <p id="message"></p>
-  </section>
-
-  <section class="panel">
-    <h2>Active Campaign</h2>
-    <div class="seed-display">
-      <span>Current SEED</span>
-      <code id="currentSeed">—</code>
-    </div>
-    <div class="stats">
-      <div><small>STATE</small><b id="activeState">Not started</b></div>
-      <div><small>SOURCE</small><b id="source">—</b></div>
-      <div><small>RESTARTS</small><b id="restarts">0</b></div>
+    <div class="status-message" id="statusMessage" role="status" aria-live="polite">
+      Open Main Menu to start a campaign.
     </div>
   </section>
+</section>
 
-  <section class="panel">
-    <h2>WP-001 Verification</h2>
-    <div class="check"><span>SEED visible to player</span><b id="vVisible">WAITING</b></div>
-    <div class="check"><span>SEED locked as active campaign root</span><b id="vLocked">WAITING</b></div>
-    <div class="check"><span>SEED survives page reload</span><b id="vReload">WAITING</b></div>
-    <div class="check"><span>Restart keeps exact same SEED</span><b id="vRestart">WAITING</b></div>
-  </section>
+<!-- FULL-SCREEN MAIN MENU -->
+<section id="mainMenuPopup" class="fullscreen-popup" aria-label="Main Menu" hidden>
+  <header class="popup-ribbon">
+    <h2>Main Menu</h2>
+    <button class="popup-close" data-close-popup="mainMenuPopup" type="button">Close</button>
+  </header>
+  <div class="popup-body menu-body">
+    <div class="menu-card">
+      <h3>The Advisor Game</h3>
+      <p>Player advises → AI Character decides → Simulation validates → World reacts.</p>
+      <div class="menu-actions">
+        <button id="resumeButton" class="primary large-button" type="button">Resume Game</button>
+        <button id="newCampaignButton" class="large-button" type="button">New Campaign</button>
+        <button id="restartCampaignButton" class="large-button" type="button" disabled>Restart Current Campaign</button>
+      </div>
+      <p id="menuMessage" class="popup-note" aria-live="polite"></p>
+    </div>
+  </div>
+</section>
 
-  <footer>Player advises → AI Character decides → Simulation validates → World reacts.</footer>
-</main>
+<!-- FULL-SCREEN SETTINGS -->
+<section id="settingsPopup" class="fullscreen-popup" aria-label="Settings" hidden>
+  <header class="popup-ribbon">
+    <h2>Settings</h2>
+    <button class="popup-close" data-close-popup="settingsPopup" type="button">Close</button>
+  </header>
+  <div class="popup-body">
+    <div class="settings-card">
+      <h3>Campaign</h3>
+      <label for="seedInput">SEED Code</label>
+      <input id="seedInput" maxlength="64" autocomplete="off" spellcheck="false">
+      <p class="field-help">Default: <code>The_Advisor_Game_20260924</code>. This value is used for the next New Campaign. An active campaign keeps the SEED it started with.</p>
+
+      <div class="readonly-setting">
+        <span>Game Time Scale</span>
+        <strong>1 real hour = 1 game day</strong>
+      </div>
+      <div class="readonly-setting">
+        <span>Starting Fantasy Date</span>
+        <strong>Real local date − 900 years</strong>
+      </div>
+      <div class="readonly-setting">
+        <span>Starting Fantasy Time</span>
+        <strong>Current local real time</strong>
+      </div>
+
+      <div class="settings-actions">
+        <button id="saveSettingsButton" class="primary" type="button">Save Settings</button>
+      </div>
+      <p id="settingsMessage" class="popup-note" aria-live="polite"></p>
+    </div>
+  </div>
+</section>
+
+<!-- EVERYTHING BELOW THIS POINT REQUIRES SCROLLING -->
+<section class="details-area" aria-label="Game Details">
+  <details>
+    <summary>Campaign Details</summary>
+    <div class="accordion-content">
+      <div class="detail-grid">
+        <div><span>Campaign State</span><strong id="detailState">Not started</strong></div>
+        <div><span>Game Date</span><strong id="detailGameDate">—</strong></div>
+        <div><span>Game Time</span><strong id="detailGameTime">—</strong></div>
+        <div><span>Time Scale</span><strong>24× real time</strong></div>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>WP-001 Verification</summary>
+    <div class="accordion-content">
+      <div class="check"><span>Settings opens full screen from ribbon</span><b id="vSettings">PASS</b></div>
+      <div class="check"><span>Campaign SEED is configured in Settings</span><b id="vSeed">PASS</b></div>
+      <div class="check"><span>Fantasy date starts at real year − 900</span><b id="vDate">WAITING</b></div>
+      <div class="check"><span>1 real hour equals 1 game day</span><b id="vRate">PASS</b></div>
+      <div class="check"><span>Campaign time persists across reload</span><b id="vPersist">WAITING</b></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Development / Technical Information</summary>
+    <div class="accordion-content technical-info">
+      <p><strong>Current Work Package:</strong> WP-001 Campaign SEED + base campaign clock.</p>
+      <p><strong>Current world rendering:</strong> Not implemented yet.</p>
+      <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
+      <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
+    </div>
+  </details>
+</section>
 
 <script src="scripts/data/config.js"></script>
 <script src="scripts/core/seed.js"></script>
-<script src="scripts/ui/seed-ui.js"></script>
+<script src="scripts/core/game-time.js"></script>
+<script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/main.js"></script>
 </body>
 </html>
