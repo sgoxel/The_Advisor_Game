@@ -15,14 +15,11 @@ const DIRECTIONS=Object.freeze([
   Object.freeze({name:"North",dx:0,dy:-1})
 ]);
 
-const BASE_PLOTS=Object.freeze([
-  Object.freeze({id:"P1",cx:8,cy:7,w:6,h:5}),
-  Object.freeze({id:"P2",cx:-8,cy:7,w:6,h:5}),
-  Object.freeze({id:"P3",cx:8,cy:-7,w:6,h:5}),
-  Object.freeze({id:"P4",cx:-8,cy:-7,w:6,h:5}),
-  Object.freeze({id:"P5",cx:0,cy:10,w:7,h:4}),
-  Object.freeze({id:"P6",cx:0,cy:-10,w:7,h:4})
-]);
+const TARGET_PLOT_COUNT=6;
+const PLOT_WIDTH=6;
+const PLOT_HEIGHT=5;
+const plotPlanCache=new Map();
+
 
 function unit(seed,key){return PRNG.foundationUint32(seed,key)/4294967296}
 function toNumber(value){
@@ -105,17 +102,130 @@ function isBridge(seed,l,underlying){
   const center=gatewayCenterOffset(seed,l.forward);
   return bridge.active&&Math.abs(l.lateral-center)<=1;
 }
-function plotAt(l){
+function isRoadReserved(seed,l){
+  if(!l)return false;
+  return isPublicSquare(l)||isMainRoad(seed,l)||isSecondaryPath(seed,l);
+}
+
+function infrastructureAt(seed,l){
   if(!l)return null;
-  for(const plot of BASE_PLOTS){
-    const minX=plot.cx-Math.floor(plot.w/2);
-    const maxX=minX+plot.w-1;
-    const minY=plot.cy-Math.floor(plot.h/2);
-    const maxY=minY+plot.h-1;
-    if(l.x>=minX&&l.x<=maxX&&l.y>=minY&&l.y<=maxY)return plot;
+  if(isPublicSquare(l))return Object.freeze({phase:"roads",type:"square",kind:"public-square"});
+  if(isMainRoad(seed,l))return Object.freeze({phase:"roads",type:"road",kind:"main-road"});
+  if(isSecondaryPath(seed,l))return Object.freeze({phase:"roads",type:"path",kind:"local-path"});
+  return null;
+}
+
+function plotBounds(cx,cy,w,h){
+  const minX=cx-Math.floor(w/2);
+  const minY=cy-Math.floor(h/2);
+  return Object.freeze({
+    minX,minY,
+    maxX:minX+w-1,
+    maxY:minY+h-1,
+    w,h
+  });
+}
+
+function boundsOverlap(a,b,padding){
+  const p=padding||0;
+  return !(
+    a.maxX+p<b.minX||
+    b.maxX+p<a.minX||
+    a.maxY+p<b.minY||
+    b.maxY+p<a.minY
+  );
+}
+
+function plotCandidateValid(seed,bounds,accepted){
+  let roadAdjacent=false;
+
+  for(let y=bounds.minY-1;y<=bounds.maxY+1;y++){
+    for(let x=bounds.minX-1;x<=bounds.maxX+1;x++){
+      const l=local(seed,String(x),String(y));
+      if(!l)return false;
+
+      const inside=
+        x>=bounds.minX&&x<=bounds.maxX&&
+        y>=bounds.minY&&y<=bounds.maxY;
+
+      if(inside){
+        if(!isVillageLand(seed,l))return false;
+        if(isRoadReserved(seed,l))return false;
+      }else if(isRoadReserved(seed,l)){
+        roadAdjacent=true;
+      }
+    }
+  }
+
+  if(!roadAdjacent)return false;
+  for(const plot of accepted){
+    if(boundsOverlap(bounds,plot.bounds,1))return false;
+  }
+  return true;
+}
+
+function buildPlots(seed){
+  if(plotPlanCache.has(seed))return plotPlanCache.get(seed);
+
+  const candidates=[];
+  for(let y=-11;y<=11;y++){
+    for(let x=-11;x<=11;x++){
+      if(Math.abs(x)<4||Math.abs(y)<4)continue;
+      const score=PRNG.foundationUint32(seed,"starting-village:plot-candidate:"+x+":"+y);
+      candidates.push({x,y,score});
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score||a.y-b.y||a.x-b.x);
+
+  const accepted=[];
+  for(const candidate of candidates){
+    if(accepted.length>=TARGET_PLOT_COUNT)break;
+    const rotate=(PRNG.foundationUint32(
+      seed,
+      "starting-village:plot-rotate:"+candidate.x+":"+candidate.y
+    )&1)===1;
+    const w=rotate?PLOT_HEIGHT:PLOT_WIDTH;
+    const h=rotate?PLOT_WIDTH:PLOT_HEIGHT;
+    const bounds=plotBounds(candidate.x,candidate.y,w,h);
+    if(!plotCandidateValid(seed,bounds,accepted))continue;
+
+    accepted.push(Object.freeze({
+      id:"P"+(accepted.length+1),
+      cx:candidate.x,
+      cy:candidate.y,
+      w,h,
+      bounds,
+      phase:"buildings"
+    }));
+  }
+
+  const frozen=Object.freeze(accepted.slice());
+  plotPlanCache.set(seed,frozen);
+  return frozen;
+}
+
+function plotAt(seed,l){
+  if(!l)return null;
+  for(const plot of buildPlots(seed)){
+    const b=plot.bounds;
+    if(l.x>=b.minX&&l.x<=b.maxX&&l.y>=b.minY&&l.y<=b.maxY)return plot;
   }
   return null;
 }
+
+function buildingAt(seed,l){
+  const plot=plotAt(seed,l);
+  return plot?Object.freeze({phase:"buildings",type:"plot",plot}):null;
+}
+
+function importantObjectAt(seed,l){
+  // Reserved architectural phase. Future wells, monuments, market objects,
+  // gates and other important objects must consult road + building reservations.
+  void seed;
+  void l;
+  return null;
+}
+
 function isSecondaryPath(seed,l){
   if(!l||!isVillageLand(seed,l))return false;
   // Short connectors from plot rows/columns to the nearest central avenue.
@@ -130,31 +240,43 @@ function farmParcel(seed,l){
   return unit(seed,"starting-village:farm:"+Math.floor(l.x/3)+":"+Math.floor(l.y/3))>0.45;
 }
 
-function getType(seed,x,y,underlying){
-  const l=local(seed,x,y);
-  if(!l)return underlying;
+function resolveInfrastructure(seed,l,infrastructure,underlying){
+  if(!infrastructure)return null;
+  if(infrastructure.type==="road"&&isBridge(seed,l,underlying))return "bridge";
+  return infrastructure.type;
+}
 
+function resolveTerrain(seed,l,underlying){
+  if(!l)return underlying;
   const villageLand=isVillageLand(seed,l);
   const mainland=isMainlandLand(seed,l);
   const shoulder=isGatewayShoulder(seed,l);
 
-  // Short approved bridge keeps water beneath; otherwise the gateway road/causeway
-  // and its shoulders are guaranteed land so the Starting Village cannot be isolated.
-  if(isBridge(seed,l,underlying))return "bridge";
-
-  if(isPublicSquare(l))return "square";
-  if(isMainRoad(seed,l))return "road";
-
-  const plot=plotAt(l);
-  if(plot&&villageLand)return "plot";
-  if(villageLand&&isSecondaryPath(seed,l))return "path";
   if(farmParcel(seed,l))return "farmland";
 
   if((villageLand||mainland||shoulder)&&underlying==="water"){
     return unit(seed,"starting-village:land:"+l.x+":"+l.y)>0.72?"dirt":"grass";
   }
-
   return underlying;
+}
+
+function getType(seed,x,y,underlying){
+  const l=local(seed,x,y);
+  if(!l)return underlying;
+
+  // AUTHORITATIVE WORLD-PLANNING ORDER:
+  // 1) Roads/public infrastructure
+  // 2) Buildings/plots
+  // 3) Important objects
+  // 4) Terrain/background fill
+  const infrastructure=infrastructureAt(seed,l);
+  const building=buildingAt(seed,l);
+  const importantObject=importantObjectAt(seed,l);
+
+  if(infrastructure)return resolveInfrastructure(seed,l,infrastructure,underlying);
+  if(building)return building.type;
+  if(importantObject)return importantObject.type;
+  return resolveTerrain(seed,l,underlying);
 }
 
 function plan(seed){
@@ -168,7 +290,7 @@ function plan(seed){
     gatewayDirection:dir.name,
     publicSquareMeters:(PUBLIC_HALF_SIZE*2+1)*WorldStandards.TILE_METERS,
     ringRoadRadiusMeters:RING_RADIUS_TILES*WorldStandards.TILE_METERS,
-    plotCount:BASE_PLOTS.length,
+    plotCount:buildPlots(seed).length,
     gatewayMainlandEdgeMeters:GATEWAY_MAINLAND_EDGE_TILES*WorldStandards.TILE_METERS,
     bridgeWindow:Object.freeze({
       startTiles:bridge.start,
@@ -211,6 +333,21 @@ function proof(seed){
     }
   }
 
+  let plotRoadOverlapCount=0;
+  let plotSquareOverlapCount=0;
+  let plotPathOverlapCount=0;
+  for(const plot of buildPlots(seed)){
+    const b=plot.bounds;
+    for(let y=b.minY;y<=b.maxY;y++){
+      for(let x=b.minX;x<=b.maxX;x++){
+        const l=local(seed,String(x),String(y));
+        if(isPublicSquare(l))plotSquareOverlapCount++;
+        if(isMainRoad(seed,l))plotRoadOverlapCount++;
+        if(isSecondaryPath(seed,l))plotPathOverlapCount++;
+      }
+    }
+  }
+
   const bridgeMeters=maxBridgeRun*WorldStandards.TILE_METERS;
   const bridgeMinutes=WorldStandards.walkMinutes(bridgeMeters,WorldStandards.WALK_SPEED_KMH.bridge);
 
@@ -218,6 +355,15 @@ function proof(seed){
     deterministic:JSON.stringify(first)===JSON.stringify(second),
     originInsideVillage:isVillageLand(seed,local(seed,"0","0")),
     plotCount:first.plotCount,
+    planningOrder:Object.freeze(["roads","buildings","important-objects","terrain"]),
+    plotRoadOverlapCount,
+    plotSquareOverlapCount,
+    plotPathOverlapCount,
+    buildingReservationPass:
+      first.plotCount===TARGET_PLOT_COUNT&&
+      plotRoadOverlapCount===0&&
+      plotSquareOverlapCount===0&&
+      plotPathOverlapCount===0,
     roadGapCount,
     mainlandConnected:roadGapCount===0&&mainlandLandSamples>0,
     mainlandLandSamples,
@@ -234,6 +380,8 @@ function proof(seed){
 window.StartingVillage=Object.freeze({
   CORE_RADIUS_TILES,PUBLIC_HALF_SIZE,RING_RADIUS_TILES,
   GATEWAY_MAINLAND_EDGE_TILES,GATEWAY_ROAD_WIDTH_TILES,SECONDARY_PATH_WIDTH_TILES,
-  direction,local,getType,plan,proof,plotAt
+  direction,local,getType,plan,proof,
+  infrastructureAt,buildingAt,importantObjectAt,resolveInfrastructure,resolveTerrain,
+  buildPlots,plotAt,isRoadReserved
 });
 })();
