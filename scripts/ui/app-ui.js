@@ -259,10 +259,11 @@ function terrainBlendLayer(spec){
   layer.dataset.blendShape=spec.shape;
   layer.dataset.blendTerrain=spec.terrain;
   layer.dataset.blendOrientation=spec.orientation;
+  layer.dataset.blendVariant=spec.variant||"a";
   return layer;
 }
 
-function applyTerrainTransitions(columns,rows){
+function applyTerrainTransitions(columns,rows,seed){
   const nodes=[...e.terrainGrid.children];
   for(let row=0;row<rows;row++){
     for(let col=0;col<columns;col++){
@@ -276,7 +277,11 @@ function applyTerrainTransitions(columns,rows){
         s:row<rows-1?nodes[(row+1)*columns+col].dataset.terrain:null,
         w:col>0?nodes[row*columns+col-1].dataset.terrain:null
       };
-      const blends=TileTextures.blendSpecs(type,neighbors);
+      const blends=TileTextures.blendSpecs(type,neighbors,{
+        seed,
+        x:node.dataset.x,
+        y:node.dataset.y
+      });
       for(const blend of blends)node.appendChild(terrainBlendLayer(blend));
     }
   }
@@ -347,7 +352,7 @@ function renderTerrain(){
     }
   }
 
-  applyTerrainTransitions(columns,rows);
+  applyTerrainTransitions(columns,rows,campaign.seed);
 
   const gridWidth=columns*tileSize;
   const gridHeight=rows*tileSize;
