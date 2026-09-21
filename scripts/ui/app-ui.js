@@ -7,7 +7,7 @@ const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","vDate","vPersist",
-  "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vPrngSource"
+  "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
 function cache(){ids.forEach(id=>e[id]=document.getElementById(id))}
 function openPopup(id){document.getElementById(id).hidden=false;document.body.style.overflow="hidden"}
@@ -40,6 +40,7 @@ function renderPRNG(fantasyTimestampMs){
     e.liveValue.textContent="—";
     setCheck(e.vLiveRepeat,false,"WAITING");
     setCheck(e.vLiveTime,false,"WAITING");
+    setCheck(e.vNoMilliseconds,true,"FAIL");
     setCheck(
       e.vPrngSource,
       PRNG.foundationUint32.length===2&&PRNG.liveUint32.length===2,
@@ -48,11 +49,25 @@ function renderPRNG(fantasyTimestampMs){
     return;
   }
 
-  const proof=PRNG.verify(campaign.seed,fantasyTimestampMs);
-  e.prngTimestamp.textContent=GameTime.formatTimestamp(GameTime.fromTimestampMs(proof.timestamp));
+  const currentTime=GameTime.fromTimestampMs(fantasyTimestampMs);
+  const timestampKey=GameTime.toTimestampKey(currentTime);
+  const nextTimestampKey=GameTime.toTimestampKey(GameTime.fromTimestampMs(
+    Math.floor(fantasyTimestampMs/1000)*1000+1000
+  ));
+  const proof=PRNG.verify(campaign.seed,timestampKey);
+  e.prngTimestamp.textContent=GameTime.formatTimestamp(currentTime);
   e.liveValue.textContent=String(proof.liveValue);
   setCheck(e.vLiveRepeat,proof.liveRepeatable,"FAIL");
-  setCheck(e.vLiveTime,proof.liveTimeSensitive,"FAIL");
+  setCheck(
+    e.vLiveTime,
+    proof.liveValue!==PRNG.liveUint32(campaign.seed,nextTimestampKey),
+    "FAIL"
+  );
+  setCheck(
+    e.vNoMilliseconds,
+    /^\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(timestampKey),
+    "FAIL"
+  );
   setCheck(
     e.vPrngSource,
     PRNG.foundationUint32.length===2&&PRNG.liveUint32.length===2,
