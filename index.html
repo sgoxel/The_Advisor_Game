@@ -33,10 +33,9 @@
       <strong>Gameplay Area</strong>
       <span>Start a campaign to generate deterministic solid-color terrain.</span>
     </div>
-    <div id="protagonistMarker" class="protagonist-marker" hidden aria-label="Protagonist at world origin">
-      <span class="protagonist-dot"></span>
-      <strong>Protagonist</strong>
-      <code id="protagonistMarkerCoords">(0,0)</code>
+    <div id="protagonistMarker" class="protagonist-marker" hidden aria-label="Protagonist on world coordinate (0,0)">
+      <img id="protagonistSprite" class="protagonist-sprite" src="assets/characters/protagonist_male.png" alt="Male protagonist">
+      <span id="protagonistFallback" class="protagonist-fallback" hidden aria-hidden="true"></span>
     </div>
   </main>
 
@@ -172,6 +171,7 @@
       <p><strong>Protagonist position:</strong> <code id="wp3Position">—</code></p>
       <div class="check"><span>Protagonist is created at (0,0) when campaign starts</span><b id="vOrigin">WAITING</b></div>
       <div class="check"><span>(0,0) is the initial gameplay-view center</span><b id="vCenter">PASS</b></div>
+      <div class="check"><span>Male protagonist PNG is rendered on the (0,0) tile</span><b id="vProtagonistSprite">WAITING</b></div>
       <div class="check"><span>Positive X/Y coordinates have no gameplay-defined boundary</span><b id="vPositiveWorld">WAITING</b></div>
       <div class="check"><span>Negative X/Y coordinates have no gameplay-defined boundary</span><b id="vNegativeWorld">WAITING</b></div>
       <p>World coordinates are signed arbitrary-size integers. The game does not define a minimum or maximum X/Y coordinate.</p>
