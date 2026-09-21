@@ -176,29 +176,50 @@ If the SEED and FantasyTimestamp are the same, the result must be exactly the sa
 
 ---
 
-## WP-003 — Infinite Tile Coordinates
+## WP-003 — Infinite World Coordinates + Protagonist Origin — COMPLETE
 
 ### Goal
 
-Define an unbounded tile-coordinate world.
+Define the world coordinate system before rendering terrain.
 
-### Rule
+### Core rules
 
-Every base tile is identified by:
+- the Protagonist is created at world coordinate **(0,0)** when a new campaign starts;
+- **(0,0)** is the initial center of the gameplay view;
+- X may extend indefinitely in the negative or positive direction;
+- Y may extend indefinitely in the negative or positive direction;
+- the game defines no minimum or maximum X/Y world coordinate;
+- coordinates are signed arbitrary-size integers stored without floating-point rounding;
+- restarting a campaign resets the Protagonist to **(0,0)**.
 
-**Campaign SEED + tileX + tileY**
+Examples of valid coordinates:
 
-Tile generation uses **foundation randomness only**. Fantasy time must not affect terrain or environment generation.
+- `(0,0)`
+- `(-1,0)`
+- `(0,-1)`
+- `(250,-900)`
+- extremely large positive or negative integer coordinates.
 
-Positive and negative integer coordinates must work.
+### Implementation
+
+- `scripts/world/coordinates.js` owns coordinate normalization and arithmetic;
+- coordinates use arbitrary-size integer handling;
+- campaign state stores the Protagonist coordinate;
+- `scripts/entities/protagonist.js` exposes the authoritative Protagonist position;
+- the gameplay area visibly centers the Protagonist at **(0,0)** before terrain rendering exists.
 
 ### In-game proof
 
-The development accordion shows the current center tile coordinate.
+After starting a campaign, the Protagonist marker appears at the exact center of the Gameplay Area and shows **(0,0)**. The WP-003 accordion verifies positive and negative arbitrary-size coordinates.
 
 ### Pass condition
 
-The same SEED and coordinate always resolve to the same base tile result.
+- new campaign creates Protagonist at **(0,0)**;
+- initial gameplay view is centered on **(0,0)**;
+- coordinate system accepts positive arbitrary-size X/Y values;
+- coordinate system accepts negative arbitrary-size X/Y values;
+- no gameplay-defined outer coordinate boundary exists;
+- saved/reloaded campaigns preserve the Protagonist coordinate.
 
 ---
 
@@ -206,7 +227,7 @@ The same SEED and coordinate always resolve to the same base tile result.
 
 ### Goal
 
-Fill the complete Gameplay Area with SEED-generated tiles using solid colors only.
+Fill the complete Gameplay Area around the current world center with SEED-generated tiles using solid colors only.
 
 ### Rules
 
