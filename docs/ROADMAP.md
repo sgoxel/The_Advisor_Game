@@ -1037,7 +1037,7 @@ GitHub Actions run **35628895648** completed successfully against exact merged `
 
 ---
 
-## WP-009 — Authoritative Walkability and Collision Foundation
+## WP-009 — Authoritative Walkability and Collision Foundation — IMPLEMENTED / VISUAL VERIFICATION PENDING
 
 ### Goal
 
@@ -1054,6 +1054,58 @@ Classify world positions as:
 - solid building footprint/wall;
 - blocked water or impassable terrain where applicable.
 
+### Implemented
+
+- added `scripts/world/walkability.js` as the authoritative Simulation movement-classification layer;
+- classifications are derived from authoritative terrain/building type data, never from presentation color;
+- road, bridge, square and path cells classify as **road-path** and remain walkable;
+- grass, dirt, farmland and outdoor work plots classify as **walkable-ground**;
+- forest, mud, rock and sand classify as **difficult-ground** with their existing deterministic movement speeds;
+- ordinary building floor cells classify as **building-interior** and remain walkable;
+- exterior and interior door cells classify as **building-entrance** and remain walkable;
+- outer walls classify as **blocked-wall**;
+- interior partition-wall overlays are also authoritative **blocked-wall** cells rather than presentation-only decoration;
+- water cells classify as **blocked-water**;
+- unknown/solid building fallback classifies as **blocked-solid**;
+- each walkable classification exposes deterministic km/h speed and seconds-per-2m-tile movement cost for later WP-010 route planning;
+- every rendered terrain tile now carries authoritative `data-walkability`, `data-walkable`, `data-blocks-movement`, movement speed/cost metadata, and wall/door semantic metadata where applicable;
+- camera movement remains presentation-only and is not constrained by this collision layer.
+
+### Verification
+
+A deterministic stress test across the default Campaign SEED plus **40 additional SEEDs** passed:
+
+- **41 / 41 SEEDs**: PASS;
+- same SEED + coordinate classification repeat: PASS;
+- sampled classification coverage: PASS;
+- road/path movement rules: PASS;
+- difficult-terrain movement rules: PASS;
+- water blocking rule: PASS;
+- outer building wall blocking: PASS;
+- interior partition-wall blocking: PASS;
+- exterior door walkability: PASS;
+- interior doorway walkability: PASS;
+- ordinary building interior walkability: PASS;
+- every house/special-lot road-access target is walkable: PASS;
+- outdoor workyard walkability: PASS.
+
+Default-SEED full proof sampled **4,761** world cells:
+
+- classified: **4,761 / 4,761**;
+- walkable: **4,133**;
+- blocked: **628**;
+- water samples: **428 / 428 blocked**;
+- outer wall samples: **192 / 192 blocked**;
+- exterior door samples: **12 / 12 walkable**;
+- ordinary interior floor samples: **114 / 114 walkable**;
+- interior wall samples: **8 / 8 blocked**;
+- interior doorway samples: **4 / 4 walkable**;
+- outdoor workyard samples: **20 / 20 walkable**;
+- road-access target samples: **13 / 13 walkable**;
+- all **7** required movement categories were present.
+
+A separate 41-SEED structure/terrain stress pass also verified the corrected interior-wall and interior-door semantics across every generated home and special building: **41 / 41 PASS**.
+
 ### Rules
 
 - walkability is authoritative Simulation data, not inferred only from color;
@@ -1066,7 +1118,8 @@ Classify world positions as:
 - every visible tile has an authoritative movement classification;
 - building walls/blocked water cannot be traversed;
 - entrances and roads are reachable;
-- same SEED + coordinate reproduces the same classification.
+- same SEED + coordinate reproduces the same classification;
+- screenshot evidence scores above 7/10 before WP-009 is marked COMPLETE.
 
 ---
 

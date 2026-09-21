@@ -346,7 +346,53 @@ return (() => {
             return {error: String(error)};
           }
         })(),
-                roadNetwork: (() => {
+                walkability: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const walkability = window.Walkability;
+            if (!campaign || !walkability?.proof) return null;
+            const proof = walkability.proof(campaign.seed);
+            const rendered = [...document.querySelectorAll('.terrain-tile')];
+            const classified = rendered.filter(tile => Boolean(tile.dataset?.walkability));
+            const visibleCategories = [...new Set(
+              classified.map(tile => tile.dataset?.walkability).filter(Boolean)
+            )].sort();
+            const visibleBlockedCount = classified.filter(
+              tile => tile.dataset?.walkable === "false"
+            ).length;
+            const visibleWalkableCount = classified.filter(
+              tile => tile.dataset?.walkable === "true"
+            ).length;
+            const visibleOuterWalls = classified.filter(
+              tile => tile.dataset?.barrierKind === "outer-wall"
+            ).length;
+            const visibleInteriorWalls = classified.filter(
+              tile => tile.dataset?.barrierKind === "interior-wall"
+            ).length;
+            const visibleExteriorDoors = classified.filter(
+              tile => tile.dataset?.doorwayKind === "exterior-door"
+            ).length;
+            const visibleInteriorDoors = classified.filter(
+              tile => tile.dataset?.doorwayKind === "interior-door"
+            ).length;
+            return {
+              ...proof,
+              visibleTileCount:rendered.length,
+              visibleClassifiedCount:classified.length,
+              visibleCoveragePass:rendered.length>0&&classified.length===rendered.length,
+              visibleCategories,
+              visibleBlockedCount,
+              visibleWalkableCount,
+              visibleOuterWalls,
+              visibleInteriorWalls,
+              visibleExteriorDoors,
+              visibleInteriorDoors,
+            };
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
+        roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
             const foundation = window.GeographyFoundation;
@@ -877,6 +923,31 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-008 invalid overlap {key}: {special}")
         if int(special.get("visibleSpecialCellCount") or 0) <= 0:
             raise RuntimeError(f"WP-008 special lots are not visible in broad village evidence: {special}")
+        walk = current.get("walkability") or {}
+        if not walk.get("pass") or not walk.get("deterministic"):
+            raise RuntimeError(f"WP-009 walkability proof failed: {walk}")
+        if not walk.get("classificationCoverage") or not walk.get("visibleCoveragePass"):
+            raise RuntimeError(f"WP-009 classification coverage failed: {walk}")
+        if int(walk.get("visibleClassifiedCount") or 0) != int(walk.get("visibleTileCount") or 0):
+            raise RuntimeError(f"WP-009 visible tile classification mismatch: {walk}")
+        structure = walk.get("structure") or {}
+        required_structure_checks = (
+            "outerWallsPass",
+            "exteriorDoorsPass",
+            "interiorsPass",
+            "interiorWallsPass",
+            "interiorDoorsPass",
+            "workyardPass",
+            "accessTargetsPass",
+        )
+        if not all(structure.get(key) for key in required_structure_checks):
+            raise RuntimeError(f"WP-009 building collision rules failed: {walk}")
+        if int(structure.get("interiorWallSamples") or 0) <= 0:
+            raise RuntimeError(f"WP-009 did not verify interior wall barriers: {walk}")
+        if int(structure.get("interiorDoorSamples") or 0) <= 0:
+            raise RuntimeError(f"WP-009 did not verify interior door passages: {walk}")
+        if not walk.get("waterRulePass") or not walk.get("routeRulesPass") or not walk.get("difficultRulesPass"):
+            raise RuntimeError(f"WP-009 terrain movement rules failed: {walk}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):

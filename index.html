@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-008</title>
+<title>The Advisor Game — WP-009</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-008</span>
+      <span class="build-badge">WP-009</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -354,10 +354,29 @@
   </details>
 
   <details>
+    <summary>WP-009 Authoritative Walkability + Collision</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Sampled Cells</span><strong id="walkSampleCount">—</strong></div>
+        <div><span>Movement Classes</span><strong id="walkClassCount">—</strong></div>
+        <div><span>Blocked Samples</span><strong id="walkBlockedCount">—</strong></div>
+        <div><span>Water Samples</span><strong id="walkWaterSamples">—</strong></div>
+      </div>
+      <div class="check"><span>Same SEED + coordinate reproduces the same authoritative movement classification</span><b id="vWalkDeterministic">WAITING</b></div>
+      <div class="check"><span>Every sampled/visible world tile receives an authoritative movement class</span><b id="vWalkCoverage">WAITING</b></div>
+      <div class="check"><span>Outer/interior walls block movement while ordinary interior floor remains walkable</span><b id="vWalkWalls">WAITING</b></div>
+      <div class="check"><span>Water is blocked and cannot be traversed as ground</span><b id="vWalkWater">WAITING</b></div>
+      <div class="check"><span>Exterior/interior doors, road-access targets and outdoor work lots remain traversable</span><b id="vWalkEntrances">WAITING</b></div>
+      <div class="check"><span>Road/path and difficult-terrain classes expose deterministic movement costs</span><b id="vWalkRoutes">WAITING</b></div>
+      <p>Walkability is Simulation data, not inferred from tile color. Camera movement remains presentation-only and ignores collision.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-008 Special Buildings + Functional Lots.</p>
-      <p><strong>Current world rendering:</strong> Deterministic rounded SVG terrain plus homes, enterable service/work buildings and one outdoor functional work lot.</p>
+      <p><strong>Current Work Package:</strong> WP-009 Authoritative Walkability + Collision Foundation.</p>
+      <p><strong>Current world rendering:</strong> Deterministic village presentation with authoritative per-tile Simulation walkability and movement-cost metadata.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
@@ -378,6 +397,7 @@
 <script src="scripts/world/house-plans.js"></script>
 <script src="scripts/world/special-lots.js"></script>
 <script src="scripts/world/terrain.js"></script>
+<script src="scripts/world/walkability.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/main.js"></script>
