@@ -7,6 +7,12 @@ function normalizeSeed(seedValue){
   return seed;
 }
 
+function normalizeFoundationKey(stableKey){
+  const key=String(stableKey==null?"":stableKey);
+  if(!key)throw new Error("Deterministic foundation key is required.");
+  return key;
+}
+
 function normalizeFantasyTimestamp(fantasyTimestampMs){
   if(!Number.isFinite(fantasyTimestampMs))throw new Error("Fantasy game timestamp is required.");
   const timestamp=Math.trunc(fantasyTimestampMs);
@@ -28,29 +34,54 @@ function mixText(text){
   return hash>>>0;
 }
 
-function randomUint32(seedValue,fantasyTimestampMs){
+// Time-independent world-foundation generation.
+// stableKey only addresses a deterministic location/slot such as terrain:x:y or npc:0001.
+// It is not an entropy source and must itself be derived from deterministic generation structure.
+function foundationUint32(seedValue,stableKey){
   const seed=normalizeSeed(seedValue);
-  const timestamp=normalizeFantasyTimestamp(fantasyTimestampMs);
-  return mixText(seed+"|"+String(timestamp));
+  const key=normalizeFoundationKey(stableKey);
+  return mixText(seed+"|FOUNDATION|"+key);
 }
 
-function random(seedValue,fantasyTimestampMs){
-  return randomUint32(seedValue,fantasyTimestampMs)/4294967296;
+function foundation(seedValue,stableKey){
+  return foundationUint32(seedValue,stableKey)/4294967296;
+}
+
+// Live simulation actions. Exactly Campaign SEED + authoritative FantasyTimestamp.
+function liveUint32(seedValue,fantasyTimestampMs){
+  const seed=normalizeSeed(seedValue);
+  const timestamp=normalizeFantasyTimestamp(fantasyTimestampMs);
+  return mixText(seed+"|LIVE|"+String(timestamp));
+}
+
+function live(seedValue,fantasyTimestampMs){
+  return liveUint32(seedValue,fantasyTimestampMs)/4294967296;
 }
 
 function verify(seedValue,fantasyTimestampMs){
   const seed=normalizeSeed(seedValue);
   const timestamp=normalizeFantasyTimestamp(fantasyTimestampMs);
-  const first=randomUint32(seed,timestamp);
-  const repeated=randomUint32(seed,timestamp);
-  const nextTimestamp=randomUint32(seed,timestamp+1);
+  const foundationKey="wp002:foundation-proof";
+  const foundationA=foundationUint32(seed,foundationKey);
+  const foundationB=foundationUint32(seed,foundationKey);
+  const liveA=liveUint32(seed,timestamp);
+  const liveB=liveUint32(seed,timestamp);
+  const liveNext=liveUint32(seed,timestamp+1);
+
   return Object.freeze({
-    value:first,
-    repeatable:first===repeated,
-    timeSensitive:first!==nextTimestamp,
+    foundationKey,
+    foundationValue:foundationA,
+    foundationRepeatable:foundationA===foundationB,
+    liveValue:liveA,
+    liveRepeatable:liveA===liveB,
+    liveTimeSensitive:liveA!==liveNext,
     timestamp
   });
 }
 
-window.PRNG=Object.freeze({randomUint32,random,verify});
+window.PRNG=Object.freeze({
+  foundationUint32,foundation,
+  liveUint32,live,
+  verify
+});
 })();
