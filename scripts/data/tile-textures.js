@@ -114,13 +114,15 @@ function blendMaskSpec(target,shape,key,context){
   else files=BLEND_MASKS[shape]&&BLEND_MASKS[shape][key];
   if(!files||!files.length)return null;
   const variantIndex=blendVariantIndex(context,target,shape,key,files.length);
+  const maskPath=ROOT+files[variantIndex];
   return Object.freeze({
     terrain:target,
     shape,
     orientation:key||"all",
     variant:variantIndex===0?"a":"b",
     variantIndex,
-    mask:ROOT+files[variantIndex]
+    mask:maskPath,
+    maskKey:keyForPath(maskPath)
   });
 }
 
@@ -213,9 +215,42 @@ function blendSpecs(type,neighbors,context){
 }
 
 
+function assetKey(type,variant){
+  if(variant&&VARIANTS[variant])return "tile:"+variant;
+  return BASE[type]?"tile:"+type:null;
+}
+
+function keyForPath(path){
+  if(!path)return null;
+  const file=String(path).split("/").pop()||"";
+  return "asset:"+file.replace(/\.[^.]+$/,"");
+}
+
 function asset(type,variant){
   const file=(variant&&VARIANTS[variant])||BASE[type];
   return file?ROOT+file:null;
+}
+
+function assetCatalog(){
+  const entries={};
+  for(const [type,file] of Object.entries(BASE)){
+    entries["tile:"+type]=ROOT+file;
+  }
+  for(const [variant,file] of Object.entries(VARIANTS)){
+    entries["tile:"+variant]=ROOT+file;
+  }
+  const addMaskFiles=value=>{
+    if(Array.isArray(value)){
+      for(const file of value)entries[keyForPath(ROOT+file)]=ROOT+file;
+      return;
+    }
+    for(const nested of Object.values(value||{}))addMaskFiles(nested);
+  };
+  addMaskFiles(BLEND_MASKS);
+  for(const file of ["transition_l.svg","transition_c.svg","transition_u.svg"]){
+    entries[keyForPath(ROOT+file)]=ROOT+file;
+  }
+  return Object.freeze(entries);
 }
 
 function transition(type,north,east,south,west){
@@ -259,6 +294,6 @@ function transition(type,north,east,south,west){
 window.TileTextures=Object.freeze({
   ROOT,BASE,VARIANTS,
   BLEND_MASKS,BLEND_PRIORITY,
-  asset,transition,blendSpecs
+  assetKey,keyForPath,asset,assetCatalog,transition,blendSpecs
 });
 })();
