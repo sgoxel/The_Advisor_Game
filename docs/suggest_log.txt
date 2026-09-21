@@ -1,3 +1,6 @@
+2026-09-21 20:32:24 +03:00 | ROADMAP WP code convention / WP-S1-1
+Suggestion: use the new WP code as the first token in every future GitHub Issue title and in any future sub-Issue naming, so Stage and parent/subpackage relationships remain sortable without adding another status system.
+
 2026-09-21 20:23:24 +03:00 | Stage 1 / WP-001
 Suggestion: after all ROADMAP WPs are migrated, group the tracking Issues by Stage using dedicated Stage 1 / Stage 2 labels or GitHub milestones so the Issues view mirrors the ROADMAP hierarchy without changing the exact copied WP bodies.
 
