@@ -28,9 +28,10 @@
 
   <!-- ROW 2: GAMEPLAY AREA -->
   <main id="gameplayArea" class="gameplay-area" aria-label="Gameplay Area">
+    <div id="terrainGrid" class="terrain-grid" hidden aria-label="Solid-color terrain preview"></div>
     <div id="gameplayPlaceholder" class="gameplay-placeholder">
       <strong>Gameplay Area</strong>
-      <span>World origin is centered at (0,0). Terrain begins in WP-004.</span>
+      <span>Start a campaign to generate deterministic solid-color terrain.</span>
     </div>
     <div id="protagonistMarker" class="protagonist-marker" hidden aria-label="Protagonist at world origin">
       <span class="protagonist-dot"></span>
@@ -177,6 +178,17 @@
     </div>
   </details>
 
+
+  <details>
+    <summary>Basic Terrain Colors</summary>
+    <div class="accordion-content technical-info">
+      <p>Temporary solid colors distinguish terrain until production textures are introduced.</p>
+      <div id="terrainLegend" class="terrain-legend"></div>
+      <div class="check"><span>Terrain type is deterministic from Campaign SEED + coordinate</span><b id="vTerrainDeterministic">WAITING</b></div>
+      <div class="check"><span>Terrain rendering uses no textures</span><b id="vTerrainSolidOnly">PASS</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -193,6 +205,8 @@
 <script src="scripts/core/seed.js"></script>
 <script src="scripts/entities/protagonist.js"></script>
 <script src="scripts/core/prng.js"></script>
+<script src="scripts/data/terrain-palette.js"></script>
+<script src="scripts/world/terrain.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/main.js"></script>
