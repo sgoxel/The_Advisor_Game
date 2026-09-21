@@ -1,3 +1,10 @@
+2026-09-21 16:07:00 +03:00
+- WP-006 final strict camera acceptance passed on GitHub Actions run 35602541946.
+- Automated camera-pan proved Camera moves away from (0,0), Protagonist remains at (0,0), reverse pan returns Camera to (0,0), and returned terrain evidence matches the starting terrain.
+- Viewport coverage and center checks remained valid during the camera test.
+- Visual-evidence artifact: visual-evidence-camera-pan-35602541946 (118392 bytes).
+- Recorded final WP-006 evidence in docs/ROADMAP.md.
+
 2026-09-21 16:04:00 +03:00
 - WP-006 verification refinement after visual review.
 - Fixed the in-game camera-independence check so it remains PASS after the camera returns to the Protagonist.
