@@ -37,6 +37,7 @@ on:
           - npc-edge-crossing
           - terrain-natural
           - main-road
+          - starting-village
       shots:
         description: Requested screenshot count; scenario minimums still apply
         required: true
@@ -56,6 +57,8 @@ on:
       - tools/requirements.txt
       - .github/workflows/visual-evidence.yml
       - scripts/world/geography.js
+      - scripts/world/starting-village.js
+      - scripts/data/world-standards.js
       - styles/main.css
 
 permissions:
@@ -137,7 +140,7 @@ jobs:
             publish="${INPUT_PUBLISH:-false}"
           elif [ "$EVENT_NAME" = 'push' ]; then
             target='http://127.0.0.1:8000/'
-            scenario='main-road'
+            scenario='starting-village'
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             [ -n "$requested" ] && scenario="$requested"
@@ -145,7 +148,7 @@ jobs:
           fi
 
           case "$scenario" in
-            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road) ;;
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village) ;;
             *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
           esac
           case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac
