@@ -26,11 +26,22 @@ function loadImage(url){
   });
 }
 
+function rasterizeSvg(image){
+  const canvas=document.createElement("canvas");
+  canvas.width=100;
+  canvas.height=100;
+  const context=canvas.getContext("2d",{alpha:true});
+  context.clearRect(0,0,100,100);
+  context.drawImage(image,0,0,100,100);
+  return canvas;
+}
+
 async function loadSource(url){
   if(sources.has(url))return sources.get(url);
   const pending=(async()=>{
     const image=await loadImage(url);
-    return PIXI.Texture.from(image);
+    const source=/\.svg(?:$|[?#])/i.test(url)?rasterizeSvg(image):image;
+    return PIXI.Texture.from(source);
   })();
   sources.set(url,pending);
   try{
