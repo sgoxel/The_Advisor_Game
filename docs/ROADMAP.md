@@ -371,6 +371,20 @@ If the Gameplay Area currently shows **16 × 9 tiles**, at least **144 visible t
 - GitHub visual evidence records the same coverage metrics for landscape and portrait verification;
 - no terrain textures or tile atlas are used.
 
+### Verified evidence
+
+GitHub Actions run **35601738723** used the `responsive-cycle` scenario on the exact checked-out commit:
+
+- landscape Gameplay Area: **1920×839 px**;
+- landscape grid: **23×11 = 253 tiles**, **2300×1100 px** coverage;
+- portrait Gameplay Area: **1080×1679 px**;
+- portrait grid: **13×19 = 247 tiles**, **1300×1900 px** coverage;
+- returning to landscape reproduced **23×11 = 253 tiles**;
+- all three frames reported `coveragePass=true`;
+- all three frames reported `centerPass=true`;
+- Protagonist remained at **(0,0)**;
+- visual inspection showed no blank Gameplay Area in landscape or portrait.
+
 ### Pass condition
 
 - no blank gameplay area is visible;
