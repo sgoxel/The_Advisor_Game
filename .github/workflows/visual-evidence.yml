@@ -64,6 +64,7 @@ on:
       - scripts/world/terrain.js
       - scripts/world/walkability.js
       - scripts/world/route-planner.js
+      - scripts/world/building-interiors.js
       - scripts/data/world-standards.js
       - scripts/data/terrain-palette.js
       - scripts/data/tile-textures.js
