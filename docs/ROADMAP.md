@@ -545,6 +545,17 @@ All generated settlements and world cells must use this reservation order:
 
 This is a **planning rule**, not merely a render z-index. Later systems must query earlier reservations before accepting a placement.
 
+### Verified reservation evidence
+
+- deterministic stress test across **12 SEEDs** produced all **6 required Starting Village plots** for every tested SEED;
+- all tested SEEDs reported **0 road/plot overlaps**;
+- all tested SEEDs reported **0 local-path/plot overlaps**;
+- all tested SEEDs reported **0 public-square/plot overlaps**;
+- GitHub Actions run **35615843410** completed successfully;
+- its runtime evidence reported planning order exactly as `roads → buildings → important-objects → terrain`;
+- `buildingReservationPass=true`, `plotRoadOverlapCount=0`, `plotPathOverlapCount=0`, and `plotSquareOverlapCount=0`;
+- visual review confirmed reserved building areas remain intact instead of being cut by road-colored cells.
+
 ---
 
 # Stage 2 — Starting Village Physical Foundation
