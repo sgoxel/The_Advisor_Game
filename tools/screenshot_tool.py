@@ -678,7 +678,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Starting Village is not deterministic: {proof}")
         if not proof.get("originInsideVillage"):
             raise RuntimeError(f"Protagonist origin is not inside Starting Village: {proof}")
-        if not proof.get("mainlandConnected") or int(proof.get("roadGapCount") or 1) != 0:
+        if not proof.get("mainlandConnected") or int(proof.get("roadGapCount", -1)) != 0:
             raise RuntimeError(f"Starting Village has no continuous mainland connection: {proof}")
         if not proof.get("bridgePass"):
             raise RuntimeError(f"Starting Village bridge limit failed: {proof}")
