@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-007C</title>
+<title>The Advisor Game — WP-007D</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-007C</span>
+      <span class="build-badge">WP-007D</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -313,10 +313,22 @@
   </details>
 
   <details>
+    <summary>WP-007D Deterministic Terrain Blend Variation</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Blend Variant Mode</span><strong id="blendVariantMode">—</strong></div>
+      </div>
+      <div class="check"><span>Same SEED + same coordinate selects the same rounded blend mask variant</span><b id="vBlendVariantDeterministic">WAITING</b></div>
+      <div class="check"><span>Both A and B rounded mask variants are reachable from deterministic coordinates</span><b id="vBlendVariantAB">WAITING</b></div>
+      <p>Long borders now alternate between compatible A/B SVG curve shapes. Both variants keep matching edge endpoints, so shoreline continuity is preserved while repeated stamping is reduced.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-007C Rounded Terrain Border Blending.</p>
-      <p><strong>Current world rendering:</strong> Deterministic SVG terrain with neighboring materials blended through rounded vector masks.</p>
+      <p><strong>Current Work Package:</strong> WP-007D Deterministic Terrain Blend Variation.</p>
+      <p><strong>Current world rendering:</strong> Deterministic SVG terrain with rounded neighboring-material masks and coordinate-stable A/B curve variation.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>

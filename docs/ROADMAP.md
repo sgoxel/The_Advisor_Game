@@ -828,6 +828,64 @@ GitHub Actions run **35621550722** completed successfully against the exact merg
 
 ---
 
+## WP-007D — Deterministic Terrain Blend Variation — IMPLEMENTED / VISUAL VERIFICATION PENDING
+
+### Goal
+
+Reduce visible repetition along long rounded terrain boundaries without changing the WP-007C border topology or authoritative terrain identity.
+
+### Scope
+
+Add a second compatible SVG mask shape for every rounded WP-007C blend family:
+
+- 4 side-edge B variants;
+- 4 rounded-corner B variants;
+- 4 peninsula/inlet B variants;
+- 1 rounded-island B variant.
+
+The original WP-007C masks remain the A variants.
+
+### Rules
+
+- A/B selection uses Campaign SEED + world tile X/Y + base terrain + neighboring terrain + blend shape/orientation;
+- selection uses foundation randomness only;
+- same SEED and coordinate always reproduce the same variant;
+- neighboring A/B masks keep the same edge endpoints so continuous borders do not split at tile boundaries;
+- variation changes presentation only;
+- terrain Simulation identity, roads, buildings and collision data do not change;
+- no PNG transition texture is introduced.
+
+### Implemented
+
+- added **13 new SVG B-variant masks**, bringing rounded blend masks to **26** total;
+- total simple vector tile/mask assets used by the current presentation layer are now **55 SVG files**;
+- `TileTextures.blendSpecs()` now accepts deterministic SEED/world-coordinate context;
+- `PRNG.foundationUint32()` selects A or B from a stable terrain-blend structural key;
+- rendered blend layers expose their selected A/B variant for verification;
+- both A and B are reachable across deterministic coordinates for the default Campaign SEED;
+- repeated calls with the same SEED/coordinate return byte-identical blend specifications;
+- the existing WP-007C material priority and road/path-versus-water protection remain unchanged.
+
+### Static verification
+
+Default-SEED sampling across **400 coordinates** passed:
+
+- deterministic repeat: PASS;
+- A variant reachable: PASS;
+- B variant reachable: PASS;
+- mask selection remains SVG-only: PASS.
+
+### Pass condition
+
+- same SEED + same world coordinate reproduces the same A/B mask;
+- both A and B variants appear in a representative terrain-border sample;
+- long boundaries show less obvious repeated stamping than WP-007C;
+- rounded border continuity remains intact;
+- existing Starting Village, buildings, roads and camera verification remain PASS;
+- screenshot review score remains **above 7/10**.
+
+---
+
 ## WP-008 — Special Buildings + Functional Lots
 
 ### Goal

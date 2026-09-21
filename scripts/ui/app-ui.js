@@ -13,6 +13,7 @@ const ids=[
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
   "vVillageCore","vVillageMainland","vVillageBridge","vVillagePlan","vVillageRepeat",
   "houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount",
+  "blendVariantMode","vBlendVariantDeterministic","vBlendVariantAB",
   "vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions",
   "tileViewportSize","tileGridSize","tileCount","tileCenterCoordinate",
   "vTileCoverage","vTileResponsive","vTileOddGrid","vTileRepeat","vTileSolidOnly",
@@ -124,8 +125,8 @@ function renderStartingVillage(){
 function renderHousePlans(){
   const campaign=SeedSystem.getCampaign();
   if(!campaign){
-    ["houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount"].forEach(id=>e[id].textContent="—");
-    ["vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions"].forEach(id=>setCheck(e[id],false,"WAITING"));
+    ["houseBuildingCount","houseTypeCount","houseMinRoomTiles","houseSvgCount","blendVariantMode"].forEach(id=>e[id].textContent="—");
+    ["vHousePlan","vHouseRooms","vHouseWalls","vHouseEntrances","vHouseSvg","vHouseTransitions","vBlendVariantDeterministic","vBlendVariantAB"].forEach(id=>setCheck(e[id],false,"WAITING"));
     return;
   }
 
@@ -140,11 +141,22 @@ function renderHousePlans(){
   const edge=TileTextures.blendSpecs("grass",{n:"water",e:"grass",s:"grass",w:"grass"});
   const corner=TileTextures.blendSpecs("grass",{n:"water",e:"water",s:"grass",w:"grass"});
   const peninsula=TileTextures.blendSpecs("grass",{n:"water",e:"water",s:"water",w:"grass"});
+  const variantNeighbors={n:"water",e:"grass",s:"grass",w:"grass"};
+  const stableA=TileTextures.blendSpecs("grass",variantNeighbors,{seed:campaign.seed,x:"17",y:"23"});
+  const stableB=TileTextures.blendSpecs("grass",variantNeighbors,{seed:campaign.seed,x:"17",y:"23"});
+  const observedVariants=new Set();
+  for(let y=0;y<12;y++){
+    for(let x=0;x<12;x++){
+      const sample=TileTextures.blendSpecs("grass",variantNeighbors,{seed:campaign.seed,x:String(x),y:String(y)});
+      if(sample[0]?.variant)observedVariants.add(sample[0].variant);
+    }
+  }
 
   e.houseBuildingCount.textContent=String(proof.buildingCount);
   e.houseTypeCount.textContent=proof.normalHouseCount+" houses / "+proof.cabinCount+" cabins";
   e.houseMinRoomTiles.textContent=proof.minimumRoomTiles+" tiles / "+(proof.minimumRoomTiles*WorldStandards.TILE_METERS*WorldStandards.TILE_METERS)+" m²";
-  e.houseSvgCount.textContent="42 vector SVG files";
+  e.houseSvgCount.textContent="55 vector SVG files";
+  e.blendVariantMode.textContent=[...observedVariants].sort().join(" / ").toUpperCase()+" deterministic";
 
   setCheck(e.vHousePlan,proof.pass&&proof.deterministic,"FAIL");
   setCheck(e.vHouseRooms,proof.roomsPass&&proof.minimumRoomTiles>=6,"FAIL");
@@ -156,6 +168,16 @@ function renderHousePlans(){
     edge.some(spec=>spec.shape==="edge")&&
     corner.some(spec=>spec.shape==="corner")&&
     peninsula.some(spec=>spec.shape==="peninsula"),
+    "FAIL"
+  );
+  setCheck(
+    e.vBlendVariantDeterministic,
+    JSON.stringify(stableA)===JSON.stringify(stableB),
+    "FAIL"
+  );
+  setCheck(
+    e.vBlendVariantAB,
+    observedVariants.has("a")&&observedVariants.has("b"),
     "FAIL"
   );
 }
@@ -259,10 +281,11 @@ function terrainBlendLayer(spec){
   layer.dataset.blendShape=spec.shape;
   layer.dataset.blendTerrain=spec.terrain;
   layer.dataset.blendOrientation=spec.orientation;
+  layer.dataset.blendVariant=spec.variant||"a";
   return layer;
 }
 
-function applyTerrainTransitions(columns,rows){
+function applyTerrainTransitions(columns,rows,seed){
   const nodes=[...e.terrainGrid.children];
   for(let row=0;row<rows;row++){
     for(let col=0;col<columns;col++){
@@ -276,7 +299,11 @@ function applyTerrainTransitions(columns,rows){
         s:row<rows-1?nodes[(row+1)*columns+col].dataset.terrain:null,
         w:col>0?nodes[row*columns+col-1].dataset.terrain:null
       };
-      const blends=TileTextures.blendSpecs(type,neighbors);
+      const blends=TileTextures.blendSpecs(type,neighbors,{
+        seed,
+        x:node.dataset.x,
+        y:node.dataset.y
+      });
       for(const blend of blends)node.appendChild(terrainBlendLayer(blend));
     }
   }
@@ -347,7 +374,7 @@ function renderTerrain(){
     }
   }
 
-  applyTerrainTransitions(columns,rows);
+  applyTerrainTransitions(columns,rows,campaign.seed);
 
   const gridWidth=columns*tileSize;
   const gridHeight=rows*tileSize;

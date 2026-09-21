@@ -258,22 +258,48 @@ return (() => {
             if (!campaign || !houses?.proof || !textures) return null;
             const proof = houses.proof(campaign.seed);
             const rendered = [...document.querySelectorAll('.terrain-tile')];
-            const transitionShapes = [...new Set(
-              [...document.querySelectorAll('.terrain-transition')]
-                .map(layer => layer.dataset?.shape)
-                .filter(Boolean)
+            const blendLayers = [...document.querySelectorAll('.terrain-blend')];
+            const blendShapes = [...new Set(
+              blendLayers.map(layer => layer.dataset?.blendShape).filter(Boolean)
             )].sort();
-            const registryShapes = [
-              textures.transition("grass","water","water","grass","grass")?.shape,
-              textures.transition("grass","water","grass","grass","grass")?.shape,
-              textures.transition("grass","water","water","water","grass")?.shape,
+            const blendVariants = [...new Set(
+              blendLayers.map(layer => layer.dataset?.blendVariant).filter(Boolean)
+            )].sort();
+            const sampleNeighbors = {n:"water",e:"grass",s:"grass",w:"grass"};
+            const stableOne = textures.blendSpecs(
+              "grass", sampleNeighbors,
+              {seed:campaign.seed,x:"17",y:"23"}
+            );
+            const stableTwo = textures.blendSpecs(
+              "grass", sampleNeighbors,
+              {seed:campaign.seed,x:"17",y:"23"}
+            );
+            const registryVariants = new Set();
+            for (let y=0;y<12;y++) {
+              for (let x=0;x<12;x++) {
+                const sample = textures.blendSpecs(
+                  "grass", sampleNeighbors,
+                  {seed:campaign.seed,x:String(x),y:String(y)}
+                );
+                if (sample[0]?.variant) registryVariants.add(sample[0].variant);
+              }
+            }
+            const shapeProof = [
+              textures.blendSpecs("grass",{n:"water",e:"grass",s:"grass",w:"grass"})[0]?.shape,
+              textures.blendSpecs("grass",{n:"water",e:"water",s:"grass",w:"grass"})[0]?.shape,
+              textures.blendSpecs("grass",{n:"water",e:"water",s:"water",w:"grass"})[0]?.shape,
+              textures.blendSpecs("grass",{n:"water",e:"water",s:"water",w:"water"})[0]?.shape,
             ].filter(Boolean).sort();
             return {
               ...proof,
               svgTileCount: rendered.filter(tile => (tile.dataset?.texture || "").endsWith(".svg")).length,
               pngTileCount: rendered.filter(tile => (tile.dataset?.texture || "").toLowerCase().endsWith(".png")).length,
-              transitionShapes,
-              registryShapes,
+              blendLayerCount: blendLayers.length,
+              blendShapes,
+              blendVariants,
+              registryVariants:[...registryVariants].sort(),
+              blendDeterministic:JSON.stringify(stableOne)===JSON.stringify(stableTwo),
+              shapeProof,
             };
           } catch (error) {
             return {error: String(error)};
@@ -786,8 +812,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-007B entrance access failed: {house}")
         if int(house.get("svgTileCount") or 0) <= 0 or int(house.get("pngTileCount") or 0) != 0:
             raise RuntimeError(f"WP-007B vector tile rendering failed: {house}")
-        if house.get("registryShapes") != ["c", "l", "u"]:
-            raise RuntimeError(f"WP-007B L/C/U transition registry failed: {house}")
+        if int(house.get("blendLayerCount") or 0) <= 0:
+            raise RuntimeError(f"WP-007C rounded terrain blending did not render: {house}")
+        if house.get("shapeProof") != ["corner", "edge", "island", "peninsula"]:
+            raise RuntimeError(f"WP-007C rounded blend shape registry failed: {house}")
+        if not house.get("blendDeterministic"):
+            raise RuntimeError(f"WP-007D deterministic blend variation failed: {house}")
+        if house.get("registryVariants") != ["a", "b"]:
+            raise RuntimeError(f"WP-007D A/B blend variants are not both reachable: {house}")
         grid = current.get("terrainGrid") or {}
         gateway_grid = gateway_frame.get("terrainGrid") or {}
         if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):
