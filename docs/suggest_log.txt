@@ -1,3 +1,6 @@
+2026-09-21 21:25:00 +03:00 | Stage 3 planning
+Suggestion: keep transient visitors, richer social interaction and economy out of Stage 3 until the 12 persistent Starting Village residents can be generated, assigned, scheduled and visibly routed reliably. This preserves a small testable population foundation before adding simulation breadth.
+
 2026-09-21 21:21:00 +03:00 | Stage 2 / WP-S002-004
 Suggestion: when autonomous character movement is implemented later, consume RoutePlanner.findRoute() as a planning service and keep path execution separate. Replan only when authoritative world state invalidates the next path segment rather than recalculating every frame.
 
