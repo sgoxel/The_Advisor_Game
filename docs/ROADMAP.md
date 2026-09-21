@@ -14,6 +14,18 @@ Every Work Package must:
 
 **Player advises → AI Character decides → Simulation validates → World reacts.**
 
+## Work Package Code Rule
+
+Work Package codes use zero-padded three-digit numeric segments so alphabetical sorting matches development order:
+
+- main WP: `WP-S###-###`;
+- sub-WP: `WP-S###-###-###`;
+- first segment after `S` = Stage number;
+- second segment = Work Package number inside that Stage;
+- optional third segment = Sub Package number.
+
+Examples: `WP-S001-001`, `WP-S002-001-001`, `WP-S002-004`.
+
 ---
 
 ## Project Structure Rule
