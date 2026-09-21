@@ -304,8 +304,8 @@ Fantasy time must not influence continent, country, region, settlement, street, 
 - village centers use deterministic spatial cells with bounded jitter;
 - every village pair has a geometric minimum separation that cannot be walked in under 1 fantasy hour even at the fastest walking speed;
 - a terrain-aware A* walking-route check verifies the nearest distinct village from the starting village;
-- tile scale for the current foundation model is **100 meters per logical tile**;
-- maximum normal walking speed used by the spacing proof is **5.5 km/h**.
+- authoritative world scale is **2 meters per logical tile**;
+- fastest normal walking surface used by village-spacing proof is **3.6 km/h**.
 
 ### In-game proof
 
@@ -492,6 +492,39 @@ The next stage may now introduce the physical starting settlement foundation, bu
 
 ---
 
+# World Measurement Standard
+
+These measurements are authoritative for all Stage 2+ world geometry and travel calculations.
+
+- **1 logical world tile = 2 meters × 2 meters = 4 m²**.
+- Tile coordinates remain integer world coordinates; rendering pixel size is camera presentation only.
+- Normal NPC walking is intentionally slower/readable for gameplay:
+  - good road / bridge: **3.6 km/h** = **1.00 m/s** = **0.50 tile/s**;
+  - dirt road: **3.2 km/h**;
+  - grass/open ground: **3.0 km/h**;
+  - farmland: **2.8 km/h**;
+  - sand: **2.3 km/h**;
+  - forest: **2.2 km/h**;
+  - mud: **1.8 km/h**;
+  - rock/mountain ground: **1.6 km/h**.
+- Future ordinary running should normally stay around **5.5–6.0 km/h**, not arcade-fast.
+- The 24× fantasy clock must not make on-screen NPC locomotion visually 24× faster; off-screen schedule/travel simulation and visible movement presentation must be reconciled in the later movement WP.
+- Distinct village centers must remain at least **1 fantasy walking hour** apart using the fastest normal walking surface.
+- At **3.6 km/h**, one fantasy walking hour is **3.6 km = 1,800 tiles**.
+- Village placement uses a larger safety spacing so jitter cannot violate that minimum.
+- Practical rural bridge cap: **120 meters = 60 tiles**.
+- Existing bridge-time hard limit remains **≤10 fantasy walking minutes**. At 3.6 km/h that time limit is 600 m, so the stricter **120 m / 60-tile practical cap** controls rural bridges.
+- Typical road widths:
+  - rough forest/mountain path: **1 tile = 2 m**;
+  - ordinary rural/wilderness road: **2 tiles = 4 m**;
+  - village main road: **2–3 tiles = 4–6 m**;
+  - town main road: up to **4 tiles = 8 m**;
+  - city main road: up to **6 tiles = 12 m**;
+  - capital-city main road: up to **10 tiles = 20 m**.
+- A normal 2-lane bridge should generally be **4 tiles = 8 m** wide when that settlement/road scale exists; small village bridges may be narrower.
+
+---
+
 # Stage 2 — Starting Village Physical Foundation
 
 The README requires every new campaign to begin with the Protagonist as an ordinary low-rank character in a **SEED-generated inhabited village**. Before population behavior is introduced, the village needs one coherent physical world layout that future homes, workplaces, NPCs and interactions can use.
@@ -508,14 +541,14 @@ Make the default campaign visibly begin inside a real **Starting Village** aroun
 
 Generate from the Campaign SEED:
 
-- deterministic Starting Village boundary around **(0,0)**;
+- deterministic Starting Village boundary around **(0,0)**, sized as a plausible small settlement rather than a single screen-sized marker;
 - central public/gathering square around the Protagonist;
 - connected authoritative village main-road ring/avenues;
 - secondary local paths attached to the main-road network;
 - reserved house/building plots;
 - farm/work parcels near the village edge;
 - one deterministic village gateway;
-- one continuous main-road connection from the village gateway to mainland;
+- one continuous main-road/causeway/short-bridge connection from the village gateway to a broader deterministic mainland land mass;
 - a deterministic mainland land mass beyond the gateway connection;
 - short bridges only when a water crossing is necessary.
 
@@ -527,7 +560,7 @@ Generate from the Campaign SEED:
 - wide water must be avoided or reshaped into a logical land/causeway connection;
 - a bridge is allowed only when the crossing is short enough;
 - bridge walking time must be **<= 10 fantasy game minutes**;
-- with the current **100 m/tile** and **5.5 km/h** main-road walking speed, a bridge may use at most **9 consecutive tiles**;
+- rural bridges use the stricter **120 m / 60-tile practical cap** and must also remain within **10 fantasy walking minutes**;
 - village main roads may be up to **3 tiles** wide;
 - wilderness/rough-terrain roads narrow naturally;
 - the width policy reserves up to **4 tiles for towns**, **6 for cities**, and **10 for capital-city main roads** in future settlement-scale WPs.
@@ -536,6 +569,7 @@ Generate from the Campaign SEED:
 
 - **(0,0)** remains the Starting Village center;
 - the Protagonist starts inside the visible village core;
+- the first village core is roughly **100–130 m across** before irregular edge transition, large enough for roads, plots and farms without pretending to be a city;
 - generation uses Campaign-SEED foundation randomness only;
 - same SEED + same coordinates reproduce exactly the same village layout and mainland connection;
 - no production textures or tile atlas yet;
@@ -576,10 +610,12 @@ Turn reserved village plots into old-school RPG top-down building plans using ti
 
 ### Minimum building rules
 
-- smallest basic cabin: at least **3x2 interior/floor tiles = 6 tiles**;
+- smallest basic cabin: at least **3×2 interior/floor tiles = 6 tiles = 24 m²**;
+- a 3×2 cabin interior therefore measures **6 m × 4 m** before wall/door presentation;
 - normal house: at least **1 bedroom + 1 living room**;
-- no room may be smaller than **6 floor tiles**;
+- no room may be smaller than **6 floor tiles = 24 m²**;
 - every house has an outer border-wall tile layer;
+- because one tile is 2 m wide, a wall tile is a grid/occupancy cell whose top-down artwork draws a realistic thin wall along the appropriate edge; it does **not** represent a literal 2-meter-thick wall;
 - multi-room houses have interior wall tiles;
 - doors/entrances must connect building interior to reachable village ground;
 - building walls, floors and rooms are deterministic from the Campaign SEED;
@@ -597,7 +633,8 @@ Define:
 - floor tiles;
 - doorway/entrance placement;
 - plot-to-road access;
-- deterministic room metadata.
+- deterministic room metadata;
+- house generation starts from a deterministic plot boundary and entrance side, then places the building plan inside it so walls/rooms never block the road.
 
 ### Pass condition
 
