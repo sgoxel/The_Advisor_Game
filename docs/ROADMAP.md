@@ -321,6 +321,7 @@ The palette is already implemented in `scripts/data/terrain-palette.js` and can 
 - no tile atlas;
 - no props or decorative artwork;
 - tile count is calculated from the actual browser gameplay viewport;
+- rendered row/column counts stay odd so the current world-center tile remains exactly centered;
 - portrait and landscape sizes are handled automatically.
 
 Example:
