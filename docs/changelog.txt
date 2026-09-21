@@ -1,3 +1,14 @@
+2026-09-21 16:27:00 +03:00
+- Extended WP-006 with camera zoom controls before starting WP-007.
+- Added Camera zoom state: default 1.0x, minimum 0.5x, maximum 2.0x.
+- Desktop mouse wheel up zooms in; mouse wheel down zooms out.
+- Added two-finger pinch zoom for phones/tablets: pinch open zooms in, pinch closed zooms out.
+- Gameplay Area now owns touch gestures so browser scrolling/pinch does not interfere with in-game camera interaction.
+- Terrain tile display size and Protagonist presentation scale follow Camera zoom while world coordinates and SEED terrain remain unchanged.
+- Added Reset Zoom control and visible zoom/tile-size diagnostics.
+- Extended screenshot_tool.py and GitHub Actions camera-zoom scenario to verify zoom changes and returns without changing Camera or Protagonist world coordinates.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 16:10:00 +03:00
 - Stage 1 review completed after WP-006 verification.
 - Re-read docs/README.md and designed the next practical development stage.
