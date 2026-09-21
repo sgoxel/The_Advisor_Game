@@ -284,21 +284,39 @@ return (() => {
                 if (sample[0]?.variant) registryVariants.add(sample[0].variant);
               }
             }
+            const diagonalOnly = textures.blendSpecs("grass",{
+              n:"grass",e:"grass",s:"grass",w:"grass",
+              ne:"water",se:"grass",sw:"grass",nw:"grass"
+            },{seed:campaign.seed,x:"31",y:"41"});
+            const highPriorityJunction = textures.blendSpecs("grass",{
+              n:"dirt",e:"forest",s:"grass",w:"grass",
+              ne:"water",se:"grass",sw:"grass",nw:"grass"
+            },{seed:campaign.seed,x:"32",y:"41"});
+            const lowPriorityJunction = textures.blendSpecs("grass",{
+              n:"water",e:"dirt",s:"grass",w:"grass",
+              ne:"forest",se:"grass",sw:"grass",nw:"grass"
+            },{seed:campaign.seed,x:"33",y:"41"});
             const shapeProof = [
               textures.blendSpecs("grass",{n:"water",e:"grass",s:"grass",w:"grass"})[0]?.shape,
               textures.blendSpecs("grass",{n:"water",e:"water",s:"grass",w:"grass"})[0]?.shape,
               textures.blendSpecs("grass",{n:"water",e:"water",s:"water",w:"grass"})[0]?.shape,
               textures.blendSpecs("grass",{n:"water",e:"water",s:"water",w:"water"})[0]?.shape,
+              diagonalOnly[0]?.shape,
             ].filter(Boolean).sort();
             return {
               ...proof,
               svgTileCount: rendered.filter(tile => (tile.dataset?.texture || "").endsWith(".svg")).length,
               pngTileCount: rendered.filter(tile => (tile.dataset?.texture || "").toLowerCase().endsWith(".png")).length,
               blendLayerCount: blendLayers.length,
+              diagonalBlendLayerCount:blendLayers.filter(layer=>layer.dataset?.blendShape==="diagonal").length,
               blendShapes,
               blendVariants,
               registryVariants:[...registryVariants].sort(),
               blendDeterministic:JSON.stringify(stableOne)===JSON.stringify(stableTwo),
+              diagonalRegistryPass:diagonalOnly.some(spec=>spec.shape==="diagonal"&&spec.orientation==="ne"&&spec.terrain==="water"),
+              junctionPriorityPass:
+                highPriorityJunction.some(spec=>spec.shape==="diagonal"&&spec.terrain==="water")&&
+                !lowPriorityJunction.some(spec=>spec.shape==="diagonal"&&spec.terrain==="forest"),
               shapeProof,
             };
           } catch (error) {
@@ -814,8 +832,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-007B vector tile rendering failed: {house}")
         if int(house.get("blendLayerCount") or 0) <= 0:
             raise RuntimeError(f"WP-007C rounded terrain blending did not render: {house}")
-        if house.get("shapeProof") != ["corner", "edge", "island", "peninsula"]:
-            raise RuntimeError(f"WP-007C rounded blend shape registry failed: {house}")
+        if house.get("shapeProof") != ["corner", "diagonal", "edge", "island", "peninsula"]:
+            raise RuntimeError(f"WP-007E rounded blend shape registry failed: {house}")
+        if not house.get("diagonalRegistryPass") or not house.get("junctionPriorityPass"):
+            raise RuntimeError(f"WP-007E diagonal/junction smoothing proof failed: {house}")
         if not house.get("blendDeterministic"):
             raise RuntimeError(f"WP-007D deterministic blend variation failed: {house}")
         if house.get("registryVariants") != ["a", "b"]:
