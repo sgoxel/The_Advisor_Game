@@ -1,3 +1,13 @@
+2026-09-21 20:32:24 +03:00
+- Updated ROADMAP WP code convention to: WP-S<StageNumber>-<WorkPackageNumber>-<SubPackageNumber if any>.
+- Renamed all 14 current Stage 1 and Stage 2 WP codes throughout docs/ROADMAP.md, including cross-references and GitHub migration tracking.
+- Stage 1 now uses WP-S1-1 through WP-S1-6.
+- Stage 2 uses WP-S2-1-1 through WP-S2-1-5, then WP-S2-2, WP-S2-3, and WP-S2-4.
+- Updated GitHub Issue #9 from WP-001 to WP-S1-1 only after the ROADMAP update.
+- Verified Issue #9 body exactly matches the renamed WP-S1-1 ROADMAP section.
+- Issue #9 remains CLOSED / completed with labels documentation and enhancement.
+- Verification score: 10/10 PASS.
+
 2026-09-21 20:23:24 +03:00
 - Started full ROADMAP → GitHub Issue migration using the one-WP-per-command workflow.
 - Migrated WP-001 exactly as written in docs/ROADMAP.md to GitHub Issue #9.
