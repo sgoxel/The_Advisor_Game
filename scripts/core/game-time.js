@@ -2,7 +2,6 @@
 "use strict";
 
 function pad2(n){return String(n).padStart(2,"0")}
-function pad3(n){return String(n).padStart(3,"0")}
 function padYear(n){return String(n).padStart(4,"0")}
 
 function fantasyStartToMs(start){
@@ -29,8 +28,7 @@ function fromTimestampMs(fantasyTimestampMs){
   const d=new Date(fantasyTimestampMs);
   return {
     year:d.getUTCFullYear(),month:d.getUTCMonth()+1,day:d.getUTCDate(),
-    hour:d.getUTCHours(),minute:d.getUTCMinutes(),second:d.getUTCSeconds(),
-    millisecond:d.getUTCMilliseconds()
+    hour:d.getUTCHours(),minute:d.getUTCMinutes(),second:d.getUTCSeconds()
   };
 }
 
@@ -38,8 +36,12 @@ function getNow(){return fromTimestampMs(getTimestampMs())}
 function formatDate(t){return t?`${pad2(t.day)}.${pad2(t.month)}.${padYear(t.year)}`:"—"}
 function formatTime(t){return t?`${pad2(t.hour)}:${pad2(t.minute)}`:"—"}
 function formatTimestamp(t){
-  return t?`${pad2(t.day)}.${pad2(t.month)}.${padYear(t.year)} ${pad2(t.hour)}:${pad2(t.minute)}:${pad2(t.second)}.${pad3(t.millisecond)}`:"—";
+  return t?`${pad2(t.day)}.${pad2(t.month)}.${padYear(t.year)} ${pad2(t.hour)}:${pad2(t.minute)}:${pad2(t.second)}`:"—";
 }
+function toTimestampKey(t){
+  return t?`${padYear(t.year)}-${pad2(t.month)}-${pad2(t.day)} ${pad2(t.hour)}:${pad2(t.minute)}:${pad2(t.second)}`:null;
+}
+function getTimestampKey(){return toTimestampKey(getNow())}
 function validateStartYear(){
   const c=SeedSystem.getCampaign();
   if(!c)return false;
@@ -48,6 +50,7 @@ function validateStartYear(){
 }
 
 window.GameTime=Object.freeze({
-  getTimestampMs,fromTimestampMs,getNow,formatDate,formatTime,formatTimestamp,validateStartYear
+  getTimestampMs,getTimestampKey,fromTimestampMs,getNow,
+  formatDate,formatTime,formatTimestamp,toTimestampKey,validateStartYear
 });
 })();
