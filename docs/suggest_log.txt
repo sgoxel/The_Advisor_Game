@@ -1,3 +1,6 @@
+2026-09-21 20:23:24 +03:00 | Stage 1 / WP-001
+Suggestion: after all ROADMAP WPs are migrated, group the tracking Issues by Stage using dedicated Stage 1 / Stage 2 labels or GitHub milestones so the Issues view mirrors the ROADMAP hierarchy without changing the exact copied WP bodies.
+
 2026-09-21 20:14:53 +03:00 | Stage 2 / WP-009
 Suggestion: WP-010 route planning should consume Walkability.classify()/movementSeconds() directly and never duplicate terrain collision rules. Route tests should include exterior doors, interior doorways, blocked interior walls, water avoidance, and route-cost preference for roads over difficult terrain.
 
