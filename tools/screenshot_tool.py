@@ -68,6 +68,7 @@ SCENARIOS = {
     "terrain-natural",
     "main-road",
     "starting-village",
+    "building-presentation",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -87,6 +88,7 @@ SCENARIO_MIN_SHOTS = {
     "terrain-natural": 2,
     "main-road": 2,
     "starting-village": 3,
+    "building-presentation": 5,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -226,6 +228,7 @@ return (() => {
           logicalTextureKeyPass: Boolean(renderer.logicalTextureKeyPass),
           protagonistVisible: Boolean(renderer.protagonistVisible),
           standardTerrainTexturePx: Number(renderer.standardTerrainTexturePx || 0),
+          buildingPresentation: renderer.buildingPresentation || null,
           textureCache: assets,
         },
         terrainNaturalness: naturalness,
@@ -782,7 +785,37 @@ def _legacy_control(driver, action: str) -> str:
     return f"legacy-skipped:{action}:{reason}"
 
 
+def _set_building_proof_state(driver, state: str) -> str:
+    result = driver.execute_script(
+        """
+        const state = arguments[0];
+        try {
+          const renderer = window.GameRenderer;
+          if (!renderer?.setBuildingProofState) {
+            return {ok:false, reason:'building-proof-api-missing'};
+          }
+          const snapshot = renderer.setBuildingProofState(state);
+          try { window.AppUI?.refreshBuildingPresentation?.(); } catch (_) {}
+          return {ok:true, presentation:snapshot?.buildingPresentation || null};
+        } catch (error) {
+          return {ok:false, reason:String(error)};
+        }
+        """,
+        state,
+    )
+    if isinstance(result, dict) and result.get("ok"):
+        return f"building-proof:{state}"
+    reason = result.get("reason", "unavailable") if isinstance(result, dict) else "unexpected"
+    return f"building-proof-failed:{state}:{reason}"
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "building-presentation":
+        states = ("outside", "entering", "inside", "behind", "leaving")
+        if frame_index == 0:
+            for _ in range(5):
+                _wheel_canvas(driver, 500)
+        return _set_building_proof_state(driver, states[min(frame_index, len(states) - 1)])
     if scenario == "static" or frame_index == 0:
         return "initial"
     if scenario == "panel-cycle":
@@ -837,6 +870,82 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "building-presentation":
+        if len(frames) < 5:
+            raise RuntimeError("building-presentation requires five evidence frames")
+        expected_states = ["outside", "entering", "inside", "behind", "leaving"]
+        expected_layers = [
+            "ground-floor",
+            "lower-structure-objects",
+            "shadows",
+            "characters-entities",
+            "upper-walls-foreground",
+            "roof-ceiling",
+            "verification-route",
+        ]
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:5]]
+        protagonist_positions = [item.get("protagonistLocation") for item in builds]
+        camera_positions = [item.get("cameraCoordinate") for item in builds]
+        if len(set(protagonist_positions)) != 1:
+            raise RuntimeError(
+                f"WP-S003-004 presentation mutated Protagonist coordinates: {protagonist_positions}"
+            )
+        if len(set(camera_positions)) != 1:
+            raise RuntimeError(
+                f"WP-S003-004 presentation mutated camera coordinates: {camera_positions}"
+            )
+
+        for index, (item, expected_state) in enumerate(zip(builds, expected_states), start=1):
+            gpu = item.get("gpuRenderer") or {}
+            presentation = gpu.get("buildingPresentation") or {}
+            if presentation.get("proofState") != expected_state:
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} proof state mismatch: {presentation}"
+                )
+            if presentation.get("layerOrder") != expected_layers:
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} layer order failed: {presentation}"
+                )
+            if not presentation.get("simulationAuthorityPreserved"):
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} lost Simulation authority: {presentation}"
+                )
+            if int(presentation.get("roofCount") or 0) <= 0:
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} has no visible roof presentation: {presentation}"
+                )
+            if int(presentation.get("visibleWallCapCount") or 0) <= 0:
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} has no raised wall presentation: {presentation}"
+                )
+            if not presentation.get("ySortedEntities"):
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} entity Y sorting is disabled: {presentation}"
+                )
+
+        outside = (builds[0].get("gpuRenderer") or {}).get("buildingPresentation") or {}
+        entering = (builds[1].get("gpuRenderer") or {}).get("buildingPresentation") or {}
+        inside = (builds[2].get("gpuRenderer") or {}).get("buildingPresentation") or {}
+        behind = (builds[3].get("gpuRenderer") or {}).get("buildingPresentation") or {}
+        leaving = (builds[4].get("gpuRenderer") or {}).get("buildingPresentation") or {}
+
+        if float(outside.get("roofAlpha") or 0) < 0.5 or outside.get("cutawayActive"):
+            raise RuntimeError(f"WP-S003-004 outside roof must be visible: {outside}")
+        if float(entering.get("roofAlpha") or 1) >= 0.5 or not entering.get("cutawayActive"):
+            raise RuntimeError(f"WP-S003-004 entering roof transition failed: {entering}")
+        for state_name, presentation in (("inside", inside), ("behind", behind)):
+            if float(presentation.get("roofAlpha") or 1) >= 0.5 or not presentation.get("cutawayActive"):
+                raise RuntimeError(
+                    f"WP-S003-004 {state_name} roof cutaway failed: {presentation}"
+                )
+        if not behind.get("proofObjectId") or int(behind.get("foregroundObjectCount") or 0) <= 0:
+            raise RuntimeError(
+                f"WP-S003-004 foreground-object occlusion proof failed: {behind}"
+            )
+        if float(leaving.get("roofAlpha") or 0) < 0.5 or leaving.get("cutawayActive"):
+            raise RuntimeError(f"WP-S003-004 leaving roof restore failed: {leaving}")
+        return
+
     if scenario == "starting-village":
         if len(frames) < 3:
             raise RuntimeError("starting-village requires three evidence frames")
@@ -1144,6 +1253,7 @@ def take_screenshots(
     scenario: str = "static",
     evidence_json: str | None = None,
     issue: str | None = None,
+    pause_seconds: float = 0.0,
 ) -> bool:
     if width <= 0 or height <= 0:
         print("Error: width and height must be positive.", file=sys.stderr)
@@ -1191,7 +1301,10 @@ def take_screenshots(
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if index:
+                if scenario == "building-presentation":
+                    action = _run_scenario_step(driver, scenario, index, width, height)
+                    time.sleep(interval)
+                elif index:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 else:
@@ -1222,6 +1335,10 @@ def take_screenshots(
                     issue=issue,
                     frames=frames,
                 )
+
+            if pause_seconds > 0:
+                print(f"Pausing browser for {pause_seconds:.1f}s before close")
+                time.sleep(pause_seconds)
 
             prune_capture_history()
             return True
@@ -1356,6 +1473,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--evidence-json", help="JSON evidence filename under tools/screenshots/")
     parser.add_argument("--issue", help="Optional GitHub Issue reference stored in evidence JSON")
     parser.add_argument(
+        "--pause-seconds",
+        type=float,
+        default=0.0,
+        help="Keep the browser open for manual inspection before it closes.",
+    )
+    parser.add_argument(
         "--no-force-max-zoom",
         action="store_false",
         dest="force_max_zoom",
@@ -1404,6 +1527,7 @@ def main(argv: list[str] | None = None) -> int:
         scenario=args.scenario,
         evidence_json=args.evidence_json,
         issue=args.issue,
+        pause_seconds=max(0.0, args.pause_seconds),
     )
     if not ok:
         return 1
