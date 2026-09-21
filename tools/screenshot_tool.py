@@ -86,7 +86,7 @@ SCENARIO_MIN_SHOTS = {
     "npc-edge-crossing": 5,
     "terrain-natural": 2,
     "main-road": 2,
-    "starting-village": 2,
+    "starting-village": 3,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -587,6 +587,53 @@ def _pinch_gameplay(driver, scale: float) -> str:
     return f"pinch-gameplay:{scale:.3f}" if result else "pinch-failed"
 
 
+
+def _focus_starting_village_gateway(driver) -> str:
+    result = driver.execute_script(
+        """
+        const campaign = window.SeedSystem?.getCampaign?.();
+        const village = window.StartingVillage;
+        const camera = window.Camera;
+        if (!campaign || !village?.plan || !camera?.pan) {
+          return {ok:false, reason:'starting-village-runtime-unavailable'};
+        }
+        const plan = village.plan(campaign.seed);
+        const moves = {
+          East:[18,0],
+          South:[0,18],
+          West:[-18,0],
+          North:[0,-18]
+        };
+        const move = moves[plan.gatewayDirection] || [0,0];
+        camera.pan(String(move[0]), String(move[1]));
+        window.dispatchEvent(new Event('resize'));
+        document.dispatchEvent(new KeyboardEvent('keydown', {key:'Shift'}));
+        return {ok:true, direction:plan.gatewayDirection, move};
+        """);
+    if isinstance(result, dict) and result.get("ok"):
+        # Force the current UI renderer to react through a harmless center-key path:
+        # one arrow step and its reverse redraw the camera window deterministically.
+        direction = result.get("direction")
+        key_pairs = {
+            "East": ("ArrowRight", "ArrowLeft"),
+            "South": ("ArrowDown", "ArrowUp"),
+            "West": ("ArrowLeft", "ArrowRight"),
+            "North": ("ArrowUp", "ArrowDown"),
+        }
+        first, second = key_pairs.get(direction, ("ArrowDown", "ArrowUp"))
+        driver.execute_script(
+            """
+            const first = arguments[0], second = arguments[1];
+            document.dispatchEvent(new KeyboardEvent('keydown',{key:first,bubbles:true}));
+            document.dispatchEvent(new KeyboardEvent('keydown',{key:second,bubbles:true}));
+            """,
+            first,
+            second,
+        )
+        return f"focus-gateway:{direction}"
+    return f"focus-gateway-skipped:{result}"
+
+
 def _legacy_control(driver, action: str) -> str:
     result = driver.execute_script(
         """
@@ -647,9 +694,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             _wheel_canvas(driver, 500)
         return "zoom-out-main-road:0.5x"
     if scenario == "starting-village":
-        for _ in range(5):
-            _wheel_canvas(driver, 500)
-        return "zoom-out-starting-village:0.5x"
+        if frame_index == 1:
+            for _ in range(5):
+                _wheel_canvas(driver, 500)
+            return "zoom-out-starting-village:0.5x"
+        return _focus_starting_village_gateway(driver)
     if scenario == "responsive-cycle":
         sizes = [(1080, 1920), (1920, 1080), (base_width, base_height)]
         width, height = sizes[(frame_index - 1) % len(sizes)]
@@ -670,9 +719,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "starting-village":
-        if len(frames) < 2:
-            raise RuntimeError("starting-village requires two evidence frames")
+        if len(frames) < 3:
+            raise RuntimeError("starting-village requires three evidence frames")
         current = frames[1].get("runtime", {}).get("currentBuild", {})
+        gateway_frame = frames[2].get("runtime", {}).get("currentBuild", {})
         proof = current.get("startingVillage") or {}
         if not proof.get("deterministic"):
             raise RuntimeError(f"Starting Village is not deterministic: {proof}")
@@ -685,8 +735,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(proof.get("plotCount") or 0) < 6:
             raise RuntimeError(f"Starting Village lacks reserved plots: {proof}")
         grid = current.get("terrainGrid") or {}
-        if not grid.get("coveragePass"):
-            raise RuntimeError(f"Starting Village frame lost viewport coverage: {grid}")
+        gateway_grid = gateway_frame.get("terrainGrid") or {}
+        if not grid.get("coveragePass") or not gateway_grid.get("coveragePass"):
+            raise RuntimeError(
+                f"Starting Village frame lost viewport coverage: center={grid}, gateway={gateway_grid}"
+            )
+        if gateway_frame.get("cameraCoordinate") == current.get("cameraCoordinate"):
+            raise RuntimeError("Starting Village gateway evidence did not move the camera")
         return
 
     if scenario == "main-road":
