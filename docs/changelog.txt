@@ -1,3 +1,10 @@
+2026-09-21 14:45:00 +03:00
+- WP-002 Deterministic PRNG implemented.
+- Added scripts/core/prng.js with stable SEED hashing and deterministic 32-bit output.
+- Added in-game PRNG sequence and automatic repeatability/difference checks below the play viewport.
+- Updated build marker to WP-002.
+- Updated docs/ROADMAP.md and marked WP-002 complete.
+
 2026-09-21 14:30:20 +03:00
 - Repository cleanup and documentation alignment.
 - Moved README into docs/README.md.
