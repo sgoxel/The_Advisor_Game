@@ -1,3 +1,8 @@
+2026-09-21 18:00:00 +03:00
+- Road/building reservation stress test found the first road-aware plot search was too restrictive: collision safety passed, but some SEEDs produced only 3–4 of the required 6 plots.
+- Expanded deterministic plot-candidate search across the village core and allowed road/path access within a two-cell planning margin.
+- Road/public-space overlap rejection remains unchanged and strict.
+
 2026-09-21 17:56:00 +03:00
 - Added authoritative world-planning order: roads/public infrastructure -> buildings -> important objects -> terrain fill.
 - This is now a reservation/planning rule, not a rendering-priority workaround.
