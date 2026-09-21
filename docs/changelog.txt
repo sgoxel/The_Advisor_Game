@@ -1,3 +1,12 @@
+2026-09-21 14:45:35 +03:00
+- Refined deterministic randomness into two strict modes.
+- Terrain, environment and initial NPC generation now use time-independent Campaign-SEED-based foundation randomness.
+- Live actions, NPC decisions and dynamic events use Random(Campaign SEED, FantasyTimestamp).
+- Added PRNG.foundationUint32(seed, stableKey) and PRNG.liveUint32(seed, fantasyTimestampMs).
+- Updated WP-002 verification, docs/ROADMAP.md and docs/README.md.
+- WP-003 tile generation explicitly forbids fantasy time as a terrain/environment input.
+- No real randomness is permitted in either mode.
+
 2026-09-21 14:42:07 +03:00
 - Corrected WP-002 deterministic randomness contract.
 - Random results now use ONLY Campaign SEED + authoritative fantasy game timestamp.
