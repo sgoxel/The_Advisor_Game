@@ -1,8 +1,20 @@
 (function(){
 "use strict";
 
-function hashSeed(seedValue){
-  const text=String(seedValue==null?"":seedValue);
+function normalizeSeed(seedValue){
+  const seed=String(seedValue==null?"":seedValue);
+  if(!seed)throw new Error("Campaign SEED is required.");
+  return seed;
+}
+
+function normalizeFantasyTimestamp(fantasyTimestampMs){
+  if(!Number.isFinite(fantasyTimestampMs))throw new Error("Fantasy game timestamp is required.");
+  const timestamp=Math.trunc(fantasyTimestampMs);
+  if(!Number.isSafeInteger(timestamp))throw new Error("Fantasy game timestamp must be a safe integer.");
+  return timestamp;
+}
+
+function mixText(text){
   let hash=2166136261>>>0;
   for(let i=0;i<text.length;i++){
     hash^=text.charCodeAt(i);
@@ -13,42 +25,32 @@ function hashSeed(seedValue){
   hash^=hash>>>13;
   hash=Math.imul(hash,3266489909);
   hash^=hash>>>16;
-  return (hash>>>0)||1831565813;
+  return hash>>>0;
 }
 
-function create(seedValue){
-  let state=hashSeed(seedValue);
-  function nextUint32(){
-    state=(state+1831565813)>>>0;
-    let value=state;
-    value=Math.imul(value^(value>>>15),value|1);
-    value^=value+Math.imul(value^(value>>>7),value|61);
-    return (value^(value>>>14))>>>0;
-  }
-  function next(){
-    return nextUint32()/4294967296;
-  }
-  return Object.freeze({nextUint32,next});
+function randomUint32(seedValue,fantasyTimestampMs){
+  const seed=normalizeSeed(seedValue);
+  const timestamp=normalizeFantasyTimestamp(fantasyTimestampMs);
+  return mixText(seed+"|"+String(timestamp));
 }
 
-function sequence(seedValue,count){
-  const total=Math.max(0,Number.isInteger(count)?count:6);
-  const random=create(seedValue);
-  const values=[];
-  for(let i=0;i<total;i++)values.push(random.nextUint32());
-  return values;
+function random(seedValue,fantasyTimestampMs){
+  return randomUint32(seedValue,fantasyTimestampMs)/4294967296;
 }
 
-function verify(seedValue){
-  const first=sequence(seedValue,6);
-  const second=sequence(seedValue,6);
-  const alternate=sequence(String(seedValue)+"|WP002_ALTERNATE",6);
+function verify(seedValue,fantasyTimestampMs){
+  const seed=normalizeSeed(seedValue);
+  const timestamp=normalizeFantasyTimestamp(fantasyTimestampMs);
+  const first=randomUint32(seed,timestamp);
+  const repeated=randomUint32(seed,timestamp);
+  const nextTimestamp=randomUint32(seed,timestamp+1);
   return Object.freeze({
-    repeatable:first.every((value,index)=>value===second[index]),
-    different:first.some((value,index)=>value!==alternate[index]),
-    sequence:first
+    value:first,
+    repeatable:first===repeated,
+    timeSensitive:first!==nextTimestamp,
+    timestamp
   });
 }
 
-window.PRNG=Object.freeze({hashSeed,create,sequence,verify});
+window.PRNG=Object.freeze({randomUint32,random,verify});
 })();
