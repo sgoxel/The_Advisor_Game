@@ -1,7 +1,23 @@
 (function(){
 "use strict";
 
+const MIN_ZOOM=0.5;
+const MAX_ZOOM=2.0;
+const DEFAULT_ZOOM=1.0;
+const ZOOM_STEP=0.1;
+
 let center=WorldCoordinates.origin();
+let zoom=DEFAULT_ZOOM;
+
+function clampZoom(value){
+  const number=Number(value);
+  if(!Number.isFinite(number))return zoom;
+  return Math.min(MAX_ZOOM,Math.max(MIN_ZOOM,number));
+}
+
+function roundZoom(value){
+  return Math.round(value*1000)/1000;
+}
 
 function getCenter(){
   return WorldCoordinates.position(center.x,center.y);
@@ -22,9 +38,31 @@ function centerOn(position){
   return setCenter(position.x,position.y);
 }
 
+function getZoom(){
+  return zoom;
+}
+
+function setZoom(value){
+  zoom=roundZoom(clampZoom(value));
+  return zoom;
+}
+
+function zoomBy(delta){
+  return setZoom(zoom+Number(delta||0));
+}
+
+function zoomIn(){
+  return zoomBy(ZOOM_STEP);
+}
+
+function zoomOut(){
+  return zoomBy(-ZOOM_STEP);
+}
+
 function reset(){
   center=WorldCoordinates.origin();
-  return getCenter();
+  zoom=DEFAULT_ZOOM;
+  return Object.freeze({center:getCenter(),zoom});
 }
 
 function offsetFrom(position){
@@ -35,5 +73,10 @@ function offsetFrom(position){
   });
 }
 
-window.Camera=Object.freeze({getCenter,setCenter,pan,centerOn,reset,offsetFrom});
+window.Camera=Object.freeze({
+  MIN_ZOOM,MAX_ZOOM,DEFAULT_ZOOM,ZOOM_STEP,
+  getCenter,setCenter,pan,centerOn,
+  getZoom,setZoom,zoomBy,zoomIn,zoomOut,
+  reset,offsetFrom
+});
 })();
