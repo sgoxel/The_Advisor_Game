@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-001</title>
+<title>The Advisor Game — WP-002</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-001</span>
+      <span class="build-badge">WP-002</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -131,10 +131,22 @@
     </div>
   </details>
 
+
+  <details>
+    <summary>WP-002 Deterministic PRNG</summary>
+    <div class="accordion-content technical-info">
+      <p><strong>SEED source:</strong> <code id="prngSeed">—</code></p>
+      <p><strong>Repeatable sequence:</strong> <code id="prngSequence">—</code></p>
+      <div class="check"><span>Same SEED produces the same sequence</span><b id="vPrngRepeat">WAITING</b></div>
+      <div class="check"><span>Different SEED produces a different sequence</span><b id="vPrngDifferent">WAITING</b></div>
+      <div class="check"><span>Procedural random source is deterministic PRNG</span><b id="vPrngSource">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-001 Campaign SEED + base campaign clock.</p>
+      <p><strong>Current Work Package:</strong> WP-002 Deterministic PRNG.</p>
       <p><strong>Current world rendering:</strong> Not implemented yet.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
@@ -144,6 +156,7 @@
 
 <script src="scripts/data/config.js"></script>
 <script src="scripts/core/seed.js"></script>
+<script src="scripts/core/prng.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/main.js"></script>
