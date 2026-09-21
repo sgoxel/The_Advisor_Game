@@ -414,6 +414,25 @@
   </details>
 
   <details>
+    <summary>WP-S003-004 Layered 2.5D Building Presentation + Interior Visibility</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Layer Stack</span><strong id="buildingLayerCount">—</strong></div>
+        <div><span>Visible Roofs</span><strong id="buildingRoofCount">—</strong></div>
+        <div><span>Visible Interior Objects</span><strong id="buildingObjectCount">—</strong></div>
+        <div><span>Presentation Proof</span><strong id="buildingProofState">—</strong></div>
+      </div>
+      <div class="check"><span>Ground, lower structure, characters, upper walls and roofs use ordered GPU layers</span><b id="vBuildingLayers">WAITING</b></div>
+      <div class="check"><span>Authoritative interior objects receive lightweight 2.5D presentation without changing Simulation data</span><b id="vBuildingObjects">WAITING</b></div>
+      <div class="check"><span>Walls and door lintels can extend visually above their authoritative tile footprint</span><b id="vBuildingWallDepth">WAITING</b></div>
+      <div class="check"><span>Occupied/proof interiors cut roof opacity while outside presentation keeps roofs visible</span><b id="vBuildingRoofCutaway">WAITING</b></div>
+      <div class="check"><span>Character Y sorting and foreground layers preserve natural occlusion</span><b id="vBuildingDepthSort">WAITING</b></div>
+      <div class="check"><span>Presentation changes do not mutate authoritative world coordinates, collision or routes</span><b id="vBuildingSimulation">WAITING</b></div>
+      <p>The controlled visual evidence scenario cycles outside → entering → inside → behind foreground object → leaving. It changes renderer proof state only; Simulation coordinates remain untouched.</p>
+    </div>
+  </details>
+
+  <details>
     <summary>WP-S003-001 GPU 2.5D Renderer Verification</summary>
     <div class="accordion-content technical-info">
       <div class="detail-grid">
@@ -435,8 +454,8 @@
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-S003-002 Authoritative Enterable Building Interiors.</p>
-      <p><strong>Current world rendering:</strong> PixiJS/WebGL canvas presentation consuming one continuous outdoor + indoor authoritative Simulation space.</p>
+      <p><strong>Current Work Package:</strong> WP-S003-004 Layered 2.5D Building Presentation + Interior Visibility.</p>
+      <p><strong>Current world rendering:</strong> PixiJS/WebGL layered 2.5D presentation consuming one continuous outdoor + indoor authoritative Simulation space.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
