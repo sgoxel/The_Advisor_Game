@@ -55,6 +55,7 @@ on:
       - tools/requirements.txt
       - .github/workflows/visual-evidence.yml
       - scripts/world/geography.js
+      - styles/main.css
 
 permissions:
   contents: write
