@@ -102,8 +102,10 @@ function renderTerrain(){
   }
 
   const tileSize=100;
-  const columns=Math.ceil(e.terrainGrid.parentElement.clientWidth/tileSize)+2;
-  const rows=Math.ceil(e.terrainGrid.parentElement.clientHeight/tileSize)+2;
+  let columns=Math.max(3,Math.ceil(e.terrainGrid.parentElement.clientWidth/tileSize)+2);
+  let rows=Math.max(3,Math.ceil(e.terrainGrid.parentElement.clientHeight/tileSize)+2);
+  if(columns%2===0)columns+=1;
+  if(rows%2===0)rows+=1;
   const halfCols=Math.floor(columns/2);
   const halfRows=Math.floor(rows/2);
 
