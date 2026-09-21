@@ -31,8 +31,10 @@
     <div id="terrainGrid" class="terrain-grid" hidden aria-label="Viewport-filling solid-color terrain"></div>
     <div id="cameraHud" class="camera-hud" hidden>
       <strong>Camera <code id="cameraCoordinate">(0,0)</code></strong>
+      <strong>Zoom <code id="cameraZoom">1.00×</code></strong>
       <button id="centerCameraButton" type="button">Center on Protagonist</button>
-      <span>Drag map or use Arrow / WASD keys</span>
+      <button id="resetZoomButton" type="button">Reset Zoom</button>
+      <span>Drag / Arrow / WASD · Wheel or pinch to zoom</span>
     </div>
     <div id="gameplayPlaceholder" class="gameplay-placeholder">
       <strong>Gameplay Area</strong>
@@ -247,12 +249,16 @@
         <div><span>Camera Y</span><strong id="cameraY">0</strong></div>
         <div><span>Protagonist X</span><strong id="cameraProtagonistX">—</strong></div>
         <div><span>Protagonist Y</span><strong id="cameraProtagonistY">—</strong></div>
+        <div><span>Camera Zoom</span><strong id="cameraZoomDetail">1.00×</strong></div>
+        <div><span>Rendered Tile Size</span><strong id="cameraTileSize">100 px</strong></div>
       </div>
       <div class="check"><span>Camera starts centered on the Protagonist</span><b id="vCameraStart">WAITING</b></div>
       <div class="check"><span>Panning changes camera coordinates without moving the Protagonist</span><b id="vCameraIndependent">WAITING</b></div>
       <div class="check"><span>Visible terrain is regenerated around the camera center with no full-map storage</span><b id="vCameraWindow">WAITING</b></div>
       <div class="check"><span>Returning to a coordinate reproduces the same SEED terrain</span><b id="vCameraReturn">WAITING</b></div>
-      <p>Controls: drag the Gameplay Area, use Arrow/WASD keys, or press <strong>Center on Protagonist</strong>.</p>
+      <div class="check"><span>Mouse wheel zoom changes presentation without changing world coordinates</span><b id="vCameraWheelZoom">WAITING</b></div>
+      <div class="check"><span>Two-finger pinch zoom is enabled for touch screens</span><b id="vCameraPinchZoom">PASS</b></div>
+      <p>Controls: drag the Gameplay Area, use Arrow/WASD keys, mouse-wheel up/down to zoom, pinch open/close on touch screens, or press <strong>Center on Protagonist</strong>.</p>
     </div>
   </details>
 
