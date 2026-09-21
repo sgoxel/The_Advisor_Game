@@ -1,3 +1,15 @@
+2026-09-21 15:37:26 +03:00
+- Integrated the previous screenshot utility as tools/screenshot_tool.py and adapted it to the current game DOM.
+- Added tools/requirements.txt, tools/SCREENSHOT_TOOL.md, tools/screenshots/.gitkeep and .github/workflows/visual-evidence.yml.
+- Added workflow_dispatch, authorized /visual-evidence Issue-comment trigger and push self-test support.
+- GitHub Actions artifacts retain screenshots/evidence for 14 days; publishing to main is optional for trusted manual runs.
+- First GitHub Actions smoke run completed successfully and produced screenshot + JSON evidence.
+- Visual evidence exposed a game-side regression: terrain/geography DOM IDs were missing from app-ui.js cache.
+- Fixed the terrain/geography UI cache regression.
+- Tightened screenshot readiness: current-build terrain/protagonist startup failure now fails CI instead of producing a blank-success capture.
+- Push self-tests now capture the exact checked-out commit through a local HTTP server, avoiding GitHub Pages deployment timing races.
+- Updated docs/ROADMAP.md.
+
 2026-09-21 15:25:08 +03:00
 - Fixed leftover protagonistMarkerCoords UI cache reference found during verification.
 - Added protagonistSprite, protagonistFallback and vProtagonistSprite to the runtime element cache.
