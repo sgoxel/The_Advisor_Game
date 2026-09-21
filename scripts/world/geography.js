@@ -9,7 +9,7 @@ const MAX_WALK_SPEED_KMH=5.5;
 const MAIN_ROAD_WALK_SPEED_KMH=5.5;
 const MAX_BRIDGE_WALK_MINUTES=10;
 const MAX_BRIDGE_TILES=Math.floor((MAIN_ROAD_WALK_SPEED_KMH*1000/60*MAX_BRIDGE_WALK_MINUTES)/TILE_METERS);
-const MAIN_ROAD_WAVE_SCALE=32;
+const MAIN_ROAD_WAVE_SCALE=20;
 const MAIN_ROAD_WAVE_AMPLITUDE=8;
 const BRIDGE_BLOCK_SIZE=24;
 const ROAD_WIDTH_POLICY=Object.freeze({
@@ -281,13 +281,25 @@ function roadWidthForContext(context,terrain,distanceFromSettlement){
   let width=ROAD_WIDTH_POLICY[context]||ROAD_WIDTH_POLICY.wilderness;
 
   if(context==="village"){
-    if(distanceFromSettlement<=4n)width=ROAD_WIDTH_POLICY.village;
-    else if(distanceFromSettlement<=12n)width=2;
-    else width=ROAD_WIDTH_POLICY.wilderness;
+    if(distanceFromSettlement<=4n){
+      width=ROAD_WIDTH_POLICY.village;
+    }else if(distanceFromSettlement<=12n){
+      width=2;
+    }else{
+      width=ROAD_WIDTH_POLICY.wilderness;
+    }
   }
 
+  // Main roads narrow gradually away from settlement centers.
+  // Rough terrain only forces the narrowest width once outside the core village road.
   if(terrain==="forest"||terrain==="rock"||terrain==="mud"){
-    width=Math.min(width,ROAD_WIDTH_POLICY.rough);
+    if(context==="village"&&distanceFromSettlement<=4n){
+      width=Math.min(width,ROAD_WIDTH_POLICY.village);
+    }else if(context==="village"&&distanceFromSettlement<=12n){
+      width=Math.min(width,2);
+    }else{
+      width=Math.min(width,ROAD_WIDTH_POLICY.rough);
+    }
   }else if(context==="wilderness"){
     width=Math.min(width,ROAD_WIDTH_POLICY.wilderness);
   }
@@ -364,7 +376,7 @@ function roadProtection(seed,x,y){
     const rawTerrain=rawBaseTerrain(seed,rawCenter.x,rawCenter.y);
     const context=roadContext(seed,rawCenter.x,rawCenter.y);
     const width=roadWidthForContext(context.kind,rawTerrain,context.distance);
-    const protection=Math.ceil(width/2)+1;
+    const protection=Math.max(1,Math.ceil(width/2));
     const distance=Math.abs(Number(lateral)-center);
     if(distance<=protection){
       candidates.push({
@@ -389,8 +401,8 @@ function baseTerrain(seed,x,y){
   if(protection.length===0)return raw;
   if(protection.some(item=>item.bridge.active))return raw;
 
-  const soil=layeredNoise(seed,"road-land-corridor",x,y,[[28,0.65],[9,0.35]]);
-  return soil>0.62?"dirt":"grass";
+  const bank=layeredNoise(seed,"road-land-corridor",x,y,[[28,0.65],[9,0.35]]);
+  return bank>0.62?"mud":"grass";
 }
 
 function bridgeRunAt(seed,axis,progressValue){
