@@ -187,6 +187,20 @@ The world is procedurally generated from a player-visible **SEED** and has no ga
 
 Compatible seeds should reproduce the same unchanged foundations of the world, while campaign history may transform those foundations over time.
 
+## Deterministic Simulation Randomness
+
+There is **no real randomness** in the Simulation.
+
+Every random result uses exactly two authoritative inputs:
+
+**Campaign SEED + Fantasy Game Timestamp**
+
+If both values are the same, the random result must be exactly the same.
+
+The random function does not read real-world time directly and may not use `Math.random()`, browser/OS cryptographic randomness, device state, mutable PRNG state, call order, hidden counters, system-specific sub-seeds, or other random inputs. The authoritative fantasy timestamp is supplied by the game-time system.
+
+This rule exists so later simulation runs can be reproduced and compared from fixed campaign state.
+
 Procedural generation may shape terrain, elevation, biomes, water and vegetation; roads, paths and bridges; settlement archetypes and layouts; buildings, landmarks and important locations; local population and home/work relationships; ecology and habitat foundations; and base political geography.
 
 Neighboring places should feel like parts of one continuous world rather than independent random maps.
