@@ -592,13 +592,26 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(
                 f"mouse wheel did not return to start zoom: start={start_zoom}, returned={wheel_return}"
             )
-        if pinch_zoom == start_zoom:
+        def parse_zoom(value: str | None) -> float:
+            if not value:
+                raise RuntimeError(f"Missing zoom evidence: {value}")
+            return float(value.replace("×", "").strip())
+
+        start_zoom_value = parse_zoom(start_zoom)
+        pinch_zoom_value = parse_zoom(pinch_zoom)
+        pinch_return_value = parse_zoom(pinch_return)
+
+        if pinch_zoom_value <= start_zoom_value:
             raise RuntimeError(
-                f"touch pinch did not change zoom: start={start_zoom}, zoomed={pinch_zoom}"
+                f"touch pinch-open did not zoom in: start={start_zoom}, zoomed={pinch_zoom}"
             )
-        if pinch_return != start_zoom:
+        if pinch_return_value >= pinch_zoom_value:
             raise RuntimeError(
-                f"touch pinch did not return to start zoom: start={start_zoom}, returned={pinch_return}"
+                f"touch pinch-close did not zoom out: zoomed={pinch_zoom}, returned={pinch_return}"
+            )
+        if abs(pinch_return_value - start_zoom_value) > 0.15:
+            raise RuntimeError(
+                f"touch pinch-close did not return near start scale: start={start_zoom}, returned={pinch_return}"
             )
 
         positions = [item.get("protagonistLocation") for item in builds]
