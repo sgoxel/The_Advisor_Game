@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Advisor Game — WP-001</title>
+<link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>The Advisor Game</h1><p>Base Game · WP-001 Campaign SEED</p></div>
+    <strong class="badge">WP-001</strong>
+  </header>
+
+  <section id="viewport">
+    <div><b>World viewport reserved</b><br><span>Tile generation is not part of WP-001.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="row between">
+      <div><h2>Campaign SEED</h2><p>The SEED is the permanent root value of the campaign.</p></div>
+      <strong id="state" class="badge">NOT STARTED</strong>
+    </div>
+
+    <label for="seedInput">SEED value</label>
+    <div class="seed-row">
+      <input id="seedInput" maxlength="64" autocomplete="off" spellcheck="false"
+             placeholder="Example: ADVISOR-7Q4M-9K2P">
+      <button id="generateButton">Generate SEED</button>
+    </div>
+    <small>Allowed: letters, numbers, dash, underscore and period.</small>
+
+    <div class="actions">
+      <button id="startButton" class="primary">Start Campaign</button>
+      <button id="restartButton" disabled>Restart Same SEED</button>
+      <button id="newButton" disabled>New Campaign</button>
+    </div>
+    <p id="message"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Active Campaign</h2>
+    <div class="seed-display">
+      <span>Current SEED</span>
+      <code id="currentSeed">—</code>
+    </div>
+    <div class="stats">
+      <div><small>STATE</small><b id="activeState">Not started</b></div>
+      <div><small>SOURCE</small><b id="source">—</b></div>
+      <div><small>RESTARTS</small><b id="restarts">0</b></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>WP-001 Verification</h2>
+    <div class="check"><span>SEED visible to player</span><b id="vVisible">WAITING</b></div>
+    <div class="check"><span>SEED locked as active campaign root</span><b id="vLocked">WAITING</b></div>
+    <div class="check"><span>SEED survives page reload</span><b id="vReload">WAITING</b></div>
+    <div class="check"><span>Restart keeps exact same SEED</span><b id="vRestart">WAITING</b></div>
+  </section>
+
+  <footer>Player advises → AI Character decides → Simulation validates → World reacts.</footer>
+</main>
+
+<script src="scripts/data/config.js"></script>
+<script src="scripts/core/seed.js"></script>
+<script src="scripts/ui/seed-ui.js"></script>
+<script src="scripts/main.js"></script>
+</body>
+</html>
