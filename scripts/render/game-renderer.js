@@ -68,7 +68,7 @@ function destroyPresentationLayers(){
   destroyLayer(routeLayer);
 }
 
-const DIMETRIC_X=0.58;
+const DIMETRIC_X=0.66;
 const DIMETRIC_Y=0.28;
 
 function projectOffset(tileSize,dx,dy){
