@@ -371,39 +371,141 @@ Offline progression should preserve believable world continuity without changing
 
 ---
 
-# 🎨 World Presentation and Art Direction
+# 🎨 World Presentation and Rendering Architecture
 
-The game is presented primarily as a **2D/2.5D world**, with selective 3D where it genuinely improves the experience.
+The final world renderer is **PlayCanvas Engine 2**. The game keeps an authoritative deterministic 2D Simulation/world model, while PlayCanvas renders that world as an orthographic 3D scene.
 
-The target is a readable, grounded **seinen medieval-fantasy / old-school RPG** presentation: painterly or hand-crafted-feeling environments, practical rather than exaggerated materials, readable silhouettes, lived-in settlements, and characters that remain identifiable at gameplay scale.
+The architecture is intentionally split:
 
-The visual direction should prioritize:
+**Simulation authority → chunk/world-data preparation → PlayCanvas presentation**
 
-- coherent roads, paths, terrain and settlement structure;
-- readable building footprints, entrances and interiors;
-- clear characters, creatures, objects and interaction points;
-- useful day/night atmosphere;
-- responsive presentation from mobile portrait through desktop;
-- stable world visuals while moving, panning and zooming;
-- performance appropriate for a large continuous world.
+Simulation remains authoritative for:
 
-Direct two-character dialogue should show relevant full-body character art where responsive layout permits.
+- Campaign SEED and world coordinates;
+- the 2 m × 2 m logical tile scale;
+- terrain identity and settlement generation;
+- walkability, collision legality and routing;
+- building footprints, rooms, entrances and interaction points;
+- NPC positions, schedules, actions and campaign state;
+- save/load truth.
 
-Visual variants may reflect Simulation-backed rank, profession, culture or faction, equipment, region and circumstances, but must not invent authoritative facts.
+The PlayCanvas scene is presentation only. Renderer state, mesh transforms, depth buffers, physics helpers or visual effects must never silently become Simulation authority.
 
-World presentation should reinforce the state of the living world without becoming gameplay authority itself.
+## PlayCanvas 3D World Standard
 
-## Static Tile Composition + Runtime Texture Resolution
+Everything in the world is rendered as 3D presentation **except character artwork**.
 
-NPC world sprites are the sole normal independently dynamic world-image exception.
+3D presentation includes:
 
-All non-NPC world art is flattened into logical-tile composites before presentation. **Production PNG tile inputs use exact 128 × 128 RGBA source pixels**, while the runtime GPU texture resolution is independent and user-selectable from Settings.
+- terrain and ground surfaces;
+- roads, paths, water and bridges;
+- buildings, walls, doors and roofs;
+- interior architecture and furniture;
+- trees, vegetation, rocks and environmental props;
+- settlement structures, landmarks and world objects;
+- shadows, lighting and other spatial presentation.
 
-Supported runtime texture resolutions are **16 × 16, 32 × 32, 64 × 64, and 128 × 128**, with **32 × 32 as the standard default**. PNG sources are downscaled once during asset preparation/cache generation to the selected runtime resolution; SVG fallback sources rasterize directly to the selected runtime resolution. Runtime rendering reuses the prepared GPU textures and never performs per-frame image decoding, SVG parsing, or texture resizing.
+Characters remain **2D drawn images rendered inside the 3D world as camera-facing sprites/billboards**. The sprite feet are anchored to the character's authoritative world coordinate. Character presentation may animate through atlas/frame changes, but the image never becomes world authority.
 
-Changing texture resolution affects presentation caches only. It must not alter Campaign SEED, world coordinates, the authoritative 2 m/tile scale, terrain identity, collision, routing, Simulation state, or save-game truth. Resolution-specific cache/chunk signatures prevent incompatible prepared textures from being reused. Reusable atlas cells remain source assets for deterministic tile composition and, when used for production PNGs, preserve the 128 × 128 source-cell contract.
+The default gameplay camera is **orthographic top-down / 3/4 view**. Perspective distortion is not required for normal play. Real 3D depth handles building height, roofs, object overlap, terrain elevation where used, and natural occlusion instead of manually faking depth through a 2D layer stack.
 
-Static composition uses sparse, bounded caching. Camera movement and zoom do not rebuild unchanged tiles; only tiles whose authoritative static presentation inputs or selected presentation-resolution signature change are invalidated. These pixels remain presentation-only and never become authority for terrain legality, collision, occupancy, identity, movement, resources or Simulation outcomes.
+## Browser + Mobile Rendering Baseline
+
+The supported production baseline is:
+
+- **PlayCanvas Engine 2**;
+- **WebGL2** for broad desktop, phone and tablet compatibility;
+- **WebGPU** when supported and validated as stable on the device/browser;
+- automatic/fallback rendering must preserve identical Simulation behavior;
+- adaptive render scale and pixel-ratio limits protect mobile GPU performance;
+- phone, tablet and desktop remain first-class targets.
+
+Renderer quality may scale by device capability, but Simulation fidelity must not be reduced to gain graphics performance.
+
+## Chunk-Native 3D Terrain
+
+The infinite world is never instantiated as one giant 3D scene.
+
+Logical terrain remains tile-addressed by the deterministic world system, but rendering is chunk-native:
+
+**SEED/world data → complete logical chunk → prepared terrain/building data → PlayCanvas mesh/entities → Active / Prepared / Cached**
+
+Each prepared chunk may contain:
+
+- terrain mesh or a small bounded set of terrain patches;
+- material/texture references;
+- road/water/bridge geometry;
+- static building and prop references;
+- cached walkability/world-data results needed by presentation;
+- static-batch and instancing groups;
+- visibility/culling bounds;
+- deterministic presentation signature.
+
+A chunk is prepared as a complete chunk before it is considered ready. Normal camera movement through prepared territory must primarily move the camera and activate/deactivate retained chunk entities instead of regenerating terrain.
+
+Chunk size, preparation radius and cache budget remain adjustable performance controls.
+
+## 3D Asset Standard
+
+Production world geometry should use browser-efficient PlayCanvas-compatible assets, with **GLB/glTF as the standard 3D interchange/runtime model format** where practical.
+
+The renderer should prefer:
+
+- shared materials;
+- texture atlases where appropriate;
+- compressed/runtime-efficient textures when validated;
+- static batching for nearby non-moving geometry;
+- hardware instancing for repeated geometry such as trees, rocks, fences and repeated props;
+- LOD only where measurable benefit justifies it;
+- bounded chunk-local scene entities instead of one Entity per logical tile;
+- asset preparation outside the visible render hot path.
+
+Draft SVG artwork may still be useful as a design/source reference, but terrain/buildings/props are no longer defined as flattened 2D world tiles. Final world presentation is 3D geometry with material textures.
+
+## Character 2D Art in 3D
+
+Character art remains 2D by design.
+
+Each visible character uses a PlayCanvas Sprite/billboard presentation that:
+
+- faces the gameplay camera according to the selected billboard rule;
+- anchors at the feet to authoritative X/Y position and appropriate visual elevation;
+- participates correctly in the 3D depth/occlusion system;
+- supports transparent character artwork and animation frames;
+- can be hidden/cut away correctly by buildings and roofs;
+- does not require a skeletal 3D character model.
+
+Off-screen Simulation characters do not require active render entities.
+
+## Performance Rules
+
+The renderer must be designed for sustained navigation on phones and tablets as well as desktop.
+
+Normal prepared-area navigation should avoid:
+
+- recreating unchanged terrain meshes;
+- rebuilding unchanged buildings/roofs/props;
+- re-running TerrainFoundation and Walkability for the full viewport every camera step;
+- per-frame asset decoding or texture creation;
+- large synchronous chunk-generation bursts;
+- one draw call or one PlayCanvas Entity per logical terrain tile;
+- unnecessary JavaScript allocations in the render/update hot path.
+
+Performance work should prioritize:
+
+- complete background chunk preparation;
+- persistent scene-graph reuse;
+- frustum/distance culling;
+- static batching;
+- hardware instancing;
+- low material/shader variation;
+- bounded Active / Prepared / Cached resource sets;
+- dynamic render scale and mobile quality budgets;
+- telemetry for CPU frame time, GPU frame time where available, draw calls, triangles, entity counts, chunk activity, cache behavior and navigation spikes.
+
+The design target is **60 FPS on capable hardware** with **30 FPS as the minimum supported gameplay fallback**, without changing Simulation correctness.
+
+The visual direction remains a readable, grounded **seinen medieval-fantasy / old-school RPG** style. Real 3D is used to improve spatial depth, buildings, settlements and terrain while 2D character artwork preserves the intended illustrated character identity.
 
 ---
 
