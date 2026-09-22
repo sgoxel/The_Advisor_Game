@@ -1671,8 +1671,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S002-004 route search exceeded local bounded-search rules: {route}")
         if int(route.get("stepCount") or 0) <= 0 or int(route.get("evaluatedCount") or 0) <= 0:
             raise RuntimeError(f"WP-S002-004 route evidence is empty: {route}")
-        if int(route.get("visibleRouteTileCount") or 0) <= 0:
-            raise RuntimeError(f"WP-S002-004 route is not visible in broad village evidence: {route}")
+        if int(route.get("visibleRouteTileCount") or 0) != 0:
+            raise RuntimeError(
+                f"WP-S003-006 normal render unexpectedly draws route-proof tiles: {route}"
+            )
         interiors = current.get("buildingInteriors") or {}
         if not interiors.get("pass") or not interiors.get("deterministic"):
             raise RuntimeError(f"WP-S003-002 authoritative interior proof failed: {interiors}")
