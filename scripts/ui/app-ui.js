@@ -3,9 +3,10 @@
 const e={};
 let restoredCampaign=false;
 let clockTimer=null;
+const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
 const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
-  "menuMessage","seedInput","saveSettingsButton","settingsMessage","gameDate","gameTime","campaignState","statusMessage",
+  "menuMessage","seedInput","saveSettingsButton","settingsMessage","developmentModeToggle","developmentDetails","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
   "rendererBackend","rendererCanvasCount","rendererTextureCount","rendererSourceMode",
@@ -41,6 +42,23 @@ function openPopup(id){document.getElementById(id).hidden=false;document.body.st
 function closePopup(id){document.getElementById(id).hidden=true;document.body.style.overflow=""}
 function closeAll(){document.querySelectorAll(".fullscreen-popup").forEach(p=>p.hidden=true);document.body.style.overflow=""}
 function setCheck(node,pass,waiting){node.textContent=pass?"PASS":waiting;node.classList.toggle("pass",pass)}
+function readDevelopmentMode(){
+  try{return localStorage.getItem(DEVELOPMENT_MODE_KEY)==="true"}
+  catch(_){return false}
+}
+function applyDevelopmentMode(enabled){
+  const active=Boolean(enabled);
+  if(e.developmentModeToggle)e.developmentModeToggle.checked=active;
+  if(e.developmentDetails)e.developmentDetails.hidden=!active;
+  document.body.classList.toggle("development-mode",active);
+  return active;
+}
+function saveDevelopmentMode(){
+  const active=Boolean(e.developmentModeToggle?.checked);
+  try{localStorage.setItem(DEVELOPMENT_MODE_KEY,active?"true":"false")}catch(_){}
+  applyDevelopmentMode(active);
+  return active;
+}
 
 function renderPRNG(fantasyTimestampMs){
   const campaign=SeedSystem.getCampaign();
@@ -1245,19 +1263,27 @@ async function restartCampaign(){
 }
 function saveSettings(){
   const result=SeedSystem.setSettingsSeed(e.seedInput.value);
-  e.settingsMessage.textContent=result.message;
+  const developmentMode=saveDevelopmentMode();
+  e.settingsMessage.textContent=result.ok
+    ?result.message+" Development Mode "+(developmentMode?"enabled.":"disabled.")
+    :result.message;
   if(result.ok)e.seedInput.value=result.seed;
 }
 async function init(){
   cache();
   SeedSystem.loadSettings();
   e.seedInput.value=SeedSystem.getSettings().seed;
+  applyDevelopmentMode(readDevelopmentMode());
   const restored=SeedSystem.loadCampaign();
   restoredCampaign=restored.ok;
   resetCameraForCampaign();
 
   e.mainMenuButton.onclick=()=>openPopup("mainMenuPopup");
-  e.settingsButton.onclick=()=>{e.seedInput.value=SeedSystem.getSettings().seed;openPopup("settingsPopup")};
+  e.settingsButton.onclick=()=>{
+    e.seedInput.value=SeedSystem.getSettings().seed;
+    if(e.developmentModeToggle)e.developmentModeToggle.checked=readDevelopmentMode();
+    openPopup("settingsPopup");
+  };
   e.resumeButton.onclick=()=>closePopup("mainMenuPopup");
   e.newCampaignButton.onclick=startNewCampaign;
   e.restartCampaignButton.onclick=restartCampaign;
