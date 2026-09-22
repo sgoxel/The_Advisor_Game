@@ -1,3 +1,11 @@
+2026-09-22 15:48:16 +03:00 | WP-S002-004 | Completion audit
+- Fresh current-main Visual Evidence run 35729326166 passed on commit 14e096509f71a1dd991c47258700a669f095b76f.
+- Artifact visual-evidence-starting-village-35729326166 contains 3 screenshots plus runtime JSON (486,073 bytes).
+- Runtime proof reconfirmed deterministic 27-step route to Storehouse (19,8), 56.82 s cost, authoritative walkability/cost checks, exterior entrance use, interior destination, blocked-wall rejection, and bounded local search.
+- Fresh screenshot/function review score: 9/10 PASS; route markers and destination proof are visibly rendered in the gameplay area.
+- GitHub Pages deployment 35727520703 already succeeded for the same tested main commit.
+- Marked WP-S002-004 COMPLETED in docs/ROADMAP.md; Issue #23 is ready for closure.
+
 2026-09-22 15:21:59 +03:00 | WP-S002-001-002 | Final revalidation
 - Fresh Visual Evidence run 35726405931 passed after the gameplay-grid repair.
 - Reviewed artifact visual-evidence-starting-village-35726405931 (486,396 bytes, 3 screenshots): housePlans pass=true and deterministic=true; 6 buildings; minimumRoomTiles=6; outer/interior walls and entrances PASS; 779 SVG-rendered tiles at broad zoom; 0 PNG terrain tiles.
