@@ -31,21 +31,27 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation — COMPLETED
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 
-# Stage 3 — GPU 2.5D World + Enterable Building Foundation
+# Stage 3 — PlayCanvas 3D World + 2D Character Billboard Foundation
 
-- `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation — COMPLETED
+- `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
+- `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation
+- `WP-S003-001-002` — Orthographic 3D Scene + Mobile WebGL2/WebGPU Baseline
 - `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
 - `WP-S003-003` — Interior Objects + Interaction Points
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
 - `WP-S003-004-001` — Tall 2.5D Building Mass + Local Character Occlusion Cutouts — COMPLETED
-- `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache
-- `WP-S003-005-001` — Adjustable Runtime Tile Texture Resolution
-- `WP-S003-006` — GPU Terrain Chunk Composition + Background Preparation
+- `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World
+- `WP-S003-005` — PlayCanvas 3D Asset + Material Preparation Pipeline
+- `WP-S003-005-001` — Adaptive 3D Texture Quality + Mobile GPU Budget
+- `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard
+- `WP-S003-006` — PlayCanvas 3D Terrain Chunk Mesh + Background Preparation
 - `WP-S003-006-001` — Adjustable Terrain Chunk Size
 - `WP-S003-006-002` — Adjustable Terrain Preload + Chunk Cache Budget
-- `WP-S003-006-003` — Chunk-Native World Data + Complete Background Preparation
-- `WP-S003-006-004` — Persistent Static Presentation + Navigation Hot-Path Elimination
-- `WP-S003-007` — Dimetric Projection + Adaptive Visual Depth Pass
+- `WP-S003-006-003` — Chunk-Native World Data + Complete 3D Background Preparation
+- `WP-S003-006-004` — Persistent PlayCanvas Scene Graph + Navigation Hot-Path Elimination
+- `WP-S003-006-005` — 3D Culling, Static Batching + Hardware Instancing
+- `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility
+- `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
