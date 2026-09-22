@@ -66,4 +66,17 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance
 - `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules
 
+# Stage 7 — Hierarchical Lazy World Simulation + Deterministic Persistence
+
+- `WP-S007-001` — Immutable SEED Foundation + Campaign Delta State Model
+- `WP-S007-002` — Hierarchical World Context Resolver + Influence Inheritance
+- `WP-S007-003` — Multi-Resolution Lazy Simulation Tiers + Relevance Activation
+- `WP-S007-004` — Deterministic Event Scheduler + Stable Random Streams
+- `WP-S007-005` — Global Country/Diplomacy Aggregate Simulation
+- `WP-S007-006` — Regional + Settlement Aggregate Simulation with Lazy Revision Propagation
+- `WP-S007-007` — NPC Materialization, Dematerialization + Schedule Reconstruction
+- `WP-S007-008` — Deterministic Lazy Catch-Up + Offline World Progression
+- `WP-S007-009` — Versioned Save/Load, Deterministic Resume + World Compatibility
+- `WP-S007-010` — World Simulation Budgets, Backpressure + Runtime Telemetry
+
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
