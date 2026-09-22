@@ -77,3 +77,33 @@ jobs:
             --model "auto" \
             --no-ask-user \
             -p "$COPILOT_PROMPT"
+
+      - name: Persist Copilot changes to main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Copilot produced no repository file changes."
+            exit 0
+          fi
+
+          echo "Copilot changed these repository files:"
+          git status --short
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No staged changes to persist."
+            exit 0
+          fi
+
+          git commit -m "Copilot hourly agent update"
+
+          # Other project agents may update main while this run is active.
+          # Rebase onto the newest main before publishing this run.
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+
+          echo "Copilot changes committed and pushed to main."
