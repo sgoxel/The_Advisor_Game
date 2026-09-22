@@ -1110,9 +1110,17 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(initial_cache.get("loadedKeyCount") or 0) >= int(initial_cache.get("logicalKeyCount") or 0):
             raise RuntimeError(f"WP-S003-005 startup loaded the whole logical asset catalog: {initial_cache}")
         if int(initial_cache.get("pngPreferredCount") or 0) < 1:
-            raise RuntimeError(f"WP-S003-005 PNG-first resolution was not observed: {initial_cache}")
+            raise RuntimeError(f"WP-S003-005 available PNG selection was not observed: {initial_cache}")
         if int(initial_cache.get("fallbackSvgCount") or 0) < 1:
             raise RuntimeError(f"WP-S003-005 SVG fallback resolution was not observed: {initial_cache}")
+        if not initial_cache.get("pngFirstTerrainPolicyPass"):
+            raise RuntimeError(f"WP-S003-005 terrain PNG-first candidate policy failed: {initial_cache}")
+        if not initial_cache.get("pngFirstBlendMaskPolicyPass"):
+            raise RuntimeError(f"WP-S003-005 blend-mask PNG-first candidate policy failed: {initial_cache}")
+        if int(initial_cache.get("terrainPngAttemptCount") or 0) < 1 or int(initial_cache.get("terrainSvgFallbackCount") or 0) < 1:
+            raise RuntimeError(f"WP-S003-005 terrain PNG-first/SVG-fallback resolution was not exercised: {initial_cache}")
+        if int(initial_cache.get("blendMaskPngAttemptCount") or 0) < 1 or int(initial_cache.get("blendMaskSvgFallbackCount") or 0) < 1:
+            raise RuntimeError(f"WP-S003-005 blend-mask PNG-first/SVG-fallback resolution was not exercised: {initial_cache}")
 
         initial_blocking = int(initial_cache.get("blockingLoadCount") or 0)
         if int(moved_cache.get("blockingLoadCount") or 0) != initial_blocking:
