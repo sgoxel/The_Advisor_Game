@@ -459,27 +459,36 @@ let terrainPrefetchSerial=0;
 let cameraTransitionQueue=Promise.resolve();
 let lastCameraDirection={dx:0,dy:0};
 
+function projectedCoverageHalfSpan(width,height,tileSize){
+  const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
+  const basisX=Math.max(.01,Number(basis.x)||1);
+  const basisY=Math.max(.01,Number(basis.y)||1);
+  const halfSpan=
+    width/(4*tileSize*basisX)+
+    height/(4*tileSize*basisY);
+  return Math.max(1,Math.ceil(halfSpan)+2);
+}
+
 function terrainGridDimensions(width,height,tileSize){
   let columns=Math.max(3,Math.ceil(width/tileSize)+2);
   let rows=Math.max(3,Math.ceil(height/tileSize)+2);
 
-  const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
-  const basisX=Math.max(.01,Number(basis.x)||1);
-  const basisY=Math.max(.01,Number(basis.y)||1);
-  const minimumProjectedSum=Math.max(
-    Math.ceil(width/(tileSize*basisX))+2,
-    Math.ceil(height/(tileSize*basisY))+2
-  );
-  const currentSum=columns+rows;
-  if(currentSum<minimumProjectedSum){
-    const extra=minimumProjectedSum-currentSum;
-    if(height>width)rows+=extra;
-    else columns+=extra;
-  }
+  // A rectangular logical grid becomes a diamond under the soft-dimetric
+  // transform. Width/height of the diamond alone is not enough: every screen
+  // corner must inverse-project inside the prepared logical grid, otherwise
+  // portrait views expose large empty triangles.
+  const requiredHalfSpan=projectedCoverageHalfSpan(width,height,tileSize);
+  columns=Math.max(columns,requiredHalfSpan*2+1);
+  rows=Math.max(rows,requiredHalfSpan*2+1);
 
   if(columns%2===0)columns+=1;
   if(rows%2===0)rows+=1;
   return {columns,rows};
+}
+
+function projectedViewportCoverage(columns,rows,width,height,tileSize){
+  const requiredHalfSpan=projectedCoverageHalfSpan(width,height,tileSize);
+  return Math.floor(columns/2)>=requiredHalfSpan&&Math.floor(rows/2)>=requiredHalfSpan;
 }
 
 function terrainRegionKey(center,columns,rows,tileSize){
@@ -736,7 +745,7 @@ async function renderTerrain(){
 
   const gridWidth=columns*tileSize;
   const gridHeight=rows*tileSize;
-  const coverage=gridWidth>=width&&gridHeight>=height;
+  const coverage=projectedViewportCoverage(columns,rows,width,height,tileSize);
   const oddGrid=columns%2===1&&rows%2===1;
   const repeatable=true;
 
