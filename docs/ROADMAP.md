@@ -24,7 +24,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 - `WP-S002-001-001` — Starting Village Core + Mainland Connection
 - `WP-S002-001-002` — Tile-Based House Plans + Wall Foundation
-- `WP-S002-001-003` — Rounded Terrain Border Blending
+- `WP-S002-001-003` — Rounded Terrain Border Blending — COMPLETED
 - `WP-S002-001-004` — Deterministic Terrain Blend Variation
 - `WP-S002-001-005` — Diagonal + Multi-Terrain Junction Smoothing
 - `WP-S002-002` — Special Buildings + Functional Lots
