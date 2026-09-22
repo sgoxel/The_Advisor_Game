@@ -991,7 +991,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         if frame_index == 0:
-            for _ in range(5):
+            # Keep the proof building large enough for real visual inspection.
+            # Two zoom-out steps preserve village context without reducing the
+            # roof/cutaway/depth proof to the former 0.5x thumbnail scale.
+            for _ in range(2):
                 _wheel_canvas(driver, 500)
         return _set_building_proof_state(driver, states[min(frame_index, len(states) - 1)])
     if scenario == "static" or frame_index == 0:
