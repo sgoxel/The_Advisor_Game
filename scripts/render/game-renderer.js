@@ -419,7 +419,7 @@ function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId,heightByBuilding,occl
           colors[direction]||0x5f493c,
           depthAlpha,
           cutouts,
-          8,5
+          12,8
         );
         depth++;
       }
@@ -450,7 +450,7 @@ function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId,heightByBuilding,occl
       {x:leftEnd.x,y:leftEnd.y},
       {x:edgeA.x,y:edgeA.y}
     ],
-    jambColor,cutaway?0.08:0.88,doorCutouts,3,5
+    jambColor,cutaway?0.08:0.88,doorCutouts,4,8
   );
   cutoutPatches+=drawQuadWithCutouts(
     lowerStructureLayer,
@@ -460,7 +460,7 @@ function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId,heightByBuilding,occl
       {x:edgeB.x,y:edgeB.y},
       {x:rightStart.x,y:rightStart.y}
     ],
-    jambColor,cutaway?0.08:0.88,doorCutouts,3,5
+    jambColor,cutaway?0.08:0.88,doorCutouts,4,8
   );
 
   const lintelA=lerpPoint(edgeA,edgeB,0.18);
@@ -590,8 +590,8 @@ function drawRoofs(model,originX,originY,visibleBuildings,cutawayBuildingId,heig
     }
 
     if(cutouts.length){
-      localCutoutPatchCount+=drawQuadWithCutouts(roof,panelA,leftColor,alpha,cutouts,8,4);
-      localCutoutPatchCount+=drawQuadWithCutouts(roof,panelB,rightColor,alpha,cutouts,8,4);
+      localCutoutPatchCount+=drawQuadWithCutouts(roof,panelA,leftColor,alpha,cutouts,12,6);
+      localCutoutPatchCount+=drawQuadWithCutouts(roof,panelB,rightColor,alpha,cutouts,12,6);
     }else{
       const leftPanel=new PIXI.Graphics();
       leftPanel.poly(panelA.flatMap(point=>[point.x,point.y]))
