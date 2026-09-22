@@ -138,7 +138,7 @@ input:focus{border-color:#92ad83}
 .status-item strong{white-space:nowrap;color:#f0f2ec;font-size:12px}
 .status-message{display:flex;align-items:center;border-right:0;color:#b6beb0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-.advisor-panel{display:block;border-top:1px solid #3b4237;border-bottom:1px solid #3b4237;background:#1a1f18;padding:12px 14px}
+.advisor-panel{position:absolute;top:10px;left:10px;z-index:6;width:min(420px,calc(100% - 20px));max-height:min(36%,280px);overflow:auto;display:block;border:1px solid #3b4237;border-radius:9px;background:rgba(26,31,24,.94);padding:12px 14px;box-shadow:0 6px 18px rgba(0,0,0,.28)}
 .advisor-panel h3{margin:0 0 10px;color:#edf0ea;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
 .advisor-log{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .advisor-log li{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border:1px solid #343a30;border-radius:8px;background:#161b15}
