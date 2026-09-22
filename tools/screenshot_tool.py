@@ -226,6 +226,8 @@ return (() => {
           };
           const settings = document.querySelector('#settingsPopup');
           return {
+            viewportWidth:Number(innerWidth),
+            viewportHeight:Number(innerHeight),
             bodyScrollWidth:Number(document.documentElement.scrollWidth || document.body?.scrollWidth || 0),
             bodyClientWidth:Number(document.documentElement.clientWidth || innerWidth),
             screenShell:rect('.screen-shell'),
@@ -999,20 +1001,19 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S001-001 time did not continue across reload: {timestamps}")
 
         def assert_shell(build, orientation):
-            viewport = build.get("viewport") or {}
             layout = build.get("layout") or {}
             shell = layout.get("screenShell") or {}
             top = layout.get("topRibbon") or {}
             game = layout.get("gameplay") or {}
             status = layout.get("status") or {}
-            width = float(viewport.get("width") or 0)
-            height = float(viewport.get("height") or 0)
+            width = float(layout.get("viewportWidth") or 0)
+            height = float(layout.get("viewportHeight") or 0)
             if width <= 0 or height <= 0:
                 raise RuntimeError(f"WP-S001-001 missing viewport evidence: {build}")
             if orientation == "portrait" and not height > width:
-                raise RuntimeError(f"WP-S001-001 expected portrait viewport: {viewport}")
+                raise RuntimeError(f"WP-S001-001 expected portrait viewport: {layout}")
             if orientation == "landscape" and not width > height:
-                raise RuntimeError(f"WP-S001-001 expected landscape viewport: {viewport}")
+                raise RuntimeError(f"WP-S001-001 expected landscape viewport: {layout}")
             if abs(float(shell.get("height") or 0) - height) > 3:
                 raise RuntimeError(f"WP-S001-001 three-row shell does not fill first viewport: {layout}")
             if float(top.get("top") or 0) < -1 or abs(float(status.get("bottom") or 0) - height) > 4:
@@ -1029,7 +1030,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
 
         settings_layout = builds[4].get("layout") or {}
         settings_rect = settings_layout.get("settingsRect") or {}
-        settings_viewport = builds[4].get("viewport") or {}
+        settings_viewport = {
+            "width": settings_layout.get("viewportWidth"),
+            "height": settings_layout.get("viewportHeight"),
+        }
         if settings_layout.get("settingsHidden") is not False:
             raise RuntimeError(f"WP-S001-001 Settings did not open: {settings_layout}")
         if (
