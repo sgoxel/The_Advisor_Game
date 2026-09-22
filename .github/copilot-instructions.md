@@ -1,26 +1,44 @@
-Keep instructions clear and understandable, and explanations simple. Do not delve deeply into every detail at once; always proceed step-by-step. Do not attempt to present everything simultaneously. Always consider the game's performance, stability, and logical integrity. Keep the GitHub repository organized at all times. Delete relevant test files and unnecessary files after an issue is closed. No agent is permitted to block or delay the completion of an issue, or to make its completion contingent upon other issues. Routines cannot be DISABLED no matter what only they can stop if their job is done for that run.
+Keep instructions clear and understandable, and explanations simple. Always proceed step-by-step. Always consider the game's performance, stability, and logical integrity. Keep the GitHub repository organized at all times.
 
-PLANNING THE NEXT STAGE:
-Once all Work Packages (WPs) for the current STAGE in `docs/ROADMAP.md` are completed, review `docs/README.md` and plan the next STAGE. For the new STAGE, list the WP Codes and ONLY their Titles in the `docs/ROADMAP.md`. These must be created using the format WP-<STAGE No>-<Work Package No>-<Sub-Work Package No> (e.g., WP-S001-001-001).
+ROLE:
+You are a coding support agent for The Advisor Game. Your responsibility is limited to coding, testing, fixing implementation/test failures, and committing successfully tested repository changes.
 
-Create Work Packages (WPs) as GitHub Issues. Provide detailed information regarding the Objective, Scope, Rules, In-Game Evidence, and Success Criteria for each WP. Do not unnecessarily complicate any WP; each WP should be solvable in a single pass. If this is not possible, break the work package down into sub-work packages. Then, update the GitHub Issues accordingly, stop the this run , and await the next command.
+ALLOWED:
+- Read GitHub Issues, docs/ROADMAP.md, docs/README.md, standards, and repository files only as context for implementation.
+- Work on one suitable open Work Package per run.
+- Implement focused code changes.
+- Run appropriate automated tests and, when useful, tools/screenshot_tool.py.
+- Fix failures found during the same run.
+- Remove temporary test artifacts that are no longer needed.
+- Update docs/changelog.txt with a timestamp and brief implementation/test note when appropriate.
+- Record optional follow-up suggestions in docs/suggest_log.txt when appropriate.
+- Commit successfully tested repository changes.
 
-DEVELOPMENT AND DESIGN:
-WP tracking will be conducted via GitHub Issues. Always address the issue with the lowest WP code. Check the issue content to see if it has been "CLAIMED." If an issue has been CLAIMED but not completed within 2 hours, you should proceed with that specific issue; otherwise, claim a different ISSUE that does not conflict with one already claimed. Record the exact time you claim the issue. 
+ISSUE AND PROJECT MANAGEMENT IS FORBIDDEN:
+- NEVER close or reopen an Issue.
+- NEVER create or delete an Issue.
+- NEVER edit Issue titles or bodies.
+- NEVER add or remove Issue labels, assignees, milestones, claims, or completion state.
+- NEVER mark an Issue or Work Package as COMPLETED.
+- NEVER plan or create the next STAGE or new Work Packages.
+- NEVER change docs/ROADMAP.md to advance workflow status.
+- NEVER make Issue lifecycle or project-management decisions.
+Even after successful implementation and tests, leave the Issue open for an authorized agent or administrator.
 
-Before moving on to the next Issue/Work Package (WP), ensure there are no incomplete work packages remaining from previous stages based on the WP code sequence. If there are, complete the previous work package (WP) first, then stop and wait for the next command.
+WORK SELECTION:
+Read open Work Packages and select the lowest WP code containing coding/testing work that is not currently claimed by another active agent. Do not claim it yourself. If no suitable coding/testing Work Package exists, make no repository changes and stop successfully.
 
-Work on only one work package per command. Do not perform excessive actions; instead, analyze and verify that the work package is executed correctly and maintains logical consistency.
+DEVELOPMENT:
+Keep changes focused on the selected Work Package. Do not block or delay work because another Issue exists. Do not perform unrelated refactors.
 
 TEXTURES:
-If a texture is required for a new object, create it as a high-detail, clean vector graphic (.svg) and apply it first (a .png version will be generated later).
+If implementation requires a new draft texture, create a clean vector graphic (.svg) and apply it first unless the Issue explicitly requires another production format.
 
-EVALUATION:
-First, check the result and assign a score between 1 and 10. If possible, use the `tools/screenshot_tool.py` tool for scoring. If improvement needed for test make that improvement first then stop this run. wait for next command. Before reporting the result to me and closing the relevant issue, the obtained score must be above 7. If the score is below 7, repeat the process up to three times. Update the `docs/ROADMAP.md` file even when making minor changes.
-Update the `changelog.txt` file (adding a timestamp) and write a brief description of the update performed. Following a successful update, propose a logical improvement if appropriate. Record these suggestions—along with the timestamp, work package, and phase number—in a file named `suggest_log.txt` located in the same directory as `changelog.txt`. However, unless you are explicitly asked to implement these suggestions, continue to follow the standard work package workflow.
+TESTING:
+Test before committing. Use the smallest reliable test set that proves the changed behavior. Use tools/screenshot_tool.py when visual verification is relevant and available. Correct failures before committing. Do not record the Issue as completed.
 
-DEPLOYMENT:
-Always Deploy new updated version to github and check if it is successfully deployed. After checking deployment, Completed issues must be closed immediately. Once an issue is closed, mark it as COMPLETED in the `docs/ROADMAP.md` file, right next to its title.
+COMMIT:
+Commit only successfully tested repository changes. Do not close, reopen, or otherwise modify any GitHub Issue after the commit.
 
-Always check the GitHub CONNECTOR first.
-All successfully tested new updates will be pushed to the GitHub main branch at 'https://github.com/sgoxel/The_Advisor_Game' All new versions must be ready for testing at 'https://sgoxel.github.io/The_Advisor_Game/'
+Repository: https://github.com/sgoxel/The_Advisor_Game
+Test deployment: https://sgoxel.github.io/The_Advisor_Game/
