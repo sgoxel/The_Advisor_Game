@@ -1174,7 +1174,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "playcanvas-foundation":
         if len(frames) < 3:
             raise RuntimeError("playcanvas-foundation requires three evidence frames")
-        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
+        runtimes = [frame.get("runtime", {}) for frame in frames[:3]]
+        builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
         seeds = [item.get("campaignSeed") for item in builds]
         protagonists = [item.get("protagonistLocation") for item in builds]
         if len(set(seeds)) != 1 or not seeds[0]:
@@ -1195,9 +1196,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"PlayCanvas authority boundary failed in frame {index}: {gpu}")
             if not gpu.get("rendererContractVersion"):
                 raise RuntimeError(f"Renderer-neutral contract version missing in frame {index}: {gpu}")
-        first_view = builds[0].get("viewport") or {}
-        portrait_view = builds[1].get("viewport") or {}
-        last_view = builds[2].get("viewport") or {}
+        first_view = runtimes[0].get("viewport") or {}
+        portrait_view = runtimes[1].get("viewport") or {}
+        last_view = runtimes[2].get("viewport") or {}
         if int(portrait_view.get("height") or 0) <= int(portrait_view.get("width") or 0):
             raise RuntimeError(f"PlayCanvas portrait resize failed: {portrait_view}")
         if int(first_view.get("width") or 0) <= int(first_view.get("height") or 0):
