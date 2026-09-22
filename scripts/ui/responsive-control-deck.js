@@ -146,14 +146,36 @@ function drawMiniMap(){
   const columns=Number(grid.columns||0);
   const rows=Number(grid.rows||0);
   if(columns>0&&rows>0&&cells.length===columns*rows){
-    const cellW=width/columns;
-    const cellH=height/rows;
+    const basis=window.GameRenderer?.projectionBasis||{x:.66,y:.28};
+    const basisX=Math.max(.01,Number(basis.x)||.66);
+    const basisY=Math.max(.01,Number(basis.y)||.28);
+    const logicalSpan=Math.max(1,columns+rows-2);
+    const padding=8;
+    const scale=Math.max(.1,Math.min(
+      (width-padding*2)/(logicalSpan*basisX),
+      (height-padding*2)/(logicalSpan*basisY)
+    ));
+    const halfW=Math.max(.6,basisX*scale);
+    const halfH=Math.max(.35,basisY*scale);
+    const centerCol=(columns-1)/2;
+    const centerRow=(rows-1)/2;
+
     for(let row=0;row<rows;row++){
       for(let col=0;col<columns;col++){
         const raw=cells[row*columns+col];
         const type=typeof raw==="string"?raw:(raw?.type||"grass");
+        const dx=col-centerCol;
+        const dy=row-centerRow;
+        const x=width/2+(dx-dy)*basisX*scale;
+        const y=height/2+(dx+dy)*basisY*scale;
         miniCtx.fillStyle=TERRAIN_COLORS[type]||"#65705f";
-        miniCtx.fillRect(col*cellW,row*cellH,Math.ceil(cellW+.3),Math.ceil(cellH+.3));
+        miniCtx.beginPath();
+        miniCtx.moveTo(x,y-halfH);
+        miniCtx.lineTo(x+halfW,y);
+        miniCtx.lineTo(x,y+halfH);
+        miniCtx.lineTo(x-halfW,y);
+        miniCtx.closePath();
+        miniCtx.fill();
       }
     }
   }else{
