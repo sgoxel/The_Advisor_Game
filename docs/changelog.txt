@@ -1,3 +1,9 @@
+2026-09-22 18:07:00 +03:00 | Stage 3 revalidation
+- Reopened previously closed Stage 3 Issues #24, #25, #26, #27, #28, and #40 because prior testing did not consistently perform proper visual inspection.
+- Stage 3 Issues #34 and #58 remain open.
+- Added mandatory revalidation instructions to all eight Stage 3 Issues: classify VISUAL/FUNCTIONAL/MIXED, generate fresh screenshots where meaningful, inspect the actual images before assigning any numeric visual score, and never substitute logs/JSON/telemetry/workflow success for visual scoring.
+- Removed COMPLETED markers from reopened Stage 3 WPs in docs/ROADMAP.md pending proper revalidation.
+
 2026-09-22T14:00:26Z | WP-S003-008 | Input scope refinement
 - Expanded WP-S003-008 so both portrait and landscape control surfaces are operable by keyboard shortcuts, mouse/pointer input, and finger/touch input.
 - Added input-parity rules for the ▲/▼ navigation controls and Character Info / Character Interactions / Mini Map controls.
