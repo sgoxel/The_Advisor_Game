@@ -69,6 +69,7 @@ SCENARIOS = {
     "main-road",
     "starting-village",
     "building-presentation",
+    "building-occlusion",
     "wp-s001-001",
     "wp-s001-004",
     "wp-s003-005",
@@ -92,6 +93,7 @@ SCENARIO_MIN_SHOTS = {
     "main-road": 2,
     "starting-village": 3,
     "building-presentation": 5,
+    "building-occlusion": 6,
     "wp-s001-001": 5,
     "wp-s001-004": 2,
     "wp-s003-005": 3,
@@ -981,6 +983,34 @@ def _set_building_proof_state(driver, state: str) -> str:
     return f"building-proof-failed:{state}:{reason}"
 
 
+def _set_building_occlusion_proof_state(driver, state: str) -> str:
+    result = driver.execute_script(
+        """
+        const state = arguments[0];
+        try {
+          const renderer = window.GameRenderer;
+          if (!renderer?.setBuildingOcclusionProofState) {
+            return {ok:false, reason:'building-occlusion-proof-api-missing'};
+          }
+          const snapshot = renderer.setBuildingOcclusionProofState(state);
+          try { window.AppUI?.refreshBuildingPresentation?.(); } catch (_) {}
+          return {
+            ok:true,
+            occlusion:snapshot?.buildingOcclusion || null,
+            presentation:snapshot?.buildingPresentation || null
+          };
+        } catch (error) {
+          return {ok:false, reason:String(error)};
+        }
+        """,
+        state,
+    )
+    if isinstance(result, dict) and result.get("ok"):
+        return f"building-occlusion-proof:{state}"
+    reason = result.get("reason", "unavailable") if isinstance(result, dict) else "unexpected"
+    return f"building-occlusion-proof-failed:{state}:{reason}"
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-005":
         if frame_index == 0:
@@ -997,6 +1027,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             for _ in range(2):
                 _wheel_canvas(driver, 500)
         return _set_building_proof_state(driver, states[min(frame_index, len(states) - 1)])
+    if scenario == "building-occlusion":
+        states = ("front", "behind", "behind", "clear", "inside", "restored")
+        if frame_index == 0:
+            _wheel_canvas(driver, 500)
+        if frame_index == 2:
+            _wheel_canvas(driver, 500)
+        return _set_building_occlusion_proof_state(
+            driver, states[min(frame_index, len(states) - 1)]
+        )
     if scenario == "static" or frame_index == 0:
         return "initial"
     if scenario == "save-load":
@@ -1317,6 +1356,104 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S001-001 fantasy time did not continue across reload: {timestamps}")
         if builds[1].get("persistenceStatus") != "PASS" or builds[2].get("persistenceStatus") != "PASS":
             raise RuntimeError(f"WP-S001-001 UI did not confirm restored campaign persistence: {builds}")
+        return
+
+    if scenario == "building-occlusion":
+        if len(frames) < 6:
+            raise RuntimeError("building-occlusion requires six evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:6]]
+        protagonist_positions = [item.get("protagonistLocation") for item in builds]
+        camera_positions = [item.get("cameraCoordinate") for item in builds]
+        if len(set(protagonist_positions)) != 1:
+            raise RuntimeError(
+                f"WP-S003-004-001 presentation mutated Protagonist coordinates: {protagonist_positions}"
+            )
+        if len(set(camera_positions)) != 1:
+            raise RuntimeError(
+                f"WP-S003-004-001 proof mutated Camera coordinates: {camera_positions}"
+            )
+
+        expected_states = ["front", "behind", "behind", "clear", "inside", "restored"]
+        occlusions = []
+        presentations = []
+        for index, (item, expected_state) in enumerate(zip(builds, expected_states), start=1):
+            gpu = item.get("gpuRenderer") or {}
+            occ = gpu.get("buildingOcclusion") or {}
+            presentation = gpu.get("buildingPresentation") or {}
+            occlusions.append(occ)
+            presentations.append(presentation)
+
+            if occ.get("proofState") != expected_state:
+                raise RuntimeError(
+                    f"WP-S003-004-001 frame {index} proof state mismatch: {occ}"
+                )
+            if not occ.get("simulationAuthorityPreserved"):
+                raise RuntimeError(
+                    f"WP-S003-004-001 frame {index} lost Simulation authority: {occ}"
+                )
+            if occ.get("wholeBuildingFade"):
+                raise RuntimeError(
+                    f"WP-S003-004-001 frame {index} fades a whole building: {occ}"
+                )
+            if not presentation.get("tallBuildingMass"):
+                raise RuntimeError(
+                    f"WP-S003-004-001 frame {index} tall building mass is disabled: {presentation}"
+                )
+            if float(presentation.get("minVisibleHeightFactor") or 0) < 0.45:
+                raise RuntimeError(
+                    f"WP-S003-004-001 frame {index} building mass is still too thin: {presentation}"
+                )
+            if float(presentation.get("maxVisibleHeightFactor") or 0) < 0.70:
+                raise RuntimeError(
+                    f"WP-S003-004-001 frame {index} lacks archetype height variation: {presentation}"
+                )
+
+        front, behind, behind_wide, clear, inside, restored = occlusions
+        for name, occ in (("front", front), ("clear", clear), ("restored", restored)):
+            if int(occ.get("localCutoutCount") or 0) != 0:
+                raise RuntimeError(
+                    f"WP-S003-004-001 {name} incorrectly triggers a local cutout: {occ}"
+                )
+
+        for name, occ in (("behind", behind), ("behind-wide", behind_wide)):
+            if int(occ.get("localCutoutCount") or 0) < 1:
+                raise RuntimeError(
+                    f"WP-S003-004-001 {name} has no local character cutout: {occ}"
+                )
+            if int(occ.get("affectedBuildingCount") or 0) < 1:
+                raise RuntimeError(
+                    f"WP-S003-004-001 {name} did not identify an occluding building: {occ}"
+                )
+            patches = int(occ.get("wallCutoutPatchCount") or 0) + int(occ.get("roofCutoutPatchCount") or 0)
+            if patches < 1:
+                raise RuntimeError(
+                    f"WP-S003-004-001 {name} has no locally faded wall/roof patches: {occ}"
+                )
+            if not occ.get("proofBuildingId"):
+                raise RuntimeError(
+                    f"WP-S003-004-001 {name} lacks proof building identity: {occ}"
+                )
+
+        if int(inside.get("localCutoutCount") or 0) != 0:
+            raise RuntimeError(
+                f"WP-S003-004-001 inside state incorrectly uses outside local occlusion: {inside}"
+            )
+        if not inside.get("insideUsesLargeCutaway"):
+            raise RuntimeError(
+                f"WP-S003-004-001 inside state did not use the large interior cutaway: {inside}"
+            )
+        if not presentations[4].get("cutawayActive"):
+            raise RuntimeError(
+                f"WP-S003-004-001 inside roof/wall cutaway is not active: {presentations[4]}"
+            )
+        if presentations[1].get("cutawayActive") or presentations[2].get("cutawayActive"):
+            raise RuntimeError(
+                f"WP-S003-004-001 outside-behind proof incorrectly uses whole-building cutaway: {presentations[1:3]}"
+            )
+        if int(behind.get("localCutoutCount") or 0) > int(behind.get("maxEntities") or 0) * int(behind.get("maxCutoutsPerBuilding") or 0):
+            raise RuntimeError(
+                f"WP-S003-004-001 local occlusion work exceeded its bound: {behind}"
+            )
         return
 
     if scenario == "building-presentation":
