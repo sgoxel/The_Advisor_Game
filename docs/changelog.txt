@@ -1,3 +1,10 @@
+2026-09-22T14:00:26Z | WP-S003-008 | Input scope refinement
+- Expanded WP-S003-008 so both portrait and landscape control surfaces are operable by keyboard shortcuts, mouse/pointer input, and finger/touch input.
+- Added input-parity rules for the ▲/▼ navigation controls and Character Info / Character Interactions / Mini Map controls.
+- Required keyboard shortcuts to avoid existing WASD/Arrow camera controls and common browser/system-reserved shortcuts.
+- Required touch-friendly controls, normal portrait finger scrolling, no hover-only required actions, and separation between control-deck gestures and gameplay pan/pinch gestures.
+- Added evidence/success checks covering all three input families in both orientations.
+
 2026-09-22 16:52:00 +03:00 | WP-S003-008 | Planning
 - Added WP-S003-008 to Stage 3 and opened the corresponding GitHub Issue.
 - Defined a landscape control/status deck fixed at 25vh with Character Info, Character Interactions, and Mini Map visible side by side.
