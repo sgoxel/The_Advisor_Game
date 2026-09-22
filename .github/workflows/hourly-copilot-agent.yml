@@ -2,9 +2,6 @@ name: Hourly Copilot Agent
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/workflows/hourly-copilot-agent.yml"
   schedule:
     # Once per hour, offset from the other project agents.
     - cron: "6 * * * *"
