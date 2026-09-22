@@ -73,7 +73,7 @@ These systems improve **influence and understanding**, not direct ownership of t
 
 # 🤖 Character AI and Advisor Relationship
 
-The protagonist may use an external LLM for richer conversation and reasoning or a deterministic local fallback when an external model is unavailable or disabled. These are not separate protagonists or separate game modes: they represent the **same persistent character** in the same world.
+The protagonist uses a **chatbot-assisted response architecture**. A lightweight deterministic chatbot layer handles well-known words, phrases, sentence patterns and common commands first; an external LLM may then be used for richer conversation, ambiguity resolution and reasoning when needed. A deterministic local fallback remains available when an external model is unavailable or disabled. These paths are not separate protagonists or separate game modes: they represent the **same persistent character** in the same world.
 
 The character should:
 
@@ -94,6 +94,87 @@ Conversation may influence beliefs, intentions, trust, memory, priorities and fu
 The game also supports persistent behavioral advice for longer-term goals, priorities, conditions, exceptions, diplomacy preferences, safety rules or strategic principles.
 
 Persistent advice may influence behavior but may never create resources, manufacture authority, bypass requirements, force impossible actions or alter Simulation truth.
+
+## Chatbot-Assisted LLM Response System
+
+The conversation system is intentionally **hybrid**. The game should not send every player message directly to an LLM. Simple, well-known and high-confidence inputs should be interpreted locally first so common interactions remain fast, predictable, inexpensive and usable without an external AI provider.
+
+The response pipeline is:
+
+**Player message → Normalize input → Known-word/phrase detection → Sentence Library match → Intent/command candidate → LLM only when needed → Character decision → Simulation validation → Response/action**
+
+### Known Words, Phrases and Sentence Library
+
+The chatbot maintains a versioned **Sentence Library** containing common player expressions and their recognized meanings. It may contain:
+
+- exact sentences and normalized sentence forms;
+- known keywords and multi-word phrases;
+- synonyms and alternative wording;
+- controlled patterns for variable parts such as a person, place, object, topic or amount;
+- an intent identifier;
+- optional response templates;
+- optional command candidates;
+- priority, confidence and ambiguity rules.
+
+Examples include greetings, status questions, requests for information, travel suggestions, interaction requests, warnings, reminders, schedule questions, inventory-related questions and other common Advisor inputs.
+
+Matching should be deterministic for the same library version and normalized input. Exact and high-confidence matches take priority over broader patterns. Ambiguous or conflicting matches must not silently choose an unsafe interpretation; they may be clarified locally or forwarded to the LLM with the recognized candidates as context.
+
+The Sentence Library is an **interpretation and routing layer**, not gameplay authority. A recognized phrase such as “go to the market” may identify a travel/advice intent, but it does not move a character by itself.
+
+### LLM Command Set Interface
+
+When an LLM is used, it receives a bounded **Command Set Interface** describing only the game-facing commands currently available to the conversation/decision system. The LLM may select or propose commands from this interface; it must never call arbitrary game code or directly mutate authoritative state.
+
+Each exposed command should define:
+
+- a stable command or intent ID;
+- a short purpose;
+- required and optional parameters;
+- valid actor and target types;
+- required context or preconditions;
+- whether it is a query, advice proposal, interaction proposal or other supported operation;
+- validation rules and expected structured result.
+
+The available command set may be filtered by current context. For example, commands involving a nearby person, known location, owned item, valid route or legitimate political authority should only expose identifiers that actually exist in authoritative Simulation state.
+
+The LLM response may contain normal conversational text plus **zero or more structured command proposals**. Free-form text is never treated as an executed action.
+
+### Command Execution Boundary
+
+Every proposed command passes through the character and Simulation layers:
+
+**Chatbot/LLM interprets → Command proposal → Character evaluates → Simulation validates → Command executes or is rejected → Result returns to conversation**
+
+This preserves the central game rule: **the Advisor can influence decisions, but cannot bypass character autonomy or Simulation authority.**
+
+The command interface must therefore never allow an LLM to:
+
+- invent an authoritative character, item, location, resource, relationship, title or event;
+- teleport or move an actor without a valid world action;
+- grant money, inventory, ownership, rank or political authority;
+- mark an action as successful before the Simulation resolves it;
+- bypass collision, travel, schedule, permission, resource or other gameplay rules;
+- execute arbitrary JavaScript or unrestricted internal functions.
+
+### Response Routing Modes
+
+The same conversation system can use several response paths without changing character identity:
+
+1. **Local library response** — a high-confidence known input is answered or routed without an LLM call.
+2. **Library-assisted LLM response** — the chatbot recognizes the likely intent and gives the LLM the relevant context and allowed command subset.
+3. **LLM interpretation fallback** — unfamiliar or complex language is sent to the LLM with authoritative context and the bounded Command Set Interface.
+4. **Deterministic offline fallback** — when no external LLM is available, local recognition, templates and deterministic character logic continue to provide functional gameplay.
+
+This architecture should reduce unnecessary LLM usage while keeping natural conversation available for inputs that genuinely benefit from language-model reasoning.
+
+### Authority and Persistence Rules
+
+The chatbot and LLM may interpret language, generate dialogue, propose intents and help the character reason. They do **not** own world truth.
+
+Authoritative facts come from Simulation state. Conversation history, recognized intent, LLM output and response templates may be stored as character memory or dialogue history where appropriate, but any resulting world change must be persisted only after successful Simulation validation.
+
+If an LLM response conflicts with authoritative state, the authoritative state wins and the conversation layer should correct, reject or reformulate the response instead of changing the world to fit the generated text.
 
 ---
 
@@ -337,7 +418,9 @@ The game is intended to remain usable across phone, tablet and desktop, in portr
 - The player is an **Advisor**, not the protagonist's direct controller.
 - The AI Character decides whether and how to act.
 - The Simulation is authoritative for legality, state, resources, position, outcomes and world truth.
-- External LLM and local fallback behavior represent the **same persistent character**.
+- The conversation system uses deterministic chatbot/Sentence Library matching first and LLM reasoning only when useful.
+- The LLM can only propose actions through a bounded structured Command Set Interface; it cannot directly mutate Simulation state.
+- External LLM, chatbot routing and local fallback behavior represent the **same persistent character**.
 - The game begins in a SEED-generated inhabited village.
 - Buildings are part of the same living world and are physically enterable where relevant.
 - NPCs are autonomous, Simulation-backed inhabitants rather than decorative sprites.
