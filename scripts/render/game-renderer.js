@@ -409,9 +409,12 @@ function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId,heightByBuilding,occl
   if(wall){
     const directions=structureDirections(tile,false);
     if(outer){
-      const depthAlpha=cutaway?0.055:0.90;
-      const colors={n:0x665044,e:0x564337,s:0x5f493c,w:0x71594b};
-      for(const direction of directions){
+      const visibleDirections=cutaway
+        ?directions
+        :directions.filter(direction=>direction==="e"||direction==="s");
+      const depthAlpha=cutaway?0.055:0.84;
+      const colors={n:0x665044,e:0x604b3e,s:0x6b5141,w:0x71594b};
+      for(const direction of visibleDirections){
         const [a,b]=edgeForDirection(points,direction);
         const quad=[
           {x:a.x,y:a.y-lift},
@@ -442,7 +445,11 @@ function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId,heightByBuilding,occl
     return Object.freeze({cap:1,depth,cutaway:cutaway?1:0,cutoutPatches});
   }
 
-  const [edgeA,edgeB]=edgeForDirection(points,structureDirections(tile,true)[0]);
+  const doorDirection=structureDirections(tile,true)[0];
+  if(!cutaway&&movement.doorwayKind==="exterior-door"&&doorDirection!=="e"&&doorDirection!=="s"){
+    return Object.freeze({cap:0,depth:0,cutaway:0,cutoutPatches:0});
+  }
+  const [edgeA,edgeB]=edgeForDirection(points,doorDirection);
   const leftEnd=lerpPoint(edgeA,edgeB,0.22);
   const rightStart=lerpPoint(edgeA,edgeB,0.78);
   const jambColor=0x6f5543;
@@ -555,9 +562,9 @@ function drawRoofs(model,originX,originY,visibleBuildings,cutawayBuildingId,heig
     const raised=footprint.map(point=>({x:point.x,y:point.y-lift}));
 
     const isCutaway=building.id===cutawayBuildingId;
-    let alpha=isCutaway?0.15:0.88;
+    let alpha=isCutaway?0.15:0.98;
     if(isCutaway&&buildingProofState==="entering")alpha=0.40;
-    if(isCutaway&&(buildingProofState==="outside"||buildingProofState==="leaving"))alpha=0.88;
+    if(isCutaway&&(buildingProofState==="outside"||buildingProofState==="leaving"))alpha=0.98;
     if(isCutaway&&alpha<0.5)cutawayRoofCount++;
     if(isCutaway)proofRoofAlpha=alpha;
 
@@ -568,7 +575,7 @@ function drawRoofs(model,originX,originY,visibleBuildings,cutawayBuildingId,heig
       point.y+model.tileSize*0.07
     ]);
     const shadow=new PIXI.Graphics();
-    shadow.poly(shadowPoints).fill({color:0x000000,alpha:isCutaway?0.025:0.12});
+    shadow.poly(shadowPoints).fill({color:0x000000,alpha:isCutaway?0.025:0.08});
     shadowLayer.addChild(shadow);
 
     const roof=new PIXI.Container();
