@@ -49,13 +49,21 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement
 - `WP-S004-005` — Interior Action Execution + Character State Presentation
 
-# Stage 5 — Political Geography + Settlement Diversity Foundation
+# Stage 5 — Advisor Interaction + Social Foundation
 
-- `WP-S005-001` — Deterministic Country Territories + Political Centers
-- `WP-S005-002` — Country Profile: Wealth, Governance + Strategic Orientation
-- `WP-S005-003` — Region/Province Profiles + Terrain/Resource Identity
-- `WP-S005-004` — Country Relations + Diplomacy Baseline
-- `WP-S005-005` — Settlement Archetypes + Country/Region/Terrain Inheritance
-- `WP-S005-006` — Settlement Building Catalog + Contextual Composition Rules
+- `WP-S005-001` — Advisor Interface + Persistent Advice Channel
+- `WP-S005-002` — Character Memory, Observation Log + World Fact Model
+- `WP-S005-003` — Local Dialogue, Social Context + Trust Framing
+- `WP-S005-004` — Advice Acceptance, Rejection + Influence Resolution
+- `WP-S005-005` — Relationship, Reputation + Duty State Foundation
+
+# Stage 6 — Political Geography + Settlement Diversity Foundation
+
+- `WP-S006-001` — Deterministic Country Territories + Political Centers
+- `WP-S006-002` — Country Profile: Wealth, Governance + Strategic Orientation
+- `WP-S006-003` — Region/Province Profiles + Terrain/Resource Identity
+- `WP-S006-004` — Country Relations + Diplomacy Baseline
+- `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance
+- `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
