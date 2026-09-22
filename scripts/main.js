@@ -1,6 +1,14 @@
 (function(){
 "use strict";
-function start(){AppUI.init()}
+async function start(){
+  try{
+    await window.RendererBootstrap?.ready?.();
+    await AppUI.init();
+  }catch(error){
+    console.error("Application startup failed.",error);
+    throw error;
+  }
+}
 function loadInterior(){
   if(window.InteriorObjects){start();return;}
   const script=document.createElement("script");
