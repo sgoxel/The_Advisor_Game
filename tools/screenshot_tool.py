@@ -73,6 +73,7 @@ SCENARIOS = {
     "wp-s001-001",
     "wp-s001-004",
     "wp-s003-005",
+    "playcanvas-foundation",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -97,6 +98,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s001-001": 5,
     "wp-s001-004": 2,
     "wp-s003-005": 3,
+    "playcanvas-foundation": 3,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -262,8 +264,18 @@ return (() => {
         terrainGrid: grid,
         gpuRenderer: {
           ready: Boolean(renderer.ready),
+          engine: renderer.engine || null,
+          engineVersion: renderer.engineVersion || null,
+          rendererContractVersion: renderer.rendererContractVersion || null,
           backend: renderer.backend || null,
+          requestedBackend: renderer.requestedBackend || null,
+          gpu: Boolean(renderer.gpu),
           webgl: Boolean(renderer.webgl),
+          webgpu: Boolean(renderer.webgpu),
+          webgpuAvailable: Boolean(renderer.webgpuAvailable),
+          migrationFoundation: Boolean(renderer.migrationFoundation),
+          simulationAuthorityPreserved: renderer.simulationAuthorityPreserved !== false,
+          simulationSnapshot: renderer.simulationSnapshot || null,
           canvasCount: Number(renderer.canvasCount || 0),
           domTerrainTileCount: Number(renderer.domTerrainTileCount || 0),
           logicalTextureKeyPass: Boolean(renderer.logicalTextureKeyPass),
@@ -600,7 +612,7 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
         print(f"Zoom-out skipped: {reason}")
 
 
-def prepare_current_build(driver, timeout: float = 10.0) -> str:
+def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
     result = driver.execute_script(CURRENT_BUILD_PREP_SCRIPT)
     action = result.get("action", "unknown") if isinstance(result, dict) else "unknown"
 
@@ -608,22 +620,40 @@ def prepare_current_build(driver, timeout: float = 10.0) -> str:
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
-            WebDriverWait(driver, timeout).until(
-                lambda d: d.execute_script(
-                    """
-                    const grid = document.querySelector('#terrainGrid');
-                    const renderer = window.GameRenderer?.snapshot?.();
-                    const assets = window.TextureAssets?.stats?.();
-                    return Boolean(
-                      grid && !grid.hidden &&
-                      renderer?.ready && renderer?.webgl &&
-                      Number(renderer?.tileCount || 0) > 0 &&
-                      renderer?.protagonistVisible &&
-                      assets?.ready
-                    );
-                    """
+            if scenario == "playcanvas-foundation":
+                WebDriverWait(driver, timeout).until(
+                    lambda d: d.execute_script(
+                        """
+                        const grid = document.querySelector('#terrainGrid');
+                        const renderer = window.GameRenderer?.snapshot?.();
+                        return Boolean(
+                          grid && !grid.hidden &&
+                          renderer?.ready &&
+                          renderer?.engine === 'PlayCanvas' &&
+                          renderer?.gpu &&
+                          Number(renderer?.canvasCount || 0) === 1 &&
+                          renderer?.simulationAuthorityPreserved !== false
+                        );
+                        """
+                    )
                 )
-            )
+            else:
+                WebDriverWait(driver, timeout).until(
+                    lambda d: d.execute_script(
+                        """
+                        const grid = document.querySelector('#terrainGrid');
+                        const renderer = window.GameRenderer?.snapshot?.();
+                        const assets = window.TextureAssets?.stats?.();
+                        return Boolean(
+                          grid && !grid.hidden &&
+                          renderer?.ready && renderer?.webgl &&
+                          Number(renderer?.tileCount || 0) > 0 &&
+                          renderer?.protagonistVisible &&
+                          assets?.ready
+                        );
+                        """
+                    )
+                )
         except Exception as exc:
             diagnostic = {}
             try:
@@ -1013,6 +1043,14 @@ def _set_building_occlusion_proof_state(driver, state: str) -> str:
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "playcanvas-foundation":
+        if frame_index == 1:
+            driver.set_window_size(1080, 1920)
+            return "playcanvas:portrait"
+        if frame_index == 2:
+            driver.set_window_size(1920, 1080)
+            return "playcanvas:landscape-return"
+        return "playcanvas:initial"
     if scenario == "wp-s003-005":
         if frame_index == 0:
             return _wait_for_asset_prefetch(driver)
@@ -1133,6 +1171,41 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "playcanvas-foundation":
+        if len(frames) < 3:
+            raise RuntimeError("playcanvas-foundation requires three evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
+        seeds = [item.get("campaignSeed") for item in builds]
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        if len(set(seeds)) != 1 or not seeds[0]:
+            raise RuntimeError(f"PlayCanvas migration changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists)) != 1 or not protagonists[0]:
+            raise RuntimeError(f"PlayCanvas migration changed/missed protagonist coordinate: {protagonists}")
+        for index, item in enumerate(builds, start=1):
+            gpu = item.get("gpuRenderer") or {}
+            if gpu.get("engine") != "PlayCanvas":
+                raise RuntimeError(f"PlayCanvas engine was not active in frame {index}: {gpu}")
+            if not str(gpu.get("engineVersion") or "").startswith("2."):
+                raise RuntimeError(f"PlayCanvas Engine 2 version missing in frame {index}: {gpu}")
+            if gpu.get("backend") not in {"webgl2", "webgpu"}:
+                raise RuntimeError(f"Unexpected PlayCanvas backend in frame {index}: {gpu}")
+            if not gpu.get("gpu") or int(gpu.get("canvasCount") or 0) != 1:
+                raise RuntimeError(f"PlayCanvas GPU/canvas foundation failed in frame {index}: {gpu}")
+            if not gpu.get("migrationFoundation") or not gpu.get("simulationAuthorityPreserved"):
+                raise RuntimeError(f"PlayCanvas authority boundary failed in frame {index}: {gpu}")
+            if not gpu.get("rendererContractVersion"):
+                raise RuntimeError(f"Renderer-neutral contract version missing in frame {index}: {gpu}")
+        first_view = builds[0].get("viewport") or {}
+        portrait_view = builds[1].get("viewport") or {}
+        last_view = builds[2].get("viewport") or {}
+        if int(portrait_view.get("height") or 0) <= int(portrait_view.get("width") or 0):
+            raise RuntimeError(f"PlayCanvas portrait resize failed: {portrait_view}")
+        if int(first_view.get("width") or 0) <= int(first_view.get("height") or 0):
+            raise RuntimeError(f"PlayCanvas initial landscape viewport failed: {first_view}")
+        if int(last_view.get("width") or 0) <= int(last_view.get("height") or 0):
+            raise RuntimeError(f"PlayCanvas landscape return failed: {last_view}")
+        return
+
     if scenario == "wp-s003-005":
         if len(frames) < 3:
             raise RuntimeError("wp-s003-005 requires three evidence frames")
@@ -1947,6 +2020,8 @@ def take_screenshots(
 
     try:
         browser_url = normalize_target(target)
+        if scenario == "playcanvas-foundation":
+            browser_url += ("&" if "?" in browser_url else "?") + "renderer=playcanvas&gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
         try:
@@ -1969,9 +2044,9 @@ def take_screenshots(
             print(f"Waiting {delay:.2f}s before capture")
             time.sleep(delay)
 
-            prep_action = prepare_current_build(driver, min(ready_timeout, 10.0)) if auto_start else "auto-start-disabled"
+            prep_action = prepare_current_build(driver, min(ready_timeout, 10.0), scenario) if auto_start else "auto-start-disabled"
 
-            if force_max_zoom:
+            if force_max_zoom and scenario != "playcanvas-foundation":
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -1987,7 +2062,8 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
+                if scenario != "playcanvas-foundation":
+                    validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
                         "index": index + 1,
