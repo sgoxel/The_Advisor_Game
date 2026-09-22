@@ -1,3 +1,5 @@
+2026-09-22 09:22:19 +00:00 | WP-S001-003 | Hardened world-coordinate normalization to accept signed integer strings/BigInts with optional + prefixes, reject unsafe floating-point/rounded numbers, and preserve exact arbitrary-size integer handling for campaign origin and protagonist coordinates.
+
 2026-09-22 07:24:39 +00:00 | WP-S001-006 | Revalidated camera-pan evidence on the current build; the camera-pan scenario passed with camera movement, reverse return, and unchanged Protagonist/world terrain identity.
 
 2026-09-22 09:39:00 +03:00

@@ -1,10 +1,21 @@
 (function(){
 "use strict";
 
-const INTEGER=/^-?\d+$/;
+const INTEGER=/^[+-]?\d+$/;
 
 function normalize(value){
-  const text=String(value==null?"":value).trim();
+  if(value===null||value===undefined||value==="")throw new Error("World coordinate must be a signed integer.");
+
+  if(typeof value==="bigint")return value.toString();
+
+  if(typeof value==="number"){
+    if(!Number.isFinite(value)||!Number.isInteger(value)||!Number.isSafeInteger(value)){
+      throw new Error("World coordinate must be a signed integer without floating-point rounding.");
+    }
+    return BigInt(value).toString();
+  }
+
+  const text=String(value).trim();
   if(!INTEGER.test(text))throw new Error("World coordinate must be a signed integer.");
   return BigInt(text).toString();
 }
