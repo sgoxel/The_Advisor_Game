@@ -40,7 +40,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache
 - `WP-S003-006` — GPU Terrain Chunk Composition + Background Preparation
 - `WP-S003-007` — Dimetric Projection + Adaptive Visual Depth Pass
-- `WP-S003-008` — Responsive Gameplay Control Deck + Orientation Navigation
+- `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
