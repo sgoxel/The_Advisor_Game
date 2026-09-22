@@ -269,6 +269,7 @@ return (() => {
           preparedKeyCount: Number(assets.preparedKeyCount || 0),
           buildingPresentation: renderer.buildingPresentation || null,
           textureCache: assets,
+          terrainChunks: renderer.terrainChunks || null,
         },
         terrainNaturalness: naturalness,
         startingVillage: (() => {
