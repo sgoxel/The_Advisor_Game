@@ -156,31 +156,47 @@ function resolveProofPlacement(model,building){
   return Object.freeze({point:building.interiorTarget||building.entrance?.immediateInside||building.entrance?.door||null,object:null});
 }
 
-function drawWallDepth(tile,x,y,tileSize){
+function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId){
   const movement=tile.movement||{};
-  const wall=movement.barrierKind==="outer-wall"||movement.barrierKind==="interior-wall";
+  const outer=movement.barrierKind==="outer-wall";
+  const inner=movement.barrierKind==="interior-wall";
+  const wall=outer||inner;
   const door=movement.doorwayKind==="exterior-door"||movement.doorwayKind==="interior-door";
-  if(!wall&&!door)return 0;
+  if(!wall&&!door)return Object.freeze({cap:0,depth:0,cutaway:0});
 
-  const lift=Math.max(4,tileSize*0.16);
-  if(wall){
+  const lift=Math.max(4,tileSize*0.18);
+  const cutaway=Boolean(cutawayBuildingId&&tile.buildingId===cutawayBuildingId);
+  const depthAlpha=cutaway?0.08:(outer?0.34:0.12);
+  let depth=0;
+  if(wall&&outer){
     const side=new PIXI.Graphics();
-    side.rect(x,y-lift,x===x?tileSize:tileSize,lift+tileSize*0.18)
-      .fill({color:0x4b3b32,alpha:0.42});
+    side.poly([x,y,x+tileSize*0.66,y+tileSize*0.28,x+tileSize*0.66,y+tileSize*0.28-lift,x,y-lift])
+      .fill({color:0x4b3b32,alpha:depthAlpha});
     lowerStructureLayer.addChild(side);
+    depth=1;
+  }
 
+  if(wall){
     const cap=new PIXI.Graphics();
-    cap.rect(x,y-lift,tileSize,Math.max(3,tileSize*0.18))
-      .fill({color:movement.barrierKind==="outer-wall"?0x9a806c:0x826f61,alpha:0.94});
+    cap.poly([
+      x,y-lift,
+      x+tileSize*0.66,y+tileSize*0.28-lift,
+      x,y+tileSize*0.56-lift,
+      x-tileSize*0.66,y+tileSize*0.28-lift
+    ]).fill({color:outer?0x9a806c:0x826f61,alpha:cutaway?0.30:0.94});
     upperStructureLayer.addChild(cap);
-    return 1;
+    return Object.freeze({cap:1,depth,cutaway:cutaway?1:0});
   }
 
   const lintel=new PIXI.Graphics();
-  lintel.rect(x+tileSize*0.08,y-lift*0.72,tileSize*0.84,Math.max(2,tileSize*0.10))
-    .fill({color:0x7a5b3c,alpha:0.88});
+  lintel.poly([
+    x-tileSize*0.26,y+tileSize*0.17-lift,
+    x+tileSize*0.26,y+tileSize*0.39-lift,
+    x+tileSize*0.26,y+tileSize*0.39-lift*0.55,
+    x-tileSize*0.26,y+tileSize*0.17-lift*0.55
+  ]).fill({color:0x7a5b3c,alpha:cutaway?0.30:0.88});
   upperStructureLayer.addChild(lintel);
-  return 0;
+  return Object.freeze({cap:0,depth:0,cutaway:cutaway?1:0});
 }
 
 function objectPalette(type){
@@ -203,8 +219,8 @@ function drawInteriorObjects(model,originX,originY){
     if(!pointVisible(model,p,1))continue;
     visibleCount++;
     const size=model.tileSize;
-    const cx=p.x+size/2;
-    const cy=p.y+size*0.66;
+    const cx=p.x;
+    const cy=p.y+size*DIMETRIC_Y*1.25;
     const bodyColor=objectPalette(object.type);
 
     const shadow=new PIXI.Graphics();
@@ -415,6 +431,8 @@ function render(model){
   let blendLayerCount=0;
   let diagonalBlendLayerCount=0;
   let visibleWallCapCount=0;
+  let visibleWallDepthCount=0;
+  let cutawayWallDepthCount=0;
   const blendShapes=new Set();
   const blendVariants=new Set();
   let visibleRouteTileCount=0;
@@ -456,7 +474,6 @@ function render(model){
     }
 
     terrainLayer.addChild(cell);
-    visibleWallCapCount+=drawWallDepth(tile,x,y,model.tileSize);
 
     if(tile.specialKind)visibleKinds.add(tile.specialKind);
     if(tile.buildingId)visibleIds.add(tile.buildingId);
@@ -493,6 +510,15 @@ function render(model){
   const proofBuilding=buildingProofState?resolveProofBuilding(model,visibleBuildings):null;
   const actualOccupied=visibleBuildings.find(building=>pointInsideBounds(model.protagonistWorld,building.bounds))||null;
   const cutawayBuildingId=proofBuilding?.id||actualOccupied?.id||null;
+  for(const tile of model.tiles){
+    const colOffset=tile.col-Math.floor(model.columns/2);
+    const rowOffset=tile.row-Math.floor(model.rows/2);
+    const projected=projectOffset(model.tileSize,colOffset,rowOffset);
+    const wallMetrics=drawWallDepth(tile,originX+projected.x,originY+projected.y,model.tileSize,cutawayBuildingId);
+    visibleWallCapCount+=wallMetrics.cap;
+    visibleWallDepthCount+=wallMetrics.depth;
+    cutawayWallDepthCount+=wallMetrics.cutaway;
+  }
   const roofMetrics=drawRoofs(model,originX,originY,visibleBuildings,cutawayBuildingId);
 
   let protagonistVisible=false;
@@ -607,6 +633,12 @@ function render(model){
       visibleInteriorObjectCount:objectMetrics.visibleCount,
       foregroundObjectCount:objectMetrics.foregroundCount,
       visibleWallCapCount,
+      visibleWallDepthCount,
+      cutawayWallDepthCount,
+      adaptiveWallDepth:true,
+      unifiedRoofWallCutaway:true,
+      lightDirection:Object.freeze({x:1,y:1}),
+      uprightBillboards:true,
       proofState:buildingProofState,
       proofBuildingId:proofBuilding?.id||null,
       proofCoordinate:proofCoordinate?Object.freeze({
