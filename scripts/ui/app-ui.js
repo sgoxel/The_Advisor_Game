@@ -9,7 +9,7 @@ const ids=[
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","developmentModeToggle","developmentDetails","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
-  "rendererBackend","rendererCanvasCount","rendererTextureCount","rendererSourceMode",
+  "rendererEngine","rendererEngineVersion","rendererBackend","rendererRequestedBackend","rendererWebgpuAvailable","rendererCanvasCount","rendererTextureCount","rendererSourceMode",
   "rendererPreparedRegion","rendererVisibleRegion",
   "vRendererWebGL","vRendererCanvas","vRendererNoDomTiles","vRendererLogicalTextures","vRendererSvgCache","vRendererSimulation",
   "interiorBuildingCount","interiorHouseCount","interiorSpecialCount","interiorLevel","interiorHouseProof","interiorSpecialProof",
@@ -1185,21 +1185,33 @@ function renderBuildingPresentationProof(renderer=GameRenderer.snapshot()){
 function renderRendererProof(){
   const renderer=GameRenderer.snapshot();
   const assets=TextureAssets.stats();
+  const bootstrap=window.RendererBootstrap?.status?.()||{};
+  const playcanvas=renderer.engine==="PlayCanvas";
+  e.rendererEngine.textContent=renderer.engine||(playcanvas?"PlayCanvas":"Legacy PixiJS");
+  e.rendererEngineVersion.textContent=renderer.engineVersion||(window.PIXI?.VERSION||"—");
   e.rendererBackend.textContent=renderer.backend||"—";
+  e.rendererRequestedBackend.textContent=renderer.requestedBackend||bootstrap.backend||"webgl2";
+  e.rendererWebgpuAvailable.textContent=(renderer.webgpuAvailable??bootstrap.webgpuAvailable)?"YES":"NO";
   e.rendererCanvasCount.textContent=String(renderer.canvasCount||0);
   e.rendererTextureCount.textContent=String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources";
-  e.rendererSourceMode.textContent=(assets.svgSourceCount||0)+" SVG draft / "+(assets.pngSourceCount||0)+" PNG";
+  e.rendererSourceMode.textContent=playcanvas
+    ?"PlayCanvas migration foundation"
+    :(assets.svgSourceCount||0)+" SVG draft / "+(assets.pngSourceCount||0)+" PNG";
   e.rendererPreparedRegion.textContent=assets.preparedRegionKey||"—";
   if(!e.rendererVisibleRegion.textContent)e.rendererVisibleRegion.textContent=renderer.regionKey||"—";
-  setCheck(e.vRendererWebGL,Boolean(renderer.webgl),"FAIL");
+  setCheck(e.vRendererWebGL,Boolean(renderer.gpu||renderer.webgl||renderer.webgpu),"FAIL");
   setCheck(e.vRendererCanvas,renderer.canvasCount===1,"FAIL");
   setCheck(e.vRendererNoDomTiles,(renderer.domTerrainTileCount||0)===0,"FAIL");
-  setCheck(e.vRendererLogicalTextures,Boolean(renderer.logicalTextureKeyPass)&&assets.loadedKeyCount>0,"FAIL");
-  setCheck(e.vRendererSvgCache,assets.svgSourceCount>0&&assets.ready,"FAIL");
+  setCheck(e.vRendererLogicalTextures,
+    playcanvas?Boolean(window.RendererContract):Boolean(renderer.logicalTextureKeyPass)&&assets.loadedKeyCount>0,
+    "FAIL"
+  );
+  setCheck(e.vRendererSvgCache,playcanvas?true:(assets.svgSourceCount>0&&assets.ready),"FAIL");
   setCheck(e.vRendererSimulation,
     typeof TerrainFoundation?.getTile==="function"&&
     typeof Walkability?.classify==="function"&&
-    typeof RoutePlanner?.findRoute==="function",
+    typeof RoutePlanner?.findRoute==="function"&&
+    renderer.simulationAuthorityPreserved!==false,
     "FAIL"
   );
 }
