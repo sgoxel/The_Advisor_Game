@@ -6,9 +6,32 @@ const SOURCE=128;
 const OPTIONS=Object.freeze([16,32,64,128]);
 let current=DEFAULT;
 let revision=0;
+let presentationRefreshSerial=0;
 function normalize(value){const n=Number(value);return OPTIONS.includes(n)?n:DEFAULT}
 function read(){try{return normalize(localStorage.getItem(STORAGE_KEY))}catch(_){return DEFAULT}}
-function write(value){current=normalize(value);try{localStorage.setItem(STORAGE_KEY,String(current))}catch(_){} revision++; window.dispatchEvent(new CustomEvent("advisor:texture-resolution-change",{detail:snapshot()}));return snapshot()}
+function requestPreparedPresentationRefresh(){
+  const serial=++presentationRefreshSerial;
+  const grid=document.getElementById("terrainGrid");
+  const host=grid?.parentElement;
+  if(!host)return;
+  const previousWidth=host.style.width;
+  host.style.width="calc(100% - 0.01px)";
+  requestAnimationFrame(()=>{
+    if(serial!==presentationRefreshSerial)return;
+    host.style.width=previousWidth;
+  });
+}
+function write(value){
+  const next=normalize(value);
+  if(next===current)return snapshot();
+  current=next;
+  try{localStorage.setItem(STORAGE_KEY,String(current))}catch(_){}
+  revision++;
+  const state=snapshot();
+  window.dispatchEvent(new CustomEvent("advisor:texture-resolution-change",{detail:state}));
+  requestPreparedPresentationRefresh();
+  return state;
+}
 function snapshot(){return Object.freeze({sourceResolution:SOURCE,runtimeResolution:current,defaultResolution:DEFAULT,options:OPTIONS.slice(),cacheSignature:"tile-texture@"+current+"px",revision})}
 function installSettingsControl(){
   const card=document.querySelector("#settingsPopup .settings-card");
