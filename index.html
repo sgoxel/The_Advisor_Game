@@ -147,6 +147,14 @@
         <strong>Current local real time</strong>
       </div>
 
+      <label class="toggle-setting" for="developmentModeToggle">
+        <span>
+          <strong>Development Mode</strong>
+          <small>Show technical verification accordions below the player interface.</small>
+        </span>
+        <input id="developmentModeToggle" type="checkbox">
+      </label>
+
       <div class="settings-actions">
         <button id="saveSettingsButton" class="primary" type="button">Save Settings</button>
       </div>
@@ -156,7 +164,7 @@
 </section>
 
 <!-- EVERYTHING BELOW THIS POINT REQUIRES SCROLLING -->
-<section class="details-area" aria-label="Game Details">
+<section id="developmentDetails" class="details-area" aria-label="Development and verification details" hidden>
   <details>
     <summary>Campaign Details</summary>
     <div class="accordion-content">
