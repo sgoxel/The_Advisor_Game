@@ -33,13 +33,13 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 # Stage 3 — GPU 2.5D World + Enterable Building Foundation
 
-- `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation — COMPLETED
-- `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
-- `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
-- `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
-- `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache — COMPLETED
+- `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation
+- `WP-S003-002` — Authoritative Enterable Building Interiors
+- `WP-S003-003` — Interior Objects + Interaction Points
+- `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility
+- `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache
 - `WP-S003-006` — GPU Terrain Chunk Composition + Background Preparation
-- `WP-S003-007` — Dimetric Projection + Adaptive Visual Depth Pass — COMPLETED
+- `WP-S003-007` — Dimetric Projection + Adaptive Visual Depth Pass
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
