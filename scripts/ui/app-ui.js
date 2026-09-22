@@ -1050,6 +1050,17 @@ function renderRendererProof(){
   );
 }
 
+function renderAdviceLog(){
+  if(typeof window.AdvisorChannel?.renderAdvicePanel !== "function") return;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign ? campaign.seed : SeedSystem.getSettings().seed;
+  const protagonistId=(campaign && campaign.protagonistId) || "protagonist";
+  const panel=document.getElementById("advisorPanel");
+  if(panel){
+    window.AdvisorChannel.renderAdvicePanel(seed, protagonistId, panel);
+  }
+}
+
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
   e.campaignState.textContent=campaign?"ACTIVE":"NOT STARTED";
@@ -1058,6 +1069,7 @@ function renderStatic(){
   e.resumeButton.disabled=!campaign;
   setCheck(e.vDate,!!campaign&&GameTime.validateStartYear(),campaign?"FAIL":"WAITING");
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
+  renderAdviceLog();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();

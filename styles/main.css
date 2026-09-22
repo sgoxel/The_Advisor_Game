@@ -138,6 +138,21 @@ input:focus{border-color:#92ad83}
 .status-item strong{white-space:nowrap;color:#f0f2ec;font-size:12px}
 .status-message{display:flex;align-items:center;border-right:0;color:#b6beb0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+.advisor-panel{display:block;border-top:1px solid #3b4237;border-bottom:1px solid #3b4237;background:#1a1f18;padding:12px 14px}
+.advisor-panel h3{margin:0 0 10px;color:#edf0ea;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+.advisor-log{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.advisor-log li{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border:1px solid #343a30;border-radius:8px;background:#161b15}
+.advisor-log li strong{display:block;color:#eef1eb;font-size:13px;line-height:1.35}
+.advisor-log li small{display:block;color:#99a594;margin-top:3px}
+.advice-status{display:inline-flex;align-items:center;justify-content:center;min-width:76px;padding:4px 8px;border-radius:999px;border:1px solid transparent;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.advice-status.delivered{background:rgba(113,140,103,.18);color:#d9e7d1;border-color:rgba(124,150,112,.52)}
+.advice-status.considered{background:rgba(127,119,76,.18);color:#ebddae;border-color:rgba(170,142,71,.52)}
+.advice-status.accepted{background:rgba(90,134,89,.18);color:#d0f0cb;border-color:rgba(115,176,113,.52)}
+.advice-status.rejected{background:rgba(138,88,88,.18);color:#f0c2c2;border-color:rgba(173,105,105,.52)}
+.advice-status.deferred{background:rgba(117,113,138,.18);color:#d0c9ea;border-color:rgba(150,141,189,.52)}
+.advice-status.forgotten{background:rgba(108,100,90,.18);color:#ddd2c5;border-color:rgba(153,139,123,.52)}
+.advice-empty{color:#a3ab9f;justify-content:flex-start}
+
 /* FULL-SCREEN POPUPS */
 .fullscreen-popup{position:fixed;inset:0;z-index:1000;display:grid;grid-template-rows:auto minmax(0,1fr);background:#151713}
 .fullscreen-popup[hidden]{display:none}
