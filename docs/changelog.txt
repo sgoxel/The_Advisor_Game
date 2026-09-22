@@ -1,3 +1,10 @@
+2026-09-22 16:52:00 +03:00 | WP-S003-008 | Planning
+- Added WP-S003-008 to Stage 3 and opened the corresponding GitHub Issue.
+- Defined a landscape control/status deck fixed at 25vh with Character Info, Character Interactions, and Mini Map visible side by side.
+- Moved the planned Advisor text/advice surface out of the Gameplay Area and into Character Interactions.
+- Defined portrait controls below gameplay with semi-transparent ▼/▲ page navigation and title-expandable control sections.
+- Added responsive screenshot/runtime acceptance for geometry, overflow, map obstruction, and unchanged authoritative coordinates.
+
 2026-09-22 15:48:16 +03:00 | WP-S002-004 | Completion audit
 - Fresh current-main Visual Evidence run 35729326166 passed on commit 14e096509f71a1dd991c47258700a669f095b76f.
 - Artifact visual-evidence-starting-village-35729326166 contains 3 screenshots plus runtime JSON (486,073 bytes).
