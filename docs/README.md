@@ -393,13 +393,17 @@ Visual variants may reflect Simulation-backed rank, profession, culture or facti
 
 World presentation should reinforce the state of the living world without becoming gameplay authority itself.
 
-## Static 100 × 100 Tile Composition
+## Static Tile Composition + Runtime Texture Resolution
 
 NPC world sprites are the sole normal independently dynamic world-image exception.
 
-All non-NPC world art is flattened into exact **100 × 100 RGBA logical-tile composites** before presentation. Each logical tile is composed deterministically with terrain/base first, followed by applicable roads, paths, transitions, buildings, interiors, vegetation, props, objects and other static visuals. Reusable atlas cells are source assets for this composition and do not remain independent persistent world-image layers.
+All non-NPC world art is flattened into logical-tile composites before presentation. **Production PNG tile inputs use exact 128 × 128 RGBA source pixels**, while the runtime GPU texture resolution is independent and user-selectable from Settings.
 
-Static composition uses sparse, bounded caching. Camera movement and zoom do not rebuild unchanged tiles; only tiles whose authoritative static presentation inputs change are invalidated. These pixels remain presentation-only and never become authority for terrain legality, collision, occupancy, identity, movement, resources or Simulation outcomes.
+Supported runtime texture resolutions are **16 × 16, 32 × 32, 64 × 64, and 128 × 128**, with **32 × 32 as the standard default**. PNG sources are downscaled once during asset preparation/cache generation to the selected runtime resolution; SVG fallback sources rasterize directly to the selected runtime resolution. Runtime rendering reuses the prepared GPU textures and never performs per-frame image decoding, SVG parsing, or texture resizing.
+
+Changing texture resolution affects presentation caches only. It must not alter Campaign SEED, world coordinates, the authoritative 2 m/tile scale, terrain identity, collision, routing, Simulation state, or save-game truth. Resolution-specific cache/chunk signatures prevent incompatible prepared textures from being reused. Reusable atlas cells remain source assets for deterministic tile composition and, when used for production PNGs, preserve the 128 × 128 source-cell contract.
+
+Static composition uses sparse, bounded caching. Camera movement and zoom do not rebuild unchanged tiles; only tiles whose authoritative static presentation inputs or selected presentation-resolution signature change are invalidated. These pixels remain presentation-only and never become authority for terrain legality, collision, occupancy, identity, movement, resources or Simulation outcomes.
 
 ---
 
