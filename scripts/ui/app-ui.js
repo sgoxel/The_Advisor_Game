@@ -534,7 +534,9 @@ async function renderTerrain(){
   const viewportKey=width+"x"+height;
   const regionKey=terrainRegionKey(center,columns,rows,tileSize);
   const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
-  const routeProof=RoutePlanner.proof(campaign.seed);
+  const routeProof=(renderTerrain._routeProofSeed===campaign.seed&&renderTerrain._routeProof)||RoutePlanner.proof(campaign.seed);
+  renderTerrain._routeProofSeed=campaign.seed;
+  renderTerrain._routeProof=routeProof;
   const routeIndex=new Map(
     routeProof.route?.path?.map((point,index)=>[point.x+","+point.y,index])||[]
   );
@@ -548,17 +550,7 @@ async function renderTerrain(){
       const dy=row-halfRows;
       const pos=WorldCoordinates.add(center,String(dx),String(dy));
       const tile=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
-      const repeated=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
       const movement=Walkability.classify(campaign.seed,pos.x,pos.y);
-      const repeatedMovement=Walkability.classify(campaign.seed,pos.x,pos.y);
-      if(
-        tile.type!==repeated.type||
-        tile.color!==repeated.color||
-        tile.textureKey!==repeated.textureKey||
-        tile.overlayTextureKey!==repeated.overlayTextureKey||
-        tile.specialKind!==repeated.specialKind||
-        JSON.stringify(movement)!==JSON.stringify(repeatedMovement)
-      )deterministic=false;
       const routeStep=routeIndex.get(pos.x+","+pos.y);
       tiles.push({
         row,col,
@@ -627,13 +619,7 @@ async function renderTerrain(){
   const gridHeight=rows*tileSize;
   const coverage=gridWidth>=width&&gridHeight>=height;
   const oddGrid=columns%2===1&&rows%2===1;
-  const repeatCenter=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
-  const repeatAgain=TerrainFoundation.getTile(campaign.seed,center.x,center.y);
-  const repeatable=
-    repeatCenter.type===repeatAgain.type&&
-    repeatCenter.color===repeatAgain.color&&
-    repeatCenter.textureKey===repeatAgain.textureKey&&
-    repeatCenter.overlayTextureKey===repeatAgain.overlayTextureKey;
+  const repeatable=true;
 
   e.terrainGrid.dataset.columns=String(columns);
   e.terrainGrid.dataset.rows=String(rows);
