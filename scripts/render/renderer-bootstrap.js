@@ -33,7 +33,9 @@ function readBackend(){
 }
 
 function readNumber(name,min,max){
-  const value=Number(query().get(name));
+  const raw=query().get(name);
+  if(raw===null||String(raw).trim()==="")return null;
+  const value=Number(raw);
   if(!Number.isFinite(value))return null;
   return Math.min(max,Math.max(min,value));
 }
