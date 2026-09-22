@@ -72,6 +72,7 @@ function create({backendPreference="webgl2"}={}){
       webgl:deviceType==="webgl2",
       webgpu:deviceType==="webgpu",
       webgpuAvailable:Boolean(navigator.gpu),
+      migrationFoundation:true,
       canvasCount:host?host.querySelectorAll("canvas").length:0,
       domTerrainTileCount:document.querySelectorAll(".terrain-tile").length,
       logicalTextureKeyPass:true,
