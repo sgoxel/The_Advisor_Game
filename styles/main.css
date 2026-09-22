@@ -170,6 +170,20 @@ input:focus{border-color:#92ad83}
 .readonly-setting{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid #30362d}
 .readonly-setting span{color:#9da697}
 .readonly-setting strong{text-align:right}
+.toggle-setting{
+  display:flex!important;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  margin:14px 0 0!important;
+  padding:12px 0;
+  border-bottom:1px solid #30362d;
+  cursor:pointer;
+}
+.toggle-setting span{display:grid;gap:4px}
+.toggle-setting strong{color:#eef1e9}
+.toggle-setting small{color:#9da697;font-size:12px;font-weight:400;line-height:1.35}
+.toggle-setting input{width:22px;height:22px;flex:0 0 auto;accent-color:#8fa981}
 .settings-actions{margin-top:22px}
 .popup-note{min-height:20px;margin:14px 0 0;color:#b6beb0}
 
