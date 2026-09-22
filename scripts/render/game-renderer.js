@@ -312,6 +312,16 @@ function resolveOcclusionProofPlacement(building,state){
   return null;
 }
 
+function occlusionProofScreenOverride(model,originX,originY,building,state){
+  if(!building||state!=="behind")return null;
+  const footprint=buildingFootprint(model,originX,originY,building);
+  const frontEdgePoint=lerpPoint(footprint[3],footprint[2],0.56);
+  return Object.freeze({
+    x:frontEdgePoint.x,
+    y:frontEdgePoint.y-model.tileSize*DIMETRIC_Y*2
+  });
+}
+
 function isNorthWestBehind(point,bounds){
   if(!point||!bounds||pointInsideBounds(point,bounds))return false;
   const x=BigInt(String(point.x)),y=BigInt(String(point.y));
@@ -332,7 +342,7 @@ function resolveLocalOcclusions(model,originX,originY,visibleBuildings,heightByB
     const point=entity?.point;
     if(!point)continue;
     considered++;
-    const screen=worldToScreen(model,originX,originY,point.x,point.y);
+    const screen=entity.screenOverride||worldToScreen(model,originX,originY,point.x,point.y);
     const footX=screen.x;
     const footY=screen.y+model.tileSize*DIMETRIC_Y*2;
     const spriteTop=footY-model.tileSize*0.94;
@@ -890,6 +900,9 @@ function render(model){
   const proofBuilding=buildingProofState?resolveProofBuilding(model,visibleBuildings):null;
   const occlusionProofBuilding=buildingOcclusionProofState?resolveProofBuilding(model,visibleBuildings):null;
   const occlusionProofPoint=resolveOcclusionProofPlacement(occlusionProofBuilding,buildingOcclusionProofState);
+  const occlusionProofScreen=occlusionProofScreenOverride(
+    model,originX,originY,occlusionProofBuilding,buildingOcclusionProofState
+  );
   const actualOccupied=visibleBuildings.find(building=>pointInsideBounds(model.protagonistWorld,building.bounds))||null;
   const occlusionProofInside=buildingOcclusionProofState==="inside"?occlusionProofBuilding:null;
   const cutawayBuildingId=proofBuilding?.id||actualOccupied?.id||occlusionProofInside?.id||null;
@@ -907,6 +920,7 @@ function render(model){
     occlusionEntities.unshift(Object.freeze({
       id:"occlusion-proof",
       point:occlusionProofPoint,
+      screenOverride:occlusionProofScreen,
       forceBehindBuildingId:occlusionProofBuilding.id
     }));
   }
@@ -1002,8 +1016,9 @@ function render(model){
   let occlusionProofCoordinate=null;
   if(occlusionProofBuilding&&occlusionProofPoint){
     occlusionProofCoordinate=occlusionProofPoint;
-    const p=worldToScreen(model,originX,originY,occlusionProofPoint.x,occlusionProofPoint.y);
-    if(pointVisible(model,p,3)){
+    const worldPoint=worldToScreen(model,originX,originY,occlusionProofPoint.x,occlusionProofPoint.y);
+    const p=occlusionProofScreen||worldPoint;
+    if(pointVisible(model,worldPoint,3)){
       const texture=TextureAssets.get("character:protagonist-male");
       addCharacterSprite(
         texture,
