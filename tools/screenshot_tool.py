@@ -655,14 +655,14 @@ def runtime_snapshot(driver) -> dict:
     return result
 
 
-def validate_current_build_snapshot(snapshot: dict) -> None:
+def validate_current_build_snapshot(snapshot: dict, *, require_coverage: bool = True) -> None:
     current = snapshot.get("currentBuild") if isinstance(snapshot, dict) else None
     if not isinstance(current, dict):
         return
     grid = current.get("terrainGrid")
     if not isinstance(grid, dict):
         raise RuntimeError("Current build terrain-grid evidence is missing")
-    if not grid.get("coveragePass"):
+    if require_coverage and not grid.get("coveragePass"):
         raise RuntimeError(f"Terrain grid does not cover viewport: {grid}")
     if not grid.get("centerPass"):
         raise RuntimeError(f"Terrain grid lost centered world tile: {grid}")
@@ -1570,7 +1570,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if not landscape_keyboard.get("sideBySide") or not landscape_keyboard.get("keyboardUsed"):
             raise RuntimeError(f"WP-S003-008 landscape keyboard/panel proof failed: {landscape_keyboard}")
 
-        for index, deck in enumerate(decks, start=1):
+        for index, (deck, item) in enumerate(zip(decks, builds), start=1):
+            grid = item.get("terrainGrid") or {}
+            if not grid.get("coveragePass"):
+                raise RuntimeError(f"WP-S003-008 gameplay terrain does not cover frame {index}: {grid}")
             if deck.get("horizontalOverflow"):
                 raise RuntimeError(f"WP-S003-008 horizontal overflow in frame {index}: {deck}")
             if not deck.get("advisorInInteractions"):
@@ -1715,7 +1718,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                validate_current_build_snapshot(snapshot)
+                validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
                         "index": index + 1,
