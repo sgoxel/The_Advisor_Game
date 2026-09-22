@@ -574,4 +574,4 @@
 - Runtime proof kept Camera and Protagonist at (0,0) through all five visual states; 7 ordered presentation layers, 5 visible roofs, 12 visible interior objects, 5 foreground objects, and 65 raised wall caps were reported.
 - Roof alpha proof: outside 0.84 → entering 0.42 → inside 0.15 → behind 0.15 → leaving 0.84; foreground proof used S2:counter:01.
 - Final visual/function score: 8.3/10 PASS.
-- Updated docs/ROADMAP.md and marked WP-S003-004 COMPLETED.
+- Updated docs/ROADMAP.md and marked WP-S003-004 COMPLETED.2026-09-22 07:00 +00:00 | WP-S001-001 | Final dedicated browser certification passed at 9/10; verified reload persistence, default SEED, fantasy year offset, 24x time, portrait/landscape three-row layout, full-screen Settings, current main deployment, closed Issue #9, and marked the WP COMPLETED.
