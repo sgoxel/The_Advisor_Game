@@ -1,3 +1,5 @@
+2026-09-22 20:58:00 +03:00 | WP-S003-005 | Hardened the GPU texture pipeline for PNG-first terrain/blend assets with SVG fallback support, added safe blob-backed image loading for rasterized SVG sources, and committed PNG replacements for the core terrain and blend mask set so startup prefetching stays deterministic without tainting the WebGL upload path.
+
 2026-09-22 18:58:00 +03:00 | WP-S003-006 | Implemented first persistent 16×16 GPU terrain RenderTexture chunk cache pass, removed duplicate normal-render determinism calculations, and extended screenshot evidence telemetry with terrain chunk cache metrics. Testing tool was improved for the required revalidation; per workflow rule, fresh certification continues next run.
 
 2026-09-22 18:07:00 +03:00 | Stage 3 revalidation

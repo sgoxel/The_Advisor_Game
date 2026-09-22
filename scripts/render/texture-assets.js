@@ -89,16 +89,36 @@ function candidates(url){
   return Object.freeze([value]);
 }
 
-function loadImage(url){
+async function loadImage(url){
+  let objectUrl=null;
+  let safeUrl=url;
+  if(typeof fetch==="function"){
+    try{
+      const response=await fetch(url,{cache:"force-cache"});
+      if(response&&response.ok){
+        const blob=await response.blob();
+        if(blob&&blob.size>0){
+          objectUrl=URL.createObjectURL(blob);
+          safeUrl=objectUrl;
+        }
+      }
+    }catch(_){ }
+  }
+
   return new Promise((resolve,reject)=>{
     const image=new Image();
     image.decoding="async";
+    image.crossOrigin="anonymous";
     image.onload=async()=>{
-      try{if(typeof image.decode==="function")await image.decode()}catch(_){}
+      try{if(typeof image.decode==="function")await image.decode()}catch(_){ }
+      if(objectUrl)URL.revokeObjectURL(objectUrl);
       resolve(image);
     };
-    image.onerror=()=>reject(new Error("Asset load failed: "+url));
-    image.src=url;
+    image.onerror=()=>{
+      if(objectUrl)URL.revokeObjectURL(objectUrl);
+      reject(new Error("Asset load failed: "+url));
+    };
+    image.src=safeUrl;
   });
 }
 
