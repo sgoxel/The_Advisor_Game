@@ -382,6 +382,16 @@ return (() => {
             return {error: String(error)};
           }
         })(),
+        interiorObjects: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const objects = window.InteriorObjects;
+            if (!campaign || !objects?.proof) return null;
+            return objects.proof(campaign.seed);
+          } catch (error) {
+            return {error: String(error)};
+          }
+        })(),
         roadNetwork: (() => {
           try {
             const campaign = window.SeedSystem?.getCampaign?.();
@@ -1174,6 +1184,12 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "building-presentation":
         if len(frames) < 5:
             raise RuntimeError("building-presentation requires five evidence frames")
+        objects = frames[2].get("runtime", {}).get("currentBuild", {}).get("interiorObjects") or {}
+        required = ("pass", "deterministic", "uniqueIds", "legalPlacement", "interactionsValid", "blockingPass", "allBuildingsCovered")
+        if not all(objects.get(key) for key in required):
+            raise RuntimeError(f"WP-S003-003 interior-object proof failed: {objects}")
+        if int(objects.get("objectCount") or 0) <= 0 or int(objects.get("buildingCount") or 0) <= 0:
+            raise RuntimeError(f"WP-S003-003 interior-object coverage missing: {objects}")
         expected_states = ["outside", "entering", "inside", "behind", "leaving"]
         expected_layers = [
             "ground-floor",

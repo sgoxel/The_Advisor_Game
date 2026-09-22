@@ -29,13 +29,13 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-001-005` — Diagonal + Multi-Terrain Junction Smoothing — COMPLETED
 - `WP-S002-002` — Special Buildings + Functional Lots — COMPLETED
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation — COMPLETED
-- `WP-S002-004` — Deterministic Local Route Planning
+- `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 
 # Stage 3 — GPU 2.5D World + Enterable Building Foundation
 
 - `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation — COMPLETED
-- `WP-S003-002` — Authoritative Enterable Building Interiors
-- `WP-S003-003` — Interior Objects + Interaction Points
+- `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
+- `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED — COMPLETED
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility
 - `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache
 - `WP-S003-006` — GPU Terrain Chunk Composition + Background Preparation
