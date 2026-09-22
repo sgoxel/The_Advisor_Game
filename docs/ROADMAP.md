@@ -49,4 +49,13 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement
 - `WP-S004-005` — Interior Action Execution + Character State Presentation
 
+# Stage 5 — Political Geography + Settlement Diversity Foundation
+
+- `WP-S005-001` — Deterministic Country Territories + Political Centers
+- `WP-S005-002` — Country Profile: Wealth, Governance + Strategic Orientation
+- `WP-S005-003` — Region/Province Profiles + Terrain/Resource Identity
+- `WP-S005-004` — Country Relations + Diplomacy Baseline
+- `WP-S005-005` — Settlement Archetypes + Country/Region/Terrain Inheritance
+- `WP-S005-006` — Settlement Building Catalog + Contextual Composition Rules
+
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
