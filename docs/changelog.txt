@@ -1,3 +1,10 @@
+2026-09-22 15:21:59 +03:00 | WP-S002-001-002 | Final revalidation
+- Fresh Visual Evidence run 35726405931 passed after the gameplay-grid repair.
+- Reviewed artifact visual-evidence-starting-village-35726405931 (486,396 bytes, 3 screenshots): housePlans pass=true and deterministic=true; 6 buildings; minimumRoomTiles=6; outer/interior walls and entrances PASS; 779 SVG-rendered tiles at broad zoom; 0 PNG terrain tiles.
+- Visual/function review score: 8.6/10 PASS. The gameplay world is visible again and the required Top Ribbon / Gameplay / Status shell is restored.
+- GitHub Pages run 35726385912 succeeded for tested app head 43ff04fd7977b9b09663dc55eb4f999b10f8c5dc.
+- docs/ROADMAP.md records WP-S002-001-002 as COMPLETED.
+
 2026-09-22 15:17:34 +03:00 | WP-S002-001-002 | Completion audit fix
 - Fresh current-main visual revalidation exposed a blank gameplay viewport because the Advisor panel had been inserted as a fourth direct child of the fixed three-row .screen-shell grid.
 - Moved the Advisor panel into the Gameplay Area as a bounded overlay so Top Ribbon / Gameplay / Status remain the only direct screen rows and the renderer can retain the gameplay viewport.
