@@ -83,27 +83,33 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "Copilot produced no repository file changes."
-            exit 0
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Copilot changed these repository files:"
+            git status --short
+            git add -A
+
+            if ! git diff --cached --quiet; then
+              git commit -m "Copilot hourly agent update"
+            fi
           fi
 
-          echo "Copilot changed these repository files:"
-          git status --short
-
-          git add -A
-
-          if git diff --cached --quiet; then
-            echo "No staged changes to persist."
-            exit 0
-          fi
-
-          git commit -m "Copilot hourly agent update"
-
-          # Other project agents may update main while this run is active.
-          # Rebase onto the newest main before publishing this run.
+          # Refresh main because other project agents may have pushed while
+          # this Copilot run was working.
           git fetch origin main
+
+          # If Copilot created its own local commit, this also publishes it.
+          if [ "$(git rev-list --count origin/main..HEAD)" -eq 0 ]; then
+            echo "No unpublished Copilot commits remain."
+            exit 0
+          fi
+
           git rebase origin/main
           git push origin HEAD:main
+          git fetch origin main
 
-          echo "Copilot changes committed and pushed to main."
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "ERROR: Copilot commit was not persisted to origin/main."
+            exit 1
+          fi
+
+          echo "Copilot changes are persisted on origin/main."
