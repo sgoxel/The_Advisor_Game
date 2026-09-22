@@ -9,6 +9,7 @@ const ids=[
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
   "rendererBackend","rendererCanvasCount","rendererTextureCount","rendererSourceMode",
+  "rendererPreparedRegion","rendererVisibleRegion",
   "vRendererWebGL","vRendererCanvas","vRendererNoDomTiles","vRendererLogicalTextures","vRendererSvgCache","vRendererSimulation",
   "interiorBuildingCount","interiorHouseCount","interiorSpecialCount","interiorLevel","interiorHouseProof","interiorSpecialProof",
   "vInteriorDeterministic","vInteriorCoverage","vInteriorCollision","vInteriorForward","vInteriorReverse","vInteriorLevel",
@@ -435,6 +436,7 @@ let dragState=null;
 let activePointers=new Map();
 let pinchState=null;
 let wheelZoomUsed=false;
+let terrainRenderSerial=0;
 
 function terrainGridDimensions(width,height,tileSize){
   let columns=Math.max(3,Math.ceil(width/tileSize)+2);
@@ -444,7 +446,66 @@ function terrainGridDimensions(width,height,tileSize){
   return {columns,rows};
 }
 
-function renderTerrain(){
+function terrainRegionKey(center,columns,rows,tileSize){
+  return [
+    "terrain",
+    center.x+","+center.y,
+    columns+"x"+rows,
+    tileSize+"px"
+  ].join(":");
+}
+
+function collectTerrainPreparationKeys(seed,center,columns,rows,halfCols,halfRows){
+  const keys=new Set(["character:protagonist-male"]);
+  const ringColumns=columns+2;
+  const ringRows=rows+2;
+  const cells=[];
+  for(let row=-1;row<=rows;row++){
+    for(let col=-1;col<=columns;col++){
+      const dx=col-halfCols;
+      const dy=row-halfRows;
+      const pos=WorldCoordinates.add(center,String(dx),String(dy));
+      const tile=TerrainFoundation.getTile(seed,pos.x,pos.y);
+      cells.push({
+        row:row+1,
+        col:col+1,
+        x:pos.x,
+        y:pos.y,
+        type:tile.type,
+        textureKey:tile.textureKey,
+        overlayTextureKey:tile.overlayTextureKey
+      });
+    }
+  }
+  const cellAt=(row,col)=> (row<0||row>=ringRows||col<0||col>=ringColumns)?null:cells[row*ringColumns+col];
+  for(const cell of cells){
+    if(cell.textureKey)keys.add(cell.textureKey);
+    if(cell.overlayTextureKey)keys.add(cell.overlayTextureKey);
+  }
+  for(const cell of cells){
+    const neighbors={
+      n:cellAt(cell.row-1,cell.col)?.type||null,
+      e:cellAt(cell.row,cell.col+1)?.type||null,
+      s:cellAt(cell.row+1,cell.col)?.type||null,
+      w:cellAt(cell.row,cell.col-1)?.type||null,
+      ne:cellAt(cell.row-1,cell.col+1)?.type||null,
+      se:cellAt(cell.row+1,cell.col+1)?.type||null,
+      sw:cellAt(cell.row+1,cell.col-1)?.type||null,
+      nw:cellAt(cell.row-1,cell.col-1)?.type||null
+    };
+    const blends=TileTextures.blendSpecs(cell.type,neighbors,{
+      seed,
+      x:cell.x,
+      y:cell.y
+    });
+    for(const blend of blends){
+      if(blend?.maskKey)keys.add(blend.maskKey);
+    }
+  }
+  return [...keys];
+}
+
+async function renderTerrain(){
   const campaign=SeedSystem.getCampaign();
   const protagonist=Protagonist.getPosition();
   const center=campaign?Camera.getCenter():null;
@@ -471,6 +532,7 @@ function renderTerrain(){
   const halfCols=Math.floor(columns/2);
   const halfRows=Math.floor(rows/2);
   const viewportKey=width+"x"+height;
+  const regionKey=terrainRegionKey(center,columns,rows,tileSize);
   const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
   const routeProof=RoutePlanner.proof(campaign.seed);
   const routeIndex=new Map(
@@ -536,12 +598,23 @@ function renderTerrain(){
     });
   }
 
-  e.terrainGrid.hidden=false;
+  const requiredKeys=collectTerrainPreparationKeys(campaign.seed,center,columns,rows,halfCols,halfRows);
+  const currentSerial=++terrainRenderSerial;
+  if(!TextureAssets.isRegionPrepared(regionKey,requiredKeys)){
+    e.terrainGrid.hidden=true;
+    const prepared=await TextureAssets.prepareRegion(regionKey,requiredKeys);
+    if(currentSerial!==terrainRenderSerial||!prepared.ready||prepared.stale||!TextureAssets.isRegionPrepared(regionKey,requiredKeys)){
+      return false;
+    }
+  }
+
   const buildingInteriors=BuildingInteriors.build(campaign.seed);
   const interiorObjects=window.InteriorObjects?.build?InteriorObjects.build(campaign.seed):[];
   const rendererSnapshot=GameRenderer.render({
     width,height,columns,rows,tileSize,
     center,
+    seed:campaign.seed,
+    regionKey,
     tiles,
     routeLastIndex,
     protagonistWorld:protagonist||null,
@@ -570,6 +643,7 @@ function renderTerrain(){
   e.terrainGrid.dataset.gridWidth=String(gridWidth);
   e.terrainGrid.dataset.gridHeight=String(gridHeight);
   e.terrainGrid.dataset.viewportKey=viewportKey;
+  e.terrainGrid.dataset.regionKey=regionKey;
   e.terrainGrid.dataset.coveragePass=coverage?"true":"false";
   e.terrainGrid.dataset.centerPass=(oddGrid&&rendererSnapshot.tileCount===columns*rows)?"true":"false";
 
@@ -584,14 +658,17 @@ function renderTerrain(){
   setCheck(e.vTileOddGrid,oddGrid&&rendererSnapshot.tileCount===columns*rows,"FAIL");
   setCheck(e.vTileRepeat,repeatable,"FAIL");
   renderBuildingPresentationProof(rendererSnapshot);
+  e.rendererVisibleRegion.textContent=regionKey;
+  e.terrainGrid.hidden=false;
   lastTerrainViewportKey=viewportKey;
+  return true;
 }
 
 function scheduleTerrainRender(){
   if(terrainRenderFrame)cancelAnimationFrame(terrainRenderFrame);
   terrainRenderFrame=requestAnimationFrame(()=>{
     terrainRenderFrame=0;
-    renderTerrain();
+    void renderTerrain().catch(error=>console.error(error));
   });
 }
 
@@ -864,6 +941,7 @@ function renderWorldCoordinates(){
   const campaign=SeedSystem.getCampaign();
   const position=Protagonist.getPosition();
   const proof=WorldCoordinates.verifyUnbounded();
+  const rendererReady=GameRenderer.snapshot().ready;
 
   if(position){
     const label="("+position.x+","+position.y+")";
@@ -872,7 +950,9 @@ function renderWorldCoordinates(){
       cameraInitialized=true;
     }
     e.gameplayPlaceholder.hidden=true;
-    renderTerrain();
+    if(!rendererReady){
+      void renderTerrain().catch(error=>console.error(error));
+    }
     updateCameraPresentation();
     e.protagonistLocation.textContent=label;
     e.detailProtagonistX.textContent=position.x;
@@ -955,6 +1035,8 @@ function renderRendererProof(){
   e.rendererCanvasCount.textContent=String(renderer.canvasCount||0);
   e.rendererTextureCount.textContent=String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources";
   e.rendererSourceMode.textContent=(assets.svgSourceCount||0)+" SVG draft / "+(assets.pngSourceCount||0)+" PNG";
+  e.rendererPreparedRegion.textContent=assets.preparedRegionKey||"—";
+  if(!e.rendererVisibleRegion.textContent)e.rendererVisibleRegion.textContent=renderer.regionKey||"—";
   setCheck(e.vRendererWebGL,Boolean(renderer.webgl),"FAIL");
   setCheck(e.vRendererCanvas,renderer.canvasCount===1,"FAIL");
   setCheck(e.vRendererNoDomTiles,(renderer.domTerrainTileCount||0)===0,"FAIL");
@@ -1002,18 +1084,36 @@ function startClock(){
   renderClock();
   clockTimer=setInterval(renderClock,250);
 }
-function startNewCampaign(){
+async function startNewCampaign(){
   const result=SeedSystem.startNewCampaign();
   restoredCampaign=false;
   if(result.ok)resetCameraForCampaign();
   e.menuMessage.textContent=result.message;
+  if(result.ok){
+    try{
+      await renderTerrain();
+    }catch(error){
+      console.error(error);
+      e.statusMessage.textContent="Renderer startup failed: "+String(error);
+      return;
+    }
+  }
   e.statusMessage.textContent="Campaign running. Game time advances 24× real time.";
   renderStatic();startClock();closePopup("mainMenuPopup");
 }
-function restartCampaign(){
+async function restartCampaign(){
   const result=SeedSystem.restartCampaign();
   if(result.ok)resetCameraForCampaign();
   e.menuMessage.textContent=result.message;
+  if(result.ok){
+    try{
+      await renderTerrain();
+    }catch(error){
+      console.error(error);
+      e.statusMessage.textContent="Renderer startup failed: "+String(error);
+      return;
+    }
+  }
   e.statusMessage.textContent=result.ok?"Campaign restarted with the same SEED.":result.message;
   renderStatic();startClock();
   if(result.ok)closePopup("mainMenuPopup");
@@ -1056,7 +1156,7 @@ async function init(){
   e.statusMessage.textContent="Loading GPU renderer and draft textures…";
   try{
     await GameRenderer.init(e.terrainGrid);
-    await TextureAssets.preloadAll();
+    await renderTerrain();
   }catch(error){
     console.error(error);
     e.statusMessage.textContent="Renderer startup failed: "+String(error);

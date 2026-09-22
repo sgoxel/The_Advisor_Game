@@ -1,1 +1,2 @@
 2026-09-22 02:38 +03:00 | WP-S003-005 | Phase 1 | Suggestion: derive the required logical texture-key set directly from the prepared coordinate region and call TextureAssets.prepareRegion() before exposing that region to GameRenderer.render(). Do not implement unrelated renderer optimization here; keep it for WP-S003-006.
+2026-09-22 00:59 +00:00 | WP-S003-005 | Phase 1 | Suggestion: expose the prepared/visible region key pair in the compact HUD header in a later polish pass so QA can spot cache mismatches without opening the technical accordion.

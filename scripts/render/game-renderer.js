@@ -540,6 +540,7 @@ function render(model){
       coveragePass:coverage,
       centerPass:model.columns%2===1&&model.rows%2===1
     }),
+    regionKey:model.regionKey||null,
     housePlans:Object.freeze({
       svgTileCount,
       pngTileCount,

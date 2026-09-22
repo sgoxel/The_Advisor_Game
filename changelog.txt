@@ -1,1 +1,1 @@
-2026-09-22 02:38 +03:00 | WP-S003-005 | Added render-region texture preparation state, stale-preparation cancellation, prepared-key pinning, and preparation metrics to the PNG/SVG texture cache.
+2026-09-22 00:59 +00:00 | WP-S003-005 | Gated startup and camera-driven terrain rendering behind coordinate-derived texture preparation, added visible/prepared region proof, and extended the screenshot evidence tool to record the active and prepared region keys.
