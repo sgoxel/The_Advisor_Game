@@ -234,6 +234,8 @@ function snapshot(){
     downVisible:visible("#controlsDownButton"),
     upVisible:visible("#gameplayUpButton"),
     advisorInInteractions:Boolean(advisor&&interactions?.contains(advisor)),
+    developmentMode:document.body.classList.contains("development-mode"),
+    developmentDetailsVisible:visible("#developmentDetails"),
     gameplayCanvasCount:document.querySelectorAll("#gameplayArea canvas").length,
     horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2,
     keyboardUsed:deck?.dataset.keyboardUsed==="true",
