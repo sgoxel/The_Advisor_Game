@@ -70,6 +70,7 @@ SCENARIOS = {
     "starting-village",
     "building-presentation",
     "wp-s001-001",
+    "wp-s001-004",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -91,6 +92,7 @@ SCENARIO_MIN_SHOTS = {
     "starting-village": 3,
     "building-presentation": 5,
     "wp-s001-001": 5,
+    "wp-s001-004": 2,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -400,6 +402,41 @@ return (() => {
           biome: document.querySelector('#geoBiome')?.textContent?.trim() || null,
           climate: document.querySelector('#geoClimate')?.textContent?.trim() || null,
         },
+        geographyProof: (() => {
+          try {
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const position = window.Protagonist?.getPosition?.();
+            const foundation = window.GeographyFoundation;
+            const standards = window.WorldStandards;
+            if (!campaign || !position || !foundation || !standards) return null;
+            const first = foundation.location(campaign.seed, position.x, position.y);
+            const repeat = foundation.location(campaign.seed, position.x, position.y);
+            const spacing = foundation.villageSpacingProof(campaign.seed);
+            const minAdjacentTiles =
+              Number(standards.VILLAGE_CELL_SIZE_TILES || 0) -
+              2 * Number(standards.VILLAGE_JITTER_TILES || 0);
+            const minAdjacentMeters = minAdjacentTiles * Number(standards.TILE_METERS || 0);
+            const minAdjacentMinutes = standards.walkMinutes(
+              minAdjacentMeters,
+              Number(standards.FASTEST_NORMAL_WALK_KMH || 0)
+            );
+            return {
+              location:first,
+              repeatable:JSON.stringify(first) === JSON.stringify(repeat),
+              spacing,
+              tileMeters:Number(standards.TILE_METERS || 0),
+              fastestWalkKmh:Number(standards.FASTEST_NORMAL_WALK_KMH || 0),
+              minVillageWalkMinutes:Number(standards.MIN_VILLAGE_WALK_MINUTES || 0),
+              villageCellSizeTiles:Number(standards.VILLAGE_CELL_SIZE_TILES || 0),
+              villageJitterTiles:Number(standards.VILLAGE_JITTER_TILES || 0),
+              minAdjacentTiles,
+              minAdjacentMeters,
+              minAdjacentMinutes,
+            };
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
       },
       legacyGame: legacy ? {
         camera: camera ? {
@@ -973,6 +1010,68 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s001-004":
+        if len(frames) < 2:
+            raise RuntimeError("wp-s001-004 requires two evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:2]]
+        proofs = [item.get("geographyProof") or {} for item in builds]
+
+        if any(proof.get("error") for proof in proofs):
+            raise RuntimeError(f"WP-S001-004 geography proof errored: {proofs}")
+        if not all(proof.get("repeatable") for proof in proofs):
+            raise RuntimeError(f"WP-S001-004 same-SEED geography was not repeatable: {proofs}")
+
+        first_locations = [proof.get("location") for proof in proofs]
+        if not first_locations[0] or first_locations[0] != first_locations[1]:
+            raise RuntimeError(
+                f"WP-S001-004 foundation changed while fantasy time advanced: {first_locations}"
+            )
+
+        timestamps = [item.get("gameTimestampMs") for item in builds]
+        if any(value is None for value in timestamps):
+            raise RuntimeError(f"WP-S001-004 missing fantasy-time evidence: {timestamps}")
+        timestamps = [float(value) for value in timestamps]
+        if not timestamps[1] > timestamps[0]:
+            raise RuntimeError(
+                f"WP-S001-004 test did not observe fantasy time advancing: {timestamps}"
+            )
+
+        location = first_locations[0] or {}
+        hierarchy = location.get("hierarchy") or {}
+        required_hierarchy = (
+            "continent","country","region","city","district","village","avenue","street"
+        )
+        missing = [key for key in required_hierarchy if not str(hierarchy.get(key) or "").strip()]
+        if missing:
+            raise RuntimeError(
+                f"WP-S001-004 geographic hierarchy is incomplete ({missing}): {hierarchy}"
+            )
+
+        environment = location.get("environment") or {}
+        if not str(environment.get("biome") or "").strip() or not str(environment.get("climate") or "").strip():
+            raise RuntimeError(f"WP-S001-004 environment foundation is incomplete: {environment}")
+        if not isinstance(environment.get("elevationMeters"), (int, float)):
+            raise RuntimeError(f"WP-S001-004 elevation evidence is missing: {environment}")
+        if not str(location.get("terrain") or "").strip():
+            raise RuntimeError(f"WP-S001-004 terrain foundation is missing: {location}")
+
+        proof = proofs[0]
+        spacing = proof.get("spacing") or {}
+        if not spacing.get("pass") or not spacing.get("nearest"):
+            raise RuntimeError(f"WP-S001-004 nearest-village spacing proof failed: {spacing}")
+        if float(spacing.get("fastestPossibleMinutes") or 0) < float(proof.get("minVillageWalkMinutes") or 60):
+            raise RuntimeError(f"WP-S001-004 nearest village is under one fantasy hour: {spacing}")
+
+        if float(proof.get("tileMeters") or 0) != 2:
+            raise RuntimeError(f"WP-S001-004 authoritative tile scale is not 2 m: {proof}")
+        if float(proof.get("fastestWalkKmh") or 0) != 3.6:
+            raise RuntimeError(f"WP-S001-004 fastest normal walk is not 3.6 km/h: {proof}")
+        if float(proof.get("minAdjacentMinutes") or 0) < 60:
+            raise RuntimeError(
+                f"WP-S001-004 village cell+jitter policy can violate one-hour spacing: {proof}"
+            )
+        return
+
     if scenario == "wp-s001-001":
         if len(frames) < 5:
             raise RuntimeError("wp-s001-001 requires five evidence frames")
