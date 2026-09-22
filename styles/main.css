@@ -483,8 +483,7 @@ details[open] summary{border-bottom:1px solid #343a30}
     min-height:480px;
   }
   .control-deck{
-    min-height:100vh;
-    min-height:100dvh;
+    min-height:0;
     display:block;
     padding:58px 10px 24px;
   }
