@@ -16,7 +16,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S001-001` — Base Game, Campaign SEED and Game Clock — COMPLETED
 - `WP-S001-002` — Deterministic Foundation and Live Randomness
 - `WP-S001-003` — Infinite World Coordinates + Protagonist Origin
-- `WP-S001-004` — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing
+- `WP-S001-004` — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing — COMPLETED
 - `WP-S001-005` — Viewport-Filling Solid-Color Tiles
 - `WP-S001-006` — Camera Movement Through the Infinite World
 
