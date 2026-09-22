@@ -273,6 +273,7 @@ return (() => {
           preparedRegionKey: assets.preparedRegionKey || null,
           preparedKeyCount: Number(assets.preparedKeyCount || 0),
           buildingPresentation: renderer.buildingPresentation || null,
+          buildingOcclusion: renderer.buildingOcclusion || null,
           textureCache: assets,
           terrainChunks: renderer.terrainChunks || null,
         },
