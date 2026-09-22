@@ -68,9 +68,15 @@ function destroyLayer(container){
 }
 
 function destroyPresentationLayers(){
-  destroyLayer(terrainLayer);
-  for(const entry of terrainChunkCache.values())entry.texture?.destroy?.(true);
+  for(const entry of terrainChunkCache.values()){
+    if(entry.sprite){
+      entry.sprite.removeFromParent();
+      entry.sprite.destroy();
+    }
+    entry.texture?.destroy?.(true);
+  }
   terrainChunkCache.clear();
+  destroyLayer(terrainLayer);
   destroyLayer(lowerStructureLayer);
   destroyLayer(shadowLayer);
   destroyLayer(entityLayer);
@@ -770,8 +776,12 @@ function renderTerrainChunks(model,originX,originY){
     if(!grouped.has(key))grouped.set(key,[]);
     grouped.get(key).push(tile);
   }
+  for(const entry of terrainChunkCache.values()){
+    if(entry.sprite)entry.sprite.visible=false;
+  }
   const active=new Set();
   let hits=0,misses=0,compositions=0,invalidations=0;
+  let createdSprites=0,reusedSprites=0;
   for(const [key,tiles] of grouped){
     active.add(key);
     const incoming=new Map(tiles.map(tile=>[String(tile.x)+","+String(tile.y),tile]));
@@ -788,30 +798,138 @@ function renderTerrainChunks(model,originX,originY){
     if(!requiresComposition){
       hits++;terrainCacheTotals.hits++;
     }else{
-      const merged=new Map(entry?.tiles||[]);
+      const previous=entry||null;
+      const merged=new Map(previous?.tiles||[]);
       for(const pair of incoming)merged.set(pair[0],pair[1]);
-      if(entry){entry.texture.destroy(true);invalidations++;terrainCacheTotals.invalidations++;}
       entry=buildTerrainChunk(model,[...merged.values()],key);
       entry.tileSize=model.tileSize;
       entry.tiles=merged;
       entry.tileSignatures=new Map([...merged].map(([tileKey,tile])=>[tileKey,terrainTileSignature(tile)]));
+      if(previous?.sprite){
+        entry.sprite=previous.sprite;
+        entry.sprite.texture=entry.texture;
+      }
+      if(previous){
+        previous.texture.destroy(true);
+        invalidations++;
+        terrainCacheTotals.invalidations++;
+      }
       terrainChunkCache.set(key,entry);
-      misses++;compositions++;terrainCacheTotals.misses++;terrainCacheTotals.compositions++;
+      misses++;compositions++;
+      terrainCacheTotals.misses++;
+      terrainCacheTotals.compositions++;
     }
     entry.lastUsed=terrainFrameSerial;
     const dx=Number(entry.baseX-BigInt(String(model.center.x)));
     const dy=Number(entry.baseY-BigInt(String(model.center.y)));
     const p=projectOffset(model.tileSize,dx,dy);
-    const sprite=new PIXI.Sprite(entry.texture);
-    sprite.position.set(originX+p.x-entry.offsetX,originY+p.y-entry.offsetY);
-    terrainLayer.addChild(sprite);
+    if(!entry.sprite){
+      entry.sprite=new PIXI.Sprite(entry.texture);
+      terrainLayer.addChild(entry.sprite);
+      createdSprites++;
+    }else{
+      if(entry.sprite.parent!==terrainLayer)terrainLayer.addChild(entry.sprite);
+      reusedSprites++;
+    }
+    entry.sprite.visible=true;
+    entry.sprite.position.set(originX+p.x-entry.offsetX,originY+p.y-entry.offsetY);
   }
   const protectedKeys=new Set(active);
+  let removedSprites=0;
   if(terrainChunkCache.size>TERRAIN_CACHE_LIMIT){
-    const candidates=[...terrainChunkCache.values()].filter(e=>!protectedKeys.has(e.key)).sort((a,b)=>a.lastUsed-b.lastUsed);
-    while(terrainChunkCache.size>TERRAIN_CACHE_LIMIT&&candidates.length){const old=candidates.shift();terrainChunkCache.delete(old.key);old.texture.destroy(true);terrainCacheTotals.evictions++;}
+    const candidates=[...terrainChunkCache.values()]
+      .filter(e=>!protectedKeys.has(e.key)&&!e.sprite?.visible)
+      .sort((a,b)=>a.lastUsed-b.lastUsed);
+    while(terrainChunkCache.size>TERRAIN_CACHE_LIMIT&&candidates.length){
+      const old=candidates.shift();
+      terrainChunkCache.delete(old.key);
+      if(old.sprite){
+        old.sprite.removeFromParent();
+        old.sprite.destroy();
+        removedSprites++;
+      }
+      old.texture.destroy(true);
+      terrainCacheTotals.evictions++;
+    }
   }
-  return Object.freeze({chunkSize:TERRAIN_CHUNK_SIZE,visibleChunkCount:active.size,preparedChunkCount:terrainChunkCache.size,hits,misses,compositions,invalidations,evictions:terrainCacheTotals.evictions,cacheLimit:TERRAIN_CACHE_LIMIT,visibleWaitedForComposition:compositions>0});
+  return Object.freeze({
+    chunkSize:TERRAIN_CHUNK_SIZE,
+    visibleChunkCount:active.size,
+    preparedChunkCount:terrainChunkCache.size,
+    hits,misses,compositions,invalidations,
+    createdSprites,reusedSprites,removedSprites,
+    evictions:terrainCacheTotals.evictions,
+    cacheLimit:TERRAIN_CACHE_LIMIT,
+    visibleWaitedForComposition:compositions>0
+  });
+}
+
+function prepareTerrain(model){
+  if(!initialized||!model?.tiles?.length)return Object.freeze({prepared:false,compositions:0,hits:0,preparedChunkCount:terrainChunkCache.size});
+  terrainFrameSerial++;
+  const grouped=new Map();
+  for(const tile of model.tiles){
+    const key=terrainChunkKey(tile);
+    if(!grouped.has(key))grouped.set(key,[]);
+    grouped.get(key).push(tile);
+  }
+  let hits=0,compositions=0,invalidations=0;
+  for(const [key,tiles] of grouped){
+    const incoming=new Map(tiles.map(tile=>[String(tile.x)+","+String(tile.y),tile]));
+    let entry=terrainChunkCache.get(key);
+    let requiresComposition=!entry||entry.tileSize!==model.tileSize;
+    if(entry&&!requiresComposition){
+      for(const [tileKey,tile] of incoming){
+        if(entry.tileSignatures?.get(tileKey)!==terrainTileSignature(tile)){
+          requiresComposition=true;
+          break;
+        }
+      }
+    }
+    if(!requiresComposition){
+      hits++;
+      terrainCacheTotals.hits++;
+      entry.lastUsed=terrainFrameSerial;
+      continue;
+    }
+    const previous=entry||null;
+    const merged=new Map(previous?.tiles||[]);
+    for(const pair of incoming)merged.set(pair[0],pair[1]);
+    entry=buildTerrainChunk(model,[...merged.values()],key);
+    entry.tileSize=model.tileSize;
+    entry.tiles=merged;
+    entry.tileSignatures=new Map([...merged].map(([tileKey,tile])=>[tileKey,terrainTileSignature(tile)]));
+    if(previous?.sprite){
+      entry.sprite=previous.sprite;
+      entry.sprite.texture=entry.texture;
+    }
+    if(previous){
+      previous.texture.destroy(true);
+      invalidations++;
+      terrainCacheTotals.invalidations++;
+    }
+    terrainChunkCache.set(key,entry);
+    entry.lastUsed=terrainFrameSerial;
+    compositions++;
+    terrainCacheTotals.misses++;
+    terrainCacheTotals.compositions++;
+  }
+  if(terrainChunkCache.size>TERRAIN_CACHE_LIMIT){
+    const candidates=[...terrainChunkCache.values()]
+      .filter(e=>!e.sprite?.visible)
+      .sort((a,b)=>a.lastUsed-b.lastUsed);
+    while(terrainChunkCache.size>TERRAIN_CACHE_LIMIT&&candidates.length){
+      const old=candidates.shift();
+      terrainChunkCache.delete(old.key);
+      if(old.sprite){
+        old.sprite.removeFromParent();
+        old.sprite.destroy();
+      }
+      old.texture.destroy(true);
+      terrainCacheTotals.evictions++;
+    }
+  }
+  return Object.freeze({prepared:true,hits,compositions,invalidations,preparedChunkCount:terrainChunkCache.size});
 }
 
 function render(model){
@@ -826,7 +944,6 @@ function render(model){
   destroyLayer(upperStructureLayer);
   destroyLayer(roofLayer);
   destroyLayer(routeLayer);
-  destroyLayer(terrainLayer);
 
   const gridWidth=model.columns*model.tileSize;
   const gridHeight=model.rows*model.tileSize;
@@ -1185,6 +1302,7 @@ function snapshot(){
 window.GameRenderer=Object.freeze({
   init,
   render,
+  prepareTerrain,
   clear,
   snapshot,
   setBuildingProofState,
