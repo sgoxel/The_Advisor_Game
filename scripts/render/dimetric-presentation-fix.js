@@ -10,30 +10,28 @@ function safePresentationBuilding(building,model){
   const maxX=BigInt(String(b.maxX));
   const minY=BigInt(String(b.minY));
   const maxY=BigInt(String(b.maxY));
-  const width=maxX-minX;
-  const height=maxY-minY;
   const centerX=(minX+maxX)/2n;
   const centerY=(minY+maxY)/2n;
   const cameraX=BigInt(String(model.center.x));
   const cameraY=BigInt(String(model.center.y));
   const halfCols=BigInt(Math.floor(model.columns/2));
   const halfRows=BigInt(Math.floor(model.rows/2));
-  const margin=2n;
+  const margin=1n;
   if(centerX<cameraX-halfCols-margin||centerX>cameraX+halfCols+margin||
      centerY<cameraY-halfRows-margin||centerY>cameraY+halfRows+margin)return null;
 
-  // drawRoofs currently expects a screen-positive span between min/max. Under a
-  // dimetric transform equal X/Y growth collapses that span into a tall slab.
-  // Keep Simulation bounds untouched outside this renderer-only model copy and
-  // provide a stable roof span along the building's wider logical axis.
-  const roofMaxX=maxX;
-  const roofMaxY=width>=height?minY:maxY;
-  const roofMinX=width>=height?minX:maxX;
-  const roofMinY=minY;
+  // The legacy roof primitive assumes an axis-aligned screen rectangle. A full
+  // square Simulation footprint collapses under dimetric projection and becomes
+  // a tall slab. Until the roof primitive is replaced by a true four-corner
+  // projected polygon, constrain its presentation-only cue to the entrance span.
+  // Simulation topology/collision remains on the untouched source building.
+  const door=building.entrance?.door;
+  const anchorX=door?BigInt(String(door.x)):centerX;
+  const anchorY=door?BigInt(String(door.y)):centerY;
   return Object.freeze({...building,bounds:Object.freeze({
     ...b,
-    minX:String(roofMinX),minY:String(roofMinY),
-    maxX:String(roofMaxX),maxY:String(roofMaxY)
+    minX:String(anchorX-1n),minY:String(anchorY),
+    maxX:String(anchorX+1n),maxY:String(anchorY)
   }),simulationBounds:b});
 }
 
@@ -46,9 +44,5 @@ function render(model){
   return base.render({...model,buildingInteriors:buildings});
 }
 
-window.GameRenderer=Object.freeze({
-  ...base,
-  render,
-  __dimetricPresentationFix:true
-});
+window.GameRenderer=Object.freeze({...base,render,__dimetricPresentationFix:true});
 })();
