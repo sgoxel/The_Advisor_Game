@@ -748,6 +748,7 @@ window.GameRenderer=Object.freeze({
   clear,
   snapshot,
   setBuildingProofState,
+  projectionBasis:Object.freeze({x:DIMETRIC_X,y:DIMETRIC_Y}),
   proofStates:Object.freeze([...PROOF_STATES])
 });
 })();
