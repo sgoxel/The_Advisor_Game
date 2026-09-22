@@ -74,6 +74,7 @@ SCENARIOS = {
     "wp-s001-004",
     "wp-s003-005",
     "playcanvas-foundation",
+    "playcanvas-scene",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -99,6 +100,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s001-004": 2,
     "wp-s003-005": 3,
     "playcanvas-foundation": 3,
+    "playcanvas-scene": 6,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -274,8 +276,13 @@ return (() => {
           webgpu: Boolean(renderer.webgpu),
           webgpuAvailable: Boolean(renderer.webgpuAvailable),
           migrationFoundation: Boolean(renderer.migrationFoundation),
+          sceneBaseline: Boolean(renderer.sceneBaseline),
           simulationAuthorityPreserved: renderer.simulationAuthorityPreserved !== false,
           simulationSnapshot: renderer.simulationSnapshot || null,
+          canvas: renderer.canvas || null,
+          quality: renderer.quality || null,
+          scene: renderer.scene || null,
+          performance: renderer.performance || null,
           canvasCount: Number(renderer.canvasCount || 0),
           domTerrainTileCount: Number(renderer.domTerrainTileCount || 0),
           logicalTextureKeyPass: Boolean(renderer.logicalTextureKeyPass),
@@ -620,7 +627,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
-            if scenario == "playcanvas-foundation":
+            if scenario in {"playcanvas-foundation", "playcanvas-scene"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -632,10 +639,14 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                           renderer?.engine === 'PlayCanvas' &&
                           renderer?.gpu &&
                           Number(renderer?.canvasCount || 0) === 1 &&
-                          renderer?.simulationAuthorityPreserved !== false
+                          renderer?.simulationAuthorityPreserved !== false &&
+                          (arguments[0] !== 'playcanvas-scene' || (
+                            renderer?.sceneBaseline === true &&
+                            renderer?.scene?.projection === 'orthographic'
+                          ))
                         );
                         """
-                    )
+                    , scenario)
                 )
             else:
                 WebDriverWait(driver, timeout).until(
@@ -1043,6 +1054,22 @@ def _set_building_occlusion_proof_state(driver, state: str) -> str:
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "playcanvas-scene":
+        if frame_index == 1:
+            driver.set_window_size(1280, 800)
+            return "playcanvas-scene:tablet-landscape"
+        if frame_index == 2:
+            driver.set_window_size(844, 390)
+            return "playcanvas-scene:phone-landscape"
+        if frame_index == 3:
+            driver.set_window_size(390, 844)
+            return "playcanvas-scene:phone-portrait"
+        if frame_index == 4:
+            driver.set_window_size(1920, 1080)
+            return _drag_canvas_and_wait(driver, 120, 0)
+        if frame_index == 5:
+            return _wheel_canvas(driver, -500)
+        return "playcanvas-scene:desktop-landscape"
     if scenario == "playcanvas-foundation":
         if frame_index == 1:
             driver.set_window_size(1080, 1920)
@@ -1171,6 +1198,94 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "playcanvas-scene":
+        if len(frames) < 6:
+            raise RuntimeError("playcanvas-scene requires six evidence frames")
+        runtimes = [frame.get("runtime", {}) for frame in frames[:6]]
+        builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
+        gpus = [(item.get("gpuRenderer") or {}) for item in builds]
+
+        seeds = [item.get("campaignSeed") for item in builds]
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        if len(set(seeds)) != 1 or not seeds[0]:
+            raise RuntimeError(f"PlayCanvas scene changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists)) != 1 or not protagonists[0]:
+            raise RuntimeError(f"PlayCanvas scene changed Protagonist coordinates: {protagonists}")
+
+        required_roots = [
+            "TerrainRoot",
+            "StructuresRoot",
+            "PropsRoot",
+            "CharacterBillboardsRoot",
+            "LightingRoot",
+        ]
+        for index, gpu in enumerate(gpus, start=1):
+            scene = gpu.get("scene") or {}
+            quality = gpu.get("quality") or {}
+            canvas = gpu.get("canvas") or {}
+            perf = gpu.get("performance") or {}
+            if gpu.get("engine") != "PlayCanvas" or not str(gpu.get("engineVersion") or "").startswith("2."):
+                raise RuntimeError(f"PlayCanvas Engine 2 missing in frame {index}: {gpu}")
+            if gpu.get("backend") not in {"webgl2", "webgpu"} or not gpu.get("gpu"):
+                raise RuntimeError(f"PlayCanvas GPU backend failed in frame {index}: {gpu}")
+            if int(gpu.get("canvasCount") or 0) != 1:
+                raise RuntimeError(f"PlayCanvas expected one gameplay canvas in frame {index}: {gpu}")
+            if not gpu.get("sceneBaseline") or scene.get("projection") != "orthographic":
+                raise RuntimeError(f"Orthographic scene baseline missing in frame {index}: {scene}")
+            if scene.get("roots") != required_roots:
+                raise RuntimeError(f"PlayCanvas scene hierarchy mismatch in frame {index}: {scene}")
+            if int(scene.get("entityCount") or 0) < 20:
+                raise RuntimeError(f"PlayCanvas scene hierarchy is unexpectedly empty in frame {index}: {scene}")
+            if int(scene.get("terrainEntityCount") or 0) < 5 or int(scene.get("structureEntityCount") or 0) < 12:
+                raise RuntimeError(f"PlayCanvas baseline geometry is incomplete in frame {index}: {scene}")
+            if float(scene.get("orthoHeight") or 0) <= 0:
+                raise RuntimeError(f"PlayCanvas orthographic height missing in frame {index}: {scene}")
+            if float(quality.get("renderScale") or 0) <= 0 or float(quality.get("renderScale") or 0) > 1:
+                raise RuntimeError(f"PlayCanvas render scale invalid in frame {index}: {quality}")
+            if float(quality.get("maxPixelRatio") or 0) <= 0 or float(quality.get("maxPixelRatio") or 0) > 2:
+                raise RuntimeError(f"PlayCanvas max pixel ratio invalid in frame {index}: {quality}")
+            if int(canvas.get("cssWidth") or 0) <= 0 or int(canvas.get("cssHeight") or 0) <= 0:
+                raise RuntimeError(f"PlayCanvas CSS canvas size missing in frame {index}: {canvas}")
+            if int(canvas.get("backingWidth") or 0) <= 0 or int(canvas.get("backingHeight") or 0) <= 0:
+                raise RuntimeError(f"PlayCanvas backing canvas size missing in frame {index}: {canvas}")
+            if float(perf.get("frameMs") or 0) < 0 or int(perf.get("drawCalls") or 0) < 1:
+                raise RuntimeError(f"PlayCanvas frame/draw telemetry invalid in frame {index}: {perf}")
+            if not gpu.get("simulationAuthorityPreserved"):
+                raise RuntimeError(f"PlayCanvas scene changed Simulation authority in frame {index}: {gpu}")
+
+        viewports = [runtime.get("viewport") or {} for runtime in runtimes]
+        desktop, tablet, phone_landscape, phone_portrait = viewports[:4]
+        if int(desktop.get("width") or 0) <= int(desktop.get("height") or 0):
+            raise RuntimeError(f"Desktop landscape evidence invalid: {desktop}")
+        if int(tablet.get("width") or 0) <= int(tablet.get("height") or 0):
+            raise RuntimeError(f"Tablet landscape evidence invalid: {tablet}")
+        if int(phone_landscape.get("width") or 0) <= int(phone_landscape.get("height") or 0):
+            raise RuntimeError(f"Phone landscape evidence invalid: {phone_landscape}")
+        if int(phone_portrait.get("height") or 0) <= int(phone_portrait.get("width") or 0):
+            raise RuntimeError(f"Phone portrait evidence invalid: {phone_portrait}")
+
+        phone_quality = gpus[2].get("quality") or {}
+        portrait_quality = gpus[3].get("quality") or {}
+        for q in (phone_quality, portrait_quality):
+            if q.get("deviceClass") != "phone":
+                raise RuntimeError(f"Phone viewport did not receive phone quality policy: {q}")
+            if float(q.get("maxPixelRatio") or 9) > 1.0 or float(q.get("renderScale") or 9) > 0.85:
+                raise RuntimeError(f"Phone quality policy is not conservative: {q}")
+
+        cameras = [item.get("cameraCoordinate") for item in builds]
+        zooms = [item.get("cameraZoom") for item in builds]
+        if cameras[4] == cameras[3] or cameras[4] == cameras[0]:
+            raise RuntimeError(f"PlayCanvas pan evidence did not change authoritative camera coordinate: {cameras}")
+        if len(set(protagonists)) != 1:
+            raise RuntimeError(f"PlayCanvas pan changed protagonist coordinate: {protagonists}")
+        if zooms[5] == zooms[4]:
+            raise RuntimeError(f"PlayCanvas zoom evidence did not change zoom: {zooms}")
+        if float((gpus[5].get("scene") or {}).get("orthoHeight") or 0) >= float((gpus[4].get("scene") or {}).get("orthoHeight") or 0):
+            raise RuntimeError(
+                f"PlayCanvas zoom-in did not reduce orthographic height: before={gpus[4].get('scene')} after={gpus[5].get('scene')}"
+            )
+        return
+
     if scenario == "playcanvas-foundation":
         if len(frames) < 3:
             raise RuntimeError("playcanvas-foundation requires three evidence frames")
@@ -2021,7 +2136,7 @@ def take_screenshots(
 
     try:
         browser_url = normalize_target(target)
-        if scenario == "playcanvas-foundation":
+        if scenario in {"playcanvas-foundation", "playcanvas-scene"}:
             browser_url += ("&" if "?" in browser_url else "?") + "renderer=playcanvas&gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
@@ -2047,7 +2162,7 @@ def take_screenshots(
 
             prep_action = prepare_current_build(driver, min(ready_timeout, 10.0), scenario) if auto_start else "auto-start-disabled"
 
-            if force_max_zoom and scenario != "playcanvas-foundation":
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -2063,7 +2178,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario != "playcanvas-foundation":
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
