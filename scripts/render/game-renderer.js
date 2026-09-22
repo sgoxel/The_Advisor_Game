@@ -14,6 +14,11 @@ let routeLayer=null;
 let initialized=false;
 let lastModel=null;
 let buildingProofState=null;
+const TERRAIN_CHUNK_SIZE=16;
+const TERRAIN_CACHE_LIMIT=36;
+const terrainChunkCache=new Map();
+let terrainFrameSerial=0;
+let terrainCacheTotals={hits:0,misses:0,compositions:0,invalidations:0,evictions:0};
 const PROOF_STATES=new Set(["outside","entering","inside","behind","leaving"]);
 const LAYER_ORDER=Object.freeze([
   "ground-floor",
@@ -60,6 +65,8 @@ function destroyLayer(container){
 
 function destroyPresentationLayers(){
   destroyLayer(terrainLayer);
+  for(const entry of terrainChunkCache.values())entry.texture?.destroy?.(true);
+  terrainChunkCache.clear();
   destroyLayer(lowerStructureLayer);
   destroyLayer(shadowLayer);
   destroyLayer(entityLayer);
@@ -399,13 +406,101 @@ function addBlend(cell,blend,tileSize){
   cell.addChild(blendContainer,maskSprite);
 }
 
+function floorDivBigInt(value,divisor){
+  let q=value/divisor;
+  const r=value%divisor;
+  if(r<0n)q-=1n;
+  return q;
+}
+
+function terrainChunkKey(tile){
+  const x=BigInt(String(tile.x)),y=BigInt(String(tile.y));
+  return floorDivBigInt(x,BigInt(TERRAIN_CHUNK_SIZE))+","+floorDivBigInt(y,BigInt(TERRAIN_CHUNK_SIZE));
+}
+
+function terrainTileSignature(tile){
+  return [tile.x,tile.y,tile.type,tile.color,tile.textureKey||"",tile.overlayTextureKey||"",...(tile.blends||[]).map(b=>[b.terrain,b.maskKey,b.shape,b.variant].join("/"))].join("|");
+}
+
+function buildTerrainChunk(model,tiles,key){
+  const [chunkXText,chunkYText]=key.split(",");
+  const chunkX=BigInt(chunkXText),chunkY=BigInt(chunkYText);
+  const baseX=chunkX*BigInt(TERRAIN_CHUNK_SIZE),baseY=chunkY*BigInt(TERRAIN_CHUNK_SIZE);
+  const pad=model.tileSize*2;
+  const width=Math.ceil(TERRAIN_CHUNK_SIZE*2*model.tileSize*DIMETRIC_X+pad*2);
+  const height=Math.ceil(TERRAIN_CHUNK_SIZE*2*model.tileSize*DIMETRIC_Y+pad*2);
+  const offsetX=pad+TERRAIN_CHUNK_SIZE*model.tileSize*DIMETRIC_X;
+  const offsetY=pad;
+  const source=new PIXI.Container();
+  for(const tile of tiles){
+    const lx=Number(BigInt(String(tile.x))-baseX);
+    const ly=Number(BigInt(String(tile.y))-baseY);
+    const p=projectOffset(model.tileSize,lx,ly);
+    const cell=new PIXI.Container();
+    applyGroundProjection(cell,offsetX+p.x,offsetY+p.y);
+    cell.addChild(makeColorSprite(tile.color,model.tileSize,model.tileSize));
+    if(tile.textureKey){const texture=TextureAssets.get(tile.textureKey);if(texture)cell.addChild(makeSprite(texture,model.tileSize,model.tileSize));}
+    if(tile.overlayTextureKey){const overlay=TextureAssets.get(tile.overlayTextureKey);if(overlay)cell.addChild(makeSprite(overlay,model.tileSize,model.tileSize));}
+    for(const blend of tile.blends||[])addBlend(cell,blend,model.tileSize);
+    source.addChild(cell);
+  }
+  const texture=PIXI.RenderTexture.create({width,height,resolution:1});
+  app.renderer.render({container:source,target:texture,clear:true});
+  source.destroy({children:true});
+  return {key,baseX,baseY,texture,width,height,offsetX,offsetY,lastUsed:terrainFrameSerial};
+}
+
+function renderTerrainChunks(model,originX,originY){
+  terrainFrameSerial++;
+  const grouped=new Map();
+  for(const tile of model.tiles){
+    const key=terrainChunkKey(tile);
+    if(!grouped.has(key))grouped.set(key,[]);
+    grouped.get(key).push(tile);
+  }
+  const active=new Set();
+  let hits=0,misses=0,compositions=0,invalidations=0;
+  for(const [key,tiles] of grouped){
+    active.add(key);
+    const signature=model.tileSize+":"+tiles.map(terrainTileSignature).sort().join(";");
+    let entry=terrainChunkCache.get(key);
+    if(entry&&entry.signature===signature){hits++;terrainCacheTotals.hits++;}
+    else{
+      if(entry){entry.texture.destroy(true);invalidations++;terrainCacheTotals.invalidations++;}
+      entry=buildTerrainChunk(model,tiles,key);
+      entry.signature=signature;
+      terrainChunkCache.set(key,entry);
+      misses++;compositions++;terrainCacheTotals.misses++;terrainCacheTotals.compositions++;
+    }
+    entry.lastUsed=terrainFrameSerial;
+    const dx=Number(entry.baseX-BigInt(String(model.center.x)));
+    const dy=Number(entry.baseY-BigInt(String(model.center.y)));
+    const p=projectOffset(model.tileSize,dx,dy);
+    const sprite=new PIXI.Sprite(entry.texture);
+    sprite.position.set(originX+p.x-entry.offsetX,originY+p.y-entry.offsetY);
+    terrainLayer.addChild(sprite);
+  }
+  const protectedKeys=new Set(active);
+  if(terrainChunkCache.size>TERRAIN_CACHE_LIMIT){
+    const candidates=[...terrainChunkCache.values()].filter(e=>!protectedKeys.has(e.key)).sort((a,b)=>a.lastUsed-b.lastUsed);
+    while(terrainChunkCache.size>TERRAIN_CACHE_LIMIT&&candidates.length){const old=candidates.shift();terrainChunkCache.delete(old.key);old.texture.destroy(true);terrainCacheTotals.evictions++;}
+  }
+  return Object.freeze({chunkSize:TERRAIN_CHUNK_SIZE,visibleChunkCount:active.size,preparedChunkCount:terrainChunkCache.size,hits,misses,compositions,invalidations,evictions:terrainCacheTotals.evictions,cacheLimit:TERRAIN_CACHE_LIMIT,visibleWaitedForComposition:compositions>0});
+}
+
 function render(model){
   if(!initialized)throw new Error("GameRenderer is not initialized");
   lastModel=model;
   app.renderer.resize(model.width,model.height);
   app.canvas.style.width=model.width+"px";
   app.canvas.style.height=model.height+"px";
-  destroyPresentationLayers();
+  destroyLayer(lowerStructureLayer);
+  destroyLayer(shadowLayer);
+  destroyLayer(entityLayer);
+  destroyLayer(upperStructureLayer);
+  destroyLayer(roofLayer);
+  destroyLayer(routeLayer);
+  destroyLayer(terrainLayer);
 
   const gridWidth=model.columns*model.tileSize;
   const gridHeight=model.rows*model.tileSize;
@@ -441,68 +536,37 @@ function render(model){
 
   for(const tile of model.tiles){
     terrainTypes[tile.type]=(terrainTypes[tile.type]||0)+1;
-    const colOffset=tile.col-Math.floor(model.columns/2);
-    const rowOffset=tile.row-Math.floor(model.rows/2);
-    const projected=projectOffset(model.tileSize,colOffset,rowOffset);
-    const x=originX+projected.x;
-    const y=originY+projected.y;
-    const cell=new PIXI.Container();
-    applyGroundProjection(cell,x,y);
-    cell.addChild(makeColorSprite(tile.color,model.tileSize,model.tileSize));
-
     if(tile.textureKey){
-      const texture=TextureAssets.get(tile.textureKey);
-      if(texture)cell.addChild(makeSprite(texture,model.tileSize,model.tileSize));
-      else logicalTextureKeyPass=false;
+      const texture=TextureAssets.get(tile.textureKey); if(!texture)logicalTextureKeyPass=false;
       const url=TextureAssets.source(tile.textureKey)||"";
-      if(/\.svg(?:$|[?#])/i.test(url))svgTileCount++;
-      if(/\.png(?:$|[?#])/i.test(url))pngTileCount++;
+      if(/\\.svg(?:$|[?#])/i.test(url))svgTileCount++;
+      if(/\\.png(?:$|[?#])/i.test(url))pngTileCount++;
     }
-
-    if(tile.overlayTextureKey){
-      const overlay=TextureAssets.get(tile.overlayTextureKey);
-      if(overlay)cell.addChild(makeSprite(overlay,model.tileSize,model.tileSize));
-      else logicalTextureKeyPass=false;
-    }
-
+    if(tile.overlayTextureKey&&!TextureAssets.get(tile.overlayTextureKey))logicalTextureKeyPass=false;
     for(const blend of tile.blends||[]){
-      addBlend(cell,blend,model.tileSize);
-      blendLayerCount++;
-      if(blend.shape==="diagonal")diagonalBlendLayerCount++;
-      if(blend.shape)blendShapes.add(blend.shape);
-      if(blend.variant)blendVariants.add(blend.variant);
+      blendLayerCount++; if(blend.shape==="diagonal")diagonalBlendLayerCount++;
+      if(blend.shape)blendShapes.add(blend.shape); if(blend.variant)blendVariants.add(blend.variant);
     }
-
-    terrainLayer.addChild(cell);
-
     if(tile.specialKind)visibleKinds.add(tile.specialKind);
     if(tile.buildingId)visibleIds.add(tile.buildingId);
     if(tile.movement){
       walkCategories.add(tile.movement.category);
-      if(tile.movement.walkable)visibleWalkableCount++;
-      else visibleBlockedCount++;
+      if(tile.movement.walkable)visibleWalkableCount++; else visibleBlockedCount++;
       if(tile.movement.barrierKind==="outer-wall")visibleOuterWalls++;
       if(tile.movement.barrierKind==="interior-wall")visibleInteriorWalls++;
       if(tile.movement.doorwayKind==="exterior-door")visibleExteriorDoors++;
       if(tile.movement.doorwayKind==="interior-door")visibleInteriorDoors++;
     }
-
     if(tile.routeStep!==null&&tile.routeStep!==undefined){
-      const marker=new PIXI.Graphics();
-      const isDestination=tile.routeStep===model.routeLastIndex;
-      if(isDestination){
-        const size=model.tileSize*0.46;
-        marker.rect(x+(model.tileSize-size)/2,y+(model.tileSize-size)/2,size,size)
-          .fill({color:0xfff4b5,alpha:0.96});
-        visibleDestinationTileCount++;
-      }else{
-        marker.circle(x+model.tileSize/2,y+model.tileSize/2,model.tileSize*0.15)
-          .fill({color:0xffde70,alpha:0.92});
-      }
-      routeLayer.addChild(marker);
-      visibleRouteTileCount++;
+      const colOffset=tile.col-Math.floor(model.columns/2),rowOffset=tile.row-Math.floor(model.rows/2);
+      const projected=projectOffset(model.tileSize,colOffset,rowOffset),x=originX+projected.x,y=originY+projected.y;
+      const marker=new PIXI.Graphics(); const isDestination=tile.routeStep===model.routeLastIndex;
+      if(isDestination){const size=model.tileSize*0.46;marker.rect(x+(model.tileSize-size)/2,y+(model.tileSize-size)/2,size,size).fill({color:0xfff4b5,alpha:0.96});visibleDestinationTileCount++;}
+      else marker.circle(x+model.tileSize/2,y+model.tileSize/2,model.tileSize*0.15).fill({color:0xffde70,alpha:0.92});
+      routeLayer.addChild(marker);visibleRouteTileCount++;
     }
   }
+  const terrainChunks=renderTerrainChunks(model,originX,originY);
 
   const objectMetrics=drawInteriorObjects(model,originX,originY);
   const visibleBuildings=(model.buildingInteriors||[])
@@ -653,6 +717,7 @@ function render(model){
     }),
     protagonistVisible,
     textureCache:TextureAssets.stats(),
+    terrainChunks:Object.freeze({...terrainChunks,totals:Object.freeze({...terrainCacheTotals})}),
     standardTerrainTexturePx:100
   });
   return lastSnapshot;
