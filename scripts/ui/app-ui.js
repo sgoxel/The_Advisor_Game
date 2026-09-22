@@ -563,6 +563,60 @@ function terrainViewDescriptor(seed,center,zoom=Camera.getZoom()){
   return {width,height,columns,rows,halfCols,halfRows,tileSize,regionKey,requiredKeys};
 }
 
+function buildTerrainSurfaceTiles(seed,center,columns,rows,halfCols=Math.floor(columns/2),halfRows=Math.floor(rows/2)){
+  const tiles=[];
+  const typeCache=new Map();
+  for(let row=0;row<rows;row++){
+    for(let col=0;col<columns;col++){
+      const dx=col-halfCols;
+      const dy=row-halfRows;
+      const pos=WorldCoordinates.add(center,String(dx),String(dy));
+      const tile=TerrainFoundation.getTile(seed,pos.x,pos.y);
+      const item={
+        row,col,
+        x:pos.x,
+        y:pos.y,
+        type:tile.type,
+        color:tile.color,
+        textureKey:tile.textureKey,
+        overlayTextureKey:tile.overlayTextureKey,
+        buildingId:tile.buildingId,
+        room:tile.room,
+        specialKind:tile.specialKind,
+        blends:[]
+      };
+      tiles.push(item);
+      typeCache.set(pos.x+","+pos.y,tile.type);
+    }
+  }
+  const neighborType=(item,dx,dy)=>{
+    const pos=WorldCoordinates.add({x:item.x,y:item.y},String(dx),String(dy));
+    const key=pos.x+","+pos.y;
+    if(typeCache.has(key))return typeCache.get(key);
+    const type=TerrainFoundation.getTile(seed,pos.x,pos.y).type;
+    typeCache.set(key,type);
+    return type;
+  };
+  for(const item of tiles){
+    const neighbors={
+      n:neighborType(item,0,-1),
+      e:neighborType(item,1,0),
+      s:neighborType(item,0,1),
+      w:neighborType(item,-1,0),
+      ne:neighborType(item,1,-1),
+      se:neighborType(item,1,1),
+      sw:neighborType(item,-1,1),
+      nw:neighborType(item,-1,-1)
+    };
+    item.blends=TileTextures.blendSpecs(item.type,neighbors,{
+      seed,
+      x:item.x,
+      y:item.y
+    });
+  }
+  return tiles;
+}
+
 function normalizeDirection(dx,dy){
   return {
     dx:Math.sign(Number(dx)||0),
@@ -619,6 +673,14 @@ function scheduleTerrainAssetPrefetch(seed,center,columns,rows,tileSize,directio
       const regionKey=terrainRegionKey(target,columns,rows,tileSize);
       const requiredKeys=collectTerrainPreparationKeys(seed,target,columns,rows,halfCols,halfRows);
       await TextureAssets.prefetchRegion(regionKey,requiredKeys,{direction:directionLabel});
+      if(serial!==terrainPrefetchSerial)return;
+      const surfaceTiles=buildTerrainSurfaceTiles(seed,target,columns,rows,halfCols,halfRows);
+      GameRenderer.prepareTerrain?.({
+        tileSize,
+        center:target,
+        regionKey,
+        tiles:surfaceTiles
+      });
     }
   })().catch(error=>console.warn("Terrain asset prefetch failed.",error));
 }
@@ -662,61 +724,13 @@ async function renderTerrain(){
   const {tileSize,width,height,columns,rows,halfCols,halfRows,regionKey,requiredKeys}=view;
   const viewportKey=width+"x"+height;
   const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
-  const routeProof=(renderTerrain._routeProofSeed===campaign.seed&&renderTerrain._routeProof)||RoutePlanner.proof(campaign.seed);
-  renderTerrain._routeProofSeed=campaign.seed;
-  renderTerrain._routeProof=routeProof;
-  const routeIndex=new Map(
-    routeProof.route?.path?.map((point,index)=>[point.x+","+point.y,index])||[]
-  );
-  const routeLastIndex=routeProof.route?.path?.length?routeProof.route.path.length-1:-1;
 
-  const tiles=[];
-  let deterministic=true;
-  for(let row=0;row<rows;row++){
-    for(let col=0;col<columns;col++){
-      const dx=col-halfCols;
-      const dy=row-halfRows;
-      const pos=WorldCoordinates.add(center,String(dx),String(dy));
-      const tile=TerrainFoundation.getTile(campaign.seed,pos.x,pos.y);
-      const movement=Walkability.classify(campaign.seed,pos.x,pos.y);
-      const routeStep=routeIndex.get(pos.x+","+pos.y);
-      tiles.push({
-        row,col,
-        x:pos.x,
-        y:pos.y,
-        type:tile.type,
-        color:tile.color,
-        textureKey:tile.textureKey,
-        overlayTextureKey:tile.overlayTextureKey,
-        buildingId:tile.buildingId,
-        room:tile.room,
-        specialKind:tile.specialKind,
-        movement,
-        routeStep:routeStep===undefined?null:routeStep,
-        blends:[]
-      });
-    }
-  }
-
-  const tileAt=(row,col)=>(row<0||row>=rows||col<0||col>=columns)?null:tiles[row*columns+col];
-  for(const item of tiles){
-    const row=item.row,col=item.col;
-    const neighbors={
-      n:tileAt(row-1,col)?.type||null,
-      e:tileAt(row,col+1)?.type||null,
-      s:tileAt(row+1,col)?.type||null,
-      w:tileAt(row,col-1)?.type||null,
-      ne:tileAt(row-1,col+1)?.type||null,
-      se:tileAt(row+1,col+1)?.type||null,
-      sw:tileAt(row+1,col-1)?.type||null,
-      nw:tileAt(row-1,col-1)?.type||null
-    };
-    item.blends=TileTextures.blendSpecs(item.type,neighbors,{
-      seed:campaign.seed,
-      x:item.x,
-      y:item.y
-    });
-  }
+  const surfaceTiles=buildTerrainSurfaceTiles(campaign.seed,center,columns,rows,halfCols,halfRows);
+  const tiles=surfaceTiles.map(item=>({
+    ...item,
+    movement:Walkability.classify(campaign.seed,item.x,item.y),
+    routeStep:null
+  }));
 
   const currentSerial=++terrainRenderSerial;
   const rendererWasReady=Boolean(GameRenderer.snapshot().ready);
@@ -736,7 +750,7 @@ async function renderTerrain(){
     seed:campaign.seed,
     regionKey,
     tiles,
-    routeLastIndex,
+    routeLastIndex:-1,
     protagonistWorld:protagonist||null,
     protagonistOffset:protagonist?Camera.offsetFrom(protagonist):null,
     buildingInteriors,
@@ -766,7 +780,7 @@ async function renderTerrain(){
   e.tileCount.textContent=String(rendererSnapshot.tileCount);
   e.tileCenterCoordinate.textContent="("+center.x+","+center.y+")";
 
-  setCheck(e.vTerrainDeterministic,deterministic,"FAIL");
+  setCheck(e.vTerrainDeterministic,true,"FAIL");
   setCheck(e.vTileCoverage,coverage,"FAIL");
   setCheck(e.vTileResponsive,responsive,"FAIL");
   setCheck(e.vTileOddGrid,oddGrid&&rendererSnapshot.tileCount===columns*rows,"FAIL");
