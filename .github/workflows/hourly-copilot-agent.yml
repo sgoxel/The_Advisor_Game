@@ -54,7 +54,8 @@ jobs:
             - Fix implementation or test failures discovered during the same run.
             - Keep the repository clean and remove temporary test artifacts that are no longer needed.
             - Update docs/changelog.txt with a timestamp and a brief description of the implemented change when appropriate.
-            - Record optional follow-up suggestions in docs/suggest_log.txt when appropriate.\n            - Commit successfully tested changes. Work on only one Work Package per run.
+            - Record optional follow-up suggestions in docs/suggest_log.txt when appropriate.
+            - Commit successfully tested changes. Work on only one Work Package per run.
 
             ISSUE MANAGEMENT IS FORBIDDEN:
             - NEVER close an Issue.
@@ -69,10 +70,18 @@ jobs:
             Even when implementation and tests are fully successful, leave the Issue open. Another authorized agent or administrator will review results and manage Issue state.
 
             WORK SELECTION:
-            Read the open Work Packages and choose the lowest WP code that contains coding or testing work and is not currently marked CLAIMED by another active agent. Do not claim it yourself. Do not work on an Issue that requires project-management-only actions. If no suitable coding or testing Work Package is available, make no repository changes and stop the run successfully.
+            - Select EXACTLY ONE Work Package for the entire run.
+            - Examine open WPs in ascending WP-code order and select the first unclaimed WP that still requires a real implementation/code change on current main.
+            - A WP requires work only when its acceptance criteria are not yet satisfied by current main, or a focused test exposes an implementation defect that needs a code/test/tool fix.
+            - Do not select a WP merely because it is open, reopened, awaiting review, awaiting deployment verification, or needs only completion auditing.
+            - Once a WP is selected, it is locked for this run. NEVER move to, inspect for execution, test as the next task, or implement a second WP during the same run.
+            - If the selected WP is already implemented and focused verification passes without requiring a code change, clean temporary artifacts and STOP THE RUN SUCCESSFULLY.
+            - In that case, DO NOT move to another WP, DO NOT add a changelog/suggestion entry just to record re-verification, and DO NOT create an empty/no-op commit.
+            - If no open unclaimed WP clearly requires implementation/code changes, make no repository changes and stop successfully.
+            - Do not claim Issues yourself.
 
             DEVELOPMENT:
-            Keep changes focused on the selected Work Package. Always consider game performance, stability, and logical integrity. Do not block or delay work because another Issue exists; use the selected Issue only as implementation context. Do not perform unrelated refactors.
+            Keep changes focused exclusively on the single selected Work Package. Always consider game performance, stability, and logical integrity. Do not block or delay work because another Issue exists. Do not perform unrelated refactors or completion-audit work.
 
             TEXTURES:
             If implementation requires a new draft texture, create it as a clean vector graphic (.svg) and apply it first unless the Issue explicitly requires another production format.
@@ -81,7 +90,7 @@ jobs:
             Test the implementation before committing. Use the smallest reliable test set that proves the changed behavior. If visual verification is relevant and available, use tools/screenshot_tool.py. Correct failures discovered during the run before committing. Do not report or record an Issue as completed.
 
             COMMIT:
-            Commit only successfully tested repository changes. Do not close, reopen, or otherwise modify any GitHub Issue after the commit. The workflow's persistence step will publish committed changes to main.
+            Commit only when the selected WP produced an actual necessary repository change such as implementation code, a test/tool fix, or a directly required supporting file change. Never commit a verification-only changelog entry when no implementation change was needed. Do not close, reopen, or otherwise modify any GitHub Issue after the commit. The workflow's persistence step will publish committed changes to main.
 
             Repository: https://github.com/sgoxel/The_Advisor_Game
             Test deployment: https://sgoxel.github.io/The_Advisor_Game/
