@@ -1441,8 +1441,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-007B wall plan failed: {house}")
         if not house.get("entrancesPass"):
             raise RuntimeError(f"WP-007B entrance access failed: {house}")
-        if int(house.get("svgTileCount") or 0) <= 0 or int(house.get("pngTileCount") or 0) != 0:
-            raise RuntimeError(f"WP-007B vector tile rendering failed: {house}")
+        texture_cache = (current.get("gpuRenderer") or {}).get("textureCache") or {}
+        if int(texture_cache.get("pngPreferredCount") or 0) < 1:
+            raise RuntimeError(f"PNG-first texture resolution was not observed: {texture_cache}")
+        if int(texture_cache.get("fallbackSvgCount") or 0) < 1:
+            raise RuntimeError(f"SVG fallback texture resolution was not observed: {texture_cache}")
+        if int(texture_cache.get("loadedKeyCount") or 0) >= int(texture_cache.get("logicalKeyCount") or 0):
+            raise RuntimeError(f"Starting Village unexpectedly preloaded the full texture catalog: {texture_cache}")
         if int(house.get("blendLayerCount") or 0) <= 0:
             raise RuntimeError(f"WP-007C rounded terrain blending did not render: {house}")
         if house.get("shapeProof") != ["corner", "diagonal", "edge", "island", "peninsula"]:
