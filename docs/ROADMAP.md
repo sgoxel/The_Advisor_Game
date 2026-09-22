@@ -33,18 +33,18 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 # Stage 3 — GPU 2.5D World + Enterable Building Foundation
 
-- `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation — COMPLETED
-- `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
-- `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
-- `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
-- `WP-S003-005` — Coordinate-Aware Asset Preparation + PNG/SVG Texture Cache — COMPLETED
-- `WP-S003-006` — Viewport Culling, Chunk Reuse + Performance Baseline — COMPLETED
+- `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation
+- `WP-S003-002` — Authoritative Enterable Building Interiors
+- `WP-S003-003` — Interior Objects + Interaction Points
+- `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility
+- `WP-S003-005` — Coordinate-Aware Asset Preparation + PNG/SVG Texture Cache
+- `WP-S003-006` — Viewport Culling, Chunk Reuse + Performance Baseline
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
-- `WP-S004-001` — Deterministic Starting Village Resident Roster — COMPLETED
-- `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment — COMPLETED
-- `WP-S004-003` — Deterministic Daily Activity + Action Targets — COMPLETED
+- `WP-S004-001` — Deterministic Starting Village Resident Roster
+- `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment
+- `WP-S004-003` — Deterministic Daily Activity + Action Targets
 - `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement
 - `WP-S004-005` — Interior Action Execution + Character State Presentation
 
