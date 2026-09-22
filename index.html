@@ -476,20 +476,24 @@
     <summary>WP-S003-001 GPU 2.5D Renderer Verification</summary>
     <div class="accordion-content technical-info">
       <div class="detail-grid">
+        <div><span>Renderer Engine</span><strong id="rendererEngine">—</strong></div>
+        <div><span>Engine Version</span><strong id="rendererEngineVersion">—</strong></div>
         <div><span>Renderer Backend</span><strong id="rendererBackend">—</strong></div>
+        <div><span>Requested Backend</span><strong id="rendererRequestedBackend">—</strong></div>
+        <div><span>WebGPU Available</span><strong id="rendererWebgpuAvailable">—</strong></div>
         <div><span>Gameplay Canvases</span><strong id="rendererCanvasCount">—</strong></div>
         <div><span>Cached Textures</span><strong id="rendererTextureCount">—</strong></div>
         <div><span>Current Sources</span><strong id="rendererSourceMode">—</strong></div>
         <div><span>Prepared Region</span><strong id="rendererPreparedRegion">—</strong></div>
         <div><span>Visible Region</span><strong id="rendererVisibleRegion">—</strong></div>
       </div>
-      <div class="check"><span>Gameplay renderer is PixiJS WebGL</span><b id="vRendererWebGL">WAITING</b></div>
+      <div class="check"><span>Gameplay renderer has an active GPU device</span><b id="vRendererWebGL">WAITING</b></div>
       <div class="check"><span>Gameplay Area owns one GPU canvas</span><b id="vRendererCanvas">WAITING</b></div>
       <div class="check"><span>No per-tile DOM terrain elements are rendered</span><b id="vRendererNoDomTiles">WAITING</b></div>
       <div class="check"><span>Renderer consumes logical cached texture keys instead of source URLs</span><b id="vRendererLogicalTextures">WAITING</b></div>
       <div class="check"><span>Current SVG draft assets are loaded once as reusable texture sources</span><b id="vRendererSvgCache">WAITING</b></div>
       <div class="check"><span>Terrain, walkability and routing remain authoritative Simulation systems</span><b id="vRendererSimulation">WAITING</b></div>
-      <p><strong>Production terrain standard:</strong> 100×100 px per logical tile texture. SVG is draft source art; final PNG replacement does not change rendering or Simulation code.</p>
+      <p><strong>Migration foundation:</strong> the normal public URL retains the legacy PixiJS renderer during migration. Add <code>?renderer=playcanvas&amp;gpu=webgl2</code>, <code>gpu=webgpu</code>, or <code>gpu=auto</code> to exercise the PlayCanvas Engine 2 path in the same gameplay canvas slot. Simulation remains authoritative.</p>
     </div>
   </details>
 
@@ -497,7 +501,7 @@
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
       <p><strong>Current Work Package:</strong> WP-S003-008 Responsive Gameplay Control Deck + Multimodal Navigation.</p>
-      <p><strong>Current world rendering:</strong> PixiJS/WebGL layered 2.5D presentation consuming one continuous outdoor + indoor authoritative Simulation space.</p>
+      <p><strong>Current world rendering:</strong> PlayCanvas migration foundation with legacy PixiJS retained as the default fallback until verified cutover. Both consume the same renderer-neutral authoritative Simulation data.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
@@ -516,6 +520,9 @@
 <script src="scripts/data/tile-textures.js"></script>
 <script src="scripts/render/texture-assets.js"></script>
 <script src="scripts/render/game-renderer.js"></script>
+<script src="scripts/render/renderer-contract.js"></script>
+<script src="scripts/render/playcanvas/app.js"></script>
+<script src="scripts/render/renderer-bootstrap.js"></script>
 <script src="scripts/world/geography.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
