@@ -23,7 +23,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 # Stage 2 — Starting Village Physical Foundation
 
 - `WP-S002-001-001` — Starting Village Core + Mainland Connection — COMPLETED
-- `WP-S002-001-002` — Tile-Based House Plans + Wall Foundation — COMPLETED
+- `WP-S002-001-002` — Tile-Based House Plans + Wall Foundation
 - `WP-S002-001-003` — Rounded Terrain Border Blending — COMPLETED
 - `WP-S002-001-004` — Deterministic Terrain Blend Variation — COMPLETED
 - `WP-S002-001-005` — Diagonal + Multi-Terrain Junction Smoothing — COMPLETED
