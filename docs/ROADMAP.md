@@ -34,7 +34,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 # Stage 3 — PlayCanvas 3D World + 2D Character Billboard Foundation
 
 - `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
-- `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation
+- `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
 - `WP-S003-001-002` — Orthographic 3D Scene + Mobile WebGL2/WebGPU Baseline
 - `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
 - `WP-S003-003` — Interior Objects + Interaction Points
