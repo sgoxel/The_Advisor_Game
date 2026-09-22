@@ -1,3 +1,20 @@
+2026-09-22 09:39:00 +03:00
+- Repository organization correction: consolidated the temporary root changelog.txt into docs/changelog.txt and moved suggest_log.txt to docs/suggest_log.txt.
+- Updated Copilot instructions/workflow to use the docs/ log paths so root copies are not recreated.
+- Repository-wide Copilot instructions are restricted to coding, testing, and committing; Issue lifecycle/project-management actions are forbidden.
+
+2026-09-22 06:30 +00:00 | WP-S004-003 | Added deterministic resident daily activity generation and action-target resolution using SEED-stable home/work/social blocks for the Starting Village population foundation.
+2026-09-22 00:59 +00:00 | WP-S003-005 | Gated startup and camera-driven terrain rendering behind coordinate-derived texture preparation, added visible/prepared region proof, and extended the screenshot evidence tool to record the active and prepared region keys.
+2026-09-22 06:18 +00:00 | INFRA-COPILOT | Fixed hourly Copilot persistence by adding mandatory commit/rebase/push verification, reopened WP-S004-003 after lost runner-only changes, and restored its ROADMAP status.
+2026-09-22 06:33 +00:00 | COMPLETION-AUDIT | Reopened every previously completed non-duplicate issue for correctness retesting, added audit comments, removed reopened WP COMPLETED markers from docs/ROADMAP.md, and removed COMPLETE suffixes from reopened WP titles.
+2026-09-22 06:36 +00:00 | WP-S001-001 | Retest pass found the save-load screenshot scenario was only a placeholder; upgraded tools/screenshot_tool.py to perform a real browser reload and verify SEED, campaign start state, 24x game-time progression, fantasy start year, and persistence across reload.
+2026-09-22 06:35 +00:00 | WP-S001-001 | Verified the base campaign SEED, fantasy clock, and reload persistence against the current build, captured fresh visual evidence, and marked the WP completed in docs/ROADMAP.md.
+2026-09-22 06:39 +00:00 | INFRA-COPILOT | Restricted hourly Copilot to coding, testing, and committing; removed Issue write authority and explicitly prohibited Issue lifecycle and project-management actions.
+2026-09-22 06:41 +00:00 | WP-S001-001 | Fixed the save-load evidence validator so it accepts negative fantasy timestamps from the year-offset fantasy calendar, then reran save-load and responsive evidence successfully.
+2026-09-22 06:43 +00:00 | WP-S001-001 | Corrected the retest state after the real save-load run exposed a pre-Unix timestamp validation error; retained the validator fix, reopened the WP, and removed its premature ROADMAP completion marker pending a clean rerun.
+2026-09-22 06:49 +00:00 | WP-S001-001 | Clean rerun passed the corrected real save-load evidence and generic responsive-cycle evidence; added a dedicated wp-s001-001 browser scenario to assert reload persistence, portrait/landscape three-row geometry, horizontal overflow, full-screen Settings, default SEED, fantasy year offset, and 24x game time before final closure.
+2026-09-22 06:54 +00:00 | WP-S001-001 | Dedicated certification exposed a viewport-evidence schema bug in the test harness; fixed the snapshot to store viewport dimensions inside currentBuild.layout and updated the WP validator to use that authoritative geometry.
+
 2026-09-22 06:30:00 +03:00
 - WP-S004-003 Deterministic Daily Activity + Action Targets completed.
 - Added scripts/world/daily-activity.js with deterministic Starting Village resident schedules, home/work/social action targets, and proof validation.
