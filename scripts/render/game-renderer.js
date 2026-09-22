@@ -772,7 +772,6 @@ function buildTerrainChunk(model,tiles,key){
     source.addChild(cell);
   }
   const texture=PIXI.RenderTexture.create({width,height,resolution:1});
-  if(texture.source)texture.source.scaleMode="nearest";
   app.renderer.render({container:source,target:texture,clear:true});
   source.destroy({children:true});
   return {key,baseX,baseY,texture,width,height,offsetX,offsetY,tileSize,lastUsed:terrainFrameSerial};
@@ -835,7 +834,6 @@ function renderTerrainChunks(model,originX,originY){
     const p=projectOffset(model.tileSize,dx,dy);
     if(!entry.sprite){
       entry.sprite=new PIXI.Sprite(entry.texture);
-      entry.sprite.roundPixels=true;
       terrainLayer.addChild(entry.sprite);
       createdSprites++;
     }else{
