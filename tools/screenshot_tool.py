@@ -69,6 +69,7 @@ SCENARIOS = {
     "main-road",
     "starting-village",
     "building-presentation",
+    "wp-s001-001",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -89,6 +90,7 @@ SCENARIO_MIN_SHOTS = {
     "main-road": 2,
     "starting-village": 3,
     "building-presentation": 5,
+    "wp-s001-001": 5,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -212,6 +214,28 @@ return (() => {
         gameTimeMultiplier: Number(window.GameConfig?.gameTimeMultiplier || 0),
         startYearValid: Boolean(window.GameTime?.validateStartYear?.()),
         persistenceStatus: document.querySelector('#vPersist')?.textContent?.trim() || null,
+        layout: (() => {
+          const rect = selector => {
+            const node = document.querySelector(selector);
+            if (!node) return null;
+            const r = node.getBoundingClientRect();
+            return {
+              left:Number(r.left), top:Number(r.top), right:Number(r.right), bottom:Number(r.bottom),
+              width:Number(r.width), height:Number(r.height)
+            };
+          };
+          const settings = document.querySelector('#settingsPopup');
+          return {
+            bodyScrollWidth:Number(document.documentElement.scrollWidth || document.body?.scrollWidth || 0),
+            bodyClientWidth:Number(document.documentElement.clientWidth || innerWidth),
+            screenShell:rect('.screen-shell'),
+            topRibbon:rect('.top-ribbon'),
+            gameplay:rect('#gameplayArea'),
+            status:rect('.status-area'),
+            settingsHidden:settings ? Boolean(settings.hidden) : null,
+            settingsRect:rect('#settingsPopup')
+          };
+        })(),
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
@@ -653,6 +677,16 @@ def _reload_current_build(driver, timeout: float = 20.0) -> str:
     return "reload:persisted-campaign"
 
 
+def _open_settings_popup(driver) -> str:
+    from selenium.webdriver.common.by import By
+
+    buttons = driver.find_elements(By.ID, "settingsButton")
+    if not buttons:
+        raise RuntimeError("WP-S001-001 Settings button not found")
+    driver.execute_script("arguments[0].click()", buttons[0])
+    return "open:settings"
+
+
 def _cycle_details(driver, frame_index: int) -> str:
     count = driver.execute_script("return document.querySelectorAll('details').length")
     if not count:
@@ -873,6 +907,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 1:
             return _reload_current_build(driver)
         return "post-reload-observe"
+    if scenario == "wp-s001-001":
+        if frame_index == 1:
+            return _reload_current_build(driver)
+        if frame_index == 2:
+            driver.set_window_size(1080, 1920)
+            return "resize:1080x1920"
+        if frame_index == 3:
+            driver.set_window_size(1920, 1080)
+            return "resize:1920x1080"
+        if frame_index == 4:
+            return _open_settings_popup(driver)
+        return "wp-s001-001:no-op"
     if scenario == "panel-cycle":
         return _cycle_details(driver, frame_index)
     if scenario == "camera-pan":
@@ -925,6 +971,76 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s001-001":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s001-001 requires five evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:5]]
+
+        if any(item.get("campaignState") != "ACTIVE" for item in builds):
+            raise RuntimeError(f"WP-S001-001 campaign not ACTIVE in all proof frames: {builds}")
+
+        seeds = [item.get("campaignSeed") for item in builds]
+        if not seeds[0] or len(set(seeds)) != 1 or seeds[0] != "The_Advisor_Game_20260924":
+            raise RuntimeError(f"WP-S001-001 default/persisted SEED failed: {seeds}")
+
+        starts = [item.get("campaignRealStartMs") for item in builds]
+        if not starts[0] or len(set(starts)) != 1:
+            raise RuntimeError(f"WP-S001-001 campaign start state changed: {starts}")
+
+        if any(int(item.get("gameTimeMultiplier") or 0) != 24 for item in builds):
+            raise RuntimeError(f"WP-S001-001 game-time multiplier is not 24x: {builds}")
+        if not all(item.get("startYearValid") for item in builds):
+            raise RuntimeError(f"WP-S001-001 fantasy start year validation failed: {builds}")
+
+        timestamps = [float(item.get("gameTimestampMs")) for item in builds if item.get("gameTimestampMs") is not None]
+        if len(timestamps) != 5 or not all(ts == ts for ts in timestamps):
+            raise RuntimeError(f"WP-S001-001 timestamp evidence invalid: {timestamps}")
+        if not (timestamps[1] > timestamps[0] and timestamps[2] >= timestamps[1]):
+            raise RuntimeError(f"WP-S001-001 time did not continue across reload: {timestamps}")
+
+        def assert_shell(build, orientation):
+            viewport = build.get("viewport") or {}
+            layout = build.get("layout") or {}
+            shell = layout.get("screenShell") or {}
+            top = layout.get("topRibbon") or {}
+            game = layout.get("gameplay") or {}
+            status = layout.get("status") or {}
+            width = float(viewport.get("width") or 0)
+            height = float(viewport.get("height") or 0)
+            if width <= 0 or height <= 0:
+                raise RuntimeError(f"WP-S001-001 missing viewport evidence: {build}")
+            if orientation == "portrait" and not height > width:
+                raise RuntimeError(f"WP-S001-001 expected portrait viewport: {viewport}")
+            if orientation == "landscape" and not width > height:
+                raise RuntimeError(f"WP-S001-001 expected landscape viewport: {viewport}")
+            if abs(float(shell.get("height") or 0) - height) > 3:
+                raise RuntimeError(f"WP-S001-001 three-row shell does not fill first viewport: {layout}")
+            if float(top.get("top") or 0) < -1 or abs(float(status.get("bottom") or 0) - height) > 4:
+                raise RuntimeError(f"WP-S001-001 top/status rows do not bound viewport: {layout}")
+            if abs(float(game.get("top") or 0) - float(top.get("bottom") or 0)) > 3:
+                raise RuntimeError(f"WP-S001-001 gameplay row does not follow ribbon: {layout}")
+            if abs(float(game.get("bottom") or 0) - float(status.get("top") or 0)) > 3:
+                raise RuntimeError(f"WP-S001-001 status row does not follow gameplay: {layout}")
+            if float(layout.get("bodyScrollWidth") or 0) > float(layout.get("bodyClientWidth") or width) + 2:
+                raise RuntimeError(f"WP-S001-001 horizontal overflow detected: {layout}")
+
+        assert_shell(builds[2], "portrait")
+        assert_shell(builds[3], "landscape")
+
+        settings_layout = builds[4].get("layout") or {}
+        settings_rect = settings_layout.get("settingsRect") or {}
+        settings_viewport = builds[4].get("viewport") or {}
+        if settings_layout.get("settingsHidden") is not False:
+            raise RuntimeError(f"WP-S001-001 Settings did not open: {settings_layout}")
+        if (
+            abs(float(settings_rect.get("left") or 0)) > 2
+            or abs(float(settings_rect.get("top") or 0)) > 2
+            or abs(float(settings_rect.get("width") or 0) - float(settings_viewport.get("width") or 0)) > 4
+            or abs(float(settings_rect.get("height") or 0) - float(settings_viewport.get("height") or 0)) > 4
+        ):
+            raise RuntimeError(f"WP-S001-001 Settings is not full-screen: {settings_layout}")
+        return
+
     if scenario == "save-load":
         if len(frames) < 3:
             raise RuntimeError("save-load requires three evidence frames")
