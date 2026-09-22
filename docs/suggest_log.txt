@@ -1,3 +1,5 @@
+2026-09-22 15:17:34 +03:00 | WP-S002-001-002 | Phase 1 | Suggestion: add a lightweight UI regression assertion that .screen-shell has exactly the Top Ribbon, Gameplay Area, and Status Area as direct layout rows so future panels cannot silently collapse the gameplay viewport.
+
 2026-09-22 06:30:00 +03:00 | Stage 4 / WP-S004-003
 Suggestion: WP-S004-004 should consume the same deterministic schedule object as its route-planning input and keep route execution separate from schedule generation so loops can later add visible NPC movement without rewriting resident logic.
 
