@@ -2,3 +2,4 @@
 2026-09-22 06:30 +00:00 | WP-S004-003 | Phase 1 | Suggestion: once WP-S004-004 adds visible NPC movement, use the same resident schedule object as the route-planning input so location changes remain deterministic and route execution stays separate from AI decision logic.
 2026-09-22 00:59 +00:00 | WP-S003-005 | Phase 1 | Suggestion: expose the prepared/visible region key pair in the compact HUD header in a later polish pass so QA can spot cache mismatches without opening the technical accordion.
 2026-09-22 06:18 +00:00 | INFRA-COPILOT | Phase 1 | Suggestion: include the final persisted main commit SHA in each Copilot issue completion comment so future audits can verify that the implementation exists on main before closure.
+2026-09-22 06:33 +00:00 | COMPLETION-AUDIT | Phase 1 | Suggestion: add an automated pre-close guard requiring the tested main commit SHA and successful GitHub Pages deployment evidence before any WP issue can be closed.
