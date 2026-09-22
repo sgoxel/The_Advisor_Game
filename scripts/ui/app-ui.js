@@ -437,6 +437,9 @@ let activePointers=new Map();
 let pinchState=null;
 let wheelZoomUsed=false;
 let terrainRenderSerial=0;
+let terrainPrefetchSerial=0;
+let cameraTransitionQueue=Promise.resolve();
+let lastCameraDirection={dx:0,dy:0};
 
 function terrainGridDimensions(width,height,tileSize){
   let columns=Math.max(3,Math.ceil(width/tileSize)+2);
@@ -520,6 +523,95 @@ function collectTerrainPreparationKeys(seed,center,columns,rows,halfCols,halfRow
   return [...keys];
 }
 
+function terrainViewDescriptor(seed,center,zoom=Camera.getZoom()){
+  const tileSize=Math.max(40,Math.round(100*zoom));
+  const viewport=e.terrainGrid.parentElement;
+  const width=Math.max(1,viewport.clientWidth);
+  const height=Math.max(1,viewport.clientHeight);
+  const {columns,rows}=terrainGridDimensions(width,height,tileSize);
+  const halfCols=Math.floor(columns/2);
+  const halfRows=Math.floor(rows/2);
+  const regionKey=terrainRegionKey(center,columns,rows,tileSize);
+  const requiredKeys=collectTerrainPreparationKeys(seed,center,columns,rows,halfCols,halfRows);
+  return {width,height,columns,rows,halfCols,halfRows,tileSize,regionKey,requiredKeys};
+}
+
+function normalizeDirection(dx,dy){
+  return {
+    dx:Math.sign(Number(dx)||0),
+    dy:Math.sign(Number(dy)||0)
+  };
+}
+
+function backgroundYield(){
+  return new Promise(resolve=>{
+    if("requestIdleCallback" in window){
+      requestIdleCallback(()=>resolve(),{timeout:60});
+    }else{
+      setTimeout(resolve,0);
+    }
+  });
+}
+
+function terrainPrefetchOffsets(direction){
+  const safety=[
+    [1,0],[-1,0],[0,1],[0,-1],
+    [2,0],[-2,0],[0,2],[0,-2],
+    [1,1],[1,-1],[-1,1],[-1,-1],
+    [2,2],[2,-2],[-2,2],[-2,-2]
+  ];
+  const result=[];
+  const seen=new Set();
+  const add=(dx,dy)=>{
+    const key=dx+","+dy;
+    if((dx||dy)&&!seen.has(key)){
+      seen.add(key);
+      result.push([dx,dy]);
+    }
+  };
+  if(direction.dx||direction.dy){
+    add(direction.dx*6,direction.dy*6);
+    add(direction.dx*4,direction.dy*4);
+  }
+  safety.forEach(([dx,dy])=>add(dx,dy));
+  return result;
+}
+
+function scheduleTerrainAssetPrefetch(seed,center,columns,rows,tileSize,direction=lastCameraDirection){
+  const serial=++terrainPrefetchSerial;
+  const halfCols=Math.floor(columns/2);
+  const halfRows=Math.floor(rows/2);
+  const directionLabel=direction.dx+","+direction.dy;
+  const offsets=terrainPrefetchOffsets(direction);
+
+  void (async()=>{
+    for(const [dx,dy] of offsets){
+      await backgroundYield();
+      if(serial!==terrainPrefetchSerial)return;
+      const target=WorldCoordinates.add(center,String(dx),String(dy));
+      const regionKey=terrainRegionKey(target,columns,rows,tileSize);
+      const requiredKeys=collectTerrainPreparationKeys(seed,target,columns,rows,halfCols,halfRows);
+      await TextureAssets.prefetchRegion(regionKey,requiredKeys,{direction:directionLabel});
+    }
+  })().catch(error=>console.warn("Terrain asset prefetch failed.",error));
+}
+
+function enqueueCameraTransition(work){
+  cameraTransitionQueue=cameraTransitionQueue
+    .then(work)
+    .catch(error=>console.error(error));
+  return cameraTransitionQueue;
+}
+
+async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom()){
+  const descriptor=terrainViewDescriptor(seed,center,zoom);
+  const prepared=await TextureAssets.prepareRegion(descriptor.regionKey,descriptor.requiredKeys);
+  if(!prepared.ready||prepared.stale||!TextureAssets.isRegionPrepared(descriptor.regionKey,descriptor.requiredKeys)){
+    throw new Error("Terrain asset preparation did not complete for "+descriptor.regionKey);
+  }
+  return descriptor;
+}
+
 async function renderTerrain(){
   const campaign=SeedSystem.getCampaign();
   const protagonist=Protagonist.getPosition();
@@ -539,15 +631,9 @@ async function renderTerrain(){
     return;
   }
 
-  const tileSize=Math.max(40,Math.round(100*Camera.getZoom()));
-  const viewport=e.terrainGrid.parentElement;
-  const width=Math.max(1,viewport.clientWidth);
-  const height=Math.max(1,viewport.clientHeight);
-  const {columns,rows}=terrainGridDimensions(width,height,tileSize);
-  const halfCols=Math.floor(columns/2);
-  const halfRows=Math.floor(rows/2);
+  const view=terrainViewDescriptor(campaign.seed,center,Camera.getZoom());
+  const {tileSize,width,height,columns,rows,halfCols,halfRows,regionKey,requiredKeys}=view;
   const viewportKey=width+"x"+height;
-  const regionKey=terrainRegionKey(center,columns,rows,tileSize);
   const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
   const routeProof=(renderTerrain._routeProofSeed===campaign.seed&&renderTerrain._routeProof)||RoutePlanner.proof(campaign.seed);
   renderTerrain._routeProofSeed=campaign.seed;
@@ -605,14 +691,14 @@ async function renderTerrain(){
     });
   }
 
-  const requiredKeys=collectTerrainPreparationKeys(campaign.seed,center,columns,rows,halfCols,halfRows);
   const currentSerial=++terrainRenderSerial;
-  if(!TextureAssets.isRegionPrepared(regionKey,requiredKeys)){
+  const rendererWasReady=Boolean(GameRenderer.snapshot().ready);
+  if(!TextureAssets.isRegionPrepared(regionKey,requiredKeys)&&!rendererWasReady){
     e.terrainGrid.hidden=true;
-    const prepared=await TextureAssets.prepareRegion(regionKey,requiredKeys);
-    if(currentSerial!==terrainRenderSerial||!prepared.ready||prepared.stale||!TextureAssets.isRegionPrepared(regionKey,requiredKeys)){
-      return false;
-    }
+  }
+  const prepared=await TextureAssets.prepareRegion(regionKey,requiredKeys);
+  if(currentSerial!==terrainRenderSerial||!prepared.ready||prepared.stale||!TextureAssets.isRegionPrepared(regionKey,requiredKeys)){
+    return false;
   }
 
   const buildingInteriors=BuildingInteriors.build(campaign.seed);
@@ -662,6 +748,7 @@ async function renderTerrain(){
   e.rendererVisibleRegion.textContent=regionKey;
   e.terrainGrid.hidden=false;
   lastTerrainViewportKey=viewportKey;
+  scheduleTerrainAssetPrefetch(campaign.seed,center,columns,rows,tileSize,lastCameraDirection);
   return true;
 }
 
@@ -764,34 +851,50 @@ function updateCameraPresentation(){
 }
 
 function panCamera(dx,dy){
-  const campaign=SeedSystem.getCampaign();
-  const protagonist=Protagonist.getPosition();
-  if(!campaign||!protagonist)return;
+  return enqueueCameraTransition(async()=>{
+    const campaign=SeedSystem.getCampaign();
+    const protagonist=Protagonist.getPosition();
+    if(!campaign||!protagonist)return;
 
-  if(!cameraReturnProof){
-    const center=Camera.getCenter();
-    cameraReturnProof={
-      center,
-      signature:cameraTerrainSignature(campaign.seed,center)
-    };
-  }
+    const centerBefore=Camera.getCenter();
+    if(!cameraReturnProof){
+      cameraReturnProof={
+        center:centerBefore,
+        signature:cameraTerrainSignature(campaign.seed,centerBefore)
+      };
+    }
 
-  const protagonistBefore=WorldCoordinates.position(protagonist.x,protagonist.y);
-  Camera.pan(String(dx),String(dy));
-  cameraMoved=true;
-  const protagonistAfter=Protagonist.getPosition();
-  cameraIndependenceProven=sameCoordinate(protagonistBefore,protagonistAfter);
-  renderTerrain();
-  updateCameraPresentation();
+    const target=WorldCoordinates.add(centerBefore,String(dx),String(dy));
+    const direction=normalizeDirection(dx,dy);
+    await ensureTerrainViewPrepared(campaign.seed,target,Camera.getZoom());
+
+    const protagonistBefore=WorldCoordinates.position(protagonist.x,protagonist.y);
+    Camera.setCenter(target.x,target.y);
+    cameraMoved=true;
+    lastCameraDirection=direction;
+    const protagonistAfter=Protagonist.getPosition();
+    cameraIndependenceProven=sameCoordinate(protagonistBefore,protagonistAfter);
+    await renderTerrain();
+    updateCameraPresentation();
+  });
 }
 
 function centerCameraOnProtagonist(){
-  const campaign=SeedSystem.getCampaign();
-  const protagonist=Protagonist.getPosition();
-  if(!campaign||!protagonist)return;
-  Camera.centerOn(protagonist);
-  renderTerrain();
-  updateCameraPresentation();
+  return enqueueCameraTransition(async()=>{
+    const campaign=SeedSystem.getCampaign();
+    const protagonist=Protagonist.getPosition();
+    if(!campaign||!protagonist)return;
+    const centerBefore=Camera.getCenter();
+    const direction=normalizeDirection(
+      BigInt(protagonist.x)-BigInt(centerBefore.x),
+      BigInt(protagonist.y)-BigInt(centerBefore.y)
+    );
+    await ensureTerrainViewPrepared(campaign.seed,protagonist,Camera.getZoom());
+    Camera.centerOn(protagonist);
+    lastCameraDirection=direction;
+    await renderTerrain();
+    updateCameraPresentation();
+  });
 }
 
 function resetCameraForCampaign(){
@@ -803,26 +906,35 @@ function resetCameraForCampaign(){
   cameraIndependenceProven=false;
   cameraReturnProof=null;
   wheelZoomUsed=false;
+  lastCameraDirection={dx:0,dy:0};
+  terrainPrefetchSerial++;
 }
 
 
 function applyCameraZoom(nextZoom,source){
-  if(!SeedSystem.getCampaign())return;
-  const protagonistBefore=Protagonist.getPosition();
-  const centerBefore=Camera.getCenter();
-  const previous=Camera.getZoom();
-  const next=Camera.setZoom(nextZoom);
-  if(next===previous)return;
+  return enqueueCameraTransition(async()=>{
+    const campaign=SeedSystem.getCampaign();
+    if(!campaign)return;
+    const protagonistBefore=Protagonist.getPosition();
+    const centerBefore=Camera.getCenter();
+    const previous=Camera.getZoom();
+    const targetZoom=Math.max(Camera.MIN_ZOOM,Math.min(Camera.MAX_ZOOM,Number(nextZoom)));
+    if(!Number.isFinite(targetZoom)||targetZoom===previous)return;
 
-  const protagonistAfter=Protagonist.getPosition();
-  const centerAfter=Camera.getCenter();
-  if(source==="wheel")wheelZoomUsed=true;
+    await ensureTerrainViewPrepared(campaign.seed,centerBefore,targetZoom);
+    const next=Camera.setZoom(targetZoom);
+    if(next===previous)return;
 
-  renderTerrain();
-  updateCameraPresentation();
+    const protagonistAfter=Protagonist.getPosition();
+    const centerAfter=Camera.getCenter();
+    if(source==="wheel")wheelZoomUsed=true;
 
-  const worldStable=sameCoordinate(protagonistBefore,protagonistAfter)&&sameCoordinate(centerBefore,centerAfter);
-  if(source==="wheel")setCheck(e.vCameraWheelZoom,worldStable,"FAIL");
+    await renderTerrain();
+    updateCameraPresentation();
+
+    const worldStable=sameCoordinate(protagonistBefore,protagonistAfter)&&sameCoordinate(centerBefore,centerAfter);
+    if(source==="wheel")setCheck(e.vCameraWheelZoom,worldStable,"FAIL");
+  });
 }
 
 function pointerDistance(){
