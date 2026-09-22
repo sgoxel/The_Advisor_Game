@@ -29,7 +29,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-001-005` — Diagonal + Multi-Terrain Junction Smoothing — COMPLETED
 - `WP-S002-002` — Special Buildings + Functional Lots — COMPLETED
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation — COMPLETED
-- `WP-S002-004` — Deterministic Local Route Planning
+- `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 
 # Stage 3 — GPU 2.5D World + Enterable Building Foundation
 
