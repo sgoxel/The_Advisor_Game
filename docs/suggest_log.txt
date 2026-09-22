@@ -1,3 +1,6 @@
+2026-09-22 06:30:00 +03:00 | Stage 4 / WP-S004-003
+Suggestion: WP-S004-004 should consume the same deterministic schedule object as its route-planning input and keep route execution separate from schedule generation so loops can later add visible NPC movement without rewriting resident logic.
+
 2026-09-21 22:31:00 +03:00 | Stage 3 / WP-S003-002
 Suggestion: WP-S003-003 should define interior objects as Simulation-owned footprints plus generic interaction points layered onto the existing BuildingInteriors model. Keep object collision/action authority separate from decorative sprite presentation so furniture can later change art without changing routing semantics.
 

@@ -1,3 +1,8 @@
+2026-09-22 06:30:00 +03:00
+- WP-S004-003 Deterministic Daily Activity + Action Targets completed.
+- Added scripts/world/daily-activity.js with deterministic Starting Village resident schedules, home/work/social action targets, and proof validation.
+- Resident schedules resolve to stable home/work targets from the same SEED-driven world layout without introducing real randomness or time-dependent drift.
+
 2026-09-21 22:31:00 +03:00
 - WP-S003-002 Authoritative Enterable Building Interiors completed and Issue #25 closed.
 - Added scripts/world/building-interiors.js as the authoritative continuous indoor/outdoor navigation model.
