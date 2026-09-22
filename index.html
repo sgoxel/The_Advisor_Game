@@ -482,6 +482,13 @@
         <div><span>Requested Backend</span><strong id="rendererRequestedBackend">—</strong></div>
         <div><span>WebGPU Available</span><strong id="rendererWebgpuAvailable">—</strong></div>
         <div><span>Gameplay Canvases</span><strong id="rendererCanvasCount">—</strong></div>
+        <div><span>Scene Projection</span><strong id="rendererProjection">—</strong></div>
+        <div><span>Scene Entities</span><strong id="rendererEntityCount">—</strong></div>
+        <div><span>Draw Calls</span><strong id="rendererDrawCalls">—</strong></div>
+        <div><span>Frame Time</span><strong id="rendererFrameTime">—</strong></div>
+        <div><span>Render Scale</span><strong id="rendererRenderScale">—</strong></div>
+        <div><span>Pixel Ratio</span><strong id="rendererPixelRatio">—</strong></div>
+        <div><span>Canvas Size</span><strong id="rendererCanvasSize">—</strong></div>
         <div><span>Cached Textures</span><strong id="rendererTextureCount">—</strong></div>
         <div><span>Current Sources</span><strong id="rendererSourceMode">—</strong></div>
         <div><span>Prepared Region</span><strong id="rendererPreparedRegion">—</strong></div>
@@ -493,7 +500,7 @@
       <div class="check"><span>Renderer consumes logical cached texture keys instead of source URLs</span><b id="vRendererLogicalTextures">WAITING</b></div>
       <div class="check"><span>Current SVG draft assets are loaded once as reusable texture sources</span><b id="vRendererSvgCache">WAITING</b></div>
       <div class="check"><span>Terrain, walkability and routing remain authoritative Simulation systems</span><b id="vRendererSimulation">WAITING</b></div>
-      <p><strong>Migration foundation:</strong> the normal public URL retains the legacy PixiJS renderer during migration. Add <code>?renderer=playcanvas&amp;gpu=webgl2</code>, <code>gpu=webgpu</code>, or <code>gpu=auto</code> to exercise the PlayCanvas Engine 2 path in the same gameplay canvas slot. Simulation remains authoritative.</p>
+      <p><strong>PlayCanvas baseline:</strong> add <code>?renderer=playcanvas&amp;gpu=webgl2</code>, <code>gpu=webgpu</code>, or <code>gpu=auto</code>. Optional <code>dpr=</code> and <code>renderScale=</code> parameters tune presentation resolution without changing Simulation. The normal public URL retains legacy PixiJS until later migration WPs replace the full world presentation.</p>
     </div>
   </details>
 
