@@ -68,16 +68,35 @@ function destroyPresentationLayers(){
   destroyLayer(routeLayer);
 }
 
+const DIMETRIC_X=0.50;
+const DIMETRIC_Y=0.28;
+
+function projectOffset(tileSize,dx,dy){
+  return Object.freeze({
+    x:(dx-dy)*tileSize*DIMETRIC_X,
+    y:(dx+dy)*tileSize*DIMETRIC_Y
+  });
+}
+
 function worldToScreen(model,originX,originY,x,y){
   const dx=BigInt(String(x))-BigInt(String(model.center.x));
   const dy=BigInt(String(y))-BigInt(String(model.center.y));
   const col=Math.floor(model.columns/2)+Number(dx);
   const row=Math.floor(model.rows/2)+Number(dy);
+  const projected=projectOffset(model.tileSize,Number(dx),Number(dy));
   return Object.freeze({
-    x:originX+col*model.tileSize,
-    y:originY+row*model.tileSize,
+    x:originX+projected.x,
+    y:originY+projected.y,
     col,row
   });
+}
+
+function applyGroundProjection(container,x,y){
+  container.setFromMatrix(new PIXI.Matrix(
+    DIMETRIC_X,DIMETRIC_Y,
+    -DIMETRIC_X,DIMETRIC_Y,
+    x,y
+  ));
 }
 
 function pointVisible(model,point,marginTiles=1){
@@ -374,8 +393,10 @@ function render(model){
 
   const gridWidth=model.columns*model.tileSize;
   const gridHeight=model.rows*model.tileSize;
-  const originX=Math.floor((model.width-gridWidth)/2);
-  const originY=Math.floor((model.height-gridHeight)/2);
+  const projectedWidth=(model.columns+model.rows)*model.tileSize*DIMETRIC_X;
+  const projectedHeight=(model.columns+model.rows)*model.tileSize*DIMETRIC_Y;
+  const originX=Math.floor(model.width/2);
+  const originY=Math.floor(model.height/2);
 
   worldLayer.position.set(0,0);
 
@@ -402,10 +423,13 @@ function render(model){
 
   for(const tile of model.tiles){
     terrainTypes[tile.type]=(terrainTypes[tile.type]||0)+1;
-    const x=originX+tile.col*model.tileSize;
-    const y=originY+tile.row*model.tileSize;
+    const colOffset=tile.col-Math.floor(model.columns/2);
+    const rowOffset=tile.row-Math.floor(model.rows/2);
+    const projected=projectOffset(model.tileSize,colOffset,rowOffset);
+    const x=originX+projected.x;
+    const y=originY+projected.y;
     const cell=new PIXI.Container();
-    cell.position.set(x,y);
+    applyGroundProjection(cell,x,y);
     cell.addChild(makeColorSprite(tile.color,model.tileSize,model.tileSize));
 
     if(tile.textureKey){
@@ -482,8 +506,8 @@ function render(model){
       const texture=TextureAssets.get("character:protagonist-male");
       addCharacterSprite(
         texture,
-        originX+(Math.floor(model.columns/2)+Number(dx))*model.tileSize+model.tileSize/2,
-        originY+(Math.floor(model.rows/2)+Number(dy)+1)*model.tileSize,
+        originX+projectOffset(model.tileSize,Number(dx),Number(dy)).x,
+        originY+projectOffset(model.tileSize,Number(dx),Number(dy)).y+model.tileSize*DIMETRIC_Y*2,
         model.tileSize
       );
     }
@@ -501,15 +525,15 @@ function render(model){
         const texture=TextureAssets.get("character:protagonist-male");
         const sprite=addCharacterSprite(
           texture,
-          p.x+model.tileSize/2,
-          p.y+model.tileSize,
+          p.x,
+          p.y+model.tileSize*DIMETRIC_Y*2,
           model.tileSize,
           0.94,
           0xffd28b
         );
         if(sprite){
           const ring=new PIXI.Graphics();
-          ring.circle(p.x+model.tileSize/2,p.y+model.tileSize*0.77,model.tileSize*0.22)
+          ring.ellipse(p.x,p.y+model.tileSize*DIMETRIC_Y*1.55,model.tileSize*0.24,model.tileSize*0.10)
             .fill({color:0xffd26d,alpha:0.20});
           ring.zIndex=sprite.zIndex-1;
           entityLayer.addChild(ring);
@@ -518,7 +542,7 @@ function render(model){
     }
   }
 
-  const coverage=gridWidth>=model.width&&gridHeight>=model.height;
+  const coverage=projectedWidth>=model.width&&projectedHeight>=model.height;
   lastSnapshot=Object.freeze({
     ready:true,
     backend:"WebGL",
@@ -537,6 +561,11 @@ function render(model){
       viewportHeight:model.height,
       gridWidth,
       gridHeight,
+      projectedWidth,
+      projectedHeight,
+      projection:"soft-dimetric",
+      projectionBasis:Object.freeze({x:DIMETRIC_X,y:DIMETRIC_Y}),
+      simulationCoordinatesUnchanged:true,
       coveragePass:coverage,
       centerPass:model.columns%2===1&&model.rows%2===1
     }),
