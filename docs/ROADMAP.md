@@ -13,7 +13,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 # Stage 1 — Deterministic World Foundation
 
-- `WP-S001-001` — Base Game, Campaign SEED and Game Clock — COMPLETED
+- `WP-S001-001` — Base Game, Campaign SEED and Game Clock
 - `WP-S001-002` — Deterministic Foundation and Live Randomness
 - `WP-S001-003` — Infinite World Coordinates + Protagonist Origin
 - `WP-S001-004` — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing
