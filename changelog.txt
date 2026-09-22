@@ -1,1 +1,2 @@
 2026-09-22 00:59 +00:00 | WP-S003-005 | Gated startup and camera-driven terrain rendering behind coordinate-derived texture preparation, added visible/prepared region proof, and extended the screenshot evidence tool to record the active and prepared region keys.
+2026-09-22 06:18 +00:00 | INFRA-COPILOT | Fixed hourly Copilot persistence by adding mandatory commit/rebase/push verification, reopened WP-S004-003 after lost runner-only changes, and restored its ROADMAP status.
