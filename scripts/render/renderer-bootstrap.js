@@ -32,6 +32,12 @@ function readBackend(){
   return "webgl2";
 }
 
+function readNumber(name,min,max){
+  const value=Number(query().get(name));
+  if(!Number.isFinite(value))return null;
+  return Math.min(max,Math.max(min,value));
+}
+
 async function initialize(){
   selectedMode=readMode();
   selectedBackend=readBackend();
@@ -51,7 +57,11 @@ async function initialize(){
   try{
     if(!window.RendererContract)throw new Error("RendererContract is unavailable");
     if(!window.PlayCanvasRendererFactory)throw new Error("PlayCanvasRendererFactory is unavailable");
-    const renderer=window.PlayCanvasRendererFactory.create({backendPreference:selectedBackend});
+    const renderer=window.PlayCanvasRendererFactory.create({
+      backendPreference:selectedBackend,
+      maxPixelRatio:readNumber("dpr",0.75,2),
+      renderScale:readNumber("renderScale",0.6,1)
+    });
     window.GameRenderer=renderer;
     return Object.freeze({
       mode:"playcanvas",
