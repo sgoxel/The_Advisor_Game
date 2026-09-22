@@ -441,6 +441,21 @@ let terrainRenderSerial=0;
 function terrainGridDimensions(width,height,tileSize){
   let columns=Math.max(3,Math.ceil(width/tileSize)+2);
   let rows=Math.max(3,Math.ceil(height/tileSize)+2);
+
+  const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
+  const basisX=Math.max(.01,Number(basis.x)||1);
+  const basisY=Math.max(.01,Number(basis.y)||1);
+  const minimumProjectedSum=Math.max(
+    Math.ceil(width/(tileSize*basisX))+2,
+    Math.ceil(height/(tileSize*basisY))+2
+  );
+  const currentSum=columns+rows;
+  if(currentSum<minimumProjectedSum){
+    const extra=minimumProjectedSum-currentSum;
+    if(height>width)rows+=extra;
+    else columns+=extra;
+  }
+
   if(columns%2===0)columns+=1;
   if(rows%2===0)rows+=1;
   return {columns,rows};
