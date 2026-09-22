@@ -44,6 +44,7 @@ on:
           - wp-s001-004
           - wp-s003-005
           - playcanvas-foundation
+          - playcanvas-scene
       shots:
         description: Requested screenshot count; scenario minimums still apply
         required: true
@@ -174,7 +175,7 @@ jobs:
           fi
 
           case "$scenario" in
-            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005|playcanvas-foundation) ;;
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005|playcanvas-foundation|playcanvas-scene) ;;
             *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
           esac
           case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac
