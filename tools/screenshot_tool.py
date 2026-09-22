@@ -204,6 +204,14 @@ return (() => {
       },
       currentBuild: {
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
+        campaignSeed: window.SeedSystem?.getCampaign?.()?.seed || null,
+        campaignRealStartMs: Number(window.SeedSystem?.getCampaign?.()?.realStartMs || 0) || null,
+        campaignFantasyStart: window.SeedSystem?.getCampaign?.()?.fantasyStart || null,
+        settingsSeed: window.SeedSystem?.getSettings?.()?.seed || null,
+        gameTimestampMs: Number(window.GameTime?.getTimestampMs?.() || 0) || null,
+        gameTimeMultiplier: Number(window.GameConfig?.gameTimeMultiplier || 0),
+        startYearValid: Boolean(window.GameTime?.validateStartYear?.()),
+        persistenceStatus: document.querySelector('#vPersist')?.textContent?.trim() || null,
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
@@ -605,6 +613,46 @@ def _safe_click(driver, selector: str) -> str:
     return f"click:{selector}"
 
 
+def _reload_current_build(driver, timeout: float = 20.0) -> str:
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    before = driver.execute_script(
+        """
+        const campaign = window.SeedSystem?.getCampaign?.();
+        return campaign ? {seed: campaign.seed, realStartMs: campaign.realStartMs} : null;
+        """
+    )
+    if not isinstance(before, dict) or not before.get("seed") or not before.get("realStartMs"):
+        raise RuntimeError(f"save-load pre-reload campaign missing: {before}")
+
+    driver.refresh()
+    WebDriverWait(driver, timeout).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    WebDriverWait(driver, timeout).until(
+        lambda d: d.execute_script(
+            """
+            const campaign = window.SeedSystem?.getCampaign?.();
+            const state = document.querySelector('#campaignState')?.textContent?.trim();
+            const renderer = window.GameRenderer?.snapshot?.();
+            return Boolean(campaign && state === 'ACTIVE' && renderer?.ready && renderer?.webgl);
+            """
+        )
+    )
+
+    after = driver.execute_script(
+        """
+        const campaign = window.SeedSystem?.getCampaign?.();
+        return campaign ? {seed: campaign.seed, realStartMs: campaign.realStartMs} : null;
+        """
+    )
+    if not isinstance(after, dict):
+        raise RuntimeError("save-load campaign missing after reload")
+    if after.get("seed") != before.get("seed") or after.get("realStartMs") != before.get("realStartMs"):
+        raise RuntimeError(f"save-load campaign identity changed across reload: before={before}, after={after}")
+    return "reload:persisted-campaign"
+
+
 def _cycle_details(driver, frame_index: int) -> str:
     count = driver.execute_script("return document.querySelectorAll('details').length")
     if not count:
@@ -821,6 +869,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _set_building_proof_state(driver, states[min(frame_index, len(states) - 1)])
     if scenario == "static" or frame_index == 0:
         return "initial"
+    if scenario == "save-load":
+        if frame_index == 1:
+            return _reload_current_build(driver)
+        return "post-reload-observe"
     if scenario == "panel-cycle":
         return _cycle_details(driver, frame_index)
     if scenario == "camera-pan":
@@ -864,7 +916,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "time-of-day":
         actions = ("time-night", "time-dawn")
         return _legacy_control(driver, actions[(frame_index - 1) % len(actions)])
-    if scenario in {"village-reference", "region-transition", "save-load", "npc-conversation-state"}:
+    if scenario in {"village-reference", "region-transition", "npc-conversation-state"}:
         return f"scenario-compatible-placeholder:{scenario}"
     if scenario == "npc-edge-crossing":
         drags = (480, 140, -140, -480)
@@ -873,6 +925,31 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "save-load":
+        if len(frames) < 3:
+            raise RuntimeError("save-load requires three evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
+        if any(item.get("campaignState") != "ACTIVE" for item in builds):
+            raise RuntimeError(f"WP-S001-001 campaign was not ACTIVE across save/load proof: {builds}")
+        seeds = [item.get("campaignSeed") for item in builds]
+        if not seeds[0] or len(set(seeds)) != 1:
+            raise RuntimeError(f"WP-S001-001 campaign SEED changed across reload: {seeds}")
+        if seeds[0] != "The_Advisor_Game_20260924":
+            raise RuntimeError(f"WP-S001-001 default SEED mismatch: {seeds[0]}")
+        starts = [item.get("campaignRealStartMs") for item in builds]
+        if not starts[0] or len(set(starts)) != 1:
+            raise RuntimeError(f"WP-S001-001 campaign start state changed across reload: {starts}")
+        if any(int(item.get("gameTimeMultiplier") or 0) != 24 for item in builds):
+            raise RuntimeError(f"WP-S001-001 game-time multiplier is not 24x: {builds}")
+        if not all(item.get("startYearValid") for item in builds):
+            raise RuntimeError(f"WP-S001-001 fantasy start year is not real year - 900: {builds}")
+        timestamps = [float(item.get("gameTimestampMs") or 0) for item in builds]
+        if min(timestamps) <= 0 or not (timestamps[1] > timestamps[0] and timestamps[2] >= timestamps[1]):
+            raise RuntimeError(f"WP-S001-001 fantasy time did not continue across reload: {timestamps}")
+        if builds[1].get("persistenceStatus") != "PASS" or builds[2].get("persistenceStatus") != "PASS":
+            raise RuntimeError(f"WP-S001-001 UI did not confirm restored campaign persistence: {builds}")
+        return
+
     if scenario == "building-presentation":
         if len(frames) < 5:
             raise RuntimeError("building-presentation requires five evidence frames")
