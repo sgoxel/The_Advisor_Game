@@ -79,7 +79,7 @@ SCENARIO_MIN_SHOTS = {
     "camera-pan": 3,
     "camera-zoom": 5,
     "camera-pan-zoom": 4,
-    "responsive-cycle": 3,
+    "responsive-cycle": 5,
     "motion-sequence": 6,
     "time-of-day": 3,
     "village-reference": 3,
@@ -240,6 +240,7 @@ return (() => {
             settingsRect:rect('#settingsPopup')
           };
         })(),
+        responsiveControlDeck: window.ResponsiveControlDeck?.snapshot?.() || null,
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
@@ -1003,10 +1004,36 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "zoom-out-starting-village:0.5x"
         return _focus_starting_village_gateway(driver)
     if scenario == "responsive-cycle":
-        sizes = [(1080, 1920), (1920, 1080), (base_width, base_height)]
-        width, height = sizes[(frame_index - 1) % len(sizes)]
-        driver.set_window_size(width, height)
-        return f"resize:{width}x{height}"
+        if frame_index == 1:
+            driver.set_window_size(1080, 1920)
+            driver.execute_script("window.scrollTo(0, 0)")
+            return "portrait:gameplay-top"
+        if frame_index == 2:
+            driver.execute_script("""
+                const button=document.querySelector('#controlsDownButton');
+                if(!button)throw new Error('controlsDownButton missing');
+                button.dispatchEvent(new PointerEvent('pointerdown',{pointerId:201,pointerType:'touch',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:1}));
+                button.dispatchEvent(new PointerEvent('pointerup',{pointerId:201,pointerType:'touch',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:0}));
+                button.click();
+            """)
+            return "touch:navigate-controls"
+        if frame_index == 3:
+            driver.execute_script("""
+                const button=document.querySelector('#characterInfoToggle');
+                if(!button)throw new Error('characterInfoToggle missing');
+                button.dispatchEvent(new PointerEvent('pointerdown',{pointerId:301,pointerType:'mouse',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:1}));
+                button.dispatchEvent(new PointerEvent('pointerup',{pointerId:301,pointerType:'mouse',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:0}));
+                button.click();
+            """)
+            return "mouse:toggle-character-info"
+        if frame_index == 4:
+            driver.set_window_size(1920, 1080)
+            driver.execute_script("""
+                window.scrollTo(0,0);
+                document.dispatchEvent(new KeyboardEvent('keydown',{key:'x',code:'KeyX',bubbles:true,cancelable:true}));
+            """)
+            return "landscape:keyboard-interactions"
+        return "responsive:no-op"
     if scenario == "motion-sequence":
         return _drag_canvas(driver, 72 if frame_index % 2 else -72, 0)
     if scenario == "time-of-day":
@@ -1499,6 +1526,64 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             grid = item.get("terrainGrid") or {}
             if not grid.get("coveragePass"):
                 raise RuntimeError(f"zoom frame {index} lost terrain coverage: {grid}")
+        return
+
+    if scenario == "responsive-cycle":
+        if len(frames) < 5:
+            raise RuntimeError("responsive-cycle requires five evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:5]]
+        decks = [item.get("responsiveControlDeck") or {} for item in builds]
+
+        landscape_start, portrait_top, portrait_touch, portrait_mouse, landscape_keyboard = decks
+
+        if landscape_start.get("portrait") is not False:
+            raise RuntimeError(f"WP-S003-008 frame 1 is not landscape: {landscape_start}")
+        ratio = float(landscape_start.get("deckHeightRatio") or 0)
+        if abs(ratio - 0.25) > 0.025:
+            raise RuntimeError(f"WP-S003-008 landscape deck is not 25vh: {landscape_start}")
+        if not landscape_start.get("sideBySide"):
+            raise RuntimeError(f"WP-S003-008 landscape panels are not side by side: {landscape_start}")
+        if not landscape_start.get("advisorInInteractions"):
+            raise RuntimeError(f"WP-S003-008 Advisor is not inside Character Interactions: {landscape_start}")
+
+        if not portrait_top.get("portrait") or not portrait_top.get("controlsBelowGameplay"):
+            raise RuntimeError(f"WP-S003-008 portrait control deck is not below gameplay: {portrait_top}")
+        if float(portrait_top.get("scrollY") or 0) > 8:
+            raise RuntimeError(f"WP-S003-008 portrait proof did not begin at gameplay: {portrait_top}")
+        if not portrait_top.get("downVisible"):
+            raise RuntimeError(f"WP-S003-008 portrait down navigation is not visible: {portrait_top}")
+
+        if not portrait_touch.get("portrait") or not portrait_touch.get("deckVisible"):
+            raise RuntimeError(f"WP-S003-008 touch navigation did not reveal controls: {portrait_touch}")
+        if not portrait_touch.get("touchUsed"):
+            raise RuntimeError(f"WP-S003-008 touch input path was not recorded: {portrait_touch}")
+        if not portrait_touch.get("upVisible"):
+            raise RuntimeError(f"WP-S003-008 portrait up navigation is not visible over controls: {portrait_touch}")
+
+        info = (portrait_mouse.get("panels") or {}).get("info") or {}
+        if not portrait_mouse.get("mouseUsed") or not info.get("collapsed"):
+            raise RuntimeError(f"WP-S003-008 mouse accordion interaction failed: {portrait_mouse}")
+
+        ratio = float(landscape_keyboard.get("deckHeightRatio") or 0)
+        if landscape_keyboard.get("portrait") or abs(ratio - 0.25) > 0.025:
+            raise RuntimeError(f"WP-S003-008 did not restore 25vh landscape deck: {landscape_keyboard}")
+        if not landscape_keyboard.get("sideBySide") or not landscape_keyboard.get("keyboardUsed"):
+            raise RuntimeError(f"WP-S003-008 landscape keyboard/panel proof failed: {landscape_keyboard}")
+
+        for index, deck in enumerate(decks, start=1):
+            if deck.get("horizontalOverflow"):
+                raise RuntimeError(f"WP-S003-008 horizontal overflow in frame {index}: {deck}")
+            if not deck.get("advisorInInteractions"):
+                raise RuntimeError(f"WP-S003-008 Advisor placement failed in frame {index}: {deck}")
+            if int(deck.get("gameplayCanvasCount") or 0) != 1:
+                raise RuntimeError(f"WP-S003-008 gameplay canvas count changed in frame {index}: {deck}")
+
+        protagonist_positions = [item.get("protagonistLocation") for item in builds]
+        camera_positions = [item.get("cameraCoordinate") for item in builds]
+        if len(set(protagonist_positions)) != 1 or len(set(camera_positions)) != 1:
+            raise RuntimeError(
+                f"WP-S003-008 UI navigation mutated authoritative coordinates: protagonist={protagonist_positions}, camera={camera_positions}"
+            )
         return
 
     if scenario != "camera-pan":
