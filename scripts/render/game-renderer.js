@@ -764,13 +764,27 @@ function renderTerrainChunks(model,originX,originY){
   let hits=0,misses=0,compositions=0,invalidations=0;
   for(const [key,tiles] of grouped){
     active.add(key);
-    const signature=model.tileSize+":"+tiles.map(terrainTileSignature).sort().join(";");
+    const incoming=new Map(tiles.map(tile=>[String(tile.x)+","+String(tile.y),tile]));
     let entry=terrainChunkCache.get(key);
-    if(entry&&entry.signature===signature){hits++;terrainCacheTotals.hits++;}
-    else{
+    let requiresComposition=!entry||entry.tileSize!==model.tileSize;
+    if(entry&&!requiresComposition){
+      for(const [tileKey,tile] of incoming){
+        if(entry.tileSignatures?.get(tileKey)!==terrainTileSignature(tile)){
+          requiresComposition=true;
+          break;
+        }
+      }
+    }
+    if(!requiresComposition){
+      hits++;terrainCacheTotals.hits++;
+    }else{
+      const merged=new Map(entry?.tiles||[]);
+      for(const pair of incoming)merged.set(pair[0],pair[1]);
       if(entry){entry.texture.destroy(true);invalidations++;terrainCacheTotals.invalidations++;}
-      entry=buildTerrainChunk(model,tiles,key);
-      entry.signature=signature;
+      entry=buildTerrainChunk(model,[...merged.values()],key);
+      entry.tileSize=model.tileSize;
+      entry.tiles=merged;
+      entry.tileSignatures=new Map([...merged].map(([tileKey,tile])=>[tileKey,terrainTileSignature(tile)]));
       terrainChunkCache.set(key,entry);
       misses++;compositions++;terrainCacheTotals.misses++;terrainCacheTotals.compositions++;
     }
