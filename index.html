@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Advisor Game — WP-S003-002</title>
+<title>The Advisor Game — WP-S003-008</title>
 <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 
     <div class="brand-block" aria-label="Game title">
       <strong>The Advisor Game</strong>
-      <span class="build-badge">WP-S003-002</span>
+      <span class="build-badge">WP-S003-008</span>
     </div>
 
     <div class="game-clock" aria-label="Game date and time">
@@ -28,7 +28,6 @@
 
   <!-- ROW 2: GAMEPLAY AREA -->
   <main id="gameplayArea" class="gameplay-area" aria-label="Gameplay Area">
-    <aside id="advisorPanel" class="advisor-panel" aria-label="Advisor advice log"></aside>
     <div id="terrainGrid" class="terrain-grid" hidden aria-label="GPU-rendered gameplay terrain"></div>
     <div id="cameraHud" class="camera-hud" hidden>
       <strong>Camera <code id="cameraCoordinate">(0,0)</code></strong>
@@ -47,26 +46,58 @@
     </div>
   </main>
 
-  <!-- ROW 3: STATUS AREA -->
-  <section class="status-area" aria-label="Status Area">
-    <div class="status-item">
-      <span>Campaign</span>
-      <strong id="campaignState">NOT STARTED</strong>
-    </div>
+  <button id="controlsDownButton" class="portrait-nav controls-down" type="button" aria-label="Go to controls" aria-controls="controlDeck" title="Controls (V)">▼</button>
+  <button id="gameplayUpButton" class="portrait-nav controls-up" type="button" aria-label="Return to gameplay" aria-controls="gameplayArea" title="Gameplay (G)">▲</button>
 
-    <div class="status-item">
-      <span>Game Time Rate</span>
-      <strong>1 real hour = 1 game day</strong>
-    </div>
+  <!-- ROW 3: RESPONSIVE CONTROL / STATUS DECK -->
+  <section id="controlDeck" class="control-deck" aria-label="Gameplay controls and status">
+    <section id="characterInfoPanel" class="control-panel" data-panel="info" data-collapsed="false">
+      <button id="characterInfoToggle" class="control-panel-title" type="button" aria-expanded="true" aria-controls="characterInfoBody">
+        <span>Character Info</span><kbd>Z</kbd>
+      </button>
+      <div id="characterInfoBody" class="control-panel-body">
+        <div class="status-area" aria-label="Status Area">
+          <div class="status-item">
+            <span>Campaign</span>
+            <strong id="campaignState">NOT STARTED</strong>
+          </div>
+          <div class="status-item">
+            <span>Game Time Rate</span>
+            <strong>1 real hour = 1 game day</strong>
+          </div>
+          <div class="status-item">
+            <span>Location</span>
+            <strong id="protagonistLocation">—</strong>
+          </div>
+          <div class="status-message" id="statusMessage" role="status" aria-live="polite">
+            Open Main Menu to start a campaign.
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="status-item">
-      <span>Location</span>
-      <strong id="protagonistLocation">—</strong>
-    </div>
+    <section id="characterInteractionsPanel" class="control-panel" data-panel="interactions" data-collapsed="false">
+      <button id="characterInteractionsToggle" class="control-panel-title" type="button" aria-expanded="true" aria-controls="characterInteractionsBody">
+        <span>Character Interactions</span><kbd>X</kbd>
+      </button>
+      <div id="characterInteractionsBody" class="control-panel-body">
+        <aside id="advisorPanel" class="advisor-panel" aria-label="Advisor advice log"></aside>
+      </div>
+    </section>
 
-    <div class="status-message" id="statusMessage" role="status" aria-live="polite">
-      Open Main Menu to start a campaign.
-    </div>
+    <section id="miniMapPanel" class="control-panel" data-panel="map" data-collapsed="false">
+      <button id="miniMapToggle" class="control-panel-title" type="button" aria-expanded="true" aria-controls="miniMapBody">
+        <span>Mini Map</span><kbd>C</kbd>
+      </button>
+      <div id="miniMapBody" class="control-panel-body mini-map-body">
+        <canvas id="miniMapCanvas" class="mini-map-canvas" width="360" height="132" aria-label="Local terrain mini map"></canvas>
+        <div class="mini-map-readout">
+          <span>Camera <strong id="miniMapCamera">(0,0)</strong></span>
+          <span>Protagonist <strong id="miniMapProtagonist">—</strong></span>
+        </div>
+        <p class="control-shortcuts">Shortcuts: <kbd>G</kbd> gameplay · <kbd>V</kbd> controls · <kbd>Z</kbd> info · <kbd>X</kbd> interactions · <kbd>C</kbd> mini map</p>
+      </div>
+    </section>
   </section>
 </section>
 
@@ -457,7 +488,7 @@
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
-      <p><strong>Current Work Package:</strong> WP-S003-004 Layered 2.5D Building Presentation + Interior Visibility.</p>
+      <p><strong>Current Work Package:</strong> WP-S003-008 Responsive Gameplay Control Deck + Multimodal Navigation.</p>
       <p><strong>Current world rendering:</strong> PixiJS/WebGL layered 2.5D presentation consuming one continuous outdoor + indoor authoritative Simulation space.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
@@ -489,6 +520,7 @@
 <script src="scripts/world/building-interiors.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
+<script src="scripts/ui/responsive-control-deck.js"></script>
 <script src="scripts/main.js"></script>
 </body>
 </html>
