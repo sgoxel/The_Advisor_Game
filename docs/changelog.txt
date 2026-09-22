@@ -1,3 +1,8 @@
+2026-09-22 15:17:34 +03:00 | WP-S002-001-002 | Completion audit fix
+- Fresh current-main visual revalidation exposed a blank gameplay viewport because the Advisor panel had been inserted as a fourth direct child of the fixed three-row .screen-shell grid.
+- Moved the Advisor panel into the Gameplay Area as a bounded overlay so Top Ribbon / Gameplay / Status remain the only direct screen rows and the renderer can retain the gameplay viewport.
+- WP-S002-001-002 remains open pending fresh screenshot/runtime verification and GitHub Pages deployment confirmation.
+
 2026-09-22 12:40:00 +03:00
 - Added a persistent advisor advice log foundation to the gameplay shell: the advisor panel is rendered from a deterministic storage-backed channel, seeded by the active campaign and scoped to the current protagonist.
 - Wired the panel into the main app UI and added minimal styling for status pills and the advisor log list without changing simulation authority or world rules.
