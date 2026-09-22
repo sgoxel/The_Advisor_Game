@@ -5,3 +5,4 @@
 2026-09-22 06:33 +00:00 | COMPLETION-AUDIT | Phase 1 | Suggestion: add an automated pre-close guard requiring the tested main commit SHA and successful GitHub Pages deployment evidence before any WP issue can be closed.
 2026-09-22 06:36 +00:00 | WP-S001-001 | Phase 1 | Suggestion: add a dedicated WP-S001-001 browser scenario that combines save/load with portrait/landscape layout checks so future completion audits can verify the entire foundation in one evidence run.
 2026-09-22 06:35 +00:00 | WP-S001-001 | Phase 1 | Suggestion: add an automated reload regression that starts a campaign, refreshes the page, and asserts the fantasy clock resumes from the persisted campaign state.
+2026-09-22 06:41 +00:00 | WP-S001-001 | Phase 1 | Suggestion: surface the fantasy timestamp era/sign in the save-load evidence JSON so BCE fantasy years are easier to diagnose during future regressions.

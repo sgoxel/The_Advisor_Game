@@ -944,7 +944,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if not all(item.get("startYearValid") for item in builds):
             raise RuntimeError(f"WP-S001-001 fantasy start year is not real year - 900: {builds}")
         timestamps = [float(item.get("gameTimestampMs") or 0) for item in builds]
-        if min(timestamps) <= 0 or not (timestamps[1] > timestamps[0] and timestamps[2] >= timestamps[1]):
+        if not all(ts == ts for ts in timestamps):
+            raise RuntimeError(f"WP-S001-001 fantasy time returned an invalid timestamp across reload: {timestamps}")
+        if not (timestamps[1] > timestamps[0] and timestamps[2] >= timestamps[1]):
             raise RuntimeError(f"WP-S001-001 fantasy time did not continue across reload: {timestamps}")
         if builds[1].get("persistenceStatus") != "PASS" or builds[2].get("persistenceStatus") != "PASS":
             raise RuntimeError(f"WP-S001-001 UI did not confirm restored campaign persistence: {builds}")
