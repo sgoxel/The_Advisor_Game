@@ -16,6 +16,7 @@ let lastModel=null;
 let buildingProofState=null;
 let buildingOcclusionProofState=null;
 const TERRAIN_CHUNK_SIZE=16;
+const TERRAIN_RASTER_TILE_SIZE=100;
 const TERRAIN_CACHE_LIMIT=36;
 const terrainChunkCache=new Map();
 let terrainFrameSerial=0;
@@ -751,28 +752,29 @@ function buildTerrainChunk(model,tiles,key){
   const [chunkXText,chunkYText]=key.split(",");
   const chunkX=BigInt(chunkXText),chunkY=BigInt(chunkYText);
   const baseX=chunkX*BigInt(TERRAIN_CHUNK_SIZE),baseY=chunkY*BigInt(TERRAIN_CHUNK_SIZE);
-  const pad=model.tileSize*2;
-  const width=Math.ceil(TERRAIN_CHUNK_SIZE*2*model.tileSize*DIMETRIC_X+pad*2);
-  const height=Math.ceil(TERRAIN_CHUNK_SIZE*2*model.tileSize*DIMETRIC_Y+pad*2);
-  const offsetX=pad+TERRAIN_CHUNK_SIZE*model.tileSize*DIMETRIC_X;
+  const tileSize=TERRAIN_RASTER_TILE_SIZE;
+  const pad=tileSize*2;
+  const width=Math.ceil(TERRAIN_CHUNK_SIZE*2*tileSize*DIMETRIC_X+pad*2);
+  const height=Math.ceil(TERRAIN_CHUNK_SIZE*2*tileSize*DIMETRIC_Y+pad*2);
+  const offsetX=pad+TERRAIN_CHUNK_SIZE*tileSize*DIMETRIC_X;
   const offsetY=pad;
   const source=new PIXI.Container();
   for(const tile of tiles){
     const lx=Number(BigInt(String(tile.x))-baseX);
     const ly=Number(BigInt(String(tile.y))-baseY);
-    const p=projectOffset(model.tileSize,lx,ly);
+    const p=projectOffset(tileSize,lx,ly);
     const cell=new PIXI.Container();
     applyGroundProjection(cell,offsetX+p.x,offsetY+p.y);
-    cell.addChild(makeColorSprite(tile.color,model.tileSize,model.tileSize));
-    if(tile.textureKey){const texture=TextureAssets.get(tile.textureKey);if(texture)cell.addChild(makeSprite(texture,model.tileSize,model.tileSize));}
-    if(tile.overlayTextureKey){const overlay=TextureAssets.get(tile.overlayTextureKey);if(overlay)cell.addChild(makeSprite(overlay,model.tileSize,model.tileSize));}
-    for(const blend of tile.blends||[])addBlend(cell,blend,model.tileSize);
+    cell.addChild(makeColorSprite(tile.color,tileSize,tileSize));
+    if(tile.textureKey){const texture=TextureAssets.get(tile.textureKey);if(texture)cell.addChild(makeSprite(texture,tileSize,tileSize));}
+    if(tile.overlayTextureKey){const overlay=TextureAssets.get(tile.overlayTextureKey);if(overlay)cell.addChild(makeSprite(overlay,tileSize,tileSize));}
+    for(const blend of tile.blends||[])addBlend(cell,blend,tileSize);
     source.addChild(cell);
   }
   const texture=PIXI.RenderTexture.create({width,height,resolution:1});
   app.renderer.render({container:source,target:texture,clear:true});
   source.destroy({children:true});
-  return {key,baseX,baseY,texture,width,height,offsetX,offsetY,lastUsed:terrainFrameSerial};
+  return {key,baseX,baseY,texture,width,height,offsetX,offsetY,tileSize,lastUsed:terrainFrameSerial};
 }
 
 function renderTerrainChunks(model,originX,originY){
@@ -793,7 +795,7 @@ function renderTerrainChunks(model,originX,originY){
     active.add(key);
     const incoming=new Map(tiles.map(tile=>[String(tile.x)+","+String(tile.y),tile]));
     let entry=terrainChunkCache.get(key);
-    let requiresComposition=!entry||entry.tileSize!==model.tileSize;
+    let requiresComposition=!entry||entry.tileSize!==TERRAIN_RASTER_TILE_SIZE;
     if(entry&&!requiresComposition){
       for(const [tileKey,tile] of incoming){
         if(entry.tileSignatures?.get(tileKey)!==terrainTileSignature(tile)){
@@ -809,7 +811,7 @@ function renderTerrainChunks(model,originX,originY){
       const merged=new Map(previous?.tiles||[]);
       for(const pair of incoming)merged.set(pair[0],pair[1]);
       entry=buildTerrainChunk(model,[...merged.values()],key);
-      entry.tileSize=model.tileSize;
+      entry.tileSize=TERRAIN_RASTER_TILE_SIZE;
       entry.tiles=merged;
       entry.tileSignatures=new Map([...merged].map(([tileKey,tile])=>[tileKey,terrainTileSignature(tile)]));
       if(previous?.sprite){
@@ -839,7 +841,12 @@ function renderTerrainChunks(model,originX,originY){
       reusedSprites++;
     }
     entry.sprite.visible=true;
-    entry.sprite.position.set(originX+p.x-entry.offsetX,originY+p.y-entry.offsetY);
+    const scale=model.tileSize/entry.tileSize;
+    entry.sprite.scale.set(scale);
+    entry.sprite.position.set(
+      originX+p.x-entry.offsetX*scale,
+      originY+p.y-entry.offsetY*scale
+    );
   }
   const protectedKeys=new Set(active);
   let removedSprites=0;
@@ -861,6 +868,8 @@ function renderTerrainChunks(model,originX,originY){
   }
   return Object.freeze({
     chunkSize:TERRAIN_CHUNK_SIZE,
+    rasterTileSize:TERRAIN_RASTER_TILE_SIZE,
+    visibleTileSize:model.tileSize,
     visibleChunkCount:active.size,
     preparedChunkCount:terrainChunkCache.size,
     hits,misses,compositions,invalidations,
@@ -884,7 +893,7 @@ function prepareTerrain(model){
   for(const [key,tiles] of grouped){
     const incoming=new Map(tiles.map(tile=>[String(tile.x)+","+String(tile.y),tile]));
     let entry=terrainChunkCache.get(key);
-    let requiresComposition=!entry||entry.tileSize!==model.tileSize;
+    let requiresComposition=!entry||entry.tileSize!==TERRAIN_RASTER_TILE_SIZE;
     if(entry&&!requiresComposition){
       for(const [tileKey,tile] of incoming){
         if(entry.tileSignatures?.get(tileKey)!==terrainTileSignature(tile)){
@@ -903,7 +912,7 @@ function prepareTerrain(model){
     const merged=new Map(previous?.tiles||[]);
     for(const pair of incoming)merged.set(pair[0],pair[1]);
     entry=buildTerrainChunk(model,[...merged.values()],key);
-    entry.tileSize=model.tileSize;
+    entry.tileSize=TERRAIN_RASTER_TILE_SIZE;
     entry.tiles=merged;
     entry.tileSignatures=new Map([...merged].map(([tileKey,tile])=>[tileKey,terrainTileSignature(tile)]));
     if(previous?.sprite){
