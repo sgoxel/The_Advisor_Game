@@ -71,6 +71,7 @@ SCENARIOS = {
     "building-presentation",
     "wp-s001-001",
     "wp-s001-004",
+    "wp-s003-005",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -93,6 +94,7 @@ SCENARIO_MIN_SHOTS = {
     "building-presentation": 5,
     "wp-s001-001": 5,
     "wp-s001-004": 2,
+    "wp-s003-005": 3,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -772,6 +774,40 @@ def _drag_canvas(driver, dx: int, dy: int) -> str:
     return f"drag-{target_name}:{dx},{dy}"
 
 
+def _wait_for_asset_prefetch(driver, minimum_regions: int = 8, timeout: float = 10.0) -> str:
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    WebDriverWait(driver, timeout).until(
+        lambda d: d.execute_script(
+            """
+            const stats=window.TextureAssets?.stats?.();
+            return Boolean(
+              stats?.ready &&
+              Number(stats?.prefetchedRegionCount || 0) >= arguments[0] &&
+              Number(stats?.preparedRegionCount || 0) >= arguments[0] + 1
+            );
+            """,
+            minimum_regions,
+        )
+    )
+    return f"asset-prefetch-ready:{minimum_regions}"
+
+
+def _drag_canvas_and_wait(driver, dx: int, dy: int, timeout: float = 10.0) -> str:
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    before = driver.execute_script(
+        "return document.querySelector('#cameraCoordinate')?.textContent?.trim() || null"
+    )
+    action = _drag_canvas(driver, dx, dy)
+    WebDriverWait(driver, timeout).until(
+        lambda d: d.execute_script(
+            "return document.querySelector('#cameraCoordinate')?.textContent?.trim() || null"
+        ) != before
+    )
+    return action + ":prepared"
+
+
 def _wheel_canvas(driver, delta_y: int) -> str:
     from selenium.webdriver.common.by import By
 
@@ -946,6 +982,12 @@ def _set_building_proof_state(driver, state: str) -> str:
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-005":
+        if frame_index == 0:
+            return _wait_for_asset_prefetch(driver)
+        if frame_index == 1:
+            return _drag_canvas_and_wait(driver, 120, 0)
+        return _drag_canvas_and_wait(driver, -120, 0)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         if frame_index == 0:
@@ -1048,6 +1090,63 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-005":
+        if len(frames) < 3:
+            raise RuntimeError("wp-s003-005 requires three evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
+        caches = [(item.get("gpuRenderer") or {}).get("textureCache") or {} for item in builds]
+
+        initial, moved, returned = builds
+        initial_cache, moved_cache, returned_cache = caches
+
+        if not initial_cache.get("ready"):
+            raise RuntimeError(f"WP-S003-005 initial asset cache is not ready: {initial_cache}")
+        if int(initial_cache.get("preparedRegionCount") or 0) < 9:
+            raise RuntimeError(f"WP-S003-005 bounded safety prefetch ring is missing: {initial_cache}")
+        if int(initial_cache.get("prefetchedRegionCount") or 0) < 8:
+            raise RuntimeError(f"WP-S003-005 nearby regions were not prefetched: {initial_cache}")
+        if int(initial_cache.get("preparedRegionCount") or 0) > int(initial_cache.get("preparedRegionLimit") or 0):
+            raise RuntimeError(f"WP-S003-005 prepared-region cache exceeded its bound: {initial_cache}")
+        if int(initial_cache.get("loadedKeyCount") or 0) >= int(initial_cache.get("logicalKeyCount") or 0):
+            raise RuntimeError(f"WP-S003-005 startup loaded the whole logical asset catalog: {initial_cache}")
+        if int(initial_cache.get("pngPreferredCount") or 0) < 1:
+            raise RuntimeError(f"WP-S003-005 PNG-first resolution was not observed: {initial_cache}")
+        if int(initial_cache.get("fallbackSvgCount") or 0) < 1:
+            raise RuntimeError(f"WP-S003-005 SVG fallback resolution was not observed: {initial_cache}")
+
+        initial_blocking = int(initial_cache.get("blockingLoadCount") or 0)
+        if int(moved_cache.get("blockingLoadCount") or 0) != initial_blocking:
+            raise RuntimeError(
+                f"WP-S003-005 camera movement required blocking asset preparation: initial={initial_cache}, moved={moved_cache}"
+            )
+        if int(moved_cache.get("activationPrefetchHitCount") or 0) <= int(initial_cache.get("activationPrefetchHitCount") or 0):
+            raise RuntimeError(
+                f"WP-S003-005 moved region was not activated from prefetch: initial={initial_cache}, moved={moved_cache}"
+            )
+        if not moved_cache.get("lastActivationWasPrefetched"):
+            raise RuntimeError(f"WP-S003-005 moved region did not report prefetched activation: {moved_cache}")
+        if int(returned_cache.get("blockingLoadCount") or 0) != initial_blocking:
+            raise RuntimeError(
+                f"WP-S003-005 return movement caused blocking asset preparation: {returned_cache}"
+            )
+
+        for index, (item, cache) in enumerate(zip(builds, caches), start=1):
+            gpu = item.get("gpuRenderer") or {}
+            if gpu.get("visibleRegionKey") != cache.get("preparedRegionKey"):
+                raise RuntimeError(
+                    f"WP-S003-005 visible/prepared region mismatch in frame {index}: visible={gpu.get('visibleRegionKey')} cache={cache}"
+                )
+            if int(cache.get("pinnedKeyCount") or 0) > int(cache.get("cacheLimit") or 0):
+                raise RuntimeError(f"WP-S003-005 pinned cache exceeded limit in frame {index}: {cache}")
+
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        cameras = [item.get("cameraCoordinate") for item in builds]
+        if len(set(protagonists)) != 1:
+            raise RuntimeError(f"WP-S003-005 asset preparation changed Protagonist coordinates: {protagonists}")
+        if not cameras[0] or cameras[1] == cameras[0] or cameras[2] != cameras[0]:
+            raise RuntimeError(f"WP-S003-005 camera evidence did not move and return: {cameras}")
+        return
+
     if scenario == "wp-s001-004":
         if len(frames) < 2:
             raise RuntimeError("wp-s001-004 requires two evidence frames")
@@ -1707,7 +1806,7 @@ def take_screenshots(
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario == "building-presentation":
+                if scenario in {"building-presentation", "wp-s003-005"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
