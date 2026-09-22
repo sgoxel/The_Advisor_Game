@@ -243,12 +243,18 @@ async function prepareRegion(regionKey,keys){
   const cached=preparedRegions.get(key);
   if(isRegionPrepared(key,unique)){
     prepTotals.activationCacheHits++;
+    const alreadyActive=key===preparedRegionKey&&cached?.kind==="active";
     const wasPrefetched=cached?.kind==="prefetch";
     if(wasPrefetched)prepTotals.activationPrefetchHits++;
-    activateRegion(key,unique,{wasPrefetched});
+    if(!alreadyActive){
+      activateRegion(key,unique,{wasPrefetched});
+    }else{
+      preparedKeys=unique.slice();
+      ready=true;
+    }
     return Object.freeze({
       ready:true,stale:false,regionKey:key,keyCount:unique.length,
-      cached:true,prefetched:wasPrefetched
+      cached:true,prefetched:wasPrefetched||(alreadyActive&&lastActivationWasPrefetched)
     });
   }
 
