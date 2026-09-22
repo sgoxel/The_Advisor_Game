@@ -53,8 +53,8 @@ jobs:
             - Run appropriate automated tests and, when useful, tools/screenshot_tool.py.
             - Fix implementation or test failures discovered during the same run.
             - Keep the repository clean and remove temporary test artifacts that are no longer needed.
-            - Update changelog.txt with a timestamp and a brief description of the implemented change when appropriate.
-            - Commit successfully tested changes. Work on only one Work Package per run.
+            - Update docs/changelog.txt with a timestamp and a brief description of the implemented change when appropriate.
+            - Record optional follow-up suggestions in docs/suggest_log.txt when appropriate.\n            - Commit successfully tested changes. Work on only one Work Package per run.
 
             ISSUE MANAGEMENT IS FORBIDDEN:
             - NEVER close an Issue.
