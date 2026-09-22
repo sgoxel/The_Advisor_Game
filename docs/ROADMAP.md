@@ -34,7 +34,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 # Stage 3 — GPU 2.5D World + Enterable Building Foundation
 
 - `WP-S003-001` — GPU 2.5D Gameplay Renderer Foundation — COMPLETED
-- `WP-S003-002` — Authoritative Enterable Building Interiors
+- `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
 - `WP-S003-003` — Interior Objects + Interaction Points
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility
 - `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache
