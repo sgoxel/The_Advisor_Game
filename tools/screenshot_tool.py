@@ -1690,6 +1690,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-S003-008 horizontal overflow in frame {index}: {deck}")
             if not deck.get("advisorInInteractions"):
                 raise RuntimeError(f"WP-S003-008 Advisor placement failed in frame {index}: {deck}")
+            if deck.get("developmentMode") or deck.get("developmentDetailsVisible"):
+                raise RuntimeError(f"WP-S003-008 player-facing layout exposes Development/verification content in frame {index}: {deck}")
             if int(deck.get("gameplayCanvasCount") or 0) != 1:
                 raise RuntimeError(f"WP-S003-008 gameplay canvas count changed in frame {index}: {deck}")
 
