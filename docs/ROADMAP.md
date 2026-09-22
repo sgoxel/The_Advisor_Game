@@ -43,6 +43,8 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006` — GPU Terrain Chunk Composition + Background Preparation
 - `WP-S003-006-001` — Adjustable Terrain Chunk Size
 - `WP-S003-006-002` — Adjustable Terrain Preload + Chunk Cache Budget
+- `WP-S003-006-003` — Chunk-Native World Data + Complete Background Preparation
+- `WP-S003-006-004` — Persistent Static Presentation + Navigation Hot-Path Elimination
 - `WP-S003-007` — Dimetric Projection + Adaptive Visual Depth Pass
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation
 
