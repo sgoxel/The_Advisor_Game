@@ -80,16 +80,19 @@ function create({
     return [pc.DEVICETYPE_WEBGL2];
   }
 
-  function deviceClass(width,height){
+  function deviceClass(){
+    const width=Math.max(1,Number(window.innerWidth||host?.clientWidth||1));
+    const height=Math.max(1,Number(window.innerHeight||host?.clientHeight||1));
     const shortSide=Math.min(width,height);
+    const longSide=Math.max(width,height);
     const coarse=Boolean(window.matchMedia?.("(pointer:coarse)")?.matches);
-    if(shortSide<=520)return "phone";
-    if(shortSide<=1100||coarse)return "tablet";
+    if(shortSide<=520||(longSide<=900&&shortSide<=520))return "phone";
+    if(shortSide<=900||coarse)return "tablet";
     return "desktop";
   }
 
   function resolveQuality(width,height){
-    const cls=deviceClass(width,height);
+    const cls=deviceClass();
     const defaults=cls==="phone"
       ?{maxPixelRatio:1.0,renderScale:0.85}
       :cls==="tablet"
@@ -288,7 +291,8 @@ function create({
     const height=Math.max(1,host?.clientHeight||1);
     const aspect=width/height;
     const portraitCompensation=aspect<0.8?1.22:1;
-    camera.camera.orthoHeight=BASE_ORTHO_HEIGHT*portraitCompensation/zoom;
+    const shortLandscapeCompensation=aspect>3&&height<220?0.72:1;
+    camera.camera.orthoHeight=BASE_ORTHO_HEIGHT*portraitCompensation*shortLandscapeCompensation/zoom;
     camera.setPosition(targetX+13.5,15.5,targetZ+13.5);
     camera.lookAt(targetX,0,targetZ);
   }
