@@ -1366,6 +1366,18 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(
                     f"WP-S003-004 frame {index} has no visible roof presentation: {presentation}"
                 )
+            if not presentation.get("projectedFootprintRoofs"):
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} is not using four-corner projected roof footprints: {presentation}"
+                )
+            if int(presentation.get("projectedFootprintRoofCount") or 0) != int(presentation.get("roofCount") or 0):
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} projected roof count mismatch: {presentation}"
+                )
+            if not presentation.get("edgeAwareWallDepth"):
+                raise RuntimeError(
+                    f"WP-S003-004 frame {index} wall depth is not orientation-aware: {presentation}"
+                )
             if int(presentation.get("visibleWallCapCount") or 0) <= 0:
                 raise RuntimeError(
                     f"WP-S003-004 frame {index} has no raised wall presentation: {presentation}"
