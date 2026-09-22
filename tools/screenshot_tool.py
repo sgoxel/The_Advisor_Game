@@ -1382,9 +1382,12 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
 
         for index, (item, cache) in enumerate(zip(builds, caches), start=1):
             gpu = item.get("gpuRenderer") or {}
-            if gpu.get("visibleRegionKey") != cache.get("preparedRegionKey"):
+            visible_region = str(gpu.get("visibleRegionKey") or "")
+            prepared_region = str(cache.get("preparedRegionKey") or "")
+            prepared_base = prepared_region.split("|", 1)[0]
+            if not visible_region or prepared_base != visible_region:
                 raise RuntimeError(
-                    f"WP-S003-005 visible/prepared region mismatch in frame {index}: visible={gpu.get('visibleRegionKey')} cache={cache}"
+                    f"WP-S003-005 visible/prepared region mismatch in frame {index}: visible={visible_region} prepared={prepared_region} cache={cache}"
                 )
             if int(cache.get("pinnedKeyCount") or 0) > int(cache.get("cacheLimit") or 0):
                 raise RuntimeError(f"WP-S003-005 pinned cache exceeded limit in frame {index}: {cache}")
