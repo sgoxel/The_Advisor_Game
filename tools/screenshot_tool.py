@@ -1973,7 +1973,7 @@ def take_screenshots(
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "wp-s003-005"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
