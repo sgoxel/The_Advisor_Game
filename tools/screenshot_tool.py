@@ -1264,13 +1264,23 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(phone_portrait.get("height") or 0) <= int(phone_portrait.get("width") or 0):
             raise RuntimeError(f"Phone portrait evidence invalid: {phone_portrait}")
 
+        desktop_quality = gpus[0].get("quality") or {}
+        tablet_quality = gpus[1].get("quality") or {}
         phone_quality = gpus[2].get("quality") or {}
         portrait_quality = gpus[3].get("quality") or {}
+        if desktop_quality.get("deviceClass") != "desktop":
+            raise RuntimeError(f"Desktop viewport did not receive desktop quality policy: {desktop_quality}")
+        if float(desktop_quality.get("maxPixelRatio") or 0) < 1.5 or float(desktop_quality.get("renderScale") or 0) < 1.0:
+            raise RuntimeError(f"Desktop default quality was unexpectedly reduced: {desktop_quality}")
+        if tablet_quality.get("deviceClass") != "tablet":
+            raise RuntimeError(f"Tablet viewport did not receive tablet quality policy: {tablet_quality}")
+        if abs(float(tablet_quality.get("maxPixelRatio") or 0) - 1.25) > 0.01 or abs(float(tablet_quality.get("renderScale") or 0) - 0.90) > 0.01:
+            raise RuntimeError(f"Tablet default quality policy is incorrect: {tablet_quality}")
         for q in (phone_quality, portrait_quality):
             if q.get("deviceClass") != "phone":
                 raise RuntimeError(f"Phone viewport did not receive phone quality policy: {q}")
-            if float(q.get("maxPixelRatio") or 9) > 1.0 or float(q.get("renderScale") or 9) > 0.85:
-                raise RuntimeError(f"Phone quality policy is not conservative: {q}")
+            if abs(float(q.get("maxPixelRatio") or 0) - 1.0) > 0.01 or abs(float(q.get("renderScale") or 0) - 0.85) > 0.01:
+                raise RuntimeError(f"Phone quality policy is not conservative/default-correct: {q}")
 
         cameras = [item.get("cameraCoordinate") for item in builds]
         zooms = [item.get("cameraZoom") for item in builds]
