@@ -37,7 +37,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
 - `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
-- `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache
+- `WP-S003-005` — PNG-First GPU Asset Preparation + SVG Fallback Cache — COMPLETED
 - `WP-S003-006` — GPU Terrain Chunk Composition + Background Preparation
 - `WP-S003-007` — Dimetric Projection + Adaptive Visual Depth Pass — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation
