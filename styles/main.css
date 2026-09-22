@@ -232,6 +232,19 @@ details[open] summary{border-bottom:1px solid #343a30}
   .game-clock span{font-size:11px}.game-clock strong{font-size:12px}
   .status-item,.status-message{padding:5px 8px}
   .gameplay-placeholder{gap:4px}.gameplay-placeholder strong{font-size:17px}.gameplay-placeholder span{font-size:11px}
+  .camera-hud{
+    top:4px;
+    left:6px;
+    max-width:calc(100% - 12px);
+    min-height:0;
+    padding:3px 5px;
+    gap:5px;
+    flex-wrap:nowrap;
+    font-size:9px;
+    border-radius:6px;
+  }
+  .camera-hud button{padding:3px 5px;font-size:9px;white-space:nowrap}
+  .camera-hud>span{display:none}
 }
 
 .geography-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0 14px}
