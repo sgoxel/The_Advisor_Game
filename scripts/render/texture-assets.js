@@ -25,6 +25,54 @@ const prepTotals={
   prefetchReuses:0,
   regionEvictions:0
 };
+const resolutionTotals={
+  pngAttempts:0,
+  pngSuccesses:0,
+  svgAttempts:0,
+  svgSuccesses:0,
+  terrainPngAttempts:0,
+  terrainPngSuccesses:0,
+  terrainSvgAttempts:0,
+  terrainSvgSuccesses:0,
+  blendMaskPngAttempts:0,
+  blendMaskPngSuccesses:0,
+  blendMaskSvgAttempts:0,
+  blendMaskSvgSuccesses:0
+};
+
+function resolutionClass(key){
+  const value=String(key||"");
+  if(value.startsWith("tile:"))return "terrain";
+  if(value.startsWith("asset:blend_"))return "blendMask";
+  return "other";
+}
+
+function noteResolution(key,url,success){
+  const isPng=/\.png(?:$|[?#])/i.test(String(url||""));
+  const isSvg=/\.svg(?:$|[?#])/i.test(String(url||""));
+  const kind=resolutionClass(key);
+  if(isPng){
+    resolutionTotals.pngAttempts++;
+    if(success)resolutionTotals.pngSuccesses++;
+    if(kind==="terrain"){
+      resolutionTotals.terrainPngAttempts++;
+      if(success)resolutionTotals.terrainPngSuccesses++;
+    }else if(kind==="blendMask"){
+      resolutionTotals.blendMaskPngAttempts++;
+      if(success)resolutionTotals.blendMaskPngSuccesses++;
+    }
+  }else if(isSvg){
+    resolutionTotals.svgAttempts++;
+    if(success)resolutionTotals.svgSuccesses++;
+    if(kind==="terrain"){
+      resolutionTotals.terrainSvgAttempts++;
+      if(success)resolutionTotals.terrainSvgSuccesses++;
+    }else if(kind==="blendMask"){
+      resolutionTotals.blendMaskSvgAttempts++;
+      if(success)resolutionTotals.blendMaskSvgSuccesses++;
+    }
+  }
+}
 
 function catalog(){
   return Object.freeze({
@@ -88,7 +136,9 @@ async function resolveKey(key,manifest){
   let lastError=null;
   for(const url of candidates(declared)){
     try{
+      noteResolution(key,url,false);
       const texture=await loadSource(url);
+      noteResolution(key,url,true);
       resolvedSources.set(key,url);
       return texture;
     }catch(error){lastError=error;}
@@ -343,6 +393,16 @@ function stats(){
   const loadedKeys=[...textures.keys()];
   const loadedSources=loadedKeys.map(key=>resolvedSources.get(key)||manifest[key]).filter(Boolean);
   const regionEntries=[...preparedRegions.values()];
+  const terrainEntries=Object.entries(manifest).filter(([key])=>key.startsWith("tile:"));
+  const blendMaskEntries=Object.entries(manifest).filter(([key])=>key.startsWith("asset:blend_"));
+  const pngFirstTerrainPolicyPass=terrainEntries.length>0&&terrainEntries.every(([,url])=>{
+    const list=candidates(url);
+    return list.length>=2&&/\.png(?:$|[?#])/i.test(list[0])&&/\.svg(?:$|[?#])/i.test(list[1]);
+  });
+  const pngFirstBlendMaskPolicyPass=blendMaskEntries.length>0&&blendMaskEntries.every(([,url])=>{
+    const list=candidates(url);
+    return list.length>=2&&/\.png(?:$|[?#])/i.test(list[0])&&/\.svg(?:$|[?#])/i.test(list[1]);
+  });
   return Object.freeze({
     ready,
     logicalKeyCount:Object.keys(manifest).length,
@@ -371,7 +431,21 @@ function stats(){
     activationPrefetchHitCount:prepTotals.activationPrefetchHits,
     prefetchCount:prepTotals.prefetches,
     prefetchReuseCount:prepTotals.prefetchReuses,
-    regionEvictionCount:prepTotals.regionEvictions
+    regionEvictionCount:prepTotals.regionEvictions,
+    pngFirstTerrainPolicyPass,
+    pngFirstBlendMaskPolicyPass,
+    pngAttemptCount:resolutionTotals.pngAttempts,
+    pngSuccessCount:resolutionTotals.pngSuccesses,
+    svgAttemptCount:resolutionTotals.svgAttempts,
+    svgSuccessCount:resolutionTotals.svgSuccesses,
+    terrainPngAttemptCount:resolutionTotals.terrainPngAttempts,
+    terrainPngSuccessCount:resolutionTotals.terrainPngSuccesses,
+    terrainSvgAttemptCount:resolutionTotals.terrainSvgAttempts,
+    terrainSvgFallbackCount:resolutionTotals.terrainSvgSuccesses,
+    blendMaskPngAttemptCount:resolutionTotals.blendMaskPngAttempts,
+    blendMaskPngSuccessCount:resolutionTotals.blendMaskPngSuccesses,
+    blendMaskSvgAttemptCount:resolutionTotals.blendMaskSvgAttempts,
+    blendMaskSvgFallbackCount:resolutionTotals.blendMaskSvgSuccesses
   });
 }
 
