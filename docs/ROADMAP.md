@@ -18,7 +18,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S001-003` — Infinite World Coordinates + Protagonist Origin
 - `WP-S001-004` — SEED-Generated Geographic Hierarchy + Realistic Settlement Spacing — COMPLETED
 - `WP-S001-005` — Viewport-Filling Solid-Color Tiles
-- `WP-S001-006` — Camera Movement Through the Infinite World
+- `WP-S001-006` — Camera Movement Through the Infinite World — COMPLETED
 
 # Stage 2 — Starting Village Physical Foundation
 
