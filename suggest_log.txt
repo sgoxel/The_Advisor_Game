@@ -3,3 +3,4 @@
 2026-09-22 00:59 +00:00 | WP-S003-005 | Phase 1 | Suggestion: expose the prepared/visible region key pair in the compact HUD header in a later polish pass so QA can spot cache mismatches without opening the technical accordion.
 2026-09-22 06:18 +00:00 | INFRA-COPILOT | Phase 1 | Suggestion: include the final persisted main commit SHA in each Copilot issue completion comment so future audits can verify that the implementation exists on main before closure.
 2026-09-22 06:33 +00:00 | COMPLETION-AUDIT | Phase 1 | Suggestion: add an automated pre-close guard requiring the tested main commit SHA and successful GitHub Pages deployment evidence before any WP issue can be closed.
+2026-09-22 06:36 +00:00 | WP-S001-001 | Phase 1 | Suggestion: add a dedicated WP-S001-001 browser scenario that combines save/load with portrait/landscape layout checks so future completion audits can verify the entire foundation in one evidence run.
