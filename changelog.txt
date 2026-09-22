@@ -6,3 +6,4 @@
 2026-09-22 06:35 +00:00 | WP-S001-001 | Verified the base campaign SEED, fantasy clock, and reload persistence against the current build, captured fresh visual evidence, and marked the WP completed in docs/ROADMAP.md.
 2026-09-22 06:39 +00:00 | INFRA-COPILOT | Restricted hourly Copilot to coding, testing, and committing; removed Issue write authority and explicitly prohibited Issue lifecycle and project-management actions.
 2026-09-22 06:41 +00:00 | WP-S001-001 | Fixed the save-load evidence validator so it accepts negative fantasy timestamps from the year-offset fantasy calendar, then reran save-load and responsive evidence successfully.
+2026-09-22 06:43 +00:00 | WP-S001-001 | Corrected the retest state after the real save-load run exposed a pre-Unix timestamp validation error; retained the validator fix, reopened the WP, and removed its premature ROADMAP completion marker pending a clean rerun.
