@@ -38,7 +38,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
 - `WP-S003-005` — Coordinate-Aware Asset Preparation + PNG/SVG Texture Cache — COMPLETED
-- `WP-S003-006` — Viewport Culling, Chunk Reuse + Performance Baseline
+- `WP-S003-006` — Viewport Culling, Chunk Reuse + Performance Baseline — COMPLETED
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
