@@ -8,3 +8,4 @@
 2026-09-22 06:41 +00:00 | WP-S001-001 | Phase 1 | Suggestion: surface the fantasy timestamp era/sign in the save-load evidence JSON so BCE fantasy years are easier to diagnose during future regressions.
 2026-09-22 06:43 +00:00 | WP-S001-001 | Phase 2 | Suggestion: date/time evidence validators should validate chronology and finite values rather than assuming Unix timestamps are positive, because the fantasy calendar intentionally uses pre-1970 years.
 2026-09-22 06:49 +00:00 | WP-S001-001 | Phase 3 | Suggestion: reuse the new dedicated foundation scenario as the template for future WP-specific browser certification scenarios instead of relying on generic visual evidence alone.
+2026-09-22 06:54 +00:00 | WP-S001-001 | Phase 4 | Suggestion: keep WP-specific evidence fields self-contained inside currentBuild snapshots so validators do not depend on mixed runtime-root and currentBuild schemas.
