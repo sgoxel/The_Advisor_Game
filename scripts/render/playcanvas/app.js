@@ -3,6 +3,9 @@
 
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
+const WORLD_TILE_METERS=2;
+const BASE_ORTHO_HEIGHT=20;
+const REBASE_DISTANCE_TILES=256;
 let enginePromise=null;
 
 function loadEngine(){
@@ -15,20 +18,48 @@ function normalizePreference(value){
   return ["webgl2","webgpu","auto"].includes(v)?v:"webgl2";
 }
 
-function create({backendPreference="webgl2"}={}){
+function finiteOrNull(value){
+  const n=Number(value);
+  return Number.isFinite(n)?n:null;
+}
+
+function clamp(value,min,max){
+  return Math.min(max,Math.max(min,value));
+}
+
+function create({
+  backendPreference="webgl2",
+  maxPixelRatio=null,
+  renderScale=null
+}={}){
   const preference=normalizePreference(backendPreference);
+  const maxPixelRatioOverride=finiteOrNull(maxPixelRatio);
+  const renderScaleOverride=finiteOrNull(renderScale);
+
   let pc=null;
   let app=null;
   let device=null;
   let host=null;
   let canvas=null;
-  let camera=null;
   let resizeObserver=null;
   let lastModel=null;
   let proofState=null;
   let occlusionProofState=null;
   let beforeInit=null;
   let afterInit=null;
+  let sceneAnchor=null;
+  let quality=null;
+
+  let cameraRoot=null;
+  let camera=null;
+  let worldRoot=null;
+  let terrainRoot=null;
+  let structuresRoot=null;
+  let propsRoot=null;
+  let charactersRoot=null;
+  let lightingRoot=null;
+
+  const materials=new Map();
 
   let lastSnapshot=Object.freeze({
     ready:false,
@@ -39,7 +70,8 @@ function create({backendPreference="webgl2"}={}){
     webgl:false,
     webgpu:false,
     canvasCount:0,
-    migrationFoundation:true
+    migrationFoundation:true,
+    sceneBaseline:false
   });
 
   function requestedDeviceTypes(){
@@ -48,14 +80,271 @@ function create({backendPreference="webgl2"}={}){
     return [pc.DEVICETYPE_WEBGL2];
   }
 
+  function deviceClass(width,height){
+    const shortSide=Math.min(width,height);
+    const coarse=Boolean(window.matchMedia?.("(pointer:coarse)")?.matches);
+    if(shortSide<=520)return "phone";
+    if(shortSide<=1100||coarse)return "tablet";
+    return "desktop";
+  }
+
+  function resolveQuality(width,height){
+    const cls=deviceClass(width,height);
+    const defaults=cls==="phone"
+      ?{maxPixelRatio:1.0,renderScale:0.85}
+      :cls==="tablet"
+        ?{maxPixelRatio:1.25,renderScale:0.90}
+        :{maxPixelRatio:1.5,renderScale:1.0};
+    const dpr=clamp(maxPixelRatioOverride??defaults.maxPixelRatio,0.75,2);
+    const scale=clamp(renderScaleOverride??defaults.renderScale,0.6,1);
+    const browserDpr=Math.max(1,Number(window.devicePixelRatio||1));
+    const effectivePixelRatio=Math.max(0.5,Math.min(browserDpr,dpr)*scale);
+    return Object.freeze({
+      deviceClass:cls,
+      browserDevicePixelRatio:browserDpr,
+      maxPixelRatio:dpr,
+      renderScale:scale,
+      effectivePixelRatio
+    });
+  }
+
+  function material(name,r,g,b){
+    if(materials.has(name))return materials.get(name);
+    const m=new pc.StandardMaterial();
+    m.name=name;
+    m.diffuse.set(r,g,b);
+    m.gloss=0.18;
+    m.metalness=0;
+    m.update();
+    materials.set(name,m);
+    return m;
+  }
+
+  function primitive(parent,name,type,position,scale,mat,euler=null){
+    const entity=new pc.Entity(name);
+    entity.addComponent("render",{type,material:mat});
+    entity.setLocalPosition(position[0],position[1],position[2]);
+    entity.setLocalScale(scale[0],scale[1],scale[2]);
+    if(euler)entity.setLocalEulerAngles(euler[0],euler[1],euler[2]);
+    parent.addChild(entity);
+    return entity;
+  }
+
+  function makeTree(x,z,index){
+    const trunk=primitive(
+      propsRoot,"TreeTrunk_"+index,"cylinder",[x,1.0,z],[0.42,2.0,0.42],
+      material("tree-trunk",0.30,0.20,0.12)
+    );
+    primitive(
+      propsRoot,"TreeCanopy_"+index,"sphere",[x,2.55,z],[1.55,1.45,1.55],
+      material("tree-canopy",0.22,0.39,0.18)
+    );
+    return trunk;
+  }
+
+  function makeHouse(x,z,index,wallColor){
+    const wall=material("house-wall-"+index,...wallColor);
+    primitive(structuresRoot,"HouseWall_"+index,"box",[x,1.0,z],[3.4,2.0,2.7],wall);
+    primitive(
+      structuresRoot,"HouseRoof_"+index,"box",[x,2.25,z],[3.8,0.65,3.1],
+      material("house-roof",0.34,0.16,0.12),[0,0,0]
+    );
+    primitive(
+      structuresRoot,"HouseDoor_"+index,"box",[x,0.72,z-1.39],[0.65,1.35,0.10],
+      material("house-door",0.18,0.10,0.06)
+    );
+  }
+
+  function buildScene(){
+    cameraRoot=new pc.Entity("CameraRoot");
+    camera=new pc.Entity("OrthographicGameplayCamera");
+    camera.addComponent("camera",{
+      clearColor:new pc.Color(0.125,0.155,0.12),
+      projection:pc.PROJECTION_ORTHOGRAPHIC,
+      orthoHeight:BASE_ORTHO_HEIGHT,
+      nearClip:0.1,
+      farClip:200
+    });
+    cameraRoot.addChild(camera);
+    app.root.addChild(cameraRoot);
+
+    worldRoot=new pc.Entity("WorldRoot");
+    terrainRoot=new pc.Entity("TerrainRoot");
+    structuresRoot=new pc.Entity("StructuresRoot");
+    propsRoot=new pc.Entity("PropsRoot");
+    charactersRoot=new pc.Entity("CharacterBillboardsRoot");
+    lightingRoot=new pc.Entity("LightingRoot");
+    worldRoot.addChild(terrainRoot);
+    worldRoot.addChild(structuresRoot);
+    worldRoot.addChild(propsRoot);
+    worldRoot.addChild(charactersRoot);
+    app.root.addChild(worldRoot);
+    app.root.addChild(lightingRoot);
+
+    primitive(
+      terrainRoot,"TerrainBase","box",[0,-0.22,0],[30,0.35,24],
+      material("terrain-grass",0.30,0.43,0.22)
+    );
+    primitive(
+      terrainRoot,"RoadEastWest","box",[0,0.015,0],[30,0.08,2.2],
+      material("road-earth",0.48,0.39,0.26)
+    );
+    primitive(
+      terrainRoot,"RoadNorthSouth","box",[0,0.02,0],[2.2,0.09,24],
+      material("road-earth",0.48,0.39,0.26)
+    );
+    primitive(
+      terrainRoot,"WaterEdge","box",[0,-0.04,9.4],[30,0.10,5.2],
+      material("water",0.20,0.40,0.48)
+    );
+    primitive(
+      terrainRoot,"Bridge","box",[0,0.12,8.0],[2.6,0.22,3.1],
+      material("bridge",0.39,0.29,0.18)
+    );
+
+    makeHouse(-5,-4,1,[0.58,0.48,0.32]);
+    makeHouse(5,-3,2,[0.49,0.43,0.31]);
+    makeHouse(-5,4,3,[0.54,0.45,0.29]);
+    makeHouse(5,4,4,[0.52,0.40,0.27]);
+
+    [
+      [-9,-6],[-9,3],[9,-6],[9,2],[-11,7],[11,7]
+    ].forEach(([x,z],index)=>makeTree(x,z,index+1));
+
+    primitive(
+      propsRoot,"VillageStone","sphere",[3,0.55,-7],[1.1,0.75,0.9],
+      material("stone",0.38,0.40,0.37)
+    );
+    primitive(
+      propsRoot,"VillageMarker","cylinder",[-2,0.75,-7],[0.55,1.5,0.55],
+      material("marker",0.60,0.50,0.28)
+    );
+
+    const sun=new pc.Entity("SunLight");
+    sun.addComponent("light",{
+      type:"directional",
+      intensity:1.25,
+      color:new pc.Color(1.0,0.95,0.82),
+      castShadows:false
+    });
+    sun.setLocalEulerAngles(48,32,0);
+    lightingRoot.addChild(sun);
+
+    const fill=new pc.Entity("FillLight");
+    fill.addComponent("light",{
+      type:"directional",
+      intensity:0.30,
+      color:new pc.Color(0.62,0.72,0.88),
+      castShadows:false
+    });
+    fill.setLocalEulerAngles(55,210,0);
+    lightingRoot.addChild(fill);
+
+    app.scene.ambientLight=new pc.Color(0.30,0.33,0.29);
+    updateCameraTransform();
+  }
+
+  function entityCount(entity){
+    if(!entity)return 0;
+    let count=1;
+    for(const child of entity.children||[])count+=entityCount(child);
+    return count;
+  }
+
+  function safeDeltaTiles(value,anchor){
+    try{
+      const delta=BigInt(String(value))-BigInt(String(anchor));
+      const limit=BigInt(REBASE_DISTANCE_TILES);
+      if(delta>limit||delta<-limit)return null;
+      return Number(delta);
+    }catch(_){
+      return 0;
+    }
+  }
+
+  function ensureSceneAnchor(center){
+    if(!center)return;
+    if(!sceneAnchor){
+      sceneAnchor=Object.freeze({x:String(center.x),y:String(center.y)});
+      return;
+    }
+    const dx=safeDeltaTiles(center.x,sceneAnchor.x);
+    const dy=safeDeltaTiles(center.y,sceneAnchor.y);
+    if(dx===null||dy===null){
+      sceneAnchor=Object.freeze({x:String(center.x),y:String(center.y)});
+    }
+  }
+
+  function updateCameraTransform(){
+    if(!camera)return;
+    const center=lastModel?.center||window.Camera?.getCenter?.()||{x:"0",y:"0"};
+    ensureSceneAnchor(center);
+    const dx=safeDeltaTiles(center.x,sceneAnchor?.x??center.x)??0;
+    const dy=safeDeltaTiles(center.y,sceneAnchor?.y??center.y)??0;
+    const targetX=dx*WORLD_TILE_METERS;
+    const targetZ=dy*WORLD_TILE_METERS;
+    const zoom=clamp(Number(lastModel?.cameraZoom??window.Camera?.getZoom?.()??1),0.5,2);
+    const width=Math.max(1,host?.clientWidth||1);
+    const height=Math.max(1,host?.clientHeight||1);
+    const aspect=width/height;
+    const portraitCompensation=aspect<0.8?1.22:1;
+    camera.camera.orthoHeight=BASE_ORTHO_HEIGHT*portraitCompensation/zoom;
+    camera.setPosition(targetX+13.5,15.5,targetZ+13.5);
+    camera.lookAt(targetX,0,targetZ);
+  }
+
   function resize(){
-    if(!app||!host)return;
+    if(!app||!host||!device)return;
     const width=Math.max(1,Math.round(host.clientWidth||1));
     const height=Math.max(1,Math.round(host.clientHeight||1));
+    quality=resolveQuality(width,height);
+    device.maxPixelRatio=quality.effectivePixelRatio;
     app.setCanvasFillMode(pc.FILLMODE_NONE,width,height);
     app.setCanvasResolution(pc.RESOLUTION_AUTO);
     app.resizeCanvas(width,height);
     app.updateCanvasSize?.();
+    updateCameraTransform();
+  }
+
+  function frameStats(){
+    const stats=app?.stats||{};
+    return Object.freeze({
+      frameMs:Number(stats.frame?.ms||0),
+      renderMs:Number(stats.frame?.renderTime||0),
+      drawCalls:Number(stats.drawCalls?.total||device?._drawCallsPerFrame||0),
+      triangles:Number(stats.frame?.triangles||device?._primitiveCount||0)
+    });
+  }
+
+  function sceneInfo(){
+    return Object.freeze({
+      projection:camera?.camera?.projection===pc?.PROJECTION_ORTHOGRAPHIC?"orthographic":"unknown",
+      orthoHeight:Number(camera?.camera?.orthoHeight||0),
+      worldTileMeters:WORLD_TILE_METERS,
+      anchor:sceneAnchor,
+      roots:Object.freeze([
+        "TerrainRoot",
+        "StructuresRoot",
+        "PropsRoot",
+        "CharacterBillboardsRoot",
+        "LightingRoot"
+      ]),
+      entityCount:entityCount(app?.root),
+      terrainEntityCount:entityCount(terrainRoot),
+      structureEntityCount:entityCount(structuresRoot),
+      propEntityCount:entityCount(propsRoot),
+      characterEntityCount:entityCount(charactersRoot),
+      lightingEntityCount:entityCount(lightingRoot)
+    });
+  }
+
+  function canvasInfo(){
+    return Object.freeze({
+      cssWidth:Math.max(0,Math.round(host?.clientWidth||0)),
+      cssHeight:Math.max(0,Math.round(host?.clientHeight||0)),
+      backingWidth:Number(canvas?.width||0),
+      backingHeight:Number(canvas?.height||0)
+    });
   }
 
   function baseSnapshot(extra={}){
@@ -73,7 +362,18 @@ function create({backendPreference="webgl2"}={}){
       webgpu:deviceType==="webgpu",
       webgpuAvailable:Boolean(navigator.gpu),
       migrationFoundation:true,
+      sceneBaseline:Boolean(camera&&worldRoot),
       canvasCount:host?host.querySelectorAll("canvas").length:0,
+      canvas:canvasInfo(),
+      quality:quality||Object.freeze({
+        deviceClass:"unknown",
+        browserDevicePixelRatio:Number(window.devicePixelRatio||1),
+        maxPixelRatio:1,
+        renderScale:1,
+        effectivePixelRatio:1
+      }),
+      scene:sceneInfo(),
+      performance:frameStats(),
       domTerrainTileCount:document.querySelectorAll(".terrain-tile").length,
       logicalTextureKeyPass:true,
       simulationAuthorityPreserved:beforeInit&&afterInit
@@ -83,6 +383,7 @@ function create({backendPreference="webgl2"}={}){
       frame:lastModel,
       regionKey:lastModel?.regionKey||null,
       tileCount:lastModel?.tileCount||0,
+      protagonistVisible:false,
       buildingPresentation:Object.freeze({
         layerOrder:Object.freeze(["playcanvas-world"]),
         proofState,
@@ -124,7 +425,7 @@ function create({backendPreference="webgl2"}={}){
     canvas=document.createElement("canvas");
     canvas.id="gameCanvas";
     canvas.className="game-canvas";
-    canvas.setAttribute("aria-label","PlayCanvas GPU-rendered gameplay world");
+    canvas.setAttribute("aria-label","PlayCanvas orthographic 3D gameplay world");
     canvas.dataset.renderer="playcanvas";
     host.replaceChildren(canvas);
 
@@ -149,35 +450,7 @@ function create({backendPreference="webgl2"}={}){
 
     app=new pc.AppBase(canvas);
     app.init(options);
-
-    camera=new pc.Entity("MigrationFoundationCamera");
-    camera.addComponent("camera",{
-      clearColor:new pc.Color(0.125,0.145,0.114),
-      projection:pc.PROJECTION_ORTHOGRAPHIC,
-      orthoHeight:12
-    });
-    camera.setPosition(0,10,10);
-    camera.lookAt(0,0,0);
-    app.root.addChild(camera);
-
-    const ground=new pc.Entity("MigrationFoundationGround");
-    ground.addComponent("render",{type:"box"});
-    ground.setLocalScale(12,0.15,8);
-    ground.setPosition(0,-0.25,0);
-    app.root.addChild(ground);
-
-    const marker=new pc.Entity("MigrationFoundationMarker");
-    marker.addComponent("render",{type:"box"});
-    marker.setLocalScale(1.6,1.6,1.6);
-    marker.setPosition(0,0.7,0);
-    app.root.addChild(marker);
-
-    const light=new pc.Entity("MigrationFoundationLight");
-    light.addComponent("light",{type:"directional",intensity:1});
-    light.setEulerAngles(45,35,0);
-    app.root.addChild(light);
-
-    app.scene.ambientLight=new pc.Color(0.35,0.35,0.35);
+    buildScene();
     resize();
     app.start();
 
@@ -202,9 +475,15 @@ function create({backendPreference="webgl2"}={}){
   }
 
   function render(model){
-    lastModel=window.RendererContract?.frameFromModel?.(model)||null;
+    const frame=window.RendererContract?.frameFromModel?.(model)||null;
+    lastModel=frame?Object.freeze({
+      ...frame,
+      cameraZoom:Number(window.Camera?.getZoom?.()??1)
+    }):null;
     if(host)host.hidden=false;
+    ensureSceneAnchor(lastModel?.center);
     resize();
+    updateCameraTransform();
     lastSnapshot=baseSnapshot();
     return lastSnapshot;
   }
@@ -214,8 +493,9 @@ function create({backendPreference="webgl2"}={}){
     return Object.freeze({
       prepared:false,
       migrationFoundation:true,
+      sceneBaseline:true,
       regionKey:frame?.regionKey||null,
-      reason:"3D chunk preparation is implemented by later Stage 3 WPs"
+      reason:"Chunk-native 3D terrain preparation belongs to later Stage 3 WPs"
     });
   }
 
@@ -238,17 +518,21 @@ function create({backendPreference="webgl2"}={}){
   }
 
   function snapshot(){
+    if(app&&device)lastSnapshot=baseSnapshot();
     return lastSnapshot;
   }
 
   function destroy(){
     resizeObserver?.disconnect?.();
     resizeObserver=null;
-    if(!resizeObserver)window.removeEventListener?.("resize",resize);
+    window.removeEventListener?.("resize",resize);
     app?.destroy?.();
-    app=null;device=null;camera=null;
+    app=null;device=null;
+    cameraRoot=null;camera=null;worldRoot=null;terrainRoot=null;structuresRoot=null;
+    propsRoot=null;charactersRoot=null;lightingRoot=null;
+    materials.clear();
     canvas?.remove?.();
-    canvas=null;host=null;
+    canvas=null;host=null;sceneAnchor=null;
   }
 
   return Object.freeze({
