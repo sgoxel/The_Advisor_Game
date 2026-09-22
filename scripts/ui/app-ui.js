@@ -9,7 +9,7 @@ const ids=[
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","developmentModeToggle","developmentDetails","gameDate","gameTime","campaignState","statusMessage",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
-  "rendererEngine","rendererEngineVersion","rendererBackend","rendererRequestedBackend","rendererWebgpuAvailable","rendererCanvasCount","rendererTextureCount","rendererSourceMode",
+  "rendererEngine","rendererEngineVersion","rendererBackend","rendererRequestedBackend","rendererWebgpuAvailable","rendererCanvasCount","rendererProjection","rendererEntityCount","rendererDrawCalls","rendererFrameTime","rendererRenderScale","rendererPixelRatio","rendererCanvasSize","rendererTextureCount","rendererSourceMode",
   "rendererPreparedRegion","rendererVisibleRegion",
   "vRendererWebGL","vRendererCanvas","vRendererNoDomTiles","vRendererLogicalTextures","vRendererSvgCache","vRendererSimulation",
   "interiorBuildingCount","interiorHouseCount","interiorSpecialCount","interiorLevel","interiorHouseProof","interiorSpecialProof",
@@ -1193,9 +1193,24 @@ function renderRendererProof(){
   e.rendererRequestedBackend.textContent=renderer.requestedBackend||bootstrap.backend||"webgl2";
   e.rendererWebgpuAvailable.textContent=(renderer.webgpuAvailable??bootstrap.webgpuAvailable)?"YES":"NO";
   e.rendererCanvasCount.textContent=String(renderer.canvasCount||0);
+  e.rendererProjection.textContent=renderer.scene?.projection||"—";
+  e.rendererEntityCount.textContent=String(renderer.scene?.entityCount??"—");
+  e.rendererDrawCalls.textContent=String(renderer.performance?.drawCalls??"—");
+  e.rendererFrameTime.textContent=Number.isFinite(renderer.performance?.frameMs)
+    ?Number(renderer.performance.frameMs).toFixed(2)+" ms"
+    :"—";
+  e.rendererRenderScale.textContent=Number.isFinite(renderer.quality?.renderScale)
+    ?Number(renderer.quality.renderScale).toFixed(2)
+    :"—";
+  e.rendererPixelRatio.textContent=Number.isFinite(renderer.quality?.effectivePixelRatio)
+    ?Number(renderer.quality.effectivePixelRatio).toFixed(2)
+    :"—";
+  e.rendererCanvasSize.textContent=renderer.canvas
+    ?renderer.canvas.cssWidth+"×"+renderer.canvas.cssHeight+" / "+renderer.canvas.backingWidth+"×"+renderer.canvas.backingHeight
+    :"—";
   e.rendererTextureCount.textContent=String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources";
   e.rendererSourceMode.textContent=playcanvas
-    ?"PlayCanvas migration foundation"
+    ?"PlayCanvas orthographic 3D baseline"
     :(assets.svgSourceCount||0)+" SVG draft / "+(assets.pngSourceCount||0)+" PNG";
   e.rendererPreparedRegion.textContent=assets.preparedRegionKey||"—";
   if(!e.rendererVisibleRegion.textContent)e.rendererVisibleRegion.textContent=renderer.regionKey||"—";
