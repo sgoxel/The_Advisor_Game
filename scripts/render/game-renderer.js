@@ -111,13 +111,33 @@ function pointVisible(model,point,marginTiles=1){
     point.row>=-marginTiles&&point.row<model.rows+marginTiles;
 }
 
+function worldGridPoint(model,originX,originY,x,y){
+  const dx=BigInt(String(x))-BigInt(String(model.center.x));
+  const dy=BigInt(String(y))-BigInt(String(model.center.y));
+  const projected=projectOffset(model.tileSize,Number(dx),Number(dy));
+  return Object.freeze({x:originX+projected.x,y:originY+projected.y});
+}
+
+function buildingFootprint(model,originX,originY,building){
+  const minX=BigInt(String(building.bounds.minX));
+  const minY=BigInt(String(building.bounds.minY));
+  const maxX=BigInt(String(building.bounds.maxX))+1n;
+  const maxY=BigInt(String(building.bounds.maxY))+1n;
+  return Object.freeze([
+    worldGridPoint(model,originX,originY,minX,minY),
+    worldGridPoint(model,originX,originY,maxX,minY),
+    worldGridPoint(model,originX,originY,maxX,maxY),
+    worldGridPoint(model,originX,originY,minX,maxY)
+  ]);
+}
+
 function buildingVisible(model,originX,originY,building){
-  const min=worldToScreen(model,originX,originY,building.bounds.minX,building.bounds.minY);
-  const max=worldToScreen(model,originX,originY,building.bounds.maxX,building.bounds.maxY);
-  const right=max.x+model.tileSize;
-  const bottom=max.y+model.tileSize;
-  return right>=-model.tileSize&&bottom>=-model.tileSize&&
-    min.x<=model.width+model.tileSize&&min.y<=model.height+model.tileSize;
+  const points=buildingFootprint(model,originX,originY,building);
+  const xs=points.map(point=>point.x);
+  const ys=points.map(point=>point.y);
+  const margin=model.tileSize;
+  return Math.max(...xs)>=-margin&&Math.max(...ys)>=-margin&&
+    Math.min(...xs)<=model.width+margin&&Math.min(...ys)<=model.height+margin;
 }
 
 function pointInsideBounds(point,bounds){
@@ -163,6 +183,40 @@ function resolveProofPlacement(model,building){
   return Object.freeze({point:building.interiorTarget||building.entrance?.immediateInside||building.entrance?.door||null,object:null});
 }
 
+function diamondPoints(x,y,tileSize){
+  const eastX=tileSize*DIMETRIC_X;
+  const downY=tileSize*DIMETRIC_Y;
+  return Object.freeze({
+    n:Object.freeze({x,y}),
+    e:Object.freeze({x:x+eastX,y:y+downY}),
+    s:Object.freeze({x,y:y+downY*2}),
+    w:Object.freeze({x:x-eastX,y:y+downY})
+  });
+}
+
+function edgeForDirection(points,direction){
+  return {
+    n:[points.n,points.e],
+    e:[points.e,points.s],
+    s:[points.w,points.s],
+    w:[points.n,points.w]
+  }[direction]||[points.w,points.s];
+}
+
+function structureDirections(tile,door=false){
+  const key=String(tile.textureKey||"");
+  const prefix=door?"door-":"wall-";
+  const cornerMatch=!door&&key.match(/wall-corner-([nesw]{2})$/);
+  if(cornerMatch)return [...cornerMatch[1]];
+  const sideMatch=key.match(new RegExp(prefix+"([nesw])$"));
+  if(sideMatch)return [sideMatch[1]];
+  return ["s"];
+}
+
+function lerpPoint(a,b,t){
+  return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};
+}
+
 function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId){
   const movement=tile.movement||{};
   const outer=movement.barrierKind==="outer-wall";
@@ -173,35 +227,48 @@ function drawWallDepth(tile,x,y,tileSize,cutawayBuildingId){
 
   const lift=Math.max(4,tileSize*0.18);
   const cutaway=Boolean(cutawayBuildingId&&tile.buildingId===cutawayBuildingId);
-  const depthAlpha=cutaway?0.08:(outer?0.34:0.12);
+  const points=diamondPoints(x,y,tileSize);
   let depth=0;
-  if(wall&&outer){
-    const side=new PIXI.Graphics();
-    side.poly([x,y,x+tileSize*0.66,y+tileSize*0.28,x+tileSize*0.66,y+tileSize*0.28-lift,x,y-lift])
-      .fill({color:0x4b3b32,alpha:depthAlpha});
-    lowerStructureLayer.addChild(side);
-    depth=1;
-  }
 
   if(wall){
+    const directions=structureDirections(tile,false);
+    if(outer){
+      const depthAlpha=cutaway?0.06:0.30;
+      for(const direction of directions){
+        const [a,b]=edgeForDirection(points,direction);
+        const side=new PIXI.Graphics();
+        side.poly([
+          a.x,a.y,
+          b.x,b.y,
+          b.x,b.y-lift,
+          a.x,a.y-lift
+        ]).fill({color:0x4b3b32,alpha:depthAlpha});
+        lowerStructureLayer.addChild(side);
+        depth++;
+      }
+    }
+
     const cap=new PIXI.Graphics();
     cap.poly([
-      x,y-lift,
-      x+tileSize*0.66,y+tileSize*0.28-lift,
-      x,y+tileSize*0.56-lift,
-      x-tileSize*0.66,y+tileSize*0.28-lift
-    ]).fill({color:outer?0x9a806c:0x826f61,alpha:cutaway?0.30:0.94});
+      points.n.x,points.n.y-lift,
+      points.e.x,points.e.y-lift,
+      points.s.x,points.s.y-lift,
+      points.w.x,points.w.y-lift
+    ]).fill({color:outer?0x9a806c:0x826f61,alpha:cutaway?0.26:0.92});
     upperStructureLayer.addChild(cap);
     return Object.freeze({cap:1,depth,cutaway:cutaway?1:0});
   }
 
+  const [edgeA,edgeB]=edgeForDirection(points,structureDirections(tile,true)[0]);
+  const a=lerpPoint(edgeA,edgeB,0.24);
+  const b=lerpPoint(edgeA,edgeB,0.76);
   const lintel=new PIXI.Graphics();
   lintel.poly([
-    x-tileSize*0.26,y+tileSize*0.17-lift,
-    x+tileSize*0.26,y+tileSize*0.39-lift,
-    x+tileSize*0.26,y+tileSize*0.39-lift*0.55,
-    x-tileSize*0.26,y+tileSize*0.17-lift*0.55
-  ]).fill({color:0x7a5b3c,alpha:cutaway?0.30:0.88});
+    a.x,a.y-lift,
+    b.x,b.y-lift,
+    b.x,b.y-lift*0.55,
+    a.x,a.y-lift*0.55
+  ]).fill({color:0x7a5b3c,alpha:cutaway?0.28:0.86});
   upperStructureLayer.addChild(lintel);
   return Object.freeze({cap:0,depth:0,cutaway:cutaway?1:0});
 }
@@ -269,51 +336,61 @@ function drawRoofs(model,originX,originY,visibleBuildings,cutawayBuildingId){
   let roofCount=0;
   let cutawayRoofCount=0;
   let proofRoofAlpha=null;
+  let projectedFootprintCount=0;
+
   for(const building of visibleBuildings){
-    const min=worldToScreen(model,originX,originY,building.bounds.minX,building.bounds.minY);
-    const max=worldToScreen(model,originX,originY,building.bounds.maxX,building.bounds.maxY);
-    const x=min.x;
-    const y=min.y;
-    const width=max.x-min.x+model.tileSize;
-    const height=max.y-min.y+model.tileSize;
+    const footprint=buildingFootprint(model,originX,originY,building);
     const lift=Math.max(4,model.tileSize*0.18);
+    const rise=Math.max(3,model.tileSize*0.10);
+    const raised=footprint.map(point=>({x:point.x,y:point.y-lift}));
+    const center=raised.reduce((sum,point)=>({x:sum.x+point.x,y:sum.y+point.y}),{x:0,y:0});
+    center.x/=raised.length;
+    center.y=center.y/raised.length-rise;
+
     const isCutaway=building.id===cutawayBuildingId;
     let alpha=isCutaway?0.15:0.84;
-    if(building.id===cutawayBuildingId&&buildingProofState==="entering")alpha=0.42;
-    if(building.id===cutawayBuildingId&&(buildingProofState==="outside"||buildingProofState==="leaving"))alpha=0.84;
+    if(isCutaway&&buildingProofState==="entering")alpha=0.42;
+    if(isCutaway&&(buildingProofState==="outside"||buildingProofState==="leaving"))alpha=0.84;
     if(isCutaway&&alpha<0.5)cutawayRoofCount++;
-    if(building.id===cutawayBuildingId)proofRoofAlpha=alpha;
+    if(isCutaway)proofRoofAlpha=alpha;
     const [leftColor,rightColor]=roofColors(building);
 
+    const shadowPoints=footprint.flatMap(point=>[
+      point.x+model.tileSize*0.05,
+      point.y+model.tileSize*0.06
+    ]);
     const shadow=new PIXI.Graphics();
-    shadow.rect(x+model.tileSize*0.07,y-lift+model.tileSize*0.10,width,height)
-      .fill({color:0x000000,alpha:isCutaway?0.04:0.16});
+    shadow.poly(shadowPoints).fill({color:0x000000,alpha:isCutaway?0.03:0.13});
     shadowLayer.addChild(shadow);
 
     const roof=new PIXI.Container();
-    const ridgeX=x+width/2;
-    const left=new PIXI.Graphics();
-    left.poly([
-      x,y-lift,
-      ridgeX,y,
-      ridgeX,y+height-lift*0.15,
-      x,y+height-lift
-    ]).fill({color:leftColor,alpha});
-    const right=new PIXI.Graphics();
-    right.poly([
-      ridgeX,y,
-      x+width,y-lift,
-      x+width,y+height-lift,
-      ridgeX,y+height-lift*0.15
-    ]).fill({color:rightColor,alpha});
+    for(let index=0;index<raised.length;index++){
+      const a=raised[index];
+      const b=raised[(index+1)%raised.length];
+      const face=new PIXI.Graphics();
+      face.poly([a.x,a.y,b.x,b.y,center.x,center.y])
+        .fill({color:index%2===0?leftColor:rightColor,alpha});
+      roof.addChild(face);
+    }
+
     const ridge=new PIXI.Graphics();
-    ridge.rect(ridgeX-Math.max(1,model.tileSize*0.018),y-lift*0.18,Math.max(2,model.tileSize*0.036),Math.max(2,height-lift*0.45))
-      .fill({color:0x352a24,alpha:alpha*0.72});
-    roof.addChild(left,right,ridge);
+    const p0=lerpPoint(raised[0],raised[1],0.5);
+    const p1=lerpPoint(raised[3],raised[2],0.5);
+    ridge.moveTo(p0.x,p0.y-rise*0.35)
+      .lineTo(p1.x,p1.y-rise*0.35)
+      .stroke({color:0x352a24,width:Math.max(1,model.tileSize*0.025),alpha:alpha*0.68});
+    roof.addChild(ridge);
     roofLayer.addChild(roof);
     roofCount++;
+    projectedFootprintCount++;
   }
-  return Object.freeze({roofCount,cutawayRoofCount,proofRoofAlpha});
+
+  return Object.freeze({
+    roofCount,
+    cutawayRoofCount,
+    proofRoofAlpha,
+    projectedFootprintCount
+  });
 }
 
 function addCharacterSprite(texture,screenX,screenY,tileSize,alpha=1,tint=null){
@@ -694,6 +771,9 @@ function render(model){
       visibleBuildingCount:visibleBuildings.length,
       roofCount:roofMetrics.roofCount,
       cutawayRoofCount:roofMetrics.cutawayRoofCount,
+      projectedFootprintRoofCount:roofMetrics.projectedFootprintCount,
+      projectedFootprintRoofs:true,
+      edgeAwareWallDepth:true,
       visibleInteriorObjectCount:objectMetrics.visibleCount,
       foregroundObjectCount:objectMetrics.foregroundCount,
       visibleWallCapCount,
