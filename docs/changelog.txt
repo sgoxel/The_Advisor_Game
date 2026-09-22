@@ -1,3 +1,5 @@
+2026-09-22 07:24:39 +00:00 | WP-S001-006 | Revalidated camera-pan evidence on the current build; the camera-pan scenario passed with camera movement, reverse return, and unchanged Protagonist/world terrain identity.
+
 2026-09-22 09:39:00 +03:00
 - Repository organization correction: consolidated the temporary root changelog.txt into docs/changelog.txt and moved suggest_log.txt to docs/suggest_log.txt.
 - Updated Copilot instructions/workflow to use the docs/ log paths so root copies are not recreated.
