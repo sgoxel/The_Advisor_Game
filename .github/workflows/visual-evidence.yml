@@ -43,6 +43,7 @@ on:
           - wp-s001-001
           - wp-s001-004
           - wp-s003-005
+          - playcanvas-foundation
       shots:
         description: Requested screenshot count; scenario minimums still apply
         required: true
@@ -78,6 +79,10 @@ on:
       - scripts/ui/responsive-control-deck.js
       - scripts/render/texture-assets.js
       - scripts/render/game-renderer.js
+      - scripts/render/renderer-contract.js
+      - scripts/render/renderer-bootstrap.js
+      - scripts/render/playcanvas/**
+      - scripts/main.js
       - assets/tiles/vector/**
       - styles/main.css
 
@@ -169,7 +174,7 @@ jobs:
           fi
 
           case "$scenario" in
-            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005) ;;
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005|playcanvas-foundation) ;;
             *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
           esac
           case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac
