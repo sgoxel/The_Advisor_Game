@@ -40,6 +40,9 @@ const ids=[
   "vResidentAssignmentHomes","vResidentAssignmentProfessions","vResidentAssignmentTargets","vResidentAssignmentWalkable","vResidentAssignmentRoutes","vResidentAssignmentDeterministic",
   "residentScheduleCount","residentScheduleTime","residentScheduleBlocks","residentScheduleRows","residentScheduleScroll",
   "vResidentScheduleComplete","vResidentScheduleActions","vResidentScheduleAssignments","vResidentScheduleDeterministic","vResidentScheduleTime","vResidentScheduleIsolation",
+  "movementProofBadge","movementProofBadgeStage","movementProofBadgeResident","movementProofBadgePosition",
+  "residentMovementResident","residentMovementPosition","residentMovementTarget","residentMovementStatus","residentMovementRoute","residentMovementRows",
+  "vResidentMovementContinuous","vResidentMovementDoors","vResidentMovementCollision","vResidentMovementSpeed","vResidentMovementDeterministic","vResidentMovementCamera","vResidentMovementCulling","vResidentMovementIsolation",
   "gameplayPlaceholder","protagonistMarker","protagonistSprite","protagonistFallback","protagonistLocation","wp3Position","vOrigin","vCenter","vProtagonistSprite","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
@@ -555,6 +558,7 @@ let residentSchedulePinned=false;
 let residentMovementTimer=null;
 let residentMovementLastRealMs=0;
 let residentMovementRenderPending=false;
+let lastResidentMovementProof=null;
 
 function projectedCoverageHalfSpan(width,height,tileSize){
   const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
@@ -1711,6 +1715,76 @@ function renderResidentScheduleProof(timeOverride=null,pin=false){
   return proof;
 }
 
+function renderResidentMovementProof(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign||!window.ResidentMovement){
+    e.movementProofBadge.hidden=true;
+    e.residentMovementRows.replaceChildren();
+    lastResidentMovementProof=null;
+    return null;
+  }
+  ResidentMovement.ensure(campaign.seed);
+  const live=ResidentMovement.snapshot();
+  const activeProof=ResidentMovement.proofSnapshot?.()||null;
+  const verified=ResidentMovement.verify(campaign.seed);
+  const proof=activeProof||verified;
+  const controlled=proof?.residentId?ResidentMovement.get(proof.residentId):null;
+
+  e.residentMovementResident.textContent=proof?.residentId?proof.residentId+" "+proof.residentName:"12 residents";
+  e.residentMovementPosition.textContent=formatAssignmentPoint(controlled?.position||proof?.position);
+  e.residentMovementTarget.textContent=formatAssignmentPoint(controlled?.target||proof?.target);
+  e.residentMovementStatus.textContent=controlled?.status||proof?.stage||"ready";
+  e.residentMovementRoute.textContent=controlled
+    ?controlled.routeIndex+" / "+controlled.routeSteps+" · plans "+controlled.routeRequests
+    :"verified";
+
+  const fragment=document.createDocumentFragment();
+  for(const resident of live.residents){
+    const row=document.createElement("tr");
+    for(const value of [
+      resident.residentId,
+      formatAssignmentPoint(resident.position),
+      formatAssignmentPoint(resident.target),
+      resident.status,
+      resident.activityState||"—",
+      resident.routeSteps?resident.routeIndex+" / "+resident.routeSteps:"—",
+      String(resident.invalidSegmentReplans)
+    ]){
+      const cell=document.createElement("td");
+      cell.textContent=value;
+      row.appendChild(cell);
+    }
+    fragment.appendChild(row);
+  }
+  e.residentMovementRows.replaceChildren(fragment);
+
+  setCheck(e.vResidentMovementContinuous,verified.adjacencyPass&&verified.noTeleport,"FAIL");
+  setCheck(e.vResidentMovementDoors,verified.inboundDoorPass&&verified.outboundDoorPass&&verified.insideArrivalPass&&verified.outsideArrivalPass,"FAIL");
+  setCheck(e.vResidentMovementCollision,verified.walkabilityPass&&verified.blockedTraversals===0&&verified.invalidSegmentReplans===0,"FAIL");
+  setCheck(e.vResidentMovementSpeed,verified.roadSpeedPass&&verified.physicalSpeedIndependent,"FAIL");
+  setCheck(e.vResidentMovementDeterministic,verified.deterministic&&verified.routeRequests===2&&verified.routePlanningPerFrame===false,"FAIL");
+  setCheck(e.vResidentMovementCamera,activeProof?.cameraIndependencePass===true,activeProof?"FAIL":"WAITING");
+  setCheck(e.vResidentMovementCulling,
+    activeProof?.rendererCullingPass===true&&activeProof?.offscreenSimulationPass===true,
+    activeProof?"FAIL":"WAITING"
+  );
+  setCheck(e.vResidentMovementIsolation,
+    live.directPlayerControl===false&&live.actionExecution===false&&
+    verified.actionExecutionIntroduced===false&&verified.dialogueEconomyCombatIntroduced===false,
+    "FAIL"
+  );
+
+  e.movementProofBadge.hidden=!activeProof;
+  if(activeProof){
+    e.movementProofBadgeStage.textContent="WP-S004-004 · "+String(activeProof.stage||"movement");
+    e.movementProofBadgeResident.textContent=activeProof.residentId+" "+activeProof.residentName;
+    e.movementProofBadgePosition.textContent=
+      formatAssignmentPoint(activeProof.position)+" → "+formatAssignmentPoint(activeProof.target);
+  }
+  lastResidentMovementProof=activeProof;
+  return activeProof||verified;
+}
+
 async function refreshResidentCharacters(){
   const campaign=SeedSystem.getCampaign();
   if(!campaign||!GameRenderer?.updateCharacters)return null;
@@ -1771,6 +1845,7 @@ function renderStatic(){
   renderResidentRosterProof();
   renderResidentAssignmentProof();
   renderResidentScheduleProof();
+  renderResidentMovementProof();
   renderHousePlans();
   renderSpecialLots();
   renderWalkability();
@@ -1908,7 +1983,8 @@ window.AppUI=Object.freeze({
   residentScheduleSnapshot:()=>lastResidentScheduleProof,
   refreshResidentCharacters,
   residentMovementSnapshot:()=>window.ResidentMovement?.snapshot?.()||null,
-  residentMovementProofSnapshot:()=>window.ResidentMovement?.proofSnapshot?.()||null,
+  refreshResidentMovementProof:()=>renderResidentMovementProof(),
+  residentMovementProofSnapshot:()=>window.ResidentMovement?.proofSnapshot?.()||lastResidentMovementProof,
   residentAssignmentSnapshot:()=>{
     const campaign=SeedSystem.getCampaign();
     return campaign?ResidentAssignments.proof(campaign.seed):null;

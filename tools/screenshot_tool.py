@@ -89,6 +89,7 @@ SCENARIOS = {
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
+    "wp-s004-004",
     "playcanvas-root-cutover",
 }
 
@@ -130,6 +131,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
+    "wp-s004-004": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -343,6 +345,8 @@ return (() => {
           }
         })(),
         residentSchedules: window.AppUI?.residentScheduleSnapshot?.() || null,
+        residentMovement: window.AppUI?.residentMovementProofSnapshot?.() || window.ResidentMovement?.proofSnapshot?.() || null,
+        residentMovementLive: window.AppUI?.residentMovementSnapshot?.() || null,
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
@@ -1225,6 +1229,79 @@ def _show_resident_schedule_proof(driver, sample_hour: int, sample_minute: int =
     return (
         f"resident-schedules:{sample_hour:02d}:{sample_minute:02d}:"
         f"rows={stable['rows']}:campaign={stable['campaignState']}"
+    )
+
+
+def _show_resident_movement_proof(driver, frame_index: int) -> str:
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    result = driver.execute_async_script(
+        """
+        const index=Number(arguments[0]);
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const campaign=window.SeedSystem?.getCampaign?.();
+            if(!campaign||!window.ResidentMovement||!window.AppUI)throw new Error('movement proof APIs unavailable');
+            let proof;
+            if(index===0)proof=ResidentMovement.beginProof(campaign.seed);
+            else if(index===1)proof=ResidentMovement.proofAdvanceToDoor();
+            else if(index===2)proof=ResidentMovement.proofAdvanceToTarget();
+            else if(index===3){
+              ResidentMovement.proofBeginOutbound();
+              proof=ResidentMovement.proofAdvanceToDoor();
+            }else proof=ResidentMovement.proofAdvanceToTarget();
+            if(!proof?.position)throw new Error('movement proof position unavailable');
+
+            const before=ResidentMovement.position(proof.residentId);
+            if(index===3){
+              const far=WorldCoordinates.add(before,'80','80');
+              Camera.setCenter(far.x,far.y);
+              const afterCameraOnly=ResidentMovement.position(proof.residentId);
+              await AppUI.refreshTerrain();
+              const hiddenBefore=!GameRenderer.snapshot()?.characterPresentation?.visibleCharacterIds?.includes('resident:'+proof.residentId);
+              const progressBefore=ResidentMovement.get(proof.residentId);
+              ResidentMovement.proofAdvanceSeconds(2.2);
+              await AppUI.refreshResidentCharacters();
+              const progressAfter=ResidentMovement.get(proof.residentId);
+              const hiddenAfter=!GameRenderer.snapshot()?.characterPresentation?.visibleCharacterIds?.includes('resident:'+proof.residentId);
+              const progressed=
+                progressBefore.position.x!==progressAfter.position.x||
+                progressBefore.position.y!==progressAfter.position.y||
+                Math.abs(Number(progressBefore.segmentElapsed)-Number(progressAfter.segmentElapsed))>1e-6;
+              ResidentMovement.recordEvidence({
+                cameraIndependencePass:before.x===afterCameraOnly.x&&before.y===afterCameraOnly.y,
+                offscreenSimulationPass:progressed,
+                rendererCullingPass:hiddenBefore&&hiddenAfter
+              });
+            }
+            const current=ResidentMovement.position(proof.residentId);
+            Camera.setCenter(current.x,current.y);
+            await AppUI.refreshTerrain();
+            AppUI.refreshResidentMovementProof();
+            window.scrollTo(0,0);
+            const finalProof=ResidentMovement.proofSnapshot();
+            done({
+              ok:true,index,stage:finalProof?.stage,residentId:finalProof?.residentId,
+              position:finalProof?.position,pass:Boolean(finalProof?.pass),
+              visibleIds:GameRenderer.snapshot()?.characterPresentation?.visibleCharacterIds||[],
+              simulated:Number(GameRenderer.snapshot()?.characterPresentation?.simulatedCharacterCount||0)
+            });
+          }catch(error){done({ok:false,error:String(error)});}
+        })();
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Resident movement proof frame failed: {result}")
+    WebDriverWait(driver, 8).until(
+        lambda d: d.execute_script(
+            "return document.querySelector('#movementProofBadge')?.hidden===false && document.querySelectorAll('#residentMovementRows tr').length===12"
+        )
+    )
+    return (
+        f"resident-movement:{frame_index}:{result.get('stage')}:"
+        f"{result.get('residentId')}@{result.get('position')}:simulated={result.get('simulated')}"
     )
 
 
@@ -2165,7 +2242,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -2264,6 +2341,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         samples=((2,30),(7,30),(12,30),(19,30))
         hour,minute=samples[min(frame_index,len(samples)-1)]
         return _show_resident_schedule_proof(driver,hour,minute)
+    if scenario == "wp-s004-004":
+        return _show_resident_movement_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2298,6 +2377,55 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s004-004":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s004-004 requires five movement evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("residentMovement") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Movement evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Movement/camera proof changed Protagonist authority: {protagonists}")
+        expected=["outside-start","door-entering","inside-arrived","door-leaving","outside-arrived"]
+        stages=[proof.get("stage") for proof in proofs]
+        if stages!=expected:
+            raise RuntimeError(f"Movement milestone mismatch: expected {expected}, got {stages}")
+        positions=[json.dumps(proof.get("position"),sort_keys=True) for proof in proofs]
+        if len(set(positions))<4:
+            raise RuntimeError(f"Resident did not visibly progress across movement evidence: {positions}")
+        final=proofs[-1]
+        required={
+            "pass":True,"insideArrivalPass":True,"outsideArrivalPass":True,
+            "inboundDoorPass":True,"outboundDoorPass":True,"walkabilityPass":True,
+            "adjacencyPass":True,"interiorTargetPass":True,"finalTargetPass":True,
+            "roadSpeedPass":True,"physicalSpeedIndependent":True,
+            "routePlanningPerFrame":False,"noTeleport":True,"noDirectPlayerControl":True,
+            "cameraIndependencePass":True,"offscreenSimulationPass":True,"rendererCullingPass":True,
+            "actionExecutionIntroduced":False,"dialogueEconomyCombatIntroduced":False,
+            "deterministic":True,"verifiedPass":True,
+        }
+        for key,value in required.items():
+            if final.get(key)!=value:
+                raise RuntimeError(f"Resident movement {key} mismatch: {final}")
+        if int(final.get("blockedTraversals") or 0)!=0 or int(final.get("invalidSegmentReplans") or 0)!=0:
+            raise RuntimeError(f"Movement crossed/encountered invalid segment: {final}")
+        if int(final.get("routeRequests") or 0)!=2:
+            raise RuntimeError(f"RoutePlanner request count should equal the two schedule-target legs: {final}")
+        for index,build in enumerate(builds,start=1):
+            live=build.get("residentMovementLive") or {}
+            if int(live.get("residentCount") or 0)!=12:
+                raise RuntimeError(f"Movement Simulation resident count mismatch in frame {index}: {live}")
+            presentation=(build.get("gpuRenderer") or {}).get("characterPresentation") or {}
+            simulated=int(presentation.get("simulatedCharacterCount") or 0)
+            active=int(presentation.get("activeCharacterCount") or 0)
+            if simulated!=13:
+                raise RuntimeError(f"Expected 12 residents + protagonist in renderer simulation count, frame {index}: {presentation}")
+            if active>simulated:
+                raise RuntimeError(f"Renderer character activation exceeds Simulation count in frame {index}: {presentation}")
+        return
+
     if scenario == "wp-s004-003":
         if len(frames) < 4:
             raise RuntimeError("wp-s004-003 requires four representative fantasy-time frames")
@@ -4393,12 +4521,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

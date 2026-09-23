@@ -36,6 +36,11 @@
       <button id="resetZoomButton" type="button">Reset Zoom</button>
       <span>Drag / Arrow / WASD · Wheel or pinch to zoom</span>
     </div>
+    <div id="movementProofBadge" class="movement-proof-badge" hidden aria-live="polite">
+      <strong id="movementProofBadgeStage">Resident movement proof</strong>
+      <span id="movementProofBadgeResident">—</span>
+      <code id="movementProofBadgePosition">—</code>
+    </div>
     <div id="gameplayPlaceholder" class="gameplay-placeholder">
       <strong>Gameplay Area</strong>
       <span>Start a campaign to generate the deterministic GPU-rendered world.</span>
@@ -633,6 +638,34 @@
       <div class="check"><span>Same Campaign SEED + resident ID reproduce identical schedules</span><b id="vResidentScheduleDeterministic">WAITING</b></div>
       <div class="check"><span>Representative fantasy times select the expected state without changing identity or assignments</span><b id="vResidentScheduleTime">WAITING</b></div>
       <div class="check"><span>No real-clock fallback, movement, teleport, action execution, dialogue, economy or combat is introduced</span><b id="vResidentScheduleIsolation">WAITING</b></div>
+    </div>
+  </details>
+
+  <details id="residentMovementProof">
+    <summary>WP-S004-004 Autonomous Indoor/Outdoor Route Execution + Visible Movement</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Controlled Resident</span><strong id="residentMovementResident">—</strong></div>
+        <div><span>Authoritative Position</span><strong id="residentMovementPosition">—</strong></div>
+        <div><span>Active Target</span><strong id="residentMovementTarget">—</strong></div>
+        <div><span>Status</span><strong id="residentMovementStatus">—</strong></div>
+        <div><span>Route Progress</span><strong id="residentMovementRoute">—</strong></div>
+        <div><span>Simulation Level</span><strong>0</strong></div>
+      </div>
+      <div class="resident-movement-scroll">
+        <table class="resident-movement-table" aria-label="Resident movement simulation state">
+          <thead><tr><th>Resident</th><th>Position</th><th>Target</th><th>Status</th><th>Schedule</th><th>Route</th><th>Invalid replans</th></tr></thead>
+          <tbody id="residentMovementRows"></tbody>
+        </table>
+      </div>
+      <div class="check"><span>Movement is continuous across adjacent authoritative cells with no teleportation</span><b id="vResidentMovementContinuous">WAITING</b></div>
+      <div class="check"><span>Controlled resident crosses the real home exterior door inbound and outbound and reaches both targets</span><b id="vResidentMovementDoors">WAITING</b></div>
+      <div class="check"><span>Water, walls and blocking interior objects are never traversed</span><b id="vResidentMovementCollision">WAITING</b></div>
+      <div class="check"><span>Physical segment timing uses terrain cost; 3.6 km/h road speed is 0.50 tile/second</span><b id="vResidentMovementSpeed">WAITING</b></div>
+      <div class="check"><span>Same starting state produces deterministic execution without per-frame route planning</span><b id="vResidentMovementDeterministic">WAITING</b></div>
+      <div class="check"><span>Camera changes do not mutate authoritative resident Simulation position</span><b id="vResidentMovementCamera">WAITING</b></div>
+      <div class="check"><span>Off-screen Simulation continues while Stage 3 renderer culls the resident billboard</span><b id="vResidentMovementCulling">WAITING</b></div>
+      <div class="check"><span>No direct player NPC control, action resolution, dialogue, economy, combat or external LLM behavior is introduced</span><b id="vResidentMovementIsolation">WAITING</b></div>
     </div>
   </details>
 
