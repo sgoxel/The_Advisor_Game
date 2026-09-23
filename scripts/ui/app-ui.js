@@ -526,6 +526,9 @@ let pinchState=null;
 let wheelZoomUsed=false;
 let terrainRenderSerial=0;
 let terrainPrefetchSerial=0;
+let terrainCachedRenderCount=0;
+let terrainFallbackRenderCount=0;
+let terrainLastRenderSource="none";
 let cameraTransitionQueue=Promise.resolve();
 let lastCameraDirection={dx:0,dy:0};
 
@@ -897,12 +900,16 @@ async function renderTerrain(){
 
   let tiles;
   if(cachedTerrain?.ready){
+    terrainCachedRenderCount++;
+    terrainLastRenderSource="chunk-cache";
     tiles=cachedTerrain.tiles.map(item=>({
       ...item,
       movement:item.movement,
       routeStep:null
     }));
   }else{
+    terrainFallbackRenderCount++;
+    terrainLastRenderSource="legacy-fallback";
     const surfaceTiles=buildTerrainSurfaceTiles(campaign.seed,center,columns,rows,halfCols,halfRows);
     tiles=surfaceTiles.map(item=>({
       ...item,
@@ -1550,6 +1557,12 @@ async function init(){
 window.AppUI=Object.freeze({
   init,
   refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
-  refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot())
+  refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot()),
+  terrainCacheTelemetry:()=>Object.freeze({
+    cachedRenderCount:terrainCachedRenderCount,
+    fallbackRenderCount:terrainFallbackRenderCount,
+    lastRenderSource:terrainLastRenderSource,
+    simulationAuthorityPreserved:true
+  })
 });
 })();
