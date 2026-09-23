@@ -8,7 +8,8 @@ const STANDARD_TERRAIN=new Set([
 ]);
 
 const cache=new Map();
-let cacheHits=0,cacheMisses=0,completeChunkGenerations=0,releases=0;
+const everGenerated=new Set();
+let cacheHits=0,cacheMisses=0,completeChunkGenerations=0,releases=0,regenerationCount=0;
 let activeGenerations=0,preparedGenerations=0,otherGenerations=0;
 let terrainFoundationCalls=0,walkabilityClassifications=0;
 let totalGenerationMs=0,maxGenerationMs=0;
@@ -214,7 +215,10 @@ function getOrCreate(spec){
     return existing.snapshot;
   }
   cacheMisses++;
-  return generate(spec);
+  if(everGenerated.has(key))regenerationCount++;
+  const snapshot=generate(spec);
+  everGenerated.add(key);
+  return snapshot;
 }
 function touch(key){
   const entry=cache.get(String(key||""));
@@ -335,6 +339,8 @@ function stats(){
     staticObjectReferenceCount,
     cacheHits,cacheMisses,
     completeChunkGenerations,
+    uniqueGeneratedChunkCount:everGenerated.size,
+    regenerationCount,
     activeGenerations,preparedGenerations,otherGenerations,
     releases,
     terrainFoundationCalls,
@@ -352,6 +358,8 @@ function stats(){
 }
 function clear(){
   cache.clear();
+  everGenerated.clear();
+  regenerationCount=0;
 }
 window.PlayCanvasChunkWorldData=Object.freeze({
   version:VERSION,
