@@ -37,7 +37,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
 - `WP-S003-001-002` — Orthographic 3D Scene + Mobile WebGL2/WebGPU Baseline — COMPLETED
 - `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
-- `WP-S003-003` — Interior Objects + Interaction Points
+- `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
 - `WP-S003-004-001` — Tall 2.5D Building Mass + Local Character Occlusion Cutouts — COMPLETED
 - `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World
