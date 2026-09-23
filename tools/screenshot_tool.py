@@ -365,6 +365,8 @@ return (() => {
           terrainCacheTelemetry: window.AppUI?.terrainCacheTelemetry?.() || null,
           interiorObjectPresentation: renderer.interiorObjectPresentation || null,
           assetPreparationProof: renderer.assetPreparationProof || null,
+          materialTextureQuality: renderer.materialTextureQuality || null,
+          renderQualityManager: window.RuntimeRenderQuality?.snapshot?.() || null,
           worldAssetPreparation: renderer.worldAssetPreparation || null,
           worldAssetCache: renderer.worldAssetCache || null,
           worldAssetProof: renderer.worldAssetProof || null,
