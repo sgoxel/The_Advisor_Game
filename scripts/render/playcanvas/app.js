@@ -122,7 +122,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const root=resource.instantiateRenderEntity();
     root.name="PreparedRepresentativeAssetSet";
     assetPreparationProofRoot.addChild(root);
-    camera.camera.orthoHeight=11.5;
+    // Frame the already-prepared representative set tightly enough for honest
+    // visual inspection without scaling or rebuilding the cached glTF content.
+    camera.camera.orthoHeight=7.6;
     camera.setPosition(17,15,20);
     camera.lookAt(0,1,1);
     const counts=countPreparedProof(root);
