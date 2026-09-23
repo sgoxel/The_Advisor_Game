@@ -1252,23 +1252,75 @@ def _set_camera_center_and_render(driver, x: int, y: int) -> str:
     return f"camera-center:{x},{y}"
 
 
+
+def _set_camera_center_and_render_active(driver, x: int, y: int) -> str:
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        try {
+          if (!window.Camera?.setCenter || !window.AppUI?.refreshTerrain) {
+            done({ok:false, reason:'camera-refresh-api-missing'});
+            return;
+          }
+          window.Camera.setCenter(String(arguments[0]), String(arguments[1]));
+          Promise.resolve(window.AppUI.refreshTerrain())
+            .then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+            .then(() => done({
+              ok:true,
+              center:window.Camera.getCenter(),
+              terrainPreload:window.GameRenderer?.snapshot?.()?.terrainPreload || null
+            }))
+            .catch(error => done({ok:false, reason:String(error)}));
+        } catch (error) {
+          done({ok:false, reason:String(error)});
+        }
+        """,
+        int(x), int(y),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to move camera and render: {result}")
+
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, 8).until(
+        lambda d: d.execute_script(
+            """
+            const camera = window.Camera?.getCenter?.();
+            const snap = window.GameRenderer?.snapshot?.();
+            const frame = snap?.frame;
+            const chunks = snap?.terrainChunks;
+            return Boolean(
+              camera && frame?.center &&
+              String(camera.x) === String(arguments[0]) &&
+              String(camera.y) === String(arguments[1]) &&
+              String(frame.center.x) === String(arguments[0]) &&
+              String(frame.center.y) === String(arguments[1]) &&
+              Number(chunks?.visibleChunkCount || 0) > 0 &&
+              chunks?.resourceKind === 'chunk-mesh'
+            );
+            """,
+            str(x), str(y),
+        )
+    )
+    return f"camera-center-active:{x},{y}"
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-006":
         if frame_index == 0:
             _set_terrain_preload_settings(driver, radius=2, cache=256, directional=True, background=True)
-            return _set_camera_center_and_render(driver, 0, 0)
+            return _set_camera_center_and_render_active(driver, 0, 0)
         if frame_index == 1:
-            return _set_camera_center_and_render(driver, 16, 0)
+            return _set_camera_center_and_render_active(driver, 16, 0)
         if frame_index == 2:
-            return _set_camera_center_and_render(driver, 32, 0)
+            return _set_camera_center_and_render_active(driver, 32, 0)
         if frame_index == 3:
-            return _set_camera_center_and_render(driver, 48, 0)
+            return _set_camera_center_and_render_active(driver, 48, 0)
         if frame_index == 4:
-            return _set_camera_center_and_render(driver, 0, 0)
+            return _set_camera_center_and_render_active(driver, 0, 0)
         if frame_index == 5:
             return _wheel_canvas(driver, -500)
         driver.set_window_size(844, 390)
-        return _set_camera_center_and_render(driver, 0, 0)
+        return _set_camera_center_and_render_active(driver, 0, 0)
     if scenario == "playcanvas-root-cutover":
         if frame_index == 1:
             driver.set_window_size(844, 390)
@@ -2942,7 +2994,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "playcanvas-root-cutover"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "playcanvas-root-cutover", "wp-s003-006"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
