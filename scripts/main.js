@@ -25,12 +25,20 @@ function loadTerrainChunkSizeSettings(){
   script.onerror=()=>{console.error("Failed to load terrain chunk size settings.");loadInterior();};
   document.head.appendChild(script);
 }
+function loadRuntimeRenderQuality(){
+  if(window.RuntimeRenderQuality){loadTerrainChunkSizeSettings();return;}
+  const script=document.createElement("script");
+  script.src="scripts/render/runtime-render-quality.js";
+  script.onload=loadTerrainChunkSizeSettings;
+  script.onerror=()=>{console.error("Failed to load adaptive render quality settings.");loadTerrainChunkSizeSettings();};
+  document.head.appendChild(script);
+}
 function loadRuntimeTextureResolution(){
-  if(window.RuntimeTextureResolution){loadTerrainChunkSizeSettings();return;}
+  if(window.RuntimeTextureResolution){loadRuntimeRenderQuality();return;}
   const script=document.createElement("script");
   script.src="scripts/render/runtime-texture-resolution.js";
-  script.onload=loadTerrainChunkSizeSettings;
-  script.onerror=()=>{console.error("Failed to load runtime texture resolution settings.");loadTerrainChunkSizeSettings();};
+  script.onload=loadRuntimeRenderQuality;
+  script.onerror=()=>{console.error("Failed to load runtime texture resolution settings.");loadRuntimeRenderQuality();};
   document.head.appendChild(script);
 }
 function boot(){
