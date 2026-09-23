@@ -416,7 +416,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       x:spec.x,
       y:spec.y,
       chunkSize:spec.chunkSize,
-      signature:spec.signature
+      signature:spec.signature,
+      state:spec.state
     })||null;
     const resource=factory.build({...spec,worldData});
     resource.worldData=worldData;
