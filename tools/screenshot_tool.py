@@ -2425,10 +2425,16 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S003-001 still renders DOM terrain tiles: {gpu}")
         if not gpu.get("logicalTextureKeyPass"):
             raise RuntimeError(f"WP-S003-001 logical texture-key resolution failed: {gpu}")
-        if int(gpu.get("standardTerrainTexturePx") or 0) != 100:
-            raise RuntimeError(f"WP-S003-001 terrain texture standard is not 100px: {gpu}")
+        runtime_texture_px = int(cache.get("runtimeTextureResolution") or 0)
+        if runtime_texture_px not in {16,32,64,128}:
+            raise RuntimeError(
+                f"PlayCanvas runtime texture resolution is outside the supported adaptive set: "
+                f"{runtime_texture_px}px, cache={cache}"
+            )
+        if not str(cache.get("runtimeTextureCacheSignature") or ""):
+            raise RuntimeError(f"PlayCanvas runtime texture cache signature is missing: {cache}")
         if not cache.get("ready") or int(cache.get("svgSourceCount") or 0) <= 0:
-            raise RuntimeError(f"WP-S003-001 SVG draft texture cache is not ready: {gpu}")
+            raise RuntimeError(f"PlayCanvas texture preparation cache is not ready: {gpu}")
         proof = current.get("startingVillage") or {}
         if not proof.get("deterministic"):
             raise RuntimeError(f"Starting Village is not deterministic: {proof}")
