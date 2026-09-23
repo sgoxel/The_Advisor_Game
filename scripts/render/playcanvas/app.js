@@ -1161,13 +1161,13 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1),aspect=width/height;
       const baseFrameHeight=aspect>3&&height<220?SHORT_LANDSCAPE_ORTHO_HEIGHT:aspect<0.8?PORTRAIT_ORTHO_HEIGHT:aspect>2.2?WIDE_ORTHO_HEIGHT:BASE_ORTHO_HEIGHT;
       camera.camera.orthoHeight=baseFrameHeight/zoom;
-      // Orthographic zoom-out enlarges the view plane but does not move the camera.
-      // At wide framing the lower view rays otherwise begin below ground and can
-      // never intersect terrain, producing a large clear-color band. Move the
-      // camera backward along the same view direction as the frame grows; this
-      // preserves orthographic scale/orientation while keeping the ground plane
-      // in front of every gameplay ray.
-      const cameraDistanceScale=Math.max(1,camera.camera.orthoHeight/BASE_ORTHO_HEIGHT);
+      // Orthographic distance does not change composition or scale. Keep the
+      // camera farther back along the same view direction so the complete
+      // tilted view volume stays in front of the ground plane at wide/portrait
+      // zoom-out framing instead of clipping the lower world to clear color.
+      const cameraFrameScale=Math.max(1,camera.camera.orthoHeight/BASE_ORTHO_HEIGHT);
+      const cameraDistanceScale=cameraFrameScale*2;
+      camera.camera.farClip=Math.max(200,400*cameraFrameScale);
       camera.setPosition(
         targetX+13.5*cameraDistanceScale,
         15.5*cameraDistanceScale,
