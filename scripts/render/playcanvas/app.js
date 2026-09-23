@@ -395,7 +395,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   }
   function prepareTerrainBackdropChunk(spec){
     const entity=new pc.Entity("TerrainBackdropChunk_"+spec.x+"_"+spec.y);
-    entity.addComponent("render",{type:"box",material:material("terrain-preload-backdrop",0.255,0.365,0.18),castShadows:false,receiveShadows:false});
+    entity.addComponent("render",{type:"box",material:material("terrain-grass",0.30,0.43,0.22),castShadows:false,receiveShadows:false});
     const meters=spec.chunkSize*WORLD_TILE_METERS;
     entity.setLocalScale(meters,0.10,meters);
     terrainPreloadRoot.addChild(entity);
@@ -424,10 +424,39 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1);
     const aspect=width/height;
     const halfHeight=Math.max(1,Number(camera?.camera?.orthoHeight||BASE_ORTHO_HEIGHT));
-    return Object.freeze({
-      x:Math.max(0,Math.ceil((halfHeight*aspect)/meters)),
-      y:Math.max(0,Math.ceil(halfHeight/meters))
+    const fallback=Object.freeze({
+      x:Math.max(1,Math.ceil((halfHeight*aspect*1.45)/meters)+1),
+      y:Math.max(1,Math.ceil((halfHeight*1.45)/meters)+1)
     });
+    try{
+      const component=camera?.camera;
+      if(!component?.screenToWorld)return fallback;
+      const center=lastModel?.center?characterScenePoint(lastModel.center):Object.freeze({x:0,z:0});
+      const groundY=-0.33;
+      const near=Math.max(0.01,Number(component.nearClip||0.1));
+      const far=Math.max(near+1,Number(component.farClip||200));
+      let maxDx=0,maxDz=0,valid=0;
+      for(const [sx,sy] of [[0,0],[width,0],[0,height],[width,height]]){
+        const a=component.screenToWorld(sx,sy,near,new pc.Vec3());
+        const b=component.screenToWorld(sx,sy,far,new pc.Vec3());
+        const dy=b.y-a.y;
+        if(Math.abs(dy)<1e-6)continue;
+        const t=(groundY-a.y)/dy;
+        if(!Number.isFinite(t)||t<0||t>1)continue;
+        const gx=a.x+(b.x-a.x)*t;
+        const gz=a.z+(b.z-a.z)*t;
+        maxDx=Math.max(maxDx,Math.abs(gx-center.x));
+        maxDz=Math.max(maxDz,Math.abs(gz-center.z));
+        valid++;
+      }
+      if(valid<2)return fallback;
+      return Object.freeze({
+        x:Math.max(1,Math.ceil(maxDx/meters)+1),
+        y:Math.max(1,Math.ceil(maxDz/meters)+1)
+      });
+    }catch(_){
+      return fallback;
+    }
   }
   function updateTerrainPreload(center){
     const manager=initTerrainPreload();
