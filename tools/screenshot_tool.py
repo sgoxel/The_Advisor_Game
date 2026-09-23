@@ -1253,7 +1253,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             _set_terrain_preload_settings(driver, radius=4, cache=256, directional=True, background=False)
             driver.set_window_size(844, 390)
             _safe_click(driver, "#settingsButton")
-            driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'center'})")
+            driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'start'})")
             return "preload:phone-landscape-settings"
         driver.refresh()
         from selenium.webdriver.support.ui import WebDriverWait
@@ -1269,7 +1269,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
         driver.set_window_size(390, 844)
         _safe_click(driver, "#settingsButton")
-        driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'center'})")
+        driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'start'})")
         return "preload:persistence-phone-portrait"
     if scenario == "wp-s003-005-002":
         if frame_index == 0:
