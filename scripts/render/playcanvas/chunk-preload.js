@@ -123,7 +123,8 @@ function createManager({
   let lastCenterChunk=null;
   let lastRequest=null;
   let settings=get();
-  let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,cacheReuses=0,frameBudgetSpikes=0;
+  let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,cacheReuses=0,frameBudgetSpikes=0,invalidations=0;
+  let lastInvalidationReason=null;
   let lastWorkMs=0,maxWorkMs=0,backgroundFrames=0;
   let lastDirection=Object.freeze({x:0,y:0});
   let lastPreparedOrder=Object.freeze([]);
@@ -144,7 +145,9 @@ function createManager({
   function currentSignature(){
     return "chunk="+size+"|"+String(signatureProvider()||"standard");
   }
-  function invalidate(){
+  function invalidate(reason="manual"){
+    invalidations++;
+    lastInvalidationReason=String(reason||"manual");
     cancelWork();
     for(const entry of entries.values()){
       try{destroyChunk?.(entry.resource,entry);}catch(_){}
@@ -348,7 +351,7 @@ function createManager({
       Cached:cached,
       protectedCount:active+prepared,
       queueDepth:queue.length,
-      hits,misses,compositions,evictions,visibleWaits,cacheReuses,
+      hits,misses,compositions,evictions,visibleWaits,cacheReuses,invalidations,lastInvalidationReason,
       visibleAssetLoads:0,visibleTextureDecodes:0,visibleGltfParses:0,
       frameBudgetMs:settings.frameBudgetMs,
       lastWorkMs:Number(lastWorkMs.toFixed(3)),

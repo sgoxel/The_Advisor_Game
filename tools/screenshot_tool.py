@@ -79,6 +79,7 @@ SCENARIOS = {
     "wp-s003-004-002",
     "wp-s003-005-002",
     "wp-s003-006-002",
+    "wp-s003-006-001",
     "wp-s003-006",
     "wp-s003-006-003",
     "playcanvas-root-cutover",
@@ -112,6 +113,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-004-002": 8,
     "wp-s003-005-002": 4,
     "wp-s003-006-002": 8,
+    "wp-s003-006-001": 14,
     "wp-s003-006": 7,
     "wp-s003-006-003": 7,
     "playcanvas-root-cutover": 3,
@@ -249,6 +251,30 @@ return (() => {
         startYearValid: Boolean(window.GameTime?.validateStartYear?.()),
         persistenceStatus: document.querySelector('#vPersist')?.textContent?.trim() || null,
         terrainPreloadSettings: window.TerrainChunkPreloadSettings?.get?.() || null,
+        terrainChunkSizeSetting: window.TerrainChunkSizeSettings?.get?.() || null,
+        terrainChunkSizeControl: (() => {
+          const select=document.querySelector('#terrainChunkSizeSelect');
+          const popup=document.querySelector('#settingsPopup');
+          return {
+            present:Boolean(select),
+            value:select?.value || null,
+            options:select ? Array.from(select.options).map(option => Number(option.value)) : [],
+            settingsOpen:popup ? !popup.hidden : false,
+          };
+        })(),
+        terrainChunkWorldIdentity: (() => {
+          try {
+            const seed=window.SeedSystem?.getCampaign?.()?.seed;
+            if(!seed||!window.TerrainFoundation?.getTile)return null;
+            const points=[[0,0],[7,0],[8,0],[15,0],[16,0],[31,0],[32,0],[63,0],[64,0],[127,0],[128,0]];
+            return points.map(([x,y]) => {
+              const tile=window.TerrainFoundation.getTile(seed,String(x),String(y));
+              return {x,y,type:String(tile?.type||''),buildingId:tile?.buildingId?String(tile.buildingId):null,specialKind:tile?.specialKind?String(tile.specialKind):null};
+            });
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
         terrainPreloadControls: {
           preloadRadius: document.querySelector('#terrainPreloadRadiusSelect')?.value || null,
           maxCachedChunks: document.querySelector('#terrainCacheCapacitySelect')?.value || null,
@@ -683,6 +709,10 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
+            if scenario == "wp-s003-006-001":
+                _set_terrain_preload_settings(
+                    driver, radius=1, cache=256, directional=True, background=True
+                )
             if scenario == "wp-s003-006":
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=True
@@ -692,7 +722,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     driver, radius=1, cache=256, directional=True, background=True
                 )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006", "wp-s003-006-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1243,6 +1273,56 @@ def _set_terrain_preload_settings(driver, *, radius: int, cache: int, directiona
     return f"preload:r{radius}:c{cache}:d{int(directional)}:b{int(background)}"
 
 
+def _set_terrain_chunk_size(driver, size: int) -> str:
+    if int(size) not in (8, 16, 32, 64):
+        raise RuntimeError(f"Unsupported terrain chunk size for evidence: {size}")
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        (async () => {
+          try {
+            const settings=window.TerrainChunkSizeSettings;
+            if(!settings?.set||!window.AppUI?.refreshTerrain){
+              done({ok:false,reason:'terrain-chunk-size-api-missing'});
+              return;
+            }
+            const before=window.GameRenderer?.snapshot?.()?.terrainPreload || null;
+            const selected=settings.set(Number(arguments[0]));
+            await Promise.resolve(window.AppUI.refreshTerrain());
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            done({ok:true,selected,before,after:window.GameRenderer?.snapshot?.()?.terrainPreload || null});
+          } catch (error) {
+            done({ok:false,reason:String(error)});
+          }
+        })();
+        """,
+        int(size),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to set terrain chunk size {size}: {result}")
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, 20).until(
+        lambda d: d.execute_script(
+            """
+            const setting=window.TerrainChunkSizeSettings?.get?.();
+            const snap=window.GameRenderer?.snapshot?.();
+            const preload=snap?.terrainPreload;
+            const chunks=snap?.terrainChunks;
+            return Boolean(
+              Number(setting?.chunkSize||0)===arguments[0] &&
+              Number(preload?.chunkSize||0)===arguments[0] &&
+              String(preload?.signature||'').startsWith('chunk='+arguments[0]+'|') &&
+              Number(preload?.queueDepth||0)===0 &&
+              chunks?.resourceKind==='chunk-mesh' &&
+              Number(chunks?.visibleChunkCount||0)>0
+            );
+            """,
+            int(size),
+        )
+    )
+    return f"chunk-size:{size}"
+
+
 def _set_camera_center_and_render(driver, x: int, y: int) -> str:
     result = driver.execute_async_script(
         """
@@ -1405,6 +1485,58 @@ def _keyboard_pan_tiles(driver, dx: int, dy: int, timeout: float = 60.0) -> str:
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-006-001":
+        if frame_index == 0:
+            _safe_click(driver, "#settingsButton")
+            driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'start'})")
+            return "chunk-size:settings-default"
+        if frame_index == 1:
+            _safe_click(driver, "#settingsPopup .popup-close")
+            return _set_terrain_chunk_size(driver, 8) + "+" + _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 2:
+            return _set_camera_center_and_render(driver, 128, 0)
+        if frame_index == 3:
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 4:
+            return _set_terrain_chunk_size(driver, 16) + "+" + _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 5:
+            return _set_camera_center_and_render(driver, 128, 0)
+        if frame_index == 6:
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 7:
+            return _set_terrain_chunk_size(driver, 32) + "+" + _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 8:
+            return _set_camera_center_and_render(driver, 128, 0)
+        if frame_index == 9:
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 10:
+            return _set_terrain_chunk_size(driver, 64) + "+" + _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 11:
+            return _set_camera_center_and_render(driver, 128, 0)
+        if frame_index == 12:
+            return _set_camera_center_and_render(driver, 0, 0)
+        driver.refresh()
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver, 30).until(lambda d: d.execute_script("return document.readyState") == "complete")
+        WebDriverWait(driver, 30).until(
+            lambda d: d.execute_script(
+                """
+                const state=document.querySelector('#campaignState')?.textContent?.trim();
+                const setting=window.TerrainChunkSizeSettings?.get?.();
+                const snap=window.GameRenderer?.snapshot?.();
+                return Boolean(
+                  state==='ACTIVE' && snap?.ready && snap?.engine==='PlayCanvas' &&
+                  Number(setting?.chunkSize||0)===64 &&
+                  Number(snap?.terrainPreload?.chunkSize||0)===64 &&
+                  Number(snap?.terrainPreload?.queueDepth||0)===0
+                );
+                """
+            )
+        )
+        driver.set_window_size(390, 844)
+        _safe_click(driver, "#settingsButton")
+        driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'start'})")
+        return "chunk-size:persistence-phone-portrait"
     if scenario == "wp-s003-006-003":
         if frame_index == 0:
             return "chunk-world-data:prewarmed-origin"
@@ -1668,6 +1800,70 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-001":
+        if len(frames) < 14:
+            raise RuntimeError("wp-s003-006-001 requires fourteen evidence frames")
+        runtimes=[frame.get("runtime",{}) for frame in frames[:14]]
+        builds=[runtime.get("currentBuild",{}) for runtime in runtimes]
+        gpus=[(build.get("gpuRenderer") or {}) for build in builds]
+        preloads=[(gpu.get("terrainPreload") or {}) for gpu in gpus]
+        chunks=[(gpu.get("terrainChunks") or {}) for gpu in gpus]
+        settings=[build.get("terrainChunkSizeSetting") or {} for build in builds]
+        controls=[build.get("terrainChunkSizeControl") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        identities=[build.get("terrainChunkWorldIdentity") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Chunk-size comparison changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Chunk-size comparison changed protagonist authority: {protagonists}")
+        encoded=[json.dumps(item,sort_keys=True) for item in identities]
+        if len(set(encoded))!=1 or not identities[0]:
+            raise RuntimeError(f"Authoritative terrain identity changed across chunk sizes: {identities}")
+        if int(settings[0].get("chunkSize") or 0)!=16 or int(settings[0].get("defaultChunkSize") or 0)!=16:
+            raise RuntimeError(f"Default chunk size is not 16×16: {settings[0]}")
+        if list(settings[0].get("options") or []) != [8,16,32,64]:
+            raise RuntimeError(f"Chunk size options mismatch: {settings[0]}")
+        if controls[0].get("present") is not True or controls[0].get("value")!="16" or controls[0].get("settingsOpen") is not True:
+            raise RuntimeError(f"Default Settings chunk-size control not visible/correct: {controls[0]}")
+
+        groups={8:(1,2,3),16:(4,5,6),32:(7,8,9),64:(10,11,12)}
+        previous_change_invalidations=0
+        for size,(origin_idx,target_idx,return_idx) in groups.items():
+            for idx,expected_camera in ((origin_idx,"(0,0)"),(target_idx,"(128,0)"),(return_idx,"(0,0)")):
+                preload=preloads[idx]; chunk=chunks[idx]; setting=settings[idx]
+                if int(setting.get("chunkSize") or 0)!=size:
+                    raise RuntimeError(f"Setting did not select {size}×{size} in frame {idx+1}: {setting}")
+                if int(preload.get("chunkSize") or 0)!=size or int(chunk.get("chunkSize") or 0)!=size:
+                    raise RuntimeError(f"Runtime chunk geometry did not use {size}×{size} in frame {idx+1}: preload={preload}, chunks={chunk}")
+                if f"chunk={size}|" not in str(preload.get("signature") or ""):
+                    raise RuntimeError(f"Cache signature omits chunk size {size} in frame {idx+1}: {preload}")
+                if build_camera:=builds[idx].get("cameraCoordinate"):
+                    if build_camera!=expected_camera:
+                        raise RuntimeError(f"Same-path camera mismatch for {size}×{size} in frame {idx+1}: {build_camera}")
+                else:
+                    raise RuntimeError(f"Camera telemetry missing in frame {idx+1}")
+                if chunk.get("resourceKind")!="chunk-mesh" or int(chunk.get("visibleChunkCount") or 0)<1:
+                    raise RuntimeError(f"Chunk mesh missing for {size}×{size} in frame {idx+1}: {chunk}")
+                if int(preload.get("Cached") or 0)>int((preload.get("settings") or {}).get("maxCachedChunks") or 0):
+                    raise RuntimeError(f"Chunk cache exceeded budget for {size}×{size}: {preload}")
+                if preload.get("simulationAuthorityPreserved") is not True or chunk.get("simulationAuthorityPreserved") is not True:
+                    raise RuntimeError(f"Simulation authority changed for {size}×{size} in frame {idx+1}")
+            change_invalidations=int(preloads[origin_idx].get("invalidations") or 0)
+            if change_invalidations<=previous_change_invalidations:
+                raise RuntimeError(f"Chunk-size change did not invalidate incompatible presentation cache for {size}×{size}: {preloads[origin_idx]}")
+            if preloads[origin_idx].get("lastInvalidationReason")!="chunk-size":
+                raise RuntimeError(f"Chunk-size invalidation reason missing for {size}×{size}: {preloads[origin_idx]}")
+            previous_change_invalidations=change_invalidations
+            if int(preloads[return_idx].get("cacheReuses") or 0)<=int(preloads[target_idx].get("cacheReuses") or 0):
+                raise RuntimeError(f"Return path did not reuse cached {size}×{size} chunks: target={preloads[target_idx]}, return={preloads[return_idx]}")
+        if int(settings[13].get("chunkSize") or 0)!=64 or controls[13].get("value")!="64" or controls[13].get("settingsOpen") is not True:
+            raise RuntimeError(f"64×64 chunk-size persistence failed after reload: setting={settings[13]}, control={controls[13]}")
+        viewport=runtimes[13].get("viewport") or {}
+        if int(viewport.get("height") or 0)<=int(viewport.get("width") or 0):
+            raise RuntimeError(f"Phone portrait Settings persistence evidence invalid: {viewport}")
+        return
+
     if scenario == "wp-s003-006-003":
         if len(frames) < 7:
             raise RuntimeError("wp-s003-006-003 requires seven evidence frames")
@@ -3181,7 +3377,7 @@ def take_screenshots(
         browser_url = normalize_target(target)
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
-        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002"}:
+        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001"}:
             browser_url += ("&" if "?" in browser_url else "?") + "gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
@@ -3210,12 +3406,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
