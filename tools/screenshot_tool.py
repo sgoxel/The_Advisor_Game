@@ -714,7 +714,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
     if scenario == "wp-s003-007-001":
-        driver.set_window_size(1280, 800)
+        driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
     if scenario == "wp-s003-005-002":
         from selenium.webdriver.support.ui import WebDriverWait
@@ -1679,7 +1679,7 @@ def _render_quality_step(
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-007-001":
         if frame_index == 0:
-            return _render_quality_step(driver, mode="low", viewport=(1280, 800))
+            return _render_quality_step(driver, mode="low", viewport=(1920, 1080))
         if frame_index == 1:
             return _render_quality_step(driver, mode="standard")
         if frame_index == 2:
@@ -2088,6 +2088,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             perf=gpus[index].get("performance") or {}
             if float(perf.get("frameMs") or 0)<0 or int(perf.get("drawCalls") or 0)<0 or int(perf.get("triangles") or 0)<0:
                 raise RuntimeError(f"Invalid performance telemetry in frame {index+1}: {perf}")
+        for index in (0,1,2):
+            if qualities[index].get("deviceClass")!="desktop":
+                raise RuntimeError(f"Explicit desktop frame {index+1} was not classified as desktop: {qualities[index]}")
         for index in (3,4,5):
             if qualities[index].get("deviceClass")!="phone":
                 raise RuntimeError(f"Auto mobile frame {index+1} was not classified as phone: {qualities[index]}")
