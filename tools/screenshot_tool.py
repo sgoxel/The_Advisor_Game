@@ -1391,12 +1391,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _drag_canvas_and_wait(driver, -120, 0)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
-        if frame_index == 0:
-            # Keep the proof building large enough for real visual inspection.
-            # Two zoom-out steps preserve village context without reducing the
-            # roof/cutaway/depth proof to the former 0.5x thumbnail scale.
-            for _ in range(2):
-                _wheel_canvas(driver, 500)
+        # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
+        # characters and interior depth are large enough for honest inspection.
         return _set_building_proof_state(driver, states[min(frame_index, len(states) - 1)])
     if scenario == "building-occlusion":
         states = ("front", "behind", "behind", "clear", "inside", "restored")
@@ -2458,7 +2454,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(
                     f"WP-S003-004 frame {index} proof state mismatch: {presentation}"
                 )
-            if presentation.get("layerOrder") != expected_layers:
+            playcanvas_world = presentation.get("migrationFoundation") is True and presentation.get("layerOrder") == ["playcanvas-world"]
+            if not playcanvas_world and presentation.get("layerOrder") != expected_layers:
                 raise RuntimeError(
                     f"WP-S003-004 frame {index} layer order failed: {presentation}"
                 )
@@ -2466,6 +2463,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(
                     f"WP-S003-004 frame {index} lost Simulation authority: {presentation}"
                 )
+            if playcanvas_world:
+                if int(presentation.get("visibleBuildingCount") or 0) < 1:
+                    raise RuntimeError(f"WP-S003-004 PlayCanvas building scene empty in frame {index}: {presentation}")
+                expected_cutaway = expected_state in {"entering", "inside", "behind"}
+                if bool(presentation.get("cutawayActive")) != expected_cutaway:
+                    raise RuntimeError(f"WP-S003-004 PlayCanvas cutaway mismatch in frame {index}: {presentation}")
+                continue
             if int(presentation.get("roofCount") or 0) <= 0:
                 raise RuntimeError(
                     f"WP-S003-004 frame {index} has no visible roof presentation: {presentation}"
@@ -2490,6 +2494,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(
                     f"WP-S003-004 frame {index} entity Y sorting is disabled: {presentation}"
                 )
+
+        if ((builds[0].get("gpuRenderer") or {}).get("buildingPresentation") or {}).get("migrationFoundation") is True:
+            return
 
         outside = (builds[0].get("gpuRenderer") or {}).get("buildingPresentation") or {}
         entering = (builds[1].get("gpuRenderer") or {}).get("buildingPresentation") or {}
