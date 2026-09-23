@@ -1647,6 +1647,9 @@ function residentScheduleHourKey(time){
 }
 function renderResidentScheduleProof(timeOverride=null,pin=false){
   const campaign=SeedSystem.getCampaign();
+  if(residentSchedulePinned&&!pin&&timeOverride==null&&lastResidentScheduleProof){
+    return lastResidentScheduleProof;
+  }
   residentSchedulePinned=Boolean(pin);
   if(!campaign){
     e.residentScheduleCount.textContent="—";
@@ -1757,6 +1760,8 @@ function startClock(){
 async function startNewCampaign(){
   const result=SeedSystem.startNewCampaign();
   restoredCampaign=false;
+  residentSchedulePinned=false;
+  lastResidentScheduleProof=null;
   if(result.ok)resetCameraForCampaign();
   e.menuMessage.textContent=result.message;
   if(result.ok){
@@ -1773,6 +1778,8 @@ async function startNewCampaign(){
 }
 async function restartCampaign(){
   const result=SeedSystem.restartCampaign();
+  residentSchedulePinned=false;
+  lastResidentScheduleProof=null;
   if(result.ok)resetCameraForCampaign();
   e.menuMessage.textContent=result.message;
   if(result.ok){
