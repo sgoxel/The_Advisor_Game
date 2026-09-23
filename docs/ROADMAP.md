@@ -43,7 +43,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World — COMPLETED
 - `WP-S003-005` — PlayCanvas 3D Asset + Material Preparation Pipeline
 - `WP-S003-005-001` — Adaptive 3D Texture Quality + Mobile GPU Budget
-- `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard
+- `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard — COMPLETED
 - `WP-S003-006` — PlayCanvas 3D Terrain Chunk Mesh + Background Preparation
 - `WP-S003-006-001` — Adjustable Terrain Chunk Size
 - `WP-S003-006-002` — Adjustable Terrain Preload + Chunk Cache Budget
