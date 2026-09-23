@@ -105,7 +105,7 @@ Every runtime asset defines usable presentation bounds before integration.
 Representative bounds:
 
 - Terrain patch: 8 × 0.5 × 8 m.
-- House including roof: 6.6 × 4.7 × 5.6 m.
+- House including roof: 6.8 × 4.8 × 5.6 m.
 - Workbench: 2.4 × 0.94 × 0.9 m.
 - Tree: 3.2 × 4.5 × 3.2 m.
 
@@ -143,7 +143,7 @@ Fallback geometry must:
 WP-S003-005-002 includes a real glTF 2.0 proof set containing:
 
 - a 6 m × 5 m house body;
-- a matching 6.6 m × 5.6 m gable roof;
+- a matching 6.8 m × 5.6 m dual-slab gable roof;
 - a 1.2 m × 2.1 m door;
 - a 2.4 m workbench;
 - three repeated low-poly trees sharing the same mesh/material definition;
