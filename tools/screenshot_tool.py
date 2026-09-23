@@ -249,7 +249,8 @@ return (() => {
             gameplay:rect('#gameplayArea'),
             status:rect('.status-area'),
             settingsHidden:settings ? Boolean(settings.hidden) : null,
-            settingsRect:rect('#settingsPopup')
+            settingsRect:rect('#settingsPopup'),
+            characterProofPanel:rect('.character-billboard-proof-panel')
           };
         })(),
         responsiveControlDeck: window.ResponsiveControlDeck?.snapshot?.() || null,
@@ -1362,6 +1363,27 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone landscape evidence invalid: {phone_landscape}")
         if int(phone_portrait.get("height") or 0) <= int(phone_portrait.get("width") or 0):
             raise RuntimeError(f"Phone portrait evidence invalid: {phone_portrait}")
+
+        landscape_layout = builds[6].get("layout") or {}
+        gameplay = landscape_layout.get("gameplay") or {}
+        proof_panel = landscape_layout.get("characterProofPanel") or {}
+        gameplay_area = float(gameplay.get("width") or 0) * float(gameplay.get("height") or 0)
+        panel_area = float(proof_panel.get("width") or 0) * float(proof_panel.get("height") or 0)
+        if gameplay_area <= 0 or panel_area <= 0:
+            raise RuntimeError(
+                f"Phone landscape proof/gameplay bounds missing: gameplay={gameplay}, panel={proof_panel}"
+            )
+        if float(proof_panel.get("height") or 999) > 34:
+            raise RuntimeError(f"Phone landscape proof badge is too tall: {proof_panel}")
+        if float(proof_panel.get("width") or 9999) > float(gameplay.get("width") or 0) * 0.48:
+            raise RuntimeError(
+                f"Phone landscape proof badge is too wide: gameplay={gameplay}, panel={proof_panel}"
+            )
+        if panel_area / gameplay_area > 0.10:
+            raise RuntimeError(
+                f"Phone landscape proof badge obscures too much gameplay: "
+                f"ratio={panel_area/gameplay_area:.3f}, gameplay={gameplay}, panel={proof_panel}"
+            )
         return
 
     if scenario == "wp-s003-003":
