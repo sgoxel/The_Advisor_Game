@@ -1143,7 +1143,132 @@ def _set_character_proof_state(driver, state: str) -> str:
     return f"character-proof-failed:{state}:{reason}"
 
 
+
+def _set_terrain_preload_settings(driver, *, radius: int, cache: int, directional: bool, background: bool) -> str:
+    result = driver.execute_script(
+        """
+        const settings = window.TerrainChunkPreloadSettings;
+        if (!settings?.set) return {ok:false, reason:'terrain-preload-settings-missing'};
+        const next = settings.set({
+          preloadRadius: arguments[0],
+          maxCachedChunks: arguments[1],
+          directionalPreload: arguments[2],
+          backgroundChunkGeneration: arguments[3]
+        });
+        return {ok:true, settings:next};
+        """,
+        int(radius), int(cache), bool(directional), bool(background),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to set terrain preload settings: {result}")
+
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, 8).until(
+        lambda d: d.execute_script(
+            """
+            const s = window.GameRenderer?.snapshot?.()?.terrainPreload;
+            return Boolean(
+              s &&
+              Number(s.settings?.preloadRadius) === arguments[0] &&
+              Number(s.settings?.maxCachedChunks) === arguments[1] &&
+              Boolean(s.settings?.directionalPreload) === arguments[2] &&
+              Boolean(s.settings?.backgroundChunkGeneration) === arguments[3] &&
+              Number(s.queueDepth || 0) === 0
+            );
+            """,
+            int(radius), int(cache), bool(directional), bool(background),
+        )
+    )
+    return f"preload:r{radius}:c{cache}:d{int(directional)}:b{int(background)}"
+
+
+def _set_camera_center_and_render(driver, x: int, y: int) -> str:
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        try {
+          if (!window.Camera?.setCenter || !window.AppUI?.refreshTerrain) {
+            done({ok:false, reason:'camera-refresh-api-missing'});
+            return;
+          }
+          window.Camera.setCenter(String(arguments[0]), String(arguments[1]));
+          Promise.resolve(window.AppUI.refreshTerrain())
+            .then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+            .then(() => done({
+              ok:true,
+              center:window.Camera.getCenter(),
+              terrainPreload:window.GameRenderer?.snapshot?.()?.terrainPreload || null
+            }))
+            .catch(error => done({ok:false, reason:String(error)}));
+        } catch (error) {
+          done({ok:false, reason:String(error)});
+        }
+        """,
+        int(x), int(y),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to move camera and render: {result}")
+
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, 8).until(
+        lambda d: d.execute_script(
+            """
+            const camera = window.Camera?.getCenter?.();
+            const frame = window.GameRenderer?.snapshot?.()?.frame;
+            const preload = window.GameRenderer?.snapshot?.()?.terrainPreload;
+            return Boolean(
+              camera && frame?.center &&
+              String(camera.x) === String(arguments[0]) &&
+              String(camera.y) === String(arguments[1]) &&
+              String(frame.center.x) === String(arguments[0]) &&
+              String(frame.center.y) === String(arguments[1]) &&
+              Number(preload?.queueDepth || 0) === 0
+            );
+            """,
+            str(x), str(y),
+        )
+    )
+    return f"camera-center:{x},{y}"
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-006-002":
+        if frame_index == 0:
+            return "preload:defaults"
+        if frame_index == 1:
+            return _set_terrain_preload_settings(driver, radius=1, cache=16, directional=True, background=True)
+        if frame_index == 2:
+            _set_terrain_preload_settings(driver, radius=2, cache=32, directional=True, background=True)
+            return _set_camera_center_and_render(driver, 16, 0)
+        if frame_index == 3:
+            _set_terrain_preload_settings(driver, radius=3, cache=64, directional=True, background=True)
+            return _set_camera_center_and_render(driver, 48, 0)
+        if frame_index == 4:
+            _set_terrain_preload_settings(driver, radius=4, cache=128, directional=True, background=True)
+            return _set_camera_center_and_render(driver, 112, 0)
+        if frame_index == 5:
+            _set_terrain_preload_settings(driver, radius=4, cache=256, directional=False, background=True)
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 6:
+            _set_terrain_preload_settings(driver, radius=4, cache=256, directional=True, background=False)
+            driver.set_window_size(844, 390)
+            _safe_click(driver, "#settingsButton")
+            return "preload:phone-landscape-settings"
+        driver.refresh()
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver, 20).until(lambda d: d.execute_script("return document.readyState") == "complete")
+        WebDriverWait(driver, 20).until(
+            lambda d: d.execute_script(
+                """
+                const state=document.querySelector('#campaignState')?.textContent?.trim();
+                const renderer=window.GameRenderer?.snapshot?.();
+                return Boolean(state==='ACTIVE' && renderer?.ready && renderer?.engine==='PlayCanvas');
+                """
+            )
+        )
+        driver.set_window_size(390, 844)
+        _safe_click(driver, "#settingsButton")
+        return "preload:persistence-phone-portrait"
     if scenario == "wp-s003-005-002":
         if frame_index == 0:
             driver.execute_script("window.WP_S003_005_002_PROOF?.setView?.('overview')")
