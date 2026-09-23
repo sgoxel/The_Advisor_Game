@@ -1721,8 +1721,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Visible render did not use cached chunk data in frame {index}: {cache}")
             if int(cache.get("fallbackRenderCount") or 0) != 0:
                 raise RuntimeError(f"Legacy full-viewport fallback ran in frame {index}: {cache}")
-            if int(data.get("viewTileMisses") or 0) != 0:
-                raise RuntimeError(f"Cached visible view missed a chunk in frame {index}: {data}")
+            if int(data.get("lastViewTileMisses") or 0) != 0:
+                raise RuntimeError(f"Current cached visible view missed a chunk in frame {index}: {data}")
             if int(stats.get("Cached") or 0) > int((stats.get("settings") or {}).get("maxCachedChunks") or 0):
                 raise RuntimeError(f"World-data cache exceeded renderer cache budget in frame {index}: {stats}")
             if chunk.get("simulationAuthorityPreserved") is not True or stats.get("simulationAuthorityPreserved") is not True:
@@ -1742,6 +1742,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 )
 
         initial_active_generations = int(world[0].get("activeGenerations") or 0)
+        if initial_active_generations < 1:
+            raise RuntimeError(f"Initial Active chunk generations were not classified: {world[0]}")
         for index in range(1, 6):
             if int(world[index].get("activeGenerations") or 0) != initial_active_generations:
                 raise RuntimeError(
