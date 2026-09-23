@@ -2790,6 +2790,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"PlayCanvas scene changed Protagonist coordinates: {protagonists}")
 
         required_roots = [
+            "TerrainPreloadRoot",
             "TerrainRoot",
             "StructuresRoot",
             "PropsRoot",
@@ -2813,8 +2814,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"PlayCanvas scene hierarchy mismatch in frame {index}: {scene}")
             if int(scene.get("entityCount") or 0) < 20:
                 raise RuntimeError(f"PlayCanvas scene hierarchy is unexpectedly empty in frame {index}: {scene}")
-            if int(scene.get("terrainEntityCount") or 0) < 5 or int(scene.get("structureEntityCount") or 0) < 12:
-                raise RuntimeError(f"PlayCanvas baseline geometry is incomplete in frame {index}: {scene}")
+            chunks = gpu.get("terrainChunks") or {}
+            if int(scene.get("terrainEntityCount") or 0) < 1 or int(scene.get("structureEntityCount") or 0) < 1:
+                raise RuntimeError(f"PlayCanvas scene roots are incomplete in frame {index}: {scene}")
+            if chunks.get("resourceKind") != "chunk-mesh" or int(chunks.get("activeMeshCount") or 0) < 1:
+                raise RuntimeError(f"PlayCanvas active chunk geometry is incomplete in frame {index}: {chunks}")
+            if chunks.get("completeChunkMeshes") is not True or chunks.get("completeChunkWorldData") is not True:
+                raise RuntimeError(f"PlayCanvas chunk/world presentation contract failed in frame {index}: {chunks}")
             if float(scene.get("orthoHeight") or 0) <= 0:
                 raise RuntimeError(f"PlayCanvas orthographic height missing in frame {index}: {scene}")
             if float(quality.get("renderScale") or 0) <= 0 or float(quality.get("renderScale") or 0) > 1:
