@@ -2735,7 +2735,7 @@ def take_screenshots(
         browser_url = normalize_target(target)
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
-        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
+        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002"}:
             browser_url += ("&" if "?" in browser_url else "?") + "renderer=playcanvas&gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
@@ -2764,7 +2764,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -2780,7 +2780,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
