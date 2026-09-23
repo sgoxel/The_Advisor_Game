@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare Low/Standard/High/Ultra presentation quality without changing Simulation truth."""
+"""Compare PlayCanvas Low/Standard/High/Ultra material quality without changing Simulation truth."""
 import json, sys, time
 from pathlib import Path
 from selenium import webdriver
@@ -8,30 +8,148 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 URL=sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8000/"
 OUT=Path("tools/screenshots"); OUT.mkdir(parents=True,exist_ok=True)
-opts=Options(); opts.add_argument("--headless=new"); opts.add_argument("--no-sandbox"); opts.add_argument("--disable-dev-shm-usage"); opts.add_argument("--window-size=1920,1080")
+opts=Options()
+opts.add_argument("--headless=new")
+opts.add_argument("--no-sandbox")
+opts.add_argument("--disable-dev-shm-usage")
+opts.add_argument("--window-size=1280,800")
 driver=webdriver.Chrome(options=opts)
+
+def identity():
+    return driver.execute_script("""
+      return {
+        seed:SeedSystem?.getCampaign?.()?.seed||null,
+        protagonist:document.querySelector('#protagonistLocation')?.textContent?.trim()||null,
+        timestamp:Number(GameTime?.getTimestampMs?.()||0)
+      };
+    """)
+
 try:
     driver.get(URL)
-    WebDriverWait(driver,20).until(lambda d:d.execute_script("return document.readyState") == "complete")
+    wait=WebDriverWait(driver,30)
+    wait.until(lambda d:d.execute_script("return document.readyState") == "complete")
     driver.execute_script("const b=document.querySelector('#newCampaignButton'),s=document.querySelector('#campaignState')?.textContent?.trim(); if(b&&s!=='ACTIVE')b.click();")
-    WebDriverWait(driver,20).until(lambda d:d.execute_script("return Boolean(window.GameRenderer?.snapshot?.()?.ready && window.TextureAssets?.stats?.()?.ready && window.RuntimeTextureQuality)") )
-    baseline=driver.execute_script("return {seed:SeedSystem?.getCampaign?.()?.seed||null, protagonist:document.querySelector('#protagonistLocation')?.textContent?.trim()||null, timestamp:Number(GameTime?.getTimestampMs?.()||0)}")
+    wait.until(lambda d:d.execute_script("""
+      const r=window.GameRenderer?.snapshot?.();
+      return Boolean(
+        r?.ready &&
+        r?.engine==='PlayCanvas' &&
+        r?.worldAssetPreparation?.ready &&
+        Number(r?.worldAssetCache?.pending||0)===0 &&
+        window.TextureAssets?.stats?.()?.ready &&
+        window.RuntimeTextureQuality
+      );
+    """))
+
+    default_state=driver.execute_script("return RuntimeTextureQuality.snapshot()")
+    if default_state.get("defaultProfile")!="standard" or default_state.get("qualityProfile")!="standard":
+        raise RuntimeError(f"Standard is not the clean-session default: {default_state}")
+
+    proof=driver.execute_script("return GameRenderer.setAssetPreparationProofState(true)?.assetPreparationProof||null")
+    if not proof or proof.get("active") is not True:
+        raise RuntimeError(f"PlayCanvas representative asset proof unavailable: {proof}")
+
+    baseline=identity()
     rows=[]
+    expected_limits={"low":24,"standard":48,"high":72,"ultra":96}
+    expected_material_max={"low":512,"standard":1024,"high":2048,"ultra":4096}
+
     for profile in ("low","standard","high","ultra"):
-        state=driver.execute_script("return RuntimeTextureQuality.setProfile(arguments[0])",profile)
-        time.sleep(1.0)
+        driver.execute_script("return RuntimeTextureQuality.setProfile(arguments[0])",profile)
+        wait.until(lambda d,p=profile:d.execute_script("""
+          const q=RuntimeTextureQuality?.snapshot?.()||{};
+          const r=GameRenderer?.snapshot?.()||{};
+          return Boolean(
+            q.qualityProfile===arguments[0] &&
+            r?.materialTextureQuality?.profile===arguments[0] &&
+            r?.worldAssetPreparation?.ready &&
+            Number(r?.worldAssetCache?.pending||0)===0
+          );
+        """,p))
+        time.sleep(0.35)
         row=driver.execute_script("""
-          const r=GameRenderer?.snapshot?.()||{}, a=TextureAssets?.stats?.()||{}, q=RuntimeTextureQuality?.snapshot?.()||{};
-          return {profile:q.qualityProfile,resolution:q.runtimeResolution,budgetMB:q.textureBudgetMB,activeTextureCount:Number(a.totalResolutionCacheEntryCount||a.loadedKeyCount||0),estimatedLoadedTextureMB:q.estimatedLoadedTextureMB,budgetUtilization:q.budgetUtilization,effectiveCacheLimit:q.effectiveCacheLimit,materialCount:r.scene?.materialCount??null,shaderVariants:r.performance?.shaderVariants??r.scene?.shaderVariants??null,drawCalls:r.performance?.drawCalls??null,frameMs:r.performance?.frameMs??null,seed:SeedSystem?.getCampaign?.()?.seed||null,protagonist:document.querySelector('#protagonistLocation')?.textContent?.trim()||null,cacheSignature:q.cacheSignature,preparedRegionKey:a.preparedRegionKey||null};
+          const r=GameRenderer?.snapshot?.()||{};
+          const a=TextureAssets?.stats?.()||{};
+          const q=RuntimeTextureQuality?.snapshot?.()||{};
+          const mq=r.materialTextureQuality||{};
+          const world=r.worldAssetCache||{};
+          return {
+            profile:q.qualityProfile,
+            terrainResolution:q.runtimeResolution,
+            maxMaterialTextureResolution:q.maxMaterialTextureResolution,
+            budgetMB:q.textureBudgetMB,
+            worldAssetCacheLimit:q.worldAssetCacheLimit,
+            activeTextureCount:Number(a.totalResolutionCacheEntryCount||a.loadedKeyCount||0)+Number(mq.textureCount||0),
+            estimatedLoadedTextureMB:q.estimatedLoadedTextureMB,
+            budgetUtilization:q.budgetUtilization,
+            effectiveLegacyCacheLimit:q.effectiveCacheLimit,
+            playCanvasWorldCacheLimit:Number(world.cacheLimit||0),
+            materialCount:Number(mq.materialCount||r.scene?.materialCount||0),
+            materialVariants:Number(mq.materialVariantCount||r.scene?.materialVariantCount||0),
+            anisotropy:Number(mq.anisotropy||0),
+            auxiliaryMaps:Boolean(mq.auxiliaryMaps),
+            detailMaps:Boolean(mq.detailMaps),
+            filtering:mq.filtering||null,
+            compressionPolicy:mq.compressionPolicy||null,
+            characterSpritePolicy:mq.characterSpritePolicy||null,
+            perFrameResizeOrTranscode:mq.perFrameResizeOrTranscode,
+            drawCalls:Number(r.performance?.drawCalls||0),
+            frameMs:Number(r.performance?.frameMs||0),
+            seed:SeedSystem?.getCampaign?.()?.seed||null,
+            protagonist:document.querySelector('#protagonistLocation')?.textContent?.trim()||null,
+            cacheSignature:q.cacheSignature,
+            terrainSignature:r.terrainChunks?.signature||null,
+            worldPending:Number(world.pending||0),
+            worldCached:Number(world.cached||0)
+          };
         """)
-        driver.save_screenshot(str(OUT/f"quality-{profile}.png")); rows.append(row)
-    after=driver.execute_script("return {seed:SeedSystem?.getCampaign?.()?.seed||null, protagonist:document.querySelector('#protagonistLocation')?.textContent?.trim()||null, timestamp:Number(GameTime?.getTimestampMs?.()||0)}")
-    if [r['profile'] for r in rows] != ['low','standard','high','ultra']: raise RuntimeError(f"profile cycle failed: {rows}")
-    if any(r['seed']!=baseline['seed'] or r['protagonist']!=baseline['protagonist'] for r in rows): raise RuntimeError(f"presentation profile changed Simulation identity: baseline={baseline} rows={rows}")
-    if after['seed']!=baseline['seed'] or after['protagonist']!=baseline['protagonist']: raise RuntimeError(f"Simulation identity changed: {baseline} -> {after}")
-    if [r['resolution'] for r in rows] != [16,32,64,128]: raise RuntimeError(f"unexpected profile resolutions: {rows}")
-    report={'baseline':baseline,'after':after,'simulationIdentityPreserved':True,'profiles':rows,'notes':{'materialCount':'null when renderer does not expose this metric','shaderVariants':'null when renderer does not expose this metric'}}
-    (OUT/'texture-quality-comparison.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+        if row["playCanvasWorldCacheLimit"] != expected_limits[profile]:
+            raise RuntimeError(f"PlayCanvas world cache limit mismatch for {profile}: {row}")
+        if row["maxMaterialTextureResolution"] != expected_material_max[profile]:
+            raise RuntimeError(f"PlayCanvas material max resolution mismatch for {profile}: {row}")
+        if row["materialCount"] < 1 or row["materialVariants"] < 1:
+            raise RuntimeError(f"PlayCanvas material metrics missing for {profile}: {row}")
+        if row["perFrameResizeOrTranscode"] is not False:
+            raise RuntimeError(f"Per-frame texture resize/transcode policy failed for {profile}: {row}")
+        if profile not in str(row["cacheSignature"]) or profile not in str(row["terrainSignature"]):
+            raise RuntimeError(f"Quality profile missing from presentation signatures for {profile}: {row}")
+        driver.save_screenshot(str(OUT/f"quality-{profile}.png"))
+        rows.append(row)
+
+    after_cycle=identity()
+    if [row["profile"] for row in rows] != ["low","standard","high","ultra"]:
+        raise RuntimeError(f"Profile cycle failed: {rows}")
+    if any(row["seed"]!=baseline["seed"] or row["protagonist"]!=baseline["protagonist"] for row in rows):
+        raise RuntimeError(f"Presentation profile changed Simulation identity: baseline={baseline} rows={rows}")
+    if after_cycle["seed"]!=baseline["seed"] or after_cycle["protagonist"]!=baseline["protagonist"]:
+        raise RuntimeError(f"Simulation identity changed during profile cycle: {baseline} -> {after_cycle}")
+
+    driver.execute_script("RuntimeTextureQuality.setProfile('high')")
+    wait.until(lambda d:d.execute_script("return RuntimeTextureQuality?.snapshot?.()?.qualityProfile==='high'"))
+    driver.refresh()
+    wait.until(lambda d:d.execute_script("return document.readyState") == "complete")
+    wait.until(lambda d:d.execute_script("return Boolean(window.RuntimeTextureQuality && window.GameRenderer?.snapshot?.()?.ready)"))
+    persisted=driver.execute_script("return RuntimeTextureQuality.snapshot()")
+    after_reload=identity()
+    if persisted.get("qualityProfile")!="high":
+        raise RuntimeError(f"Texture quality profile did not persist across reload: {persisted}")
+    if after_reload["seed"]!=baseline["seed"] or after_reload["protagonist"]!=baseline["protagonist"]:
+        raise RuntimeError(f"Reload after profile persistence changed Simulation identity: {baseline} -> {after_reload}")
+
+    report={
+      "baseline":baseline,
+      "afterCycle":after_cycle,
+      "afterReload":after_reload,
+      "simulationIdentityPreserved":True,
+      "standardDefault":True,
+      "profilePersistence":{"selected":"high","persisted":persisted.get("qualityProfile")=="high"},
+      "profiles":rows,
+      "notes":{
+        "materialVariants":"Unique active PlayCanvas material feature combinations, not an invented compiled-shader count.",
+        "characterSpriteQuality":"Character sprites stay on the separate native 2D preparation path."
+      }
+    }
+    (OUT/"texture-quality-comparison.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
     print(json.dumps(report,indent=2))
 finally:
     driver.quit()
