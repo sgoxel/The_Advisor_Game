@@ -38,6 +38,21 @@ function create({pc,device,parent,material,seedProvider=()=>""}={}){
     const b=clamp(0.215+n*0.012+lift*0.5,0.14,0.30);
     return [r,g,b,1];
   }
+  function parseHexColor(value){
+    const text=String(value||"").trim();
+    const match=/^#([0-9a-f]{6})$/i.exec(text);
+    if(!match)return null;
+    const n=parseInt(match[1],16);
+    return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255,1];
+  }
+  function preparedColor(worldData,localX,localZ,fallback){
+    const size=Number(worldData?.chunkSize||0);
+    if(!worldData?.cells||!size)return fallback;
+    const x=Math.min(size-1,Math.max(0,Math.round(localX)));
+    const z=Math.min(size-1,Math.max(0,Math.round(localZ)));
+    const cell=worldData.cells[z*size+x];
+    return parseHexColor(cell?.color)||fallback;
+  }
   function build(spec){
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
@@ -60,7 +75,8 @@ function create({pc,device,parent,material,seedProvider=()=>""}={}){
         const y=sampleHeight(seed,wx,wz);
         positions.push(x*step*metersPerTile-half,y,z*step*metersPerTile-half);
         normals.push(0,1,0);
-        colors.push(...sampleColor(seed,wx,wz,y));
+        const fallback=sampleColor(seed,wx,wz,y);
+        colors.push(...preparedColor(spec.worldData,tileX,tileZ,fallback));
       }
     }
     const row=segments+1;
@@ -95,6 +111,8 @@ function create({pc,device,parent,material,seedProvider=()=>""}={}){
       meshInstanceCount:1,
       materialCount:1,
       buildMs,
+      worldDataKey:spec.worldData?.key||null,
+      worldDataComplete:Boolean(spec.worldData?.complete),
       presentationKind:"chunk-mesh",
       complete:true
     };
