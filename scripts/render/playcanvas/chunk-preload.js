@@ -305,6 +305,14 @@ function createManager({
       if(processed>0&&performance.now()-started>=settings.frameBudgetMs)break;
       const item=queue.shift();queued.delete(item.fullKey);
       if(item.signature!==currentSignature())continue;
+      // A viewport/orientation change can promote a chunk to Active while an
+      // older background-prepare item for the same chunk is still queued.
+      // Never let that stale item demote and disable a now-visible resource.
+      const existing=entries.get(item.fullKey);
+      if(existing?.state==="Active"){
+        processed++;
+        continue;
+      }
       prepareNow(item.x,item.y,"Prepared",false);
       preparedKeys.push(coordKey(item.x,item.y));
       processed++;
@@ -386,6 +394,14 @@ function createManager({
       chunkSize:size,
       signature:currentSignature(),
       centerChunk:lastCenterChunk?Object.freeze({...lastCenterChunk}):null,
+      activeRadiusX:Number(lastRequest?.activeRadiusX||0),
+      activeRadiusY:Number(lastRequest?.activeRadiusY||0),
+      activeTargetCount:lastRequest
+        ?(Math.max(0,Number(lastRequest.activeRadiusX||0))*2+1)*(Math.max(0,Number(lastRequest.activeRadiusY||0))*2+1)
+        :0,
+      activeStateComplete:lastRequest
+        ?active===((Math.max(0,Number(lastRequest.activeRadiusX||0))*2+1)*(Math.max(0,Number(lastRequest.activeRadiusY||0))*2+1))
+        :active===0,
       direction:lastDirection,
       Active:active,
       Prepared:prepared,
