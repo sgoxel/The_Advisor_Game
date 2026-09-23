@@ -40,7 +40,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
 - `WP-S003-004-001` — Tall 2.5D Building Mass + Local Character Occlusion Cutouts — COMPLETED
-- `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World
+- `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World — COMPLETED
 - `WP-S003-005` — PlayCanvas 3D Asset + Material Preparation Pipeline
 - `WP-S003-005-001` — Adaptive 3D Texture Quality + Mobile GPU Budget
 - `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard
