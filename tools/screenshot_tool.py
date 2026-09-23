@@ -129,18 +129,15 @@ MAX_ZOOM_OUT_SCRIPT = r"""
 const done = arguments[arguments.length - 1];
 (async () => {
   try {
-    const game = window.Game;
-    const camera = game?.State?.camera;
-    const renderer = game?.Renderer;
-    if (!camera || typeof camera.minZoom !== 'number') {
-      done({ok: false, reason: 'legacy-camera-not-found'});
+    const camera = window.Camera;
+    if (!camera || typeof camera.setZoom !== 'function' || typeof camera.MIN_ZOOM !== 'number') {
+      done({ok: false, reason: 'camera-api-not-found'});
       return;
     }
-    camera.zoom = camera.minZoom;
-    try { renderer?.centerCamera?.(); } catch (_) {}
-    try { renderer?.markDirty?.(true, true); } catch (_) {}
+    const zoom = camera.setZoom(camera.MIN_ZOOM);
+    if (window.AppUI?.refreshTerrain) await window.AppUI.refreshTerrain();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    done({ok: true, zoom: camera.zoom, minZoom: camera.minZoom});
+    done({ok: true, zoom, minZoom: camera.MIN_ZOOM});
   } catch (error) {
     done({ok: false, reason: String(error)});
   }
@@ -154,7 +151,19 @@ return (() => {
     const assets = window.TextureAssets?.stats?.() || {};
     const cells = Array.isArray(renderer.cells) ? renderer.cells : [];
     const terrainTypes = renderer.terrainTypes || {};
-    const grid = renderer.grid || null;
+    const gridNode = document.querySelector('#terrainGrid');
+    const grid = renderer.grid || (gridNode ? {
+      columns: Number(gridNode.dataset.columns || 0),
+      rows: Number(gridNode.dataset.rows || 0),
+      tileSize: Number(gridNode.dataset.tileSize || 0),
+      viewportWidth: Number(gridNode.dataset.viewportWidth || 0),
+      viewportHeight: Number(gridNode.dataset.viewportHeight || 0),
+      gridWidth: Number(gridNode.dataset.gridWidth || 0),
+      gridHeight: Number(gridNode.dataset.gridHeight || 0),
+      regionKey: gridNode.dataset.regionKey || null,
+      coveragePass: gridNode.dataset.coveragePass === 'true',
+      centerPass: gridNode.dataset.centerPass === 'true',
+    } : null);
     const protagonistTexture = window.TextureAssets?.get?.('character:protagonist-male') || null;
     const legacy = window.Game || null;
     const camera = legacy?.State?.camera || null;
@@ -643,7 +652,7 @@ def output_paths(filename: str, shots: int, timestamp_names: bool = False) -> li
 def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
     result = driver.execute_async_script(MAX_ZOOM_OUT_SCRIPT)
     if isinstance(result, dict) and result.get("ok"):
-        print(f"Forced legacy maximum zoom-out: {result}")
+        print(f"Forced maximum zoom-out: {result}")
         time.sleep(max(0.0, settle_seconds))
     else:
         reason = result.get("reason", "unknown") if isinstance(result, dict) else "unexpected-result"
