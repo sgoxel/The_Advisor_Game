@@ -91,8 +91,8 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
       role:"protagonist",
       textureUrl:"assets/characters/protagonist_male.png",
       point:Object.freeze({x:protagonist.x,y:protagonist.y}),
-      height:Number(tileSize||0)*0.94,
-      elevation:0.06,
+      height:1.82,
+      elevation:0.04,
       flipX:false,
       frameIndex:0
     }));
@@ -117,8 +117,8 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
       buildingId:activity.buildingId||null,
       textureUrl:characterTextureUrlForProfession(resident.profession),
       point:Object.freeze({x:target.x,y:target.y}),
-      height:Number(tileSize||0)*0.92,
-      elevation:0.05,
+      height:1.74,
+      elevation:0.03,
       flipX:(BigInt(resident.id.slice(1)||"0")&1n)===1n,
       frameIndex:0
     }));
