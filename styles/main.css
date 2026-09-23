@@ -184,6 +184,30 @@ input:focus{border-color:#92ad83}
 .toggle-setting strong{color:#eef1e9}
 .toggle-setting small{color:#9da697;font-size:12px;font-weight:400;line-height:1.35}
 .toggle-setting input{width:22px;height:22px;flex:0 0 auto;accent-color:#8fa981}
+.settings-subsection{margin-top:24px;padding-top:18px;border-top:1px solid #3b4237}
+.settings-subsection h4{margin:0 0 4px;font-size:16px;color:#dfe7d9}
+.select-setting{
+  display:flex!important;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  margin:14px 0 0!important;
+  padding:12px 0;
+  border-bottom:1px solid #30362d;
+}
+.select-setting span{display:grid;gap:4px;min-width:0}
+.select-setting strong{color:#eef1e9}
+.select-setting small{color:#9da697;font-size:12px;font-weight:400;line-height:1.35}
+.select-setting select{
+  flex:0 0 auto;
+  min-width:132px;
+  min-height:36px;
+  padding:6px 28px 6px 9px;
+  border:1px solid #46513f;
+  border-radius:6px;
+  background:#151a13;
+  color:#eef1e9;
+}
 .settings-actions{margin-top:22px}
 .popup-note{min-height:20px;margin:14px 0 0;color:#b6beb0}
 
