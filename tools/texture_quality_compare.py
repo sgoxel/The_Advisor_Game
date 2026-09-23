@@ -29,7 +29,9 @@ try:
     driver.get(URL)
     wait=WebDriverWait(driver,30)
     wait.until(lambda d:d.execute_script("return document.readyState") == "complete")
-    driver.execute_script("const b=document.querySelector('#newCampaignButton'),s=document.querySelector('#campaignState')?.textContent?.trim(); if(b&&s!=='ACTIVE')b.click();")
+    # Let PlayCanvas finish initialization against a stable pre-campaign Simulation
+    # snapshot before starting the campaign. Starting mid-init correctly trips the
+    # renderer's Simulation-authority guard and would create false visual failures.
     wait.until(lambda d:d.execute_script("""
       const r=window.GameRenderer?.snapshot?.();
       return Boolean(
@@ -38,6 +40,15 @@ try:
         window.RuntimeTextureQuality &&
         window.AppUI?.refreshTerrain
       );
+    """))
+    driver.execute_script("""
+      const b=document.querySelector('#newCampaignButton');
+      const active=Boolean(window.SeedSystem?.getCampaign?.());
+      if(b&&!active)b.click();
+    """)
+    wait.until(lambda d:d.execute_script("""
+      const s=window.RendererContract?.simulationSnapshot?.()||{};
+      return Boolean(s.campaignActive && s.protagonist);
     """))
     refresh=driver.execute_async_script("""
       const done=arguments[arguments.length-1];
