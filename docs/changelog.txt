@@ -683,3 +683,8 @@
 - Character sprites remain on a separate native 2D asset path; no authoritative Simulation state changes with graphics quality.
 - Dedicated comparison run 35876421600 passed on commit 0cfc3d8e78aee0620f58208d82f68d694913a7a6. Profile persistence and Simulation identity passed; no per-frame texture resize/transcode path is used.
 - Four fresh screenshots were directly inspected. VISUAL 8.1/10 PASS with no missing materials, corruption, clipping, projection failure, or obvious aliasing defect.
+2026-09-23 18:19:09 +03:00 | WP-S003-006-003 | Completion validation
+- Replaced the normal-play hard-coded PlayCanvas sample village with stable SEED-derived chunk presentation data.
+- Complete retained chunks now provide terrain/road/water surface identity, authoritative walkability data, owned building descriptors, sparse static props, and reusable PlayCanvas chunk resources.
+- Final dedicated run 35880138891 passed the fixed overlapping-pan/boundary/return route on tested commit 462c474b77b37724123276d1ab442a15845ce16d with zero world-data regeneration, zero current-view misses, return-cache reuse, and average chunk mesh build ~0.54–0.60 ms.
+- All seven fresh screenshots were directly inspected. Terrain variation, roads/paths, blue water and SEED-derived buildings are visible with no hard-coded sample village or major rendering defect. Visual score: 8.2/10 PASS.
