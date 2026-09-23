@@ -84,6 +84,7 @@ SCENARIOS = {
     "wp-s003-006-003",
     "wp-s003-006-004",
     "wp-s003-006-005",
+    "wp-s003-007-001",
     "playcanvas-root-cutover",
 }
 
@@ -120,6 +121,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-003": 7,
     "wp-s003-006-004": 9,
     "wp-s003-006-005": 7,
+    "wp-s003-007-001": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -709,6 +711,9 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
+    if scenario == "wp-s003-007-001":
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 30.0)
     if scenario == "wp-s003-005-002":
         from selenium.webdriver.support.ui import WebDriverWait
         WebDriverWait(driver, timeout).until(
@@ -737,7 +742,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     driver, radius=1, cache=256, directional=True, background=True
                 )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1627,7 +1632,63 @@ def _keyboard_pan_tiles(driver, dx: int, dy: int, timeout: float = 60.0) -> str:
     return f"keyboard-pan:{start_x},{start_y}->{target_x},{target_y}"
 
 
+def _render_quality_step(
+    driver,
+    *,
+    mode: str | None = None,
+    frame_ms: float | None = None,
+    samples: int = 0,
+    viewport: tuple[int, int] | None = None,
+) -> str:
+    if viewport:
+        driver.set_window_size(int(viewport[0]), int(viewport[1]))
+        time.sleep(0.15)
+    result = driver.execute_async_script(
+        """
+        const mode=arguments[0];
+        const frameMs=Number(arguments[1]||0);
+        const samples=Math.max(0,Number(arguments[2]||0));
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          const api=window.RuntimeRenderQuality;
+          if(!api)throw new Error('RuntimeRenderQuality unavailable');
+          if(mode)api.setMode(mode);
+          for(let i=0;i<samples;i++)api.recordFrame(frameMs);
+          await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+          if(window.AppUI?.refreshTerrain)await window.AppUI.refreshTerrain();
+          await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+          done({ok:true,state:api.snapshot(),renderer:window.GameRenderer?.snapshot?.()||null});
+        })().catch(error=>done({ok:false,error:String(error)}));
+        """,
+        mode,
+        float(frame_ms or 0),
+        int(samples),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Render-quality evidence action failed: {result}")
+    state=result.get("state") or {}
+    return (
+        f"render-quality:{state.get('mode')}:{state.get('activeLevel')}"
+        f":scale={state.get('renderScale')}:dpr={state.get('maxPixelRatio')}"
+        f":reason={state.get('lastTransitionReason')}"
+    )
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-007-001":
+        if frame_index == 0:
+            return _render_quality_step(driver, mode="low", viewport=(1280, 800))
+        if frame_index == 1:
+            return _render_quality_step(driver, mode="standard")
+        if frame_index == 2:
+            return _render_quality_step(driver, mode="high")
+        if frame_index == 3:
+            return _render_quality_step(driver, mode="auto", viewport=(430, 900))
+        if frame_index == 4:
+            return _render_quality_step(driver, frame_ms=12.0, samples=360)
+        if frame_index == 5:
+            return _render_quality_step(driver, frame_ms=40.0, samples=180)
+        return "render-quality:no-op"
     if scenario == "wp-s003-006-001":
         if frame_index == 0:
             _safe_click(driver, "#settingsButton")
@@ -1987,6 +2048,55 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-007-001":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-007-001 requires six evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        gpus=[build.get("gpuRenderer") or {} for build in builds]
+        qualities=[gpu.get("quality") or {} for gpu in gpus]
+        materials=[gpu.get("materialTextureQuality") or {} for gpu in gpus]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        expected_modes=["low","standard","high","auto","auto","auto"]
+        expected_levels=["low","standard","high","low","standard","low"]
+        expected_scales=[0.65,0.85,1.0,0.65,0.85,0.65]
+        expected_dpr=[1.0,1.25,1.5,1.0,1.25,1.0]
+        expected_textures=["low","standard","high","low","standard","low"]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Render-quality cycle changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Render-quality cycle changed Protagonist authority: {protagonists}")
+        for index,(quality,material) in enumerate(zip(qualities,materials)):
+            if quality.get("mode")!=expected_modes[index] or quality.get("activeLevel")!=expected_levels[index]:
+                raise RuntimeError(f"Render-quality mode/level mismatch in frame {index+1}: {quality}")
+            if quality.get("persistedMode")!=expected_modes[index]:
+                raise RuntimeError(f"Render-quality persistence mismatch in frame {index+1}: {quality}")
+            if abs(float(quality.get("renderScale") or 0)-expected_scales[index])>0.001:
+                raise RuntimeError(f"Render scale mismatch in frame {index+1}: {quality}")
+            if abs(float(quality.get("maxPixelRatio") or 0)-expected_dpr[index])>0.001:
+                raise RuntimeError(f"Pixel-ratio cap mismatch in frame {index+1}: {quality}")
+            if material.get("profile")!=expected_textures[index]:
+                raise RuntimeError(f"Texture/material profile mismatch in frame {index+1}: {material}")
+            if int(quality.get("lightCount") or 0)!=(1 if expected_levels[index]=="low" else 2):
+                raise RuntimeError(f"Light-count quality mismatch in frame {index+1}: {quality}")
+            if quality.get("shadowQuality")!="off":
+                raise RuntimeError(f"Unexpected shadow quality in frame {index+1}: {quality}")
+            if quality.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Render-quality state lost Simulation boundary in frame {index+1}: {quality}")
+            perf=gpus[index].get("performance") or {}
+            if float(perf.get("frameMs") or 0)<0 or int(perf.get("drawCalls") or 0)<0 or int(perf.get("triangles") or 0)<0:
+                raise RuntimeError(f"Invalid performance telemetry in frame {index+1}: {perf}")
+        for index in (3,4,5):
+            if qualities[index].get("deviceClass")!="phone":
+                raise RuntimeError(f"Auto mobile frame {index+1} was not classified as phone: {qualities[index]}")
+            deck=builds[index].get("responsiveControlDeck") or {}
+            if deck.get("horizontalOverflow"):
+                raise RuntimeError(f"Auto mobile frame {index+1} has horizontal overflow: {deck}")
+        if qualities[4].get("lastTransitionReason")!="sustained-near-60-fps":
+            raise RuntimeError(f"Auto quality did not recover after sustained good performance: {qualities[4]}")
+        if qualities[5].get("lastTransitionReason")!="sustained-below-30-fps":
+            raise RuntimeError(f"Auto quality did not reduce after sustained low performance: {qualities[5]}")
+        return
     if scenario == "wp-s003-006-001":
         if len(frames) < 14:
             raise RuntimeError("wp-s003-006-001 requires fourteen evidence frames")
@@ -3783,7 +3893,7 @@ def take_screenshots(
         browser_url = normalize_target(target)
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
-        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001"}:
+        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-007-001"}:
             browser_url += ("&" if "?" in browser_url else "?") + "gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
@@ -3812,12 +3922,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
