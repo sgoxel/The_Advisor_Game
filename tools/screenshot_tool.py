@@ -1535,6 +1535,8 @@ def _show_advisor_channel_proof(driver, frame_index: int) -> str:
 
         channel.renderAdvicePanel(seed,protagonistId,document.querySelector('#advisorPanel'));
         document.querySelector('#characterInteractionsPanel')?.scrollIntoView({block:'nearest'});
+        const body=document.querySelector('#characterInteractionsBody');
+        if(body)body.scrollTop=index===0?0:body.scrollHeight;
         const proof=channel.proof(seed,protagonistId);
         return {
           ok:Boolean(proof.pass),
@@ -2598,7 +2600,14 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_resident_action_proof(driver,frame_index)
     if scenario == "wp-s005-001":
         if frame_index == 3:
-            return _reload_current_build(driver)
+            action=_reload_current_build(driver)
+            driver.execute_script("""
+                const toggle=document.querySelector('#characterInteractionsToggle');
+                if(toggle?.getAttribute('aria-expanded')==='false')toggle.click();
+                const body=document.querySelector('#characterInteractionsBody');
+                if(body)body.scrollTop=body.scrollHeight;
+            """)
+            return action+"+advisor-history-scroll"
         return _show_advisor_channel_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
