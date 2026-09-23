@@ -688,3 +688,8 @@
 - Complete retained chunks now provide terrain/road/water surface identity, authoritative walkability data, owned building descriptors, sparse static props, and reusable PlayCanvas chunk resources.
 - Final dedicated run 35880138891 passed the fixed overlapping-pan/boundary/return route on tested commit 462c474b77b37724123276d1ab442a15845ce16d with zero world-data regeneration, zero current-view misses, return-cache reuse, and average chunk mesh build ~0.54–0.60 ms.
 - All seven fresh screenshots were directly inspected. Terrain variation, roads/paths, blue water and SEED-derived buildings are visible with no hard-coded sample village or major rendering defect. Visual score: 8.2/10 PASS.
+2026-09-23 18:18:55 +03:00 | WP-S003-005-001 | PlayCanvas texture-quality checkpoint
+- Connected Low/Standard/High/Ultra quality profiles to PlayCanvas world-asset cache limits, terrain/chunk cache signatures, anisotropy/filter policy, auxiliary/detail-map policy, and renderer material/texture metrics.
+- Dedicated run 35880317169 functionally passed all four profiles, preserved SEED/Protagonist identity, and confirmed profile persistence across reload.
+- Direct inspection of all four fresh screenshots exposed a test-induced PlayCanvas initialization race; visual score 5.5/10 FAIL, so the WP remains open and is not marked completed.
+- Corrected the evidence startup ordering in c3e999033539862c196c5d3e1c0f854aaa5c2c56; no fourth evaluation was started because the three-attempt limit was reached for this run.
