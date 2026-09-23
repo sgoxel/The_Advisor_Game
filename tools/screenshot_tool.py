@@ -775,7 +775,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     driver, radius=1, cache=256, directional=True, background=True
                 )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -860,6 +860,17 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               chunks.frustumCulling === true &&
                               Number(chunks.staticBatchCount || 0) > 0 &&
                               Number(chunks.instancedObjectCount || 0) > 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s004-003' || (() => {
+                            const campaignState=document.querySelector('#campaignState')?.textContent?.trim();
+                            const status=document.querySelector('#statusMessage')?.textContent?.trim() || '';
+                            return Boolean(
+                              campaignState === 'ACTIVE' &&
+                              status.startsWith('Campaign running.') &&
+                              renderer?.protagonistVisible === true &&
+                              renderer?.regionKey &&
+                              renderer?.simulationSnapshot?.campaignActive === true
                             );
                           })())
                         );
@@ -1151,6 +1162,8 @@ def _show_resident_assignment_proof(driver, position: str = "top") -> str:
 
 
 def _show_resident_schedule_proof(driver, sample_hour: int, sample_minute: int = 30) -> str:
+    from selenium.webdriver.support.ui import WebDriverWait
+
     result = driver.execute_script(
         """
         const hour=arguments[0],minute=arguments[1];
@@ -1182,7 +1195,37 @@ def _show_resident_schedule_proof(driver, sample_hour: int, sample_minute: int =
     )
     if not isinstance(result, dict) or int(result.get("rows") or 0) != 12 or not result.get("pass"):
         raise RuntimeError(f"Resident schedule proof view failed: {result}")
-    return f"resident-schedules:{sample_hour:02d}:{sample_minute:02d}:rows={result['rows']}"
+    stable = WebDriverWait(driver, 8).until(
+        lambda d: d.execute_script(
+            """
+            const expectedHour=Number(arguments[0]), expectedMinute=Number(arguments[1]);
+            const snapshot=window.AppUI?.residentScheduleSnapshot?.();
+            const section=document.querySelector('#developmentDetails');
+            const proof=document.querySelector('#residentScheduleProof');
+            const rows=document.querySelectorAll('#residentScheduleRows tr');
+            const time=snapshot?.sampleTime;
+            if(
+              !snapshot?.pass || !time ||
+              Number(time.hour)!==expectedHour || Number(time.minute)!==expectedMinute ||
+              !section || section.hidden || !proof?.open || rows.length!==12
+            ) return null;
+            proof.scrollIntoView({block:'start'});
+            document.querySelector('#residentScheduleScroll').scrollTop=0;
+            return {
+              hour:Number(time.hour),
+              minute:Number(time.minute),
+              rows:rows.length,
+              campaignState:document.querySelector('#campaignState')?.textContent?.trim() || null
+            };
+            """,
+            sample_hour,
+            sample_minute,
+        )
+    )
+    return (
+        f"resident-schedules:{sample_hour:02d}:{sample_minute:02d}:"
+        f"rows={stable['rows']}:campaign={stable['campaignState']}"
+    )
 
 
 def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
