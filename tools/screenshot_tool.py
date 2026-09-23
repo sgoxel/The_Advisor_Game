@@ -1130,16 +1130,22 @@ def _set_character_proof_state(driver, state: str) -> str:
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-005-002":
+        if frame_index == 0:
+            driver.execute_script("window.WP_S003_005_002_PROOF?.setView?.('overview')")
+            return "asset-standard:overview"
         if frame_index == 1:
             driver.set_window_size(1280, 800)
-            return "asset-standard:tablet-landscape"
+            driver.execute_script("window.WP_S003_005_002_PROOF?.setView?.('building')")
+            return "asset-standard:building-close"
         if frame_index == 2:
             driver.set_window_size(844, 390)
-            return "asset-standard:phone-landscape"
+            driver.execute_script("window.WP_S003_005_002_PROOF?.setView?.('props')")
+            return "asset-standard:props-phone-landscape"
         if frame_index == 3:
             driver.set_window_size(390, 844)
-            return "asset-standard:phone-portrait"
-        return "asset-standard:desktop-landscape"
+            driver.execute_script("window.WP_S003_005_002_PROOF?.setView?.('portrait')")
+            return "asset-standard:building-phone-portrait"
+        return "asset-standard:overview"
     if scenario == "wp-s003-004-002":
         if frame_index == 0:
             return _set_character_proof_state(driver, "open")
@@ -1345,13 +1351,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             door = building.get("doorMeters") or {}
             if footprint != {"x": 6, "z": 5}:
                 raise RuntimeError(f"House footprint scale mismatch in frame {index}: {footprint}")
-            if roof != {"x": 6.6, "z": 5.6}:
+            if roof != {"x": 6.8, "z": 5.6}:
                 raise RuntimeError(f"Roof scale mismatch in frame {index}: {roof}")
+            if proof.get("roofConstruction") != "dual-slab-gable":
+                raise RuntimeError(f"Roof construction proof missing in frame {index}: {proof}")
             if door != {"x": 1.2, "y": 2.1}:
                 raise RuntimeError(f"Door scale mismatch in frame {index}: {door}")
             tree = rep.get("tree") or {}
             if int(tree.get("repeatedCount") or 0) != 3 or tree.get("instancingEligible") is not True:
                 raise RuntimeError(f"Repeated tree proof failed in frame {index}: {tree}")
+
+        expected_views = ("overview", "building", "props", "portrait")
+        actual_views = [str(proof.get("view") or "") for proof in proofs]
+        if tuple(actual_views) != expected_views:
+            raise RuntimeError(f"Asset proof views did not cycle correctly: {actual_views}")
 
         viewports = [frame.get("runtime", {}).get("viewport") or {} for frame in frames[:4]]
         if int(viewports[0].get("width") or 0) <= int(viewports[0].get("height") or 0):
