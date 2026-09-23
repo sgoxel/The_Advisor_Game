@@ -79,14 +79,37 @@ try{
 
   const camera=new pc.Entity("ProofCamera");
   camera.addComponent("camera",{projection:pc.PROJECTION_ORTHOGRAPHIC,orthoHeight:12,clearColor:new pc.Color(.07,.10,.06),nearClip:.1,farClip:100});
-  camera.setPosition(17,15,19); camera.lookAt(0,1,1); app.root.addChild(camera);
+  app.root.addChild(camera);
+
+  let activeView="overview";
+  const views=Object.freeze({
+    overview:Object.freeze({target:[0,1,1],offset:[17,15,19],orthoHeight:12}),
+    building:Object.freeze({target:[-6,1.8,0],offset:[9,8.5,10],orthoHeight:7.2}),
+    props:Object.freeze({target:[6,1.5,2],offset:[10,8.5,10],orthoHeight:8.2}),
+    portrait:Object.freeze({target:[-5,1.7,0],offset:[9,9,10],orthoHeight:10.5})
+  });
+  function setView(name){
+    const view=views[name]||views.overview;
+    activeView=views[name]?name:"overview";
+    camera.camera.orthoHeight=view.orthoHeight;
+    camera.setPosition(
+      view.target[0]+view.offset[0],
+      view.target[1]+view.offset[1],
+      view.target[2]+view.offset[2]
+    );
+    camera.lookAt(view.target[0],view.target[1],view.target[2]);
+    evidence.view=activeView;
+    return activeView;
+  }
+  setView("overview");
+  window.WP_S003_005_002_PROOF=Object.freeze({setView,getView:()=>activeView});
 
   const sun=new pc.Entity("ProofSun");
   sun.addComponent("light",{type:"directional",intensity:1.35,color:new pc.Color(1,.94,.80),castShadows:false});
   sun.setEulerAngles(50,35,0); app.root.addChild(sun);
   app.scene.ambientLight=new pc.Color(.30,.34,.28);
 
-  resize(app,device); window.addEventListener("resize",()=>resize(app,device));
+  resize(app,device); window.addEventListener("resize",()=>{resize(app,device);setView(activeView);});
   const asset=new pc.Asset("wp-s003-005-002-representatives","container",{url:catalog.modelUrl});
   app.assets.add(asset);
   const loaded=await new Promise((resolve,reject)=>{
@@ -124,8 +147,9 @@ try{
     textureCount:0,
     drawCalls,
     triangles,
+    roofConstruction:"dual-slab-gable",
     representative:Object.freeze({
-      building:Object.freeze({footprintMeters:{x:6,z:5},roofMeters:{x:6.6,z:5.6},doorMeters:{x:1.2,y:2.1}}),
+      building:Object.freeze({footprintMeters:{x:6,z:5},roofMeters:{x:6.8,z:5.6},doorMeters:{x:1.2,y:2.1}}),
       workbench:Object.freeze({x:2.4,y:.94,z:.9}),
       tree:Object.freeze({repeatedCount:3,instancingEligible:true}),
       terrain:Object.freeze({x:8,z:8})
