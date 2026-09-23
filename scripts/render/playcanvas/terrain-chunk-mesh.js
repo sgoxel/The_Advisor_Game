@@ -265,18 +265,43 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     const roof=presentationMaterial("building-roof",0.33,0.15,0.10,0.08);
     const door=presentationMaterial("building-door",0.20,0.11,0.06,0.06);
     const rootName="ChunkBuilding_"+String(descriptor.id||index).replace(/[^a-z0-9_-]+/gi,"-");
-    appendBoxBatch(batchFor(batches,wall.name,wall),[b.x,height*0.5,b.z],[b.width*0.90,height,b.depth*0.90],0);
+    const outerW=b.width*0.90,outerD=b.depth*0.90,thickness=0.22;
+    const wallBatch=batchFor(batches,wall.name,wall);
+    appendBoxBatch(wallBatch,[b.x,height*0.5,b.z-outerD*0.5],[outerW,height,thickness],0);
+    appendBoxBatch(wallBatch,[b.x,height*0.5,b.z+outerD*0.5],[outerW,height,thickness],0);
+    appendBoxBatch(wallBatch,[b.x-outerW*0.5,height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
+    appendBoxBatch(wallBatch,[b.x+outerW*0.5,height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
     const roofLift=height+0.34;
     const left=primitive(root,rootName+"_RoofL","box",[b.x-b.width*0.21,roofLift,b.z],[b.width*0.58,0.16,b.depth*0.98],roof,[0,0,-25]);
     const right=primitive(root,rootName+"_RoofR","box",[b.x+b.width*0.21,roofLift,b.z],[b.width*0.58,0.16,b.depth*0.98],roof,[0,0,25]);
-    registerRoof(left);registerRoof(right);
+    left._advisorBuildingId=String(descriptor.id||"");
+    right._advisorBuildingId=String(descriptor.id||"");
+    registerRoof(left,descriptor);registerRoof(right,descriptor);
+    let count=6;
     if(descriptor.entrance){
       const p=localTileCenter(worldData,descriptor.entrance.x,descriptor.entrance.y);
       const minX=String(descriptor.bounds?.minX),maxX=String(descriptor.bounds?.maxX);
       const sideX=String(descriptor.entrance.x)===minX||String(descriptor.entrance.x)===maxX;
       appendBoxBatch(batchFor(batches,door.name,door),[p.x,0.65,p.z],sideX?[0.12,1.20,0.62]:[0.62,1.20,0.12],0);
+      count++;
     }
-    return 3+(descriptor.entrance?1:0);
+    return count;
+  }
+  function buildInteriorObject(worldData,descriptor,batches){
+    const p=localTileCenter(worldData,descriptor.x,descriptor.y);
+    const type=String(descriptor.type||"object");
+    const specs={
+      bed:{scale:[1.45,0.42,1.70],y:0.27,color:[0.50,0.31,0.24]},
+      table:{scale:[1.20,0.62,0.86],y:0.36,color:[0.39,0.24,0.12]},
+      chair:{scale:[0.58,0.76,0.58],y:0.42,color:[0.35,0.22,0.12]},
+      hearth:{scale:[0.88,0.66,0.88],y:0.36,color:[0.48,0.20,0.10]},
+      storage:{scale:[1.00,0.96,0.82],y:0.50,color:[0.32,0.23,0.15]},
+      workbench:{scale:[1.46,0.80,0.72],y:0.43,color:[0.42,0.29,0.16]}
+    };
+    const spec=specs[type]||{scale:[0.78,0.60,0.78],y:0.34,color:[0.36,0.29,0.20]};
+    const mat=presentationMaterial("interior-"+type,...spec.color,0.08);
+    appendBoxBatch(batchFor(batches,mat.name,mat),[p.x,spec.y,p.z],spec.scale,0);
+    return 1;
   }
   function collectPropInstances(worldData,descriptor,treeTrunks,treeCanopies,rocks){
     const p=localTileCenter(worldData,descriptor.x,descriptor.y);
@@ -338,9 +363,11 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     const presentation=spec.worldData?.presentation||{};
     const buildings=Array.isArray(presentation.buildingDescriptors)?presentation.buildingDescriptors:[];
     const props=Array.isArray(presentation.propDescriptors)?presentation.propDescriptors:[];
+    const interiorObjects=Array.isArray(presentation.interiorObjectDescriptors)?presentation.interiorObjectDescriptors:[];
     const batches=staticBatchCollector();
     let sourcePresentationPrimitiveCount=0;
     for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches);
+    for(let i=0;i<interiorObjects.length;i++)sourcePresentationPrimitiveCount+=buildInteriorObject(spec.worldData,interiorObjects[i],batches);
 
     const staticBatches=finalizeStaticBatches(entity,batches);
 
@@ -390,6 +417,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       savedDrawCalls,
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       buildingPresentationCount:buildings.length,
+      interiorObjectPresentationCount:interiorObjects.length,
       propPresentationCount:props.length,
       roadCellCount:Number(surfaceCounts.road||0)+Number(surfaceCounts.path||0)+Number(surfaceCounts.square||0),
       waterCellCount:Number(surfaceCounts.water||0),
