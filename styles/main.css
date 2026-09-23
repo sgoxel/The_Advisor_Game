@@ -241,6 +241,8 @@ details[open] summary{border-bottom:1px solid #343a30}
 }
 
 @media(max-width:460px){
+  .select-setting{align-items:stretch;flex-direction:column;gap:8px}
+  .select-setting select{width:100%;min-width:0}
   .game-clock{display:grid;gap:1px;text-align:center}
   .game-clock span{font-size:10px}.game-clock strong{font-size:12px}
   .status-item,.status-message{padding:7px 8px}
