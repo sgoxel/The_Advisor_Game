@@ -79,6 +79,7 @@ SCENARIOS = {
     "wp-s003-004-002",
     "wp-s003-005-002",
     "wp-s003-006-002",
+    "wp-s003-006",
     "playcanvas-root-cutover",
 }
 
@@ -110,6 +111,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-004-002": 8,
     "wp-s003-005-002": 4,
     "wp-s003-006-002": 8,
+    "wp-s003-006": 7,
     "playcanvas-root-cutover": 3,
 }
 
@@ -1251,6 +1253,22 @@ def _set_camera_center_and_render(driver, x: int, y: int) -> str:
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-006":
+        if frame_index == 0:
+            _set_terrain_preload_settings(driver, radius=2, cache=256, directional=True, background=True)
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 1:
+            return _set_camera_center_and_render(driver, 16, 0)
+        if frame_index == 2:
+            return _set_camera_center_and_render(driver, 32, 0)
+        if frame_index == 3:
+            return _set_camera_center_and_render(driver, 48, 0)
+        if frame_index == 4:
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 5:
+            return _wheel_canvas(driver, -500)
+        driver.set_window_size(844, 390)
+        return _set_camera_center_and_render(driver, 0, 0)
     if scenario == "playcanvas-root-cutover":
         if frame_index == 1:
             driver.set_window_size(844, 390)
@@ -1485,6 +1503,84 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-006 requires seven evidence frames")
+        runtimes = [frame.get("runtime", {}) for frame in frames[:7]]
+        builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
+        gpus = [(item.get("gpuRenderer") or {}) for item in builds]
+        chunks = [(gpu.get("terrainChunks") or {}) for gpu in gpus]
+        preload = [(gpu.get("terrainPreload") or {}) for gpu in gpus]
+
+        seeds = [item.get("campaignSeed") for item in builds]
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        if len(set(seeds)) != 1 or not seeds[0]:
+            raise RuntimeError(f"Terrain chunk mesh changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists)) != 1 or not protagonists[0]:
+            raise RuntimeError(f"Terrain chunk mesh changed protagonist authority: {protagonists}")
+
+        expected_cameras = ("(0,0)", "(16,0)", "(32,0)", "(48,0)", "(0,0)")
+        cameras = [item.get("cameraCoordinate") for item in builds]
+        if tuple(cameras[:5]) != expected_cameras:
+            raise RuntimeError(f"Chunk navigation camera path mismatch: {cameras[:5]}")
+
+        initial_visible_waits = int(preload[0].get("visibleWaits") or 0)
+        for index, (gpu, chunk, stats) in enumerate(zip(gpus, chunks, preload), start=1):
+            if gpu.get("engine") != "PlayCanvas" or not gpu.get("ready"):
+                raise RuntimeError(f"PlayCanvas renderer missing in frame {index}: {gpu}")
+            if chunk.get("resourceKind") != "chunk-mesh":
+                raise RuntimeError(f"Chunk-native mesh resource missing in frame {index}: {chunk}")
+            if chunk.get("oneEntityPerTile") is not False:
+                raise RuntimeError(f"Per-tile entity architecture detected in frame {index}: {chunk}")
+            if chunk.get("completeChunkMeshes") is not True:
+                raise RuntimeError(f"Incomplete terrain chunk mesh detected in frame {index}: {chunk}")
+            resources = int(chunk.get("meshResourceCount") or 0)
+            instances = int(chunk.get("meshInstanceCount") or 0)
+            visible = int(chunk.get("visibleChunkCount") or 0)
+            prepared = int(chunk.get("preparedChunkCount") or 0)
+            cached = int(chunk.get("cachedChunkCount") or 0)
+            if resources < 1 or instances != resources:
+                raise RuntimeError(f"Chunk mesh/instance counts invalid in frame {index}: {chunk}")
+            if resources != visible + prepared + cached:
+                raise RuntimeError(f"Chunk lifecycle/resource totals mismatch in frame {index}: {chunk}")
+            if int(chunk.get("vertices") or 0) < resources * 25:
+                raise RuntimeError(f"Terrain mesh vertex telemetry unexpectedly small in frame {index}: {chunk}")
+            if int(chunk.get("triangles") or 0) < resources * 32:
+                raise RuntimeError(f"Terrain mesh triangle telemetry unexpectedly small in frame {index}: {chunk}")
+            if int(chunk.get("materialCount") or 0) != 1:
+                raise RuntimeError(f"Terrain chunks do not share one material family in frame {index}: {chunk}")
+            generator = chunk.get("generator") or {}
+            if generator.get("oneEntityPerChunk") is not True or generator.get("oneEntityPerTile") is not False:
+                raise RuntimeError(f"Terrain mesh generator architecture invalid in frame {index}: {generator}")
+            if generator.get("sharedMaterial") is not True or generator.get("completeChunkMesh") is not True:
+                raise RuntimeError(f"Terrain mesh generator sharing/completeness failed in frame {index}: {generator}")
+            if chunk.get("simulationAuthorityPreserved") is not True or stats.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Terrain chunk renderer changed Simulation authority in frame {index}")
+            if int(stats.get("Cached") or 0) > int((stats.get("settings") or {}).get("maxCachedChunks") or 0):
+                raise RuntimeError(f"Chunk cache exceeded budget in frame {index}: {stats}")
+            if resources > 320:
+                raise RuntimeError(f"Terrain mesh allocation is not bounded for mobile in frame {index}: {chunk}")
+
+        for index in (1,2,3,4):
+            if int(preload[index].get("visibleWaits") or 0) != initial_visible_waits:
+                raise RuntimeError(
+                    f"Prepared navigation introduced a new visible mesh wait at frame {index+1}: "
+                    f"initial={initial_visible_waits}, current={preload[index]}"
+                )
+
+        if int(chunks[4].get("hits") or 0) <= int(chunks[3].get("hits") or 0):
+            raise RuntimeError(f"Return navigation did not reuse retained chunk meshes: before={chunks[3]}, return={chunks[4]}")
+        if int(chunks[4].get("compositions") or 0) != int(chunks[3].get("compositions") or 0):
+            raise RuntimeError(f"Return navigation rebuilt retained terrain chunks: before={chunks[3]}, return={chunks[4]}")
+
+        zooms = [item.get("cameraZoom") for item in builds]
+        if zooms[5] == zooms[4]:
+            raise RuntimeError(f"Terrain chunk zoom evidence did not change camera zoom: {zooms}")
+        viewport = runtimes[6].get("viewport") or {}
+        if int(viewport.get("width") or 0) <= int(viewport.get("height") or 0):
+            raise RuntimeError(f"Phone landscape terrain evidence invalid: {viewport}")
+        return
+
     if scenario == "playcanvas-root-cutover":
         if len(frames) < 3:
             raise RuntimeError("playcanvas-root-cutover requires three evidence frames")
