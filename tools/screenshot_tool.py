@@ -2843,7 +2843,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "playcanvas-root-cutover"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
