@@ -189,10 +189,16 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       mesh.setNormals(batch.normals);
       mesh.setIndices(batch.indices);
       mesh.update();
-      const mi=new pc.MeshInstance(mesh,batch.material,root);
+      const batchEntity=new pc.Entity("ChunkStaticBatch_"+String(batch.key).replace(/[^a-z0-9_-]+/gi,"-"));
+      batchEntity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+      const mi=new pc.MeshInstance(mesh,batch.material,batchEntity);
       mi.cull=true;
+      batchEntity.render.meshInstances=[mi];
+      root.addChild(batchEntity);
+      presentationEntityCreations++;
+      presentationMeshInstanceCreations++;
       frustumCulledMeshInstances++;
-      meshes.push({mesh,meshInstance:mi,sourcePrimitiveCount:batch.sourcePrimitiveCount});
+      meshes.push({entity:batchEntity,mesh,meshInstance:mi,sourcePrimitiveCount:batch.sourcePrimitiveCount});
       staticBatchMeshCreations++;
     }
     return meshes;
@@ -337,10 +343,6 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches);
 
     const staticBatches=finalizeStaticBatches(entity,batches);
-    if(staticBatches.length){
-      entity.render.meshInstances=[meshInstance,...staticBatches.map(item=>item.meshInstance)];
-      presentationMeshInstanceCreations+=staticBatches.length;
-    }
 
     const treeTrunks=[],treeCanopies=[],rocks=[];
     for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeTrunks,treeCanopies,rocks);
