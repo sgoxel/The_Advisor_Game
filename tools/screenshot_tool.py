@@ -78,6 +78,7 @@ SCENARIOS = {
     "wp-s003-003",
     "wp-s003-004-002",
     "wp-s003-005-002",
+    "wp-s003-006-002",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -107,6 +108,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-003": 3,
     "wp-s003-004-002": 8,
     "wp-s003-005-002": 4,
+    "wp-s003-006-002": 8,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -231,6 +233,13 @@ return (() => {
         gameTimeMultiplier: Number(window.GameConfig?.gameTimeMultiplier || 0),
         startYearValid: Boolean(window.GameTime?.validateStartYear?.()),
         persistenceStatus: document.querySelector('#vPersist')?.textContent?.trim() || null,
+        terrainPreloadSettings: window.TerrainChunkPreloadSettings?.get?.() || null,
+        terrainPreloadControls: {
+          preloadRadius: document.querySelector('#terrainPreloadRadiusSelect')?.value || null,
+          maxCachedChunks: document.querySelector('#terrainCacheCapacitySelect')?.value || null,
+          directionalPreload: document.querySelector('#directionalPreloadToggle')?.checked ?? null,
+          backgroundChunkGeneration: document.querySelector('#backgroundChunkGenerationToggle')?.checked ?? null,
+        },
         layout: (() => {
           const rect = selector => {
             const node = document.querySelector(selector);
@@ -304,6 +313,7 @@ return (() => {
           buildingOcclusion: renderer.buildingOcclusion || null,
           textureCache: assets,
           terrainChunks: renderer.terrainChunks || null,
+          terrainPreload: renderer.terrainPreload || null,
           interiorObjectPresentation: renderer.interiorObjectPresentation || null,
           characterProof: renderer.characterProof || null,
         },
@@ -646,7 +656,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -662,6 +672,11 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                           (arguments[0] !== 'playcanvas-scene' || (
                             renderer?.sceneBaseline === true &&
                             renderer?.scene?.projection === 'orthographic'
+                          )) &&
+                          (arguments[0] !== 'wp-s003-006-002' || (
+                            renderer?.terrainPreload &&
+                            Number(renderer.terrainPreload.Active || 0) > 0 &&
+                            Number(renderer.terrainPreload.queueDepth || 0) === 0
                           ))
                         );
                         """
