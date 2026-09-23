@@ -1384,6 +1384,30 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 f"Phone landscape proof badge obscures too much gameplay: "
                 f"ratio={panel_area/gameplay_area:.3f}, gameplay={gameplay}, panel={proof_panel}"
             )
+
+        landscape_gpu = gpus[6]
+        landscape_scene = landscape_gpu.get("scene") or {}
+        landscape_canvas = landscape_gpu.get("canvas") or {}
+        landscape_instances = (presentations[6].get("instances") or [])
+        landscape_protagonist = next(
+            (item for item in landscape_instances if item.get("id") == "protagonist"),
+            None,
+        )
+        if not landscape_protagonist:
+            raise RuntimeError(f"Phone landscape protagonist telemetry missing: {presentations[6]}")
+        ortho = float(landscape_scene.get("orthoHeight") or 0)
+        canvas_height = float(landscape_canvas.get("cssHeight") or 0)
+        protagonist_height_m = float(landscape_protagonist.get("height") or 0)
+        estimated_height_px = (
+            protagonist_height_m * canvas_height / (2.0 * ortho)
+            if ortho > 0 and canvas_height > 0 else 0
+        )
+        if estimated_height_px < 14.0:
+            raise RuntimeError(
+                f"Phone landscape protagonist is too small for readable 2D art: "
+                f"estimated_height_px={estimated_height_px:.2f}, "
+                f"orthoHeight={ortho}, canvasHeight={canvas_height}"
+            )
         return
 
     if scenario == "wp-s003-003":
