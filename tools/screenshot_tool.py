@@ -2163,7 +2163,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _set_building_occlusion_proof_state(
             driver, states[min(frame_index, len(states) - 1)]
         )
-    if scenario == "static" or frame_index == 0:
+    if scenario == "static" or (
+        frame_index == 0 and
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003"}
+    ):
         return "initial"
     if scenario == "save-load":
         if frame_index == 1:
