@@ -642,7 +642,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   function terrainMeshMetrics(){
     let meshResourceCount=0,activeMeshCount=0,preparedMeshCount=0,cachedMeshCount=0;
     let meshInstanceCount=0,vertices=0,triangles=0;
-    let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,propPresentationCount=0;
+    let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,interiorObjectPresentationCount=0,propPresentationCount=0;
     let staticBatchCount=0,staticBatchSourcePrimitiveCount=0,instancedGroupCount=0,instancedObjectCount=0;
     let optimizedPresentationDrawCalls=0,unoptimizedPresentationDrawCalls=0,savedDrawCalls=0;
     let frustumCulledResourceCount=0,hardwareInstancedResourceCount=0,batchedResourceCount=0;
@@ -686,6 +686,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         }
       }
       buildingPresentationCount+=Number(resource.buildingPresentationCount||0);
+      interiorObjectPresentationCount+=Number(resource.interiorObjectPresentationCount||0);
       propPresentationCount+=Number(resource.propPresentationCount||0);
       roadCellCount+=Number(resource.roadCellCount||0);
       waterCellCount+=Number(resource.waterCellCount||0);
@@ -707,7 +708,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       frustumCulledResourceCount,hardwareInstancedResourceCount,batchedResourceCount,
       renderMeshInstanceCount,visibleMeshInstanceCount,culledMeshInstanceCount,cullEnabledMeshInstanceCount,
-      buildingPresentationCount,propPresentationCount,
+      buildingPresentationCount,interiorObjectPresentationCount,propPresentationCount,
       roadCellCount,waterCellCount,bridgeCellCount,terrainTypeCount,
       seedDerivedPresentation,
       hardCodedSampleGeometry,
