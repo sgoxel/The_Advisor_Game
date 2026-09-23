@@ -84,29 +84,25 @@ function authoritativeBuildingCell(seed,x,y){
 
 function classifyPrepared(seed,tile){
   if(!tile)return null;
-  const cell=authoritativeBuildingCell(seed,tile.x,tile.y);
-
-  if(cell){
-    if(cell.type==="wall"){
-      return stateFromRule(tile,RULES.wall,{barrierKind:"outer-wall"});
-    }
-    if(cell.type==="door"){
-      return stateFromRule(tile,RULES.door,{doorwayKind:"exterior-door"});
-    }
-    if(cell.type==="floor"){
-      if(typeof cell.overlayVariant==="string"&&cell.overlayVariant.startsWith("wall-")){
-        return stateFromRule(tile,RULES.wall,{barrierKind:"interior-wall"});
-      }
-      if(typeof cell.overlayVariant==="string"&&cell.overlayVariant.startsWith("door-")){
-        return stateFromRule(tile,RULES.door,{doorwayKind:"interior-door"});
-      }
-      return stateFromRule(tile,RULES.floor,null);
-    }
-    if(cell.type==="plot"){
-      return stateFromRule(tile,RULES.plot,null);
-    }
+  if(tile.type==="wall"){
+    return stateFromRule(tile,RULES.wall,{barrierKind:"outer-wall"});
   }
-
+  if(tile.type==="door"){
+    return stateFromRule(tile,RULES.door,{doorwayKind:"exterior-door"});
+  }
+  if(tile.type==="floor"){
+    const overlay=String(tile.overlayTextureKey||"").toLowerCase();
+    if(overlay.includes("wall-")){
+      return stateFromRule(tile,RULES.wall,{barrierKind:"interior-wall"});
+    }
+    if(overlay.includes("door-")){
+      return stateFromRule(tile,RULES.door,{doorwayKind:"interior-door"});
+    }
+    return stateFromRule(tile,RULES.floor,null);
+  }
+  if(tile.type==="plot"){
+    return stateFromRule(tile,RULES.plot,null);
+  }
   return classifyTile(tile);
 }
 
