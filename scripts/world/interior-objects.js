@@ -46,6 +46,30 @@ function interactionFor(building,cell,occupied,reserved){
     .filter(p=>adjacent(p,cell)&&!occupied.has(pointKey(p))&&!reserved.has(pointKey(p)))
     .sort(comparePoint)[0]||null;
 }
+function interactionsReachable(building,blocked,targetPoints){
+  const floors=new Map(building.interiorFloorCells.map(p=>[pointKey(p),point(p.x,p.y)]));
+  const targets=targetPoints.map(pointKey);
+  if(targets.some(key=>!floors.has(key)||blocked.has(key)))return false;
+  const startCandidates=[building.entrance?.immediateInside,building.interiorTarget]
+    .filter(Boolean)
+    .map(p=>point(p.x,p.y))
+    .filter(p=>floors.has(pointKey(p))&&!blocked.has(pointKey(p)));
+  const start=startCandidates[0]||[...floors.values()].find(p=>!blocked.has(pointKey(p)))||null;
+  if(!start)return targets.length===0;
+  const queue=[start],seen=new Set([pointKey(start)]);
+  while(queue.length){
+    const current=queue.shift();
+    for(const [dx,dy] of [["1","0"],["-1","0"],["0","1"],["0","-1"]]){
+      const next=WorldCoordinates.add(current,dx,dy);
+      const candidate=point(next.x,next.y);
+      const key=pointKey(candidate);
+      if(seen.has(key)||blocked.has(key)||!floors.has(key))continue;
+      seen.add(key);
+      queue.push(candidate);
+    }
+  }
+  return targets.every(key=>seen.has(key));
+}
 function buildFresh(seed){
   const occupied=new Set();
   const reserved=new Set();
@@ -58,6 +82,7 @@ function buildFresh(seed){
         building.interiorTarget
       ].filter(Boolean).map(pointKey)
     );
+    const buildingInteractions=[];
     const types=typesFor(building);
     types.forEach((type,index)=>{
       const rule=TYPE_RULES[type];
@@ -68,6 +93,9 @@ function buildFresh(seed){
         const interaction=interactionFor(building,c,occupied,reserved);
         if(!interaction)continue;
         const ip=point(interaction.x,interaction.y);
+        const prospectiveBlocked=new Set(occupied);
+        if(rule.blocking)prospectiveBlocked.add(pointKey(c));
+        if(!interactionsReachable(building,prospectiveBlocked,[...buildingInteractions,ip]))continue;
         const id=building.id+":"+type+":"+String(index+1).padStart(2,"0");
         objects.push(Object.freeze({
           id,type,buildingId:building.id,buildingLabel:building.label,
@@ -75,8 +103,9 @@ function buildFresh(seed){
           blocking:rule.blocking,actions:rule.actions,
           interactionPositions:Object.freeze([ip])
         }));
-        occupied.add(pointKey(c));
+        if(rule.blocking)occupied.add(pointKey(c));
         reserved.add(pointKey(ip));
+        buildingInteractions.push(ip);
         break;
       }
     });
