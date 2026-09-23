@@ -461,11 +461,13 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const elevation=Math.max(0,Number(raw.elevation??CHARACTER_DEFAULT_ELEVATION));
       const yaw=billboardYawDegrees(scenePoint,cameraPosition);
       entity.enabled=true;
-      /* PlayCanvas primitive planes are horizontal (local XZ). Rotate X=90°
-         to make the quad vertical, then yaw around world Y toward the gameplay camera. */
-      entity.setLocalEulerAngles(90,yaw,0);
+      /* PlayCanvas primitive planes are local XZ surfaces. Their visual width
+         therefore scales on X and image height scales on Z. Aim local -Z at
+         the camera, then rotate locally so the plane's Z axis becomes world-up. */
       entity.setLocalPosition(scenePoint.x,elevation+height*0.5+CHARACTER_GROUND_LIFT,scenePoint.z);
-      entity.setLocalScale((flipped?-1:1)*width,height,1);
+      entity.setLocalScale((flipped?-1:1)*width,1,height);
+      entity.lookAt(cameraPosition.x,entity.getPosition().y,cameraPosition.z);
+      entity.rotateLocal(-90,0,0);
       desired.set(id,record);
       visibleIds.push(id);
       instances.push(Object.freeze({
