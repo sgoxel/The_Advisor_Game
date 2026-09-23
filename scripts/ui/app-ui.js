@@ -531,6 +531,11 @@ let terrainFallbackRenderCount=0;
 let terrainLastRenderSource="none";
 let cameraTransitionQueue=Promise.resolve();
 let lastCameraDirection={dx:0,dy:0};
+let cameraNavigationSequence=0;
+let lastCameraNavigation=null;
+const cameraNavigationHistory=[];
+const activeCameraKeys=new Set();
+let keyboardPanTimer=null;
 
 function projectedCoverageHalfSpan(width,height,tileSize){
   const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
@@ -1082,7 +1087,79 @@ function updateCameraPresentation(){
   }
 }
 
-function panCamera(dx,dy){
+function frozenCoordinate(point){
+  return point?Object.freeze({x:String(point.x),y:String(point.y)}):null;
+}
+function cameraNavigationAngle(requested,projected){
+  const rx=Number(requested?.x||0),ry=Number(requested?.y||0);
+  const px=Number(projected?.x||0),py=Number(projected?.y||0);
+  const rm=Math.hypot(rx,ry),pm=Math.hypot(px,py);
+  if(rm<1e-7||pm<1e-7)return 180;
+  const dot=Math.max(-1,Math.min(1,(rx*px+ry*py)/(rm*pm)));
+  return Number((Math.acos(dot)*180/Math.PI).toFixed(3));
+}
+function rememberCameraNavigation(meta,centerBefore,centerAfter,protagonistBefore,protagonistAfter){
+  if(!meta)return;
+  const worldDx=Number(BigInt(centerAfter.x)-BigInt(centerBefore.x));
+  const worldDy=Number(BigInt(centerAfter.y)-BigInt(centerBefore.y));
+  const record=Object.freeze({
+    sequence:++cameraNavigationSequence,
+    source:String(meta.source||"screen"),
+    mappingSource:String(meta.mappingSource||"unknown"),
+    requestedScreen:Object.freeze({x:Number(meta.requestedScreen?.x||0),y:Number(meta.requestedScreen?.y||0)}),
+    worldDelta:Object.freeze({x:worldDx,y:worldDy}),
+    projectedScreen:Object.freeze({x:Number(meta.projectedScreen?.x||0),y:Number(meta.projectedScreen?.y||0)}),
+    angleErrorDegrees:cameraNavigationAngle(meta.requestedScreen,meta.projectedScreen),
+    logicalSteps:Number(meta.logicalSteps||0),
+    centerBefore:frozenCoordinate(centerBefore),
+    centerAfter:frozenCoordinate(centerAfter),
+    protagonistBefore:frozenCoordinate(protagonistBefore),
+    protagonistAfter:frozenCoordinate(protagonistAfter),
+    simulationAuthorityPreserved:sameCoordinate(protagonistBefore,protagonistAfter)
+  });
+  lastCameraNavigation=record;
+  cameraNavigationHistory.push(record);
+  while(cameraNavigationHistory.length>32)cameraNavigationHistory.shift();
+}
+function panCameraScreen(screenDx,screenDy,source="screen"){
+  const sx=Math.trunc(Number(screenDx)||0),sy=Math.trunc(Number(screenDy)||0);
+  if(!sx&&!sy)return Promise.resolve(null);
+  const count=Math.max(Math.abs(sx),Math.abs(sy));
+  const signX=Math.sign(sx),signY=Math.sign(sy);
+  const mappings=[];
+  let worldX=0,worldY=0,projectedX=0,projectedY=0;
+  for(let index=0;index<count;index++){
+    const unitX=index<Math.abs(sx)?signX:0;
+    const unitY=index<Math.abs(sy)?signY:0;
+    const mapping=GameRenderer?.screenToCameraDelta?.(unitX,unitY);
+    if(!mapping?.worldDelta)continue;
+    mappings.push(mapping);
+    worldX+=Number(mapping.worldDelta.x||0);
+    worldY+=Number(mapping.worldDelta.y||0);
+    projectedX+=Number(mapping.projectedScreen?.x||0);
+    projectedY+=Number(mapping.projectedScreen?.y||0);
+  }
+  if(!mappings.length||(!worldX&&!worldY))return Promise.resolve(null);
+  return panCamera(worldX,worldY,Object.freeze({
+    source,
+    mappingSource:String(mappings[0].source||"unknown"),
+    requestedScreen:Object.freeze({x:sx,y:sy}),
+    projectedScreen:Object.freeze({x:projectedX,y:projectedY}),
+    logicalSteps:mappings.length
+  }));
+}
+function cameraNavigationSnapshot(){
+  return Object.freeze({
+    sequence:cameraNavigationSequence,
+    last:lastCameraNavigation,
+    history:Object.freeze(cameraNavigationHistory.slice()),
+    activeKeyboardKeys:Object.freeze([...activeCameraKeys].sort()),
+    repeatIntervalMs:140,
+    sharedTransform:true,
+    mappingSource:"playcanvas-screen-to-ground"
+  });
+}
+function panCamera(dx,dy,navigationMeta=null){
   return enqueueCameraTransition(async()=>{
     const campaign=SeedSystem.getCampaign();
     const protagonist=Protagonist.getPosition();
@@ -1108,6 +1185,7 @@ function panCamera(dx,dy){
     cameraIndependenceProven=sameCoordinate(protagonistBefore,protagonistAfter);
     await renderTerrain();
     updateCameraPresentation();
+    rememberCameraNavigation(navigationMeta,centerBefore,Camera.getCenter(),protagonistBefore,protagonistAfter);
   });
 }
 
@@ -1202,7 +1280,7 @@ function installCameraControls(){
       area.classList.remove("camera-dragging");
       pinchState={distance:pointerDistance(),zoom:Camera.getZoom()};
     }else{
-      dragState={pointerId:event.pointerId,x:event.clientX,y:event.clientY,accX:0,accY:0};
+      dragState={pointerId:event.pointerId,pointerType:event.pointerType||"pointer",x:event.clientX,y:event.clientY,accX:0,accY:0};
       area.classList.add("camera-dragging");
     }
     event.preventDefault();
@@ -1230,18 +1308,18 @@ function installCameraControls(){
     dragState.accX+=dx;
     dragState.accY+=dy;
     const threshold=60;
-    let panX=0,panY=0;
+    let screenX=0,screenY=0;
     while(Math.abs(dragState.accX)>=threshold){
-      const step=dragState.accX>0?-1:1;
-      panX+=step;
+      const step=dragState.accX>0?1:-1;
+      screenX+=step;
       dragState.accX+=dragState.accX>0?-threshold:threshold;
     }
     while(Math.abs(dragState.accY)>=threshold){
-      const step=dragState.accY>0?-1:1;
-      panY+=step;
+      const step=dragState.accY>0?1:-1;
+      screenY+=step;
       dragState.accY+=dragState.accY>0?-threshold:threshold;
     }
-    if(panX||panY)panCamera(panX,panY);
+    if(screenX||screenY)panCameraScreen(screenX,screenY,"pointer:"+(event.pointerType||dragState.pointerType||"pointer"));
     event.preventDefault();
   });
 
@@ -1256,7 +1334,7 @@ function installCameraControls(){
 
     if(activePointers.size===1&&!dragState){
       const [pointerId,point]=activePointers.entries().next().value;
-      dragState={pointerId,x:point.x,y:point.y,accX:0,accY:0};
+      dragState={pointerId,pointerType:"pointer",x:point.x,y:point.y,accX:0,accY:0};
       area.classList.add("camera-dragging");
     }
 
@@ -1265,20 +1343,46 @@ function installCameraControls(){
   area.addEventListener("pointerup",endDrag);
   area.addEventListener("pointercancel",endDrag);
 
+  const cameraKeys=new Set(["arrowleft","a","arrowright","d","arrowup","w","arrowdown","s"]);
+  const keyboardScreenDirection=()=>{
+    const left=activeCameraKeys.has("arrowleft")||activeCameraKeys.has("a");
+    const right=activeCameraKeys.has("arrowright")||activeCameraKeys.has("d");
+    const up=activeCameraKeys.has("arrowup")||activeCameraKeys.has("w");
+    const down=activeCameraKeys.has("arrowdown")||activeCameraKeys.has("s");
+    return Object.freeze({x:(right?1:0)-(left?1:0),y:(down?1:0)-(up?1:0)});
+  };
+  const repeatKeyboardPan=()=>{
+    const move=keyboardScreenDirection();
+    if(move.x||move.y)panCameraScreen(move.x,move.y,"keyboard:hold");
+  };
+  const stopKeyboardRepeatIfIdle=()=>{
+    if(activeCameraKeys.size||!keyboardPanTimer)return;
+    clearInterval(keyboardPanTimer);
+    keyboardPanTimer=null;
+  };
   document.addEventListener("keydown",event=>{
     if(!SeedSystem.getCampaign())return;
     if(event.target&&["INPUT","TEXTAREA","SELECT"].includes(event.target.tagName))return;
     const key=event.key.toLowerCase();
-    const moves={
-      arrowleft:[-1,0],a:[-1,0],
-      arrowright:[1,0],d:[1,0],
-      arrowup:[0,-1],w:[0,-1],
-      arrowdown:[0,1],s:[0,1]
-    };
-    const move=moves[key];
-    if(!move)return;
+    if(!cameraKeys.has(key))return;
     event.preventDefault();
-    panCamera(move[0],move[1]);
+    const wasActive=activeCameraKeys.has(key);
+    activeCameraKeys.add(key);
+    if(!event.repeat&&!wasActive){
+      const move=keyboardScreenDirection();
+      if(move.x||move.y)panCameraScreen(move.x,move.y,"keyboard:"+key);
+    }
+    if(!keyboardPanTimer)keyboardPanTimer=setInterval(repeatKeyboardPan,140);
+  });
+  document.addEventListener("keyup",event=>{
+    const key=event.key.toLowerCase();
+    if(!cameraKeys.has(key))return;
+    activeCameraKeys.delete(key);
+    stopKeyboardRepeatIfIdle();
+  });
+  window.addEventListener("blur",()=>{
+    activeCameraKeys.clear();
+    stopKeyboardRepeatIfIdle();
   });
 }
 
@@ -1560,6 +1664,8 @@ window.AppUI=Object.freeze({
     fallbackRenderCount:terrainFallbackRenderCount,
     lastRenderSource:terrainLastRenderSource,
     simulationAuthorityPreserved:true
-  })
+  }),
+  cameraNavigationSnapshot,
+  resolveCameraScreenDelta:(x,y)=>GameRenderer?.screenToCameraDelta?.(x,y)||null
 });
 })();

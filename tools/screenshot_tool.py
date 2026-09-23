@@ -85,6 +85,7 @@ SCENARIOS = {
     "wp-s003-006-004",
     "wp-s003-006-005",
     "wp-s003-007-001",
+    "wp-s003-008-001",
     "playcanvas-root-cutover",
 }
 
@@ -122,6 +123,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-004": 9,
     "wp-s003-006-005": 7,
     "wp-s003-007-001": 6,
+    "wp-s003-008-001": 16,
     "playcanvas-root-cutover": 3,
 }
 
@@ -320,6 +322,7 @@ return (() => {
         cameraX: document.querySelector('#cameraX')?.textContent?.trim() || null,
         cameraY: document.querySelector('#cameraY')?.textContent?.trim() || null,
         cameraZoom: document.querySelector('#cameraZoom')?.textContent?.trim() || null,
+        cameraNavigation: window.AppUI?.cameraNavigationSnapshot?.() || null,
         protagonistSpriteLoaded: Boolean(protagonistTexture),
         protagonistSpriteSize: protagonistTexture ? {
           naturalWidth: Number(protagonistTexture.width || 0),
@@ -1003,6 +1006,58 @@ def _drag_canvas(driver, dx: int, dy: int) -> str:
         return "camera-drag-skipped:no-camera-surface"
     ActionChains(driver).move_to_element(target).click_and_hold().move_by_offset(dx, dy).release().perform()
     return f"drag-{target_name}:{dx},{dy}"
+
+
+def _keyboard_camera(driver, *keys: str) -> str:
+    from selenium.webdriver.common.action_chains import ActionChains
+    from selenium.webdriver.common.keys import Keys
+
+    aliases = {
+        "arrowleft": Keys.ARROW_LEFT,
+        "arrowright": Keys.ARROW_RIGHT,
+        "arrowup": Keys.ARROW_UP,
+        "arrowdown": Keys.ARROW_DOWN,
+        "a": "a",
+        "d": "d",
+        "w": "w",
+        "s": "s",
+    }
+    action = ActionChains(driver)
+    normalized = [str(key).lower() for key in keys]
+    for key in normalized:
+        action.key_down(aliases[key])
+    action.pause(0.04)
+    for key in reversed(normalized):
+        action.key_up(aliases[key])
+    action.perform()
+    return "keyboard:" + "+".join(normalized)
+
+
+def _touch_drag_canvas(driver, dx: int, dy: int) -> str:
+    rect = driver.execute_script(
+        """
+        const node=document.querySelector('#gameCanvas')||document.querySelector('#gameplayArea');
+        if(!node)return null;
+        const r=node.getBoundingClientRect();
+        return {left:r.left,top:r.top,width:r.width,height:r.height};
+        """
+    )
+    if not isinstance(rect, dict) or float(rect.get("width") or 0) <= 0 or float(rect.get("height") or 0) <= 0:
+        return "touch-drag-skipped:no-camera-surface"
+    start_x = float(rect["left"]) + float(rect["width"]) * 0.5
+    start_y = float(rect["top"]) + float(rect["height"]) * 0.5
+    end_x = start_x + int(dx)
+    end_y = start_y + int(dy)
+    driver.execute_cdp_cmd(
+        "Input.dispatchTouchEvent",
+        {"type": "touchStart", "touchPoints": [{"x": start_x, "y": start_y, "id": 1}]},
+    )
+    driver.execute_cdp_cmd(
+        "Input.dispatchTouchEvent",
+        {"type": "touchMove", "touchPoints": [{"x": end_x, "y": end_y, "id": 1}]},
+    )
+    driver.execute_cdp_cmd("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    return f"touch-drag:{dx},{dy}"
 
 
 def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
@@ -2036,6 +2091,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             """)
             return "landscape:keyboard-interactions"
         return "responsive:no-op"
+    if scenario == "wp-s003-008-001":
+        actions = {
+            1: lambda: _drag_canvas(driver, -120, 0),
+            2: lambda: _drag_canvas(driver, 120, 0),
+            3: lambda: _drag_canvas(driver, 0, -120),
+            4: lambda: _drag_canvas(driver, 0, 120),
+            5: lambda: _keyboard_camera(driver, "arrowleft"),
+            6: lambda: _keyboard_camera(driver, "arrowright"),
+            7: lambda: _keyboard_camera(driver, "arrowup"),
+            8: lambda: _keyboard_camera(driver, "arrowdown"),
+            9: lambda: _keyboard_camera(driver, "a"),
+            10: lambda: _keyboard_camera(driver, "d"),
+            11: lambda: _keyboard_camera(driver, "w"),
+            12: lambda: _keyboard_camera(driver, "s"),
+            13: lambda: _keyboard_camera(driver, "arrowup", "arrowleft"),
+            14: lambda: _keyboard_camera(driver, "s", "d"),
+            15: lambda: _touch_drag_canvas(driver, -120, 0),
+        }
+        action = actions.get(frame_index)
+        return action() if action else "screen-navigation:initial"
     if scenario == "motion-sequence":
         return _drag_canvas(driver, 72 if frame_index % 2 else -72, 0)
     if scenario == "time-of-day":
@@ -2050,6 +2125,71 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-008-001":
+        if len(frames) < 16:
+            raise RuntimeError("wp-s003-008-001 requires sixteen evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:16]]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Screen-space navigation changed/missed Protagonist authority: {protagonists}")
+        navs=[(build.get("cameraNavigation") or {}).get("last") for build in builds]
+        expected={
+            1:(-1,0,"pointer:mouse"),2:(1,0,"pointer:mouse"),
+            3:(0,-1,"pointer:mouse"),4:(0,1,"pointer:mouse"),
+            5:(-1,0,"keyboard:arrowleft"),6:(1,0,"keyboard:arrowright"),
+            7:(0,-1,"keyboard:arrowup"),8:(0,1,"keyboard:arrowdown"),
+            9:(-1,0,"keyboard:a"),10:(1,0,"keyboard:d"),
+            11:(0,-1,"keyboard:w"),12:(0,1,"keyboard:s"),
+            13:(-1,-1,"keyboard:arrowleft"),14:(1,1,"keyboard:d"),
+            15:(-1,0,"pointer:touch"),
+        }
+        def unit(pair):
+            x=float(pair.get("x") or 0); y=float(pair.get("y") or 0)
+            mag=(x*x+y*y)**0.5
+            return (x/mag,y/mag) if mag>1e-9 else (0.0,0.0)
+        def world_unit(nav):
+            return unit(nav.get("worldDelta") or {})
+        for index,(ex,ey,source) in expected.items():
+            nav=navs[index]
+            if not isinstance(nav,dict):
+                raise RuntimeError(f"Missing navigation telemetry in frame {index+1}: {builds[index].get('cameraNavigation')}")
+            if nav.get("mappingSource")!="playcanvas-screen-to-ground":
+                raise RuntimeError(f"Frame {index+1} bypassed live camera mapping: {nav}")
+            if str(nav.get("source") or "")!=source:
+                raise RuntimeError(f"Frame {index+1} input path mismatch: expected {source}, got {nav}")
+            req=unit(nav.get("requestedScreen") or {})
+            exp_mag=(ex*ex+ey*ey)**0.5
+            exp=(ex/exp_mag,ey/exp_mag)
+            if req[0]*exp[0]+req[1]*exp[1] < 0.999:
+                raise RuntimeError(f"Frame {index+1} requested wrong screen direction: expected {(ex,ey)}, got {nav}")
+            projected=unit(nav.get("projectedScreen") or {})
+            if projected[0]*exp[0]+projected[1]*exp[1] < 0.985:
+                raise RuntimeError(f"Frame {index+1} visible motion is not aligned to screen intent: expected {(ex,ey)}, got {nav}")
+            if float(nav.get("angleErrorDegrees") or 180)>10:
+                raise RuntimeError(f"Frame {index+1} screen-direction error exceeds 10 degrees: {nav}")
+            if nav.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Frame {index+1} changed Protagonist/Simulation authority: {nav}")
+            before=nav.get("centerBefore") or {}; after=nav.get("centerAfter") or {}
+            if before==after:
+                raise RuntimeError(f"Frame {index+1} did not move camera: {nav}")
+            if int(nav.get("logicalSteps") or 0)<1:
+                raise RuntimeError(f"Frame {index+1} recorded no logical screen step: {nav}")
+        for left,right in ((1,2),(3,4),(5,6),(7,8),(9,10),(11,12)):
+            before=navs[left].get("centerBefore")
+            after=navs[right].get("centerAfter")
+            if before!=after:
+                raise RuntimeError(f"Opposite screen directions did not cancel for frames {left+1}/{right+1}: before={before}, after={after}")
+        for arrow_idx,wasd_idx in ((5,9),(6,10),(7,11),(8,12)):
+            if world_unit(navs[arrow_idx])!=world_unit(navs[wasd_idx]):
+                raise RuntimeError(f"Arrow/WASD mapping diverged: arrow={navs[arrow_idx]}, wasd={navs[wasd_idx]}")
+        for index in (13,14):
+            if int(navs[index].get("logicalSteps") or 0)!=1:
+                raise RuntimeError(f"Diagonal keyboard movement inflated logical step count in frame {index+1}: {navs[index]}")
+        gpu=[build.get("gpuRenderer") or {} for build in builds]
+        if any((item.get("navigationHotPath") or {}).get("fullSceneRebuilds") not in (0,None) for item in gpu):
+            raise RuntimeError("Screen-space navigation triggered a full scene rebuild")
+        return
+
     if scenario == "wp-s003-007-001":
         if len(frames) < 6:
             raise RuntimeError("wp-s003-007-001 requires six evidence frames")
@@ -3932,7 +4072,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
