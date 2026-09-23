@@ -119,7 +119,10 @@ function createManager({
   let queue=[];
   let frameHandle=0;
   let destroyed=false;
-  let signature=String(signatureProvider()||"standard");
+  // Cache identity must use the exact same canonical format as every later update.
+  // Using only the provider fragment here forced a one-time "signature" invalidation
+  // on the first navigation update, purging already prepared chunks.
+  let signature="chunk="+size+"|"+String(signatureProvider()||"standard");
   let lastCenterChunk=null;
   let lastRequest=null;
   let settings=get();
