@@ -9,6 +9,7 @@ const STANDARD_TERRAIN=new Set([
 
 const cache=new Map();
 let cacheHits=0,cacheMisses=0,completeChunkGenerations=0,releases=0;
+let activeGenerations=0,preparedGenerations=0,otherGenerations=0;
 let terrainFoundationCalls=0,walkabilityClassifications=0;
 let totalGenerationMs=0,maxGenerationMs=0;
 let viewTileHits=0,viewTileMisses=0;
@@ -163,6 +164,9 @@ function generate(spec){
   const elapsed=performance.now()-started;
   totalGenerationMs+=elapsed;maxGenerationMs=Math.max(maxGenerationMs,elapsed);
   completeChunkGenerations++;
+  if(spec.state==="Active")activeGenerations++;
+  else if(spec.state==="Prepared")preparedGenerations++;
+  else otherGenerations++;
 
   const key=signatureFor(spec);
   const snapshot=Object.freeze({
@@ -317,6 +321,7 @@ function stats(){
     entryCount:cache.size,
     cacheHits,cacheMisses,
     completeChunkGenerations,
+    activeGenerations,preparedGenerations,otherGenerations,
     releases,
     terrainFoundationCalls,
     walkabilityClassifications,
