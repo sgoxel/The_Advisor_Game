@@ -934,8 +934,9 @@ function updateCameraPresentation(){
   e.cameraProtagonistY.textContent=protagonist.y;
 
   e.protagonistMarker.style.setProperty("--camera-tile-size",tileSize+"px");
-  e.protagonistMarker.hidden=!visible;
-  if(visible){
+  const playcanvasCharacter=GameRenderer.snapshot().engine==="PlayCanvas";
+  e.protagonistMarker.hidden=!visible||playcanvasCharacter;
+  if(visible&&!playcanvasCharacter){
     const px=Number(dx)*tileSize;
     const py=Number(dy)*tileSize;
     e.protagonistMarker.style.transform="translate(calc(-50% + "+px+"px),calc(-50% + "+py+"px))";
