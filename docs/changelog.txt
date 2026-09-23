@@ -749,3 +749,10 @@
 - Visual Evidence run 35919896492 passed on exact head 8250c61994d1f7204c9d5937d9b03f0238244f59; same-SEED identity repeatability, one-year age derivation, Protagonist separation, required fields and foundation-only randomness all passed.
 - All 3 fresh screenshots were retrieved and directly inspected. The roster table is complete/readable with all checks visible as PASS and no clipping, overlap, malformed text or broken layout. VISUAL 8.7/10 PASS.
 - Automatic regression run 35919871098 passed and GitHub Pages run 35919870428 successfully deployed the exact tested head.
+2026-09-24 00:22 +03:00 | WP-S004-002 | Homes, professions + workplace assignment final certification
+- Replaced generic home/work access rotation with Campaign-SEED + resident-ID deterministic assignments: all six generated homes hold exactly two residents, and the six profession types map to authoritative SpecialLot functions.
+- Indoor home/work destinations now use Stage 3 InteriorObjects interaction positions; the outdoor woodcutter worksite uses a deterministic walkable point inside the generated workyard. Assignment targets remain Simulation-owned and no movement/action execution was introduced by this WP.
+- ResidentAssignments proof verifies valid homes, capacity, profession compatibility, non-blocked targets, deterministic repeatability, and continuous RoutePlanner home-to-work paths through real exterior doors where required.
+- Attempt 1 run 35921592597 exposed a legacy social-target helper regression; fixed in 8c0420ac26a23e1318f4ad4ab3c776c1c4760f57 without changing WP assignment semantics.
+- Final Visual Evidence run 35921858512 passed on exact tested head 8c0420ac26a23e1318f4ad4ab3c776c1c4760f57 with all 12/12 routes passing (18–42 steps). All 3 fresh screenshots were directly inspected; the assignment table is complete/readable with all six checks visible as PASS and no clipping, overlap, malformed text or broken layout. VISUAL 8.6/10 PASS.
+- Automatic regression run 35921764854 passed and GitHub Pages run 35921763924 successfully deployed the exact tested head.
