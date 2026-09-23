@@ -698,3 +698,8 @@
 - Low/Standard/High/Ultra all passed with PlayCanvas world cache limits 24/48/72/96, material caps 512/1024/2048/4096 px, anisotropy 1/2/4/8, profile-aware chunk signatures, persistent settings, and no per-frame resize/transcode.
 - Authoritative SEED remained The_Advisor_Game_20260924 and Protagonist remained (0,0, level 0) across the profile cycle and reload.
 - Four fresh screenshots were directly inspected after fixing the startup race. Campaign is ACTIVE, renderer error is absent, and no missing materials, corruption, clipping, projection failure, or major UI defect is visible. VISUAL 8.1/10 PASS.
+2026-09-23 18:43 +03:00 | WP-S003-006-004 | Persistent navigation hot-path checkpoint
+- Eliminated redundant PlayCanvas chunk state callbacks, repeated cached-chunk repositioning on ordinary refreshes, duplicate camera-transform calls, and unnecessary same-size canvas resizes; added persistent scene/entity lifetime and navigation timing telemetry.
+- Dedicated run 35883309212 completed all nine small-pan/chunk-crossing/reverse/revisit/zoom screenshots. Direct inspection scored VISUAL 8.0/10 PASS with no duplicated buildings, missing terrain, stale-chunk artifact, projection failure, or major UI defect.
+- Functional validation exposed a real remaining spike: a render-scale-dependent chunk signature invalidated prepared resources during a small pan (lastUpdateMs 944.3 ms, maxUpdateMs 1403.3 ms, 169 resource creations, visible waits increased).
+- Commit 64dbe0730da4987cabbeacc8dbe00d94291c6a87 removes framebuffer render scale from chunk-resource cache identity because it does not change chunk geometry. Three evaluation attempts were exhausted, so this fix remains pending fresh certification and the WP stays open.
