@@ -603,3 +603,37 @@ details[open] summary{border-bottom:1px solid #343a30}
   }
   .interior-object-proof-row:nth-child(n+4){display:none}
 }
+
+
+/* WP-S003-004-002 — 2D character billboard proof */
+.character-billboard-proof-panel{
+  position:absolute;
+  left:12px;
+  bottom:12px;
+  z-index:13;
+  width:min(560px,calc(100% - 24px));
+  display:grid;
+  gap:4px;
+  padding:9px 11px;
+  border:1px solid rgba(177,207,163,.42);
+  border-radius:9px;
+  background:rgba(14,19,13,.88);
+  box-shadow:0 6px 22px rgba(0,0,0,.32);
+  backdrop-filter:blur(4px);
+  color:#eef3e9;
+  pointer-events:none;
+}
+.character-billboard-proof-panel[hidden]{display:none}
+.character-billboard-proof-panel strong{font-size:12px;letter-spacing:.035em;color:#f1e7bd}
+.character-billboard-proof-panel small{font-size:9px;line-height:1.35;color:#d1dbca}
+@media(max-width:720px){
+  .character-billboard-proof-panel{
+    left:6px;
+    bottom:6px;
+    width:calc(100% - 12px);
+    padding:6px 8px;
+    gap:2px;
+  }
+  .character-billboard-proof-panel strong{font-size:10px}
+  .character-billboard-proof-panel small{font-size:8px}
+}
