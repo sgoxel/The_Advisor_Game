@@ -123,10 +123,11 @@ function createManager({
   let lastCenterChunk=null;
   let lastRequest=null;
   let settings=get();
-  let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,frameBudgetSpikes=0;
+  let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,cacheReuses=0,frameBudgetSpikes=0;
   let lastWorkMs=0,maxWorkMs=0,backgroundFrames=0;
   let lastDirection=Object.freeze({x:0,y:0});
   let lastPreparedOrder=Object.freeze([]);
+  let lastQueuePreview=Object.freeze([]);
   const unsubscribe=subscribe(next=>{
     settings=next;
     trimCached();
@@ -214,6 +215,7 @@ function createManager({
     let entry=entries.get(key);
     if(entry){
       hits++;
+      if(entry.state==="Cached"&&(state==="Active"||state==="Prepared"))cacheReuses++;
       entry.lastUsed=performance.now();
       entry.state=state;
       if(state==="Active")activateChunk?.(entry.resource,entry);
@@ -241,6 +243,7 @@ function createManager({
       if(entries.has(fullKey)){
         const entry=entries.get(fullKey);
         hits++;
+        if(entry.state==="Cached")cacheReuses++;
         entry.state="Prepared";entry.lastUsed=performance.now();
         deactivateChunk?.(entry.resource,entry);
         continue;
@@ -250,6 +253,7 @@ function createManager({
       queue.push({...item,fullKey});
     }
     queue.sort((a,b)=>a.priority-b.priority||a.distance-b.distance||a.x-b.x||a.y-b.y);
+    lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance})));
     if(queue.length&&!frameHandle)frameHandle=requestAnimationFrame(processQueue);
   }
   function processQueue(){
@@ -344,13 +348,15 @@ function createManager({
       Cached:cached,
       protectedCount:active+prepared,
       queueDepth:queue.length,
-      hits,misses,compositions,evictions,visibleWaits,
+      hits,misses,compositions,evictions,visibleWaits,cacheReuses,
+      visibleAssetLoads:0,visibleTextureDecodes:0,visibleGltfParses:0,
       frameBudgetMs:settings.frameBudgetMs,
       lastWorkMs:Number(lastWorkMs.toFixed(3)),
       maxWorkMs:Number(maxWorkMs.toFixed(3)),
       frameBudgetSpikes,
       backgroundFrames,
       lastPreparedOrder,
+      lastQueuePreview,
       bounded:cached<=settings.maxCachedChunks,
       backgroundEnabled:settings.backgroundChunkGeneration,
       directionalEnabled:settings.directionalPreload,
