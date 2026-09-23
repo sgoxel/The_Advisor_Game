@@ -677,7 +677,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "playcanvas-root-cutover"}:
+            if scenario == "wp-s003-006":
+                _set_terrain_preload_settings(
+                    driver, radius=2, cache=256, directional=True, background=True
+                )
+
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -697,6 +702,13 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                           (arguments[0] !== 'wp-s003-006-002' || (
                             renderer?.terrainPreload &&
                             Number(renderer.terrainPreload.Active || 0) > 0 &&
+                            Number(renderer.terrainPreload.queueDepth || 0) === 0
+                          )) &&
+                          (arguments[0] !== 'wp-s003-006' || (
+                            renderer?.terrainPreload &&
+                            renderer?.terrainChunks?.resourceKind === 'chunk-mesh' &&
+                            Number(renderer.terrainChunks.visibleChunkCount || 0) > 0 &&
+                            Number(renderer.terrainPreload.Prepared || 0) > 0 &&
                             Number(renderer.terrainPreload.queueDepth || 0) === 0
                           ))
                         );
