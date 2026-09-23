@@ -9,12 +9,20 @@ async function start(){
     throw error;
   }
 }
+function loadResidentMovement(){
+  if(window.ResidentMovement){start();return;}
+  const script=document.createElement("script");
+  script.src="scripts/world/resident-movement.js";
+  script.onload=start;
+  script.onerror=()=>{console.error("Failed to load resident movement simulation.");start();};
+  document.head.appendChild(script);
+}
 function loadInterior(){
-  if(window.InteriorObjects){start();return;}
+  if(window.InteriorObjects){loadResidentMovement();return;}
   const script=document.createElement("script");
   script.src="scripts/world/interior-objects.js";
-  script.onload=start;
-  script.onerror=()=>{console.error("Failed to load interior object foundation.");start();};
+  script.onload=loadResidentMovement;
+  script.onerror=()=>{console.error("Failed to load interior object foundation.");loadResidentMovement();};
   document.head.appendChild(script);
 }
 function loadTerrainChunkSizeSettings(){

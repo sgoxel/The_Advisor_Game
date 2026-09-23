@@ -86,6 +86,7 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     ?DailyActivity.build(campaign.seed)
     :[];
   const timestamp=GameTime.getTimestampMs?.();
+  if(campaign?.seed&&window.ResidentMovement)ResidentMovement.ensure(campaign.seed);
   const halfCols=Math.floor(Number(columns||0)/2);
   const halfRows=Math.floor(Number(rows||0)/2);
   const maxX=BigInt(halfCols+CHARACTER_VISIBILITY_MARGIN_TILES);
@@ -106,9 +107,11 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
 
   for(const resident of roster){
     const activity=DailyActivity.resolveActionTarget(campaign.seed,resident,timestamp);
-    const target=activity?.target;
-    if(!target)continue;
-    const offset=Camera.offsetFrom(target);
+    const movement=window.ResidentMovement?.get?.(resident.id)||null;
+    const authoritative=movement?.position||activity?.target;
+    if(!authoritative)continue;
+    const presentation=window.ResidentMovement?.presentation?.(resident.id)||null;
+    const offset=Camera.offsetFrom(authoritative);
     if(!offset)continue;
     const dx=BigInt(offset.x),dy=BigInt(offset.y);
     if(dx<-maxX||dx>maxX||dy<-maxY||dy>maxY)continue;
@@ -120,9 +123,10 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
       profession:resident.profession,
       activity:activity.action,
       activityLabel:activity.label,
-      buildingId:activity.buildingId||null,
+      buildingId:movement?.buildingId||activity.buildingId||null,
       textureUrl:characterTextureUrlForProfession(resident.profession),
-      point:Object.freeze({x:target.x,y:target.y}),
+      point:Object.freeze({x:authoritative.x,y:authoritative.y}),
+      presentationOffset:presentation?.offset||Object.freeze({x:0,y:0}),
       height:1.74,
       elevation:0.03,
       flipX:(BigInt(resident.id.slice(1)||"0")&1n)===1n,
@@ -548,6 +552,9 @@ let lastResidentRosterDateKey="";
 let lastResidentScheduleHourKey="";
 let lastResidentScheduleProof=null;
 let residentSchedulePinned=false;
+let residentMovementTimer=null;
+let residentMovementLastRealMs=0;
+let residentMovementRenderPending=false;
 
 function projectedCoverageHalfSpan(width,height,tileSize){
   const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
@@ -1704,6 +1711,40 @@ function renderResidentScheduleProof(timeOverride=null,pin=false){
   return proof;
 }
 
+async function refreshResidentCharacters(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign||!GameRenderer?.updateCharacters)return null;
+  const center=Camera.getCenter();
+  const columns=Number(e.terrainGrid.dataset.columns||0);
+  const rows=Number(e.terrainGrid.dataset.rows||0);
+  const tileSize=Number(e.terrainGrid.dataset.tileSize||100);
+  if(!center||columns<=0||rows<=0)return null;
+  const bundle=visibleCharacterSpecs(campaign,center,columns,rows,tileSize);
+  return GameRenderer.updateCharacters(bundle.visibleCharacters,bundle.simulatedCharacterCount);
+}
+function startResidentMovement(){
+  if(residentMovementTimer)clearInterval(residentMovementTimer);
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign||!window.ResidentMovement)return;
+  ResidentMovement.ensure(campaign.seed);
+  residentMovementLastRealMs=performance.now();
+  residentMovementTimer=setInterval(()=>{
+    const current=SeedSystem.getCampaign();
+    if(!current||ResidentMovement.snapshot().proofActive){
+      residentMovementLastRealMs=performance.now();
+      return;
+    }
+    const now=performance.now();
+    const dt=Math.max(0,Math.min(0.5,(now-residentMovementLastRealMs)/1000));
+    residentMovementLastRealMs=now;
+    const result=ResidentMovement.advance(current.seed,GameTime.getNow(),dt);
+    if(!result.changed||residentMovementRenderPending)return;
+    residentMovementRenderPending=true;
+    Promise.resolve(refreshResidentCharacters())
+      .catch(error=>console.error(error))
+      .finally(()=>{residentMovementRenderPending=false});
+  },100);
+}
 function renderAdviceLog(){
   if(typeof window.AdvisorChannel?.renderAdvicePanel !== "function") return;
   const campaign=SeedSystem.getCampaign();
@@ -1762,7 +1803,10 @@ async function startNewCampaign(){
   restoredCampaign=false;
   residentSchedulePinned=false;
   lastResidentScheduleProof=null;
-  if(result.ok)resetCameraForCampaign();
+  if(result.ok){
+    resetCameraForCampaign();
+    ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  }
   e.menuMessage.textContent=result.message;
   if(result.ok){
     try{
@@ -1774,13 +1818,16 @@ async function startNewCampaign(){
     }
   }
   e.statusMessage.textContent="Campaign running. Game time advances 24× real time.";
-  renderStatic();startClock();closePopup("mainMenuPopup");
+  renderStatic();startClock();startResidentMovement();closePopup("mainMenuPopup");
 }
 async function restartCampaign(){
   const result=SeedSystem.restartCampaign();
   residentSchedulePinned=false;
   lastResidentScheduleProof=null;
-  if(result.ok)resetCameraForCampaign();
+  if(result.ok){
+    resetCameraForCampaign();
+    ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  }
   e.menuMessage.textContent=result.message;
   if(result.ok){
     try{
@@ -1792,7 +1839,7 @@ async function restartCampaign(){
     }
   }
   e.statusMessage.textContent=result.ok?"Campaign restarted with the same SEED.":result.message;
-  renderStatic();startClock();
+  renderStatic();startClock();startResidentMovement();
   if(result.ok)closePopup("mainMenuPopup");
 }
 function saveSettings(){
@@ -1811,6 +1858,7 @@ async function init(){
   const restored=SeedSystem.loadCampaign();
   restoredCampaign=restored.ok;
   resetCameraForCampaign();
+  if(restored.ok&&window.ResidentMovement)ResidentMovement.reset(restored.seed||SeedSystem.getCampaign()?.seed);
 
   e.mainMenuButton.onclick=()=>openPopup("mainMenuPopup");
   e.settingsButton.onclick=()=>{
@@ -1847,7 +1895,7 @@ async function init(){
     e.statusMessage.textContent="Renderer startup failed: "+String(error);
     throw error;
   }
-  renderStatic();startClock();
+  renderStatic();startClock();startResidentMovement();
   observeTerrainViewport();
 }
 window.AppUI=Object.freeze({
@@ -1858,6 +1906,9 @@ window.AppUI=Object.freeze({
   refreshResidentAssignments:()=>renderResidentAssignmentProof(),
   refreshResidentSchedules:(time,pin=true)=>renderResidentScheduleProof(time,pin),
   residentScheduleSnapshot:()=>lastResidentScheduleProof,
+  refreshResidentCharacters,
+  residentMovementSnapshot:()=>window.ResidentMovement?.snapshot?.()||null,
+  residentMovementProofSnapshot:()=>window.ResidentMovement?.proofSnapshot?.()||null,
   residentAssignmentSnapshot:()=>{
     const campaign=SeedSystem.getCampaign();
     return campaign?ResidentAssignments.proof(campaign.seed):null;
