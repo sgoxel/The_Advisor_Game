@@ -82,11 +82,9 @@ function authoritativeBuildingCell(seed,x,y){
   return null;
 }
 
-function classify(seed,xValue,yValue){
-  const x=WorldCoordinates.normalize(xValue);
-  const y=WorldCoordinates.normalize(yValue);
-  const tile=TerrainFoundation.getTile(seed,x,y);
-  const cell=authoritativeBuildingCell(seed,x,y);
+function classifyPrepared(seed,tile){
+  if(!tile)return null;
+  const cell=authoritativeBuildingCell(seed,tile.x,tile.y);
 
   if(cell){
     if(cell.type==="wall"){
@@ -110,6 +108,13 @@ function classify(seed,xValue,yValue){
   }
 
   return classifyTile(tile);
+}
+
+function classify(seed,xValue,yValue){
+  const x=WorldCoordinates.normalize(xValue);
+  const y=WorldCoordinates.normalize(yValue);
+  const tile=TerrainFoundation.getTile(seed,x,y);
+  return classifyPrepared(seed,tile);
 }
 
 function isWalkable(seed,x,y){
@@ -294,6 +299,6 @@ function proof(seed){
 
 window.Walkability=Object.freeze({
   CATEGORY,RULES,
-  ruleFor,classifyTile,classify,isWalkable,movementSeconds,proof
+  ruleFor,classifyTile,classifyPrepared,classify,isWalkable,movementSeconds,proof
 });
 })();
