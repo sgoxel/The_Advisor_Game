@@ -46,7 +46,16 @@ function estimatedTextureBytes(profile=active()){const px=profile.runtimeResolut
 function budgetTextureCapacity(profile=active()){return Math.max(1,Math.floor(profile.textureBudgetMB*1024*1024/estimatedTextureBytes(profile)))}
 function effectiveCacheLimit(profile=active()){return Math.max(1,Math.min(HARD_CACHE_LIMIT,budgetTextureCapacity(profile)))}
 function enforceBudget(){const limit=effectiveCacheLimit();const before=window.TextureAssets?.stats?.().totalResolutionCacheEntryCount??0;const removed=window.TextureAssets?.evict?.(limit)||0;budgetEnforcementCount++;return Object.freeze({limit,before,removed,after:Math.max(0,before-removed)})}
-function requestPreparedPresentationRefresh(){const serial=++presentationRefreshSerial,grid=document.getElementById("terrainGrid"),host=grid?.parentElement;if(!host)return;const previousWidth=host.style.width;host.style.width="calc(100% - 0.01px)";requestAnimationFrame(()=>{if(serial!==presentationRefreshSerial)return;host.style.width=previousWidth})}
+function requestPreparedPresentationRefresh(){
+  const serial=++presentationRefreshSerial,grid=document.getElementById("terrainGrid"),host=grid?.parentElement;
+  const previousWidth=host?.style?.width??"";
+  if(host)host.style.width="calc(100% - 0.01px)";
+  requestAnimationFrame(async()=>{
+    if(serial!==presentationRefreshSerial)return;
+    if(host)host.style.width=previousWidth;
+    try{await window.AppUI?.refreshTerrain?.()}catch(error){console.error("Texture-quality presentation refresh failed.",error)}
+  });
+}
 function write(value){const next=normalize(value);if(next===current)return snapshot();current=next;try{localStorage.setItem(STORAGE_KEY,current);localStorage.removeItem(LEGACY_KEY)}catch(_){}revision++;enforceBudget();const state=snapshot();window.dispatchEvent(new CustomEvent("advisor:texture-resolution-change",{detail:state}));window.dispatchEvent(new CustomEvent("advisor:texture-quality-change",{detail:state}));requestPreparedPresentationRefresh();return state}
 function setResolution(value){return write(profileForResolution(value))}
 function ultraSupported(){const memory=Number(navigator.deviceMemory||0);return memory<=0||memory>=4}
