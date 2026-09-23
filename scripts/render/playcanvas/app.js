@@ -595,6 +595,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     if(!resource?.entity)return;
     const p=terrainChunkPosition(resource.x,resource.y,resource.chunkSize);
     resource.entity.setLocalPosition(p.x,-0.095,p.z);
+    terrainChunkMeshFactory?.reposition?.(resource,p.x,p.z);
   }
   function initTerrainChunkMeshFactory(){
     if(terrainChunkMeshFactory)return terrainChunkMeshFactory;
@@ -620,7 +621,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       signature:spec.signature,
       state:spec.state
     })||null;
-    const resource=factory.build({...spec,worldData});
+    const chunkPosition=terrainChunkPosition(spec.x,spec.y,spec.chunkSize);
+    const resource=factory.build({...spec,worldData,worldX:chunkPosition.x,worldZ:chunkPosition.z});
     resource.worldData=worldData;
     resource.worldDataKey=worldData?.key||resource.worldDataKey||null;
     positionTerrainChunk(resource);
@@ -640,7 +642,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   function terrainMeshMetrics(){
     let meshResourceCount=0,activeMeshCount=0,preparedMeshCount=0,cachedMeshCount=0;
     let meshInstanceCount=0,vertices=0,triangles=0;
-    let presentationMeshInstanceCount=0,presentationEntityCount=0,buildingPresentationCount=0,propPresentationCount=0;
+    let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,propPresentationCount=0;
+    let staticBatchCount=0,staticBatchSourcePrimitiveCount=0,instancedGroupCount=0,instancedObjectCount=0;
+    let optimizedPresentationDrawCalls=0,unoptimizedPresentationDrawCalls=0,savedDrawCalls=0;
+    let frustumCulledResourceCount=0,hardwareInstancedResourceCount=0,batchedResourceCount=0;
     let roadCellCount=0,waterCellCount=0,bridgeCellCount=0,terrainTypeCount=0;
     let seedDerivedPresentation=true,hardCodedSampleGeometry=false;
     const materialNames=new Set();
@@ -655,6 +660,17 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       triangles+=Number(resource.triangleCount||0);
       presentationMeshInstanceCount+=Number(resource.presentationMeshInstanceCount||0);
       presentationEntityCount+=Number(resource.presentationEntityCount||0);
+      sourcePresentationEntityCount+=Number(resource.sourcePresentationEntityCount||0);
+      staticBatchCount+=Number(resource.staticBatchCount||0);
+      staticBatchSourcePrimitiveCount+=Number(resource.staticBatchSourcePrimitiveCount||0);
+      instancedGroupCount+=Number(resource.instancedGroupCount||0);
+      instancedObjectCount+=Number(resource.instancedObjectCount||0);
+      optimizedPresentationDrawCalls+=Number(resource.optimizedPresentationDrawCalls||0);
+      unoptimizedPresentationDrawCalls+=Number(resource.unoptimizedPresentationDrawCalls||0);
+      savedDrawCalls+=Number(resource.savedDrawCalls||0);
+      if(resource.frustumCulling===true)frustumCulledResourceCount++;
+      if(resource.hardwareInstancing===true)hardwareInstancedResourceCount++;
+      if(resource.chunkLocalStaticBatching===true)batchedResourceCount++;
       buildingPresentationCount+=Number(resource.buildingPresentationCount||0);
       propPresentationCount+=Number(resource.propPresentationCount||0);
       roadCellCount+=Number(resource.roadCellCount||0);
@@ -671,7 +687,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       meshResourceCount,activeMeshCount,preparedMeshCount,cachedMeshCount,
       meshInstanceCount,vertices,triangles,
       materialCount:materialNames.size,
-      presentationMeshInstanceCount,presentationEntityCount,
+      presentationMeshInstanceCount,presentationEntityCount,sourcePresentationEntityCount,
+      staticBatchCount,staticBatchSourcePrimitiveCount,instancedGroupCount,instancedObjectCount,
+      optimizedPresentationDrawCalls,unoptimizedPresentationDrawCalls,savedDrawCalls,
+      drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
+      frustumCulledResourceCount,hardwareInstancedResourceCount,batchedResourceCount,
       buildingPresentationCount,propPresentationCount,
       roadCellCount,waterCellCount,bridgeCellCount,terrainTypeCount,
       seedDerivedPresentation,
@@ -680,6 +700,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       generator:terrainChunkMeshFactory?.stats?.()||null,
       worldData:window.PlayCanvasChunkWorldData?.stats?.()||null,
       oneEntityPerTile:false,
+      chunkLocalStaticBatching:true,
+      hardwareInstancing:true,
+      frustumCulling:true,
       completeChunkMeshes:true,
       completeChunkWorldData:Boolean(window.PlayCanvasChunkWorldData),
       simulationAuthorityPreserved:true
