@@ -67,6 +67,15 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     const n=parseInt(match[1],16);
     return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255,1];
   }
+  function appendColor32(target,color,count=1){
+    const rgba=[
+      Math.round(clamp(Number(color?.[0]??0),0,1)*255),
+      Math.round(clamp(Number(color?.[1]??0),0,1)*255),
+      Math.round(clamp(Number(color?.[2]??0),0,1)*255),
+      Math.round(clamp(Number(color?.[3]??1),0,1)*255)
+    ];
+    for(let i=0;i<count;i++)target.push(...rgba);
+  }
   function terrainPriority(type){
     const t=String(type||"");
     if(t==="bridge")return 100;
@@ -180,7 +189,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     const seed=String(seedProvider()||"");
     const baseX=BigInt(Math.trunc(Number(spec.x)||0))*BigInt(size);
     const baseZ=BigInt(Math.trunc(Number(spec.y)||0))*BigInt(size);
-    const positions=[],normals=[],colors=[],indices=[];
+    const positions=[],normals=[],colors32=[],indices=[];
 
     for(let bz=0;bz<segments;bz++){
       for(let bx=0;bx<segments;bx++){
@@ -195,17 +204,20 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
         const base=positions.length/3;
         positions.push(x0,0.05,z0, x1,0.05,z0, x0,0.05,z1, x1,0.05,z1);
         normals.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
-        colors.push(...color,...color,...color,...color);
+        appendColor32(colors32,color,4);
         indices.push(base,base+2,base+1, base+1,base+2,base+3);
       }
     }
 
-    const geometry=new pc.Geometry();
-    geometry.positions=positions;
-    geometry.normals=normals;
-    geometry.colors=colors;
-    geometry.indices=indices;
-    const mesh=pc.Mesh.fromGeometry(device,geometry);
+    // Use the explicit Mesh stream API for vertex colors. setColors32 stores
+    // deterministic 8-bit RGBA values and PlayCanvas normalizes them for the
+    // StandardMaterial diffuseVertexColor shader path.
+    const mesh=new pc.Mesh(device);
+    mesh.setPositions(positions);
+    mesh.setNormals(normals);
+    mesh.setColors32(colors32);
+    mesh.setIndices(indices);
+    mesh.update();
     const entity=new pc.Entity("TerrainChunkMesh_"+spec.x+"_"+spec.y);
     entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
     const meshInstance=new pc.MeshInstance(mesh,material,entity);
