@@ -19,6 +19,7 @@ function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>{}}={}){
   if(!pc||!device||!parent||!material)throw new Error("PlayCanvasTerrainChunkMesh requires pc/device/parent/material");
   material.vertexColors=true;
+  material.diffuseVertexColor=true;
   material.diffuse.set(1,1,1);
   material.gloss=0.06;
   material.metalness=0;
@@ -170,7 +171,9 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
   function build(spec){
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
-    const segments=Math.min(16,size);
+    // Eight flat presentation blocks per axis keep default 16×16 chunks readable
+    // while avoiding a 1,024-vertex terrain build for every cached chunk.
+    const segments=Math.min(8,size);
     const step=size/segments;
     const metersPerTile=2;
     const half=size*metersPerTile/2;
