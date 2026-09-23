@@ -83,6 +83,7 @@ SCENARIOS = {
     "wp-s003-006",
     "wp-s003-006-003",
     "wp-s003-006-004",
+    "wp-s003-006-005",
     "playcanvas-root-cutover",
 }
 
@@ -118,6 +119,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006": 7,
     "wp-s003-006-003": 7,
     "wp-s003-006-004": 9,
+    "wp-s003-006-005": 7,
     "playcanvas-root-cutover": 3,
 }
 
@@ -704,7 +706,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # glTF/material proof is readable instead of being lost inside an ultra-wide
         # evidence canvas. Camera/world coordinates remain independently validated.
         driver.set_window_size(1280, 800)
-    if scenario in {"wp-s003-006-003", "wp-s003-006-004"}:
+    if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
     if scenario == "wp-s003-005-002":
@@ -730,12 +732,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=True
                 )
-            if scenario in {"wp-s003-006-003", "wp-s003-006-004"}:
+            if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
                 )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -805,6 +807,21 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               nav.persistentSceneGraph === true &&
                               Number(nav.fullSceneRebuilds || 0) === 0 &&
                               Number(nav.redundantStateCallbacks || 0) === 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-006-005' || (() => {
+                            const preload=renderer?.terrainPreload || {};
+                            const chunks=renderer?.terrainChunks || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              Number(chunks.visibleChunkCount || 0) > 0 &&
+                              Number(preload.Prepared || 0) > 0 &&
+                              Number(preload.queueDepth || 0) === 0 &&
+                              chunks.chunkLocalStaticBatching === true &&
+                              chunks.hardwareInstancing === true &&
+                              chunks.frustumCulling === true &&
+                              Number(chunks.staticBatchCount || 0) > 0 &&
+                              Number(chunks.instancedObjectCount || 0) > 0
                             );
                           })())
                         );
@@ -1681,6 +1698,69 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver, radius=1, cache=256, directional=True, background=False
         )
         return _keyboard_pan_tiles(driver, -32, 0)
+    if scenario == "wp-s003-006-005":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-006-005 requires seven evidence frames")
+        runtimes=[frame.get("runtime",{}) for frame in frames[:7]]
+        builds=[runtime.get("currentBuild",{}) for runtime in runtimes]
+        gpus=[(build.get("gpuRenderer") or {}) for build in builds]
+        chunks=[(gpu.get("terrainChunks") or {}) for gpu in gpus]
+        preloads=[(gpu.get("terrainPreload") or {}) for gpu in gpus]
+        perf=[(gpu.get("performance") or {}) for gpu in gpus]
+        chars=[(gpu.get("characterPresentation") or {}) for gpu in gpus]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        cameras=[build.get("cameraCoordinate") for build in builds]
+        expected=("(0,0)","(16,0)","(32,0)","(64,0)","(32,0)","(0,0)","(0,0)")
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Culling/batching evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Culling/batching evidence changed protagonist authority: {protagonists}")
+        if tuple(cameras)!=expected:
+            raise RuntimeError(f"Culling/batching camera path mismatch: {cameras}")
+        max_saved=0
+        max_instanced=0
+        max_batched=0
+        max_culled=0
+        for index,(gpu,chunk,preload,frame_perf,char) in enumerate(zip(gpus,chunks,preloads,perf,chars),start=1):
+            if gpu.get("engine")!="PlayCanvas" or not gpu.get("ready"):
+                raise RuntimeError(f"PlayCanvas renderer missing in frame {index}: {gpu}")
+            if chunk.get("chunkLocalStaticBatching") is not True or chunk.get("hardwareInstancing") is not True or chunk.get("frustumCulling") is not True:
+                raise RuntimeError(f"3D optimization flags missing in frame {index}: {chunk}")
+            if int(preload.get("queueDepth") or 0)!=0:
+                raise RuntimeError(f"Chunk preparation queue not settled in frame {index}: {preload}")
+            if int(chunk.get("activeMeshCount") or 0)<=0 or int(chunk.get("preparedMeshCount") or 0)<=0:
+                raise RuntimeError(f"Chunk-local activation/preparation missing in frame {index}: {chunk}")
+            if int(chunk.get("cullEnabledMeshInstanceCount") or 0)<=0:
+                raise RuntimeError(f"Frustum-cullable mesh instances missing in frame {index}: {chunk}")
+            if int(chunk.get("optimizedPresentationDrawCalls") or 0)>int(chunk.get("unoptimizedPresentationDrawCalls") or 0):
+                raise RuntimeError(f"Optimization increased presentation draw-call estimate in frame {index}: {chunk}")
+            if int(chunk.get("presentationEntityCount") or 0)>int(chunk.get("sourcePresentationEntityCount") or 0):
+                raise RuntimeError(f"Optimization increased static presentation entity count in frame {index}: {chunk}")
+            if int(preload.get("visibleAssetLoads") or 0)!=0 or int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleGltfParses") or 0)!=0:
+                raise RuntimeError(f"Visible navigation performed asset/decode/parse work in frame {index}: {preload}")
+            if float(frame_perf.get("frameMs") or 0)<0 or int(frame_perf.get("triangles") or 0)<0 or int(frame_perf.get("drawCalls") or 0)<0:
+                raise RuntimeError(f"Invalid performance telemetry in frame {index}: {frame_perf}")
+            if char.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Dynamic character path lost Simulation authority in frame {index}: {char}")
+            max_saved=max(max_saved,int(chunk.get("savedDrawCalls") or 0))
+            max_instanced=max(max_instanced,int(chunk.get("instancedObjectCount") or 0))
+            max_batched=max(max_batched,int(chunk.get("staticBatchSourcePrimitiveCount") or 0))
+            max_culled=max(max_culled,int(chunk.get("culledMeshInstanceCount") or 0))
+        if max_saved<=0:
+            raise RuntimeError(f"No measurable draw-call reduction was recorded: {chunks}")
+        if max_instanced<=0:
+            raise RuntimeError(f"No repeated world objects used hardware instancing: {chunks}")
+        if max_batched<=0:
+            raise RuntimeError(f"No static source primitives were chunk-batched: {chunks}")
+        if max_culled<=0:
+            raise RuntimeError(f"No active mesh instances were observed as frustum culled: {chunks}")
+        if int(chunks[5].get("savedDrawCalls") or 0)<=0:
+            raise RuntimeError(f"Origin revisit lost optimized presentation: {chunks[5]}")
+        if int(preloads[5].get("evictions") or 0)>int(preloads[0].get("evictions") or 0):
+            raise RuntimeError(f"Bounded revisit unexpectedly evicted retained geometry: origin={preloads[0]}, return={preloads[5]}")
+        return
+
     if scenario == "wp-s003-006-004":
         if frame_index == 0:
             _set_terrain_preload_settings(driver, radius=1, cache=256, directional=True, background=True)
@@ -1700,6 +1780,21 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 7:
             return _set_camera_zoom_and_render(driver, 0.75)
         return _set_camera_zoom_and_render(driver, 1.0)
+    if scenario == "wp-s003-006-005":
+        if frame_index == 0:
+            _set_terrain_preload_settings(driver, radius=1, cache=256, directional=True, background=True)
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 1:
+            return _set_camera_center_and_render(driver, 16, 0)
+        if frame_index == 2:
+            return _set_camera_center_and_render(driver, 32, 0)
+        if frame_index == 3:
+            return _set_camera_center_and_render(driver, 64, 0)
+        if frame_index == 4:
+            return _set_camera_center_and_render(driver, 32, 0)
+        if frame_index == 5:
+            return _set_camera_center_and_render(driver, 0, 0)
+        return _set_camera_zoom_and_render(driver, 0.75)
     if scenario == "wp-s003-006":
         if frame_index == 0:
             _set_terrain_preload_settings(driver, radius=2, cache=256, directional=True, background=True)
@@ -3702,12 +3797,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
