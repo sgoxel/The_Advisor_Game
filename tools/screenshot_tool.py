@@ -86,6 +86,7 @@ SCENARIOS = {
     "wp-s003-006-005",
     "wp-s003-007-001",
     "wp-s003-008-001",
+    "wp-s004-001",
     "playcanvas-root-cutover",
 }
 
@@ -124,6 +125,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-005": 7,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
+    "wp-s004-001": 3,
     "playcanvas-root-cutover": 3,
 }
 
@@ -315,6 +317,17 @@ return (() => {
           };
         })(),
         responsiveControlDeck: window.ResponsiveControlDeck?.snapshot?.() || null,
+        residentRoster: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            const now=window.GameTime?.getNow?.();
+            return campaign&&window.ResidentRoster?.proof
+              ? window.ResidentRoster.proof(campaign.seed,now)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
@@ -1058,6 +1071,36 @@ def _touch_drag_canvas(driver, dx: int, dy: int) -> str:
     )
     driver.execute_cdp_cmd("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
     return f"touch-drag:{dx},{dy}"
+
+
+def _show_resident_roster_proof(driver, position: str = "top") -> str:
+    result = driver.execute_script(
+        """
+        const position=arguments[0];
+        const section=document.querySelector('#developmentDetails');
+        const proof=document.querySelector('#residentRosterProof');
+        const scroll=document.querySelector('#residentRosterScroll');
+        if(!section||!proof||!scroll)return null;
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        proof.open=true;
+        window.AppUI?.refreshResidentRoster?.();
+        proof.scrollIntoView({block:'start'});
+        scroll.scrollTop=position==='bottom'?scroll.scrollHeight:0;
+        return {
+          rows:document.querySelectorAll('#residentRosterRows tr').length,
+          open:proof.open,
+          position,
+          scrollTop:Number(scroll.scrollTop||0),
+          scrollHeight:Number(scroll.scrollHeight||0),
+          clientHeight:Number(scroll.clientHeight||0)
+        };
+        """,
+        position,
+    )
+    if not isinstance(result, dict) or int(result.get("rows") or 0) != 12:
+        raise RuntimeError(f"Resident roster proof view did not expose 12 rows: {result}")
+    return f"resident-roster:{position}:rows={result['rows']}"
 
 
 def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
@@ -2077,6 +2120,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             """)
             return "landscape:keyboard-interactions"
         return "responsive:no-op"
+    if scenario == "wp-s004-001":
+        if frame_index == 0:
+            return _show_resident_roster_proof(driver, "top")
+        if frame_index == 1:
+            return _show_resident_roster_proof(driver, "bottom")
+        return _show_resident_roster_proof(driver, "top")
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2111,6 +2160,51 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s004-001":
+        if len(frames) < 3:
+            raise RuntimeError("wp-s004-001 requires three evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:3]]
+        proofs=[build.get("residentRoster") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Resident roster evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Resident roster evidence changed Protagonist authority: {protagonists}")
+        static_rosters=[]
+        for index,proof in enumerate(proofs,start=1):
+            if proof.get("error"):
+                raise RuntimeError(f"Resident roster proof errored in frame {index}: {proof}")
+            required={
+                "pass":True,"residentCount":12,"requiredFieldsPass":True,
+                "uniqueIdsPass":True,"namesPass":True,"birthplacePass":True,
+                "deterministic":True,"identityStableAcrossTime":True,
+                "ageDerivedPass":True,"agesAdvanceOneYear":True,
+                "protagonistSeparate":True,"foundationOnly":True,
+                "randomnessSource":"PRNG.foundationUint32",
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Resident roster {key} mismatch in frame {index}: {proof}")
+            residents=proof.get("residents") or []
+            if len(residents)!=12:
+                raise RuntimeError(f"Resident roster row count mismatch in frame {index}: {residents}")
+            ids=[resident.get("id") for resident in residents]
+            if len(set(ids))!=12:
+                raise RuntimeError(f"Resident IDs are not unique in frame {index}: {ids}")
+            for resident in residents:
+                if not all(resident.get(key) not in (None,"") for key in ("id","name","gender","birthDate","birthplace")):
+                    raise RuntimeError(f"Resident identity field missing in frame {index}: {resident}")
+                if not isinstance(resident.get("age"),int) or resident.get("age")<0:
+                    raise RuntimeError(f"Resident age invalid in frame {index}: {resident}")
+            static_rosters.append([
+                {key:resident.get(key) for key in ("id","name","gender","birthDate","birthplace","birthplaceCenter")}
+                for resident in residents
+            ])
+        if len({json.dumps(item,sort_keys=True) for item in static_rosters})!=1:
+            raise RuntimeError(f"Same-SEED identity roster changed across evidence frames: {static_rosters}")
+        return
+
     if scenario == "wp-s003-008-001":
         if len(frames) < 16:
             raise RuntimeError("wp-s003-008-001 requires sixteen evidence frames")
@@ -4071,12 +4165,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

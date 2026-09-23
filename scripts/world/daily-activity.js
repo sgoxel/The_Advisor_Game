@@ -3,8 +3,12 @@
 
 const RESIDENT_NAMES=Object.freeze([
   "Alda","Bram","Celia","Dren","Edda","Fenn",
-  "Garr","Hira","Ivo","Jessa","Kale","Lysa"
+  "Garr","Hira","Ivo","Jessa","Kale","Lysa",
+  "Mara","Neri","Oren","Pella","Quin","Rhea",
+  "Soren","Tala","Ulric","Vela","Wren","Yara"
 ]);
+const RESIDENT_BIRTH_YEAR_MIN=1056;
+const RESIDENT_BIRTH_YEAR_SPAN=52;
 const PROFESSIONS=Object.freeze([
   Object.freeze({profession:"farmer",workFunction:"farm",idealStart:7,afterWork:18,homeKind:"cabin"}),
   Object.freeze({profession:"smith",workFunction:"craft",idealStart:8,afterWork:17,homeKind:"house"}),
@@ -16,6 +20,47 @@ const PROFESSIONS=Object.freeze([
 const cache=new Map();
 
 function pad2(value){return String(value).padStart(2,"0")}
+function identityName(seed,index){
+  const offset=Number(PRNG.foundationUint32(seed,"resident-roster:name-offset"))%RESIDENT_NAMES.length;
+  return RESIDENT_NAMES[(offset+index)%RESIDENT_NAMES.length];
+}
+function identityGender(seed,index){
+  return Number(PRNG.foundationUint32(seed,"resident-roster:gender:"+index))%2===0?"female":"male";
+}
+function identityBirthDate(seed,index){
+  const year=RESIDENT_BIRTH_YEAR_MIN+
+    Number(PRNG.foundationUint32(seed,"resident-roster:birth-year:"+index))%RESIDENT_BIRTH_YEAR_SPAN;
+  const month=1+Number(PRNG.foundationUint32(seed,"resident-roster:birth-month:"+index))%12;
+  const day=1+Number(PRNG.foundationUint32(seed,"resident-roster:birth-day:"+index))%28;
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+function identityBirthplace(seed){
+  const plan=StartingVillage.plan(seed);
+  return Object.freeze({
+    name:String(plan.name||"Starting Village"),
+    center:Object.freeze({x:String(plan.center.x),y:String(plan.center.y)})
+  });
+}
+function ageAtBirthDate(birthDate,when){
+  const current=normalizeTimestamp(when);
+  const match=/^(\d{4,})-(\d{2})-(\d{2})$/.exec(String(birthDate||""));
+  if(!current||!match)return null;
+  const birthYear=Number(match[1]),birthMonth=Number(match[2]),birthDay=Number(match[3]);
+  let age=current.year-birthYear;
+  if(current.month<birthMonth||(current.month===birthMonth&&current.day<birthDay))age--;
+  return age;
+}
+function identityForIndex(seed,index){
+  const birthplace=identityBirthplace(seed);
+  return Object.freeze({
+    id:`R${String(index+1).padStart(2,"0")}`,
+    name:identityName(seed,index),
+    gender:identityGender(seed,index),
+    birthDate:identityBirthDate(seed,index),
+    birthplace:birthplace.name,
+    birthplaceCenter:birthplace.center
+  });
+}
 function normalizeHour(value){
   const n=Number(value);
   if(!Number.isFinite(n))return 0;
@@ -223,6 +268,7 @@ function schedulePattern(seed,resident){
 }
 
 function buildResident(seed,index){
+  const identity=identityForIndex(seed,index);
   const professionConfig=PROFESSIONS[index % PROFESSIONS.length];
   const home=homeForIndex(seed,index);
   const work=workplaceForIndex(seed,index);
@@ -231,8 +277,12 @@ function buildResident(seed,index){
   const socialTarget=socialLot ? accessTargetFromLot(socialLot) : work.workplaceTarget;
   const socialBuildingId=socialLot ? socialLot.id : work.workplaceId;
   const resident=Object.freeze({
-    id:`R${String(index+1).padStart(2,"0")}`,
-    name:RESIDENT_NAMES[index % RESIDENT_NAMES.length],
+    id:identity.id,
+    name:identity.name,
+    gender:identity.gender,
+    birthDate:identity.birthDate,
+    birthplace:identity.birthplace,
+    birthplaceCenter:identity.birthplaceCenter,
     profession:professionConfig.profession,
     professionConfig,
     homePlotId:home.homePlotId,
@@ -294,6 +344,77 @@ function build(seedValue){
   return frozen;
 }
 
+function residentIdentityView(seedValue,when){
+  const seed=String(seedValue==null?"":seedValue);
+  if(!seed)return Object.freeze([]);
+  const timestamp=when==null?(window.GameTime?.getTimestampMs?.()??null):when;
+  return Object.freeze(build(seed).map(resident=>Object.freeze({
+    id:resident.id,
+    name:resident.name,
+    gender:resident.gender,
+    birthDate:resident.birthDate,
+    birthplace:resident.birthplace,
+    birthplaceCenter:resident.birthplaceCenter,
+    age:ageAtBirthDate(resident.birthDate,timestamp)
+  })));
+}
+function identityOnly(resident){
+  return Object.freeze({
+    id:resident.id,
+    name:resident.name,
+    gender:resident.gender,
+    birthDate:resident.birthDate,
+    birthplace:resident.birthplace,
+    birthplaceCenter:resident.birthplaceCenter
+  });
+}
+function residentRosterProof(seedValue,when){
+  const seed=String(seedValue==null?"":seedValue);
+  if(!seed)return Object.freeze({pass:false,residentCount:0,residents:Object.freeze([])});
+  const current=normalizeTimestamp(when==null?(window.GameTime?.getTimestampMs?.()??null):when);
+  const firstStatic=build(seed).map(identityOnly);
+  const freshStatic=Array.from({length:12},(_,index)=>identityForIndex(seed,index));
+  const currentViews=residentIdentityView(seed,current);
+  const nextYear=current?Object.freeze({
+    year:current.year+1,month:current.month,day:current.day,
+    hour:current.hour,minute:current.minute,second:current.second
+  }):null;
+  const nextYearViews=residentIdentityView(seed,nextYear);
+  const ids=currentViews.map(item=>item.id);
+  const village=StartingVillage.plan(seed);
+  const requiredFieldsPass=currentViews.length===12&&currentViews.every(item=>
+    /^R\d{2}$/.test(item.id)&&Boolean(item.name)&&
+    (item.gender==="female"||item.gender==="male")&&
+    /^\d{4,}-\d{2}-\d{2}$/.test(item.birthDate)&&Boolean(item.birthplace)&&
+    Number.isInteger(item.age)&&item.age>=0
+  );
+  const birthplacePass=currentViews.every(item=>
+    item.birthplace===village.name&&
+    item.birthplaceCenter?.x===String(village.center.x)&&
+    item.birthplaceCenter?.y===String(village.center.y)
+  );
+  const deterministic=JSON.stringify(firstStatic)===JSON.stringify(freshStatic);
+  const identityStableAcrossTime=currentViews.every((item,index)=>
+    JSON.stringify(identityOnly(item))===JSON.stringify(identityOnly(nextYearViews[index]))
+  );
+  const ageDerivedPass=currentViews.every(item=>item.age===ageAtBirthDate(item.birthDate,current));
+  const agesAdvanceOneYear=currentViews.every((item,index)=>nextYearViews[index]?.age===item.age+1);
+  const uniqueIds=new Set(ids).size===12;
+  const namesPass=currentViews.every(item=>item.name.trim().length>0);
+  const protagonistSeparate=!ids.includes("protagonist")&&!ids.includes("PROTAGONIST");
+  const pass=currentViews.length===12&&requiredFieldsPass&&uniqueIds&&namesPass&&
+    birthplacePass&&deterministic&&identityStableAcrossTime&&ageDerivedPass&&
+    agesAdvanceOneYear&&protagonistSeparate;
+  return Object.freeze({
+    pass,residentCount:currentViews.length,requiredFieldsPass,uniqueIdsPass:uniqueIds,
+    namesPass,birthplacePass,deterministic,identityStableAcrossTime,ageDerivedPass,
+    agesAdvanceOneYear,protagonistSeparate,foundationOnly:true,
+    randomnessSource:"PRNG.foundationUint32",
+    fantasyDate:current?Object.freeze({year:current.year,month:current.month,day:current.day}):null,
+    residents:currentViews
+  });
+}
+
 function resolveActionTarget(seedValue,residentValue,when){
   const seed=String(seedValue==null?"":seedValue);
   const roster=build(seed);
@@ -350,10 +471,12 @@ window.ActionTargets=Object.freeze({
   proof
 });
 window.ResidentRoster=Object.freeze({
-  build,
-  residents:build,
-  resolve:resolveActionTarget,
-  proof
+  build:residentIdentityView,
+  residents:residentIdentityView,
+  identities:residentIdentityView,
+  ageAt:ageAtBirthDate,
+  proof:residentRosterProof,
+  randomnessSource:"PRNG.foundationUint32"
 });
 window.StartingVillagePopulation=Object.freeze({
   build,
@@ -361,6 +484,8 @@ window.StartingVillagePopulation=Object.freeze({
   resolve:resolveActionTarget,
   proof,
   roster:build,
+  identityRoster:residentIdentityView,
+  residentRosterProof,
   dailyActivity:api
 });
 window.VillagePopulation=window.StartingVillagePopulation;

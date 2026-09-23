@@ -564,6 +564,30 @@
     </div>
   </details>
 
+  <details id="residentRosterProof">
+    <summary>WP-S004-001 Deterministic Starting Village Resident Roster</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Residents</span><strong id="residentRosterCount">—</strong></div>
+        <div><span>Campaign SEED</span><strong id="residentRosterSeed">—</strong></div>
+        <div><span>Fantasy Date</span><strong id="residentRosterTime">—</strong></div>
+        <div><span>Identity RNG</span><strong>Foundation only</strong></div>
+      </div>
+      <div class="resident-roster-scroll" id="residentRosterScroll">
+        <table class="resident-roster-table" aria-label="Starting Village resident roster">
+          <thead><tr><th>ID</th><th>Name</th><th>Gender</th><th>Birth date</th><th>Birthplace</th><th>Age</th></tr></thead>
+          <tbody id="residentRosterRows"></tbody>
+        </table>
+      </div>
+      <div class="check"><span>Exactly 12 residents expose every required identity field</span><b id="vResidentFields">WAITING</b></div>
+      <div class="check"><span>Resident IDs are unique and the Protagonist remains separate</span><b id="vResidentIds">WAITING</b></div>
+      <div class="check"><span>Same Campaign SEED reproduces the identical identity roster</span><b id="vResidentDeterministic">WAITING</b></div>
+      <div class="check"><span>Fantasy-time changes leave identity unchanged</span><b id="vResidentTimeIdentity">WAITING</b></div>
+      <div class="check"><span>Age derives from birth date + authoritative fantasy date</span><b id="vResidentAge">WAITING</b></div>
+      <div class="check"><span>Every birthplace resolves to the generated Starting Village</span><b id="vResidentBirthplace">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">

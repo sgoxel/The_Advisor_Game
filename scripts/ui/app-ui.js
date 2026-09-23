@@ -34,6 +34,8 @@ const ids=[
   "geoContinent","geoCountry","geoRegion","geoCity","geoDistrict","geoVillage","geoAvenue","geoStreet",
   "geoBiome","geoClimate","geoElevation","geoTerrain","nearestVillage","nearestVillageWalk",
   "vGeoDeterministic","vGeoTimeFree","vVillageSpacing","vTerrainGeography",
+  "residentRosterCount","residentRosterSeed","residentRosterTime","residentRosterRows","residentRosterScroll",
+  "vResidentFields","vResidentIds","vResidentDeterministic","vResidentTimeIdentity","vResidentAge","vResidentBirthplace",
   "gameplayPlaceholder","protagonistMarker","protagonistSprite","protagonistFallback","protagonistLocation","wp3Position","vOrigin","vCenter","vProtagonistSprite","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
@@ -538,6 +540,7 @@ const activeCameraKeys=new Set();
 let keyboardPanTimer=null;
 let keyboardInitialTimer=null;
 let pendingKeyboardSource=null;
+let lastResidentRosterDateKey="";
 
 function projectedCoverageHalfSpan(width,height,tileSize){
   const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
@@ -1542,6 +1545,47 @@ function renderRendererProof(){
   );
 }
 
+function residentDateKey(time){
+  return time?`${time.year}-${String(time.month).padStart(2,"0")}-${String(time.day).padStart(2,"0")}`:"";
+}
+function renderResidentRosterProof(timeOverride=null){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    e.residentRosterCount.textContent="—";
+    e.residentRosterSeed.textContent="—";
+    e.residentRosterTime.textContent="—";
+    e.residentRosterRows.replaceChildren();
+    ["vResidentFields","vResidentIds","vResidentDeterministic","vResidentTimeIdentity","vResidentAge","vResidentBirthplace"]
+      .forEach(id=>setCheck(e[id],false,"WAITING"));
+    lastResidentRosterDateKey="";
+    return null;
+  }
+  const time=timeOverride||GameTime.getNow();
+  const proof=ResidentRoster.proof(campaign.seed,time);
+  e.residentRosterCount.textContent=String(proof.residentCount);
+  e.residentRosterSeed.textContent=campaign.seed;
+  e.residentRosterTime.textContent=GameTime.formatDate(time);
+  const fragment=document.createDocumentFragment();
+  for(const resident of proof.residents){
+    const row=document.createElement("tr");
+    for(const value of [resident.id,resident.name,resident.gender,resident.birthDate,resident.birthplace,String(resident.age)]){
+      const cell=document.createElement("td");
+      cell.textContent=value;
+      row.appendChild(cell);
+    }
+    fragment.appendChild(row);
+  }
+  e.residentRosterRows.replaceChildren(fragment);
+  setCheck(e.vResidentFields,proof.residentCount===12&&proof.requiredFieldsPass,"FAIL");
+  setCheck(e.vResidentIds,proof.uniqueIdsPass&&proof.protagonistSeparate,"FAIL");
+  setCheck(e.vResidentDeterministic,proof.deterministic&&proof.foundationOnly,"FAIL");
+  setCheck(e.vResidentTimeIdentity,proof.identityStableAcrossTime,"FAIL");
+  setCheck(e.vResidentAge,proof.ageDerivedPass&&proof.agesAdvanceOneYear,"FAIL");
+  setCheck(e.vResidentBirthplace,proof.birthplacePass,"FAIL");
+  lastResidentRosterDateKey=residentDateKey(time);
+  return proof;
+}
+
 function renderAdviceLog(){
   if(typeof window.AdvisorChannel?.renderAdvicePanel !== "function") return;
   const campaign=SeedSystem.getCampaign();
@@ -1565,6 +1609,7 @@ function renderStatic(){
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
+  renderResidentRosterProof();
   renderHousePlans();
   renderSpecialLots();
   renderWalkability();
@@ -1582,6 +1627,7 @@ function renderClock(){
   e.gameDate.textContent=date;e.gameTime.textContent=time;
   e.detailGameDate.textContent=date;e.detailGameTime.textContent=time;
   renderPRNG(fantasyTimestampMs);
+  if(residentDateKey(t)!==lastResidentRosterDateKey)renderResidentRosterProof(t);
 }
 function startClock(){
   if(clockTimer)clearInterval(clockTimer);
@@ -1681,6 +1727,11 @@ window.AppUI=Object.freeze({
   init,
   refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot()),
+  refreshResidentRoster:()=>renderResidentRosterProof(),
+  residentRosterSnapshot:()=>{
+    const campaign=SeedSystem.getCampaign();
+    return campaign?ResidentRoster.proof(campaign.seed,GameTime.getNow()):null;
+  },
   terrainCacheTelemetry:()=>Object.freeze({
     cachedRenderCount:terrainCachedRenderCount,
     fallbackRenderCount:terrainFallbackRenderCount,
