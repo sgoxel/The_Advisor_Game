@@ -17,9 +17,10 @@ driver=webdriver.Chrome(options=opts)
 
 def identity():
     return driver.execute_script("""
+      const s=window.RendererContract?.simulationSnapshot?.()||{};
       return {
-        seed:SeedSystem?.getCampaign?.()?.seed||null,
-        protagonist:document.querySelector('#protagonistLocation')?.textContent?.trim()||null,
+        seed:s.campaignSeed??SeedSystem?.getCampaign?.()?.seed??null,
+        protagonist:s.protagonist||null,
         timestamp:Number(GameTime?.getTimestampMs?.()||0)
       };
     """)
@@ -114,7 +115,7 @@ try:
             drawCalls:Number(r.performance?.drawCalls||0),
             frameMs:Number(r.performance?.frameMs||0),
             seed:SeedSystem?.getCampaign?.()?.seed||null,
-            protagonist:document.querySelector('#protagonistLocation')?.textContent?.trim()||null,
+            protagonist:r.simulationSnapshot?.protagonist||window.RendererContract?.simulationSnapshot?.()?.protagonist||null,
             cacheSignature:q.cacheSignature,
             terrainSignature:r.terrainChunks?.signature||null,
             worldPending:Number(world.pending||0),
@@ -146,7 +147,10 @@ try:
     wait.until(lambda d:d.execute_script("return RuntimeTextureQuality?.snapshot?.()?.qualityProfile==='high'"))
     driver.refresh()
     wait.until(lambda d:d.execute_script("return document.readyState") == "complete")
-    wait.until(lambda d:d.execute_script("return Boolean(window.RuntimeTextureQuality && window.GameRenderer?.snapshot?.()?.ready)"))
+    wait.until(lambda d:d.execute_script("""
+      const s=window.RendererContract?.simulationSnapshot?.()||{};
+      return Boolean(window.RuntimeTextureQuality && window.GameRenderer?.snapshot?.()?.ready && s.campaignActive && s.protagonist);
+    """))
     persisted=driver.execute_script("return RuntimeTextureQuality.snapshot()")
     after_reload=identity()
     if persisted.get("qualityProfile")!="high":
