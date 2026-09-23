@@ -42,7 +42,7 @@ const ASSETS=Object.freeze({
     static:true,
     instancingEligible:false,
     lod:Object.freeze({mode:"none"}),
-    boundsMeters:Object.freeze({x:6.6,y:4.7,z:5.6}),
+    boundsMeters:Object.freeze({x:6.8,y:4.8,z:5.6}),
     footprintMeters:Object.freeze({x:6,z:5}),
     pivot:"footprint-center-ground",
     collisionAuthority:"Simulation",
