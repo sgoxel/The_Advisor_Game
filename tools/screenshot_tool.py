@@ -696,6 +696,11 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
 
 
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
+    if scenario == "wp-s003-005":
+        # Use a representative desktop/tablet-landscape viewport so the prepared
+        # glTF/material proof is readable instead of being lost inside an ultra-wide
+        # evidence canvas. Camera/world coordinates remain independently validated.
+        driver.set_window_size(1280, 800)
     if scenario == "wp-s003-006-003":
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
