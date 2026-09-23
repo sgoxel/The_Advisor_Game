@@ -32,7 +32,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   </div>
   <div class="legend">
     <b>Runtime representatives</b>
-    <span>House 6×5 m · matching gable roof 6.6×5.6 m · 1.2×2.1 m door</span>
+    <span>House 6×5 m · matching gable roof 6.8×5.6 m · 1.2×2.1 m door</span>
     <span>Workbench 2.4 m · repeated tree mesh ×3 · terrain patch 8×8 m</span>
     <span>1 logical tile = 2 m · +Y up · world Y maps to +Z · Simulation remains authoritative</span>
   </div>
@@ -83,10 +83,10 @@ try{
 
   let activeView="overview";
   const views=Object.freeze({
-    overview:Object.freeze({target:[0,1,1],offset:[17,15,19],orthoHeight:12}),
-    building:Object.freeze({target:[-6,1.8,0],offset:[9,8.5,10],orthoHeight:7.2}),
-    props:Object.freeze({target:[6,1.5,2],offset:[10,8.5,10],orthoHeight:8.2}),
-    portrait:Object.freeze({target:[-5,1.7,0],offset:[9,9,10],orthoHeight:10.5})
+    overview:Object.freeze({target:[0,1,1],offset:[17,15,19],orthoHeight:11.5}),
+    building:Object.freeze({target:[-6,1.8,0],offset:[8,7.5,-9],orthoHeight:5.6}),
+    props:Object.freeze({target:[6,1.6,1.5],offset:[7,6.5,-8],orthoHeight:5.8}),
+    portrait:Object.freeze({target:[-6,1.8,0],offset:[8,8,-9],orthoHeight:7.8})
   });
   function setView(name){
     const view=views[name]||views.overview;
