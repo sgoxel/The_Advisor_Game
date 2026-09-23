@@ -1277,7 +1277,9 @@ def _show_resident_movement_proof(driver, frame_index: int) -> str:
             }
             const current=ResidentMovement.position(proof.residentId);
             Camera.setCenter(current.x,current.y);
+            Camera.setZoom(Math.min(1.5,Number(Camera.MAX_ZOOM||2)));
             await AppUI.refreshTerrain();
+            await AppUI.refreshResidentCharacters();
             AppUI.refreshResidentMovementProof();
             window.scrollTo(0,0);
             const finalProof=ResidentMovement.proofSnapshot();

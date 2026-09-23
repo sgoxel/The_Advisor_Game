@@ -108,6 +108,7 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     }));
   }
 
+  const movementProofResidentId=window.ResidentMovement?.proofSnapshot?.()?.residentId||null;
   for(const resident of roster){
     const activity=DailyActivity.resolveActionTarget(campaign.seed,resident,timestamp);
     const movement=window.ResidentMovement?.get?.(resident.id)||null;
@@ -130,8 +131,8 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
       textureUrl:characterTextureUrlForProfession(resident.profession),
       point:Object.freeze({x:authoritative.x,y:authoritative.y}),
       presentationOffset:presentation?.offset||Object.freeze({x:0,y:0}),
-      height:1.74,
-      elevation:0.03,
+      height:movementProofResidentId===resident.id?2.15:1.74,
+      elevation:movementProofResidentId===resident.id?0.05:0.03,
       flipX:(BigInt(resident.id.slice(1)||"0")&1n)===1n,
       frameIndex:0
     }));

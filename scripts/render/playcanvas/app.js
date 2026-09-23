@@ -573,7 +573,13 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     lastSnapshot=baseSnapshot();
     return lastSnapshot;
   }
-  function cutawayRequested(){return proofState==="inside"||proofState==="entering"||proofState==="behind";}
+  function movementProofCutawayRequested(){
+    const stage=window.ResidentMovement?.proofSnapshot?.()?.stage;
+    return stage==="door-entering"||stage==="inside-arrived"||stage==="door-leaving";
+  }
+  function cutawayRequested(){
+    return proofState==="inside"||proofState==="entering"||proofState==="behind"||movementProofCutawayRequested();
+  }
   function activeRoofGroups(){
     const groups=new Map();
     for(let i=roofEntities.length-1;i>=0;i--){
@@ -587,6 +593,17 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return groups;
   }
   function cutawayFocusPoint(){
+    const proofResidentId=window.ResidentMovement?.proofSnapshot?.()?.residentId;
+    const proofResident=proofResidentId
+      ?(lastCharacterState.instances||[]).find(item=>item.id==="resident:"+proofResidentId)
+      :null;
+    if(proofResident?.scene){
+      return {
+        x:Number(proofResident.scene.x||0),
+        z:Number(proofResident.scene.z||0),
+        buildingId:proofResident.buildingId?String(proofResident.buildingId):null
+      };
+    }
     const protagonist=(lastCharacterState.instances||[]).find(item=>item.id==="protagonist")||null;
     if(protagonist?.scene)return {x:Number(protagonist.scene.x||0),z:Number(protagonist.scene.z||0),buildingId:protagonist.buildingId?String(protagonist.buildingId):null};
     const point=characterScenePoint(lastModel?.center||{x:sceneAnchor?.x||"0",y:sceneAnchor?.y||"0"});
