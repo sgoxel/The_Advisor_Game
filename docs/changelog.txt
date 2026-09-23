@@ -677,3 +677,9 @@
 - Dedicated run 35873923328 passed the origin → moved region → return path without additional network loads or glTF parses; cache hits increased 16 → 24 → 32.
 - Fresh three-frame visual evidence was directly inspected after improving proof framing; visual score 8.1/10 PASS with no missing materials, clipping, projection, or layout defects.
 - Tested main implementation commit: 4adef19f05cd31be4c099daafb8f8a289090d989.
+2026-09-23 17:48 +03:00 | WP-S003-005-001 | Adaptive 3D Texture Quality + Mobile GPU Budget
+- Connected Low/Standard/High/Ultra quality profiles to the PlayCanvas renderer rather than leaving them limited to the legacy terrain texture cache.
+- Added profile-aware PlayCanvas world-asset cache limits (24/48/72/96), material texture caps (512/1024/2048/4096 px), anisotropy/filter policies, auxiliary/detail-map policy, quality-aware chunk signatures, renderer material metrics, and presentation-only refresh/invalidation.
+- Character sprites remain on a separate native 2D asset path; no authoritative Simulation state changes with graphics quality.
+- Dedicated comparison run 35876421600 passed on commit 0cfc3d8e78aee0620f58208d82f68d694913a7a6. Profile persistence and Simulation identity passed; no per-frame texture resize/transcode path is used.
+- Four fresh screenshots were directly inspected. VISUAL 8.1/10 PASS with no missing materials, corruption, clipping, projection failure, or obvious aliasing defect.
