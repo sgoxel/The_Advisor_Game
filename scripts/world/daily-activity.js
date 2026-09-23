@@ -106,6 +106,17 @@ function timestampKey(value){
   return `${stamp.year}-${pad2(stamp.month)}-${pad2(stamp.day)} ${pad2(stamp.hour)}:${pad2(stamp.minute)}:${pad2(stamp.second)}`;
 }
 
+function accessTargetFromLot(lot){
+  if(!lot)return Object.freeze({x:"0",y:"0"});
+  if(lot.access?.target){
+    return Object.freeze({x:String(lot.access.target.x),y:String(lot.access.target.y)});
+  }
+  if(lot.access){
+    return Object.freeze({x:String(lot.access.x),y:String(lot.access.y)});
+  }
+  return Object.freeze({x:String(lot.cx??0),y:String(lot.cy??0)});
+}
+
 function residentOrdinal(residentId){
   const match=/^R(\d+)$/.exec(String(residentId||""));
   return Math.max(0,(match?Number(match[1]):1)-1);
