@@ -79,6 +79,7 @@ SCENARIOS = {
     "wp-s003-004-002",
     "wp-s003-005-002",
     "wp-s003-006-002",
+    "playcanvas-root-cutover",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -109,6 +110,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-004-002": 8,
     "wp-s003-005-002": 4,
     "wp-s003-006-002": 8,
+    "playcanvas-root-cutover": 3,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -316,6 +318,14 @@ return (() => {
           terrainPreload: renderer.terrainPreload || null,
           interiorObjectPresentation: renderer.interiorObjectPresentation || null,
           characterProof: renderer.characterProof || null,
+          bootstrapMode: window.RendererBootstrap?.status?.().mode || null,
+          bootstrapLegacyAvailable: Boolean(window.RendererBootstrap?.status?.().legacyRendererAvailable),
+          pixiLoaded: Boolean(window.PIXI),
+          legacyGameRendererLoaded: Boolean(window.LegacyGameRenderer),
+          pixiScriptLoaded: Array.from(document.scripts).some(script => /pixi/i.test(script.src || "")),
+          legacyRendererScriptLoaded: Array.from(document.scripts).some(script => /game-renderer\.js(?:\?|$)/.test(script.src || "")),
+          locationSearch: location.search || "",
+          rendererParam: new URLSearchParams(location.search).get("renderer"),
         },
         terrainNaturalness: naturalness,
         startingVillage: (() => {
@@ -656,7 +666,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1232,6 +1242,14 @@ def _set_camera_center_and_render(driver, x: int, y: int) -> str:
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "playcanvas-root-cutover":
+        if frame_index == 1:
+            driver.set_window_size(844, 390)
+            return "root-cutover:phone-landscape"
+        if frame_index == 2:
+            driver.set_window_size(390, 844)
+            return "root-cutover:phone-portrait"
+        return "root-cutover:desktop-landscape"
     if scenario == "wp-s003-006-002":
         if frame_index == 0:
             return "preload:defaults"
@@ -1458,6 +1476,50 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "playcanvas-root-cutover":
+        if len(frames) < 3:
+            raise RuntimeError("playcanvas-root-cutover requires three evidence frames")
+        runtimes = [frame.get("runtime", {}) for frame in frames[:3]]
+        builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
+        gpus = [(item.get("gpuRenderer") or {}) for item in builds]
+
+        seeds = [item.get("campaignSeed") for item in builds]
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        cameras = [item.get("cameraCoordinate") for item in builds]
+        if len(set(seeds)) != 1 or not seeds[0]:
+            raise RuntimeError(f"Root PlayCanvas cutover changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists)) != 1 or not protagonists[0]:
+            raise RuntimeError(f"Root PlayCanvas cutover changed protagonist authority: {protagonists}")
+        if len(set(cameras)) != 1 or not cameras[0]:
+            raise RuntimeError(f"Root PlayCanvas cutover changed camera authority during responsive resize: {cameras}")
+
+        for index, gpu in enumerate(gpus, start=1):
+            if gpu.get("engine") != "PlayCanvas" or not str(gpu.get("engineVersion") or "").startswith("2."):
+                raise RuntimeError(f"Canonical root is not PlayCanvas Engine 2 in frame {index}: {gpu}")
+            if gpu.get("bootstrapMode") != "playcanvas":
+                raise RuntimeError(f"Canonical root bootstrap mode is not PlayCanvas in frame {index}: {gpu}")
+            if gpu.get("bootstrapLegacyAvailable") is not False:
+                raise RuntimeError(f"Legacy renderer availability leaked into frame {index}: {gpu}")
+            if gpu.get("pixiLoaded") or gpu.get("legacyGameRendererLoaded"):
+                raise RuntimeError(f"Legacy renderer globals are loaded in frame {index}: {gpu}")
+            if gpu.get("pixiScriptLoaded") or gpu.get("legacyRendererScriptLoaded"):
+                raise RuntimeError(f"Legacy renderer scripts are loaded in frame {index}: {gpu}")
+            if gpu.get("rendererParam") is not None or str(gpu.get("locationSearch") or "") not in {"", "?"}:
+                raise RuntimeError(f"Canonical root evidence unexpectedly uses a renderer/query compatibility path in frame {index}: {gpu}")
+            if not gpu.get("ready") or not gpu.get("gpu") or int(gpu.get("canvasCount") or 0) != 1:
+                raise RuntimeError(f"Canonical PlayCanvas root did not initialize one GPU canvas in frame {index}: {gpu}")
+            if gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"PlayCanvas root changed Simulation authority in frame {index}: {gpu}")
+
+        viewports = [runtime.get("viewport") or {} for runtime in runtimes]
+        if int(viewports[0].get("width") or 0) <= int(viewports[0].get("height") or 0):
+            raise RuntimeError(f"Root desktop evidence is not landscape: {viewports[0]}")
+        if int(viewports[1].get("width") or 0) <= int(viewports[1].get("height") or 0):
+            raise RuntimeError(f"Root phone landscape evidence invalid: {viewports[1]}")
+        if int(viewports[2].get("height") or 0) <= int(viewports[2].get("width") or 0):
+            raise RuntimeError(f"Root phone portrait evidence invalid: {viewports[2]}")
+        return
+
     if scenario == "wp-s003-006-002":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-006-002 requires eight evidence frames")
@@ -2738,7 +2800,7 @@ def take_screenshots(
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
         if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002"}:
-            browser_url += ("&" if "?" in browser_url else "?") + "renderer=playcanvas&gpu=webgl2"
+            browser_url += ("&" if "?" in browser_url else "?") + "gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
         try:
