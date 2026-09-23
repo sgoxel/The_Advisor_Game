@@ -76,6 +76,7 @@ SCENARIOS = {
     "playcanvas-foundation",
     "playcanvas-scene",
     "wp-s003-003",
+    "wp-s003-004-002",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -103,6 +104,7 @@ SCENARIO_MIN_SHOTS = {
     "playcanvas-foundation": 3,
     "playcanvas-scene": 6,
     "wp-s003-003": 3,
+    "wp-s003-004-002": 8,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -299,6 +301,7 @@ return (() => {
           textureCache: assets,
           terrainChunks: renderer.terrainChunks || null,
           interiorObjectPresentation: renderer.interiorObjectPresentation || null,
+          characterProof: renderer.characterProof || null,
         },
         terrainNaturalness: naturalness,
         startingVillage: (() => {
@@ -631,7 +634,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1085,7 +1088,54 @@ def _set_interior_object_proof_state(driver, state: str) -> str:
     return f"interior-object-proof-failed:{state}:{reason}"
 
 
+
+def _set_character_proof_state(driver, state: str) -> str:
+    result = driver.execute_script(
+        """
+        const state = arguments[0];
+        try {
+          const renderer = window.GameRenderer;
+          if (!renderer?.setCharacterProofState) {
+            return {ok:false, reason:'character-proof-api-missing'};
+          }
+          const snapshot = renderer.setCharacterProofState(state);
+          return {
+            ok:true,
+            proof:snapshot?.characterProof || null,
+            presentation:snapshot?.characterPresentation || null
+          };
+        } catch (error) {
+          return {ok:false, reason:String(error)};
+        }
+        """,
+        state,
+    )
+    if isinstance(result, dict) and result.get("ok"):
+        return f"character-proof:{state}"
+    reason = result.get("reason", "unavailable") if isinstance(result, dict) else "unexpected"
+    return f"character-proof-failed:{state}:{reason}"
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-004-002":
+        if frame_index == 0:
+            return _set_character_proof_state(driver, "open")
+        if frame_index == 1:
+            return _set_character_proof_state(driver, "front")
+        if frame_index == 2:
+            return _set_character_proof_state(driver, "behind")
+        if frame_index == 3:
+            return _set_character_proof_state(driver, "entering")
+        if frame_index == 4:
+            return _set_character_proof_state(driver, "inside")
+        if frame_index == 5:
+            _set_character_proof_state(driver, "open")
+            return _wheel_canvas(driver, -500)
+        if frame_index == 6:
+            driver.set_window_size(844, 390)
+            return _set_character_proof_state(driver, "open")
+        driver.set_window_size(390, 844)
+        return _set_character_proof_state(driver, "inside")
     if scenario == "wp-s003-003":
         if frame_index == 0:
             return _set_interior_object_proof_state(driver, "house")
@@ -1237,6 +1287,80 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-004-002":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-004-002 requires eight evidence frames")
+        runtimes = [frame.get("runtime", {}) for frame in frames[:8]]
+        builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
+        gpus = [(item.get("gpuRenderer") or {}) for item in builds]
+        presentations = [(gpu.get("characterPresentation") or {}) for gpu in gpus]
+        proofs = [(gpu.get("characterProof") or {}) for gpu in gpus]
+
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        if len(set(protagonists)) != 1 or not protagonists[0]:
+            raise RuntimeError(f"Character proof changed/missed protagonist authority: {protagonists}")
+
+        expected_states = ("open", "front", "behind", "entering", "inside", "open", "open", "inside")
+        for index, (presentation, proof, expected) in enumerate(zip(presentations, proofs, expected_states), start=1):
+            if not presentation.get("visibleProtagonist"):
+                raise RuntimeError(f"Protagonist billboard not visible in frame {index}: {presentation}")
+            active = int(presentation.get("activeCharacterCount") or 0)
+            simulated = int(presentation.get("simulatedCharacterCount") or 0)
+            prepared = int(presentation.get("preparedCharacterCount") or 0)
+            if active < 1 or simulated < active or prepared < 1:
+                raise RuntimeError(f"Character activation bounds invalid in frame {index}: {presentation}")
+            if simulated <= active:
+                raise RuntimeError(f"Off-screen characters are not demonstrably bounded in frame {index}: {presentation}")
+            if presentation.get("feetAnchored") is not True or presentation.get("billboardMode") != "vertical-yaw":
+                raise RuntimeError(f"Feet/billboard contract failed in frame {index}: {presentation}")
+            if presentation.get("depthTest") is not True or presentation.get("depthWrite") is not True:
+                raise RuntimeError(f"Character depth contract failed in frame {index}: {presentation}")
+            if int(presentation.get("sharedTextureCount") or 0) < 1 or int(presentation.get("sharedMaterialCount") or 0) < 1:
+                raise RuntimeError(f"Shared character asset/material path missing in frame {index}: {presentation}")
+
+            instances = presentation.get("instances") or []
+            protagonist = next((item for item in instances if item.get("id") == "protagonist"), None)
+            if not protagonist:
+                raise RuntimeError(f"Protagonist instance telemetry missing in frame {index}: {presentation}")
+            world = protagonist.get("world") or {}
+            if f"({world.get('x')},{world.get('y')})" != protagonists[index-1]:
+                raise RuntimeError(f"Billboard world coordinate diverged in frame {index}: {protagonist} vs {protagonists[index-1]}")
+            if abs(float(protagonist.get("height") or 0) - 1.82) > 0.02:
+                raise RuntimeError(f"Protagonist world-meter height invalid in frame {index}: {protagonist}")
+            if float(protagonist.get("feetY") or -1) < 0 or float(protagonist.get("feetY") or 9) > 0.25:
+                raise RuntimeError(f"Protagonist feet anchor invalid in frame {index}: {protagonist}")
+            if protagonist.get("depthTest") is not True or protagonist.get("depthWrite") is not True:
+                raise RuntimeError(f"Protagonist depth settings invalid in frame {index}: {protagonist}")
+            if not isinstance(protagonist.get("yawDegrees"), (int, float)):
+                raise RuntimeError(f"Protagonist billboard yaw telemetry missing in frame {index}: {protagonist}")
+
+            if not proof.get("active") or proof.get("state") != expected:
+                raise RuntimeError(f"Character proof state mismatch in frame {index}: {proof}")
+            if proof.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Character proof mutated Simulation authority in frame {index}: {proof}")
+            if proof.get("world") != protagonist.get("world") or proof.get("scene") != protagonist.get("scene"):
+                raise RuntimeError(f"Character proof is not anchored to actual protagonist instance in frame {index}: {proof}")
+
+        if proofs[1].get("occlusionExpected") != "in-front":
+            raise RuntimeError(f"Front-depth proof missing: {proofs[1]}")
+        if proofs[2].get("occlusionExpected") != "occluded":
+            raise RuntimeError(f"Behind-depth proof missing: {proofs[2]}")
+        if proofs[4].get("cutawayActive") is not True or proofs[7].get("cutawayActive") is not True:
+            raise RuntimeError(f"Interior cutaway proof missing: frame5={proofs[4]}, frame8={proofs[7]}")
+
+        zooms = [item.get("cameraZoom") for item in builds]
+        if zooms[5] == zooms[4]:
+            raise RuntimeError(f"Character zoom evidence did not change camera zoom: {zooms}")
+
+        viewports = [runtime.get("viewport") or {} for runtime in runtimes]
+        phone_landscape = viewports[6]
+        phone_portrait = viewports[7]
+        if int(phone_landscape.get("width") or 0) <= int(phone_landscape.get("height") or 0):
+            raise RuntimeError(f"Phone landscape evidence invalid: {phone_landscape}")
+        if int(phone_portrait.get("height") or 0) <= int(phone_portrait.get("width") or 0):
+            raise RuntimeError(f"Phone portrait evidence invalid: {phone_portrait}")
+        return
+
     if scenario == "wp-s003-003":
         if len(frames) < 3:
             raise RuntimeError("wp-s003-003 requires three evidence frames")
@@ -2243,7 +2367,7 @@ def take_screenshots(
 
     try:
         browser_url = normalize_target(target)
-        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
+        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
             browser_url += ("&" if "?" in browser_url else "?") + "renderer=playcanvas&gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
@@ -2269,7 +2393,7 @@ def take_screenshots(
 
             prep_action = prepare_current_build(driver, min(ready_timeout, 10.0), scenario) if auto_start else "auto-start-disabled"
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -2285,7 +2409,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
