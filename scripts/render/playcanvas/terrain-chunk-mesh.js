@@ -41,7 +41,7 @@ function create({pc,device,parent,material,seedProvider=()=>""}={}){
   function build(spec){
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
-    const segments=Math.min(8,size);
+    const segments=Math.min(4,size);
     const step=size/segments;
     const metersPerTile=2;
     const half=size*metersPerTile/2;
