@@ -43,6 +43,9 @@ const ids=[
   "movementProofBadge","movementProofBadgeStage","movementProofBadgeResident","movementProofBadgePosition",
   "residentMovementResident","residentMovementPosition","residentMovementTarget","residentMovementStatus","residentMovementRoute","residentMovementRows",
   "vResidentMovementContinuous","vResidentMovementDoors","vResidentMovementCollision","vResidentMovementSpeed","vResidentMovementDeterministic","vResidentMovementCamera","vResidentMovementCulling","vResidentMovementIsolation",
+  "residentActionRibbon","residentActionRibbonActor","residentActionRibbonState","residentActionRibbonProgress",
+  "residentActionActor","residentActionName","residentActionStatus","residentActionTarget","residentActionProgress","residentActionRows",
+  "vResidentActionRequired","vResidentActionReject","vResidentActionArrival","vResidentActionOffscreen","vResidentActionSchedule","vResidentActionGeneric","vResidentActionIsolation",
   "gameplayPlaceholder","protagonistMarker","protagonistSprite","protagonistFallback","protagonistLocation","wp3Position","vOrigin","vCenter","vProtagonistSprite","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
@@ -127,6 +130,7 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
       profession:resident.profession,
       activity:activity.action,
       activityLabel:activity.label,
+      actionExecution:window.ActionExecutor?.get?.("resident",resident.id)||null,
       buildingId:movement?.buildingId||activity.buildingId||null,
       textureUrl:characterTextureUrlForProfession(resident.profession),
       point:Object.freeze({x:authoritative.x,y:authoritative.y}),
@@ -142,6 +146,19 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     visibleCharacters:Object.freeze(visibleCharacters),
     simulatedCharacterCount:roster.length+(protagonist?1:0)
   });
+}
+
+function renderVisibleActionRibbon(characters){
+  const visible=(characters||[]).filter(character=>character.role==="resident"&&character.actionExecution?.holdsPosition);
+  const action=visible[0]||null;
+  e.residentActionRibbon.hidden=!action;
+  if(!action)return null;
+  const state=action.actionExecution;
+  e.residentActionRibbonActor.textContent=(action.residentId||"resident")+" "+(action.residentName||"");
+  e.residentActionRibbonState.textContent=String(state.label||state.action||"Action")+" · "+String(state.status||"active").toUpperCase();
+  e.residentActionRibbonProgress.textContent=
+    String(Math.round(Number(state.progress||0)*100))+"% · "+formatAssignmentPoint(state.target);
+  return state;
 }
 
 function renderPRNG(fantasyTimestampMs){
@@ -957,6 +974,7 @@ async function renderTerrain(){
   const buildingInteriors=BuildingInteriors.build(campaign.seed);
   const interiorObjects=window.InteriorObjects?.build?InteriorObjects.build(campaign.seed):[];
   const characterBundle=visibleCharacterSpecs(campaign,center,columns,rows,tileSize);
+  renderVisibleActionRibbon(characterBundle.visibleCharacters);
   const characterPreparation=GameRenderer.prepareCharacters?.(characterBundle.visibleCharacters,characterBundle.simulatedCharacterCount)||Promise.resolve(null);
   await characterPreparation;
   if(currentSerial!==terrainRenderSerial)return false;
@@ -1775,7 +1793,7 @@ function renderResidentMovementProof(){
     "FAIL"
   );
 
-  e.movementProofBadge.hidden=!activeProof;
+  e.movementProofBadge.hidden=!activeProof||Boolean(window.ActionExecutor?.proofSnapshot?.());
   if(activeProof){
     e.movementProofBadgeStage.textContent="WP-S004-004 · "+String(activeProof.stage||"movement");
     e.movementProofBadgeResident.textContent=activeProof.residentId+" "+activeProof.residentName;
@@ -1784,6 +1802,72 @@ function renderResidentMovementProof(){
   }
   lastResidentMovementProof=activeProof;
   return activeProof||verified;
+}
+
+function renderResidentActionProof(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign||!window.ActionExecutor){
+    e.residentActionRibbon.hidden=true;
+    e.residentActionRows.replaceChildren();
+    return null;
+  }
+  const verified=ActionExecutor.verify(campaign.seed);
+  const proof=ActionExecutor.proofSnapshot?.()||null;
+  const live=ActionExecutor.snapshot();
+  const current=proof?.current||live.actions[0]||null;
+  const movementProof=window.ResidentMovement?.proofSnapshot?.()||null;
+  const resident=proof?.residentId
+    ?DailyActivity.build(campaign.seed).find(item=>item.id===proof.residentId)
+    :null;
+  e.residentActionActor.textContent=proof?.residentId
+    ?proof.residentId+" "+(resident?.name||"")
+    :(current?current.actorKind+":"+current.actorId:"No active action");
+  e.residentActionName.textContent=current?.label||current?.action||"—";
+  e.residentActionStatus.textContent=current?.status||proof?.stage||"ready";
+  e.residentActionTarget.textContent=formatAssignmentPoint(current?.target||movementProof?.target);
+  e.residentActionProgress.textContent=current
+    ?String(Math.round(Number(current.progress||0)*100))+"%"
+    :"—";
+  const fragment=document.createDocumentFragment();
+  for(const action of live.actions){
+    const row=document.createElement("tr");
+    for(const value of [
+      action.actorKind+":"+action.actorId,
+      action.action,
+      action.status,
+      formatAssignmentPoint(action.target),
+      action.interactionObjectId||action.interactionObjectType||"—",
+      String(Math.round(Number(action.progress||0)*100))+"%"
+    ]){
+      const cell=document.createElement("td");
+      cell.textContent=value;
+      row.appendChild(cell);
+    }
+    fragment.appendChild(row);
+  }
+  e.residentActionRows.replaceChildren(fragment);
+  setCheck(e.vResidentActionRequired,verified.requiredActionPass,"FAIL");
+  setCheck(e.vResidentActionReject,verified.incompatibleRejected&&verified.outOfRangeRejected,"FAIL");
+  setCheck(e.vResidentActionArrival,
+    proof?proof.arrivalRejected&&proof.actionStarted&&proof.heldAtTarget:verified.arrivalRequired,
+    proof?"FAIL":"WAITING"
+  );
+  setCheck(e.vResidentActionOffscreen,
+    proof?proof.offscreenStatePass&&proof.rendererCullingPass&&proof.cameraRoundTripPass:false,
+    proof?"FAIL":"WAITING"
+  );
+  setCheck(e.vResidentActionSchedule,
+    proof?proof.scheduleReleasePass&&proof.nextGoalRoutingPass&&proof.workStarted:false,
+    proof?"FAIL":"WAITING"
+  );
+  setCheck(e.vResidentActionGeneric,verified.genericNpcContract&&verified.genericProtagonistContract,"FAIL");
+  setCheck(e.vResidentActionIsolation,
+    verified.rendererDependency===false&&verified.presentationAuthority===false&&
+    verified.economyIntroduced===false&&verified.combatIntroduced===false&&
+    verified.fullInventoryIntroduced===false&&verified.externalLlmIntroduced===false,
+    "FAIL"
+  );
+  return proof||verified;
 }
 
 async function refreshResidentCharacters(){
@@ -1795,6 +1879,8 @@ async function refreshResidentCharacters(){
   const tileSize=Number(e.terrainGrid.dataset.tileSize||100);
   if(!center||columns<=0||rows<=0)return null;
   const bundle=visibleCharacterSpecs(campaign,center,columns,rows,tileSize);
+  renderVisibleActionRibbon(bundle.visibleCharacters);
+  renderResidentActionProof();
   return GameRenderer.updateCharacters(bundle.visibleCharacters,bundle.simulatedCharacterCount);
 }
 function startResidentMovement(){
@@ -1847,6 +1933,7 @@ function renderStatic(){
   renderResidentAssignmentProof();
   renderResidentScheduleProof();
   renderResidentMovementProof();
+  renderResidentActionProof();
   renderHousePlans();
   renderSpecialLots();
   renderWalkability();
@@ -1986,6 +2073,13 @@ window.AppUI=Object.freeze({
   residentMovementSnapshot:()=>window.ResidentMovement?.snapshot?.()||null,
   refreshResidentMovementProof:()=>renderResidentMovementProof(),
   residentMovementProofSnapshot:()=>window.ResidentMovement?.proofSnapshot?.()||lastResidentMovementProof,
+  refreshResidentActionProof:()=>renderResidentActionProof(),
+  residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
+  residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
+  residentActionVerify:()=>{
+    const campaign=SeedSystem.getCampaign();
+    return campaign&&window.ActionExecutor?ActionExecutor.verify(campaign.seed):null;
+  },
   residentAssignmentSnapshot:()=>{
     const campaign=SeedSystem.getCampaign();
     return campaign?ResidentAssignments.proof(campaign.seed):null;

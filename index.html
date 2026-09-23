@@ -41,6 +41,11 @@
       <span id="movementProofBadgeResident">—</span>
       <code id="movementProofBadgePosition">—</code>
     </div>
+    <div id="residentActionRibbon" class="resident-action-ribbon" hidden aria-live="polite">
+      <strong id="residentActionRibbonActor">Resident action</strong>
+      <span id="residentActionRibbonState">—</span>
+      <code id="residentActionRibbonProgress">—</code>
+    </div>
     <div id="gameplayPlaceholder" class="gameplay-placeholder">
       <strong>Gameplay Area</strong>
       <span>Start a campaign to generate the deterministic GPU-rendered world.</span>
@@ -666,6 +671,33 @@
       <div class="check"><span>Camera changes do not mutate authoritative resident Simulation position</span><b id="vResidentMovementCamera">WAITING</b></div>
       <div class="check"><span>Off-screen Simulation continues while Stage 3 renderer culls the resident billboard</span><b id="vResidentMovementCulling">WAITING</b></div>
       <div class="check"><span>No direct player NPC control, action resolution, dialogue, economy, combat or external LLM behavior is introduced</span><b id="vResidentMovementIsolation">WAITING</b></div>
+    </div>
+  </details>
+
+  <details id="residentActionProof">
+    <summary>WP-S004-005 Interior Action Execution + Character State Presentation</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Controlled Actor</span><strong id="residentActionActor">—</strong></div>
+        <div><span>Current Action</span><strong id="residentActionName">—</strong></div>
+        <div><span>Status</span><strong id="residentActionStatus">—</strong></div>
+        <div><span>Target</span><strong id="residentActionTarget">—</strong></div>
+        <div><span>Progress</span><strong id="residentActionProgress">—</strong></div>
+        <div><span>Authority</span><strong>Simulation</strong></div>
+      </div>
+      <div class="resident-action-scroll">
+        <table class="resident-action-table" aria-label="Authoritative character action execution state">
+          <thead><tr><th>Actor</th><th>Action</th><th>Status</th><th>Target</th><th>Object</th><th>Progress</th></tr></thead>
+          <tbody id="residentActionRows"></tbody>
+        </table>
+      </div>
+      <div class="check"><span>Sleep/rest, sit, eat and work start and complete at compatible interaction targets</span><b id="vResidentActionRequired">WAITING</b></div>
+      <div class="check"><span>Incompatible and out-of-range action attempts are rejected before execution</span><b id="vResidentActionReject">WAITING</b></div>
+      <div class="check"><span>Controlled resident starts only after arrival and remains at the interaction coordinate while acting</span><b id="vResidentActionArrival">WAITING</b></div>
+      <div class="check"><span>Action remains authoritative while the camera moves away and the billboard is culled</span><b id="vResidentActionOffscreen">WAITING</b></div>
+      <div class="check"><span>Schedule change ends/releases the previous action and movement can route toward the next goal</span><b id="vResidentActionSchedule">WAITING</b></div>
+      <div class="check"><span>The same generic action contract accepts both NPC/resident and Protagonist actor kinds</span><b id="vResidentActionGeneric">WAITING</b></div>
+      <div class="check"><span>Presentation is non-authoritative; no economy, combat, full inventory/crafting or external LLM behavior is added</span><b id="vResidentActionIsolation">WAITING</b></div>
     </div>
   </details>
 
