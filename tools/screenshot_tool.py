@@ -711,7 +711,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
 
             if scenario == "wp-s003-006-001":
                 _set_terrain_preload_settings(
-                    driver, radius=1, cache=256, directional=True, background=True
+                    driver, radius=1, cache=256, directional=True, background=False
                 )
             if scenario == "wp-s003-006":
                 _set_terrain_preload_settings(
