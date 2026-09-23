@@ -3330,6 +3330,15 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 expected_cutaway = expected_state in {"entering", "inside", "behind"}
                 if bool(presentation.get("cutawayActive")) != expected_cutaway:
                     raise RuntimeError(f"WP-S003-004 PlayCanvas cutaway mismatch in frame {index}: {presentation}")
+                hidden_roofs = int(presentation.get("hiddenRoofCount") or 0)
+                total_roofs = int(presentation.get("totalRoofCount") or 0)
+                if expected_cutaway:
+                    if presentation.get("cutawayLocal") is not True or not presentation.get("cutawayBuildingId"):
+                        raise RuntimeError(f"WP-S003-007 cutaway is not building-local in frame {index}: {presentation}")
+                    if hidden_roofs <= 0 or total_roofs <= hidden_roofs:
+                        raise RuntimeError(f"WP-S003-007 local cutaway hid all/no roofs in frame {index}: {presentation}")
+                elif hidden_roofs != 0:
+                    raise RuntimeError(f"WP-S003-007 outside/leaving state retained hidden roofs in frame {index}: {presentation}")
                 continue
             if int(presentation.get("roofCount") or 0) <= 0:
                 raise RuntimeError(
