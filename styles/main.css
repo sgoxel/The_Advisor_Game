@@ -557,3 +557,49 @@ details[open] summary{border-bottom:1px solid #343a30}
   .control-deck .status-message{grid-column:auto}
   .mini-map-readout{display:grid;gap:3px}
 }
+
+
+/* WP-S003-003 — PlayCanvas interior-object development proof */
+.interior-object-proof-panel{
+  position:absolute;
+  top:12px;
+  right:12px;
+  z-index:12;
+  width:min(520px,calc(100% - 24px));
+  max-height:calc(100% - 24px);
+  overflow:auto;
+  display:grid;
+  gap:7px;
+  padding:10px 12px;
+  border:1px solid rgba(218,230,208,.36);
+  border-radius:9px;
+  background:rgba(16,20,15,.88);
+  box-shadow:0 6px 20px rgba(0,0,0,.34);
+  backdrop-filter:blur(4px);
+  color:#edf2e8;
+  pointer-events:none;
+}
+.interior-object-proof-panel[hidden]{display:none}
+.interior-object-proof-panel>strong{font-size:13px;letter-spacing:.03em}
+.interior-object-proof-panel>small{color:#b6c2ae;font-size:10px}
+.interior-object-proof-list{display:grid;gap:5px}
+.interior-object-proof-row{
+  display:grid;
+  gap:2px;
+  padding:5px 7px;
+  border:1px solid rgba(179,194,167,.22);
+  border-radius:6px;
+  background:rgba(30,37,27,.80);
+}
+.interior-object-proof-row b{font-size:10px;color:#f1e4b0}
+.interior-object-proof-row span{font-size:9px;line-height:1.35;color:#d2dacd}
+@media(max-width:720px){
+  .interior-object-proof-panel{
+    top:6px;
+    right:6px;
+    width:min(430px,calc(100% - 12px));
+    max-height:46%;
+    padding:7px 8px;
+  }
+  .interior-object-proof-row:nth-child(n+4){display:none}
+}
