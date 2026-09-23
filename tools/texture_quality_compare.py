@@ -34,7 +34,6 @@ try:
       return Boolean(
         r?.ready &&
         r?.engine==='PlayCanvas' &&
-        window.TextureAssets?.stats?.()?.ready &&
         window.RuntimeTextureQuality &&
         window.AppUI?.refreshTerrain
       );
@@ -67,6 +66,14 @@ try:
 
     for profile in ("low","standard","high","ultra"):
         driver.execute_script("return RuntimeTextureQuality.setProfile(arguments[0])",profile)
+        refresh=driver.execute_async_script("""
+          const done=arguments[arguments.length-1];
+          Promise.resolve(window.AppUI?.refreshTerrain?.())
+            .then(value=>done({ok:true,value:value||null}))
+            .catch(error=>done({ok:false,error:String(error?.stack||error)}));
+        """)
+        if not refresh or refresh.get("ok") is not True:
+            raise RuntimeError(f"PlayCanvas terrain refresh failed for {profile}: {refresh}")
         wait.until(lambda d,p=profile:d.execute_script("""
           const q=RuntimeTextureQuality?.snapshot?.()||{};
           const r=GameRenderer?.snapshot?.()||{};
@@ -162,5 +169,29 @@ try:
     }
     (OUT/"texture-quality-comparison.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
     print(json.dumps(report,indent=2))
+except Exception:
+    try:
+        diagnostic=driver.execute_script("""
+          const r=window.GameRenderer?.snapshot?.()||{};
+          return {
+            ready:Boolean(r.ready),
+            engine:r.engine||null,
+            regionKey:r.regionKey||null,
+            worldAssetPreparation:r.worldAssetPreparation||null,
+            worldAssetCache:r.worldAssetCache||null,
+            materialTextureQuality:r.materialTextureQuality||null,
+            terrainPreload:r.terrainPreload||null,
+            textureAssets:window.TextureAssets?.stats?.()||null,
+            textureQuality:window.RuntimeTextureQuality?.snapshot?.()||null,
+            campaignState:document.querySelector('#campaignState')?.textContent?.trim()||null,
+            status:document.querySelector('#statusMessage')?.textContent?.trim()||null
+          };
+        """)
+        (OUT/"texture-quality-failure.json").write_text(json.dumps(diagnostic,indent=2),encoding="utf-8")
+        driver.save_screenshot(str(OUT/"texture-quality-failure.png"))
+        print(json.dumps({"failureDiagnostic":diagnostic},indent=2),file=sys.stderr)
+    except Exception as diagnostic_error:
+        print(f"Could not collect failure diagnostic: {diagnostic_error}",file=sys.stderr)
+    raise
 finally:
     driver.quit()
