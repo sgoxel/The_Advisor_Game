@@ -158,6 +158,19 @@
       <section class="settings-subsection" aria-labelledby="terrainPerformanceHeading">
         <h4 id="terrainPerformanceHeading">3D Terrain Performance</h4>
 
+        <label class="select-setting" for="terrainChunkSizeSelect">
+          <span>
+            <strong>Terrain Chunk Size</strong>
+            <small>Partition deterministic terrain into reusable PlayCanvas chunks. 16×16 is the default.</small>
+          </span>
+          <select id="terrainChunkSizeSelect" aria-label="Terrain Chunk Size">
+            <option value="8">8×8 tiles</option>
+            <option value="16" selected>16×16 tiles (default)</option>
+            <option value="32">32×32 tiles</option>
+            <option value="64">64×64 tiles</option>
+          </select>
+        </label>
+
         <label class="select-setting" for="terrainPreloadRadiusSelect">
           <span>
             <strong>Preload Radius</strong>
