@@ -27,7 +27,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
 
   const presentationMaterials=new Map();
   let creations=0,destroys=0,totalBuildMs=0,maxBuildMs=0;
-  let presentationEntityCreations=0,presentationMeshInstanceCreations=0;
+  let presentationEntityCreations=0,presentationEntityDestroys=0,presentationMeshInstanceCreations=0;
 
   function presentationMaterial(name,r,g,b,gloss=0.10){
     if(presentationMaterials.has(name))return presentationMaterials.get(name);
@@ -262,6 +262,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
   }
   function destroy(resource){
     if(!resource)return;
+    presentationEntityDestroys+=Number(resource.presentationEntityCount||0);
     resource.entity?.destroy?.();
     resource.mesh?.destroy?.();
     destroys++;
@@ -273,7 +274,9 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       totalBuildMs:Number(totalBuildMs.toFixed(3)),
       maxBuildMs:Number(maxBuildMs.toFixed(3)),
       averageBuildMs:Number((creations?totalBuildMs/creations:0).toFixed(3)),
-      presentationEntityCreations,presentationMeshInstanceCreations,
+      presentationEntityCreations,presentationEntityDestroys,presentationMeshInstanceCreations,
+      entityCreations:creations+presentationEntityCreations,
+      entityDestroys:destroys+presentationEntityDestroys,
       sharedPresentationMaterialCount:presentationMaterials.size,
       oneEntityPerChunk:true,
       oneEntityPerTile:false,
