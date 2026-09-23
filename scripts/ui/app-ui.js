@@ -570,6 +570,34 @@ function terrainRegionKey(center,columns,rows,tileSize){
   ].join(":");
 }
 
+function isPlayCanvasRenderer(){
+  return GameRenderer.snapshot().engine==="PlayCanvas";
+}
+
+function terrainViewGeometryDescriptor(center,zoom=Camera.getZoom()){
+  const tileSize=Math.max(40,Math.round(100*zoom));
+  const viewport=e.terrainGrid.parentElement;
+  const width=Math.max(1,viewport.clientWidth);
+  const height=Math.max(1,viewport.clientHeight);
+  const {columns,rows}=terrainGridDimensions(width,height,tileSize);
+  const halfCols=Math.floor(columns/2);
+  const halfRows=Math.floor(rows/2);
+  const regionKey=terrainRegionKey(center,columns,rows,tileSize);
+  return {width,height,columns,rows,halfCols,halfRows,tileSize,regionKey};
+}
+
+function collectTerrainPreparationKeysFromTiles(tiles){
+  const keys=new Set(["character:protagonist-male"]);
+  for(const tile of tiles||[]){
+    if(tile?.textureKey)keys.add(tile.textureKey);
+    if(tile?.overlayTextureKey)keys.add(tile.overlayTextureKey);
+    for(const blend of tile?.blends||[]){
+      if(blend?.maskKey)keys.add(blend.maskKey);
+    }
+  }
+  return [...keys];
+}
+
 function collectTerrainPreparationKeys(seed,center,columns,rows,halfCols,halfRows){
   const keys=new Set(["character:protagonist-male"]);
   const ringColumns=columns+2;
@@ -621,16 +649,11 @@ function collectTerrainPreparationKeys(seed,center,columns,rows,halfCols,halfRow
 }
 
 function terrainViewDescriptor(seed,center,zoom=Camera.getZoom()){
-  const tileSize=Math.max(40,Math.round(100*zoom));
-  const viewport=e.terrainGrid.parentElement;
-  const width=Math.max(1,viewport.clientWidth);
-  const height=Math.max(1,viewport.clientHeight);
-  const {columns,rows}=terrainGridDimensions(width,height,tileSize);
-  const halfCols=Math.floor(columns/2);
-  const halfRows=Math.floor(rows/2);
-  const regionKey=terrainRegionKey(center,columns,rows,tileSize);
-  const requiredKeys=collectTerrainPreparationKeys(seed,center,columns,rows,halfCols,halfRows);
-  return {width,height,columns,rows,halfCols,halfRows,tileSize,regionKey,requiredKeys};
+  const base=terrainViewGeometryDescriptor(center,zoom);
+  const requiredKeys=collectTerrainPreparationKeys(
+    seed,center,base.columns,base.rows,base.halfCols,base.halfRows
+  );
+  return {...base,requiredKeys};
 }
 
 function buildTerrainSurfaceTiles(seed,center,columns,rows,halfCols=Math.floor(columns/2),halfRows=Math.floor(rows/2)){
@@ -729,6 +752,7 @@ function terrainPrefetchOffsets(direction){
 }
 
 function scheduleTerrainAssetPrefetch(seed,center,columns,rows,tileSize,direction=lastCameraDirection){
+  if(isPlayCanvasRenderer())return;
   const serial=++terrainPrefetchSerial;
   const halfCols=Math.floor(columns/2);
   const halfRows=Math.floor(rows/2);
@@ -763,7 +787,43 @@ function enqueueCameraTransition(work){
 }
 
 async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom()){
-  const descriptor=terrainViewDescriptor(seed,center,zoom);
+  let descriptor;
+  if(isPlayCanvasRenderer()){
+    const base=terrainViewGeometryDescriptor(center,zoom);
+    const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
+      seed,
+      center,
+      width:base.width,
+      height:base.height,
+      columns:base.columns,
+      rows:base.rows,
+      tileSize:base.tileSize,
+      regionKey:base.regionKey
+    }));
+    if(rendererPrepared&&rendererPrepared.prepared===false){
+      throw new Error("PlayCanvas chunk preparation failed for "+base.regionKey);
+    }
+    const cached=GameRenderer.getPreparedTerrainView?.({
+      seed,
+      center,
+      columns:base.columns,
+      rows:base.rows
+    });
+    if(!cached?.ready){
+      throw new Error(
+        "PlayCanvas chunk world data is incomplete for "+base.regionKey+
+        " missing="+JSON.stringify(cached?.missingChunkIds||[])
+      );
+    }
+    descriptor={
+      ...base,
+      requiredKeys:collectTerrainPreparationKeysFromTiles(cached.tiles),
+      cachedTerrain:cached
+    };
+  }else{
+    descriptor=terrainViewDescriptor(seed,center,zoom);
+  }
+
   const prepared=await TextureAssets.prepareRegion(descriptor.regionKey,descriptor.requiredKeys);
   if(!prepared.ready||prepared.stale||!TextureAssets.isRegionPrepared(descriptor.regionKey,descriptor.requiredKeys)){
     throw new Error("Terrain asset preparation did not complete for "+descriptor.regionKey);
@@ -790,17 +850,66 @@ async function renderTerrain(){
     return;
   }
 
-  const view=terrainViewDescriptor(campaign.seed,center,Camera.getZoom());
+  let view;
+  let cachedTerrain=null;
+  if(isPlayCanvasRenderer()){
+    const base=terrainViewGeometryDescriptor(center,Camera.getZoom());
+    cachedTerrain=GameRenderer.getPreparedTerrainView?.({
+      seed:campaign.seed,
+      center,
+      columns:base.columns,
+      rows:base.rows
+    })||null;
+    if(!cachedTerrain?.ready){
+      const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
+        seed:campaign.seed,
+        center,
+        width:base.width,
+        height:base.height,
+        columns:base.columns,
+        rows:base.rows,
+        tileSize:base.tileSize,
+        regionKey:base.regionKey
+      }));
+      if(rendererPrepared&&rendererPrepared.prepared===false)return false;
+      cachedTerrain=GameRenderer.getPreparedTerrainView?.({
+        seed:campaign.seed,
+        center,
+        columns:base.columns,
+        rows:base.rows
+      })||null;
+    }
+    view={
+      ...base,
+      requiredKeys:cachedTerrain?.ready
+        ?collectTerrainPreparationKeysFromTiles(cachedTerrain.tiles)
+        :collectTerrainPreparationKeys(
+          campaign.seed,center,base.columns,base.rows,base.halfCols,base.halfRows
+        )
+    };
+  }else{
+    view=terrainViewDescriptor(campaign.seed,center,Camera.getZoom());
+  }
+
   const {tileSize,width,height,columns,rows,halfCols,halfRows,regionKey,requiredKeys}=view;
   const viewportKey=width+"x"+height;
   const responsive=lastTerrainViewportKey===""||lastTerrainViewportKey===viewportKey||e.terrainGrid.dataset.viewportKey!==viewportKey;
 
-  const surfaceTiles=buildTerrainSurfaceTiles(campaign.seed,center,columns,rows,halfCols,halfRows);
-  const tiles=surfaceTiles.map(item=>({
-    ...item,
-    movement:Walkability.classify(campaign.seed,item.x,item.y),
-    routeStep:null
-  }));
+  let tiles;
+  if(cachedTerrain?.ready){
+    tiles=cachedTerrain.tiles.map(item=>({
+      ...item,
+      movement:item.movement,
+      routeStep:null
+    }));
+  }else{
+    const surfaceTiles=buildTerrainSurfaceTiles(campaign.seed,center,columns,rows,halfCols,halfRows);
+    tiles=surfaceTiles.map(item=>({
+      ...item,
+      movement:Walkability.classify(campaign.seed,item.x,item.y),
+      routeStep:null
+    }));
+  }
 
   const currentSerial=++terrainRenderSerial;
   const rendererWasReady=Boolean(GameRenderer.snapshot().ready);
