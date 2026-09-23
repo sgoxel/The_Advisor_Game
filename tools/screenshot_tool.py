@@ -773,6 +773,17 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               Number(preload.queueDepth || 0) === 0 &&
                               world.stableChunkIdentity === true &&
                               world.completeChunksOnly === true &&
+                              world.seedDerivedPresentation === true &&
+                              world.hardCodedSampleGeometry === false &&
+                              chunks.seedDerivedPresentation === true &&
+                              chunks.hardCodedSampleGeometry === false &&
+                              chunks.normalWorldSource === 'seed-chunk-world-data' &&
+                              renderer?.scene?.normalWorldSource === 'seed-chunk-world-data' &&
+                              renderer?.scene?.hardCodedSampleGeometry === false &&
+                              Number(renderer?.scene?.sampleVillageEntityCount || 0) === 0 &&
+                              Number(chunks.buildingPresentationCount || 0) > 0 &&
+                              Number(chunks.roadCellCount || 0) > 0 &&
+                              Number(chunks.terrainTypeCount || 0) >= 2 &&
                               Number(world.entryCount || 0) > 0 &&
                               Number(world.completeEntryCount || 0) === Number(world.entryCount || 0) &&
                               Number(world.surfaceCellCount || 0) > 0 &&
@@ -1941,6 +1952,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         chunks = [(gpu.get("terrainChunks") or {}) for gpu in gpus]
         preload = [(gpu.get("terrainPreload") or {}) for gpu in gpus]
         world = [(chunk.get("worldData") or {}) for chunk in chunks]
+        scenes = [(gpu.get("scene") or {}) for gpu in gpus]
         render_cache = [(gpu.get("terrainCacheTelemetry") or {}) for gpu in gpus]
 
         seeds = [item.get("campaignSeed") for item in builds]
@@ -1954,8 +1966,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if tuple(cameras) != expected_cameras:
             raise RuntimeError(f"Chunk world-data keyboard path mismatch: {cameras}")
 
-        for index, (gpu, chunk, stats, data, cache) in enumerate(
-            zip(gpus, chunks, preload, world, render_cache), start=1
+        for index, (gpu, chunk, stats, data, scene, cache) in enumerate(
+            zip(gpus, chunks, preload, world, scenes, render_cache), start=1
         ):
             if gpu.get("engine") != "PlayCanvas" or not gpu.get("ready"):
                 raise RuntimeError(f"PlayCanvas renderer missing in frame {index}: {gpu}")
@@ -1995,6 +2007,22 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"World-data cache exceeded renderer cache budget in frame {index}: {stats}")
             if chunk.get("simulationAuthorityPreserved") is not True or stats.get("simulationAuthorityPreserved") is not True:
                 raise RuntimeError(f"Chunk world-data path changed Simulation authority in frame {index}")
+            if chunk.get("seedDerivedPresentation") is not True or data.get("seedDerivedPresentation") is not True:
+                raise RuntimeError(f"SEED-derived chunk presentation missing in frame {index}: chunk={chunk}, world={data}")
+            if chunk.get("hardCodedSampleGeometry") is not False or data.get("hardCodedSampleGeometry") is not False:
+                raise RuntimeError(f"Hard-coded sample geometry leaked into chunk presentation in frame {index}: chunk={chunk}, world={data}")
+            if chunk.get("normalWorldSource") != "seed-chunk-world-data":
+                raise RuntimeError(f"Normal world source is not chunk-native in frame {index}: {chunk}")
+            if scene.get("normalWorldSource") != "seed-chunk-world-data" or scene.get("hardCodedSampleGeometry") is not False:
+                raise RuntimeError(f"Scene source/sample flags failed in frame {index}: {scene}")
+            if int(scene.get("sampleVillageEntityCount") or 0) != 0:
+                raise RuntimeError(f"Hard-coded sample village entity still exists in frame {index}: {scene}")
+            if int(chunk.get("buildingPresentationCount") or 0) < 1:
+                raise RuntimeError(f"No SEED-derived building presentation is visible/prepared in frame {index}: {chunk}")
+            if int(chunk.get("roadCellCount") or 0) < 1:
+                raise RuntimeError(f"No SEED-derived road presentation cells exist in frame {index}: {chunk}")
+            if int(chunk.get("terrainTypeCount") or 0) < 2:
+                raise RuntimeError(f"Chunk presentation lacks terrain diversity in frame {index}: {chunk}")
 
         # Exact camera-center changes inside the same chunk must not regenerate chunk data.
         for index in (1, 2):
@@ -2029,6 +2057,12 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Return navigation evicted retained world-data unexpectedly: before={world[5]}, return={world[6]}")
         if int(world[0].get("buildingReferenceCount") or 0) < 1:
             raise RuntimeError(f"Starting-village chunk cache contains no building references: {world[0]}")
+        if int(world[0].get("presentationBuildingCount") or 0) < 1:
+            raise RuntimeError(f"Starting-village chunk cache contains no owned building presentation descriptors: {world[0]}")
+        if max(int(item.get("waterCellCount") or 0) for item in chunks) < 1:
+            raise RuntimeError(f"Fixed route never exposed SEED-derived water presentation: {chunks}")
+        if max(int(item.get("presentationMeshInstanceCount") or 0) for item in chunks) < 1:
+            raise RuntimeError(f"Fixed route produced no 3D building/prop presentation geometry: {chunks}")
         return
 
     if scenario == "wp-s003-006":
