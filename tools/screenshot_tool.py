@@ -2079,10 +2079,19 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
 
         # Reverse travel and origin revisit must reactivate retained scene entities;
         # no eviction/destruction is allowed with the deliberately large cache.
-        if int(nav[5].get("cacheReuses") or 0)<=int(nav[4].get("cacheReuses") or 0):
-            raise RuntimeError(f"Reverse travel did not reuse cached chunks: forward={nav[4]}, reverse={nav[5]}")
-        if int(nav[6].get("cacheReuses") or 0)<=int(nav[5].get("cacheReuses") or 0):
-            raise RuntimeError(f"Origin revisit did not reuse cached chunks: reverse={nav[5]}, return={nav[6]}")
+        # Retained chunks can remain Prepared rather than Cached, so reuse must be
+        # proved from lifecycle counters instead of requiring the Cached-only
+        # cacheReuses metric to increment.
+        if int(nav[5].get("stateReuses") or 0)<=int(nav[4].get("stateReuses") or 0):
+            raise RuntimeError(f"Reverse travel did not reuse retained chunk state: forward={nav[4]}, reverse={nav[5]}")
+        if int(nav[6].get("stateReuses") or 0)<=int(nav[5].get("stateReuses") or 0):
+            raise RuntimeError(f"Origin revisit did not reuse retained chunk state: reverse={nav[5]}, return={nav[6]}")
+        if int(nav[5].get("chunkResourceCreations") or 0)!=int(nav[4].get("chunkResourceCreations") or 0):
+            raise RuntimeError(f"Reverse travel recreated retained chunk resources: forward={nav[4]}, reverse={nav[5]}")
+        if int(nav[6].get("chunkResourceCreations") or 0)!=int(nav[5].get("chunkResourceCreations") or 0):
+            raise RuntimeError(f"Origin revisit recreated retained chunk resources: reverse={nav[5]}, return={nav[6]}")
+        if int(nav[6].get("staticEntityCreations") or 0)!=int(nav[5].get("staticEntityCreations") or 0):
+            raise RuntimeError(f"Origin revisit recreated retained static entities: reverse={nav[5]}, return={nav[6]}")
         if int(nav[6].get("staticEntityDestructions") or 0)!=int(nav[0].get("staticEntityDestructions") or 0):
             raise RuntimeError(f"Revisit destroyed retained static entities: origin={nav[0]}, return={nav[6]}")
         if int(preloads[6].get("evictions") or 0)!=int(preloads[0].get("evictions") or 0):
