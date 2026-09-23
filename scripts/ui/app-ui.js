@@ -1916,6 +1916,12 @@ function renderAdviceLog(){
     window.AdvisorChannel.renderAdvicePanel(seed, protagonistId, panel);
   }
 }
+function renderCharacterMemoryProof(actorKind="protagonist",actorId="protagonist"){
+  if(typeof window.CharacterMemory?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.CharacterMemory.renderDebugPanel(seed,{kind:actorKind,id:actorId},undefined,document.getElementById("memoryProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1926,6 +1932,7 @@ function renderStatic(){
   setCheck(e.vDate,!!campaign&&GameTime.validateStartYear(),campaign?"FAIL":"WAITING");
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
   renderAdviceLog();
+  renderCharacterMemoryProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2074,6 +2081,9 @@ window.AppUI=Object.freeze({
   refreshResidentMovementProof:()=>renderResidentMovementProof(),
   residentMovementProofSnapshot:()=>window.ResidentMovement?.proofSnapshot?.()||lastResidentMovementProof,
   refreshResidentActionProof:()=>renderResidentActionProof(),
+  refreshCharacterMemory:(actorKind="protagonist",actorId="protagonist")=>renderCharacterMemoryProof(actorKind,actorId),
+  characterMemorySnapshot:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CharacterMemory?CharacterMemory.snapshot(campaign.seed):null;},
+  characterMemoryVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CharacterMemory?CharacterMemory.verify(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

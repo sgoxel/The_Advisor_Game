@@ -701,6 +701,31 @@
     </div>
   </details>
 
+  <details id="memoryProof">
+    <summary>WP-S005-002 Character Memory, Observation Log + World Fact Model</summary>
+    <div class="accordion-content technical-info">
+      <div class="memory-proof-toolbar">
+        <label for="memoryActorSelect">Inspect memory ledger</label>
+        <select id="memoryActorSelect" aria-label="Character memory actor"></select>
+      </div>
+      <div class="detail-grid">
+        <div><span>Actor</span><strong id="memoryActor">—</strong></div>
+        <div><span>Entries</span><strong id="memoryEntryCount">0</strong></div>
+        <div><span>Verified</span><strong id="memoryVerifiedCount">0</strong></div>
+        <div><span>Uncertain</span><strong id="memoryUncertainCount">0</strong></div>
+        <div><span>Authority</span><strong>Knowledge only</strong></div>
+        <div><span>Persistence</span><strong>Campaign scoped</strong></div>
+      </div>
+      <div id="memoryTimeline" class="memory-timeline" aria-label="Character memory timeline"></div>
+      <div class="check"><span>Protagonist and residents use the same memory record schema</span><b id="vMemorySharedFormat">WAITING</b></div>
+      <div class="check"><span>Every entry retains source, fantasy timestamp, confidence, relevance and reliability</span><b id="vMemoryTraceable">WAITING</b></div>
+      <div class="check"><span>Rumors, disputed facts and low-confidence memories remain explicitly uncertain</span><b id="vMemoryUncertain">WAITING</b></div>
+      <div class="check"><span>Same event order reproduces stable entry IDs and actor sequence</span><b id="vMemoryDeterministic">WAITING</b></div>
+      <div class="check"><span>Campaign storage round-trip preserves memory entries without schema drift</span><b id="vMemoryReload">WAITING</b></div>
+      <div class="check"><span>Memory is knowledge state only and cannot mutate Simulation world truth</span><b id="vMemoryAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -739,6 +764,7 @@
 <script src="scripts/world/advisor-channel.js"></script>
 <script src="scripts/world/building-interiors.js"></script>
 <script src="scripts/core/game-time.js"></script>
+<script src="scripts/world/character-memory.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/ui/responsive-control-deck.js"></script>
 <script src="scripts/main.js"></script>

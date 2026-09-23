@@ -92,6 +92,7 @@ SCENARIOS = {
     "wp-s004-004",
     "wp-s004-005",
     "wp-s005-001",
+    "wp-s005-002",
     "playcanvas-root-cutover",
 }
 
@@ -136,6 +137,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s004-004": 5,
     "wp-s004-005": 5,
     "wp-s005-001": 4,
+    "wp-s005-002": 4,
     "playcanvas-root-cutover": 3,
 }
 
@@ -336,6 +338,34 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        characterMemory: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.CharacterMemory?.verify
+              ? window.CharacterMemory.verify(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        memoryPanel: (() => {
+          const root=document.querySelector("#memoryProof");
+          const timeline=document.querySelector("#memoryTimeline");
+          if(!root||!timeline)return null;
+          return {
+            present:true,
+            open:Boolean(root.open),
+            actorKey:root.dataset.actorKey||null,
+            entryCount:Number(root.dataset.entryCount||0),
+            renderedEntries:timeline.querySelectorAll(".memory-entry").length,
+            uncertainRendered:timeline.querySelectorAll(".memory-entry.uncertain").length,
+            summaries:Array.from(timeline.querySelectorAll(".memory-entry > strong")).map(node=>node.textContent.trim()),
+            sources:Array.from(timeline.querySelectorAll(".memory-source")).map(node=>node.textContent.trim()),
+            timelineScrollTop:Number(timeline.scrollTop||0),
+            timelineScrollHeight:Number(timeline.scrollHeight||0),
+            timelineClientHeight:Number(timeline.clientHeight||0),
+          };
         })(),
         advisorPanel: (() => {
           const panel=document.querySelector("#advisorPanel");
@@ -1492,6 +1522,122 @@ def _show_resident_action_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_character_memory_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const memory=window.CharacterMemory;
+        const advisor=window.AdvisorChannel;
+        if(!campaign?.seed||!memory)return {ok:false,error:'character-memory-unavailable'};
+        const seed=campaign.seed;
+        const protagonist={kind:'protagonist',id:'protagonist'};
+        const resident={kind:'resident',id:'R03'};
+
+        if(index===0){
+          memory.clear(seed);
+          if(advisor){
+            localStorage.removeItem(advisor.storageKey(seed,'protagonist'));
+            const advice=advisor.recordAdvice(seed,{
+              topic:'Warn the elder about the late milling run',
+              target:{kind:'topic',label:'Village elder'},
+              timestamp:'1200-06-12 07:55:00'
+            },'protagonist');
+
+            memory.recordFact(seed,protagonist,{
+              category:'places',
+              summary:'The mill is closed today.',
+              timestamp:'1200-06-12 08:00:00',
+              source:{type:'simulation',id:'mill-state:1200-06-12',label:'Mill operating state'},
+              confidence:1,relevance:0.95,reliability:'verified',
+              fact:{subject:'mill',predicate:'open',value:false}
+            });
+            memory.recordObservation(seed,protagonist,{
+              category:'people',
+              summary:'The baker is inside the tavern.',
+              timestamp:'1200-06-12 08:05:00',
+              source:{type:'direct-observation',id:'scene:tavern:0805',label:'Direct tavern observation'},
+              confidence:0.98,relevance:0.82,reliability:'verified',
+              scene:{location:'tavern',event:'morning-visit',subjectId:'R05'}
+            });
+            memory.recordMemory(seed,protagonist,{
+              kind:'memory',category:'warnings',
+              summary:'The trader was angry after the missed payment.',
+              timestamp:'1200-06-12 08:10:00',
+              source:{type:'trusted-testimony',id:'resident:R07',label:'Trusted villager testimony'},
+              confidence:0.82,relevance:0.9,reliability:'trusted'
+            });
+            memory.recordMemory(seed,protagonist,{
+              kind:'memory',category:'rumors',
+              summary:'A caravan may arrive after dusk.',
+              timestamp:'1200-06-12 08:12:00',
+              source:{type:'rumor',id:'market-rumor:17',label:'Market rumor'},
+              confidence:0.35,relevance:0.58,reliability:'uncertain'
+            });
+            if(advice){
+              memory.recordAdviceReference(seed,protagonist,advice.id,{
+                category:'advice',
+                summary:'Advisor warning retained for later consideration.',
+                timestamp:'1200-06-12 08:15:00',
+                relevance:0.88
+              });
+            }
+          }
+
+          memory.recordObservation(seed,resident,{
+            category:'places',
+            summary:'Rain clouds are gathering over the west field.',
+            timestamp:'1200-06-12 08:03:00',
+            source:{type:'direct-observation',id:'scene:west-field:0803',label:'Direct field observation'},
+            confidence:0.92,relevance:0.67,reliability:'verified',
+            scene:{location:'west field',event:'weather-check'}
+          });
+          memory.recordMemory(seed,resident,{
+            category:'rumors',
+            summary:'A merchant may be buying grain above market price.',
+            timestamp:'1200-06-12 08:14:00',
+            source:{type:'rumor',id:'rumor:grain-buyer',label:'Unverified market rumor'},
+            confidence:0.4,relevance:0.72,reliability:'uncertain'
+          });
+        }
+
+        const section=document.querySelector('#developmentDetails');
+        const proof=document.querySelector('#memoryProof');
+        const timeline=document.querySelector('#memoryTimeline');
+        if(!section||!proof||!timeline)return {ok:false,error:'memory-proof-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        proof.open=true;
+
+        const actor=index===2?resident:protagonist;
+        memory.renderDebugPanel(seed,actor,undefined,proof);
+        proof.scrollIntoView({block:'start'});
+        if(index===1||index===3)timeline.scrollTop=timeline.scrollHeight;
+        else timeline.scrollTop=0;
+
+        const verify=memory.verify(seed);
+        return {
+          ok:Boolean(verify.pass),
+          index,
+          actorKey:proof.dataset.actorKey,
+          entryCount:Number(proof.dataset.entryCount||0),
+          renderedEntries:timeline.querySelectorAll('.memory-entry').length,
+          uncertainRendered:timeline.querySelectorAll('.memory-entry.uncertain').length,
+          scrollTop:Number(timeline.scrollTop||0),
+          scrollHeight:Number(timeline.scrollHeight||0),
+          clientHeight:Number(timeline.clientHeight||0)
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Character memory proof frame failed: {result}")
+    return (
+        f"character-memory:{frame_index}:{result.get('actorKey')}:"
+        f"entries={result.get('entryCount')}:uncertain={result.get('uncertainRendered')}"
+    )
+
+
 def _show_advisor_channel_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -2495,7 +2641,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -2609,6 +2755,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             """)
             return action+"+advisor-history-scroll"
         return _show_advisor_channel_proof(driver,frame_index)
+    if scenario == "wp-s005-002":
+        if frame_index == 3:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_character_memory_proof(driver,frame_index)
+        return _show_character_memory_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2643,6 +2794,67 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s005-002":
+        if len(frames) < 4:
+            raise RuntimeError("wp-s005-002 requires four memory evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:4]]
+        proofs=[build.get("characterMemory") or {} for build in builds]
+        panels=[build.get("memoryPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Memory evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Memory evidence mutated Protagonist world position: {protagonists}")
+
+        for index,proof in enumerate(proofs,start=1):
+            required={
+                "pass":True,
+                "sharedRecordFormat":True,
+                "uniqueIds":True,
+                "sequenceStable":True,
+                "deterministicIds":True,
+                "traceable":True,
+                "uncertainPreserved":True,
+                "authoritySafe":True,
+                "adviceRefsTraceable":True,
+                "storageRoundTrip":True,
+                "worldMutationApi":False,
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Character memory proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("actorCount") or 0) < 2 or int(proof.get("entryCount") or 0) < 7:
+                raise RuntimeError(f"Character memory evidence is incomplete in frame {index}: {proof}")
+
+        expected_actor_keys=["protagonist:protagonist","protagonist:protagonist","resident:R03","protagonist:protagonist"]
+        actor_keys=[panel.get("actorKey") for panel in panels]
+        if actor_keys!=expected_actor_keys:
+            raise RuntimeError(f"Memory debug actor sequence mismatch: {actor_keys}")
+
+        if panels[0].get("renderedEntries")!=5 or panels[2].get("renderedEntries")!=2:
+            raise RuntimeError(f"Shared protagonist/resident memory formats not visibly populated: {panels}")
+        if int(panels[0].get("uncertainRendered") or 0) < 1 or int(panels[2].get("uncertainRendered") or 0) < 1:
+            raise RuntimeError(f"Uncertain memory state not visibly retained: {panels}")
+
+        def actor_entries(proof,kind,actor_id):
+            for ledger in proof.get("actors") or []:
+                actor=ledger.get("actor") or {}
+                if actor.get("kind")==kind and actor.get("id")==actor_id:
+                    return ledger.get("entries") or []
+            return []
+        before=actor_entries(proofs[0],"protagonist","protagonist")
+        after=actor_entries(proofs[3],"protagonist","protagonist")
+        if json.dumps(before,sort_keys=True)!=json.dumps(after,sort_keys=True):
+            raise RuntimeError("Protagonist memory changed after campaign page reload")
+        if not any((entry.get("source") or {}).get("type")=="simulation" and entry.get("authority")=="simulation-truth" for entry in before):
+            raise RuntimeError("Simulation-sourced world fact is missing from protagonist memory")
+        if not any(entry.get("uncertain") is True and (entry.get("source") or {}).get("type")=="rumor" for entry in before):
+            raise RuntimeError("Uncertain rumor did not remain explicitly uncertain")
+        if not any((entry.get("externalRef") or {}).get("type")=="advice" for entry in before):
+            raise RuntimeError("Stable advice reference is missing from protagonist memory")
+        return
+
     if scenario == "wp-s005-001":
         if len(frames) < 4:
             raise RuntimeError("wp-s005-001 requires four advisor evidence frames")
@@ -4919,12 +5131,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
