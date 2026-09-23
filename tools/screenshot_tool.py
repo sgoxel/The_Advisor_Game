@@ -80,6 +80,7 @@ SCENARIOS = {
     "wp-s003-005-002",
     "wp-s003-006-002",
     "wp-s003-006",
+    "wp-s003-006-003",
     "playcanvas-root-cutover",
 }
 
@@ -112,6 +113,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-005-002": 4,
     "wp-s003-006-002": 8,
     "wp-s003-006": 7,
+    "wp-s003-006-003": 7,
     "playcanvas-root-cutover": 3,
 }
 
@@ -327,6 +329,7 @@ return (() => {
           textureCache: assets,
           terrainChunks: renderer.terrainChunks || null,
           terrainPreload: renderer.terrainPreload || null,
+          terrainCacheTelemetry: window.AppUI?.terrainCacheTelemetry?.() || null,
           interiorObjectPresentation: renderer.interiorObjectPresentation || null,
           characterProof: renderer.characterProof || null,
           bootstrapMode: window.RendererBootstrap?.status?.().mode || null,
@@ -662,6 +665,9 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
 
 
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
+    if scenario == "wp-s003-006-003":
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 30.0)
     if scenario == "wp-s003-005-002":
         from selenium.webdriver.support.ui import WebDriverWait
         WebDriverWait(driver, timeout).until(
@@ -681,8 +687,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=True
                 )
+            if scenario == "wp-s003-006-003":
+                _set_terrain_preload_settings(
+                    driver, radius=1, cache=256, directional=True, background=True
+                )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006", "wp-s003-006-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -710,7 +720,25 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                             Number(renderer.terrainChunks.visibleChunkCount || 0) > 0 &&
                             Number(renderer.terrainPreload.Prepared || 0) > 0 &&
                             Number(renderer.terrainPreload.queueDepth || 0) === 0
-                          ))
+                          )) &&
+                          (arguments[0] !== 'wp-s003-006-003' || (() => {
+                            const preload = renderer?.terrainPreload || {};
+                            const chunks = renderer?.terrainChunks || {};
+                            const world = chunks?.worldData || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              chunks.completeChunkWorldData === true &&
+                              Number(chunks.visibleChunkCount || 0) > 0 &&
+                              Number(preload.Prepared || 0) > 0 &&
+                              Number(preload.queueDepth || 0) === 0 &&
+                              world.stableChunkIdentity === true &&
+                              world.completeChunksOnly === true &&
+                              Number(world.entryCount || 0) > 0 &&
+                              Number(world.completeEntryCount || 0) === Number(world.entryCount || 0) &&
+                              Number(world.surfaceCellCount || 0) > 0 &&
+                              Number(world.terrainFoundationCalls || 0) === Number(world.walkabilityClassifications || 0)
+                            );
+                          })())
                         );
                         """
                     , scenario)
@@ -1316,7 +1344,84 @@ def _set_camera_center_and_render_active(driver, x: int, y: int) -> str:
     return f"camera-center-active:{x},{y}"
 
 
+def _keyboard_pan_tiles(driver, dx: int, dy: int, timeout: float = 60.0) -> str:
+    center = driver.execute_script("return window.Camera?.getCenter?.() || null")
+    if not isinstance(center, dict):
+        raise RuntimeError(f"Camera center unavailable before keyboard pan: {center}")
+    start_x = int(center.get("x") or 0)
+    start_y = int(center.get("y") or 0)
+    target_x = start_x + int(dx)
+    target_y = start_y + int(dy)
+
+    def dispatch(key: str, count: int) -> None:
+        if count <= 0:
+            return
+        driver.execute_script(
+            """
+            const key = arguments[0];
+            const count = Number(arguments[1] || 0);
+            for (let i = 0; i < count; i++) {
+              document.dispatchEvent(new KeyboardEvent('keydown', {
+                key,
+                bubbles: true,
+                cancelable: true
+              }));
+            }
+            """,
+            key,
+            count,
+        )
+
+    if dx > 0:
+        dispatch("ArrowRight", dx)
+    elif dx < 0:
+        dispatch("ArrowLeft", -dx)
+    if dy > 0:
+        dispatch("ArrowDown", dy)
+    elif dy < 0:
+        dispatch("ArrowUp", -dy)
+
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, timeout).until(
+        lambda d: d.execute_script(
+            """
+            const camera = window.Camera?.getCenter?.();
+            const snap = window.GameRenderer?.snapshot?.();
+            const frame = snap?.frame;
+            const cache = window.AppUI?.terrainCacheTelemetry?.();
+            return Boolean(
+              camera && frame?.center &&
+              String(camera.x) === String(arguments[0]) &&
+              String(camera.y) === String(arguments[1]) &&
+              String(frame.center.x) === String(arguments[0]) &&
+              String(frame.center.y) === String(arguments[1]) &&
+              cache?.lastRenderSource === 'chunk-cache'
+            );
+            """,
+            str(target_x), str(target_y),
+        )
+    )
+    return f"keyboard-pan:{start_x},{start_y}->{target_x},{target_y}"
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-006-003":
+        if frame_index == 0:
+            return "chunk-world-data:prewarmed-origin"
+        if frame_index == 1:
+            return _keyboard_pan_tiles(driver, 4, 0)
+        if frame_index == 2:
+            return _keyboard_pan_tiles(driver, 4, 0)
+        if frame_index == 3:
+            return _keyboard_pan_tiles(driver, 8, 0)
+        if frame_index == 4:
+            return _keyboard_pan_tiles(driver, 8, 0)
+        if frame_index == 5:
+            return _keyboard_pan_tiles(driver, 8, 0)
+        _set_terrain_preload_settings(
+            driver, radius=1, cache=256, directional=True, background=False
+        )
+        return _keyboard_pan_tiles(driver, -32, 0)
     if scenario == "wp-s003-006":
         if frame_index == 0:
             _set_terrain_preload_settings(driver, radius=2, cache=256, directional=True, background=True)
@@ -1563,6 +1668,101 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-003":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-006-003 requires seven evidence frames")
+        runtimes = [frame.get("runtime", {}) for frame in frames[:7]]
+        builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
+        gpus = [(item.get("gpuRenderer") or {}) for item in builds]
+        chunks = [(gpu.get("terrainChunks") or {}) for gpu in gpus]
+        preload = [(gpu.get("terrainPreload") or {}) for gpu in gpus]
+        world = [(chunk.get("worldData") or {}) for chunk in chunks]
+        render_cache = [(gpu.get("terrainCacheTelemetry") or {}) for gpu in gpus]
+
+        seeds = [item.get("campaignSeed") for item in builds]
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        cameras = [item.get("cameraCoordinate") for item in builds]
+        if len(set(seeds)) != 1 or not seeds[0]:
+            raise RuntimeError(f"Chunk world-data path changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists)) != 1 or not protagonists[0]:
+            raise RuntimeError(f"Chunk world-data path changed protagonist authority: {protagonists}")
+        expected_cameras = ("(0,0)", "(4,0)", "(8,0)", "(16,0)", "(24,0)", "(32,0)", "(0,0)")
+        if tuple(cameras) != expected_cameras:
+            raise RuntimeError(f"Chunk world-data keyboard path mismatch: {cameras}")
+
+        for index, (gpu, chunk, stats, data, cache) in enumerate(
+            zip(gpus, chunks, preload, world, render_cache), start=1
+        ):
+            if gpu.get("engine") != "PlayCanvas" or not gpu.get("ready"):
+                raise RuntimeError(f"PlayCanvas renderer missing in frame {index}: {gpu}")
+            if chunk.get("resourceKind") != "chunk-mesh" or chunk.get("completeChunkWorldData") is not True:
+                raise RuntimeError(f"Chunk mesh/world-data contract missing in frame {index}: {chunk}")
+            if data.get("stableChunkIdentity") is not True or data.get("completeChunksOnly") is not True:
+                raise RuntimeError(f"Stable complete chunk identity failed in frame {index}: {data}")
+            if data.get("boundedByRendererRetention") is not True or data.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Chunk world-data retention/authority failed in frame {index}: {data}")
+            entries = int(data.get("entryCount") or 0)
+            complete = int(data.get("completeEntryCount") or 0)
+            if entries < 1 or complete != entries:
+                raise RuntimeError(f"Incomplete cached chunks in frame {index}: {data}")
+            chunk_size = int(stats.get("chunkSize") or 0)
+            if chunk_size < 1:
+                raise RuntimeError(f"Chunk size telemetry missing in frame {index}: {stats}")
+            if int(data.get("surfaceCellCount") or 0) != entries * chunk_size * chunk_size:
+                raise RuntimeError(f"Cached chunk cells are not complete in frame {index}: data={data}, preload={stats}")
+            tf_calls = int(data.get("terrainFoundationCalls") or 0)
+            walk_calls = int(data.get("walkabilityClassifications") or 0)
+            generations = int(data.get("completeChunkGenerations") or 0)
+            if tf_calls != walk_calls or tf_calls != generations * chunk_size * chunk_size:
+                raise RuntimeError(f"Chunk generation call accounting mismatch in frame {index}: {data}")
+            if generations != int(data.get("cacheMisses") or 0):
+                raise RuntimeError(f"Chunk misses/generations diverged in frame {index}: {data}")
+            if cache.get("lastRenderSource") != "chunk-cache":
+                raise RuntimeError(f"Visible render did not use cached chunk data in frame {index}: {cache}")
+            if int(cache.get("fallbackRenderCount") or 0) != 0:
+                raise RuntimeError(f"Legacy full-viewport fallback ran in frame {index}: {cache}")
+            if int(data.get("viewTileMisses") or 0) != 0:
+                raise RuntimeError(f"Cached visible view missed a chunk in frame {index}: {data}")
+            if int(stats.get("Cached") or 0) > int((stats.get("settings") or {}).get("maxCachedChunks") or 0):
+                raise RuntimeError(f"World-data cache exceeded renderer cache budget in frame {index}: {stats}")
+            if chunk.get("simulationAuthorityPreserved") is not True or stats.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Chunk world-data path changed Simulation authority in frame {index}")
+
+        # Exact camera-center changes inside the same chunk must not regenerate chunk data.
+        for index in (1, 2):
+            if int(world[index].get("completeChunkGenerations") or 0) != int(world[0].get("completeChunkGenerations") or 0):
+                raise RuntimeError(
+                    f"Same-chunk overlapping movement regenerated world data at frame {index+1}: "
+                    f"origin={world[0]}, current={world[index]}"
+                )
+            if int(world[index].get("terrainFoundationCalls") or 0) != int(world[0].get("terrainFoundationCalls") or 0):
+                raise RuntimeError(
+                    f"Same-chunk overlapping movement repeated TerrainFoundation work at frame {index+1}: "
+                    f"origin={world[0]}, current={world[index]}"
+                )
+
+        initial_active_generations = int(world[0].get("activeGenerations") or 0)
+        for index in range(1, 6):
+            if int(world[index].get("activeGenerations") or 0) != initial_active_generations:
+                raise RuntimeError(
+                    f"Prepared boundary navigation generated a newly-visible chunk at frame {index+1}: "
+                    f"initial={world[0]}, current={world[index]}"
+                )
+
+        before_return_generations = int(world[5].get("completeChunkGenerations") or 0)
+        after_return_generations = int(world[6].get("completeChunkGenerations") or 0)
+        if after_return_generations != before_return_generations:
+            raise RuntimeError(
+                f"Return navigation regenerated retained chunk world data: before={world[5]}, return={world[6]}"
+            )
+        if int(world[6].get("cacheHits") or 0) <= int(world[5].get("cacheHits") or 0):
+            raise RuntimeError(f"Return navigation did not increase world-data cache hits: before={world[5]}, return={world[6]}")
+        if int(chunks[6].get("compositions") or 0) != int(chunks[5].get("compositions") or 0):
+            raise RuntimeError(f"Return navigation rebuilt retained chunk meshes: before={chunks[5]}, return={chunks[6]}")
+        if int(world[0].get("buildingReferenceCount") or 0) < 1:
+            raise RuntimeError(f"Starting-village chunk cache contains no building references: {world[0]}")
+        return
+
     if scenario == "wp-s003-006":
         if len(frames) < 7:
             raise RuntimeError("wp-s003-006 requires seven evidence frames")
@@ -3006,7 +3206,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "playcanvas-root-cutover", "wp-s003-006"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
