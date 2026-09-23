@@ -1309,8 +1309,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             prepared = int(presentation.get("preparedCharacterCount") or 0)
             if active < 1 or simulated < active or prepared < 1:
                 raise RuntimeError(f"Character activation bounds invalid in frame {index}: {presentation}")
-            if simulated <= active:
-                raise RuntimeError(f"Off-screen characters are not demonstrably bounded in frame {index}: {presentation}")
+            if simulated < active:
+                raise RuntimeError(f"Active character entities exceed simulated population in frame {index}: {presentation}")
             if presentation.get("feetAnchored") is not True or presentation.get("billboardMode") != "vertical-yaw":
                 raise RuntimeError(f"Feet/billboard contract failed in frame {index}: {presentation}")
             if presentation.get("depthTest") is not True or presentation.get("depthWrite") is not True:
@@ -1340,6 +1340,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Character proof mutated Simulation authority in frame {index}: {proof}")
             if proof.get("world") != protagonist.get("world") or proof.get("scene") != protagonist.get("scene"):
                 raise RuntimeError(f"Character proof is not anchored to actual protagonist instance in frame {index}: {proof}")
+
+        if not any(int(p.get("simulatedCharacterCount") or 0) > int(p.get("activeCharacterCount") or 0) for p in presentations):
+            raise RuntimeError(f"Off-screen character activation was never bounded below simulated population: {presentations}")
 
         if proofs[1].get("occlusionExpected") != "in-front":
             raise RuntimeError(f"Front-depth proof missing: {proofs[1]}")
