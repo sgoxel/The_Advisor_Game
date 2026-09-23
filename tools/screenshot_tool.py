@@ -1663,79 +1663,6 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         _safe_click(driver, "#settingsButton")
         driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'start'})")
         return "chunk-size:persistence-phone-portrait"
-    if scenario == "wp-s003-006-004":
-        if len(frames) < 9:
-            raise RuntimeError("wp-s003-006-004 requires nine evidence frames")
-        runtimes=[frame.get("runtime",{}) for frame in frames[:9]]
-        builds=[runtime.get("currentBuild",{}) for runtime in runtimes]
-        gpus=[(build.get("gpuRenderer") or {}) for build in builds]
-        preloads=[(gpu.get("terrainPreload") or {}) for gpu in gpus]
-        chunks=[(gpu.get("terrainChunks") or {}) for gpu in gpus]
-        nav=[(gpu.get("navigationHotPath") or {}) for gpu in gpus]
-        assets=[(gpu.get("worldAssetCache") or {}) for gpu in gpus]
-        seeds=[build.get("campaignSeed") for build in builds]
-        protagonists=[build.get("protagonistLocation") for build in builds]
-        cameras=[build.get("cameraCoordinate") for build in builds]
-        expected=("(0,0)","(2,0)","(4,0)","(16,0)","(32,0)","(16,0)","(0,0)","(0,0)","(0,0)")
-        if len(set(seeds))!=1 or not seeds[0]:
-            raise RuntimeError(f"Persistent navigation changed/missed Campaign SEED: {seeds}")
-        if len(set(protagonists))!=1 or not protagonists[0]:
-            raise RuntimeError(f"Persistent navigation changed protagonist authority: {protagonists}")
-        if tuple(cameras)!=expected:
-            raise RuntimeError(f"Persistent navigation camera path mismatch: {cameras}")
-        baseline_visible_waits=int(preloads[0].get("visibleWaits") or 0)
-        baseline_network=int(assets[0].get("networkLoads") or 0)
-        baseline_parses=int(assets[0].get("containerParses") or 0)
-        initial_bulk=int(nav[0].get("bulkChunkRepositions") or 0)
-        for index,(gpu,preload,chunk,navigation,asset) in enumerate(zip(gpus,preloads,chunks,nav,assets),start=1):
-            if gpu.get("engine")!="PlayCanvas" or not gpu.get("ready"):
-                raise RuntimeError(f"PlayCanvas renderer missing in frame {index}: {gpu}")
-            if navigation.get("persistentSceneGraph") is not True or int(navigation.get("fullSceneRebuilds") or 0)!=0:
-                raise RuntimeError(f"Persistent scene graph contract failed in frame {index}: {navigation}")
-            if int(navigation.get("redundantStateCallbacks") or 0)!=0:
-                raise RuntimeError(f"Redundant chunk state callback detected in frame {index}: {navigation}")
-            if int(navigation.get("sceneAnchorRebases") or 0)!=0:
-                raise RuntimeError(f"Ordinary navigation unexpectedly rebased scene anchor in frame {index}: {navigation}")
-            if int(navigation.get("bulkChunkRepositions") or 0)!=initial_bulk:
-                raise RuntimeError(f"Ordinary navigation bulk-repositioned cached chunks in frame {index}: {navigation}")
-            if int(preload.get("visibleWaits") or 0)!=baseline_visible_waits:
-                raise RuntimeError(f"Prepared navigation introduced a visible chunk composition wait in frame {index}: {preload}")
-            if int(preload.get("visibleAssetLoads") or 0)!=0 or int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleGltfParses") or 0)!=0:
-                raise RuntimeError(f"Visible navigation performed asset/decode/parse work in frame {index}: {preload}")
-            if int(asset.get("networkLoads") or 0)!=baseline_network or int(asset.get("containerParses") or 0)!=baseline_parses:
-                raise RuntimeError(f"World assets reloaded/reparsed during navigation in frame {index}: {asset}")
-            if int(preload.get("Cached") or 0)>int((preload.get("settings") or {}).get("maxCachedChunks") or 0):
-                raise RuntimeError(f"Persistent chunk cache exceeded budget in frame {index}: {preload}")
-            if chunk.get("resourceKind")!="chunk-mesh" or int(chunk.get("visibleChunkCount") or 0)<1:
-                raise RuntimeError(f"Persistent terrain chunk presentation missing in frame {index}: {chunk}")
-            if navigation.get("simulationAuthorityPreserved") is not True:
-                raise RuntimeError(f"Navigation telemetry lost Simulation authority in frame {index}: {navigation}")
-
-        # Two small pans remain inside the origin chunk: no static scene resources
-        # should be created or destroyed merely because the camera moved.
-        for idx in (1,2):
-            if int(nav[idx].get("chunkResourceCreations") or 0)!=int(nav[0].get("chunkResourceCreations") or 0):
-                raise RuntimeError(f"Small prepared pan created static chunk resources in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
-            if int(nav[idx].get("staticEntityCreations") or 0)!=int(nav[0].get("staticEntityCreations") or 0):
-                raise RuntimeError(f"Small prepared pan created static entities in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
-            if int(nav[idx].get("staticEntityDestructions") or 0)!=int(nav[0].get("staticEntityDestructions") or 0):
-                raise RuntimeError(f"Small prepared pan destroyed static entities in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
-
-        # Reverse travel and origin revisit must reactivate retained scene entities;
-        # no eviction/destruction is allowed with the deliberately large cache.
-        if int(nav[5].get("cacheReuses") or 0)<=int(nav[4].get("cacheReuses") or 0):
-            raise RuntimeError(f"Reverse travel did not reuse cached chunks: forward={nav[4]}, reverse={nav[5]}")
-        if int(nav[6].get("cacheReuses") or 0)<=int(nav[5].get("cacheReuses") or 0):
-            raise RuntimeError(f"Origin revisit did not reuse cached chunks: reverse={nav[5]}, return={nav[6]}")
-        if int(nav[6].get("staticEntityDestructions") or 0)!=int(nav[0].get("staticEntityDestructions") or 0):
-            raise RuntimeError(f"Revisit destroyed retained static entities: origin={nav[0]}, return={nav[6]}")
-        if int(preloads[6].get("evictions") or 0)!=int(preloads[0].get("evictions") or 0):
-            raise RuntimeError(f"Revisit evicted retained chunks under non-pressured cache: origin={preloads[0]}, return={preloads[6]}")
-        if int(nav[8].get("cameraTransformCalls") or 0)<=int(nav[6].get("cameraTransformCalls") or 0):
-            raise RuntimeError(f"Zoom path did not execute camera transforms: before={nav[6]}, after={nav[8]}")
-        if float(nav[8].get("maxCameraTransformMs") or 0)<0 or float(nav[8].get("maxPreloadUpdateMs") or 0)<0:
-            raise RuntimeError(f"Navigation timing telemetry invalid: {nav[8]}")
-        return
 
     if scenario == "wp-s003-006-003":
         if frame_index == 0:
@@ -2090,6 +2017,80 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         viewport=runtimes[13].get("viewport") or {}
         if int(viewport.get("height") or 0)<=int(viewport.get("width") or 0):
             raise RuntimeError(f"Phone portrait Settings persistence evidence invalid: {viewport}")
+        return
+
+    if scenario == "wp-s003-006-004":
+        if len(frames) < 9:
+            raise RuntimeError("wp-s003-006-004 requires nine evidence frames")
+        runtimes=[frame.get("runtime",{}) for frame in frames[:9]]
+        builds=[runtime.get("currentBuild",{}) for runtime in runtimes]
+        gpus=[(build.get("gpuRenderer") or {}) for build in builds]
+        preloads=[(gpu.get("terrainPreload") or {}) for gpu in gpus]
+        chunks=[(gpu.get("terrainChunks") or {}) for gpu in gpus]
+        nav=[(gpu.get("navigationHotPath") or {}) for gpu in gpus]
+        assets=[(gpu.get("worldAssetCache") or {}) for gpu in gpus]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        cameras=[build.get("cameraCoordinate") for build in builds]
+        expected=("(0,0)","(2,0)","(4,0)","(16,0)","(32,0)","(16,0)","(0,0)","(0,0)","(0,0)")
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Persistent navigation changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Persistent navigation changed protagonist authority: {protagonists}")
+        if tuple(cameras)!=expected:
+            raise RuntimeError(f"Persistent navigation camera path mismatch: {cameras}")
+        baseline_visible_waits=int(preloads[0].get("visibleWaits") or 0)
+        baseline_network=int(assets[0].get("networkLoads") or 0)
+        baseline_parses=int(assets[0].get("containerParses") or 0)
+        initial_bulk=int(nav[0].get("bulkChunkRepositions") or 0)
+        for index,(gpu,preload,chunk,navigation,asset) in enumerate(zip(gpus,preloads,chunks,nav,assets),start=1):
+            if gpu.get("engine")!="PlayCanvas" or not gpu.get("ready"):
+                raise RuntimeError(f"PlayCanvas renderer missing in frame {index}: {gpu}")
+            if navigation.get("persistentSceneGraph") is not True or int(navigation.get("fullSceneRebuilds") or 0)!=0:
+                raise RuntimeError(f"Persistent scene graph contract failed in frame {index}: {navigation}")
+            if int(navigation.get("redundantStateCallbacks") or 0)!=0:
+                raise RuntimeError(f"Redundant chunk state callback detected in frame {index}: {navigation}")
+            if int(navigation.get("sceneAnchorRebases") or 0)!=0:
+                raise RuntimeError(f"Ordinary navigation unexpectedly rebased scene anchor in frame {index}: {navigation}")
+            if int(navigation.get("bulkChunkRepositions") or 0)!=initial_bulk:
+                raise RuntimeError(f"Ordinary navigation bulk-repositioned cached chunks in frame {index}: {navigation}")
+            if int(preload.get("visibleWaits") or 0)!=baseline_visible_waits:
+                raise RuntimeError(f"Prepared navigation introduced a visible chunk composition wait in frame {index}: {preload}")
+            if int(preload.get("visibleAssetLoads") or 0)!=0 or int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleGltfParses") or 0)!=0:
+                raise RuntimeError(f"Visible navigation performed asset/decode/parse work in frame {index}: {preload}")
+            if int(asset.get("networkLoads") or 0)!=baseline_network or int(asset.get("containerParses") or 0)!=baseline_parses:
+                raise RuntimeError(f"World assets reloaded/reparsed during navigation in frame {index}: {asset}")
+            if int(preload.get("Cached") or 0)>int((preload.get("settings") or {}).get("maxCachedChunks") or 0):
+                raise RuntimeError(f"Persistent chunk cache exceeded budget in frame {index}: {preload}")
+            if chunk.get("resourceKind")!="chunk-mesh" or int(chunk.get("visibleChunkCount") or 0)<1:
+                raise RuntimeError(f"Persistent terrain chunk presentation missing in frame {index}: {chunk}")
+            if navigation.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Navigation telemetry lost Simulation authority in frame {index}: {navigation}")
+
+        # Two small pans remain inside the origin chunk: no static scene resources
+        # should be created or destroyed merely because the camera moved.
+        for idx in (1,2):
+            if int(nav[idx].get("chunkResourceCreations") or 0)!=int(nav[0].get("chunkResourceCreations") or 0):
+                raise RuntimeError(f"Small prepared pan created static chunk resources in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
+            if int(nav[idx].get("staticEntityCreations") or 0)!=int(nav[0].get("staticEntityCreations") or 0):
+                raise RuntimeError(f"Small prepared pan created static entities in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
+            if int(nav[idx].get("staticEntityDestructions") or 0)!=int(nav[0].get("staticEntityDestructions") or 0):
+                raise RuntimeError(f"Small prepared pan destroyed static entities in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
+
+        # Reverse travel and origin revisit must reactivate retained scene entities;
+        # no eviction/destruction is allowed with the deliberately large cache.
+        if int(nav[5].get("cacheReuses") or 0)<=int(nav[4].get("cacheReuses") or 0):
+            raise RuntimeError(f"Reverse travel did not reuse cached chunks: forward={nav[4]}, reverse={nav[5]}")
+        if int(nav[6].get("cacheReuses") or 0)<=int(nav[5].get("cacheReuses") or 0):
+            raise RuntimeError(f"Origin revisit did not reuse cached chunks: reverse={nav[5]}, return={nav[6]}")
+        if int(nav[6].get("staticEntityDestructions") or 0)!=int(nav[0].get("staticEntityDestructions") or 0):
+            raise RuntimeError(f"Revisit destroyed retained static entities: origin={nav[0]}, return={nav[6]}")
+        if int(preloads[6].get("evictions") or 0)!=int(preloads[0].get("evictions") or 0):
+            raise RuntimeError(f"Revisit evicted retained chunks under non-pressured cache: origin={preloads[0]}, return={preloads[6]}")
+        if int(nav[8].get("cameraTransformCalls") or 0)<=int(nav[6].get("cameraTransformCalls") or 0):
+            raise RuntimeError(f"Zoom path did not execute camera transforms: before={nav[6]}, after={nav[8]}")
+        if float(nav[8].get("maxCameraTransformMs") or 0)<0 or float(nav[8].get("maxPreloadUpdateMs") or 0)<0:
+            raise RuntimeError(f"Navigation timing telemetry invalid: {nav[8]}")
         return
 
     if scenario == "wp-s003-006-003":
