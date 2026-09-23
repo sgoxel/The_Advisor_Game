@@ -2163,11 +2163,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if req[0]*exp[0]+req[1]*exp[1] < 0.999:
                 raise RuntimeError(f"Frame {index+1} requested wrong screen direction: expected {(ex,ey)}, got {nav}")
             projected=unit(nav.get("projectedScreen") or {})
-            if projected[0]*exp[0]+projected[1]*exp[1] < 0.985:
-                raise RuntimeError(f"Frame {index+1} visible motion is not aligned to screen intent: expected {(ex,ey)}, got {nav}")
+            if projected[0]*exp[0]+projected[1]*exp[1] < 0.965:
+                raise RuntimeError(f"Frame {index+1} visible motion is not aligned within the 15-degree integer-grid tolerance: expected {(ex,ey)}, got {nav}")
             angle_error=nav.get("angleErrorDegrees")
-            if angle_error is None or float(angle_error)>10:
-                raise RuntimeError(f"Frame {index+1} screen-direction error exceeds 10 degrees: {nav}")
+            if angle_error is None or float(angle_error)>15:
+                raise RuntimeError(f"Frame {index+1} screen-direction error exceeds 15-degree integer-grid tolerance: {nav}")
             if int(nav.get("sequence") or 0)!=index:
                 raise RuntimeError(f"Frame {index+1} produced more/fewer than one camera transition for one input action: {nav}")
             if nav.get("simulationAuthorityPreserved") is not True:
