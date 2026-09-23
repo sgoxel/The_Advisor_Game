@@ -46,5 +46,9 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`Texture quality comparison completed. [Open workflow run and artifact](${url}).`});
+            const report = JSON.parse(fs.readFileSync('tools/screenshots/texture-quality-comparison.json','utf8'));
+            const lines = report.profiles.map(p => `| ${p.profile} | ${p.resolution}px | ${p.budgetMB} | ${p.activeTextureCount} | ${p.estimatedLoadedTextureMB} | ${p.budgetUtilization} | ${p.drawCalls ?? 'N/A'} | ${p.frameMs ?? 'N/A'} | ${p.materialCount ?? 'N/A'} | ${p.shaderVariants ?? 'N/A'} |`);
+            const body = `Texture quality comparison completed. Simulation identity preserved: **${report.simulationIdentityPreserved ? 'YES' : 'NO'}**.\n\n| Profile | Resolution | Budget MB | Active textures | Est. loaded MB | Budget utilization | Draw calls | Frame ms | Materials | Shader variants |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n${lines.join('\n')}\n\n[Open workflow run and screenshots](${url}). Metrics unavailable from the current renderer are reported as N/A rather than invented.`;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
