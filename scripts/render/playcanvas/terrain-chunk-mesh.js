@@ -26,8 +26,12 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
   material.update();
 
   const presentationMaterials=new Map();
+  const primitiveMeshes=new Map();
+  const baseBox=new pc.BoxGeometry();
   let creations=0,destroys=0,totalBuildMs=0,maxBuildMs=0;
   let presentationEntityCreations=0,presentationEntityDestroys=0,presentationMeshInstanceCreations=0;
+  let staticBatchMeshCreations=0,staticBatchSourcePrimitiveCount=0,instancedGroupCreations=0,instancedObjectCount=0;
+  let instancingBufferUpdates=0,frustumCulledMeshInstances=0;
 
   function presentationMaterial(name,r,g,b,gloss=0.10){
     if(presentationMaterials.has(name))return presentationMaterials.get(name);
@@ -49,7 +53,17 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     root.addChild(entity);
     presentationEntityCreations++;
     presentationMeshInstanceCreations+=Number(entity.render?.meshInstances?.length||1);
+    for(const mi of entity.render?.meshInstances||[]){mi.cull=true;frustumCulledMeshInstances++;}
     return entity;
+  }
+  function primitiveMesh(kind){
+    if(primitiveMeshes.has(kind))return primitiveMeshes.get(kind);
+    let geometry;
+    if(kind==="tree-trunk")geometry=new pc.CylinderGeometry({radius:0.5,height:1,heightSegments:1,capSegments:8});
+    else geometry=new pc.SphereGeometry({radius:0.5,latitudeBands:8,longitudeBands:8});
+    const mesh=pc.Mesh.fromGeometry(device,geometry);
+    primitiveMeshes.set(kind,mesh);
+    return mesh;
   }
   function sampleColor(seed,x,z){
     const n=signed01(seed,x,z,"color");
@@ -142,17 +156,110 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       };
     }catch(_){return {x:0,z:0,width:2,depth:2};}
   }
-  function buildBuilding(root,worldData,descriptor,index){
+
+  function staticBatchCollector(){
+    return new Map();
+  }
+  function batchFor(collector,key,mat){
+    if(!collector.has(key))collector.set(key,{key,material:mat,positions:[],normals:[],indices:[],sourcePrimitiveCount:0});
+    return collector.get(key);
+  }
+  function appendBoxBatch(batch,position,scale,eulerZ=0){
+    const p=baseBox.positions||[],n=baseBox.normals||[],idx=baseBox.indices||[];
+    const base=batch.positions.length/3;
+    const sx=Number(scale[0]),sy=Number(scale[1]),sz=Number(scale[2]);
+    const tx=Number(position[0]),ty=Number(position[1]),tz=Number(position[2]);
+    const a=Number(eulerZ||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
+    for(let i=0;i<p.length;i+=3){
+      const x=p[i]*sx,y=p[i+1]*sy,z=p[i+2]*sz;
+      batch.positions.push(x*c-y*s+tx,x*s+y*c+ty,z+tz);
+      const nx=n[i],ny=n[i+1],nz=n[i+2];
+      batch.normals.push(nx*c-ny*s,nx*s+ny*c,nz);
+    }
+    for(const value of idx)batch.indices.push(base+value);
+    batch.sourcePrimitiveCount++;
+    staticBatchSourcePrimitiveCount++;
+  }
+  function finalizeStaticBatches(root,collector){
+    const meshes=[];
+    for(const batch of collector.values()){
+      if(!batch.positions.length)continue;
+      const mesh=new pc.Mesh(device);
+      mesh.setPositions(batch.positions);
+      mesh.setNormals(batch.normals);
+      mesh.setIndices(batch.indices);
+      mesh.update();
+      const mi=new pc.MeshInstance(mesh,batch.material,root);
+      mi.cull=true;
+      frustumCulledMeshInstances++;
+      meshes.push({mesh,meshInstance:mi,sourcePrimitiveCount:batch.sourcePrimitiveCount});
+      staticBatchMeshCreations++;
+    }
+    return meshes;
+  }
+  function matrixDataFor(instances,worldX,worldZ){
+    const data=new Float32Array(instances.length*16);
+    const matrix=new pc.Mat4(),pos=new pc.Vec3(),rot=new pc.Quat(),scale=new pc.Vec3();
+    for(let i=0;i<instances.length;i++){
+      const item=instances[i];
+      pos.set(Number(worldX)+item.position[0],item.position[1],Number(worldZ)+item.position[2]);
+      rot.setFromEulerAngles(...(item.euler||[0,0,0]));
+      scale.set(...item.scale);
+      matrix.setTRS(pos,rot,scale);
+      data.set(matrix.data,i*16);
+    }
+    return data;
+  }
+  function instanceAabb(instances,worldX,worldZ){
+    if(!instances.length)return new pc.BoundingBox(new pc.Vec3(worldX,0,worldZ),new pc.Vec3(1,1,1));
+    let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+    for(const item of instances){
+      const hx=Math.abs(item.scale[0])*0.6,hy=Math.abs(item.scale[1])*0.6,hz=Math.abs(item.scale[2])*0.6;
+      const x=Number(worldX)+item.position[0],y=item.position[1],z=Number(worldZ)+item.position[2];
+      minX=Math.min(minX,x-hx);maxX=Math.max(maxX,x+hx);
+      minY=Math.min(minY,y-hy);maxY=Math.max(maxY,y+hy);
+      minZ=Math.min(minZ,z-hz);maxZ=Math.max(maxZ,z+hz);
+    }
+    return new pc.BoundingBox(
+      new pc.Vec3((minX+maxX)/2,(minY+maxY)/2,(minZ+maxZ)/2),
+      new pc.Vec3((maxX-minX)/2,(maxY-minY)/2,(maxZ-minZ)/2)
+    );
+  }
+  function createInstancedGroup(root,name,mesh,mat,instances,worldX=0,worldZ=0){
+    if(!instances.length)return null;
+    const entity=new pc.Entity(name);
+    const mi=new pc.MeshInstance(mesh,mat,entity);
+    const format=pc.VertexFormat.getDefaultInstancingFormat(device);
+    const vb=new pc.VertexBuffer(device,format,instances.length,{data:matrixDataFor(instances,worldX,worldZ)});
+    mi.setInstancing(vb,true);
+    mi.aabb=instanceAabb(instances,worldX,worldZ);
+    entity.addComponent("render",{meshInstances:[mi],castShadows:false,receiveShadows:false});
+    root.addChild(entity);
+    presentationEntityCreations++;
+    presentationMeshInstanceCreations++;
+    instancedGroupCreations++;
+    instancedObjectCount+=instances.length;
+    frustumCulledMeshInstances++;
+    return {entity,meshInstance:mi,vertexBuffer:vb,instances};
+  }
+  function updateInstancingGroup(group,worldX,worldZ){
+    if(!group)return;
+    group.vertexBuffer.setData(matrixDataFor(group.instances,worldX,worldZ));
+    group.meshInstance.aabb=instanceAabb(group.instances,worldX,worldZ);
+    instancingBufferUpdates++;
+  }
+
+  function buildBuilding(root,worldData,descriptor,index,batches){
     const b=localBounds(worldData,descriptor.bounds||{});
     const special=descriptor.source==="special";
     const height=special?2.25:1.75;
-    const wall= special
+    const wall=special
       ?presentationMaterial("building-special-wall",0.53,0.45,0.31,0.10)
       :presentationMaterial("building-house-wall",0.61,0.52,0.36,0.10);
     const roof=presentationMaterial("building-roof",0.33,0.15,0.10,0.08);
     const door=presentationMaterial("building-door",0.20,0.11,0.06,0.06);
     const rootName="ChunkBuilding_"+String(descriptor.id||index).replace(/[^a-z0-9_-]+/gi,"-");
-    primitive(root,rootName+"_Wall","box",[b.x,height*0.5,b.z],[b.width*0.90,height,b.depth*0.90],wall);
+    appendBoxBatch(batchFor(batches,wall.name,wall),[b.x,height*0.5,b.z],[b.width*0.90,height,b.depth*0.90],0);
     const roofLift=height+0.34;
     const left=primitive(root,rootName+"_RoofL","box",[b.x-b.width*0.21,roofLift,b.z],[b.width*0.58,0.16,b.depth*0.98],roof,[0,0,-25]);
     const right=primitive(root,rootName+"_RoofR","box",[b.x+b.width*0.21,roofLift,b.z],[b.width*0.58,0.16,b.depth*0.98],roof,[0,0,25]);
@@ -161,27 +268,25 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       const p=localTileCenter(worldData,descriptor.entrance.x,descriptor.entrance.y);
       const minX=String(descriptor.bounds?.minX),maxX=String(descriptor.bounds?.maxX);
       const sideX=String(descriptor.entrance.x)===minX||String(descriptor.entrance.x)===maxX;
-      primitive(root,rootName+"_Door","box",[p.x,0.65,p.z],sideX?[0.12,1.20,0.62]:[0.62,1.20,0.12],door);
+      appendBoxBatch(batchFor(batches,door.name,door),[p.x,0.65,p.z],sideX?[0.12,1.20,0.62]:[0.62,1.20,0.12],0);
     }
     return 3+(descriptor.entrance?1:0);
   }
-  function buildProp(root,worldData,descriptor,index){
+  function collectPropInstances(worldData,descriptor,treeTrunks,treeCanopies,rocks){
     const p=localTileCenter(worldData,descriptor.x,descriptor.y);
     const type=String(descriptor.type||"");
     if(type==="tree"){
-      primitive(root,"ChunkTree_"+index+"_Trunk","cylinder",[p.x,0.72,p.z],[0.30,1.35,0.30],presentationMaterial("tree-trunk",0.28,0.18,0.10));
-      primitive(root,"ChunkTree_"+index+"_Canopy","sphere",[p.x,1.75,p.z],[1.05,0.95,1.05],presentationMaterial("tree-canopy",0.18,0.38,0.16));
+      treeTrunks.push({position:[p.x,0.72,p.z],scale:[0.30,1.35,0.30],euler:[0,0,0]});
+      treeCanopies.push({position:[p.x,1.75,p.z],scale:[1.05,0.95,1.05],euler:[0,0,0]});
       return 2;
     }
-    primitive(root,"ChunkProp_"+index+"_"+type,"sphere",[p.x,0.34,p.z],[0.70,0.48,0.62],presentationMaterial("rock",0.39,0.40,0.37));
+    rocks.push({position:[p.x,0.34,p.z],scale:[0.70,0.48,0.62],euler:[0,0,0]});
     return 1;
   }
 
   function build(spec){
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
-    // Eight flat presentation blocks per axis keep default 16×16 chunks readable
-    // while avoiding a 1,024-vertex terrain build for every cached chunk.
     const segments=Math.min(8,size);
     const step=size/segments;
     const metersPerTile=2;
@@ -209,9 +314,6 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       }
     }
 
-    // Use the explicit Mesh stream API for vertex colors. setColors32 stores
-    // deterministic 8-bit RGBA values and PlayCanvas normalizes them for the
-    // StandardMaterial diffuseVertexColor shader path.
     const mesh=new pc.Mesh(device);
     mesh.setPositions(positions);
     mesh.setNormals(normals);
@@ -221,22 +323,49 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     const entity=new pc.Entity("TerrainChunkMesh_"+spec.x+"_"+spec.y);
     entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
     const meshInstance=new pc.MeshInstance(mesh,material,entity);
+    meshInstance.cull=true;
     entity.render.meshInstances=[meshInstance];
     parent.addChild(entity);
     entity.enabled=false;
+    frustumCulledMeshInstances++;
 
-    let presentationMeshInstanceCount=0;
     const presentation=spec.worldData?.presentation||{};
     const buildings=Array.isArray(presentation.buildingDescriptors)?presentation.buildingDescriptors:[];
     const props=Array.isArray(presentation.propDescriptors)?presentation.propDescriptors:[];
-    for(let i=0;i<buildings.length;i++)presentationMeshInstanceCount+=buildBuilding(entity,spec.worldData,buildings[i],i);
-    for(let i=0;i<props.length;i++)presentationMeshInstanceCount+=buildProp(entity,spec.worldData,props[i],i);
+    const batches=staticBatchCollector();
+    let sourcePresentationPrimitiveCount=0;
+    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches);
+
+    const staticBatches=finalizeStaticBatches(entity,batches);
+    if(staticBatches.length){
+      entity.render.meshInstances=[meshInstance,...staticBatches.map(item=>item.meshInstance)];
+      presentationMeshInstanceCreations+=staticBatches.length;
+    }
+
+    const treeTrunks=[],treeCanopies=[],rocks=[];
+    for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeTrunks,treeCanopies,rocks);
+    const worldX=Number(spec.worldX||0),worldZ=Number(spec.worldZ||0);
+    const instancedGroups=[
+      createInstancedGroup(entity,"ChunkTrees_Trunks",primitiveMesh("tree-trunk"),presentationMaterial("tree-trunk",0.28,0.18,0.10),treeTrunks,worldX,worldZ),
+      createInstancedGroup(entity,"ChunkTrees_Canopies",primitiveMesh("tree-canopy"),presentationMaterial("tree-canopy",0.18,0.38,0.16),treeCanopies,worldX,worldZ),
+      createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks,worldX,worldZ)
+    ].filter(Boolean);
+
+    const roofPrimitiveCount=buildings.length*2;
+    const staticBatchCount=staticBatches.length;
+    const instancedGroupCount=instancedGroups.length;
+    const optimizedPresentationDrawCalls=roofPrimitiveCount+staticBatchCount+instancedGroupCount;
+    const unoptimizedPresentationDrawCalls=sourcePresentationPrimitiveCount;
+    const presentationMeshInstanceCount=optimizedPresentationDrawCalls;
+    const presentationEntityCount=roofPrimitiveCount+staticBatchCount+instancedGroupCount;
+    const sourcePresentationEntityCount=unoptimizedPresentationDrawCalls;
+    const savedDrawCalls=Math.max(0,unoptimizedPresentationDrawCalls-optimizedPresentationDrawCalls);
 
     const surfaceCounts=spec.worldData?.terrain?.surfaceCounts||{};
     const buildMs=performance.now()-started;
     creations++;totalBuildMs+=buildMs;maxBuildMs=Math.max(maxBuildMs,buildMs);
     return {
-      entity,mesh,meshInstance,
+      entity,mesh,meshInstance,staticBatches,instancedGroups,
       x:Number(spec.x),y:Number(spec.y),chunkSize:size,signature:String(spec.signature||""),
       segments,
       vertexCount:positions.length/3,
@@ -244,7 +373,20 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       meshInstanceCount:1,
       materialCount:1,
       presentationMeshInstanceCount,
-      presentationEntityCount:presentationMeshInstanceCount,
+      presentationEntityCount,
+      sourcePresentationEntityCount,
+      sourcePresentationPrimitiveCount,
+      staticBatchCount,
+      staticBatchSourcePrimitiveCount:staticBatches.reduce((sum,item)=>sum+item.sourcePrimitiveCount,0),
+      instancedGroupCount,
+      instancedObjectCount:treeTrunks.length+treeCanopies.length+rocks.length,
+      hardwareInstancing:instancedGroupCount>0,
+      chunkLocalStaticBatching:staticBatchCount>0,
+      frustumCulling:true,
+      optimizedPresentationDrawCalls,
+      unoptimizedPresentationDrawCalls,
+      savedDrawCalls,
+      drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       buildingPresentationCount:buildings.length,
       propPresentationCount:props.length,
       roadCellCount:Number(surfaceCounts.road||0)+Number(surfaceCounts.path||0)+Number(surfaceCounts.square||0),
@@ -260,9 +402,15 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       complete:true
     };
   }
+  function reposition(resource,worldX,worldZ){
+    if(!resource)return;
+    for(const group of resource.instancedGroups||[])updateInstancingGroup(group,Number(worldX||0),Number(worldZ||0));
+  }
   function destroy(resource){
     if(!resource)return;
     presentationEntityDestroys+=Number(resource.presentationEntityCount||0);
+    for(const group of resource.instancedGroups||[])group.vertexBuffer?.destroy?.();
+    for(const item of resource.staticBatches||[])item.mesh?.destroy?.();
     resource.entity?.destroy?.();
     resource.mesh?.destroy?.();
     destroys++;
@@ -277,17 +425,23 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       presentationEntityCreations,presentationEntityDestroys,presentationMeshInstanceCreations,
       entityCreations:creations+presentationEntityCreations,
       entityDestroys:destroys+presentationEntityDestroys,
+      staticBatchMeshCreations,staticBatchSourcePrimitiveCount,
+      instancedGroupCreations,instancedObjectCount,instancingBufferUpdates,
+      frustumCulledMeshInstances,
       sharedPresentationMaterialCount:presentationMaterials.size,
       oneEntityPerChunk:true,
       oneEntityPerTile:false,
       sharedMaterial:true,
+      chunkLocalStaticBatching:true,
+      hardwareInstancing:true,
+      frustumCulling:true,
       completeChunkMesh:true,
       seedDerivedPresentation:true,
       hardCodedSampleGeometry:false,
       simulationAuthorityPreserved:true
     });
   }
-  return Object.freeze({build,destroy,stats});
+  return Object.freeze({build,reposition,destroy,stats});
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});
