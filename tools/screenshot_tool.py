@@ -287,6 +287,7 @@ return (() => {
           domTerrainTileCount: Number(renderer.domTerrainTileCount || 0),
           logicalTextureKeyPass: Boolean(renderer.logicalTextureKeyPass),
           protagonistVisible: Boolean(renderer.protagonistVisible),
+          characterPresentation: renderer.characterPresentation || null,
           standardTerrainTexturePx: Number(renderer.standardTerrainTexturePx || 0),
           visibleRegionKey: renderer.regionKey || document.querySelector('#terrainGrid')?.dataset?.regionKey || null,
           preparedRegionKey: assets.preparedRegionKey || null,

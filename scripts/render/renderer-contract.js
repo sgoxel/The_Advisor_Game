@@ -38,6 +38,26 @@ function sameSimulation(a,b){
 
 function frameFromModel(model){
   if(!model)return null;
+  const visibleCharacters=Array.isArray(model.visibleCharacters)
+    ?model.visibleCharacters.map(character=>Object.freeze({
+      id:String(character?.id||""),
+      role:String(character?.role||"resident"),
+      textureUrl:character?.textureUrl?String(character.textureUrl):null,
+      assetUrl:character?.assetUrl?String(character.assetUrl):null,
+      frameUrls:Array.isArray(character?.frameUrls)?character.frameUrls.map(url=>String(url)) : null,
+      frameIndex:Number(character?.frameIndex||0),
+      point:freezePoint(character?.point),
+      height:Number(character?.height||0),
+      elevation:Number(character?.elevation||0),
+      flipX:Boolean(character?.flipX),
+      residentId:character?.residentId?String(character.residentId):null,
+      residentName:character?.residentName?String(character.residentName):null,
+      profession:character?.profession?String(character.profession):null,
+      activity:character?.activity?String(character.activity):null,
+      activityLabel:character?.activityLabel?String(character.activityLabel):null,
+      buildingId:character?.buildingId?String(character.buildingId):null
+    }))
+    :Object.freeze([]);
   return Object.freeze({
     width:Number(model.width||0),
     height:Number(model.height||0),
@@ -50,7 +70,10 @@ function frameFromModel(model){
     tileCount:Array.isArray(model.tiles)?model.tiles.length:0,
     protagonistWorld:freezePoint(model.protagonistWorld),
     buildingCount:Array.isArray(model.buildingInteriors)?model.buildingInteriors.length:0,
-    interiorObjectCount:Array.isArray(model.interiorObjects)?model.interiorObjects.length:0
+    interiorObjectCount:Array.isArray(model.interiorObjects)?model.interiorObjects.length:0,
+    visibleCharacters,
+    visibleCharacterCount:Array.isArray(model.visibleCharacters)?model.visibleCharacters.length:0,
+    simulatedCharacterCount:Number(model.simulatedCharacterCount||0)
   });
 }
 

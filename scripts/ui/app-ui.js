@@ -60,6 +60,76 @@ function saveDevelopmentMode(){
   return active;
 }
 
+const CHARACTER_VISIBILITY_MARGIN_TILES=1;
+function characterTextureUrlForProfession(profession){
+  switch(String(profession||"")){
+    case "farmer":return "assets/characters/npc_farmer_male_01.png";
+    case "smith":return "assets/characters/npc_blacksmith_male_01.png";
+    case "tavern-keeper":return "assets/characters/npc_tavernkeeper_male_01.png";
+    case "shopkeeper":return "assets/characters/npc_merchant_male_01.png";
+    case "woodcutter":return "assets/characters/npc_woodcutter_male_01.png";
+    case "guard":return "assets/characters/npc_guard_male_01.png";
+    default:return "assets/characters/npc_market_vendor_female_01.png";
+  }
+}
+
+function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
+  const protagonist=Protagonist.getPosition();
+  const visibleCharacters=[];
+  const roster=campaign?.seed&&window.DailyActivity?.build
+    ?DailyActivity.build(campaign.seed)
+    :[];
+  const timestamp=GameTime.getTimestampMs?.();
+  const halfCols=Math.floor(Number(columns||0)/2);
+  const halfRows=Math.floor(Number(rows||0)/2);
+  const maxX=BigInt(halfCols+CHARACTER_VISIBILITY_MARGIN_TILES);
+  const maxY=BigInt(halfRows+CHARACTER_VISIBILITY_MARGIN_TILES);
+
+  if(protagonist){
+    visibleCharacters.push(Object.freeze({
+      id:"protagonist",
+      role:"protagonist",
+      textureUrl:"assets/characters/protagonist_male.png",
+      point:Object.freeze({x:protagonist.x,y:protagonist.y}),
+      height:Number(tileSize||0)*0.94,
+      elevation:0.06,
+      flipX:false,
+      frameIndex:0
+    }));
+  }
+
+  for(const resident of roster){
+    const activity=DailyActivity.resolveActionTarget(campaign.seed,resident,timestamp);
+    const target=activity?.target;
+    if(!target)continue;
+    const offset=Camera.offsetFrom(target);
+    if(!offset)continue;
+    const dx=BigInt(offset.x),dy=BigInt(offset.y);
+    if(dx<-maxX||dx>maxX||dy<-maxY||dy>maxY)continue;
+    visibleCharacters.push(Object.freeze({
+      id:`resident:${resident.id}`,
+      role:"resident",
+      residentId:resident.id,
+      residentName:resident.name,
+      profession:resident.profession,
+      activity:activity.action,
+      activityLabel:activity.label,
+      buildingId:activity.buildingId||null,
+      textureUrl:characterTextureUrlForProfession(resident.profession),
+      point:Object.freeze({x:target.x,y:target.y}),
+      height:Number(tileSize||0)*0.92,
+      elevation:0.05,
+      flipX:(BigInt(resident.id.slice(1)||"0")&1n)===1n,
+      frameIndex:0
+    }));
+  }
+
+  return Object.freeze({
+    visibleCharacters:Object.freeze(visibleCharacters),
+    simulatedCharacterCount:roster.length+(protagonist?1:0)
+  });
+}
+
 function renderPRNG(fantasyTimestampMs){
   const campaign=SeedSystem.getCampaign();
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
@@ -744,6 +814,10 @@ async function renderTerrain(){
 
   const buildingInteriors=BuildingInteriors.build(campaign.seed);
   const interiorObjects=window.InteriorObjects?.build?InteriorObjects.build(campaign.seed):[];
+  const characterBundle=visibleCharacterSpecs(campaign,center,columns,rows,tileSize);
+  const characterPreparation=GameRenderer.prepareCharacters?.(characterBundle.visibleCharacters,characterBundle.simulatedCharacterCount)||Promise.resolve(null);
+  await characterPreparation;
+  if(currentSerial!==terrainRenderSerial)return false;
   const rendererSnapshot=GameRenderer.render({
     width,height,columns,rows,tileSize,
     center,
@@ -754,7 +828,10 @@ async function renderTerrain(){
     protagonistWorld:protagonist||null,
     protagonistOffset:protagonist?Camera.offsetFrom(protagonist):null,
     buildingInteriors,
-    interiorObjects
+    interiorObjects,
+    visibleCharacters:characterBundle.visibleCharacters,
+    visibleEntities:characterBundle.visibleCharacters,
+    simulatedCharacterCount:characterBundle.simulatedCharacterCount
   });
 
   const gridWidth=columns*tileSize;
@@ -1208,9 +1285,11 @@ function renderRendererProof(){
   e.rendererCanvasSize.textContent=renderer.canvas
     ?renderer.canvas.cssWidth+"×"+renderer.canvas.cssHeight+" / "+renderer.canvas.backingWidth+"×"+renderer.canvas.backingHeight
     :"—";
-  e.rendererTextureCount.textContent=String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources";
+  e.rendererTextureCount.textContent=playcanvas
+    ?String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources / "+String(renderer.characterPresentation?.preparedCharacterCount||0)+" character textures"
+    :String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources";
   e.rendererSourceMode.textContent=playcanvas
-    ?"PlayCanvas orthographic 3D baseline"
+    ?"PlayCanvas orthographic 3D baseline | "+String(renderer.characterPresentation?.activeCharacterCount||0)+" active / "+String(renderer.characterPresentation?.simulatedCharacterCount||0)+" simulated characters"
     :(assets.svgSourceCount||0)+" SVG draft / "+(assets.pngSourceCount||0)+" PNG";
   e.rendererPreparedRegion.textContent=assets.preparedRegionKey||"—";
   if(!e.rendererVisibleRegion.textContent)e.rendererVisibleRegion.textContent=renderer.regionKey||"—";
