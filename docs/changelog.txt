@@ -764,3 +764,9 @@
 - Attempt 3 run 35924050079 still failed the representative-time validator because frame 1 reverted to live fantasy time: expected [2,7,12,19], observed [21,7,12,19].
 - All four fresh attempt-3 screenshots were directly inspected. Frames 2–4 show a clean/readable schedule proof with all six visible checks PASS; frame 1 shows the normal gameplay view. VISUAL 8.5/10 PASS, but functional certification remains incomplete.
 - The three-attempt limit was reached. Issue #31 remains open and the ROADMAP is intentionally not marked COMPLETED.
+2026-09-24 01:01 +03:00 | WP-S004-003 | Deterministic daily activity + action targets final certification
+- Completed the evidence revalidation by fixing the screenshot harness first-frame dispatch so WP-S004 schedule scenarios execute their intended 02:30 proof step instead of the generic initial frame.
+- Final tested implementation head 1f6b66e7a823fc1bdc3667bbb93384ee43ff5234 preserves deterministic 24-hour schedules, authoritative fantasy-time selection, WP-S004-002 home/work assignments, and action-compatible Stage 3 interaction targets without adding movement or action execution.
+- Dedicated Visual Evidence run 35925721612 passed with exact representative fantasy samples 02:30, 07:30, 12:30 and 19:30; 12 residents, complete schedules, valid intended-action/target pairs, deterministic reproduction, stable identity/assignments and isolation rules all passed.
+- All four fresh screenshots were directly inspected. The schedule table is complete/readable at every representative time, all six checks are visibly PASS, and there is no clipping, overlap, malformed table structure, unreadable text or broken layout. VISUAL 8.7/10 PASS.
+- Automatic regression run 35925614813 and GitHub Pages run 35925613719 passed on the exact tested head.
