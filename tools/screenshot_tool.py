@@ -87,6 +87,7 @@ SCENARIOS = {
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s004-001",
+    "wp-s004-002",
     "playcanvas-root-cutover",
 }
 
@@ -126,6 +127,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s004-001": 3,
+    "wp-s004-002": 3,
     "playcanvas-root-cutover": 3,
 }
 
@@ -323,6 +325,16 @@ return (() => {
             const now=window.GameTime?.getNow?.();
             return campaign&&window.ResidentRoster?.proof
               ? window.ResidentRoster.proof(campaign.seed,now)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        residentAssignments: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.ResidentAssignments?.proof
+              ? window.ResidentAssignments.proof(campaign.seed)
               : null;
           } catch (error) {
             return {error:String(error)};
@@ -1101,6 +1113,38 @@ def _show_resident_roster_proof(driver, position: str = "top") -> str:
     if not isinstance(result, dict) or int(result.get("rows") or 0) != 12:
         raise RuntimeError(f"Resident roster proof view did not expose 12 rows: {result}")
     return f"resident-roster:{position}:rows={result['rows']}"
+
+
+def _show_resident_assignment_proof(driver, position: str = "top") -> str:
+    result = driver.execute_script(
+        """
+        const position=arguments[0];
+        const section=document.querySelector('#developmentDetails');
+        const proof=document.querySelector('#residentAssignmentProof');
+        const scroll=document.querySelector('#residentAssignmentScroll');
+        if(!section||!proof||!scroll)return null;
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        proof.open=true;
+        window.AppUI?.refreshResidentAssignments?.();
+        proof.scrollIntoView({block:'start'});
+        if(position==='bottom')scroll.scrollTop=scroll.scrollHeight;
+        else if(position==='middle')scroll.scrollTop=Math.max(0,(scroll.scrollHeight-scroll.clientHeight)/2);
+        else scroll.scrollTop=0;
+        return {
+          rows:document.querySelectorAll('#residentAssignmentRows tr').length,
+          open:proof.open,
+          position,
+          scrollTop:Number(scroll.scrollTop||0),
+          scrollHeight:Number(scroll.scrollHeight||0),
+          clientHeight:Number(scroll.clientHeight||0)
+        };
+        """,
+        position,
+    )
+    if not isinstance(result, dict) or int(result.get("rows") or 0) != 12:
+        raise RuntimeError(f"Resident assignment proof view did not expose 12 rows: {result}")
+    return f"resident-assignments:{position}:rows={result['rows']}"
 
 
 def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
@@ -2126,6 +2170,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 1:
             return _show_resident_roster_proof(driver, "bottom")
         return _show_resident_roster_proof(driver, "top")
+    if scenario == "wp-s004-002":
+        if frame_index == 0:
+            return _show_resident_assignment_proof(driver, "top")
+        if frame_index == 1:
+            return _show_resident_assignment_proof(driver, "middle")
+        return _show_resident_assignment_proof(driver, "bottom")
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2160,6 +2210,48 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s004-002":
+        if len(frames) < 3:
+            raise RuntimeError("wp-s004-002 requires three evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:3]]
+        proofs=[build.get("residentAssignments") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Assignment evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Assignment evidence changed Protagonist authority: {protagonists}")
+        signatures=[]
+        for index,proof in enumerate(proofs,start=1):
+            if proof.get("error"):
+                raise RuntimeError(f"Assignment proof errored in frame {index}: {proof}")
+            required={
+                "pass":True,"residentCount":12,"homeCount":6,"homesValid":True,
+                "homeCapacityPass":True,"professionsCompatible":True,"targetsPass":True,
+                "interactionTargetsPass":True,"routesPass":True,"doorsPass":True,
+                "deterministic":True,"assignmentBasis":"Campaign SEED + resident ID",
+                "movementExecutionIntroduced":False,"actionExecutionIntroduced":False,
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Resident assignment {key} mismatch in frame {index}: {proof}")
+            occupancy=proof.get("homeOccupancy") or []
+            if len(occupancy)!=6 or any(int(item.get("count") or 0)!=2 for item in occupancy):
+                raise RuntimeError(f"Home capacity/coverage mismatch in frame {index}: {occupancy}")
+            assignments=proof.get("assignments") or []
+            routes=proof.get("routes") or []
+            if len(assignments)!=12 or len(routes)!=12:
+                raise RuntimeError(f"Assignment/route count mismatch in frame {index}: assignments={len(assignments)}, routes={len(routes)}")
+            if any(not route.get("pass") for route in routes):
+                raise RuntimeError(f"Continuous route failed in frame {index}: {routes}")
+            signatures.append([
+                {key:item.get(key) for key in ("residentId","homeId","homeTarget","profession","workFunction","workplaceId","workTarget")}
+                for item in assignments
+            ])
+        if len({json.dumps(item,sort_keys=True) for item in signatures})!=1:
+            raise RuntimeError(f"Same-SEED assignments changed across evidence frames: {signatures}")
+        return
+
     if scenario == "wp-s004-001":
         if len(frames) < 3:
             raise RuntimeError("wp-s004-001 requires three evidence frames")
@@ -4165,12 +4257,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

@@ -588,6 +588,30 @@
     </div>
   </details>
 
+  <details id="residentAssignmentProof">
+    <summary>WP-S004-002 Homes, Professions + Indoor Workplace Assignment</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Residents Assigned</span><strong id="residentAssignmentCount">—</strong></div>
+        <div><span>Homes Used</span><strong id="residentAssignmentHomes">—</strong></div>
+        <div><span>Max Home Occupancy</span><strong id="residentAssignmentCapacity">—</strong></div>
+        <div><span>Assignment Basis</span><strong>SEED + Resident ID</strong></div>
+      </div>
+      <div class="resident-assignment-scroll" id="residentAssignmentScroll">
+        <table class="resident-assignment-table" aria-label="Starting Village resident home and profession assignments">
+          <thead><tr><th>Resident</th><th>Home</th><th>Profession</th><th>Workplace</th><th>Home target</th><th>Work target</th><th>Route</th></tr></thead>
+          <tbody id="residentAssignmentRows"></tbody>
+        </table>
+      </div>
+      <div class="check"><span>All 12 residents have a valid generated home; six homes hold exactly two residents each</span><b id="vResidentAssignmentHomes">WAITING</b></div>
+      <div class="check"><span>Professions map to authoritative compatible workplaces/worksites</span><b id="vResidentAssignmentProfessions">WAITING</b></div>
+      <div class="check"><span>Indoor home/work targets use Stage 3 interaction points; outdoor work targets stay inside the worksite</span><b id="vResidentAssignmentTargets">WAITING</b></div>
+      <div class="check"><span>All selected targets are authoritative walkable, non-blocked cells</span><b id="vResidentAssignmentWalkable">WAITING</b></div>
+      <div class="check"><span>Every home-to-work route is continuous and crosses real exterior doors where required</span><b id="vResidentAssignmentRoutes">WAITING</b></div>
+      <div class="check"><span>Same Campaign SEED + resident IDs reproduce the identical assignment set</span><b id="vResidentAssignmentDeterministic">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">

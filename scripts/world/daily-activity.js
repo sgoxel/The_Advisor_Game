@@ -10,12 +10,12 @@ const RESIDENT_NAMES=Object.freeze([
 const RESIDENT_BIRTH_YEAR_MIN=1056;
 const RESIDENT_BIRTH_YEAR_SPAN=52;
 const PROFESSIONS=Object.freeze([
-  Object.freeze({profession:"farmer",workFunction:"farm",idealStart:7,afterWork:18,homeKind:"cabin"}),
-  Object.freeze({profession:"smith",workFunction:"craft",idealStart:8,afterWork:17,homeKind:"house"}),
-  Object.freeze({profession:"tavern-keeper",workFunction:"lodging",idealStart:9,afterWork:18,homeKind:"house"}),
-  Object.freeze({profession:"shopkeeper",workFunction:"market",idealStart:8,afterWork:17,homeKind:"house"}),
-  Object.freeze({profession:"woodcutter",workFunction:"outdoor-work",idealStart:7,afterWork:18,homeKind:"cabin"}),
-  Object.freeze({profession:"guard",workFunction:"civic",idealStart:9,afterWork:18,homeKind:"house"})
+  Object.freeze({profession:"farmer",workFunction:"farm",workObjectTypes:Object.freeze(["workbench","storage"]),idealStart:7,afterWork:18}),
+  Object.freeze({profession:"smith",workFunction:"craft",workObjectTypes:Object.freeze(["workbench"]),idealStart:8,afterWork:17}),
+  Object.freeze({profession:"tavern-keeper",workFunction:"lodging",workObjectTypes:Object.freeze(["counter","table"]),idealStart:9,afterWork:18}),
+  Object.freeze({profession:"shopkeeper",workFunction:"market",workObjectTypes:Object.freeze(["counter","storage"]),idealStart:8,afterWork:17}),
+  Object.freeze({profession:"woodcutter",workFunction:"outdoor-work",workObjectTypes:Object.freeze([]),idealStart:7,afterWork:18}),
+  Object.freeze({profession:"guard",workFunction:"civic",workObjectTypes:Object.freeze(["table","chair"]),idealStart:9,afterWork:18})
 ]);
 const cache=new Map();
 
@@ -106,57 +106,132 @@ function timestampKey(value){
   return `${stamp.year}-${pad2(stamp.month)}-${pad2(stamp.day)} ${pad2(stamp.hour)}:${pad2(stamp.minute)}:${pad2(stamp.second)}`;
 }
 
-function accessTargetFromPlan(plan){
-  if(!plan)return {x:0,y:0};
-  if(plan.entrance && plan.entrance.target){
-    return Object.freeze({x:plan.entrance.target.x,y:plan.entrance.target.y});
-  }
-  if(plan.entrance){
-    return Object.freeze({x:plan.entrance.x,y:plan.entrance.y});
-  }
-  if(plan.bounds){
-    return Object.freeze({x:(plan.bounds.minX+plan.bounds.maxX)/2,y:(plan.bounds.minY+plan.bounds.maxY)/2});
-  }
-  return Object.freeze({x:0,y:0});
+function residentOrdinal(residentId){
+  const match=/^R(\d+)$/.exec(String(residentId||""));
+  return Math.max(0,(match?Number(match[1]):1)-1);
 }
-
-function accessTargetFromLot(lot){
-  if(!lot)return {x:0,y:0};
-  if(lot.access && lot.access.target){
-    return Object.freeze({x:lot.access.target.x,y:lot.access.target.y});
-  }
-  if(lot.access){
-    return Object.freeze({x:lot.access.x,y:lot.access.y});
-  }
-  if(lot.bounds){
-    return Object.freeze({x:(lot.bounds.minX+lot.bounds.maxX)/2,y:(lot.bounds.minY+lot.bounds.maxY)/2});
-  }
-  return Object.freeze({x:0,y:0});
+function professionOrder(seed){
+  return PROFESSIONS.slice().sort((a,b)=>{
+    const av=PRNG.foundationUint32(seed,"resident-assignment:profession-order:"+a.profession);
+    const bv=PRNG.foundationUint32(seed,"resident-assignment:profession-order:"+b.profession);
+    return av-bv||a.profession.localeCompare(b.profession);
+  });
 }
-
-function homeForIndex(seed,index){
-  const homes=HousePlans && HousePlans.build ? HousePlans.build(seed) : [];
-  if(!homes.length)return {homePlotId:"H0",homePlanId:null,homeTarget:Object.freeze({x:0,y:0}),homeType:"house"};
-  const home=homes[index % homes.length];
-  return {
-    homePlotId:home?.plotId||`H${index+1}`,
-    homePlanId:home?.id||null,
-    homeTarget:accessTargetFromPlan(home),
-    homeType:home?.kind||"house"
-  };
+function professionForResident(seed,residentId){
+  const order=professionOrder(seed);
+  return order[residentOrdinal(residentId)%order.length];
 }
-
-function workplaceForIndex(seed,index){
-  const lots=SpecialLots && SpecialLots.build ? SpecialLots.build(seed) : [];
-  const fallback=(lots[index % Math.max(1,lots.length)]||null);
-  if(!fallback){
-    return {workplaceId:"S0",workplaceKind:"workshop",workplaceTarget:Object.freeze({x:0,y:0})};
+function homeOrder(seed){
+  return HousePlans.build(seed).slice().sort((a,b)=>{
+    const av=PRNG.foundationUint32(seed,"resident-assignment:home-order:"+a.id);
+    const bv=PRNG.foundationUint32(seed,"resident-assignment:home-order:"+b.id);
+    return av-bv||a.id.localeCompare(b.id);
+  });
+}
+function interactionObjectTarget(seed,buildingId,preferredTypes){
+  const objects=window.InteriorObjects?.build?.(seed)||[];
+  const candidates=objects
+    .filter(object=>object.buildingId===buildingId&&object.interactionPositions?.length)
+    .sort((a,b)=>a.id.localeCompare(b.id));
+  for(const type of preferredTypes||[]){
+    const object=candidates.find(item=>item.type===type);
+    const target=object?.interactionPositions?.[0];
+    if(target)return Object.freeze({
+      target:Object.freeze({x:String(target.x),y:String(target.y)}),
+      source:"interior-interaction",
+      objectId:object.id,
+      objectType:object.type
+    });
   }
-  return {
-    workplaceId:fallback.id,
-    workplaceKind:fallback.kind,
-    workplaceTarget:accessTargetFromLot(fallback)
-  };
+  const fallback=candidates[0];
+  const target=fallback?.interactionPositions?.[0];
+  return target?Object.freeze({
+    target:Object.freeze({x:String(target.x),y:String(target.y)}),
+    source:"interior-interaction",
+    objectId:fallback.id,
+    objectType:fallback.type
+  }):null;
+}
+function homeForResident(seed,residentId){
+  const homes=homeOrder(seed);
+  if(homes.length!==6)throw new Error("WP-S004-002 requires exactly six generated homes.");
+  const ordinal=residentOrdinal(residentId);
+  const home=homes[Math.floor(ordinal/2)%homes.length];
+  const interior=BuildingInteriors.get(seed,home.id);
+  const interaction=interactionObjectTarget(seed,home.id,["bed"]);
+  if(!interior||!interaction)throw new Error("Home interaction target unavailable for "+home.id);
+  return Object.freeze({
+    homePlotId:home.plotId,
+    homePlanId:home.id,
+    homeLabel:interior.label,
+    homeType:home.kind,
+    homeTarget:interaction.target,
+    homeTargetSource:interaction.source,
+    homeObjectId:interaction.objectId,
+    homeObjectType:interaction.objectType,
+    homeDoor:interior.entrance?.door||null
+  });
+}
+function outdoorWorkTarget(seed,lot,residentId){
+  const candidates=[];
+  for(let y=lot.bounds.minY;y<=lot.bounds.maxY;y++){
+    for(let x=lot.bounds.minX;x<=lot.bounds.maxX;x++){
+      const point=Object.freeze({x:String(x),y:String(y)});
+      const state=window.InteriorObjects?.classifyNavigation
+        ?InteriorObjects.classifyNavigation(seed,point.x,point.y)
+        :Walkability.classify(seed,point.x,point.y);
+      if(!state?.walkable)continue;
+      const score=PRNG.foundationUint32(
+        seed,"resident-assignment:outdoor-target:"+residentId+":"+point.x+":"+point.y
+      );
+      candidates.push({point,score});
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score||a.point.y.localeCompare(b.point.y)||a.point.x.localeCompare(b.point.x));
+  return candidates[0]?.point||null;
+}
+function workplaceForResident(seed,residentId,professionConfig){
+  const lot=SpecialLots.build(seed).find(item=>item.function===professionConfig.workFunction)||null;
+  if(!lot)throw new Error("Compatible workplace unavailable for "+professionConfig.profession);
+  if(!lot.enterable){
+    const target=outdoorWorkTarget(seed,lot,residentId);
+    if(!target)throw new Error("Outdoor work target unavailable for "+lot.id);
+    return Object.freeze({
+      workplaceId:lot.id,
+      workplaceKind:lot.kind,
+      workplaceLabel:lot.label,
+      workplaceFunction:lot.function,
+      workplaceEnterable:false,
+      workplaceTarget:target,
+      workplaceTargetSource:"outdoor-worksite",
+      workplaceObjectId:null,
+      workplaceObjectType:null,
+      workplaceDoor:null
+    });
+  }
+  const interior=BuildingInteriors.get(seed,lot.id);
+  const interaction=interactionObjectTarget(seed,lot.id,professionConfig.workObjectTypes);
+  if(!interior||!interaction)throw new Error("Indoor work interaction unavailable for "+lot.id);
+  return Object.freeze({
+    workplaceId:lot.id,
+    workplaceKind:lot.kind,
+    workplaceLabel:lot.label,
+    workplaceFunction:lot.function,
+    workplaceEnterable:true,
+    workplaceTarget:interaction.target,
+    workplaceTargetSource:interaction.source,
+    workplaceObjectId:interaction.objectId,
+    workplaceObjectType:interaction.objectType,
+    workplaceDoor:interior.entrance?.door||null
+  });
+}
+function assignmentForResident(seed,residentId){
+  const professionConfig=professionForResident(seed,residentId);
+  return Object.freeze({
+    professionConfig,
+    home:homeForResident(seed,residentId),
+    work:workplaceForResident(seed,residentId,professionConfig)
+  });
 }
 
 function schedulePattern(seed,resident){
@@ -269,9 +344,10 @@ function schedulePattern(seed,resident){
 
 function buildResident(seed,index){
   const identity=identityForIndex(seed,index);
-  const professionConfig=PROFESSIONS[index % PROFESSIONS.length];
-  const home=homeForIndex(seed,index);
-  const work=workplaceForIndex(seed,index);
+  const assignment=assignmentForResident(seed,identity.id);
+  const professionConfig=assignment.professionConfig;
+  const home=assignment.home;
+  const work=assignment.work;
   const special=SpecialLots && SpecialLots.build ? SpecialLots.build(seed) : [];
   const socialLot=special.find(lot=>lot.function==="lodging")||special[0]||null;
   const socialTarget=socialLot ? accessTargetFromLot(socialLot) : work.workplaceTarget;
@@ -285,13 +361,26 @@ function buildResident(seed,index){
     birthplaceCenter:identity.birthplaceCenter,
     profession:professionConfig.profession,
     professionConfig,
+    workFunction:professionConfig.workFunction,
     homePlotId:home.homePlotId,
     homePlanId:home.homePlanId,
+    homeLabel:home.homeLabel,
     homeTarget:home.homeTarget,
+    homeTargetSource:home.homeTargetSource,
+    homeObjectId:home.homeObjectId,
+    homeObjectType:home.homeObjectType,
     homeType:home.homeType,
+    homeDoor:home.homeDoor,
     workplaceId:work.workplaceId,
     workplaceKind:work.workplaceKind,
+    workplaceLabel:work.workplaceLabel,
+    workplaceFunction:work.workplaceFunction,
+    workplaceEnterable:work.workplaceEnterable,
     workplaceTarget:work.workplaceTarget,
+    workplaceTargetSource:work.workplaceTargetSource,
+    workplaceObjectId:work.workplaceObjectId,
+    workplaceObjectType:work.workplaceObjectType,
+    workplaceDoor:work.workplaceDoor,
     socialTarget,
     socialBuildingId,
     schedule:null
@@ -415,6 +504,133 @@ function residentRosterProof(seedValue,when){
   });
 }
 
+function assignmentView(seedValue){
+  const seed=String(seedValue==null?"":seedValue);
+  return Object.freeze(build(seed).map(resident=>Object.freeze({
+    residentId:resident.id,
+    residentName:resident.name,
+    homeId:resident.homePlanId,
+    homeLabel:resident.homeLabel,
+    homeTarget:resident.homeTarget,
+    homeTargetSource:resident.homeTargetSource,
+    homeObjectId:resident.homeObjectId,
+    profession:resident.profession,
+    workFunction:resident.workFunction,
+    workplaceId:resident.workplaceId,
+    workplaceLabel:resident.workplaceLabel,
+    workplaceKind:resident.workplaceKind,
+    workplaceFunction:resident.workplaceFunction,
+    workplaceEnterable:resident.workplaceEnterable,
+    workTarget:resident.workplaceTarget,
+    workTargetSource:resident.workplaceTargetSource,
+    workObjectId:resident.workplaceObjectId
+  })));
+}
+function pointKey2(point){return point?String(point.x)+","+String(point.y):null}
+function routeContainsPoint(route,point){
+  const key=pointKey2(point);
+  return Boolean(route?.found&&key&&route.path?.some(item=>pointKey2(item)===key));
+}
+function residentAssignmentProof(seedValue){
+  const seed=String(seedValue==null?"":seedValue);
+  if(!seed)return Object.freeze({pass:false,residentCount:0,assignments:Object.freeze([])});
+  const residents=build(seed);
+  const assignments=assignmentView(seed);
+  const repeated=Object.freeze(Array.from({length:12},(_,index)=>{
+    const residentId=`R${String(index+1).padStart(2,"0")}`;
+    const assignment=assignmentForResident(seed,residentId);
+    return Object.freeze({
+      residentId,
+      homeId:assignment.home.homePlanId,
+      homeTarget:assignment.home.homeTarget,
+      profession:assignment.professionConfig.profession,
+      workFunction:assignment.professionConfig.workFunction,
+      workplaceId:assignment.work.workplaceId,
+      workTarget:assignment.work.workplaceTarget
+    });
+  }));
+  const signature=assignments.map(item=>({
+    residentId:item.residentId,homeId:item.homeId,homeTarget:item.homeTarget,
+    profession:item.profession,workFunction:item.workFunction,
+    workplaceId:item.workplaceId,workTarget:item.workTarget
+  }));
+  const deterministic=JSON.stringify(signature)===JSON.stringify(repeated);
+  const homes=HousePlans.build(seed);
+  const homeCounts=new Map(homes.map(home=>[home.id,0]));
+  const routeProofs=[];
+  let homesValid=true,homeCapacityPass=true,professionsCompatible=true;
+  let targetsPass=true,interactionTargetsPass=true,routesPass=true,doorsPass=true;
+  for(const resident of residents){
+    const home=BuildingInteriors.get(seed,resident.homePlanId);
+    const lot=SpecialLots.build(seed).find(item=>item.id===resident.workplaceId)||null;
+    const homeCount=(homeCounts.get(resident.homePlanId)||0)+1;
+    homeCounts.set(resident.homePlanId,homeCount);
+    if(!home||home.source!=="house")homesValid=false;
+    if(homeCount>2)homeCapacityPass=false;
+    if(!lot||lot.function!==resident.workFunction||resident.workplaceFunction!==resident.workFunction){
+      professionsCompatible=false;
+    }
+    const homeState=InteriorObjects.classifyNavigation(seed,resident.homeTarget.x,resident.homeTarget.y);
+    const workState=InteriorObjects.classifyNavigation(seed,resident.workplaceTarget.x,resident.workplaceTarget.y);
+    if(!homeState?.walkable||!workState?.walkable)targetsPass=false;
+    const homeObject=InteriorObjects.build(seed).find(object=>object.id===resident.homeObjectId);
+    const homeInteraction=Boolean(
+      resident.homeTargetSource==="interior-interaction"&&homeObject?.type==="bed"&&
+      homeObject.interactionPositions?.some(point=>pointKey2(point)===pointKey2(resident.homeTarget))
+    );
+    let workInteraction=true;
+    if(resident.workplaceEnterable){
+      const workObject=InteriorObjects.build(seed).find(object=>object.id===resident.workplaceObjectId);
+      workInteraction=Boolean(
+        resident.workplaceTargetSource==="interior-interaction"&&
+        workObject?.buildingId===resident.workplaceId&&
+        workObject.interactionPositions?.some(point=>pointKey2(point)===pointKey2(resident.workplaceTarget))
+      );
+    }else{
+      const x=Number(resident.workplaceTarget.x),y=Number(resident.workplaceTarget.y);
+      workInteraction=Boolean(
+        resident.workplaceTargetSource==="outdoor-worksite"&&lot&&
+        x>=lot.bounds.minX&&x<=lot.bounds.maxX&&y>=lot.bounds.minY&&y<=lot.bounds.maxY
+      );
+    }
+    if(!homeInteraction||!workInteraction)interactionTargetsPass=false;
+    const route=RoutePlanner.findRoute(seed,resident.homeTarget,resident.workplaceTarget);
+    const homeDoorPass=routeContainsPoint(route,home?.entrance?.door);
+    const workInterior=resident.workplaceEnterable?BuildingInteriors.get(seed,resident.workplaceId):null;
+    const workDoorPass=resident.workplaceEnterable
+      ?routeContainsPoint(route,workInterior?.entrance?.door)
+      :true;
+    const routeWalkable=Boolean(route?.found&&route.path.every(point=>InteriorObjects.classifyNavigation(seed,point.x,point.y)?.walkable));
+    const routePass=Boolean(route?.found&&routeWalkable&&homeDoorPass&&workDoorPass);
+    if(!routePass)routesPass=false;
+    if(!homeDoorPass||!workDoorPass)doorsPass=false;
+    routeProofs.push(Object.freeze({
+      residentId:resident.id,
+      found:Boolean(route?.found),
+      stepCount:route?.stepCount??0,
+      totalSeconds:route?.totalSeconds??0,
+      homeDoorPass,
+      workDoorPass,
+      routeWalkable,
+      pass:routePass
+    }));
+  }
+  const allSixHomesUsed=homeCounts.size===6&&[...homeCounts.values()].every(count=>count===2);
+  homeCapacityPass=homeCapacityPass&&allSixHomesUsed;
+  const pass=residents.length===12&&homesValid&&homeCapacityPass&&professionsCompatible&&
+    targetsPass&&interactionTargetsPass&&routesPass&&doorsPass&&deterministic;
+  return Object.freeze({
+    pass,residentCount:residents.length,homeCount:homes.length,homesValid,homeCapacityPass,
+    homeOccupancy:Object.freeze([...homeCounts.entries()].map(([homeId,count])=>Object.freeze({homeId,count}))),
+    professionsCompatible,targetsPass,interactionTargetsPass,routesPass,doorsPass,deterministic,
+    assignmentBasis:"Campaign SEED + resident ID",
+    movementExecutionIntroduced:false,
+    actionExecutionIntroduced:false,
+    assignments,
+    routes:Object.freeze(routeProofs)
+  });
+}
+
 function resolveActionTarget(seedValue,residentValue,when){
   const seed=String(seedValue==null?"":seedValue);
   const roster=build(seed);
@@ -469,6 +685,12 @@ window.ActionTargets=Object.freeze({
   resolveActionTarget,
   build,
   proof
+});
+window.ResidentAssignments=Object.freeze({
+  build:assignmentView,
+  assignments:assignmentView,
+  proof:residentAssignmentProof,
+  basis:"Campaign SEED + resident ID"
 });
 window.ResidentRoster=Object.freeze({
   build:residentIdentityView,

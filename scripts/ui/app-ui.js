@@ -36,6 +36,8 @@ const ids=[
   "vGeoDeterministic","vGeoTimeFree","vVillageSpacing","vTerrainGeography",
   "residentRosterCount","residentRosterSeed","residentRosterTime","residentRosterRows","residentRosterScroll",
   "vResidentFields","vResidentIds","vResidentDeterministic","vResidentTimeIdentity","vResidentAge","vResidentBirthplace",
+  "residentAssignmentCount","residentAssignmentHomes","residentAssignmentCapacity","residentAssignmentRows","residentAssignmentScroll",
+  "vResidentAssignmentHomes","vResidentAssignmentProfessions","vResidentAssignmentTargets","vResidentAssignmentWalkable","vResidentAssignmentRoutes","vResidentAssignmentDeterministic",
   "gameplayPlaceholder","protagonistMarker","protagonistSprite","protagonistFallback","protagonistLocation","wp3Position","vOrigin","vCenter","vProtagonistSprite","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
@@ -1586,6 +1588,55 @@ function renderResidentRosterProof(timeOverride=null){
   return proof;
 }
 
+function formatAssignmentPoint(point){
+  return point?"("+point.x+","+point.y+")":"—";
+}
+function renderResidentAssignmentProof(){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign){
+    e.residentAssignmentCount.textContent="—";
+    e.residentAssignmentHomes.textContent="—";
+    e.residentAssignmentCapacity.textContent="—";
+    e.residentAssignmentRows.replaceChildren();
+    ["vResidentAssignmentHomes","vResidentAssignmentProfessions","vResidentAssignmentTargets","vResidentAssignmentWalkable","vResidentAssignmentRoutes","vResidentAssignmentDeterministic"]
+      .forEach(id=>setCheck(e[id],false,"WAITING"));
+    return null;
+  }
+  const proof=ResidentAssignments.proof(campaign.seed);
+  e.residentAssignmentCount.textContent=String(proof.residentCount);
+  e.residentAssignmentHomes.textContent=String(proof.homeCount);
+  e.residentAssignmentCapacity.textContent=String(Math.max(0,...proof.homeOccupancy.map(item=>item.count)));
+  const routeByResident=new Map(proof.routes.map(route=>[route.residentId,route]));
+  const fragment=document.createDocumentFragment();
+  for(const assignment of proof.assignments){
+    const route=routeByResident.get(assignment.residentId);
+    const row=document.createElement("tr");
+    const values=[
+      assignment.residentId+" "+assignment.residentName,
+      assignment.homeId+" "+assignment.homeLabel,
+      assignment.profession,
+      assignment.workplaceId+" "+assignment.workplaceLabel,
+      formatAssignmentPoint(assignment.homeTarget),
+      formatAssignmentPoint(assignment.workTarget),
+      route?.pass?"PASS · "+route.stepCount+" steps":"FAIL"
+    ];
+    for(const value of values){
+      const cell=document.createElement("td");
+      cell.textContent=value;
+      row.appendChild(cell);
+    }
+    fragment.appendChild(row);
+  }
+  e.residentAssignmentRows.replaceChildren(fragment);
+  setCheck(e.vResidentAssignmentHomes,proof.homesValid&&proof.homeCapacityPass,"FAIL");
+  setCheck(e.vResidentAssignmentProfessions,proof.professionsCompatible,"FAIL");
+  setCheck(e.vResidentAssignmentTargets,proof.interactionTargetsPass,"FAIL");
+  setCheck(e.vResidentAssignmentWalkable,proof.targetsPass,"FAIL");
+  setCheck(e.vResidentAssignmentRoutes,proof.routesPass&&proof.doorsPass,"FAIL");
+  setCheck(e.vResidentAssignmentDeterministic,proof.deterministic,"FAIL");
+  return proof;
+}
+
 function renderAdviceLog(){
   if(typeof window.AdvisorChannel?.renderAdvicePanel !== "function") return;
   const campaign=SeedSystem.getCampaign();
@@ -1610,6 +1661,7 @@ function renderStatic(){
   renderGeography();
   renderStartingVillage();
   renderResidentRosterProof();
+  renderResidentAssignmentProof();
   renderHousePlans();
   renderSpecialLots();
   renderWalkability();
@@ -1728,6 +1780,11 @@ window.AppUI=Object.freeze({
   refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot()),
   refreshResidentRoster:()=>renderResidentRosterProof(),
+  refreshResidentAssignments:()=>renderResidentAssignmentProof(),
+  residentAssignmentSnapshot:()=>{
+    const campaign=SeedSystem.getCampaign();
+    return campaign?ResidentAssignments.proof(campaign.seed):null;
+  },
   residentRosterSnapshot:()=>{
     const campaign=SeedSystem.getCampaign();
     return campaign?ResidentRoster.proof(campaign.seed,GameTime.getNow()):null;
