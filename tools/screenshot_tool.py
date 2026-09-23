@@ -1558,8 +1558,16 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Terrain chunk renderer changed Simulation authority in frame {index}")
             if int(stats.get("Cached") or 0) > int((stats.get("settings") or {}).get("maxCachedChunks") or 0):
                 raise RuntimeError(f"Chunk cache exceeded budget in frame {index}: {stats}")
-            if resources > 320:
-                raise RuntimeError(f"Terrain mesh allocation is not bounded for mobile in frame {index}: {chunk}")
+            if visible > 128:
+                raise RuntimeError(f"Active terrain mesh draw allocation is not bounded in frame {index}: {chunk}")
+            if resources > 512:
+                raise RuntimeError(f"Retained terrain mesh allocation is not bounded in frame {index}: {chunk}")
+            average_build_ms = float(generator.get("averageBuildMs") or 0)
+            if average_build_ms > 1.0:
+                raise RuntimeError(f"Average terrain chunk mesh build cost is too high in frame {index}: {generator}")
+            draw_calls = int((gpu.get("performance") or {}).get("drawCalls") or 0)
+            if draw_calls < 1 or draw_calls > 180:
+                raise RuntimeError(f"PlayCanvas draw-call budget invalid in frame {index}: drawCalls={draw_calls}, gpu={gpu}")
 
         for index in (1,2,3,4):
             if int(preload[index].get("visibleWaits") or 0) != initial_visible_waits:
