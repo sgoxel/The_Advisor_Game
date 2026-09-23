@@ -77,6 +77,7 @@ SCENARIOS = {
     "playcanvas-scene",
     "wp-s003-003",
     "wp-s003-004-002",
+    "wp-s003-005-002",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -105,6 +106,7 @@ SCENARIO_MIN_SHOTS = {
     "playcanvas-scene": 6,
     "wp-s003-003": 3,
     "wp-s003-004-002": 8,
+    "wp-s003-005-002": 4,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -218,6 +220,7 @@ return (() => {
         height: innerHeight,
         devicePixelRatio: window.devicePixelRatio || 1,
       },
+      assetStandardProof: window.WP_S003_005_002_EVIDENCE || null,
       currentBuild: {
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
         campaignSeed: window.SeedSystem?.getCampaign?.()?.seed || null,
@@ -628,6 +631,14 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
 
 
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
+    if scenario == "wp-s003-005-002":
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                "return Boolean(window.WP_S003_005_002_EVIDENCE?.ready)"
+            )
+        )
+        return "asset-standard-proof-ready"
     result = driver.execute_script(CURRENT_BUILD_PREP_SCRIPT)
     action = result.get("action", "unknown") if isinstance(result, dict) else "unknown"
 
@@ -1118,6 +1129,17 @@ def _set_character_proof_state(driver, state: str) -> str:
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-005-002":
+        if frame_index == 1:
+            driver.set_window_size(1280, 800)
+            return "asset-standard:tablet-landscape"
+        if frame_index == 2:
+            driver.set_window_size(844, 390)
+            return "asset-standard:phone-landscape"
+        if frame_index == 3:
+            driver.set_window_size(390, 844)
+            return "asset-standard:phone-portrait"
+        return "asset-standard:desktop-landscape"
     if scenario == "wp-s003-004-002":
         if frame_index == 0:
             return _set_character_proof_state(driver, "open")
@@ -1288,6 +1310,60 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-005-002":
+        if len(frames) < 4:
+            raise RuntimeError("wp-s003-005-002 requires four evidence frames")
+        proofs = [frame.get("runtime", {}).get("assetStandardProof") or {} for frame in frames[:4]]
+        for index, proof in enumerate(proofs, start=1):
+            if proof.get("ready") is not True or proof.get("gltfLoaded") is not True:
+                raise RuntimeError(f"glTF proof did not load in frame {index}: {proof}")
+            if proof.get("engine") != "PlayCanvas" or not str(proof.get("engineVersion") or "").startswith("2."):
+                raise RuntimeError(f"PlayCanvas Engine 2 missing in frame {index}: {proof}")
+            if proof.get("runtimeFormat") != "glTF 2.0":
+                raise RuntimeError(f"Unexpected runtime format in frame {index}: {proof}")
+            if abs(float(proof.get("worldTileMeters") or 0) - 2.0) > 0.001:
+                raise RuntimeError(f"2 m tile scale missing in frame {index}: {proof}")
+            if proof.get("deterministicLogicalKeys") is not True or proof.get("rendererOnly") is not True:
+                raise RuntimeError(f"Asset authority/key standard failed in frame {index}: {proof}")
+            if proof.get("boundsDefined") is not True:
+                raise RuntimeError(f"Asset bounds missing in frame {index}: {proof}")
+            if int(proof.get("logicalAssetCount") or 0) < 4:
+                raise RuntimeError(f"Representative logical asset set incomplete in frame {index}: {proof}")
+            eligible = set(proof.get("instancingEligible") or [])
+            if "environment.tree.prototype" not in eligible or "interior.workbench.prototype" not in eligible:
+                raise RuntimeError(f"Instancing eligibility missing in frame {index}: {eligible}")
+            if int(proof.get("meshInstanceCount") or 0) < 10:
+                raise RuntimeError(f"Representative mesh count too small in frame {index}: {proof}")
+            if int(proof.get("materialCount") or 0) < 5:
+                raise RuntimeError(f"Shared material proof incomplete in frame {index}: {proof}")
+            if int(proof.get("drawCalls") or 0) < 1:
+                raise RuntimeError(f"Draw-call telemetry missing in frame {index}: {proof}")
+            rep = proof.get("representative") or {}
+            building = rep.get("building") or {}
+            footprint = building.get("footprintMeters") or {}
+            roof = building.get("roofMeters") or {}
+            door = building.get("doorMeters") or {}
+            if footprint != {"x": 6, "z": 5}:
+                raise RuntimeError(f"House footprint scale mismatch in frame {index}: {footprint}")
+            if roof != {"x": 6.6, "z": 5.6}:
+                raise RuntimeError(f"Roof scale mismatch in frame {index}: {roof}")
+            if door != {"x": 1.2, "y": 2.1}:
+                raise RuntimeError(f"Door scale mismatch in frame {index}: {door}")
+            tree = rep.get("tree") or {}
+            if int(tree.get("repeatedCount") or 0) != 3 or tree.get("instancingEligible") is not True:
+                raise RuntimeError(f"Repeated tree proof failed in frame {index}: {tree}")
+
+        viewports = [frame.get("runtime", {}).get("viewport") or {} for frame in frames[:4]]
+        if int(viewports[0].get("width") or 0) <= int(viewports[0].get("height") or 0):
+            raise RuntimeError(f"Desktop proof is not landscape: {viewports[0]}")
+        if int(viewports[1].get("width") or 0) <= int(viewports[1].get("height") or 0):
+            raise RuntimeError(f"Tablet proof is not landscape: {viewports[1]}")
+        if int(viewports[2].get("width") or 0) <= int(viewports[2].get("height") or 0):
+            raise RuntimeError(f"Phone proof is not landscape: {viewports[2]}")
+        if int(viewports[3].get("height") or 0) <= int(viewports[3].get("width") or 0):
+            raise RuntimeError(f"Phone proof is not portrait: {viewports[3]}")
+        return
+
     if scenario == "wp-s003-004-002":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-004-002 requires eight evidence frames")
@@ -2416,6 +2492,8 @@ def take_screenshots(
 
     try:
         browser_url = normalize_target(target)
+        if scenario == "wp-s003-005-002":
+            browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
         if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
             browser_url += ("&" if "?" in browser_url else "?") + "renderer=playcanvas&gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
@@ -2445,7 +2523,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -2461,7 +2539,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
