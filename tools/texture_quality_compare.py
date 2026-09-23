@@ -129,6 +129,7 @@ try:
             protagonist:r.simulationSnapshot?.protagonist||window.RendererContract?.simulationSnapshot?.()?.protagonist||null,
             cacheSignature:q.cacheSignature,
             terrainSignature:r.terrainChunks?.signature||null,
+            terrainPresentationSignature:r.terrainChunks?.presentationSignature||null,
             worldPending:Number(world.pending||0),
             worldCached:Number(world.cached||0)
           };
@@ -141,8 +142,10 @@ try:
             raise RuntimeError(f"PlayCanvas material metrics missing for {profile}: {row}")
         if row["perFrameResizeOrTranscode"] is not False:
             raise RuntimeError(f"Per-frame texture resize/transcode policy failed for {profile}: {row}")
-        if profile not in str(row["cacheSignature"]) or profile not in str(row["terrainSignature"]):
+        if profile not in str(row["cacheSignature"]) or profile not in str(row["terrainPresentationSignature"]):
             raise RuntimeError(f"Quality profile missing from presentation signatures for {profile}: {row}")
+        if "geometry=seed-chunk-v1" not in str(row["terrainSignature"]):
+            raise RuntimeError(f"Terrain geometry signature should remain quality-independent for {profile}: {row}")
         driver.save_screenshot(str(OUT/f"quality-{profile}.png"))
         rows.append(row)
 
