@@ -4,7 +4,8 @@ const DEFAULT_LIMIT=96;
 function create({app,pc,cacheLimit=DEFAULT_LIMIT}={}){
   if(!app||!pc)throw new Error("PlayCanvasAssetPreparation requires app and pc");
   const registry=new Map(),cache=new Map(),regions=new Map();
-  let serial=0,hits=0,misses=0,waits=0,evictions=0,loads=0,networkLoads=0,containerParses=0,textureLoads=0,nullResolutions=0;
+  let currentCacheLimit=Math.max(1,Math.floor(Number(cacheLimit)||DEFAULT_LIMIT));
+  let serial=0,hits=0,misses=0,waits=0,evictions=0,loads=0,networkLoads=0,containerParses=0,textureLoads=0,nullResolutions=0,cacheLimitChanges=0;
   function register(key,spec){
     if(!key||!spec)throw new Error("asset key/spec required");
     const type=spec.type||"container";
@@ -14,12 +15,21 @@ function create({app,pc,cacheLimit=DEFAULT_LIMIT}={}){
   function touch(key,e){e.lastUsed=performance.now();cache.delete(key);cache.set(key,e);}
   function evict(){
     for(const [key,e] of cache){
-      if(cache.size<=cacheLimit)break;
+      if(cache.size<=currentCacheLimit)break;
       if(e.pins>0||e.promise)continue;
       if(e.asset){try{app.assets.remove(e.asset);e.asset.unload?.();}catch(_){}}
       cache.delete(key);evictions++;
     }
   }
+  function setCacheLimit(value){
+    const next=Math.max(1,Math.floor(Number(value)||DEFAULT_LIMIT));
+    if(next===currentCacheLimit)return currentCacheLimit;
+    currentCacheLimit=next;
+    cacheLimitChanges++;
+    evict();
+    return currentCacheLimit;
+  }
+  function getCacheLimit(){return currentCacheLimit;}
   function load(key){
     const id=String(key),old=cache.get(id);
     if(old){hits++;touch(id,old);return old.promise||Promise.resolve(old.asset);}
@@ -80,10 +90,10 @@ function create({app,pc,cacheLimit=DEFAULT_LIMIT}={}){
   function stats(){
     let meshes=0,textures=0,materials=0,characters=0,pinned=0,pending=0;
     for(const [key,e] of cache){const spec=registry.get(key);if(spec?.type==="container")meshes++;if(spec?.type==="texture")textures++;if(spec?.type==="material")materials++;if(spec?.character)characters++;if(e.pins>0)pinned++;if(e.promise)pending++;}
-    return Object.freeze({registered:registry.size,cached:cache.size,meshContainers:meshes,textures,materials,characterAssets:characters,pinned,pending,hits,misses,waits,loads,networkLoads,containerParses,textureLoads,nullResolutions,evictions,cacheLimit,regions:[...regions.keys()]});
+    return Object.freeze({registered:registry.size,cached:cache.size,meshContainers:meshes,textures,materials,characterAssets:characters,pinned,pending,hits,misses,waits,loads,networkLoads,containerParses,textureLoads,nullResolutions,evictions,cacheLimit:currentCacheLimit,cacheLimitChanges,regions:[...regions.keys()]});
   }
   function proof(){const s=stats();return Object.freeze({logicalKeys:registry.size>0,bounded:s.cached<=cacheLimit,separateCharacterPath:[...registry.values()].some(v=>v.character),noVisiblePathLoads:true,preparedRegions:s.regions.every(isReady),stats:s});}
-  return Object.freeze({register,load,asset,prepareRegion,prepareRegions,invalidate,isReady,stats,proof});
+  return Object.freeze({register,load,asset,prepareRegion,prepareRegions,invalidate,isReady,stats,proof,setCacheLimit,getCacheLimit});
 }
 window.PlayCanvasAssetPreparation=Object.freeze({create,DEFAULT_LIMIT});
 })();
