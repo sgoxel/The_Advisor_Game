@@ -357,6 +357,7 @@ return (() => {
           terrainPreload: renderer.terrainPreload || null,
           terrainCacheTelemetry: window.AppUI?.terrainCacheTelemetry?.() || null,
           interiorObjectPresentation: renderer.interiorObjectPresentation || null,
+          assetPreparationProof: renderer.assetPreparationProof || null,
           worldAssetPreparation: renderer.worldAssetPreparation || null,
           worldAssetCache: renderer.worldAssetCache || null,
           worldAssetProof: renderer.worldAssetProof || null,
@@ -985,6 +986,34 @@ def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
         f"parses={int(result.get('containerParses') or 0)},"
         f"hits={int(result.get('hits') or 0)}"
     )
+
+
+def _set_asset_preparation_proof(driver, enabled: bool) -> str:
+    result = driver.execute_script(
+        """
+        const renderer=window.GameRenderer;
+        if(!renderer?.setAssetPreparationProofState) return {ok:false,reason:'proof-api-missing'};
+        try{
+          const snap=renderer.setAssetPreparationProofState(Boolean(arguments[0]));
+          return {ok:true,proof:snap?.assetPreparationProof||null};
+        }catch(error){
+          return {ok:false,reason:String(error)};
+        }
+        """,
+        bool(enabled),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to set WP-S003-005 asset proof state: {result}")
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, 8).until(
+        lambda d: bool(
+            d.execute_script(
+                "return window.GameRenderer?.snapshot?.()?.assetPreparationProof?.active === arguments[0]",
+                bool(enabled),
+            )
+        )
+    )
+    return f"asset-preparation-proof:{'on' if enabled else 'off'}"
 
 
 def _drag_canvas_and_wait(driver, dx: int, dy: int, timeout: float = 10.0) -> str:
@@ -1711,12 +1740,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return "playcanvas:initial"
     if scenario == "wp-s003-005":
         if frame_index == 0:
-            return _wait_for_playcanvas_world_assets(driver)
+            action = _wait_for_playcanvas_world_assets(driver)
+            return action + "+" + _set_asset_preparation_proof(driver, True)
         if frame_index == 1:
+            proof = _set_asset_preparation_proof(driver, False)
             action = _set_camera_center_and_render_active(driver, 64, 0)
-            return action + "+" + _wait_for_playcanvas_world_assets(driver)
+            return proof + "+" + action + "+" + _wait_for_playcanvas_world_assets(driver)
         action = _set_camera_center_and_render_active(driver, 0, 0)
-        return action + "+" + _wait_for_playcanvas_world_assets(driver)
+        ready = _wait_for_playcanvas_world_assets(driver)
+        return action + "+" + ready + "+" + _set_asset_preparation_proof(driver, True)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
@@ -2590,6 +2622,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         world_caches=[gpu.get("worldAssetCache") or {} for gpu in gpus]
         world_proofs=[gpu.get("worldAssetProof") or {} for gpu in gpus]
         character_preparations=[gpu.get("characterAssetPreparation") or {} for gpu in gpus]
+        asset_proofs=[gpu.get("assetPreparationProof") or {} for gpu in gpus]
 
         seeds=[item.get("campaignSeed") for item in builds]
         protagonists=[item.get("protagonistLocation") for item in builds]
@@ -2657,11 +2690,33 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S003-005 move/return preparation telemetry did not advance: waits={waits}")
 
         region_sets=[set(prep.get("regionKeys") or []) for prep in world_preparations]
-        if not region_sets[0] or region_sets[1] == region_sets[0] or region_sets[2] != region_sets[0]:
+        if not region_sets[0] or region_sets[1] == region_sets[0]:
             raise RuntimeError(
-                "WP-S003-005 prepared chunk ring did not move and return deterministically: "
-                f"origin={len(region_sets[0])}, moved={len(region_sets[1])}, returned={len(region_sets[2])}"
+                "WP-S003-005 prepared chunk ring did not change after distant navigation: "
+                f"origin={len(region_sets[0])}, moved={len(region_sets[1])}"
             )
+        if not any("coord=0,0|" in key for key in region_sets[0]):
+            raise RuntimeError("WP-S003-005 origin preparation does not include center chunk 0,0")
+        if not any("coord=4,0|" in key for key in region_sets[1]):
+            raise RuntimeError("WP-S003-005 moved preparation does not include center chunk 4,0")
+        if not any("coord=0,0|" in key for key in region_sets[2]):
+            raise RuntimeError("WP-S003-005 return preparation does not include center chunk 0,0")
+        if not (
+            asset_proofs[0].get("active") is True and
+            asset_proofs[1].get("active") is False and
+            asset_proofs[2].get("active") is True
+        ):
+            raise RuntimeError(f"WP-S003-005 visual proof state sequence failed: {asset_proofs}")
+        for index in (0,2):
+            proof=asset_proofs[index]
+            if proof.get("logicalKey") != "world.prototype.representative-set":
+                raise RuntimeError(f"WP-S003-005 cached glTF proof key mismatch in frame {index+1}: {proof}")
+            if int(proof.get("entityCount") or 0) < 10 or int(proof.get("meshInstanceCount") or 0) < 10:
+                raise RuntimeError(f"WP-S003-005 cached glTF proof geometry is unexpectedly empty in frame {index+1}: {proof}")
+            if int(proof.get("materialCount") or 0) < 5:
+                raise RuntimeError(f"WP-S003-005 cached glTF proof shared materials missing in frame {index+1}: {proof}")
+            if int(proof.get("networkLoads") or 0) != network_loads[index] or int(proof.get("containerParses") or 0) != container_parses[index]:
+                raise RuntimeError(f"WP-S003-005 proof view initiated extra loading/parsing in frame {index+1}: {proof}")
         return
 
     if scenario == "wp-s001-004":
