@@ -693,3 +693,8 @@
 - Dedicated run 35880317169 functionally passed all four profiles, preserved SEED/Protagonist identity, and confirmed profile persistence across reload.
 - Direct inspection of all four fresh screenshots exposed a test-induced PlayCanvas initialization race; visual score 5.5/10 FAIL, so the WP remains open and is not marked completed.
 - Corrected the evidence startup ordering in c3e999033539862c196c5d3e1c0f854aaa5c2c56; no fourth evaluation was started because the three-attempt limit was reached for this run.
+2026-09-23 18:23 +03:00 | WP-S003-005-001 | Final fresh certification
+- Re-certified the corrected PlayCanvas texture-quality evidence path on run 35880975272 / tested head 34f5a0b3e044efd1ebe3cbd370ace74e0204bd21.
+- Low/Standard/High/Ultra all passed with PlayCanvas world cache limits 24/48/72/96, material caps 512/1024/2048/4096 px, anisotropy 1/2/4/8, profile-aware chunk signatures, persistent settings, and no per-frame resize/transcode.
+- Authoritative SEED remained The_Advisor_Game_20260924 and Protagonist remained (0,0, level 0) across the profile cycle and reload.
+- Four fresh screenshots were directly inspected after fixing the startup race. Campaign is ACTIVE, renderer error is absent, and no missing materials, corruption, clipping, projection failure, or major UI defect is visible. VISUAL 8.1/10 PASS.
