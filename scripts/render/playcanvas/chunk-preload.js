@@ -124,6 +124,8 @@ function createManager({
   let lastRequest=null;
   let settings=get();
   let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,cacheReuses=0,frameBudgetSpikes=0,invalidations=0;
+  let activations=0,deactivations=0,stateReuses=0,resourceCreations=0,resourceDestructions=0;
+  let updateCalls=0,lastUpdateMs=0,maxUpdateMs=0,totalUpdateMs=0,transitionCalls=0,totalTransitionMs=0,maxTransitionMs=0;
   let lastInvalidationReason=null;
   let lastWorkMs=0,maxWorkMs=0,backgroundFrames=0;
   let lastDirection=Object.freeze({x:0,y:0});
@@ -145,13 +147,38 @@ function createManager({
   function currentSignature(){
     return "chunk="+size+"|"+String(signatureProvider()||"standard");
   }
+  function destroyEntry(entry){
+    if(!entry)return;
+    try{destroyChunk?.(entry.resource,entry);}catch(_){}
+    resourceDestructions++;
+  }
+  function setEntryState(entry,state){
+    if(!entry)return false;
+    const previous=entry.state;
+    if(previous===state){stateReuses++;return false;}
+    entry.state=state;
+    const started=performance.now();
+    if(previous==="Active"&&state!=="Active"){
+      deactivateChunk?.(entry.resource,entry);
+      deactivations++;
+      transitionCalls++;
+    }else if(previous!=="Active"&&state==="Active"){
+      activateChunk?.(entry.resource,entry);
+      activations++;
+      transitionCalls++;
+    }
+    const elapsed=performance.now()-started;
+    if(previous==="Active"||state==="Active"){
+      totalTransitionMs+=elapsed;
+      maxTransitionMs=Math.max(maxTransitionMs,elapsed);
+    }
+    return true;
+  }
   function invalidate(reason="manual"){
     invalidations++;
     lastInvalidationReason=String(reason||"manual");
     cancelWork();
-    for(const entry of entries.values()){
-      try{destroyChunk?.(entry.resource,entry);}catch(_){}
-    }
+    for(const entry of entries.values())destroyEntry(entry);
     entries.clear();queue=[];queued.clear();lastCenterChunk=null;
     signature=currentSignature();
   }
@@ -220,9 +247,7 @@ function createManager({
       hits++;
       if(entry.state==="Cached"&&(state==="Active"||state==="Prepared"))cacheReuses++;
       entry.lastUsed=performance.now();
-      entry.state=state;
-      if(state==="Active")activateChunk?.(entry.resource,entry);
-      else deactivateChunk?.(entry.resource,entry);
+      setEntryState(entry,state);
       return entry;
     }
     misses++;
@@ -235,8 +260,16 @@ function createManager({
     entry={key,x,y,state,signature:sig,resource,lastUsed:performance.now()};
     entries.set(key,entry);
     compositions++;
-    if(state==="Active")activateChunk?.(resource,entry);
-    else deactivateChunk?.(resource,entry);
+    resourceCreations++;
+    if(state==="Active"){
+      activateChunk?.(resource,entry);
+      activations++;
+      transitionCalls++;
+    }else{
+      deactivateChunk?.(resource,entry);
+      deactivations++;
+      transitionCalls++;
+    }
     return entry;
   }
   function schedulePrepared(items){
@@ -247,8 +280,8 @@ function createManager({
         const entry=entries.get(fullKey);
         hits++;
         if(entry.state==="Cached")cacheReuses++;
-        entry.state="Prepared";entry.lastUsed=performance.now();
-        deactivateChunk?.(entry.resource,entry);
+        entry.lastUsed=performance.now();
+        setEntryState(entry,"Prepared");
         continue;
       }
       if(queued.has(fullKey))continue;
@@ -287,12 +320,14 @@ function createManager({
     while(cached.length>settings.maxCachedChunks){
       const entry=cached.shift();
       entries.delete(entry.key);
-      try{destroyChunk?.(entry.resource,entry);}catch(_){}
+      destroyEntry(entry);
       evictions++;
     }
   }
   function update(request){
     if(destroyed||!request?.center)return stats();
+    const updateStarted=performance.now();
+    updateCalls++;
     const sig=currentSignature();
     if(sig!==signature){invalidate("signature");signature=sig;}
     lastRequest={
@@ -307,8 +342,8 @@ function createManager({
     for(const entry of entries.values()){
       const ckey=coordKey(entry.x,entry.y);
       if(activeCoords.has(ckey))continue;
-      if(preparedCoords.has(ckey)){entry.state="Prepared";deactivateChunk?.(entry.resource,entry);}
-      else {entry.state="Cached";deactivateChunk?.(entry.resource,entry);}
+      if(preparedCoords.has(ckey))setEntryState(entry,"Prepared");
+      else setEntryState(entry,"Cached");
     }
 
     for(const point of activeCoords.values())prepareNow(point.x,point.y,"Active",true);
@@ -327,6 +362,9 @@ function createManager({
     schedulePrepared(prepItems);
     trimCached();
     lastCenterChunk=targets.centerChunk;
+    lastUpdateMs=performance.now()-updateStarted;
+    totalUpdateMs+=lastUpdateMs;
+    maxUpdateMs=Math.max(maxUpdateMs,lastUpdateMs);
     return stats();
   }
   function forEachResource(fn){
@@ -352,6 +390,12 @@ function createManager({
       protectedCount:active+prepared,
       queueDepth:queue.length,
       hits,misses,compositions,evictions,visibleWaits,cacheReuses,invalidations,lastInvalidationReason,
+      activations,deactivations,stateReuses,resourceCreations,resourceDestructions,
+      updateCalls,lastUpdateMs:Number(lastUpdateMs.toFixed(3)),maxUpdateMs:Number(maxUpdateMs.toFixed(3)),
+      averageUpdateMs:Number((updateCalls?totalUpdateMs/updateCalls:0).toFixed(3)),
+      transitionCalls,totalTransitionMs:Number(totalTransitionMs.toFixed(3)),maxTransitionMs:Number(maxTransitionMs.toFixed(3)),
+      averageTransitionMs:Number((transitionCalls?totalTransitionMs/transitionCalls:0).toFixed(3)),
+      redundantStateCallbacks:0,
       visibleAssetLoads:0,visibleTextureDecodes:0,visibleGltfParses:0,
       frameBudgetMs:settings.frameBudgetMs,
       lastWorkMs:Number(lastWorkMs.toFixed(3)),
@@ -380,7 +424,7 @@ function createManager({
   }
   function destroy(){
     destroyed=true;cancelWork();unsubscribe();
-    for(const entry of entries.values()){try{destroyChunk?.(entry.resource,entry);}catch(_){}}
+    for(const entry of entries.values())destroyEntry(entry);
     entries.clear();queue=[];queued.clear();
   }
   return Object.freeze({update,stats,proof,setChunkSize,forEachResource,invalidate,destroy});
