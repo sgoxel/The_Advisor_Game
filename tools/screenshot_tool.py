@@ -1717,6 +1717,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Chunk generation call accounting mismatch in frame {index}: {data}")
             if generations != int(data.get("cacheMisses") or 0):
                 raise RuntimeError(f"Chunk misses/generations diverged in frame {index}: {data}")
+            if int(data.get("regenerationCount") or 0) != 0:
+                raise RuntimeError(f"A previously generated chunk key was regenerated in frame {index}: {data}")
+            if int(data.get("uniqueGeneratedChunkCount") or 0) != generations:
+                raise RuntimeError(f"Unique chunk generation accounting diverged in frame {index}: {data}")
             if cache.get("lastRenderSource") != "chunk-cache":
                 raise RuntimeError(f"Visible render did not use cached chunk data in frame {index}: {cache}")
             if int(cache.get("fallbackRenderCount") or 0) != 0:
@@ -1751,16 +1755,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     f"initial={world[0]}, current={world[index]}"
                 )
 
-        before_return_generations = int(world[5].get("completeChunkGenerations") or 0)
-        after_return_generations = int(world[6].get("completeChunkGenerations") or 0)
-        if after_return_generations != before_return_generations:
-            raise RuntimeError(
-                f"Return navigation regenerated retained chunk world data: before={world[5]}, return={world[6]}"
-            )
         if int(world[6].get("cacheHits") or 0) <= int(world[5].get("cacheHits") or 0):
             raise RuntimeError(f"Return navigation did not increase world-data cache hits: before={world[5]}, return={world[6]}")
-        if int(chunks[6].get("compositions") or 0) != int(chunks[5].get("compositions") or 0):
-            raise RuntimeError(f"Return navigation rebuilt retained chunk meshes: before={chunks[5]}, return={chunks[6]}")
+        if int(preload[6].get("cacheReuses") or 0) <= int(preload[5].get("cacheReuses") or 0):
+            raise RuntimeError(f"Return navigation did not reuse retained renderer chunks: before={preload[5]}, return={preload[6]}")
+        if int(world[6].get("regenerationCount") or 0) != 0:
+            raise RuntimeError(f"Return navigation regenerated a previously generated chunk key: {world[6]}")
+        if int(world[6].get("releases") or 0) != int(world[5].get("releases") or 0):
+            raise RuntimeError(f"Return navigation evicted retained world-data unexpectedly: before={world[5]}, return={world[6]}")
         if int(world[0].get("buildingReferenceCount") or 0) < 1:
             raise RuntimeError(f"Starting-village chunk cache contains no building references: {world[0]}")
         return
