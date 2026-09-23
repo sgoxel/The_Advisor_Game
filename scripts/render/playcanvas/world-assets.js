@@ -53,5 +53,23 @@ function registerProceduralBaseline(manager){
   return true;
 }
 
-window.PlayCanvasWorldAssets=Object.freeze({WORLD_KEYS,requirements,registerProceduralBaseline});
+/* Single world-side preparation gate. The renderer can call this before
+   exposing a frame; requirement derivation stays semantic and deterministic,
+   while the preparation manager owns loading, pinning, stale rejection and
+   bounded retention. */
+async function prepareFrame(manager,frame,{retainRegionKeys=[]}={}){
+  if(!manager?.prepareRegion)throw new Error("PlayCanvas world asset preparation manager is unavailable");
+  const required=requirements(frame);
+  const result=await manager.prepareRegion(required.regionKey,required.keys,{retainRegionKeys});
+  return Object.freeze({
+    ready:Boolean(result?.ready&&!result?.stale&&manager.isReady?.(required.regionKey)),
+    stale:Boolean(result?.stale),
+    regionKey:required.regionKey,
+    keys:required.keys,
+    keyCount:required.keys.length,
+    preparation:result||null
+  });
+}
+
+window.PlayCanvasWorldAssets=Object.freeze({WORLD_KEYS,requirements,registerProceduralBaseline,prepareFrame});
 })();
