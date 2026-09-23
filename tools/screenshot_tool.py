@@ -2395,6 +2395,9 @@ def take_screenshots(
             time.sleep(delay)
 
             prep_action = prepare_current_build(driver, min(ready_timeout, 10.0), scenario) if auto_start else "auto-start-disabled"
+            if scenario == "wp-s003-004-002":
+                proof_action = _set_character_proof_state(driver, "open")
+                prep_action = prep_action + "+" + proof_action
 
             if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002"}:
                 force_max_zoom_out(driver)
