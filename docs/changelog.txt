@@ -786,3 +786,9 @@
 - Static contract proof also passed deterministic sleep/rest/sit/eat/work start+completion, incompatible rejection, out-of-range rejection, and generic resident/Protagonist compatibility.
 - All 5 fresh screenshots were directly inspected. Sleeping ACTIVE/COMPLETE is clearly readable with Yara visible inside the cut-away home; the route-transition frame correctly has no action ribbon; the final work target shows Working ACTIVE. No major clipping, overlap, malformed geometry, projection failure or unreadable action UI is visible. VISUAL 8.5/10 PASS.
 - Automatic Visual Evidence run 35930638869 and GitHub Pages run 35930638426 passed on the exact tested head.
+2026-09-24 02:28 +03:00 | WP-S005-001 | Advisor Interface + Persistent Advice Channel
+- Added a campaign/protagonist-scoped persistent Advisor record and deterministic advice ledger with stable advice IDs, fantasy-time timestamps, topic, target, state, transition history and reload persistence.
+- Added a player-facing Advisor compose surface inside Character Interactions. Player input can deliver advice only; protagonist reaction states remain separate and the UI explicitly states that the protagonist decides and Simulation remains authoritative.
+- Added deterministic status-transition validation for Delivered, Considered, Accepted, Rejected, Deferred and Forgotten without mutating protagonist/world state.
+- Added dedicated wp-s005-001 evidence coverage for stable identity, chronology, target/topic preservation, reload persistence and authority isolation. Final Visual Evidence run 35933508476 passed on main SHA b1340ac4f140f2b6e8092e252ea215d1a7864ee6.
+- All 4 final screenshots were directly inspected after improving evidence framing. Compose/history/reload views are clean and readable with no major clipping, overlap or gameplay obstruction. VISUAL 8/10 PASS.
