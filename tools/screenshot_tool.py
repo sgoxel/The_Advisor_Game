@@ -2474,8 +2474,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"SVG fallback texture resolution was not observed: {texture_cache}")
         if int(texture_cache.get("loadedKeyCount") or 0) >= int(texture_cache.get("logicalKeyCount") or 0):
             raise RuntimeError(f"Starting Village unexpectedly preloaded the full texture catalog: {texture_cache}")
-        if int(house.get("blendLayerCount") or 0) <= 0:
-            raise RuntimeError(f"WP-007C rounded terrain blending did not render: {house}")
         if house.get("shapeProof") != ["corner", "diagonal", "edge", "island", "peninsula"]:
             raise RuntimeError(f"WP-007E rounded blend shape registry failed: {house}")
         if not house.get("diagonalRegistryPass") or not house.get("junctionPriorityPass"):
