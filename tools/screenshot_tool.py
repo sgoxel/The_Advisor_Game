@@ -91,6 +91,7 @@ SCENARIOS = {
     "wp-s004-003",
     "wp-s004-004",
     "wp-s004-005",
+    "wp-s005-001",
     "playcanvas-root-cutover",
 }
 
@@ -134,6 +135,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s004-003": 4,
     "wp-s004-004": 5,
     "wp-s004-005": 5,
+    "wp-s005-001": 4,
     "playcanvas-root-cutover": 3,
 }
 
@@ -325,6 +327,33 @@ return (() => {
           };
         })(),
         responsiveControlDeck: window.ResponsiveControlDeck?.snapshot?.() || null,
+        advisorChannel: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.AdvisorChannel?.proof
+              ? window.AdvisorChannel.proof(campaign.seed,"protagonist")
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        advisorPanel: (() => {
+          const panel=document.querySelector("#advisorPanel");
+          if(!panel)return null;
+          return {
+            present:true,
+            adviceCount:Number(panel.dataset.adviceCount||0),
+            advisorSeed:panel.dataset.advisorSeed||null,
+            protagonistId:panel.dataset.protagonistId||null,
+            rowCount:panel.querySelectorAll(".advisor-log li[data-advice-id]").length,
+            statuses:Array.from(panel.querySelectorAll(".advice-status")).map(node=>node.textContent.trim().toLowerCase()),
+            targets:Array.from(panel.querySelectorAll(".advice-copy small:first-of-type")).map(node=>node.textContent.trim()),
+            formPresent:Boolean(panel.querySelector("#advisorComposeForm")),
+            deliverEnabled:!Boolean(panel.querySelector("#advisorDeliverButton")?.disabled),
+            boundary:panel.querySelector(".advisor-boundary")?.textContent?.trim()||null,
+            advisorRecordId:panel.querySelector(".advisor-record-id")?.textContent?.trim()||null,
+          };
+        })(),
         residentRoster: (() => {
           try {
             const campaign=window.SeedSystem?.getCampaign?.();
@@ -1463,6 +1492,70 @@ def _show_resident_action_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_advisor_channel_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const channel=window.AdvisorChannel;
+        if(!campaign?.seed||!channel) return {ok:false,error:'advisor-channel-unavailable'};
+        const seed=campaign.seed;
+        const protagonistId='protagonist';
+        const toggle=document.querySelector('#characterInteractionsToggle');
+        if(toggle?.getAttribute('aria-expanded')==='false') toggle.click();
+
+        if(index===0){
+          localStorage.removeItem(channel.storageKey(seed,protagonistId));
+          channel.getAdvisor(seed,protagonistId);
+          const samples=[
+            ['Warn the elder about the late milling run','Village elder','1200-01-01 08:00:00'],
+            ['Ask the tanner about the spare hides','Tanner','1200-01-01 08:05:00'],
+            ['Visit the market before dusk','Market','1200-01-01 08:10:00'],
+            ['Check the bridge watch before nightfall','Bridge watch','1200-01-01 08:15:00']
+          ];
+          for(const [topic,target,timestamp] of samples){
+            channel.recordAdvice(seed,{topic,target:{kind:'topic',label:target},timestamp},protagonistId);
+          }
+        }
+
+        const entries=channel.list(seed,protagonistId);
+        if(entries.length!==4) return {ok:false,error:'unexpected-entry-count',count:entries.length};
+
+        if(index===1){
+          channel.transition(seed,entries[0].id,'considered',protagonistId,{timestamp:'1200-01-01 08:30:00',actor:'protagonist'});
+          channel.transition(seed,entries[1].id,'considered',protagonistId,{timestamp:'1200-01-01 08:31:00',actor:'protagonist'});
+          channel.transition(seed,entries[2].id,'deferred',protagonistId,{timestamp:'1200-01-01 08:32:00',actor:'protagonist'});
+          channel.transition(seed,entries[3].id,'considered',protagonistId,{timestamp:'1200-01-01 08:33:00',actor:'protagonist'});
+        }else if(index===2){
+          const current=channel.list(seed,protagonistId);
+          channel.transition(seed,current[0].id,'accepted',protagonistId,{timestamp:'1200-01-01 09:00:00',actor:'protagonist'});
+          channel.transition(seed,current[1].id,'rejected',protagonistId,{timestamp:'1200-01-01 09:01:00',actor:'protagonist'});
+          channel.transition(seed,current[3].id,'forgotten',protagonistId,{timestamp:'1200-01-01 09:02:00',actor:'protagonist'});
+        }
+
+        channel.renderAdvicePanel(seed,protagonistId,document.querySelector('#advisorPanel'));
+        document.querySelector('#characterInteractionsPanel')?.scrollIntoView({block:'nearest'});
+        const proof=channel.proof(seed,protagonistId);
+        return {
+          ok:Boolean(proof.pass),
+          index,
+          statuses:proof.entries.map(entry=>entry.status),
+          ids:proof.entries.map(entry=>entry.id),
+          advisorId:proof.advisor?.id||null,
+          boundary:document.querySelector('.advisor-boundary')?.textContent?.trim()||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Advisor channel proof frame failed: {result}")
+    return (
+        f"advisor-channel:{frame_index}:"
+        f"{','.join(result.get('statuses') or [])}:"
+        f"{result.get('advisorId')}"
+    )
+
+
 def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
     from selenium.webdriver.support.ui import WebDriverWait
 
@@ -2400,7 +2493,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -2503,6 +2596,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_resident_movement_proof(driver,frame_index)
     if scenario == "wp-s004-005":
         return _show_resident_action_proof(driver,frame_index)
+    if scenario == "wp-s005-001":
+        if frame_index == 3:
+            return _reload_current_build(driver)
+        return _show_advisor_channel_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2537,6 +2634,77 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s005-001":
+        if len(frames) < 4:
+            raise RuntimeError("wp-s005-001 requires four advisor evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:4]]
+        proofs=[build.get("advisorChannel") or {} for build in builds]
+        panels=[build.get("advisorPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Advisor evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Advice mutated Protagonist world position: {protagonists}")
+
+        expected=[
+            ["delivered","delivered","delivered","delivered"],
+            ["considered","considered","deferred","considered"],
+            ["accepted","rejected","deferred","forgotten"],
+            ["accepted","rejected","deferred","forgotten"],
+        ]
+        observed=[[entry.get("status") for entry in (proof.get("entries") or [])] for proof in proofs]
+        if observed!=expected:
+            raise RuntimeError(f"Advisor status chronology mismatch: expected {expected}, got {observed}")
+
+        for index,proof in enumerate(proofs,start=1):
+            required={
+                "pass":True,
+                "stableAdvisor":True,
+                "uniqueIds":True,
+                "sequenceStable":True,
+                "validFields":True,
+                "validHistory":True,
+                "deterministicIds":True,
+                "storageRoundTrip":True,
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Advisor proof {key} mismatch in frame {index}: {proof}")
+            if proof.get("entryCount")!=4:
+                raise RuntimeError(f"Advisor entry count mismatch in frame {index}: {proof}")
+            advisor=proof.get("advisor") or {}
+            if advisor.get("campaignSeed")!=seeds[index-1] or advisor.get("protagonistId")!="protagonist":
+                raise RuntimeError(f"Stable advisor identity mismatch in frame {index}: {advisor}")
+
+        ids=[[entry.get("id") for entry in (proof.get("entries") or [])] for proof in proofs]
+        if any(row!=ids[0] for row in ids[1:]):
+            raise RuntimeError(f"Advice entry identity changed across transitions/reload: {ids}")
+        topics=[[entry.get("topic") for entry in (proof.get("entries") or [])] for proof in proofs]
+        targets=[[entry.get("target",{}).get("label") for entry in (proof.get("entries") or [])] for proof in proofs]
+        if any(row!=topics[0] for row in topics[1:]) or any(row!=targets[0] for row in targets[1:]):
+            raise RuntimeError("Advice topic/target changed after protagonist reaction or reload")
+
+        if json.dumps(proofs[2].get("entries"),sort_keys=True)!=json.dumps(proofs[3].get("entries"),sort_keys=True):
+            raise RuntimeError("Persistent advice log changed after campaign page reload")
+
+        for index,panel in enumerate(panels,start=1):
+            if panel.get("present") is not True or panel.get("rowCount")!=4 or panel.get("formPresent") is not True:
+                raise RuntimeError(f"Advisor UI incomplete in frame {index}: {panel}")
+            if panel.get("deliverEnabled") is not True:
+                raise RuntimeError(f"Advisor delivery form unexpectedly disabled in frame {index}: {panel}")
+            boundary=(panel.get("boundary") or "").lower()
+            if "protagonist decides" not in boundary or "simulation remains authoritative" not in boundary:
+                raise RuntimeError(f"Advisor authority boundary missing in frame {index}: {panel}")
+            if panel.get("advisorRecordId")!=(proofs[index-1].get("advisor") or {}).get("id"):
+                raise RuntimeError(f"Advisor UI record ID mismatch in frame {index}: {panel}")
+
+        final_statuses=set(panels[2].get("statuses") or [])
+        for status in ("accepted","rejected","deferred","forgotten"):
+            if status not in final_statuses:
+                raise RuntimeError(f"Final Advisor UI does not visibly expose {status}: {panels[2]}")
+        return
+
     if scenario == "wp-s004-005":
         if len(frames) < 5:
             raise RuntimeError("wp-s004-005 requires five action evidence frames")
