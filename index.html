@@ -612,6 +612,30 @@
     </div>
   </details>
 
+  <details id="residentScheduleProof">
+    <summary>WP-S004-003 Deterministic Daily Activity + Action Targets</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid">
+        <div><span>Residents Scheduled</span><strong id="residentScheduleCount">—</strong></div>
+        <div><span>Fantasy Sample</span><strong id="residentScheduleTime">—</strong></div>
+        <div><span>Blocks / Resident</span><strong id="residentScheduleBlocks">—</strong></div>
+        <div><span>Time Source</span><strong>Authoritative fantasy time</strong></div>
+      </div>
+      <div class="resident-schedule-scroll" id="residentScheduleScroll">
+        <table class="resident-schedule-table" aria-label="Starting Village resident daily schedule state">
+          <thead><tr><th>Resident</th><th>State</th><th>Intended action</th><th>Target building</th><th>Target coordinate</th><th>Interaction object</th><th>Source</th></tr></thead>
+          <tbody id="residentScheduleRows"></tbody>
+        </table>
+      </div>
+      <div class="check"><span>Every resident has a complete non-overlapping 24-hour deterministic schedule</span><b id="vResidentScheduleComplete">WAITING</b></div>
+      <div class="check"><span>Every intended action is supported by its authoritative reachable target</span><b id="vResidentScheduleActions">WAITING</b></div>
+      <div class="check"><span>Sleep/return-home and work states preserve authoritative WP-S004-002 assignments</span><b id="vResidentScheduleAssignments">WAITING</b></div>
+      <div class="check"><span>Same Campaign SEED + resident ID reproduce identical schedules</span><b id="vResidentScheduleDeterministic">WAITING</b></div>
+      <div class="check"><span>Representative fantasy times select the expected state without changing identity or assignments</span><b id="vResidentScheduleTime">WAITING</b></div>
+      <div class="check"><span>No real-clock fallback, movement, teleport, action execution, dialogue, economy or combat is introduced</span><b id="vResidentScheduleIsolation">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">

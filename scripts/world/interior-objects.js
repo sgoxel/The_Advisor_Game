@@ -7,10 +7,10 @@ const proofCache=new Map();
 const TYPE_RULES=Object.freeze({
   bed:Object.freeze({blocking:true,actions:Object.freeze(["sleep"])}),
   chair:Object.freeze({blocking:true,actions:Object.freeze(["sit"])}),
-  table:Object.freeze({blocking:true,actions:Object.freeze(["eat","social"])}),
+  table:Object.freeze({blocking:true,actions:Object.freeze(["eat","social","work"])}),
   counter:Object.freeze({blocking:true,actions:Object.freeze(["service","work"])}),
   workbench:Object.freeze({blocking:true,actions:Object.freeze(["craft","work"])}),
-  hearth:Object.freeze({blocking:true,actions:Object.freeze(["cook","warm"])}),
+  hearth:Object.freeze({blocking:true,actions:Object.freeze(["cook","warm","eat"])}),
   storage:Object.freeze({blocking:true,actions:Object.freeze(["store","retrieve"])})
 });
 const SPECIAL_TYPES=Object.freeze({

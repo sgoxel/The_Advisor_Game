@@ -245,111 +245,114 @@ function assignmentForResident(seed,residentId){
   });
 }
 
+function scheduleInteractionChoice(seed,buildingId,choices){
+  const objects=InteriorObjects.build(seed)
+    .filter(object=>object.buildingId===buildingId&&object.interactionPositions?.length)
+    .sort((a,b)=>a.id.localeCompare(b.id));
+  for(const choice of choices){
+    const object=objects.find(item=>item.type===choice.type&&item.actions?.includes(choice.action));
+    const point=object?.interactionPositions?.[0];
+    if(point){
+      return Object.freeze({
+        target:Object.freeze({x:String(point.x),y:String(point.y)}),
+        targetSource:"interior-interaction",
+        interactionObjectId:object.id,
+        interactionObjectType:object.type,
+        intendedAction:choice.action,
+        supportedActions:Object.freeze([...(object.actions||[])])
+      });
+    }
+  }
+  return null;
+}
+function assignedWorkScheduleTarget(seed,resident){
+  if(!resident.workplaceEnterable){
+    return Object.freeze({
+      target:Object.freeze({x:String(resident.workplaceTarget.x),y:String(resident.workplaceTarget.y)}),
+      targetSource:"outdoor-worksite",
+      interactionObjectId:null,
+      interactionObjectType:"worksite",
+      intendedAction:"work",
+      supportedActions:Object.freeze(["work"])
+    });
+  }
+  const object=InteriorObjects.build(seed).find(item=>item.id===resident.workplaceObjectId)||null;
+  const point=object?.interactionPositions?.find(item=>pointKey2(item)===pointKey2(resident.workplaceTarget))||null;
+  if(!object||!point||!object.actions?.includes("work"))return null;
+  return Object.freeze({
+    target:Object.freeze({x:String(point.x),y:String(point.y)}),
+    targetSource:"interior-interaction",
+    interactionObjectId:object.id,
+    interactionObjectType:object.type,
+    intendedAction:"work",
+    supportedActions:Object.freeze([...(object.actions||[])])
+  });
+}
+function publicScheduleTarget(seed,action){
+  const tavern=SpecialLots.build(seed).find(lot=>lot.function==="lodging"&&lot.enterable)||null;
+  if(!tavern)return null;
+  return scheduleInteractionChoice(seed,tavern.id,[
+    {type:"table",action},
+    {type:"chair",action},
+    {type:"counter",action}
+  ]);
+}
+function scheduleBlock(state,label,startHour,endHour,targetInfo,location,buildingId){
+  if(!targetInfo)throw new Error("Schedule target unavailable for "+state);
+  return Object.freeze({
+    state,
+    kind:state,
+    label,
+    startHour,
+    endHour,
+    startMinute:startHour*60,
+    endMinute:endHour*60,
+    target:targetInfo.target,
+    location,
+    buildingId,
+    targetSource:targetInfo.targetSource,
+    interactionObjectId:targetInfo.interactionObjectId,
+    interactionObjectType:targetInfo.interactionObjectType,
+    intendedAction:targetInfo.intendedAction,
+    supportedActions:targetInfo.supportedActions
+  });
+}
 function schedulePattern(seed,resident){
-  const phase=Number(PRNG.foundationUint32(seed,"daily-activity:phase:"+resident.id))%240;
-  const baseStart=resident.professionConfig.idealStart;
-  const breakfastStart=Math.max(5,baseStart-1+Math.floor(phase/60)%2);
-  const lunchStart=Math.max(11,Math.min(14,12+Math.floor(phase/80)%2));
-  const socialStart=Math.max(17,Math.min(19,18+Math.floor(phase/100)%2));
-  const sleepStart=Number.isInteger(phase%2)?22:23;
+  const phase=Number(PRNG.foundationUint32(seed,"daily-activity:phase:"+resident.id));
+  const workStart=Math.min(10,resident.professionConfig.idealStart+(phase%2));
+  const wakeStart=Math.max(5,workStart-2);
+  const breakfastStart=workStart-1;
+  const lunchStart=Math.max(workStart+2,12+(Math.floor(phase/2)%2));
+  const lunchEnd=lunchStart+1;
+  const workEnd=Math.max(lunchEnd+2,resident.professionConfig.afterWork);
+  const sleepStart=22+(Math.floor(phase/4)%2);
+  const socialStart=workEnd;
+  const socialEnd=Math.min(sleepStart-1,socialStart+2);
 
-  const earlySleep=Object.freeze({
-    kind:"sleep",
-    label:"Sleep",
-    startHour:0,
-    endHour:Math.max(4,Math.min(6,sleepStart-18)),
-    target:resident.homeTarget,
-    location:"home",
-    buildingId:resident.homePlanId,
-    targetKind:"home"
-  });
-
-  const wake=Object.freeze({
-    kind:"wake",
-    label:"Wake & prepare",
-    startHour:Math.max(5,Math.min(6,breakfastStart-1)),
-    endHour:breakfastStart,
-    target:resident.homeTarget,
-    location:"home",
-    buildingId:resident.homePlanId,
-    targetKind:"home"
-  });
-
-  const breakfast=Object.freeze({
-    kind:"meal",
-    label:"Breakfast",
-    startHour:breakfastStart,
-    endHour:Math.min(8,breakfastStart+1),
-    target:resident.homeTarget,
-    location:"home",
-    buildingId:resident.homePlanId,
-    targetKind:"home"
-  });
-
-  const work=Object.freeze({
-    kind:"work",
-    label:resident.profession+" work",
-    startHour:baseStart,
-    endHour:resident.professionConfig.afterWork,
-    target:resident.workplaceTarget,
-    location:"workplace",
-    buildingId:resident.workplaceId,
-    targetKind:"workplace"
-  });
-
-  const lunch=Object.freeze({
-    kind:"meal",
-    label:"Lunch",
-    startHour:lunchStart,
-    endHour:Math.min(15,lunchStart+1),
-    target:resident.workplaceTarget,
-    location:"workplace",
-    buildingId:resident.workplaceId,
-    targetKind:"workplace"
-  });
-
-  const social=Object.freeze({
-    kind:"social",
-    label:"Village social time",
-    startHour:socialStart,
-    endHour:Math.min(22,socialStart+2),
-    target:resident.socialTarget,
-    location:"social",
-    buildingId:resident.socialBuildingId,
-    targetKind:"social"
-  });
-
-  const evening=Object.freeze({
-    kind:"rest",
-    label:"Return home",
-    startHour:Math.max(20,socialStart+2),
-    endHour:22,
-    target:resident.homeTarget,
-    location:"home",
-    buildingId:resident.homePlanId,
-    targetKind:"home"
-  });
-
-  const nightSleep=Object.freeze({
-    kind:"sleep",
-    label:"Sleep",
-    startHour:22,
-    endHour:24,
-    target:resident.homeTarget,
-    location:"home",
-    buildingId:resident.homePlanId,
-    targetKind:"home"
-  });
+  const sleepTarget=scheduleInteractionChoice(seed,resident.homePlanId,[{type:"bed",action:"sleep"}]);
+  const prepareTarget=scheduleInteractionChoice(seed,resident.homePlanId,[
+    {type:"chair",action:"sit"},
+    {type:"hearth",action:"warm"},
+    {type:"table",action:"social"}
+  ]);
+  const breakfastTarget=scheduleInteractionChoice(seed,resident.homePlanId,[
+    {type:"table",action:"eat"},
+    {type:"hearth",action:"eat"}
+  ]);
+  const workTarget=assignedWorkScheduleTarget(seed,resident);
+  const lunchTarget=publicScheduleTarget(seed,"eat");
+  const socialTarget=publicScheduleTarget(seed,"social");
 
   return Object.freeze([
-    earlySleep,
-    wake,
-    breakfast,
-    work,
-    lunch,
-    social,
-    evening,
-    nightSleep
+    scheduleBlock("sleep","Sleep",0,wakeStart,sleepTarget,"home",resident.homePlanId),
+    scheduleBlock("prepare","Wake & prepare",wakeStart,breakfastStart,prepareTarget,"home",resident.homePlanId),
+    scheduleBlock("breakfast","Breakfast",breakfastStart,workStart,breakfastTarget,"home",resident.homePlanId),
+    scheduleBlock("work","Morning "+resident.profession+" work",workStart,lunchStart,workTarget,"workplace",resident.workplaceId),
+    scheduleBlock("lunch","Lunch",lunchStart,lunchEnd,lunchTarget,"public",lunchTarget?.interactionObjectId?.split(":")[0]||null),
+    scheduleBlock("work","Afternoon "+resident.profession+" work",lunchEnd,workEnd,workTarget,"workplace",resident.workplaceId),
+    scheduleBlock("social","Village social time",socialStart,socialEnd,socialTarget,"public",socialTarget?.interactionObjectId?.split(":")[0]||null),
+    scheduleBlock("return-home","Return home",socialEnd,sleepStart,sleepTarget,"home",resident.homePlanId),
+    scheduleBlock("sleep","Sleep",sleepStart,24,sleepTarget,"home",resident.homePlanId)
   ]);
 }
 
@@ -359,10 +362,6 @@ function buildResident(seed,index){
   const professionConfig=assignment.professionConfig;
   const home=assignment.home;
   const work=assignment.work;
-  const special=SpecialLots && SpecialLots.build ? SpecialLots.build(seed) : [];
-  const socialLot=special.find(lot=>lot.function==="lodging")||special[0]||null;
-  const socialTarget=socialLot ? accessTargetFromLot(socialLot) : work.workplaceTarget;
-  const socialBuildingId=socialLot ? socialLot.id : work.workplaceId;
   const resident=Object.freeze({
     id:identity.id,
     name:identity.name,
@@ -392,8 +391,6 @@ function buildResident(seed,index){
     workplaceObjectId:work.workplaceObjectId,
     workplaceObjectType:work.workplaceObjectType,
     workplaceDoor:work.workplaceDoor,
-    socialTarget,
-    socialBuildingId,
     schedule:null
   });
   const schedule=schedulePattern(seed,resident);
@@ -401,35 +398,28 @@ function buildResident(seed,index){
 }
 
 function resolveDayActivity(seed,resident,when){
-  const resolved=normalizeTimestamp(when);
   const targetResident=(resident&&resident.id)?resident:build(seed).find(item=>item.id===resident)||null;
   if(!targetResident)return null;
-  const hour=resolved?normalizeHour(resolved.hour):normalizeHour(new Date().getUTCHours());
-  for(const block of targetResident.schedule||[]){
-    if(block.startHour<=hour&&hour<block.endHour){
-      return Object.freeze({
-        residentId:targetResident.id,
-        residentName:targetResident.name,
-        action:block.kind,
-        label:block.label,
-        timestamp:resolved?timestampKey(resolved):null,
-        target:Object.freeze({x:targetResident[block.targetKind+"Target"].x,y:targetResident[block.targetKind+"Target"].y}),
-        location:block.location,
-        buildingId:block.buildingId,
-        valid:true
-      });
-    }
-  }
-  const fallback=targetResident.schedule[0];
+  const resolved=normalizeTimestamp(when==null?window.GameTime?.getNow?.():when);
+  if(!resolved)return null;
+  const minute=Math.max(0,Math.min(1439,(Number(resolved.hour)||0)*60+(Number(resolved.minute)||0)));
+  const block=(targetResident.schedule||[]).find(item=>item.startMinute<=minute&&minute<item.endMinute)||null;
+  if(!block)return null;
   return Object.freeze({
     residentId:targetResident.id,
     residentName:targetResident.name,
-    action:fallback.kind,
-    label:fallback.label,
-    timestamp:resolved?timestampKey(resolved):null,
-    target:Object.freeze({x:fallback.target.x,y:fallback.target.y}),
-    location:fallback.location,
-    buildingId:fallback.buildingId,
+    state:block.state,
+    action:block.intendedAction,
+    intendedAction:block.intendedAction,
+    label:block.label,
+    timestamp:timestampKey(resolved),
+    target:Object.freeze({x:String(block.target.x),y:String(block.target.y)}),
+    targetSource:block.targetSource,
+    interactionObjectId:block.interactionObjectId,
+    interactionObjectType:block.interactionObjectType,
+    supportedActions:block.supportedActions,
+    location:block.location,
+    buildingId:block.buildingId,
     valid:true
   });
 }
@@ -650,32 +640,114 @@ function resolveActionTarget(seedValue,residentValue,when){
   return resolveDayActivity(seed,resident,when);
 }
 
-function proof(seedValue){
-  const seed=String(seedValue==null?"":seedValue);
-  const first=build(seed);
-  const second=build(seed);
-  const deterministic=JSON.stringify(first)===JSON.stringify(second);
-  const residentCount=first.length===12;
-  const allHaveHome=first.every(r=>r.homeTarget&&Number.isFinite(r.homeTarget.x)&&Number.isFinite(r.homeTarget.y));
-  const allHaveWork=first.every(r=>r.workplaceTarget&&Number.isFinite(r.workplaceTarget.x)&&Number.isFinite(r.workplaceTarget.y));
-  const allHaveSchedule=first.every(r=>Array.isArray(r.schedule)&&r.schedule.length>=7);
-  const allHaveSleep=first.every(r=>r.schedule.some(block=>block.kind==="sleep"));
-  const dailyTargets=first.every(r=>r.schedule.some(block=>{
-    const target=block.target;
-    return target&&Number.isFinite(target.x)&&Number.isFinite(target.y);
-  }));
+function identityAssignmentSignature(resident){
   return Object.freeze({
-    pass:deterministic&&residentCount&&allHaveHome&&allHaveWork&&allHaveSchedule&&allHaveSleep&&dailyTargets,
-    deterministic,
-    residentCount:first.length,
-    homeTargetsPass:allHaveHome,
-    workTargetsPass:allHaveWork,
-    schedulePass:allHaveSchedule,
-    sleepPass:allHaveSleep,
-    dailyTargetsPass:dailyTargets,
-    residents:first
+    id:resident.id,name:resident.name,gender:resident.gender,birthDate:resident.birthDate,
+    birthplace:resident.birthplace,homePlanId:resident.homePlanId,homeTarget:resident.homeTarget,
+    profession:resident.profession,workFunction:resident.workFunction,
+    workplaceId:resident.workplaceId,workplaceTarget:resident.workplaceTarget
   });
 }
+function scheduleTargetSupportsAction(seed,block){
+  const state=InteriorObjects.classifyNavigation(seed,block.target.x,block.target.y);
+  if(!state?.walkable)return false;
+  if(block.targetSource==="outdoor-worksite"){
+    const lot=SpecialLots.build(seed).find(item=>item.id===block.buildingId)||null;
+    const x=Number(block.target.x),y=Number(block.target.y);
+    return Boolean(
+      block.intendedAction==="work"&&block.supportedActions?.includes("work")&&lot&&!lot.enterable&&
+      x>=lot.bounds.minX&&x<=lot.bounds.maxX&&y>=lot.bounds.minY&&y<=lot.bounds.maxY
+    );
+  }
+  if(block.targetSource!=="interior-interaction")return false;
+  const object=InteriorObjects.build(seed).find(item=>item.id===block.interactionObjectId)||null;
+  return Boolean(
+    object&&object.buildingId===block.buildingId&&
+    object.actions?.includes(block.intendedAction)&&
+    object.interactionPositions?.some(point=>pointKey2(point)===pointKey2(block.target))
+  );
+}
+function scheduleView(seedValue,when){
+  const seed=String(seedValue==null?"":seedValue);
+  const current=normalizeTimestamp(when==null?window.GameTime?.getNow?.():when);
+  if(!seed||!current)return Object.freeze([]);
+  return Object.freeze(build(seed).map(resident=>resolveDayActivity(seed,resident,current)));
+}
+function residentScheduleProof(seedValue,when){
+  const seed=String(seedValue==null?"":seedValue);
+  if(!seed)return Object.freeze({pass:false,residentCount:0,currentStates:Object.freeze([])});
+  const residents=build(seed);
+  const current=normalizeTimestamp(when==null?window.GameTime?.getNow?.():when)||
+    Object.freeze({year:1200,month:1,day:1,hour:0,minute:0,second:0});
+  const before=residents.map(identityAssignmentSignature);
+  let completeSchedules=true,targetsActionsValid=true,homeWorkAssignmentsMatch=true;
+  let representativeSelectionPass=true,deterministic=true;
+  const scheduleSummaries=[];
+  for(const resident of residents){
+    const schedule=resident.schedule||[];
+    if(schedule.length!==9||schedule[0]?.startMinute!==0||schedule[schedule.length-1]?.endMinute!==1440){
+      completeSchedules=false;
+    }
+    for(let index=0;index<schedule.length;index++){
+      const block=schedule[index];
+      if(!block||block.startMinute>=block.endMinute)completeSchedules=false;
+      if(index>0&&schedule[index-1].endMinute!==block.startMinute)completeSchedules=false;
+      if(!scheduleTargetSupportsAction(seed,block))targetsActionsValid=false;
+      if((block.state==="sleep"||block.state==="return-home")&&pointKey2(block.target)!==pointKey2(resident.homeTarget)){
+        homeWorkAssignmentsMatch=false;
+      }
+      if(block.state==="work"&&pointKey2(block.target)!==pointKey2(resident.workplaceTarget)){
+        homeWorkAssignmentsMatch=false;
+      }
+      const midpoint=Math.floor((block.startMinute+block.endMinute)/2);
+      const sample=Object.freeze({
+        year:current.year,month:current.month,day:current.day,
+        hour:Math.floor(midpoint/60),minute:midpoint%60,second:0
+      });
+      const resolved=resolveDayActivity(seed,resident,sample);
+      if(!resolved||resolved.state!==block.state||resolved.intendedAction!==block.intendedAction||
+         pointKey2(resolved.target)!==pointKey2(block.target)){
+        representativeSelectionPass=false;
+      }
+    }
+    const rebuilt=schedulePattern(seed,Object.freeze(Object.assign({},resident,{schedule:null})));
+    if(JSON.stringify(schedule)!==JSON.stringify(rebuilt))deterministic=false;
+    scheduleSummaries.push(Object.freeze({
+      residentId:resident.id,
+      blockCount:schedule.length,
+      states:Object.freeze(schedule.map(block=>block.state)),
+      actions:Object.freeze(schedule.map(block=>block.intendedAction))
+    }));
+  }
+  const after=build(seed).map(identityAssignmentSignature);
+  const identityAssignmentsStable=JSON.stringify(before)===JSON.stringify(after);
+  const currentStates=scheduleView(seed,current);
+  const currentStatesValid=currentStates.length===12&&currentStates.every(state=>
+    state?.valid&&state.intendedAction&&state.supportedActions?.includes(state.intendedAction)
+  );
+  const pass=residents.length===12&&completeSchedules&&targetsActionsValid&&homeWorkAssignmentsMatch&&
+    deterministic&&representativeSelectionPass&&identityAssignmentsStable&&currentStatesValid;
+  return Object.freeze({
+    pass,
+    residentCount:residents.length,
+    completeSchedules,
+    targetsActionsValid,
+    homeWorkAssignmentsMatch,
+    deterministic,
+    representativeSelectionPass,
+    identityAssignmentsStable,
+    currentStatesValid,
+    timeSource:"authoritative fantasy time",
+    directRealClockRead:false,
+    movementExecutionIntroduced:false,
+    actionExecutionIntroduced:false,
+    dialogueEconomyCombatIntroduced:false,
+    sampleTime:Object.freeze({year:current.year,month:current.month,day:current.day,hour:current.hour,minute:current.minute,second:current.second}),
+    scheduleSummaries:Object.freeze(scheduleSummaries),
+    currentStates
+  });
+}
+function proof(seedValue,when){return residentScheduleProof(seedValue,when)}
 
 const api=Object.freeze({
   build,
@@ -686,11 +758,21 @@ const api=Object.freeze({
   roster:build,
   generate:build,
   schedule:build,
+  current:scheduleView,
+  scheduleView,
+  residentScheduleProof,
   actionTargets:resolveActionTarget
 });
 
 window.DailyActivity=api;
-window.ResidentSchedules=api;
+window.ResidentSchedules=Object.freeze({
+  build,
+  schedules:build,
+  current:scheduleView,
+  resolve:resolveActionTarget,
+  proof:residentScheduleProof,
+  timeSource:"authoritative fantasy time"
+});
 window.ActionTargets=Object.freeze({
   resolve:resolveActionTarget,
   resolveActionTarget,

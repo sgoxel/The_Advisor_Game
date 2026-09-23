@@ -88,6 +88,7 @@ SCENARIOS = {
     "wp-s003-008-001",
     "wp-s004-001",
     "wp-s004-002",
+    "wp-s004-003",
     "playcanvas-root-cutover",
 }
 
@@ -128,6 +129,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-001": 16,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
+    "wp-s004-003": 4,
     "playcanvas-root-cutover": 3,
 }
 
@@ -340,6 +342,7 @@ return (() => {
             return {error:String(error)};
           }
         })(),
+        residentSchedules: window.AppUI?.residentScheduleSnapshot?.() || null,
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
@@ -1145,6 +1148,41 @@ def _show_resident_assignment_proof(driver, position: str = "top") -> str:
     if not isinstance(result, dict) or int(result.get("rows") or 0) != 12:
         raise RuntimeError(f"Resident assignment proof view did not expose 12 rows: {result}")
     return f"resident-assignments:{position}:rows={result['rows']}"
+
+
+def _show_resident_schedule_proof(driver, sample_hour: int, sample_minute: int = 30) -> str:
+    result = driver.execute_script(
+        """
+        const hour=arguments[0],minute=arguments[1];
+        const section=document.querySelector('#developmentDetails');
+        const proof=document.querySelector('#residentScheduleProof');
+        const scroll=document.querySelector('#residentScheduleScroll');
+        const now=window.GameTime?.getNow?.();
+        if(!section||!proof||!scroll||!now)return null;
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        proof.open=true;
+        const sample={
+          year:now.year,month:now.month,day:now.day,
+          hour:Number(hour),minute:Number(minute),second:0
+        };
+        const snapshot=window.AppUI?.refreshResidentSchedules?.(sample,true);
+        proof.scrollIntoView({block:'start'});
+        scroll.scrollTop=0;
+        return {
+          rows:document.querySelectorAll('#residentScheduleRows tr').length,
+          open:proof.open,
+          hour:Number(hour),
+          minute:Number(minute),
+          pass:Boolean(snapshot?.pass)
+        };
+        """,
+        sample_hour,
+        sample_minute,
+    )
+    if not isinstance(result, dict) or int(result.get("rows") or 0) != 12 or not result.get("pass"):
+        raise RuntimeError(f"Resident schedule proof view failed: {result}")
+    return f"resident-schedules:{sample_hour:02d}:{sample_minute:02d}:rows={result['rows']}"
 
 
 def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
@@ -2176,6 +2214,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 1:
             return _show_resident_assignment_proof(driver, "middle")
         return _show_resident_assignment_proof(driver, "bottom")
+    if scenario == "wp-s004-003":
+        samples=((2,30),(7,30),(12,30),(19,30))
+        hour,minute=samples[min(frame_index,len(samples)-1)]
+        return _show_resident_schedule_proof(driver,hour,minute)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2210,6 +2252,54 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s004-003":
+        if len(frames) < 4:
+            raise RuntimeError("wp-s004-003 requires four representative fantasy-time frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:4]]
+        proofs=[build.get("residentSchedules") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Schedule evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Schedule evidence changed Protagonist authority: {protagonists}")
+        required={
+            "pass":True,"residentCount":12,"completeSchedules":True,
+            "targetsActionsValid":True,"homeWorkAssignmentsMatch":True,
+            "deterministic":True,"representativeSelectionPass":True,
+            "identityAssignmentsStable":True,"currentStatesValid":True,
+            "timeSource":"authoritative fantasy time","directRealClockRead":False,
+            "movementExecutionIntroduced":False,"actionExecutionIntroduced":False,
+            "dialogueEconomyCombatIntroduced":False,
+        }
+        state_signatures=[]
+        sample_hours=[]
+        for index,proof in enumerate(proofs,start=1):
+            if proof.get("error"):
+                raise RuntimeError(f"Schedule proof errored in frame {index}: {proof}")
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Resident schedule {key} mismatch in frame {index}: {proof}")
+            summaries=proof.get("scheduleSummaries") or []
+            states=proof.get("currentStates") or []
+            if len(summaries)!=12 or any(int(item.get("blockCount") or 0)!=9 for item in summaries):
+                raise RuntimeError(f"Resident schedule completeness mismatch in frame {index}: {summaries}")
+            if len(states)!=12:
+                raise RuntimeError(f"Current schedule state count mismatch in frame {index}: {len(states)}")
+            for state in states:
+                if state.get("intendedAction") not in (state.get("supportedActions") or []):
+                    raise RuntimeError(f"Unsupported intended action in frame {index}: {state}")
+                if not state.get("target") or not state.get("targetSource"):
+                    raise RuntimeError(f"Missing authoritative schedule target in frame {index}: {state}")
+            sample=proof.get("sampleTime") or {}
+            sample_hours.append(int(sample.get("hour") or 0))
+            state_signatures.append(tuple((s.get("residentId"),s.get("state"),s.get("intendedAction")) for s in states))
+        if sample_hours != [2,7,12,19]:
+            raise RuntimeError(f"Representative fantasy times mismatch: {sample_hours}")
+        if len(set(state_signatures))<3:
+            raise RuntimeError(f"Representative fantasy times did not produce meaningful deterministic state changes: {state_signatures}")
+        return
+
     if scenario == "wp-s004-002":
         if len(frames) < 3:
             raise RuntimeError("wp-s004-002 requires three evidence frames")
@@ -4257,12 +4347,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

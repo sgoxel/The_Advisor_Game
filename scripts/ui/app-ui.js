@@ -38,6 +38,8 @@ const ids=[
   "vResidentFields","vResidentIds","vResidentDeterministic","vResidentTimeIdentity","vResidentAge","vResidentBirthplace",
   "residentAssignmentCount","residentAssignmentHomes","residentAssignmentCapacity","residentAssignmentRows","residentAssignmentScroll",
   "vResidentAssignmentHomes","vResidentAssignmentProfessions","vResidentAssignmentTargets","vResidentAssignmentWalkable","vResidentAssignmentRoutes","vResidentAssignmentDeterministic",
+  "residentScheduleCount","residentScheduleTime","residentScheduleBlocks","residentScheduleRows","residentScheduleScroll",
+  "vResidentScheduleComplete","vResidentScheduleActions","vResidentScheduleAssignments","vResidentScheduleDeterministic","vResidentScheduleTime","vResidentScheduleIsolation",
   "gameplayPlaceholder","protagonistMarker","protagonistSprite","protagonistFallback","protagonistLocation","wp3Position","vOrigin","vCenter","vProtagonistSprite","vPositiveWorld","vNegativeWorld",
   "prngSeed","foundationKey","foundationValue","prngTimestamp","liveValue","vFoundationRepeat","vFoundationTimeFree","vLiveRepeat","vLiveTime","vNoMilliseconds","vPrngSource"
 ];
@@ -543,6 +545,9 @@ let keyboardPanTimer=null;
 let keyboardInitialTimer=null;
 let pendingKeyboardSource=null;
 let lastResidentRosterDateKey="";
+let lastResidentScheduleHourKey="";
+let lastResidentScheduleProof=null;
+let residentSchedulePinned=false;
 
 function projectedCoverageHalfSpan(width,height,tileSize){
   const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
@@ -1637,6 +1642,65 @@ function renderResidentAssignmentProof(){
   return proof;
 }
 
+function residentScheduleHourKey(time){
+  return time?`${time.year}-${time.month}-${time.day}-${time.hour}`:"";
+}
+function renderResidentScheduleProof(timeOverride=null,pin=false){
+  const campaign=SeedSystem.getCampaign();
+  residentSchedulePinned=Boolean(pin);
+  if(!campaign){
+    e.residentScheduleCount.textContent="—";
+    e.residentScheduleTime.textContent="—";
+    e.residentScheduleBlocks.textContent="—";
+    e.residentScheduleRows.replaceChildren();
+    ["vResidentScheduleComplete","vResidentScheduleActions","vResidentScheduleAssignments","vResidentScheduleDeterministic","vResidentScheduleTime","vResidentScheduleIsolation"]
+      .forEach(id=>setCheck(e[id],false,"WAITING"));
+    lastResidentScheduleProof=null;
+    lastResidentScheduleHourKey="";
+    return null;
+  }
+  const time=timeOverride||GameTime.getNow();
+  const proof=ResidentSchedules.proof(campaign.seed,time);
+  e.residentScheduleCount.textContent=String(proof.residentCount);
+  e.residentScheduleTime.textContent=GameTime.formatTimestamp(proof.sampleTime);
+  e.residentScheduleBlocks.textContent=proof.scheduleSummaries.length
+    ?String(proof.scheduleSummaries[0].blockCount)
+    :"—";
+  const fragment=document.createDocumentFragment();
+  for(const state of proof.currentStates){
+    const row=document.createElement("tr");
+    const values=[
+      state.residentId+" "+state.residentName,
+      state.state,
+      state.intendedAction,
+      state.buildingId||"—",
+      formatAssignmentPoint(state.target),
+      state.interactionObjectId||state.interactionObjectType||"—",
+      state.targetSource
+    ];
+    for(const value of values){
+      const cell=document.createElement("td");
+      cell.textContent=value;
+      row.appendChild(cell);
+    }
+    fragment.appendChild(row);
+  }
+  e.residentScheduleRows.replaceChildren(fragment);
+  setCheck(e.vResidentScheduleComplete,proof.completeSchedules,"FAIL");
+  setCheck(e.vResidentScheduleActions,proof.targetsActionsValid&&proof.currentStatesValid,"FAIL");
+  setCheck(e.vResidentScheduleAssignments,proof.homeWorkAssignmentsMatch,"FAIL");
+  setCheck(e.vResidentScheduleDeterministic,proof.deterministic,"FAIL");
+  setCheck(e.vResidentScheduleTime,proof.representativeSelectionPass&&proof.identityAssignmentsStable,"FAIL");
+  setCheck(e.vResidentScheduleIsolation,
+    proof.directRealClockRead===false&&proof.movementExecutionIntroduced===false&&
+    proof.actionExecutionIntroduced===false&&proof.dialogueEconomyCombatIntroduced===false,
+    "FAIL"
+  );
+  lastResidentScheduleProof=proof;
+  lastResidentScheduleHourKey=residentScheduleHourKey(proof.sampleTime);
+  return proof;
+}
+
 function renderAdviceLog(){
   if(typeof window.AdvisorChannel?.renderAdvicePanel !== "function") return;
   const campaign=SeedSystem.getCampaign();
@@ -1662,6 +1726,7 @@ function renderStatic(){
   renderStartingVillage();
   renderResidentRosterProof();
   renderResidentAssignmentProof();
+  renderResidentScheduleProof();
   renderHousePlans();
   renderSpecialLots();
   renderWalkability();
@@ -1680,6 +1745,9 @@ function renderClock(){
   e.detailGameDate.textContent=date;e.detailGameTime.textContent=time;
   renderPRNG(fantasyTimestampMs);
   if(residentDateKey(t)!==lastResidentRosterDateKey)renderResidentRosterProof(t);
+  if(!residentSchedulePinned&&residentScheduleHourKey(t)!==lastResidentScheduleHourKey){
+    renderResidentScheduleProof(t,false);
+  }
 }
 function startClock(){
   if(clockTimer)clearInterval(clockTimer);
@@ -1781,6 +1849,8 @@ window.AppUI=Object.freeze({
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot()),
   refreshResidentRoster:()=>renderResidentRosterProof(),
   refreshResidentAssignments:()=>renderResidentAssignmentProof(),
+  refreshResidentSchedules:(time,pin=true)=>renderResidentScheduleProof(time,pin),
+  residentScheduleSnapshot:()=>lastResidentScheduleProof,
   residentAssignmentSnapshot:()=>{
     const campaign=SeedSystem.getCampaign();
     return campaign?ResidentAssignments.proof(campaign.seed):null;
