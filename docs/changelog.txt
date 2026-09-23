@@ -792,3 +792,12 @@
 - Added deterministic status-transition validation for Delivered, Considered, Accepted, Rejected, Deferred and Forgotten without mutating protagonist/world state.
 - Added dedicated wp-s005-001 evidence coverage for stable identity, chronology, target/topic preservation, reload persistence and authority isolation. Final Visual Evidence run 35933508476 passed on main SHA b1340ac4f140f2b6e8092e252ea215d1a7864ee6.
 - All 4 final screenshots were directly inspected after improving evidence framing. Compose/history/reload views are clean and readable with no major clipping, overlap or gameplay obstruction. VISUAL 8/10 PASS.
+2026-09-24 02:52 +03:00 | WP-S005-002 | Character Memory, Observation Log + World Fact Model
+- Added one campaign-scoped persistent CharacterMemory ledger shared by Protagonist and Starting Village residents, with stable actor/entry identity and deterministic event sequencing.
+- Added a common memory record schema covering memory/observation/fact kind, category, fantasy timestamp, source, confidence, relevance, reliability, explicit uncertainty, authority classification, optional world-fact/scene data and external references.
+- Added source safeguards so rumor/unknown sources cannot silently become verified/trusted, low-confidence/disputed records remain explicitly uncertain, and only verified Simulation-sourced facts are labelled simulation-truth; memory exposes no world-mutation API.
+- Added traceable advice-memory references that point back to stable WP-S005-001 advice IDs rather than becoming new world truth.
+- Added a Development Mode actor selector and readable memory timeline for Protagonist/resident inspection.
+- Dedicated Visual Evidence run 35935407511 passed on tested SHA 9d8433d8b071dec6a7652dd4ce7547194e263a4f; protagonist/resident shared schema, deterministic IDs, uncertainty preservation, traceability, advice references, storage round-trip, actual page reload persistence and world-position isolation all passed.
+- All 4 fresh screenshots were directly inspected. The protagonist and resident timelines are readable with no major clipping, overlap or broken layout; uncertain rumor state and reload persistence are visibly demonstrated. VISUAL 8.5/10 PASS.
+- GitHub Pages run 35935394946 successfully deployed the tested implementation SHA.
