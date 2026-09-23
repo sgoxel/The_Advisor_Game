@@ -34,11 +34,22 @@ try:
       return Boolean(
         r?.ready &&
         r?.engine==='PlayCanvas' &&
-        r?.worldAssetPreparation?.ready &&
-        Number(r?.worldAssetCache?.pending||0)===0 &&
         window.TextureAssets?.stats?.()?.ready &&
-        window.RuntimeTextureQuality
+        window.RuntimeTextureQuality &&
+        window.AppUI?.refreshTerrain
       );
+    """))
+    refresh=driver.execute_async_script("""
+      const done=arguments[arguments.length-1];
+      Promise.resolve(window.AppUI?.refreshTerrain?.())
+        .then(value=>done({ok:true,value:value||null}))
+        .catch(error=>done({ok:false,error:String(error)}));
+    """)
+    if not refresh or refresh.get("ok") is not True:
+        raise RuntimeError(f"Initial PlayCanvas terrain preparation failed: {refresh}")
+    wait.until(lambda d:d.execute_script("""
+      const r=window.GameRenderer?.snapshot?.();
+      return Boolean(r?.worldAssetPreparation?.ready && Number(r?.worldAssetCache?.pending||0)===0);
     """))
 
     default_state=driver.execute_script("return RuntimeTextureQuality.snapshot()")
