@@ -575,7 +575,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return textureQualitySnapshot().cacheSignature;
   }
   function terrainChunkSignature(){
-    return "quality="+terrainTextureProfile()+"|scale="+Number(quality?.renderScale||1).toFixed(2);
+    // Chunk geometry/material identity must not depend on framebuffer render scale.
+    // DPR/render-scale changes resize the canvas only; retaining the same signature
+    // prevents prepared chunk meshes from being invalidated during ordinary viewport
+    // or device-class presentation changes.
+    return "quality="+terrainTextureProfile();
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
