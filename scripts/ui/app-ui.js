@@ -1448,7 +1448,7 @@ async function init(){
 }
 window.AppUI=Object.freeze({
   init,
-  refreshTerrain:()=>renderTerrain(),
+  refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot())
 });
 })();
