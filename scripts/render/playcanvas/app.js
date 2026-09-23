@@ -400,6 +400,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     material.diffuse.set(1,1,1);
     material.emissive.set(1,1,1);
     material.diffuseMap=texture;
+    material.emissiveMap=texture;
     material.opacityMap=texture;
     material.opacityMapChannel="a";
     material.alphaTest=0.12;
