@@ -82,6 +82,7 @@ SCENARIOS = {
     "wp-s003-006-001",
     "wp-s003-006",
     "wp-s003-006-003",
+    "wp-s003-006-004",
     "playcanvas-root-cutover",
 }
 
@@ -116,6 +117,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-001": 14,
     "wp-s003-006": 7,
     "wp-s003-006-003": 7,
+    "wp-s003-006-004": 9,
     "playcanvas-root-cutover": 3,
 }
 
@@ -341,6 +343,7 @@ return (() => {
           quality: renderer.quality || null,
           scene: renderer.scene || null,
           performance: renderer.performance || null,
+          navigationHotPath: renderer.navigationHotPath || null,
           canvasCount: Number(renderer.canvasCount || 0),
           domTerrainTileCount: Number(renderer.domTerrainTileCount || 0),
           logicalTextureKeyPass: Boolean(renderer.logicalTextureKeyPass),
@@ -701,7 +704,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # glTF/material proof is readable instead of being lost inside an ultra-wide
         # evidence canvas. Camera/world coordinates remain independently validated.
         driver.set_window_size(1280, 800)
-    if scenario == "wp-s003-006-003":
+    if scenario in {"wp-s003-006-003", "wp-s003-006-004"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
     if scenario == "wp-s003-005-002":
@@ -727,12 +730,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=True
                 )
-            if scenario == "wp-s003-006-003":
+            if scenario in {"wp-s003-006-003", "wp-s003-006-004"}:
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
                 )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -788,6 +791,20 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               Number(world.completeEntryCount || 0) === Number(world.entryCount || 0) &&
                               Number(world.surfaceCellCount || 0) > 0 &&
                               Number(world.terrainFoundationCalls || 0) === Number(world.walkabilityClassifications || 0)
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-006-004' || (() => {
+                            const preload=renderer?.terrainPreload || {};
+                            const chunks=renderer?.terrainChunks || {};
+                            const nav=renderer?.navigationHotPath || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              Number(chunks.visibleChunkCount || 0) > 0 &&
+                              Number(preload.Prepared || 0) > 0 &&
+                              Number(preload.queueDepth || 0) === 0 &&
+                              nav.persistentSceneGraph === true &&
+                              Number(nav.fullSceneRebuilds || 0) === 0 &&
+                              Number(nav.redundantStateCallbacks || 0) === 0
                             );
                           })())
                         );
@@ -1494,6 +1511,45 @@ def _set_camera_center_and_render_active(driver, x: int, y: int) -> str:
     return f"camera-center-active:{x},{y}"
 
 
+def _set_camera_zoom_and_render(driver, zoom: float) -> str:
+    result = driver.execute_async_script(
+        """
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            if(!window.Camera?.setZoom||!window.AppUI?.refreshTerrain){
+              done({ok:false,reason:'camera-zoom-refresh-api-missing'});
+              return;
+            }
+            const selected=window.Camera.setZoom(Number(arguments[0]));
+            await Promise.resolve(window.AppUI.refreshTerrain());
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            done({ok:true,zoom:Number(window.Camera.getZoom?.()||selected)});
+          }catch(error){done({ok:false,reason:String(error?.stack||error)})}
+        })();
+        """,
+        float(zoom),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to set camera zoom and render: {result}")
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, 15).until(
+        lambda d: d.execute_script(
+            """
+            const z=Number(window.Camera?.getZoom?.()||0);
+            const snap=window.GameRenderer?.snapshot?.();
+            return Boolean(
+              Math.abs(z-Number(arguments[0]))<0.001 &&
+              snap?.ready &&
+              Number(snap?.terrainPreload?.queueDepth||0)===0
+            );
+            """,
+            float(zoom),
+        )
+    )
+    return f"camera-zoom:{zoom:.2f}"
+
+
 def _keyboard_pan_tiles(driver, dx: int, dy: int, timeout: float = 60.0) -> str:
     center = driver.execute_script("return window.Camera?.getCenter?.() || null")
     if not isinstance(center, dict):
@@ -1607,6 +1663,80 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         _safe_click(driver, "#settingsButton")
         driver.execute_script("document.querySelector('#terrainPerformanceHeading')?.scrollIntoView({block:'start'})")
         return "chunk-size:persistence-phone-portrait"
+    if scenario == "wp-s003-006-004":
+        if len(frames) < 9:
+            raise RuntimeError("wp-s003-006-004 requires nine evidence frames")
+        runtimes=[frame.get("runtime",{}) for frame in frames[:9]]
+        builds=[runtime.get("currentBuild",{}) for runtime in runtimes]
+        gpus=[(build.get("gpuRenderer") or {}) for build in builds]
+        preloads=[(gpu.get("terrainPreload") or {}) for gpu in gpus]
+        chunks=[(gpu.get("terrainChunks") or {}) for gpu in gpus]
+        nav=[(gpu.get("navigationHotPath") or {}) for gpu in gpus]
+        assets=[(gpu.get("worldAssetCache") or {}) for gpu in gpus]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        cameras=[build.get("cameraCoordinate") for build in builds]
+        expected=("(0,0)","(2,0)","(4,0)","(16,0)","(32,0)","(16,0)","(0,0)","(0,0)","(0,0)")
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Persistent navigation changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Persistent navigation changed protagonist authority: {protagonists}")
+        if tuple(cameras)!=expected:
+            raise RuntimeError(f"Persistent navigation camera path mismatch: {cameras}")
+        baseline_visible_waits=int(preloads[0].get("visibleWaits") or 0)
+        baseline_network=int(assets[0].get("networkLoads") or 0)
+        baseline_parses=int(assets[0].get("containerParses") or 0)
+        initial_bulk=int(nav[0].get("bulkChunkRepositions") or 0)
+        for index,(gpu,preload,chunk,navigation,asset) in enumerate(zip(gpus,preloads,chunks,nav,assets),start=1):
+            if gpu.get("engine")!="PlayCanvas" or not gpu.get("ready"):
+                raise RuntimeError(f"PlayCanvas renderer missing in frame {index}: {gpu}")
+            if navigation.get("persistentSceneGraph") is not True or int(navigation.get("fullSceneRebuilds") or 0)!=0:
+                raise RuntimeError(f"Persistent scene graph contract failed in frame {index}: {navigation}")
+            if int(navigation.get("redundantStateCallbacks") or 0)!=0:
+                raise RuntimeError(f"Redundant chunk state callback detected in frame {index}: {navigation}")
+            if int(navigation.get("sceneAnchorRebases") or 0)!=0:
+                raise RuntimeError(f"Ordinary navigation unexpectedly rebased scene anchor in frame {index}: {navigation}")
+            if int(navigation.get("bulkChunkRepositions") or 0)!=initial_bulk:
+                raise RuntimeError(f"Ordinary navigation bulk-repositioned cached chunks in frame {index}: {navigation}")
+            if int(preload.get("visibleWaits") or 0)!=baseline_visible_waits:
+                raise RuntimeError(f"Prepared navigation introduced a visible chunk composition wait in frame {index}: {preload}")
+            if int(preload.get("visibleAssetLoads") or 0)!=0 or int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleGltfParses") or 0)!=0:
+                raise RuntimeError(f"Visible navigation performed asset/decode/parse work in frame {index}: {preload}")
+            if int(asset.get("networkLoads") or 0)!=baseline_network or int(asset.get("containerParses") or 0)!=baseline_parses:
+                raise RuntimeError(f"World assets reloaded/reparsed during navigation in frame {index}: {asset}")
+            if int(preload.get("Cached") or 0)>int((preload.get("settings") or {}).get("maxCachedChunks") or 0):
+                raise RuntimeError(f"Persistent chunk cache exceeded budget in frame {index}: {preload}")
+            if chunk.get("resourceKind")!="chunk-mesh" or int(chunk.get("visibleChunkCount") or 0)<1:
+                raise RuntimeError(f"Persistent terrain chunk presentation missing in frame {index}: {chunk}")
+            if navigation.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Navigation telemetry lost Simulation authority in frame {index}: {navigation}")
+
+        # Two small pans remain inside the origin chunk: no static scene resources
+        # should be created or destroyed merely because the camera moved.
+        for idx in (1,2):
+            if int(nav[idx].get("chunkResourceCreations") or 0)!=int(nav[0].get("chunkResourceCreations") or 0):
+                raise RuntimeError(f"Small prepared pan created static chunk resources in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
+            if int(nav[idx].get("staticEntityCreations") or 0)!=int(nav[0].get("staticEntityCreations") or 0):
+                raise RuntimeError(f"Small prepared pan created static entities in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
+            if int(nav[idx].get("staticEntityDestructions") or 0)!=int(nav[0].get("staticEntityDestructions") or 0):
+                raise RuntimeError(f"Small prepared pan destroyed static entities in frame {idx+1}: origin={nav[0]}, frame={nav[idx]}")
+
+        # Reverse travel and origin revisit must reactivate retained scene entities;
+        # no eviction/destruction is allowed with the deliberately large cache.
+        if int(nav[5].get("cacheReuses") or 0)<=int(nav[4].get("cacheReuses") or 0):
+            raise RuntimeError(f"Reverse travel did not reuse cached chunks: forward={nav[4]}, reverse={nav[5]}")
+        if int(nav[6].get("cacheReuses") or 0)<=int(nav[5].get("cacheReuses") or 0):
+            raise RuntimeError(f"Origin revisit did not reuse cached chunks: reverse={nav[5]}, return={nav[6]}")
+        if int(nav[6].get("staticEntityDestructions") or 0)!=int(nav[0].get("staticEntityDestructions") or 0):
+            raise RuntimeError(f"Revisit destroyed retained static entities: origin={nav[0]}, return={nav[6]}")
+        if int(preloads[6].get("evictions") or 0)!=int(preloads[0].get("evictions") or 0):
+            raise RuntimeError(f"Revisit evicted retained chunks under non-pressured cache: origin={preloads[0]}, return={preloads[6]}")
+        if int(nav[8].get("cameraTransformCalls") or 0)<=int(nav[6].get("cameraTransformCalls") or 0):
+            raise RuntimeError(f"Zoom path did not execute camera transforms: before={nav[6]}, after={nav[8]}")
+        if float(nav[8].get("maxCameraTransformMs") or 0)<0 or float(nav[8].get("maxPreloadUpdateMs") or 0)<0:
+            raise RuntimeError(f"Navigation timing telemetry invalid: {nav[8]}")
+        return
+
     if scenario == "wp-s003-006-003":
         if frame_index == 0:
             return "chunk-world-data:prewarmed-origin"
@@ -1624,6 +1754,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver, radius=1, cache=256, directional=True, background=False
         )
         return _keyboard_pan_tiles(driver, -32, 0)
+    if scenario == "wp-s003-006-004":
+        if frame_index == 0:
+            _set_terrain_preload_settings(driver, radius=1, cache=256, directional=True, background=True)
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 1:
+            return _set_camera_center_and_render(driver, 2, 0)
+        if frame_index == 2:
+            return _set_camera_center_and_render(driver, 4, 0)
+        if frame_index == 3:
+            return _set_camera_center_and_render(driver, 16, 0)
+        if frame_index == 4:
+            return _set_camera_center_and_render(driver, 32, 0)
+        if frame_index == 5:
+            return _set_camera_center_and_render(driver, 16, 0)
+        if frame_index == 6:
+            return _set_camera_center_and_render(driver, 0, 0)
+        if frame_index == 7:
+            return _set_camera_zoom_and_render(driver, 0.75)
+        return _set_camera_zoom_and_render(driver, 1.0)
     if scenario == "wp-s003-006":
         if frame_index == 0:
             _set_terrain_preload_settings(driver, radius=2, cache=256, directional=True, background=True)
