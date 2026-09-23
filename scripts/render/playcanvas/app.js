@@ -1161,7 +1161,18 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1),aspect=width/height;
       const baseFrameHeight=aspect>3&&height<220?SHORT_LANDSCAPE_ORTHO_HEIGHT:aspect<0.8?PORTRAIT_ORTHO_HEIGHT:aspect>2.2?WIDE_ORTHO_HEIGHT:BASE_ORTHO_HEIGHT;
       camera.camera.orthoHeight=baseFrameHeight/zoom;
-      camera.setPosition(targetX+13.5,15.5,targetZ+13.5);
+      // Orthographic zoom-out enlarges the view plane but does not move the camera.
+      // At wide framing the lower view rays otherwise begin below ground and can
+      // never intersect terrain, producing a large clear-color band. Move the
+      // camera backward along the same view direction as the frame grows; this
+      // preserves orthographic scale/orientation while keeping the ground plane
+      // in front of every gameplay ray.
+      const cameraDistanceScale=Math.max(1,camera.camera.orthoHeight/BASE_ORTHO_HEIGHT);
+      camera.setPosition(
+        targetX+13.5*cameraDistanceScale,
+        15.5*cameraDistanceScale,
+        targetZ+13.5*cameraDistanceScale
+      );
       camera.lookAt(targetX,0,targetZ);
     }
     const elapsed=performance.now()-started;
