@@ -3,6 +3,7 @@
 
 const LEVEL=0;
 const cache=new Map();
+const proofCache=new Map();
 const TYPE_RULES=Object.freeze({
   bed:Object.freeze({blocking:true,actions:Object.freeze(["sleep"])}),
   chair:Object.freeze({blocking:true,actions:Object.freeze(["sit"])}),
@@ -84,7 +85,9 @@ function classifyNavigation(seed,x,y){
   return Object.freeze(Object.assign({},base,{walkable:false,blocksMovement:true,secondsPerTile:Infinity,barrierKind:"interior-object",objectId:object.id}));
 }
 function proof(seed){
-  const key=String(seed),first=buildFresh(key),second=buildFresh(key);
+  const key=String(seed);
+  if(proofCache.has(key))return proofCache.get(key);
+  const first=buildFresh(key),second=buildFresh(key);
   const deterministic=JSON.stringify(first)===JSON.stringify(second);
   const ids=new Set(first.map(o=>o.id));
   const uniqueIds=ids.size===first.length;
@@ -104,9 +107,22 @@ function proof(seed){
     const state=classifyNavigation(key,o.coordinate.x,o.coordinate.y);
     return !state?.walkable&&state?.barrierKind==="interior-object"&&state?.objectId===o.id;
   });
+  const routeBlockingPass=first.filter(o=>o.blocking).every(o=>{
+    const interior=BuildingInteriors.get(key,o.buildingId);
+    const start=interior?.entrance?.door;
+    if(!start)return false;
+    const route=RoutePlanner.findRoute(key,start,o.coordinate);
+    return route&&!route.found&&route.reason==="blocked-destination";
+  });
   const buildingIds=new Set(first.map(o=>o.buildingId));
   const allBuildingsCovered=BuildingInteriors.build(key).every(b=>buildingIds.has(b.id));
-  return Object.freeze({pass:deterministic&&uniqueIds&&legalPlacement&&interactionsValid&&blockingPass&&allBuildingsCovered,deterministic,uniqueIds,legalPlacement,interactionsValid,blockingPass,allBuildingsCovered,objectCount:first.length,buildingCount:buildingIds.size,objects:first});
+  const result=Object.freeze({
+    pass:deterministic&&uniqueIds&&legalPlacement&&interactionsValid&&blockingPass&&routeBlockingPass&&allBuildingsCovered,
+    deterministic,uniqueIds,legalPlacement,interactionsValid,blockingPass,routeBlockingPass,allBuildingsCovered,
+    objectCount:first.length,buildingCount:buildingIds.size,objects:first
+  });
+  proofCache.set(key,result);
+  return result;
 }
 window.InteriorObjects=Object.freeze({LEVEL,TYPE_RULES,build,blockingAt,classifyNavigation,proof});
 })();
