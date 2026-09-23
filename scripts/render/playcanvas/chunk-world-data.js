@@ -12,7 +12,7 @@ let cacheHits=0,cacheMisses=0,completeChunkGenerations=0,releases=0;
 let activeGenerations=0,preparedGenerations=0,otherGenerations=0;
 let terrainFoundationCalls=0,walkabilityClassifications=0;
 let totalGenerationMs=0,maxGenerationMs=0;
-let viewTileHits=0,viewTileMisses=0;
+let viewTileHits=0,viewTileMisses=0,lastViewTileHits=0,lastViewTileMisses=0;
 let lastGeneratedIds=Object.freeze([]);
 
 function floorDiv(value,divisor){
@@ -241,6 +241,8 @@ function snapshotForCoordinate({seed,x,y,chunkSize,signature}){
   return cache.get(key)?.snapshot||null;
 }
 function collectView({seed,center,columns,rows,chunkSize,signature}){
+  lastViewTileHits=0;
+  lastViewTileMisses=0;
   const halfCols=Math.floor(columns/2),halfRows=Math.floor(rows/2);
   const baseCells=[];
   const missing=new Set();
@@ -250,17 +252,17 @@ function collectView({seed,center,columns,rows,chunkSize,signature}){
   function lookup(x,y,{countVisible=false}={}){
     const snapshot=snapshotForCoordinate({seed,x:String(x),y:String(y),chunkSize,signature});
     if(!snapshot){
-      if(countVisible)viewTileMisses++;
+      if(countVisible){viewTileMisses++;lastViewTileMisses++;}
       missing.add(String(chunkCoordinate(x,chunkSize))+","+String(chunkCoordinate(y,chunkSize)));
       return null;
     }
     const cell=cellFromSnapshot(snapshot,x,y);
     if(!cell){
-      if(countVisible)viewTileMisses++;
+      if(countVisible){viewTileMisses++;lastViewTileMisses++;}
       missing.add(snapshot.key);
       return null;
     }
-    if(countVisible)viewTileHits++;
+    if(countVisible){viewTileHits++;lastViewTileHits++;}
     used.add(snapshot.key);
     return cell;
   }
@@ -337,7 +339,7 @@ function stats(){
     releases,
     terrainFoundationCalls,
     walkabilityClassifications,
-    viewTileHits,viewTileMisses,
+    viewTileHits,viewTileMisses,lastViewTileHits,lastViewTileMisses,
     totalGenerationMs:Number(totalGenerationMs.toFixed(3)),
     maxGenerationMs:Number(maxGenerationMs.toFixed(3)),
     averageGenerationMs:Number((completeChunkGenerations?totalGenerationMs/completeChunkGenerations:0).toFixed(3)),
