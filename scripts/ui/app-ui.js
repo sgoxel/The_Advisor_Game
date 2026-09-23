@@ -857,31 +857,28 @@ async function renderTerrain(){
   let cachedTerrain=null;
   if(isPlayCanvasRenderer()){
     const base=terrainViewGeometryDescriptor(center,Camera.getZoom());
+    /* PlayCanvas presentation readiness is separate from chunk-world-data cache
+       readiness. Always run the renderer preparation gate for the region that is
+       about to become visible, including revisits whose terrain data is already
+       cached. This keeps world assets/materials pinned and ready before render. */
+    const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
+      seed:campaign.seed,
+      center,
+      width:base.width,
+      height:base.height,
+      columns:base.columns,
+      rows:base.rows,
+      tileSize:base.tileSize,
+      regionKey:base.regionKey
+    }));
+    if(rendererPrepared&&rendererPrepared.prepared===false)return false;
     cachedTerrain=GameRenderer.getPreparedTerrainView?.({
       seed:campaign.seed,
       center,
       columns:base.columns,
       rows:base.rows
     })||null;
-    if(!cachedTerrain?.ready){
-      const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
-        seed:campaign.seed,
-        center,
-        width:base.width,
-        height:base.height,
-        columns:base.columns,
-        rows:base.rows,
-        tileSize:base.tileSize,
-        regionKey:base.regionKey
-      }));
-      if(rendererPrepared&&rendererPrepared.prepared===false)return false;
-      cachedTerrain=GameRenderer.getPreparedTerrainView?.({
-        seed:campaign.seed,
-        center,
-        columns:base.columns,
-        rows:base.rows
-      })||null;
-    }
+    if(!cachedTerrain?.ready)return false;
     view={
       ...base,
       requiredKeys:cachedTerrain?.ready
