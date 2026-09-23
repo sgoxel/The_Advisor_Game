@@ -23,7 +23,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   const preference=normalizePreference(backendPreference),maxPixelRatioOverride=finiteOrNull(maxPixelRatio),renderScaleOverride=finiteOrNull(renderScale);
   let pc=null,app=null,device=null,host=null,canvas=null,resizeObserver=null,lastModel=null,proofState=null,occlusionProofState=null,beforeInit=null,afterInit=null,sceneAnchor=null,quality=null;
   let cameraRoot=null,camera=null,worldRoot=null,terrainPreloadRoot=null,terrainRoot=null,terrainBaseEntity=null,structuresRoot=null,propsRoot=null,charactersRoot=null,lightingRoot=null,interiorProofRoot=null,characterProofRoot=null;
-  let characterPreparation=null,terrainPreloadManager=null,terrainChunkMeshFactory=null,interiorProofState=null,interiorProofPanel=null,characterProofState=null,characterProofPanel=null,lastRawSeed=null;
+  let characterPreparation=null,terrainPreloadManager=null,terrainChunkMeshFactory=null,lastPreparedTerrainKey="",interiorProofState=null,interiorProofPanel=null,characterProofState=null,characterProofPanel=null,lastRawSeed=null;
   let lastRawInteriorObjects=[],lastRawBuildingInteriors=[];
   let lastInteriorObjectPresentation=Object.freeze({active:false,state:null,buildingId:null,buildingLabel:null,buildingSource:null,objectCount:0,interactionCount:0,reachableInteractionCount:0,blockingObjectCount:0,objects:Object.freeze([])});
   let lastCharacterProof=Object.freeze({active:false,state:null,protagonistId:null,world:null,scene:null,feetY:null,height:null,yawDegrees:null,occlusionExpected:null,cutawayActive:false});
@@ -408,14 +408,28 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   function prepareTerrainMeshChunk(spec){
     const factory=initTerrainChunkMeshFactory();
     if(!factory)throw new Error("PlayCanvas terrain chunk mesh factory is unavailable");
-    const resource=factory.build(spec);
+    const worldData=window.PlayCanvasChunkWorldData?.getOrCreate?.({
+      seed:lastRawSeed||"",
+      x:spec.x,
+      y:spec.y,
+      chunkSize:spec.chunkSize,
+      signature:spec.signature
+    })||null;
+    const resource=factory.build({...spec,worldData});
+    resource.worldData=worldData;
+    resource.worldDataKey=worldData?.key||resource.worldDataKey||null;
     positionTerrainChunk(resource);
     resource.entity.enabled=false;
     return resource;
   }
-  function activateTerrainChunk(resource){positionTerrainChunk(resource);if(resource?.entity)resource.entity.enabled=true;}
+  function activateTerrainChunk(resource){
+    if(resource?.worldDataKey)window.PlayCanvasChunkWorldData?.touch?.(resource.worldDataKey);
+    positionTerrainChunk(resource);
+    if(resource?.entity)resource.entity.enabled=true;
+  }
   function deactivateTerrainChunk(resource){positionTerrainChunk(resource);if(resource?.entity)resource.entity.enabled=false;}
   function destroyTerrainChunk(resource){
+    if(resource?.worldDataKey)window.PlayCanvasChunkWorldData?.release?.(resource.worldDataKey);
     if(terrainChunkMeshFactory)terrainChunkMeshFactory.destroy(resource);
     else resource?.entity?.destroy?.();
   }
@@ -441,8 +455,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       meshInstanceCount,vertices,triangles,
       materialCount:materialNames.size,
       generator:terrainChunkMeshFactory?.stats?.()||null,
+      worldData:window.PlayCanvasChunkWorldData?.stats?.()||null,
       oneEntityPerTile:false,
       completeChunkMeshes:true,
+      completeChunkWorldData:Boolean(window.PlayCanvasChunkWorldData),
       simulationAuthorityPreserved:true
     });
   }
@@ -506,6 +522,29 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const result=manager.update({center,activeRadiusX:radii.x,activeRadiusY:radii.y});
     manager.forEachResource(positionTerrainChunk);
     return result;
+  }
+  function preparedTerrainKey(seed,center){
+    if(!center)return "";
+    return [
+      String(seed||""),
+      String(center.x),String(center.y),
+      String(terrainChunkSize()),
+      String(terrainChunkSignature())
+    ].join("|");
+  }
+  function getPreparedTerrainView(model){
+    const seed=String(model?.seed??lastRawSeed??"");
+    const center=model?.center||lastModel?.center;
+    const columns=Math.max(1,Number(model?.columns||lastModel?.columns||0));
+    const rows=Math.max(1,Number(model?.rows||lastModel?.rows||0));
+    if(!seed||!center||!columns||!rows||!window.PlayCanvasChunkWorldData){
+      return Object.freeze({ready:false,tiles:Object.freeze([]),missingChunkIds:Object.freeze([]),tileCount:0,expectedTileCount:columns*rows});
+    }
+    return window.PlayCanvasChunkWorldData.collectView({
+      seed,center,columns,rows,
+      chunkSize:terrainChunkSize(),
+      signature:terrainChunkSignature()
+    });
   }
   function characterAssetKey(character){
     const frameUrls=Array.isArray(character?.frameUrls)&&character.frameUrls.length?character.frameUrls:null;
@@ -693,7 +732,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   function canvasInfo(){return Object.freeze({cssWidth:Math.max(0,Math.round(host?.clientWidth||0)),cssHeight:Math.max(0,Math.round(host?.clientHeight||0)),backingWidth:Number(canvas?.width||0),backingHeight:Number(canvas?.height||0)});}
   function baseSnapshot(extra={}){const deviceType=device?.deviceType||"unknown",current=window.RendererContract?.simulationSnapshot?.()||null;return Object.freeze({ready:Boolean(app&&device),engine:"PlayCanvas",engineVersion:ENGINE_VERSION,rendererContractVersion:window.RendererContract?.version||null,backend:deviceType,requestedBackend:preference,gpu:Boolean(device),webgl:deviceType==="webgl2",webgpu:deviceType==="webgpu",webgpuAvailable:Boolean(navigator.gpu),migrationFoundation:true,sceneBaseline:Boolean(camera&&worldRoot),canvasCount:host?host.querySelectorAll("canvas").length:0,canvas:canvasInfo(),quality:quality||Object.freeze({deviceClass:"unknown",browserDevicePixelRatio:Number(window.devicePixelRatio||1),maxPixelRatio:1,renderScale:1,effectivePixelRatio:1}),scene:sceneInfo(),performance:frameStats(),domTerrainTileCount:document.querySelectorAll(".terrain-tile").length,logicalTextureKeyPass:true,simulationAuthorityPreserved:beforeInit&&afterInit?window.RendererContract.sameSimulation(beforeInit,afterInit):true,simulationSnapshot:current,frame:lastModel,regionKey:lastModel?.regionKey||null,tileCount:lastModel?.tileCount||0,protagonistVisible:Boolean(lastCharacterState.visibleProtagonist),characterPresentation:Object.freeze({activeCharacterCount:Number(lastCharacterState.activeCharacterCount||0),simulatedCharacterCount:Number(lastCharacterState.simulatedCharacterCount||0),preparedCharacterCount:Number(lastCharacterState.preparedCharacterCount||0),visibleCharacterIds:lastCharacterState.visibleCharacterIds,visibleProtagonist:Boolean(lastCharacterState.visibleProtagonist),suppressedCharacterCount:Number(lastCharacterState.suppressedCharacterCount||0),suppressedCharacterIds:lastCharacterState.suppressedCharacterIds||Object.freeze([]),instances:lastCharacterState.instances||Object.freeze([]),feetAnchored:true,billboardMode:"vertical-yaw",depthTest:true,depthWrite:true,sharedTextureCount:characterTextures.size,sharedMaterialCount:characterMaterials.size,simulationAuthorityPreserved:true,migrationFoundation:true}),characterProof:lastCharacterProof,buildingPresentation:Object.freeze({layerOrder:Object.freeze(["playcanvas-world"]),proofState,visibleBuildingCount:lastModel?.buildingCount||0,visibleInteriorObjectCount:lastModel?.interiorObjectCount||0,simulationAuthorityPreserved:true,migrationFoundation:true,cutawayActive:proofState==="inside"||proofState==="entering"}),buildingOcclusion:Object.freeze({proofState:occlusionProofState,simulationAuthorityPreserved:true,migrationFoundation:true}),interiorObjectPresentation:lastInteriorObjectPresentation,terrainPreload:terrainPreloadManager?.stats?.()||Object.freeze({settings:window.TerrainChunkPreloadSettings?.get?.()||null,Active:0,Prepared:0,Cached:0,queueDepth:0,hits:0,misses:0,compositions:0,evictions:0,visibleWaits:0,bounded:true,simulationAuthorityPreserved:true}),terrainChunks:Object.freeze({migrationFoundation:true,visibleChunkCount:Number(terrainPreloadManager?.stats?.().Active||0),preparedChunkCount:Number(terrainPreloadManager?.stats?.().Prepared||0),cachedChunkCount:Number(terrainPreloadManager?.stats?.().Cached||0),hits:Number(terrainPreloadManager?.stats?.().hits||0),misses:Number(terrainPreloadManager?.stats?.().misses||0),compositions:Number(terrainPreloadManager?.stats?.().compositions||0),invalidations:0,createdSprites:0,reusedSprites:Number(terrainPreloadManager?.stats?.().hits||0),removedSprites:0,evictions:Number(terrainPreloadManager?.stats?.().evictions||0),visibleWaitedForComposition:Number(terrainPreloadManager?.stats?.().visibleWaits||0)>0,...terrainMeshMetrics()}),...extra});}
   async function init(target){if(app)return snapshot();if(!target)throw new Error("PlayCanvas renderer requires a gameplay host");host=target;beforeInit=window.RendererContract?.simulationSnapshot?.()||null;pc=await loadEngine();canvas=document.createElement("canvas");canvas.id="gameCanvas";canvas.className="game-canvas";canvas.setAttribute("aria-label","PlayCanvas orthographic 3D gameplay world");canvas.dataset.renderer="playcanvas";host.replaceChildren(canvas);device=await pc.createGraphicsDevice(canvas,{deviceTypes:requestedDeviceTypes(),antialias:false,depth:true,powerPreference:"high-performance"});const options=new pc.AppOptions();options.graphicsDevice=device;options.componentSystems=[pc.RenderComponentSystem,pc.CameraComponentSystem,pc.LightComponentSystem];options.resourceHandlers=[pc.TextureHandler,pc.ContainerHandler];app=new pc.AppBase(canvas);app.init(options);characterPreparation=window.PlayCanvasAssetPreparation?.create({app,pc,cacheLimit:64})||null;buildScene();resize();initTerrainPreload();app.start();if("ResizeObserver" in window){resizeObserver=new ResizeObserver(resize);resizeObserver.observe(host);}else window.addEventListener("resize",resize);afterInit=window.RendererContract?.simulationSnapshot?.()||null;if(beforeInit&&afterInit&&!window.RendererContract.sameSimulation(beforeInit,afterInit))throw new Error("PlayCanvas initialization changed authoritative Simulation state");host.hidden=false;lastSnapshot=baseSnapshot({ready:true,canvasCount:host.querySelectorAll("canvas").length});return lastSnapshot;}
-  function render(model){lastRawSeed=model?.seed??lastRawSeed;lastRawInteriorObjects=Array.isArray(model?.interiorObjects)?model.interiorObjects:[];lastRawBuildingInteriors=Array.isArray(model?.buildingInteriors)?model.buildingInteriors:[];const frame=window.RendererContract?.frameFromModel?.(model)||null;lastModel=frame?Object.freeze({...frame,cameraZoom:Number(window.Camera?.getZoom?.()??1)}):null;if(host)host.hidden=false;ensureSceneAnchor(lastModel?.center);resize();updateCameraTransform();updateTerrainPreload(lastModel?.center);applyCutaway();syncCharacterBillboards(lastModel?.visibleCharacters||[]);if(interiorProofState)buildInteriorObjectProof(interiorProofState);if(characterProofState)rebuildCharacterProof();lastSnapshot=baseSnapshot();return lastSnapshot;}
+  function render(model){lastRawSeed=model?.seed??lastRawSeed;lastRawInteriorObjects=Array.isArray(model?.interiorObjects)?model.interiorObjects:[];lastRawBuildingInteriors=Array.isArray(model?.buildingInteriors)?model.buildingInteriors:[];const frame=window.RendererContract?.frameFromModel?.(model)||null;lastModel=frame?Object.freeze({...frame,cameraZoom:Number(window.Camera?.getZoom?.()??1)}):null;if(host)host.hidden=false;ensureSceneAnchor(lastModel?.center);resize();updateCameraTransform();const terrainKey=preparedTerrainKey(lastRawSeed,lastModel?.center);if(terrainKey!==lastPreparedTerrainKey){updateTerrainPreload(lastModel?.center);lastPreparedTerrainKey=terrainKey;}applyCutaway();syncCharacterBillboards(lastModel?.visibleCharacters||[]);if(interiorProofState)buildInteriorObjectProof(interiorProofState);if(characterProofState)rebuildCharacterProof();lastSnapshot=baseSnapshot();return lastSnapshot;}
   function prepareTerrain(model){
     lastRawSeed=model?.seed??lastRawSeed;
     const frame=window.RendererContract?.frameFromModel?.(model)||null;
@@ -702,21 +741,24 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     resize();
     updateCameraTransform();
     const preload=updateTerrainPreload(frame.center);
+    lastPreparedTerrainKey=preparedTerrainKey(lastRawSeed,frame.center);
     return Object.freeze({
       prepared:true,
       chunkMesh:true,
+      chunkWorldData:true,
       regionKey:frame.regionKey||null,
       preload,
       mesh:terrainMeshMetrics(),
+      worldData:window.PlayCanvasChunkWorldData?.stats?.()||null,
       simulationAuthorityPreserved:true
     });
   }
   function setBuildingProofState(state){proofState=(state===null||state===undefined||state==="off")?null:String(state);applyCutaway();lastSnapshot=baseSnapshot();return lastSnapshot;}
   function setBuildingOcclusionProofState(state){occlusionProofState=(state===null||state===undefined||state==="off")?null:String(state);lastSnapshot=baseSnapshot();return lastSnapshot;}
-  function clear(){lastModel=null;lastRawSeed=null;lastRawInteriorObjects=[];lastRawBuildingInteriors=[];setInteriorObjectProofState(null);setCharacterProofState(null);clearCharacterBillboards();if(host)host.hidden=true;lastSnapshot=baseSnapshot({ready:Boolean(app&&device)});}
+  function clear(){lastModel=null;lastRawSeed=null;lastPreparedTerrainKey="";lastRawInteriorObjects=[];lastRawBuildingInteriors=[];setInteriorObjectProofState(null);setCharacterProofState(null);clearCharacterBillboards();if(host)host.hidden=true;lastSnapshot=baseSnapshot({ready:Boolean(app&&device)});}
   function snapshot(){if(app&&device)lastSnapshot=baseSnapshot();return lastSnapshot;}
-  function destroy(){resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;app?.destroy?.();app=null;device=null;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});}
-  return Object.freeze({init,render,prepareTerrain,prepareCharacters,clear,snapshot,destroy,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
+  function destroy(){resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;lastPreparedTerrainKey="";window.PlayCanvasChunkWorldData?.clear?.();app?.destroy?.();app=null;device=null;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});}
+  return Object.freeze({init,render,prepareTerrain,getPreparedTerrainView,prepareCharacters,clear,snapshot,destroy,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
 }
 window.PlayCanvasRendererFactory=Object.freeze({engineVersion:ENGINE_VERSION,engineUrl:ENGINE_URL,loadEngine,create});
 })();
