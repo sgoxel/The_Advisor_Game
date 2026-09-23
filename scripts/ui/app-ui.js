@@ -1448,6 +1448,7 @@ async function init(){
 }
 window.AppUI=Object.freeze({
   init,
+  refreshTerrain:()=>renderTerrain(),
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot())
 });
 })();
