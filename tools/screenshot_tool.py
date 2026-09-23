@@ -1743,12 +1743,16 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action = _wait_for_playcanvas_world_assets(driver)
             return action + "+" + _set_asset_preparation_proof(driver, True)
         if frame_index == 1:
-            proof = _set_asset_preparation_proof(driver, False)
+            proof_off = _set_asset_preparation_proof(driver, False)
             action = _set_camera_center_and_render_active(driver, 64, 0)
-            return proof + "+" + action + "+" + _wait_for_playcanvas_world_assets(driver)
+            ready = _wait_for_playcanvas_world_assets(driver)
+            proof_on = _set_asset_preparation_proof(driver, True)
+            return proof_off + "+" + action + "+" + ready + "+" + proof_on
+        proof_off = _set_asset_preparation_proof(driver, False)
         action = _set_camera_center_and_render_active(driver, 0, 0)
         ready = _wait_for_playcanvas_world_assets(driver)
-        return action + "+" + ready + "+" + _set_asset_preparation_proof(driver, True)
+        proof_on = _set_asset_preparation_proof(driver, True)
+        return proof_off + "+" + action + "+" + ready + "+" + proof_on
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
@@ -2701,13 +2705,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError("WP-S003-005 moved preparation does not include center chunk 4,0")
         if not any("coord=0,0|" in key for key in region_sets[2]):
             raise RuntimeError("WP-S003-005 return preparation does not include center chunk 0,0")
-        if not (
-            asset_proofs[0].get("active") is True and
-            asset_proofs[1].get("active") is False and
-            asset_proofs[2].get("active") is True
-        ):
-            raise RuntimeError(f"WP-S003-005 visual proof state sequence failed: {asset_proofs}")
-        for index in (0,2):
+        if not all(proof.get("active") is True for proof in asset_proofs):
+            raise RuntimeError(f"WP-S003-005 visual proof must be active in every evidence frame: {asset_proofs}")
+        for index in (0,1,2):
             proof=asset_proofs[index]
             if proof.get("logicalKey") != "world.prototype.representative-set":
                 raise RuntimeError(f"WP-S003-005 cached glTF proof key mismatch in frame {index+1}: {proof}")
