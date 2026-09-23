@@ -51,13 +51,20 @@ function buildFresh(seed){
   const reserved=new Set();
   const objects=[];
   for(const building of BuildingInteriors.build(seed)){
+    const protectedCells=new Set(
+      [
+        building.entrance?.door,
+        building.entrance?.immediateInside,
+        building.interiorTarget
+      ].filter(Boolean).map(pointKey)
+    );
     const types=typesFor(building);
     types.forEach((type,index)=>{
       const rule=TYPE_RULES[type];
       if(!rule)return;
       for(const candidate of orderedFloors(seed,building,type,index)){
         const c=point(candidate.x,candidate.y);
-        if(occupied.has(pointKey(c))||reserved.has(pointKey(c)))continue;
+        if(protectedCells.has(pointKey(c))||occupied.has(pointKey(c))||reserved.has(pointKey(c)))continue;
         const interaction=interactionFor(building,c,occupied,reserved);
         if(!interaction)continue;
         const ip=point(interaction.x,interaction.y);
