@@ -38,7 +38,6 @@ scripts/
       character-sprites.js 2D character billboards
       quality-manager.js  phone/tablet/desktop presentation quality
       telemetry.js        draw calls, frame time, entities, cache metrics
-    legacy/               temporary PixiJS migration boundary only
   ui/                    responsive DOM control deck
 ```
 
@@ -148,10 +147,10 @@ Simulation fidelity cannot be reduced as a graphics-quality setting.
 
 Target 60 FPS on capable hardware and support a 30 FPS fallback target.
 
-## Migration Rule
+## Canonical Renderer Rule
 
-The current PixiJS renderer remains a temporary legacy implementation only until the PlayCanvas replacement path is verified.
+The canonical public root launches PlayCanvas Engine 2 directly.
 
-New renderer-specific features must target PlayCanvas unless they are strictly necessary to keep the public build functional during migration.
+There is no supported PixiJS renderer mode, renderer-selection compatibility path, or silent legacy fallback. PlayCanvas startup failures must be surfaced so they can be fixed rather than hidden.
 
-Completed historical PixiJS WPs remain valid historical records, but open Stage 3 renderer WPs must implement the PlayCanvas architecture.
+Completed historical PixiJS WPs remain historical records only. All current renderer-specific work targets the PlayCanvas architecture.
