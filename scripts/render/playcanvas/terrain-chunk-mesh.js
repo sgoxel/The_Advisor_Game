@@ -28,7 +28,7 @@ function create({pc,device,parent,material,seedProvider=()=>""}={}){
   function sampleHeight(seed,x,z){
     const broad=signed01(seed,Math.trunc(x/4),Math.trunc(z/4),"broad");
     const fine=signed01(seed,x,z,"fine");
-    return -0.045 + broad*0.035 + fine*0.012;
+    return 0.05 + broad*0.018 + fine*0.006;
   }
   function sampleColor(seed,x,z,height){
     const n=signed01(seed,x,z,"color");
