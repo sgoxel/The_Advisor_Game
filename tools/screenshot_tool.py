@@ -75,6 +75,7 @@ SCENARIOS = {
     "wp-s003-005",
     "playcanvas-foundation",
     "playcanvas-scene",
+    "wp-s003-003",
 }
 
 SCENARIO_MIN_SHOTS = {
@@ -101,6 +102,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-005": 3,
     "playcanvas-foundation": 3,
     "playcanvas-scene": 6,
+    "wp-s003-003": 3,
 }
 
 CURRENT_BUILD_PREP_SCRIPT = r"""
@@ -296,6 +298,7 @@ return (() => {
           buildingOcclusion: renderer.buildingOcclusion || null,
           textureCache: assets,
           terrainChunks: renderer.terrainChunks || null,
+          interiorObjectPresentation: renderer.interiorObjectPresentation || null,
         },
         terrainNaturalness: naturalness,
         startingVillage: (() => {
@@ -628,7 +631,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1054,7 +1057,42 @@ def _set_building_occlusion_proof_state(driver, state: str) -> str:
     return f"building-occlusion-proof-failed:{state}:{reason}"
 
 
+
+
+def _set_interior_object_proof_state(driver, state: str) -> str:
+    result = driver.execute_script(
+        """
+        const state = arguments[0];
+        try {
+          const renderer = window.GameRenderer;
+          if (!renderer?.setInteriorObjectProofState) {
+            return {ok:false, reason:'interior-object-proof-api-missing'};
+          }
+          const snapshot = renderer.setInteriorObjectProofState(state);
+          return {
+            ok:true,
+            presentation:snapshot?.interiorObjectPresentation || null
+          };
+        } catch (error) {
+          return {ok:false, reason:String(error)};
+        }
+        """,
+        state,
+    )
+    if isinstance(result, dict) and result.get("ok"):
+        return f"interior-object-proof:{state}"
+    reason = result.get("reason", "unavailable") if isinstance(result, dict) else "unexpected"
+    return f"interior-object-proof-failed:{state}:{reason}"
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-003":
+        if frame_index == 0:
+            return _set_interior_object_proof_state(driver, "house")
+        if frame_index == 1:
+            return _set_interior_object_proof_state(driver, "special")
+        driver.set_window_size(1280, 800)
+        return _set_interior_object_proof_state(driver, "special")
     if scenario == "playcanvas-scene":
         if frame_index == 1:
             driver.set_window_size(1280, 800)
@@ -1199,6 +1237,61 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-003":
+        if len(frames) < 3:
+            raise RuntimeError("wp-s003-003 requires three evidence frames")
+        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
+        proofs = [item.get("interiorObjects") or {} for item in builds]
+        presentations = [
+            ((item.get("gpuRenderer") or {}).get("interiorObjectPresentation") or {})
+            for item in builds
+        ]
+        for index, proof in enumerate(proofs, start=1):
+            required = (
+                "pass",
+                "deterministic",
+                "uniqueIds",
+                "legalPlacement",
+                "interactionsValid",
+                "blockingPass",
+                "routeBlockingPass",
+                "allBuildingsCovered",
+            )
+            if not all(proof.get(key) is True for key in required):
+                raise RuntimeError(f"WP-S003-003 authoritative proof failed in frame {index}: {proof}")
+            if int(proof.get("objectCount") or 0) < 1 or int(proof.get("buildingCount") or 0) < 2:
+                raise RuntimeError(f"WP-S003-003 proof coverage is unexpectedly empty in frame {index}: {proof}")
+
+        expected_sources = ("house", "special", "special")
+        for index, (presentation, source) in enumerate(zip(presentations, expected_sources), start=1):
+            if not presentation.get("active"):
+                raise RuntimeError(f"WP-S003-003 PlayCanvas proof is inactive in frame {index}: {presentation}")
+            if presentation.get("buildingSource") != source:
+                raise RuntimeError(f"WP-S003-003 representative source mismatch in frame {index}: {presentation}")
+            object_count = int(presentation.get("objectCount") or 0)
+            interaction_count = int(presentation.get("interactionCount") or 0)
+            reachable_count = int(presentation.get("reachableInteractionCount") or 0)
+            if object_count < 1 or interaction_count != object_count or reachable_count != interaction_count:
+                raise RuntimeError(f"WP-S003-003 interaction presentation mismatch in frame {index}: {presentation}")
+            if int(presentation.get("blockingObjectCount") or 0) < 1:
+                raise RuntimeError(f"WP-S003-003 blocking object proof missing in frame {index}: {presentation}")
+            objects = presentation.get("objects") or []
+            if len(objects) != object_count:
+                raise RuntimeError(f"WP-S003-003 presented object details mismatch in frame {index}: {presentation}")
+            for obj in objects:
+                if not obj.get("id") or not obj.get("type") or not obj.get("coordinate") or not obj.get("interaction"):
+                    raise RuntimeError(f"WP-S003-003 object metadata missing in frame {index}: {obj}")
+                if not obj.get("actions") or obj.get("reachable") is not True:
+                    raise RuntimeError(f"WP-S003-003 action/reachability metadata failed in frame {index}: {obj}")
+
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        cameras = [item.get("cameraCoordinate") for item in builds]
+        if len(set(protagonists)) != 1 or len(set(cameras)) != 1:
+            raise RuntimeError(
+                f"WP-S003-003 development proof mutated authoritative coordinates: protagonist={protagonists}, camera={cameras}"
+            )
+        return
+
     if scenario == "playcanvas-scene":
         if len(frames) < 6:
             raise RuntimeError("playcanvas-scene requires six evidence frames")
@@ -2150,7 +2243,7 @@ def take_screenshots(
 
     try:
         browser_url = normalize_target(target)
-        if scenario in {"playcanvas-foundation", "playcanvas-scene"}:
+        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
             browser_url += ("&" if "?" in browser_url else "?") + "renderer=playcanvas&gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
@@ -2176,12 +2269,12 @@ def take_screenshots(
 
             prep_action = prepare_current_build(driver, min(ready_timeout, 10.0), scenario) if auto_start else "auto-start-disabled"
 
-            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene"}:
+            if force_max_zoom and scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
@@ -2192,7 +2285,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
