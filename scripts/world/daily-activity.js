@@ -256,6 +256,7 @@ function scheduleInteractionChoice(seed,buildingId,choices){
       return Object.freeze({
         target:Object.freeze({x:String(point.x),y:String(point.y)}),
         targetSource:"interior-interaction",
+        buildingId,
         interactionObjectId:object.id,
         interactionObjectType:object.type,
         intendedAction:choice.action,
@@ -270,6 +271,7 @@ function assignedWorkScheduleTarget(seed,resident){
     return Object.freeze({
       target:Object.freeze({x:String(resident.workplaceTarget.x),y:String(resident.workplaceTarget.y)}),
       targetSource:"outdoor-worksite",
+      buildingId:resident.workplaceId,
       interactionObjectId:null,
       interactionObjectType:"worksite",
       intendedAction:"work",
@@ -282,6 +284,7 @@ function assignedWorkScheduleTarget(seed,resident){
   return Object.freeze({
     target:Object.freeze({x:String(point.x),y:String(point.y)}),
     targetSource:"interior-interaction",
+    buildingId:resident.workplaceId,
     interactionObjectId:object.id,
     interactionObjectType:object.type,
     intendedAction:"work",
@@ -309,7 +312,7 @@ function scheduleBlock(state,label,startHour,endHour,targetInfo,location,buildin
     endMinute:endHour*60,
     target:targetInfo.target,
     location,
-    buildingId,
+    buildingId:targetInfo.buildingId||buildingId,
     targetSource:targetInfo.targetSource,
     interactionObjectId:targetInfo.interactionObjectId,
     interactionObjectType:targetInfo.interactionObjectType,
@@ -333,12 +336,13 @@ function schedulePattern(seed,resident){
   const prepareTarget=scheduleInteractionChoice(seed,resident.homePlanId,[
     {type:"chair",action:"sit"},
     {type:"hearth",action:"warm"},
-    {type:"table",action:"social"}
+    {type:"table",action:"social"},
+    {type:"bed",action:"rest"}
   ]);
   const breakfastTarget=scheduleInteractionChoice(seed,resident.homePlanId,[
     {type:"table",action:"eat"},
     {type:"hearth",action:"eat"}
-  ]);
+  ])||publicScheduleTarget(seed,"eat");
   const workTarget=assignedWorkScheduleTarget(seed,resident);
   const lunchTarget=publicScheduleTarget(seed,"eat");
   const socialTarget=publicScheduleTarget(seed,"social");

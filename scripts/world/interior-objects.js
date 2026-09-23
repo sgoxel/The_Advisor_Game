@@ -5,10 +5,10 @@ const LEVEL=0;
 const cache=new Map();
 const proofCache=new Map();
 const TYPE_RULES=Object.freeze({
-  bed:Object.freeze({blocking:true,actions:Object.freeze(["sleep"])}),
-  chair:Object.freeze({blocking:true,actions:Object.freeze(["sit"])}),
+  bed:Object.freeze({blocking:true,actions:Object.freeze(["sleep","rest"])}),
+  chair:Object.freeze({blocking:true,actions:Object.freeze(["sit","social"])}),
   table:Object.freeze({blocking:true,actions:Object.freeze(["eat","social","work"])}),
-  counter:Object.freeze({blocking:true,actions:Object.freeze(["service","work"])}),
+  counter:Object.freeze({blocking:true,actions:Object.freeze(["service","work","social","eat"])}),
   workbench:Object.freeze({blocking:true,actions:Object.freeze(["craft","work"])}),
   hearth:Object.freeze({blocking:true,actions:Object.freeze(["cook","warm","eat"])}),
   storage:Object.freeze({blocking:true,actions:Object.freeze(["store","retrieve"])})
