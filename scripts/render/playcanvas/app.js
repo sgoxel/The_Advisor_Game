@@ -532,6 +532,12 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       String(terrainChunkSignature())
     ].join("|");
   }
+  function terrainResourceSignature(){
+    return String(
+      terrainPreloadManager?.stats?.().signature||
+      ("chunk="+terrainChunkSize()+"|"+terrainChunkSignature())
+    );
+  }
   function getPreparedTerrainView(model){
     const seed=String(model?.seed??lastRawSeed??"");
     const center=model?.center||lastModel?.center;
@@ -543,7 +549,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return window.PlayCanvasChunkWorldData.collectView({
       seed,center,columns,rows,
       chunkSize:terrainChunkSize(),
-      signature:terrainChunkSignature()
+      signature:terrainResourceSignature()
     });
   }
   function characterAssetKey(character){
