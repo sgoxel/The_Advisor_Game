@@ -155,6 +155,53 @@
         <input id="developmentModeToggle" type="checkbox">
       </label>
 
+      <section class="settings-subsection" aria-labelledby="terrainPerformanceHeading">
+        <h4 id="terrainPerformanceHeading">3D Terrain Performance</h4>
+
+        <label class="select-setting" for="terrainPreloadRadiusSelect">
+          <span>
+            <strong>Preload Radius</strong>
+            <small>Prepare nearby PlayCanvas terrain chunks before they enter view.</small>
+          </span>
+          <select id="terrainPreloadRadiusSelect">
+            <option value="1">1 chunk</option>
+            <option value="2">2 chunks</option>
+            <option value="3">3 chunks</option>
+            <option value="4">4 chunks</option>
+          </select>
+        </label>
+
+        <label class="select-setting" for="terrainCacheCapacitySelect">
+          <span>
+            <strong>Maximum Cached Chunks</strong>
+            <small>Retain recently prepared chunks for fast revisits while keeping memory bounded.</small>
+          </span>
+          <select id="terrainCacheCapacitySelect">
+            <option value="16">16 chunks</option>
+            <option value="32">32 chunks</option>
+            <option value="64">64 chunks</option>
+            <option value="128">128 chunks</option>
+            <option value="256">256 chunks</option>
+          </select>
+        </label>
+
+        <label class="toggle-setting" for="directionalPreloadToggle">
+          <span>
+            <strong>Directional Preload</strong>
+            <small>Prioritize chunks ahead of camera movement while keeping a safety ring around the view.</small>
+          </span>
+          <input id="directionalPreloadToggle" type="checkbox">
+        </label>
+
+        <label class="toggle-setting" for="backgroundChunkGenerationToggle">
+          <span>
+            <strong>Background Chunk Generation</strong>
+            <small>Prepare off-screen chunks incrementally inside a strict per-frame budget.</small>
+          </span>
+          <input id="backgroundChunkGenerationToggle" type="checkbox">
+        </label>
+      </section>
+
       <div class="settings-actions">
         <button id="saveSettingsButton" class="primary" type="button">Save Settings</button>
       </div>
@@ -528,6 +575,7 @@
 <script src="scripts/render/texture-assets.js"></script>
 <script src="scripts/render/game-renderer.js"></script>
 <script src="scripts/render/renderer-contract.js"></script>
+<script src="scripts/render/playcanvas/chunk-preload.js"></script>
 <script src="scripts/render/playcanvas/app.js"></script>
 <script src="scripts/render/renderer-bootstrap.js"></script>
 <script src="scripts/world/geography.js"></script>
