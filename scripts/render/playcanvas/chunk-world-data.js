@@ -316,9 +316,21 @@ function collectView({seed,center,columns,rows,chunkSize,signature}){
   });
 }
 function stats(){
+  let surfaceCellCount=0,buildingReferenceCount=0,staticObjectReferenceCount=0,completeEntryCount=0;
+  for(const entry of cache.values()){
+    const snapshot=entry.snapshot;
+    surfaceCellCount+=Number(snapshot?.cells?.length||0);
+    buildingReferenceCount+=Number(snapshot?.buildings?.length||0);
+    staticObjectReferenceCount+=Number(snapshot?.staticObjects?.length||0);
+    if(snapshot?.complete)completeEntryCount++;
+  }
   return Object.freeze({
     version:VERSION,
     entryCount:cache.size,
+    completeEntryCount,
+    surfaceCellCount,
+    buildingReferenceCount,
+    staticObjectReferenceCount,
     cacheHits,cacheMisses,
     completeChunkGenerations,
     activeGenerations,preparedGenerations,otherGenerations,
