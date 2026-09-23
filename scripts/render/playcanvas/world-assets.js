@@ -20,7 +20,7 @@ function unique(values){return Object.freeze([...new Set(values.filter(Boolean).
 function regionKey(frame){return String(frame?.regionKey||"region:unknown");}
 
 function requirements(frame){
-  const keys=[WORLD_KEYS.terrainGrass];
+  const keys=[WORLD_KEYS.terrainGrass,WORLD_KEYS.prototypeSet];
   const tiles=Array.isArray(frame?.tiles)?frame.tiles:[];
   const buildings=Array.isArray(frame?.buildings)?frame.buildings:[];
   const interiors=Array.isArray(frame?.buildingInteriors)?frame.buildingInteriors:[];

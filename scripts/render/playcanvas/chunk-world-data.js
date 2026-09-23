@@ -36,7 +36,7 @@ function assetVersion(){
   return String(window.PlayCanvasAssetStandard?.version||"none");
 }
 function worldAssetVersion(){
-  return window.PlayCanvasWorldAssets?"catalog-1":"none";
+  return String(window.PlayCanvasWorldAssets?.VERSION||"none");
 }
 function signatureFor({seed,x,y,chunkSize,signature=""}){
   return [

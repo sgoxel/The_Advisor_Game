@@ -27,8 +27,17 @@ function create({app,pc,cacheLimit=DEFAULT_LIMIT}={}){
     if(!spec)return Promise.reject(new Error("unregistered logical asset: "+id));
     misses++;loads++;
     const e={asset:null,promise:null,pins:0,lastUsed:performance.now()};
+    if(!spec.url){
+      nullResolutions++;
+      cache.set(id,e);
+      touch(id,e);
+      evict();
+      return Promise.resolve(null);
+    }
+    networkLoads++;
+    if(spec.type==="container")containerParses++;
+    if(spec.type==="texture"||spec.type==="sprite")textureLoads++;
     e.promise=new Promise((resolve,reject)=>{
-      if(!spec.url){e.promise=null;resolve(null);return;}
       const asset=new pc.Asset(id,spec.type,{url:spec.url},spec.options);
       e.asset=asset;app.assets.add(asset);
       asset.ready(()=>{e.promise=null;touch(id,e);evict();resolve(asset);});
