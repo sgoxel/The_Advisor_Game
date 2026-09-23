@@ -90,6 +90,7 @@ SCENARIOS = {
     "wp-s004-002",
     "wp-s004-003",
     "wp-s004-004",
+    "wp-s004-005",
     "playcanvas-root-cutover",
 }
 
@@ -132,6 +133,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s004-002": 3,
     "wp-s004-003": 4,
     "wp-s004-004": 5,
+    "wp-s004-005": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -347,6 +349,15 @@ return (() => {
         residentSchedules: window.AppUI?.residentScheduleSnapshot?.() || null,
         residentMovement: window.AppUI?.residentMovementProofSnapshot?.() || window.ResidentMovement?.proofSnapshot?.() || null,
         residentMovementLive: window.AppUI?.residentMovementSnapshot?.() || null,
+        residentAction: window.AppUI?.residentActionProofSnapshot?.() || window.ActionExecutor?.proofSnapshot?.() || null,
+        residentActionLive: window.AppUI?.residentActionSnapshot?.() || window.ActionExecutor?.snapshot?.() || null,
+        residentActionVerify: window.AppUI?.residentActionVerify?.() || null,
+        residentActionRibbon: {
+          hidden:Boolean(document.querySelector('#residentActionRibbon')?.hidden),
+          actor:document.querySelector('#residentActionRibbonActor')?.textContent?.trim() || null,
+          state:document.querySelector('#residentActionRibbonState')?.textContent?.trim() || null,
+          progress:document.querySelector('#residentActionRibbonProgress')?.textContent?.trim() || null,
+        },
         gameDate: document.querySelector('#gameDate')?.textContent?.trim() || null,
         gameTime: document.querySelector('#gameTime')?.textContent?.trim() || null,
         protagonistLocation: document.querySelector('#protagonistLocation')?.textContent?.trim() || null,
@@ -1307,6 +1318,151 @@ def _show_resident_movement_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_resident_action_proof(driver, frame_index: int) -> str:
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    result = driver.execute_async_script(
+        """
+        const index=Number(arguments[0]);
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const campaign=window.SeedSystem?.getCampaign?.();
+            if(!campaign||!window.ActionExecutor||!window.ResidentMovement||!window.AppUI){
+              throw new Error('action proof APIs unavailable');
+            }
+            const sample=(hour,minute=30)=>{
+              const now=GameTime.getNow();
+              return {year:now.year,month:now.month,day:now.day,hour,minute,second:0};
+            };
+            const residentFor=id=>DailyActivity.build(campaign.seed).find(item=>item.id===id);
+            let movement=ResidentMovement.proofSnapshot?.();
+            let proof=ActionExecutor.proofSnapshot?.();
+
+            if(index===0){
+              movement=ResidentMovement.beginProof(campaign.seed);
+              proof=ActionExecutor.beginProof(campaign.seed,movement.residentId);
+              const resident=residentFor(movement.residentId);
+              const sleep=DailyActivity.resolveActionTarget(campaign.seed,resident,sample(2,30));
+              const rejected=ActionExecutor.advanceActor({
+                seed:campaign.seed,actorKind:'resident',actorId:resident.id,
+                position:movement.position,activity:sleep
+              },0);
+              ActionExecutor.recordProof({
+                stage:'arrival-required',
+                arrivalRejected:rejected.status==='waiting-arrival'&&!rejected.holdsPosition
+              });
+            }else if(index===1){
+              movement=ResidentMovement.proofAdvanceToTarget();
+              const resident=residentFor(movement.residentId);
+              const sleep=DailyActivity.resolveActionTarget(campaign.seed,resident,sample(2,30));
+              const before=ResidentMovement.position(resident.id);
+              const started=ActionExecutor.advanceActor({
+                seed:campaign.seed,actorKind:'resident',actorId:resident.id,
+                position:before,activity:sleep
+              },0.25);
+              const after=ResidentMovement.position(resident.id);
+              ActionExecutor.recordProof({
+                stage:'sleep-active',
+                actionStarted:started.status==='active'&&started.holdsPosition,
+                heldAtTarget:before.x===after.x&&before.y===after.y
+              });
+            }else if(index===2){
+              movement=ResidentMovement.proofSnapshot();
+              const resident=residentFor(movement.residentId);
+              const sleep=DailyActivity.resolveActionTarget(campaign.seed,resident,sample(2,30));
+              const beforePos=ResidentMovement.position(resident.id);
+              const completed=ActionExecutor.advanceActor({
+                seed:campaign.seed,actorKind:'resident',actorId:resident.id,
+                position:beforePos,activity:sleep
+              },20);
+              const far=WorldCoordinates.add(beforePos,'80','80');
+              Camera.setCenter(far.x,far.y);
+              await AppUI.refreshTerrain();
+              const hidden=!GameRenderer.snapshot()?.characterPresentation?.visibleCharacterIds?.includes('resident:'+resident.id);
+              const offBefore=ActionExecutor.get('resident',resident.id);
+              ActionExecutor.advanceActor({
+                seed:campaign.seed,actorKind:'resident',actorId:resident.id,
+                position:beforePos,activity:sleep
+              },1);
+              const offAfter=ActionExecutor.get('resident',resident.id);
+              const afterPos=ResidentMovement.position(resident.id);
+              Camera.setCenter(beforePos.x,beforePos.y);
+              await AppUI.refreshTerrain();
+              ActionExecutor.recordProof({
+                stage:'sleep-complete-offscreen',
+                actionCompleted:completed.status==='complete',
+                offscreenStatePass:offBefore?.status==='complete'&&offAfter?.status==='complete'&&
+                  offBefore.action===offAfter.action,
+                rendererCullingPass:hidden,
+                cameraRoundTripPass:beforePos.x===afterPos.x&&beforePos.y===afterPos.y
+              });
+            }else if(index===3){
+              const before=ResidentMovement.proofSnapshot();
+              const resident=residentFor(before.residentId);
+              ResidentMovement.proofBeginOutbound();
+              const work=DailyActivity.resolveActionTarget(campaign.seed,resident,sample(10,30));
+              const released=ActionExecutor.advanceActor({
+                seed:campaign.seed,actorKind:'resident',actorId:resident.id,
+                position:ResidentMovement.position(resident.id),activity:work
+              },0);
+              const start=ResidentMovement.position(resident.id);
+              movement=ResidentMovement.proofAdvanceToDoor();
+              const end=ResidentMovement.position(resident.id);
+              ActionExecutor.recordProof({
+                stage:'route-next-goal',
+                scheduleReleasePass:released.status==='waiting-arrival'&&!released.holdsPosition&&
+                  ActionExecutor.get('resident',resident.id)===null,
+                nextGoalRoutingPass:start.x!==end.x||start.y!==end.y
+              });
+            }else{
+              movement=ResidentMovement.proofAdvanceToTarget();
+              const resident=residentFor(movement.residentId);
+              const work=DailyActivity.resolveActionTarget(campaign.seed,resident,sample(10,30));
+              const started=ActionExecutor.advanceActor({
+                seed:campaign.seed,actorKind:'resident',actorId:resident.id,
+                position:ResidentMovement.position(resident.id),activity:work
+              },0.25);
+              ActionExecutor.recordProof({
+                stage:'work-active',
+                workStarted:started.status==='active'&&started.holdsPosition
+              });
+            }
+
+            proof=ActionExecutor.proofSnapshot();
+            movement=ResidentMovement.proofSnapshot();
+            const focus=ResidentMovement.position(proof.residentId);
+            Camera.setCenter(focus.x,focus.y);
+            await AppUI.refreshTerrain();
+            AppUI.refreshResidentMovementProof();
+            AppUI.refreshResidentActionProof();
+            window.scrollTo(0,0);
+            done({
+              ok:true,index,stage:proof.stage,residentId:proof.residentId,
+              action:proof.current?.action||null,status:proof.current?.status||null,
+              pass:Boolean(proof.pass),position:focus,
+              ribbonHidden:Boolean(document.querySelector('#residentActionRibbon')?.hidden),
+              ribbonState:document.querySelector('#residentActionRibbonState')?.textContent?.trim()||null
+            });
+          }catch(error){done({ok:false,error:String(error),stack:error?.stack||null});}
+        })();
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Resident action proof frame failed: {result}")
+    WebDriverWait(driver, 8).until(
+        lambda d: d.execute_script(
+            "return document.querySelector('#residentActionProof') && document.querySelectorAll('#residentMovementRows tr').length===12"
+        )
+    )
+    return (
+        f"resident-action:{frame_index}:{result.get('stage')}:"
+        f"{result.get('residentId')}:{result.get('action')}:{result.get('status')}:"
+        f"ribbonHidden={result.get('ribbonHidden')}"
+    )
+
+
 def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
     from selenium.webdriver.support.ui import WebDriverWait
 
@@ -2244,7 +2400,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -2345,6 +2501,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_resident_schedule_proof(driver,hour,minute)
     if scenario == "wp-s004-004":
         return _show_resident_movement_proof(driver,frame_index)
+    if scenario == "wp-s004-005":
+        return _show_resident_action_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2379,6 +2537,67 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s004-005":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s004-005 requires five action evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("residentAction") or {} for build in builds]
+        verifies=[build.get("residentActionVerify") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Action evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Action evidence changed Protagonist authority: {protagonists}")
+        expected=["arrival-required","sleep-active","sleep-complete-offscreen","route-next-goal","work-active"]
+        stages=[proof.get("stage") for proof in proofs]
+        if stages!=expected:
+            raise RuntimeError(f"Action milestone mismatch: expected {expected}, got {stages}")
+        for index,verified in enumerate(verifies,start=1):
+            required={
+                "pass":True,"requiredActionPass":True,"incompatibleRejected":True,
+                "outOfRangeRejected":True,"arrivalRequired":True,
+                "genericNpcContract":True,"genericProtagonistContract":True,
+                "deterministic":True,"rendererDependency":False,"presentationAuthority":False,
+                "economyIntroduced":False,"combatIntroduced":False,
+                "fullInventoryIntroduced":False,"externalLlmIntroduced":False,
+            }
+            for key,value in required.items():
+                if verified.get(key)!=value:
+                    raise RuntimeError(f"Action contract {key} mismatch in frame {index}: {verified}")
+            actions=verified.get("requiredActions") or {}
+            for action in ("sleep","rest","sit","eat","work"):
+                result=actions.get(action) or {}
+                if result.get("start") is not True or result.get("complete") is not True:
+                    raise RuntimeError(f"Required action {action} failed contract proof in frame {index}: {result}")
+        final=proofs[-1]
+        dynamic={
+            "pass":True,"arrivalRejected":True,"actionStarted":True,"heldAtTarget":True,
+            "actionCompleted":True,"offscreenStatePass":True,"rendererCullingPass":True,
+            "scheduleReleasePass":True,"nextGoalRoutingPass":True,"workStarted":True,
+            "cameraRoundTripPass":True,
+        }
+        for key,value in dynamic.items():
+            if final.get(key)!=value:
+                raise RuntimeError(f"Resident action proof {key} mismatch: {final}")
+        if (proofs[1].get("current") or {}).get("action")!="sleep" or (proofs[1].get("current") or {}).get("status")!="active":
+            raise RuntimeError(f"Sleep did not start after arrival: {proofs[1]}")
+        if (proofs[2].get("current") or {}).get("status")!="complete":
+            raise RuntimeError(f"Sleep did not complete/hold at interaction target: {proofs[2]}")
+        if proofs[3].get("current") is not None:
+            raise RuntimeError(f"Schedule change did not release prior action: {proofs[3]}")
+        if (proofs[4].get("current") or {}).get("action")!="work" or (proofs[4].get("current") or {}).get("status")!="active":
+            raise RuntimeError(f"Work action did not start at next target: {proofs[4]}")
+        for frame_index in (1,2,4):
+            ribbon=builds[frame_index].get("residentActionRibbon") or {}
+            if ribbon.get("hidden") is not False or not ribbon.get("state"):
+                raise RuntimeError(f"Visible action ribbon missing in frame {frame_index+1}: {ribbon}")
+        for index,build in enumerate(builds,start=1):
+            live=build.get("residentActionLive") or {}
+            if live.get("rendererDependency") is not False or live.get("presentationAuthority") is not False:
+                raise RuntimeError(f"Action authority leaked into presentation in frame {index}: {live}")
+        return
+
     if scenario == "wp-s004-004":
         if len(frames) < 5:
             raise RuntimeError("wp-s004-004 requires five movement evidence frames")
@@ -4523,12 +4742,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
