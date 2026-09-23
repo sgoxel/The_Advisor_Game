@@ -637,3 +637,25 @@ details[open] summary{border-bottom:1px solid #343a30}
   .character-billboard-proof-panel strong{font-size:10px}
   .character-billboard-proof-panel small{font-size:8px}
 }
+@media(max-height:430px) and (orientation:landscape){
+  .character-billboard-proof-panel{
+    left:6px;
+    bottom:6px;
+    width:min(360px,42vw);
+    min-width:0;
+    display:block;
+    padding:4px 6px;
+    border-radius:6px;
+    background:rgba(14,19,13,.78);
+    backdrop-filter:blur(2px);
+  }
+  .character-billboard-proof-panel strong{
+    display:block;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:9px;
+    line-height:1.2;
+  }
+  .character-billboard-proof-panel small{display:none}
+}
