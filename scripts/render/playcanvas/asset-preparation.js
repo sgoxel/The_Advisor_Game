@@ -75,6 +75,7 @@ function create({app,pc,cacheLimit=DEFAULT_LIMIT}={}){
     return Object.freeze({ready:result.ready,stale:result.stale,regionKey:String(regionKey),keyCount:result.keyCount});
   }
   function invalidate(){serial++;for(const key of [...regions.keys()])unpinRegion(key);evict();}
+  function asset(key){return cache.get(String(key))?.asset||null;}
   function isReady(regionKey){const keys=regions.get(String(regionKey));return Boolean(keys&&[...keys].every(key=>{const e=cache.get(key);return e&&!e.promise;}));}
   function stats(){
     let meshes=0,textures=0,materials=0,characters=0,pinned=0,pending=0;
@@ -82,7 +83,7 @@ function create({app,pc,cacheLimit=DEFAULT_LIMIT}={}){
     return Object.freeze({registered:registry.size,cached:cache.size,meshContainers:meshes,textures,materials,characterAssets:characters,pinned,pending,hits,misses,waits,loads,networkLoads,containerParses,textureLoads,nullResolutions,evictions,cacheLimit,regions:[...regions.keys()]});
   }
   function proof(){const s=stats();return Object.freeze({logicalKeys:registry.size>0,bounded:s.cached<=cacheLimit,separateCharacterPath:[...registry.values()].some(v=>v.character),noVisiblePathLoads:true,preparedRegions:s.regions.every(isReady),stats:s});}
-  return Object.freeze({register,load,prepareRegion,prepareRegions,invalidate,isReady,stats,proof});
+  return Object.freeze({register,load,asset,prepareRegion,prepareRegions,invalidate,isReady,stats,proof});
 }
 window.PlayCanvasAssetPreparation=Object.freeze({create,DEFAULT_LIMIT});
 })();
