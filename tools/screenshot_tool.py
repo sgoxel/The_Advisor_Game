@@ -947,23 +947,44 @@ def _drag_canvas(driver, dx: int, dy: int) -> str:
     return f"drag-{target_name}:{dx},{dy}"
 
 
-def _wait_for_asset_prefetch(driver, minimum_regions: int = 8, timeout: float = 10.0) -> str:
+def _wait_for_playcanvas_world_assets(driver, timeout: float = 15.0) -> str:
     from selenium.webdriver.support.ui import WebDriverWait
 
-    WebDriverWait(driver, timeout).until(
+    result = WebDriverWait(driver, timeout).until(
         lambda d: d.execute_script(
             """
-            const stats=window.TextureAssets?.stats?.();
-            return Boolean(
-              stats?.ready &&
-              Number(stats?.prefetchedRegionCount || 0) >= arguments[0] &&
-              Number(stats?.preparedRegionCount || 0) >= arguments[0] + 1
-            );
-            """,
-            minimum_regions,
+            const snap=window.GameRenderer?.snapshot?.();
+            const prep=snap?.worldAssetPreparation;
+            const cache=snap?.worldAssetCache;
+            const proof=snap?.worldAssetProof;
+            if (!snap?.ready || snap?.engine !== 'PlayCanvas') return null;
+            if (
+              prep?.ready !== true ||
+              Number(prep?.regionCount || 0) < 1 ||
+              Number(prep?.keyCount || 0) < 1 ||
+              Number(cache?.pending || 0) !== 0 ||
+              Number(cache?.networkLoads || 0) < 1 ||
+              Number(cache?.containerParses || 0) < 1 ||
+              proof?.preparedRegions !== true
+            ) return null;
+            return {
+              regionCount:Number(prep.regionCount || 0),
+              keyCount:Number(prep.keyCount || 0),
+              networkLoads:Number(cache.networkLoads || 0),
+              containerParses:Number(cache.containerParses || 0),
+              hits:Number(cache.hits || 0)
+            };
+            """
         )
     )
-    return f"asset-prefetch-ready:{minimum_regions}"
+    return (
+        "playcanvas-world-assets-ready:"
+        f"regions={int(result.get('regionCount') or 0)},"
+        f"keys={int(result.get('keyCount') or 0)},"
+        f"loads={int(result.get('networkLoads') or 0)},"
+        f"parses={int(result.get('containerParses') or 0)},"
+        f"hits={int(result.get('hits') or 0)}"
+    )
 
 
 def _drag_canvas_and_wait(driver, dx: int, dy: int, timeout: float = 10.0) -> str:
@@ -1690,10 +1711,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return "playcanvas:initial"
     if scenario == "wp-s003-005":
         if frame_index == 0:
-            return _wait_for_asset_prefetch(driver)
+            return _wait_for_playcanvas_world_assets(driver)
         if frame_index == 1:
-            return _drag_canvas_and_wait(driver, 120, 0)
-        return _drag_canvas_and_wait(driver, -120, 0)
+            action = _set_camera_center_and_render_active(driver, 64, 0)
+            return action + "+" + _wait_for_playcanvas_world_assets(driver)
+        action = _set_camera_center_and_render_active(driver, 0, 0)
+        return action + "+" + _wait_for_playcanvas_world_assets(driver)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
@@ -2560,91 +2583,85 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "wp-s003-005":
         if len(frames) < 3:
             raise RuntimeError("wp-s003-005 requires three evidence frames")
-        builds = [frame.get("runtime", {}).get("currentBuild", {}) for frame in frames[:3]]
-        caches = [(item.get("gpuRenderer") or {}).get("textureCache") or {} for item in builds]
 
-        initial, moved, returned = builds
-        initial_cache, moved_cache, returned_cache = caches
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:3]]
+        gpus=[(item.get("gpuRenderer") or {}) for item in builds]
+        world_preparations=[gpu.get("worldAssetPreparation") or {} for gpu in gpus]
+        world_caches=[gpu.get("worldAssetCache") or {} for gpu in gpus]
+        world_proofs=[gpu.get("worldAssetProof") or {} for gpu in gpus]
+        character_preparations=[gpu.get("characterAssetPreparation") or {} for gpu in gpus]
 
-        world_preparations=[(item.get("gpuRenderer") or {}).get("worldAssetPreparation") or {} for item in builds]
-        world_caches=[(item.get("gpuRenderer") or {}).get("worldAssetCache") or {} for item in builds]
-        world_proofs=[(item.get("gpuRenderer") or {}).get("worldAssetProof") or {} for item in builds]
-        character_preparations=[(item.get("gpuRenderer") or {}).get("characterAssetPreparation") or {} for item in builds]
-
-        for index,(world_prep,world_cache,world_proof,char_cache) in enumerate(zip(world_preparations,world_caches,world_proofs,character_preparations),start=1):
-            if world_prep.get("ready") is not True or int(world_prep.get("regionCount") or 0) < 1 or int(world_prep.get("keyCount") or 0) < 1:
-                raise RuntimeError(f"WP-S003-005 world preparation gate is not ready in frame {index}: {world_prep}")
-            if int(world_cache.get("registered") or 0) < 10 or int(world_cache.get("meshContainers") or 0) < 1 or int(world_cache.get("materials") or 0) < 3:
-                raise RuntimeError(f"WP-S003-005 logical 3D world catalog is incomplete in frame {index}: {world_cache}")
-            if int(world_cache.get("networkLoads") or 0) < 1 or int(world_cache.get("containerParses") or 0) < 1:
-                raise RuntimeError(f"WP-S003-005 real glTF preparation was not exercised in frame {index}: {world_cache}")
-            if int(world_cache.get("pending") or 0) != 0 or int(world_cache.get("cached") or 0) > int(world_cache.get("cacheLimit") or 0):
-                raise RuntimeError(f"WP-S003-005 world asset retention is not ready/bounded in frame {index}: {world_cache}")
-            if world_proof.get("logicalKeys") is not True or world_proof.get("bounded") is not True or world_proof.get("preparedRegions") is not True or world_proof.get("noVisiblePathLoads") is not True:
-                raise RuntimeError(f"WP-S003-005 world asset proof failed in frame {index}: {world_proof}")
-            if int(char_cache.get("characterAssets") or 0) < 1:
-                raise RuntimeError(f"WP-S003-005 separate 2D character preparation path missing in frame {index}: {char_cache}")
-        world_network=[int(cache.get("networkLoads") or 0) for cache in world_caches]
-        world_parses=[int(cache.get("containerParses") or 0) for cache in world_caches]
-        if len(set(world_network)) != 1 or len(set(world_parses)) != 1:
-            raise RuntimeError(f"WP-S003-005 visible movement initiated new world network/parse work: network={world_network}, parses={world_parses}")
-        if not initial_cache.get("ready"):
-            raise RuntimeError(f"WP-S003-005 initial asset cache is not ready: {initial_cache}")
-        if int(initial_cache.get("preparedRegionCount") or 0) < 9:
-            raise RuntimeError(f"WP-S003-005 bounded safety prefetch ring is missing: {initial_cache}")
-        if int(initial_cache.get("prefetchedRegionCount") or 0) < 8:
-            raise RuntimeError(f"WP-S003-005 nearby regions were not prefetched: {initial_cache}")
-        if int(initial_cache.get("preparedRegionCount") or 0) > int(initial_cache.get("preparedRegionLimit") or 0):
-            raise RuntimeError(f"WP-S003-005 prepared-region cache exceeded its bound: {initial_cache}")
-        if int(initial_cache.get("loadedKeyCount") or 0) >= int(initial_cache.get("logicalKeyCount") or 0):
-            raise RuntimeError(f"WP-S003-005 startup loaded the whole logical asset catalog: {initial_cache}")
-        if int(initial_cache.get("pngPreferredCount") or 0) < 1:
-            raise RuntimeError(f"WP-S003-005 available PNG selection was not observed: {initial_cache}")
-        if int(initial_cache.get("fallbackSvgCount") or 0) < 1:
-            raise RuntimeError(f"WP-S003-005 SVG fallback resolution was not observed: {initial_cache}")
-        if not initial_cache.get("pngFirstTerrainPolicyPass"):
-            raise RuntimeError(f"WP-S003-005 terrain PNG-first candidate policy failed: {initial_cache}")
-        if not initial_cache.get("pngFirstBlendMaskPolicyPass"):
-            raise RuntimeError(f"WP-S003-005 blend-mask PNG-first candidate policy failed: {initial_cache}")
-        if int(initial_cache.get("terrainPngAttemptCount") or 0) < 1 or int(initial_cache.get("terrainSvgFallbackCount") or 0) < 1:
-            raise RuntimeError(f"WP-S003-005 terrain PNG-first/SVG-fallback resolution was not exercised: {initial_cache}")
-        if int(initial_cache.get("blendMaskPngAttemptCount") or 0) < 1 or int(initial_cache.get("blendMaskSvgFallbackCount") or 0) < 1:
-            raise RuntimeError(f"WP-S003-005 blend-mask PNG-first/SVG-fallback resolution was not exercised: {initial_cache}")
-
-        initial_blocking = int(initial_cache.get("blockingLoadCount") or 0)
-        if int(moved_cache.get("blockingLoadCount") or 0) != initial_blocking:
-            raise RuntimeError(
-                f"WP-S003-005 camera movement required blocking asset preparation: initial={initial_cache}, moved={moved_cache}"
-            )
-        if int(moved_cache.get("activationPrefetchHitCount") or 0) <= int(initial_cache.get("activationPrefetchHitCount") or 0):
-            raise RuntimeError(
-                f"WP-S003-005 moved region was not activated from prefetch: initial={initial_cache}, moved={moved_cache}"
-            )
-        if not moved_cache.get("lastActivationWasPrefetched"):
-            raise RuntimeError(f"WP-S003-005 moved region did not report prefetched activation: {moved_cache}")
-        if int(returned_cache.get("blockingLoadCount") or 0) != initial_blocking:
-            raise RuntimeError(
-                f"WP-S003-005 return movement caused blocking asset preparation: {returned_cache}"
-            )
-
-        for index, (item, cache) in enumerate(zip(builds, caches), start=1):
-            gpu = item.get("gpuRenderer") or {}
-            visible_region = str(gpu.get("visibleRegionKey") or "")
-            prepared_region = str(cache.get("preparedRegionKey") or "")
-            prepared_base = prepared_region.split("|", 1)[0]
-            if not visible_region or prepared_base != visible_region:
-                raise RuntimeError(
-                    f"WP-S003-005 visible/prepared region mismatch in frame {index}: visible={visible_region} prepared={prepared_region} cache={cache}"
-                )
-            if int(cache.get("pinnedKeyCount") or 0) > int(cache.get("cacheLimit") or 0):
-                raise RuntimeError(f"WP-S003-005 pinned cache exceeded limit in frame {index}: {cache}")
-
-        protagonists = [item.get("protagonistLocation") for item in builds]
-        cameras = [item.get("cameraCoordinate") for item in builds]
-        if len(set(protagonists)) != 1:
+        seeds=[item.get("campaignSeed") for item in builds]
+        protagonists=[item.get("protagonistLocation") for item in builds]
+        cameras=[item.get("cameraCoordinate") for item in builds]
+        if len(set(seeds)) != 1 or not seeds[0]:
+            raise RuntimeError(f"WP-S003-005 Campaign SEED changed/missing: {seeds}")
+        if len(set(protagonists)) != 1 or not protagonists[0]:
             raise RuntimeError(f"WP-S003-005 asset preparation changed Protagonist coordinates: {protagonists}")
         if not cameras[0] or cameras[1] == cameras[0] or cameras[2] != cameras[0]:
-            raise RuntimeError(f"WP-S003-005 camera evidence did not move and return: {cameras}")
+            raise RuntimeError(f"WP-S003-005 camera evidence did not move away and return: {cameras}")
+
+        for index,(gpu,prep,cache,proof,char_cache) in enumerate(
+            zip(gpus,world_preparations,world_caches,world_proofs,character_preparations),start=1
+        ):
+            if gpu.get("engine") != "PlayCanvas" or gpu.get("backend") not in {"webgl2","webgpu"}:
+                raise RuntimeError(f"WP-S003-005 PlayCanvas backend missing in frame {index}: {gpu}")
+            if gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"WP-S003-005 renderer changed Simulation authority in frame {index}: {gpu}")
+            if prep.get("ready") is not True or prep.get("stale") is True:
+                raise RuntimeError(f"WP-S003-005 world preparation gate is not ready in frame {index}: {prep}")
+            if int(prep.get("regionCount") or 0) < 1 or int(prep.get("keyCount") or 0) < 2:
+                raise RuntimeError(f"WP-S003-005 chunk-derived world requirements missing in frame {index}: {prep}")
+            logical_keys=set(prep.get("logicalKeys") or [])
+            if "world.prototype.representative-set" not in logical_keys or "world.terrain.grass" not in logical_keys:
+                raise RuntimeError(f"WP-S003-005 required stable logical keys missing in frame {index}: {prep}")
+            if int(cache.get("registered") or 0) < 10:
+                raise RuntimeError(f"WP-S003-005 logical world catalog is incomplete in frame {index}: {cache}")
+            if int(cache.get("meshContainers") or 0) < 1 or int(cache.get("materials") or 0) < 3:
+                raise RuntimeError(f"WP-S003-005 prepared mesh/material coverage is incomplete in frame {index}: {cache}")
+            if int(cache.get("networkLoads") or 0) < 1 or int(cache.get("containerParses") or 0) < 1:
+                raise RuntimeError(f"WP-S003-005 real glTF preparation was not exercised in frame {index}: {cache}")
+            if int(cache.get("pending") or 0) != 0:
+                raise RuntimeError(f"WP-S003-005 world asset preparation is still pending in frame {index}: {cache}")
+            if int(cache.get("cached") or 0) > int(cache.get("cacheLimit") or 0):
+                raise RuntimeError(f"WP-S003-005 world asset cache exceeded its bound in frame {index}: {cache}")
+            if int(cache.get("pinned") or 0) > int(cache.get("cacheLimit") or 0):
+                raise RuntimeError(f"WP-S003-005 pinned world assets exceeded cache limit in frame {index}: {cache}")
+            if int(cache.get("characterAssets") or 0) != 0:
+                raise RuntimeError(f"WP-S003-005 world preparation mixed in character assets in frame {index}: {cache}")
+            if (
+                proof.get("logicalKeys") is not True or
+                proof.get("bounded") is not True or
+                proof.get("preparedRegions") is not True or
+                proof.get("noVisiblePathLoads") is not True
+            ):
+                raise RuntimeError(f"WP-S003-005 world asset proof failed in frame {index}: {proof}")
+            if int(char_cache.get("characterAssets") or 0) < 1 or int(char_cache.get("textures") or 0) < 1:
+                raise RuntimeError(f"WP-S003-005 separate 2D character preparation path missing in frame {index}: {char_cache}")
+            if int(char_cache.get("pending") or 0) != 0:
+                raise RuntimeError(f"WP-S003-005 character asset preparation still pending in frame {index}: {char_cache}")
+
+        network_loads=[int(cache.get("networkLoads") or 0) for cache in world_caches]
+        container_parses=[int(cache.get("containerParses") or 0) for cache in world_caches]
+        if len(set(network_loads)) != 1 or len(set(container_parses)) != 1:
+            raise RuntimeError(
+                "WP-S003-005 visible navigation initiated new world network/GLTF parse work: "
+                f"network={network_loads}, parses={container_parses}"
+            )
+
+        hits=[int(cache.get("hits") or 0) for cache in world_caches]
+        waits=[int(cache.get("waits") or 0) for cache in world_caches]
+        if not (hits[1] > hits[0] and hits[2] > hits[1]):
+            raise RuntimeError(f"WP-S003-005 move/return did not reuse cached world assets: hits={hits}")
+        if not (waits[1] > waits[0] and waits[2] > waits[1]):
+            raise RuntimeError(f"WP-S003-005 move/return preparation telemetry did not advance: waits={waits}")
+
+        region_sets=[set(prep.get("regionKeys") or []) for prep in world_preparations]
+        if not region_sets[0] or region_sets[1] == region_sets[0] or region_sets[2] != region_sets[0]:
+            raise RuntimeError(
+                "WP-S003-005 prepared chunk ring did not move and return deterministically: "
+                f"origin={len(region_sets[0])}, moved={len(region_sets[1])}, returned={len(region_sets[2])}"
+            )
         return
 
     if scenario == "wp-s001-004":
