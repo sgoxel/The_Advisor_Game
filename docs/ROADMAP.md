@@ -59,7 +59,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
 - `WP-S004-001` — Deterministic Starting Village Resident Roster — COMPLETED
-- `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment — TESTED; DEPLOYMENT VERIFIED
+- `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment — COMPLETED
 - `WP-S004-003` — Deterministic Daily Activity + Action Targets
 - `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement
 - `WP-S004-005` — Interior Action Execution + Character State Presentation
