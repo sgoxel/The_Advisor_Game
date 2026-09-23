@@ -1456,6 +1456,94 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-002":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-006-002 requires eight evidence frames")
+        runtimes = [frame.get("runtime", {}) for frame in frames[:8]]
+        builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
+        gpus = [(item.get("gpuRenderer") or {}) for item in builds]
+        preload = [(gpu.get("terrainPreload") or {}) for gpu in gpus]
+
+        seeds = [item.get("campaignSeed") for item in builds]
+        protagonists = [item.get("protagonistLocation") for item in builds]
+        if len(set(seeds)) != 1 or not seeds[0]:
+            raise RuntimeError(f"Preload settings changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists)) != 1 or not protagonists[0]:
+            raise RuntimeError(f"Preload settings changed protagonist authority: {protagonists}")
+
+        expected = (
+            (2,64,True,True),
+            (1,16,True,True),
+            (2,32,True,True),
+            (3,64,True,True),
+            (4,128,True,True),
+            (4,256,False,True),
+            (4,256,True,False),
+            (4,256,True,False),
+        )
+        for index,(stats,values) in enumerate(zip(preload,expected),start=1):
+            settings=stats.get("settings") or {}
+            actual=(
+                int(settings.get("preloadRadius") or 0),
+                int(settings.get("maxCachedChunks") or 0),
+                bool(settings.get("directionalPreload")),
+                bool(settings.get("backgroundChunkGeneration")),
+            )
+            if actual != values:
+                raise RuntimeError(f"Preload settings mismatch in frame {index}: expected={values}, actual={actual}, stats={stats}")
+            if int(stats.get("Active") or 0) < 1:
+                raise RuntimeError(f"No Active terrain chunks in frame {index}: {stats}")
+            if stats.get("bounded") is not True:
+                raise RuntimeError(f"Terrain cache exceeded configured budget in frame {index}: {stats}")
+            if int(stats.get("Cached") or 0) > int(settings.get("maxCachedChunks") or 0):
+                raise RuntimeError(f"Cached terrain exceeded max in frame {index}: {stats}")
+            if stats.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Terrain preload mutated Simulation in frame {index}: {stats}")
+            if int(stats.get("visibleAssetLoads") or 0) != 0 or int(stats.get("visibleTextureDecodes") or 0) != 0 or int(stats.get("visibleGltfParses") or 0) != 0:
+                raise RuntimeError(f"Visible path performed asset/decode/GLB work in frame {index}: {stats}")
+            signature=str(stats.get("signature") or "")
+            if "chunk=" not in signature or "quality=" not in signature:
+                raise RuntimeError(f"Terrain preload cache signature missing chunk/quality inputs in frame {index}: {signature}")
+
+        if int(preload[1].get("evictions") or 0) < 1:
+            raise RuntimeError(f"16-chunk cache test did not exercise bounded eviction: {preload[1]}")
+        if int(preload[2].get("visibleWaits") or 0) != int(preload[1].get("visibleWaits") or 0):
+            raise RuntimeError(
+                f"Prepared boundary crossing introduced a new visible wait: before={preload[1]}, after={preload[2]}"
+            )
+        direction = preload[2].get("direction") or {}
+        if int(direction.get("x") or 0) != 1:
+            raise RuntimeError(f"Directional preload did not detect +X movement: {preload[2]}")
+        preview = preload[2].get("lastQueuePreview") or []
+        center = preload[2].get("centerChunk") or {}
+        if preview and int(preview[0].get("x") or 0) < int(center.get("x") or 0):
+            raise RuntimeError(f"Directional preload did not prioritize ahead chunks: center={center}, preview={preview}")
+        if int(preload[5].get("cacheReuses") or 0) < 1:
+            raise RuntimeError(f"Reverse traversal did not reuse cached chunks: {preload[5]}")
+        if int(preload[6].get("Prepared") or 0) != 0 or int(preload[6].get("queueDepth") or 0) != 0:
+            raise RuntimeError(f"Background OFF retained prepared work: {preload[6]}")
+
+        expected_controls = {
+            "preloadRadius":"4",
+            "maxCachedChunks":"256",
+            "directionalPreload":True,
+            "backgroundChunkGeneration":False,
+        }
+        controls6=builds[6].get("terrainPreloadControls") or {}
+        controls7=builds[7].get("terrainPreloadControls") or {}
+        if controls6 != expected_controls:
+            raise RuntimeError(f"Phone landscape Settings controls mismatch: {controls6}")
+        if controls7 != expected_controls:
+            raise RuntimeError(f"Persisted phone portrait Settings controls mismatch: {controls7}")
+
+        view6=runtimes[6].get("viewport") or {}
+        view7=runtimes[7].get("viewport") or {}
+        if int(view6.get("width") or 0) <= int(view6.get("height") or 0):
+            raise RuntimeError(f"Settings phone landscape evidence invalid: {view6}")
+        if int(view7.get("height") or 0) <= int(view7.get("width") or 0):
+            raise RuntimeError(f"Settings phone portrait evidence invalid: {view7}")
+        return
+
     if scenario == "wp-s003-005-002":
         if len(frames) < 4:
             raise RuntimeError("wp-s003-005-002 requires four evidence frames")
