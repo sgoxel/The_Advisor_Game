@@ -16,6 +16,11 @@ function normalizePoint(value){
   if(!value||typeof value!=="object")throw new Error("Route point is required.");
   return WorldCoordinates.position(value.x,value.y);
 }
+function movementState(seed,x,y){
+  const objects=window.InteriorObjects;
+  if(objects?.classifyNavigation)return objects.classifyNavigation(seed,x,y);
+  return movementState(seed,x,y);
+}
 function key(point){return WorldCoordinates.key(point)}
 function absBig(value){return value<0n?-value:value}
 function manhattan(a,b){
@@ -129,9 +134,9 @@ function findRoute(seed,startValue,destinationValue,options){
     return failure("outside-local-range",start,destination,{searchRadius:maxDistance,maxNodes});
   }
 
-  const startState=Walkability.classify(seed,start.x,start.y);
+  const startState=movementState(seed,start.x,start.y);
   if(!startState?.walkable)return failure("blocked-start",start,destination,{searchRadius:direct,maxNodes});
-  const destinationState=Walkability.classify(seed,destination.x,destination.y);
+  const destinationState=movementState(seed,destination.x,destination.y);
   if(!destinationState?.walkable)return failure("blocked-destination",start,destination,{searchRadius:direct,maxNodes});
 
   if(key(start)===key(destination)){
@@ -212,7 +217,7 @@ function findRoute(seed,startValue,destinationValue,options){
       const nextKey=key(next);
       let state=stateCache.get(nextKey);
       if(!state){
-        state=Walkability.classify(seed,next.x,next.y);
+        state=movementState(seed,next.x,next.y);
         stateCache.set(nextKey,state);
         evaluatedCount++;
       }
@@ -247,7 +252,7 @@ function interiorPoint(seed,lot){
   else if(lot.access.side==="W")x+=1;
   else if(lot.access.side==="E")x-=1;
   const point=WorldCoordinates.position(String(x),String(y));
-  const state=Walkability.classify(seed,point.x,point.y);
+  const state=movementState(seed,point.x,point.y);
   return state?.walkable?point:null;
 }
 function destinationChoice(seed){
@@ -270,7 +275,7 @@ function blockedWallPoint(seed,lot){
     for(let x=b.minX;x<=b.maxX;x++){
       if(x!==b.minX&&x!==b.maxX&&y!==b.minY&&y!==b.maxY)continue;
       if(x===lot.access.x&&y===lot.access.y)continue;
-      const state=Walkability.classify(seed,String(x),String(y));
+      const state=movementState(seed,String(x),String(y));
       if(!state?.walkable&&state?.barrierKind==="outer-wall"){
         return WorldCoordinates.position(String(x),String(y));
       }
@@ -300,16 +305,16 @@ function proof(seed){
   const blocked=blockedPoint?findRoute(seedKey,start,blockedPoint):null;
 
   const states=first.found
-    ?first.path.map(point=>Walkability.classify(seedKey,point.x,point.y))
+    ?first.path.map(point=>movementState(seedKey,point.x,point.y))
     :[];
   const deterministic=routeSignature(first)===routeSignature(second);
   const obeysWalkability=first.found&&states.every(state=>state?.walkable);
   const usesExteriorEntrance=states.some(state=>state?.doorwayKind==="exterior-door");
-  const destinationState=Walkability.classify(seedKey,choice.point.x,choice.point.y);
+  const destinationState=movementState(seedKey,choice.point.x,choice.point.y);
   const destinationInterior=destinationState?.category===Walkability.CATEGORY.INTERIOR;
   const blockedDestinationRejected=!!blockedPoint&&!!blocked&&!blocked.found&&blocked.reason==="blocked-destination";
   const costCheck=first.found
-    ?first.path.slice(1).reduce((total,point)=>total+Walkability.movementSeconds(seedKey,point.x,point.y),0)
+    ?first.path.slice(1).reduce((total,point)=>total+(movementState(seedKey,point.x,point.y)?.secondsPerTile??Infinity),0)
     :Infinity;
   const movementCostPass=first.found&&Math.abs(costCheck-first.totalSeconds)<1e-6;
   const localEvaluationPass=
