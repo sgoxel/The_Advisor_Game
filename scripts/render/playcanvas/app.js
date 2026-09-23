@@ -646,6 +646,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let staticBatchCount=0,staticBatchSourcePrimitiveCount=0,instancedGroupCount=0,instancedObjectCount=0;
     let optimizedPresentationDrawCalls=0,unoptimizedPresentationDrawCalls=0,savedDrawCalls=0;
     let frustumCulledResourceCount=0,hardwareInstancedResourceCount=0,batchedResourceCount=0;
+    let renderMeshInstanceCount=0,visibleMeshInstanceCount=0,culledMeshInstanceCount=0,cullEnabledMeshInstanceCount=0;
     let roadCellCount=0,waterCellCount=0,bridgeCellCount=0,terrainTypeCount=0;
     let seedDerivedPresentation=true,hardCodedSampleGeometry=false;
     const materialNames=new Set();
@@ -671,6 +672,19 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       if(resource.frustumCulling===true)frustumCulledResourceCount++;
       if(resource.hardwareInstancing===true)hardwareInstancedResourceCount++;
       if(resource.chunkLocalStaticBatching===true)batchedResourceCount++;
+      if(resource.entity){
+        const stack=[resource.entity];
+        while(stack.length){
+          const node=stack.pop();
+          for(const mi of node?.render?.meshInstances||[]){
+            renderMeshInstanceCount++;
+            if(mi.cull!==false)cullEnabledMeshInstanceCount++;
+            if(entry?.state==="Active"&&mi.visibleThisFrame===true)visibleMeshInstanceCount++;
+            else if(entry?.state==="Active"&&mi.cull!==false)culledMeshInstanceCount++;
+          }
+          for(const child of node?.children||[])stack.push(child);
+        }
+      }
       buildingPresentationCount+=Number(resource.buildingPresentationCount||0);
       propPresentationCount+=Number(resource.propPresentationCount||0);
       roadCellCount+=Number(resource.roadCellCount||0);
@@ -692,6 +706,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       optimizedPresentationDrawCalls,unoptimizedPresentationDrawCalls,savedDrawCalls,
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       frustumCulledResourceCount,hardwareInstancedResourceCount,batchedResourceCount,
+      renderMeshInstanceCount,visibleMeshInstanceCount,culledMeshInstanceCount,cullEnabledMeshInstanceCount,
       buildingPresentationCount,propPresentationCount,
       roadCellCount,waterCellCount,bridgeCellCount,terrainTypeCount,
       seedDerivedPresentation,
