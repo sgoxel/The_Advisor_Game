@@ -53,7 +53,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-005` — 3D Culling, Static Batching + Hardware Instancing — COMPLETED
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
-- `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — TESTED; DEPLOYMENT PENDING
+- `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
