@@ -400,27 +400,15 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   }
   async function prepareCharacters(characters,simulatedCharacterCount=0){
     const visibleCharacters=Array.isArray(characters)?characters:[];
-    if(!visibleCharacters.length){
-      clearCharacterBillboards();
-      return Object.freeze({
-        ready:true,
-        stale:false,
-        visibleCharacterCount:0,
-        simulatedCharacterCount:Number(simulatedCharacterCount||lastModel?.simulatedCharacterCount||0),
-        preparedCharacterCount:characterTextures.size,
-        visibleCharacterIds:Object.freeze([])
-      });
-    }
     const urls=[...new Set(visibleCharacters.map(characterAssetKey).filter(Boolean))];
     await Promise.all(urls.map(loadCharacterTexture));
-    const state=syncCharacterBillboards(visibleCharacters);
     return Object.freeze({
       ready:true,
       stale:false,
-      visibleCharacterCount:state.activeCharacterCount,
+      visibleCharacterCount:visibleCharacters.length,
       simulatedCharacterCount:Number(simulatedCharacterCount||lastModel?.simulatedCharacterCount||0),
-      preparedCharacterCount:state.preparedCharacterCount,
-      visibleCharacterIds:state.visibleCharacterIds
+      preparedCharacterCount:characterTextures.size,
+      visibleCharacterIds:Object.freeze(visibleCharacters.map(character=>String(character?.id||"")).filter(Boolean))
     });
   }
   function updateCameraTransform(){if(!camera)return;if(interiorProofState){const building=selectInteriorProofBuilding(interiorProofState),bounds=proofBounds(building);if(bounds)updateInteriorProofCamera(bounds);return;}const center=lastModel?.center||window.Camera?.getCenter?.()||{x:"0",y:"0"};ensureSceneAnchor(center);const dx=safeDeltaTiles(center.x,sceneAnchor?.x??center.x)??0,dy=safeDeltaTiles(center.y,sceneAnchor?.y??center.y)??0,targetX=dx*WORLD_TILE_METERS,targetZ=dy*WORLD_TILE_METERS,zoom=clamp(Number(lastModel?.cameraZoom??window.Camera?.getZoom?.()??1),0.5,2),width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1),aspect=width/height,portraitCompensation=aspect<0.8?1.22:1,shortLandscapeCompensation=aspect>3&&height<220?0.72:1;camera.camera.orthoHeight=BASE_ORTHO_HEIGHT*portraitCompensation*shortLandscapeCompensation/zoom;camera.setPosition(targetX+13.5,15.5,targetZ+13.5);camera.lookAt(targetX,0,targetZ);}
