@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WP-S003-005-002 — PlayCanvas Asset Standard Proof</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#11170f;color:#edf1e7;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+#app{position:fixed;inset:0}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.panel{position:absolute;top:12px;left:12px;z-index:2;width:min(540px,calc(100% - 24px));display:grid;gap:6px;padding:10px 12px;border:1px solid #52604a;border-radius:9px;background:rgba(13,18,12,.87);box-shadow:0 8px 30px rgba(0,0,0,.32);pointer-events:none}
+.panel strong{font-size:14px}.panel small{font-size:10px;line-height:1.4;color:#cbd5c4}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.metric{padding:5px 6px;border:1px solid #3b4636;border-radius:6px;background:#1a2218}.metric b{display:block;font-size:11px;color:#f0e4b7}.metric span{font-size:9px;color:#b9c4b2}
+.legend{position:absolute;right:12px;bottom:12px;z-index:2;display:grid;gap:5px;width:min(330px,calc(100% - 24px));padding:9px 11px;border:1px solid #52604a;border-radius:8px;background:rgba(13,18,12,.82);pointer-events:none}
+.legend b{font-size:11px;color:#f0e4b7}.legend span{font-size:9px;color:#cbd5c4}
+.error{color:#ffb6aa}
+@media(max-width:720px){.panel{top:6px;left:6px;width:calc(100% - 12px);padding:6px 8px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.legend{right:6px;bottom:6px;width:min(280px,calc(100% - 12px));padding:6px 8px}.panel small,.legend span{font-size:8px}}
+@media(max-height:430px) and (orientation:landscape){.panel{width:min(430px,48vw)}.panel>small{display:none}.grid{grid-template-columns:repeat(4,minmax(0,1fr))}.metric{padding:3px 4px}.legend{width:min(320px,38vw)}}
+</style>
+<script src="scripts/render/playcanvas/asset-standard-catalog.js"></script>
+</head>
+<body>
+<div id="app"><canvas id="canvas" aria-label="PlayCanvas representative glTF asset proof"></canvas>
+  <div class="panel" id="panel">
+    <strong>WP-S003-005-002 — glTF Asset Standard Proof</strong>
+    <small id="status">Loading PlayCanvas 2.22.3 and representative glTF asset set…</small>
+    <div class="grid">
+      <div class="metric"><b id="meshCount">—</b><span>mesh instances</span></div>
+      <div class="metric"><b id="materialCount">—</b><span>materials</span></div>
+      <div class="metric"><b id="drawCalls">—</b><span>draw calls</span></div>
+      <div class="metric"><b id="entityCount">—</b><span>entities</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <b>Runtime representatives</b>
+    <span>House 6×5 m · matching gable roof 6.6×5.6 m · 1.2×2.1 m door</span>
+    <span>Workbench 2.4 m · repeated tree mesh ×3 · terrain patch 8×8 m</span>
+    <span>1 logical tile = 2 m · +Y up · world Y maps to +Z · Simulation remains authoritative</span>
+  </div>
+</div>
+<script type="module">
+import * as pc from "https://cdn.jsdelivr.net/npm/playcanvas@2.22.3/+esm";
+const canvas=document.getElementById("canvas");
+const statusEl=document.getElementById("status");
+const catalog=window.PlayCanvasAssetStandard;
+const evidence={ready:false,engine:"PlayCanvas",engineVersion:"2.22.3",runtimeFormat:"glTF 2.0",simulationAuthorityPreserved:true};
+window.WP_S003_005_002_EVIDENCE=evidence;
+
+function countEntities(root){
+  let entities=0,meshInstances=0,materials=new Set();
+  const walk=e=>{
+    entities++;
+    const render=e.render;
+    if(render?.meshInstances){
+      meshInstances+=render.meshInstances.length;
+      for(const mi of render.meshInstances)if(mi.material)materials.add(mi.material.name||String(mi.material.id||"material"));
+    }
+    for(const child of e.children||[])walk(child);
+  };
+  walk(root);
+  return {entities,meshInstances,materialCount:materials.size};
+}
+function resize(app,device){
+  const w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);
+  const short=Math.min(w,h);
+  device.maxPixelRatio=short<=520?1:short<=900?1.25:1.5;
+  app.setCanvasFillMode(pc.FILLMODE_NONE,w,h);
+  app.setCanvasResolution(pc.RESOLUTION_AUTO);
+  app.resizeCanvas(w,h);
+  app.updateCanvasSize?.();
+}
+try{
+  if(!catalog)throw new Error("PlayCanvasAssetStandard catalog missing");
+  const device=await pc.createGraphicsDevice(canvas,{deviceTypes:[pc.DEVICETYPE_WEBGL2],antialias:true,depth:true,powerPreference:"high-performance"});
+  const options=new pc.AppOptions();
+  options.graphicsDevice=device;
+  options.componentSystems=[pc.RenderComponentSystem,pc.CameraComponentSystem,pc.LightComponentSystem];
+  options.resourceHandlers=[pc.ContainerHandler];
+  const app=new pc.AppBase(canvas); app.init(options);
+
+  const camera=new pc.Entity("ProofCamera");
+  camera.addComponent("camera",{projection:pc.PROJECTION_ORTHOGRAPHIC,orthoHeight:12,clearColor:new pc.Color(.07,.10,.06),nearClip:.1,farClip:100});
+  camera.setPosition(17,15,19); camera.lookAt(0,1,1); app.root.addChild(camera);
+
+  const sun=new pc.Entity("ProofSun");
+  sun.addComponent("light",{type:"directional",intensity:1.35,color:new pc.Color(1,.94,.80),castShadows:false});
+  sun.setEulerAngles(50,35,0); app.root.addChild(sun);
+  app.scene.ambientLight=new pc.Color(.30,.34,.28);
+
+  resize(app,device); window.addEventListener("resize",()=>resize(app,device));
+  const asset=new pc.Asset("wp-s003-005-002-representatives","container",{url:catalog.modelUrl});
+  app.assets.add(asset);
+  const loaded=await new Promise((resolve,reject)=>{
+    asset.ready(()=>resolve(asset));
+    asset.once("error",err=>reject(err instanceof Error?err:new Error(String(err))));
+    app.assets.load(asset);
+  });
+  const root=loaded.resource.instantiateRenderEntity();
+  root.name="RepresentativeAssetSet";
+  app.root.addChild(root);
+  app.start();
+
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  const counts=countEntities(root);
+  const proof=catalog.proof();
+  const stats=app.stats||{};
+  const drawCalls=Number(stats.drawCalls?.total||device?._drawCallsPerFrame||0);
+  const triangles=Number(stats.frame?.triangles||0);
+
+  Object.assign(evidence,{
+    ready:true,
+    backend:device.deviceType,
+    gltfLoaded:true,
+    assetUrl:catalog.modelUrl,
+    catalogVersion:catalog.version,
+    worldTileMeters:catalog.worldTileMeters,
+    logicalAssetCount:proof.assetCount,
+    deterministicLogicalKeys:proof.deterministicLogicalKeys,
+    rendererOnly:proof.rendererOnly,
+    boundsDefined:proof.boundsDefined,
+    instancingEligible:proof.instancingEligible,
+    entityCount:counts.entities,
+    meshInstanceCount:counts.meshInstances,
+    materialCount:counts.materialCount,
+    textureCount:0,
+    drawCalls,
+    triangles,
+    representative:Object.freeze({
+      building:Object.freeze({footprintMeters:{x:6,z:5},roofMeters:{x:6.6,z:5.6},doorMeters:{x:1.2,y:2.1}}),
+      workbench:Object.freeze({x:2.4,y:.94,z:.9}),
+      tree:Object.freeze({repeatedCount:3,instancingEligible:true}),
+      terrain:Object.freeze({x:8,z:8})
+    })
+  });
+  document.getElementById("meshCount").textContent=String(counts.meshInstances);
+  document.getElementById("materialCount").textContent=String(counts.materialCount);
+  document.getElementById("drawCalls").textContent=String(drawCalls);
+  document.getElementById("entityCount").textContent=String(counts.entities);
+  statusEl.textContent="Loaded real glTF 2.0 assets · shared material families · meter scale · renderer-only authority";
+}catch(error){
+  evidence.error=String(error);
+  statusEl.textContent="ERROR: "+String(error);
+  statusEl.classList.add("error");
+  console.error(error);
+}
+</script>
+</body>
+</html>
