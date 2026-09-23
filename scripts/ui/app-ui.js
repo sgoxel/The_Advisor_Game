@@ -1264,9 +1264,8 @@ function renderRendererProof(){
   const renderer=GameRenderer.snapshot();
   const assets=TextureAssets.stats();
   const bootstrap=window.RendererBootstrap?.status?.()||{};
-  const playcanvas=renderer.engine==="PlayCanvas";
-  e.rendererEngine.textContent=renderer.engine||(playcanvas?"PlayCanvas":"Legacy PixiJS");
-  e.rendererEngineVersion.textContent=renderer.engineVersion||(window.PIXI?.VERSION||"—");
+  e.rendererEngine.textContent=renderer.engine||"PlayCanvas";
+  e.rendererEngineVersion.textContent=renderer.engineVersion||"—";
   e.rendererBackend.textContent=renderer.backend||"—";
   e.rendererRequestedBackend.textContent=renderer.requestedBackend||bootstrap.backend||"webgl2";
   e.rendererWebgpuAvailable.textContent=(renderer.webgpuAvailable??bootstrap.webgpuAvailable)?"YES":"NO";
@@ -1286,22 +1285,15 @@ function renderRendererProof(){
   e.rendererCanvasSize.textContent=renderer.canvas
     ?renderer.canvas.cssWidth+"×"+renderer.canvas.cssHeight+" / "+renderer.canvas.backingWidth+"×"+renderer.canvas.backingHeight
     :"—";
-  e.rendererTextureCount.textContent=playcanvas
-    ?String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources / "+String(renderer.characterPresentation?.preparedCharacterCount||0)+" character textures"
-    :String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources";
-  e.rendererSourceMode.textContent=playcanvas
-    ?"PlayCanvas orthographic 3D baseline | "+String(renderer.characterPresentation?.activeCharacterCount||0)+" active / "+String(renderer.characterPresentation?.simulatedCharacterCount||0)+" simulated characters"
-    :(assets.svgSourceCount||0)+" SVG draft / "+(assets.pngSourceCount||0)+" PNG";
+  e.rendererTextureCount.textContent=String(assets.loadedKeyCount||0)+" logical / "+String(assets.loadedSourceCount||0)+" sources / "+String(renderer.characterPresentation?.preparedCharacterCount||0)+" character textures";
+  e.rendererSourceMode.textContent="PlayCanvas orthographic 3D | "+String(renderer.characterPresentation?.activeCharacterCount||0)+" active / "+String(renderer.characterPresentation?.simulatedCharacterCount||0)+" simulated characters";
   e.rendererPreparedRegion.textContent=assets.preparedRegionKey||"—";
   if(!e.rendererVisibleRegion.textContent)e.rendererVisibleRegion.textContent=renderer.regionKey||"—";
   setCheck(e.vRendererWebGL,Boolean(renderer.gpu||renderer.webgl||renderer.webgpu),"FAIL");
   setCheck(e.vRendererCanvas,renderer.canvasCount===1,"FAIL");
   setCheck(e.vRendererNoDomTiles,(renderer.domTerrainTileCount||0)===0,"FAIL");
-  setCheck(e.vRendererLogicalTextures,
-    playcanvas?Boolean(window.RendererContract):Boolean(renderer.logicalTextureKeyPass)&&assets.loadedKeyCount>0,
-    "FAIL"
-  );
-  setCheck(e.vRendererSvgCache,playcanvas?true:(assets.svgSourceCount>0&&assets.ready),"FAIL");
+  setCheck(e.vRendererLogicalTextures,Boolean(window.RendererContract),"FAIL");
+  setCheck(e.vRendererSvgCache,true,"FAIL");
   setCheck(e.vRendererSimulation,
     typeof TerrainFoundation?.getTile==="function"&&
     typeof Walkability?.classify==="function"&&
