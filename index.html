@@ -547,7 +547,7 @@
       <div class="check"><span>Renderer consumes logical cached texture keys instead of source URLs</span><b id="vRendererLogicalTextures">WAITING</b></div>
       <div class="check"><span>Current SVG draft assets are loaded once as reusable texture sources</span><b id="vRendererSvgCache">WAITING</b></div>
       <div class="check"><span>Terrain, walkability and routing remain authoritative Simulation systems</span><b id="vRendererSimulation">WAITING</b></div>
-      <p><strong>PlayCanvas baseline:</strong> add <code>?renderer=playcanvas&amp;gpu=webgl2</code>, <code>gpu=webgpu</code>, or <code>gpu=auto</code>. Optional <code>dpr=</code> and <code>renderScale=</code> parameters tune presentation resolution without changing Simulation. The normal public URL retains legacy PixiJS until later migration WPs replace the full world presentation.</p>
+      <p><strong>PlayCanvas renderer:</strong> the canonical root URL launches PlayCanvas directly. Optional <code>gpu=webgl2</code>, <code>gpu=webgpu</code>, <code>gpu=auto</code>, <code>dpr=</code>, and <code>renderScale=</code> parameters tune presentation only; no renderer-selection parameter is required.</p>
     </div>
   </details>
 
@@ -555,7 +555,7 @@
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
       <p><strong>Current Work Package:</strong> WP-S003-008 Responsive Gameplay Control Deck + Multimodal Navigation.</p>
-      <p><strong>Current world rendering:</strong> PlayCanvas migration foundation with legacy PixiJS retained as the default fallback until verified cutover. Both consume the same renderer-neutral authoritative Simulation data.</p>
+      <p><strong>Current world rendering:</strong> PlayCanvas Engine 2 is the canonical gameplay renderer. The renderer consumes renderer-neutral authoritative Simulation data; renderer state never becomes gameplay authority.</p>
       <p><strong>Root project rule:</strong> Only <code>index.html</code> exists in the project root.</p>
       <p><strong>Local operation:</strong> The base game opens directly from <code>index.html</code>.</p>
     </div>
@@ -570,10 +570,8 @@
 <script src="scripts/entities/protagonist.js"></script>
 <script src="scripts/core/prng.js"></script>
 <script src="scripts/data/terrain-palette.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi.js@8.12.0/dist/pixi.min.js"></script>
 <script src="scripts/data/tile-textures.js"></script>
 <script src="scripts/render/texture-assets.js"></script>
-<script src="scripts/render/game-renderer.js"></script>
 <script src="scripts/render/renderer-contract.js"></script>
 <script src="scripts/render/playcanvas/chunk-preload.js"></script>
 <script src="scripts/render/playcanvas/app.js"></script>
