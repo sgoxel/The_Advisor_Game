@@ -238,31 +238,68 @@ function snapshotForCoordinate({seed,x,y,chunkSize,signature}){
 }
 function collectView({seed,center,columns,rows,chunkSize,signature}){
   const halfCols=Math.floor(columns/2),halfRows=Math.floor(rows/2);
-  const tiles=[];
+  const baseCells=[];
   const missing=new Set();
   const used=new Set();
   const centerX=BigInt(String(center.x)),centerY=BigInt(String(center.y));
+
+  function lookup(x,y,{countVisible=false}={}){
+    const snapshot=snapshotForCoordinate({seed,x:String(x),y:String(y),chunkSize,signature});
+    if(!snapshot){
+      if(countVisible)viewTileMisses++;
+      missing.add(String(chunkCoordinate(x,chunkSize))+","+String(chunkCoordinate(y,chunkSize)));
+      return null;
+    }
+    const cell=cellFromSnapshot(snapshot,x,y);
+    if(!cell){
+      if(countVisible)viewTileMisses++;
+      missing.add(snapshot.key);
+      return null;
+    }
+    if(countVisible)viewTileHits++;
+    used.add(snapshot.key);
+    return cell;
+  }
+
   for(let row=0;row<rows;row++){
     const y=centerY+BigInt(row-halfRows);
     for(let col=0;col<columns;col++){
       const x=centerX+BigInt(col-halfCols);
-      const snapshot=snapshotForCoordinate({seed,x:String(x),y:String(y),chunkSize,signature});
-      if(!snapshot){
-        viewTileMisses++;
-        missing.add(String(chunkCoordinate(x,chunkSize))+","+String(chunkCoordinate(y,chunkSize)));
-        continue;
-      }
-      const cell=cellFromSnapshot(snapshot,x,y);
-      if(!cell){
-        viewTileMisses++;
-        missing.add(snapshot.key);
-        continue;
-      }
-      viewTileHits++;
-      used.add(snapshot.key);
-      tiles.push(cell);
+      const cell=lookup(x,y,{countVisible:true});
+      baseCells.push({row,col,x,y,cell});
     }
   }
+
+  const tiles=[];
+  for(const item of baseCells){
+    if(!item.cell)continue;
+    const neighbor=(dx,dy)=>{
+      const cell=lookup(item.x+BigInt(dx),item.y+BigInt(dy));
+      return cell?.type||null;
+    };
+    const neighbors={
+      n:neighbor(0,-1),
+      e:neighbor(1,0),
+      s:neighbor(0,1),
+      w:neighbor(-1,0),
+      ne:neighbor(1,-1),
+      se:neighbor(1,1),
+      sw:neighbor(-1,1),
+      nw:neighbor(-1,-1)
+    };
+    const blends=TileTextures.blendSpecs(item.cell.type,neighbors,{
+      seed,
+      x:item.cell.x,
+      y:item.cell.y
+    });
+    tiles.push(Object.freeze({
+      ...item.cell,
+      row:item.row,
+      col:item.col,
+      blends:Object.freeze(blends.map(blend=>Object.freeze({...blend})))
+    }));
+  }
+
   for(const key of used)touch(key);
   return Object.freeze({
     ready:missing.size===0&&tiles.length===columns*rows,
