@@ -17,12 +17,20 @@ function loadInterior(){
   script.onerror=()=>{console.error("Failed to load interior object foundation.");start();};
   document.head.appendChild(script);
 }
+function loadTerrainChunkSizeSettings(){
+  if(window.TerrainChunkSizeSettings){loadInterior();return;}
+  const script=document.createElement("script");
+  script.src="scripts/render/terrain-chunk-size-settings.js";
+  script.onload=loadInterior;
+  script.onerror=()=>{console.error("Failed to load terrain chunk size settings.");loadInterior();};
+  document.head.appendChild(script);
+}
 function loadRuntimeTextureResolution(){
-  if(window.RuntimeTextureResolution){loadInterior();return;}
+  if(window.RuntimeTextureResolution){loadTerrainChunkSizeSettings();return;}
   const script=document.createElement("script");
   script.src="scripts/render/runtime-texture-resolution.js";
-  script.onload=loadInterior;
-  script.onerror=()=>{console.error("Failed to load runtime texture resolution settings.");loadInterior();};
+  script.onload=loadTerrainChunkSizeSettings;
+  script.onerror=()=>{console.error("Failed to load runtime texture resolution settings.");loadTerrainChunkSizeSettings();};
   document.head.appendChild(script);
 }
 function boot(){
