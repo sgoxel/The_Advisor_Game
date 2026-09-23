@@ -19,7 +19,7 @@ function normalizePoint(value){
 function movementState(seed,x,y){
   const objects=window.InteriorObjects;
   if(objects?.classifyNavigation)return objects.classifyNavigation(seed,x,y);
-  return movementState(seed,x,y);
+  return Walkability.classify(seed,x,y);
 }
 function key(point){return WorldCoordinates.key(point)}
 function absBig(value){return value<0n?-value:value}
