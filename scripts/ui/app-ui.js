@@ -536,6 +536,8 @@ let lastCameraNavigation=null;
 const cameraNavigationHistory=[];
 const activeCameraKeys=new Set();
 let keyboardPanTimer=null;
+let keyboardInitialTimer=null;
+let pendingKeyboardSource=null;
 
 function projectedCoverageHalfSpan(width,height,tileSize){
   const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
@@ -1355,6 +1357,23 @@ function installCameraControls(){
     const move=keyboardScreenDirection();
     if(move.x||move.y)panCameraScreen(move.x,move.y,"keyboard:hold");
   };
+  const flushInitialKeyboardPan=()=>{
+    if(keyboardInitialTimer){
+      clearTimeout(keyboardInitialTimer);
+      keyboardInitialTimer=null;
+    }
+    const source=pendingKeyboardSource;
+    pendingKeyboardSource=null;
+    const move=keyboardScreenDirection();
+    if(source&&(move.x||move.y))panCameraScreen(move.x,move.y,"keyboard:"+source);
+  };
+  const scheduleInitialKeyboardPan=key=>{
+    pendingKeyboardSource=key;
+    if(keyboardInitialTimer)return;
+    // Coalesce keys pressed within the same physical chord into one normalized
+    // screen-space movement instead of firing an axis step for each key.
+    keyboardInitialTimer=setTimeout(flushInitialKeyboardPan,20);
+  };
   const stopKeyboardRepeatIfIdle=()=>{
     if(activeCameraKeys.size||!keyboardPanTimer)return;
     clearInterval(keyboardPanTimer);
@@ -1368,19 +1387,22 @@ function installCameraControls(){
     event.preventDefault();
     const wasActive=activeCameraKeys.has(key);
     activeCameraKeys.add(key);
-    if(!event.repeat&&!wasActive){
-      const move=keyboardScreenDirection();
-      if(move.x||move.y)panCameraScreen(move.x,move.y,"keyboard:"+key);
-    }
+    if(!event.repeat&&!wasActive)scheduleInitialKeyboardPan(key);
     if(!keyboardPanTimer)keyboardPanTimer=setInterval(repeatKeyboardPan,140);
   });
   document.addEventListener("keyup",event=>{
     const key=event.key.toLowerCase();
     if(!cameraKeys.has(key))return;
+    if(keyboardInitialTimer)flushInitialKeyboardPan();
     activeCameraKeys.delete(key);
     stopKeyboardRepeatIfIdle();
   });
   window.addEventListener("blur",()=>{
+    if(keyboardInitialTimer){
+      clearTimeout(keyboardInitialTimer);
+      keyboardInitialTimer=null;
+    }
+    pendingKeyboardSource=null;
     activeCameraKeys.clear();
     stopKeyboardRepeatIfIdle();
   });

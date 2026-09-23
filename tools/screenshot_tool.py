@@ -2165,8 +2165,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             projected=unit(nav.get("projectedScreen") or {})
             if projected[0]*exp[0]+projected[1]*exp[1] < 0.985:
                 raise RuntimeError(f"Frame {index+1} visible motion is not aligned to screen intent: expected {(ex,ey)}, got {nav}")
-            if float(nav.get("angleErrorDegrees") or 180)>10:
+            angle_error=nav.get("angleErrorDegrees")
+            if angle_error is None or float(angle_error)>10:
                 raise RuntimeError(f"Frame {index+1} screen-direction error exceeds 10 degrees: {nav}")
+            if int(nav.get("sequence") or 0)!=index:
+                raise RuntimeError(f"Frame {index+1} produced more/fewer than one camera transition for one input action: {nav}")
             if nav.get("simulationAuthorityPreserved") is not True:
                 raise RuntimeError(f"Frame {index+1} changed Protagonist/Simulation authority: {nav}")
             before=nav.get("centerBefore") or {}; after=nav.get("centerAfter") or {}
@@ -2182,9 +2185,19 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         for arrow_idx,wasd_idx in ((5,9),(6,10),(7,11),(8,12)):
             if world_unit(navs[arrow_idx])!=world_unit(navs[wasd_idx]):
                 raise RuntimeError(f"Arrow/WASD mapping diverged: arrow={navs[arrow_idx]}, wasd={navs[wasd_idx]}")
+        cardinal_screen_magnitudes=[]
+        for index in (5,6,7,8,9,10,11,12):
+            projected=navs[index].get("projectedScreen") or {}
+            cardinal_screen_magnitudes.append((float(projected.get("x") or 0)**2+float(projected.get("y") or 0)**2)**0.5)
+        max_cardinal=max(cardinal_screen_magnitudes or [0])
         for index in (13,14):
-            if int(navs[index].get("logicalSteps") or 0)!=1:
-                raise RuntimeError(f"Diagonal keyboard movement inflated logical step count in frame {index+1}: {navs[index]}")
+            nav=navs[index]
+            if int(nav.get("logicalSteps") or 0)!=1:
+                raise RuntimeError(f"Diagonal keyboard movement inflated logical step count in frame {index+1}: {nav}")
+            projected=nav.get("projectedScreen") or {}
+            magnitude=(float(projected.get("x") or 0)**2+float(projected.get("y") or 0)**2)**0.5
+            if max_cardinal>0 and magnitude>max_cardinal*1.05:
+                raise RuntimeError(f"Diagonal keyboard movement is faster than single-axis screen movement in frame {index+1}: diagonal={magnitude}, cardinalMax={max_cardinal}, nav={nav}")
         gpu=[build.get("gpuRenderer") or {} for build in builds]
         if any((item.get("navigationHotPath") or {}).get("fullSceneRebuilds") not in (0,None) for item in gpu):
             raise RuntimeError("Screen-space navigation triggered a full scene rebuild")
