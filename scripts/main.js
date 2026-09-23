@@ -17,12 +17,20 @@ function loadResidentMovement(){
   script.onerror=()=>{console.error("Failed to load resident movement simulation.");start();};
   document.head.appendChild(script);
 }
+function loadActionExecutor(){
+  if(window.ActionExecutor){loadResidentMovement();return;}
+  const script=document.createElement("script");
+  script.src="scripts/world/action-executor.js";
+  script.onload=loadResidentMovement;
+  script.onerror=()=>{console.error("Failed to load action executor.");loadResidentMovement();};
+  document.head.appendChild(script);
+}
 function loadInterior(){
-  if(window.InteriorObjects){loadResidentMovement();return;}
+  if(window.InteriorObjects){loadActionExecutor();return;}
   const script=document.createElement("script");
   script.src="scripts/world/interior-objects.js";
-  script.onload=loadResidentMovement;
-  script.onerror=()=>{console.error("Failed to load interior object foundation.");loadResidentMovement();};
+  script.onload=loadActionExecutor;
+  script.onerror=()=>{console.error("Failed to load interior object foundation.");loadActionExecutor();};
   document.head.appendChild(script);
 }
 function loadTerrainChunkSizeSettings(){

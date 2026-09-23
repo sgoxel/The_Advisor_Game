@@ -38,7 +38,10 @@ function cloneActivity(activity){
     label:String(activity.label||activity.state||"Movement"),
     target:point(activity.target),
     buildingId:activity.buildingId?String(activity.buildingId):null,
-    targetSource:activity.targetSource?String(activity.targetSource):null
+    targetSource:activity.targetSource?String(activity.targetSource):null,
+    interactionObjectId:activity.interactionObjectId?String(activity.interactionObjectId):null,
+    interactionObjectType:activity.interactionObjectType?String(activity.interactionObjectType):null,
+    supportedActions:Object.freeze([...(activity.supportedActions||[])])
   });
 }
 function residentState(resident,startValue){
@@ -83,6 +86,7 @@ function reset(seed){
   states=new Map();
   accumulator=0;
   proofContext=null;
+  window.ActionExecutor?.clearKind?.("resident");
   return ensure(seed);
 }
 function routeTargetKey(activity){return activity?key(activity.target)+"|"+activity.state+"|"+activity.action:""}
@@ -207,7 +211,19 @@ function advance(seed,when,realSeconds){
   let ticks=0,changed=false;
   while(accumulator+1e-9>=FIXED_STEP_SECONDS&&ticks<MAX_ADVANCE_STEPS){
     for(const state of states.values()){
-      changed=advanceState(seedKey,state,activeActivity(seedKey,state,when),FIXED_STEP_SECONDS)||changed;
+      const activity=activeActivity(seedKey,state,when);
+      const before=window.ActionExecutor?.advanceActor?.({
+        seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
+      },FIXED_STEP_SECONDS)||null;
+      if(before?.holdsPosition){
+        changed=Boolean(before.changed)||changed;
+        continue;
+      }
+      changed=advanceState(seedKey,state,activity,FIXED_STEP_SECONDS)||changed;
+      const after=window.ActionExecutor?.advanceActor?.({
+        seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
+      },0)||null;
+      changed=Boolean(after?.changed)||changed;
     }
     accumulator-=FIXED_STEP_SECONDS;
     ticks++;
@@ -228,6 +244,7 @@ function stateSnapshot(state){
     status:state.status,
     activityState:state.activity?.state||null,
     intendedAction:state.activity?.action||null,
+    actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null,
     buildingId:nav?.buildingId||null,
     navigationCategory:nav?.category||null,
     routeIndex:state.routeIndex,
