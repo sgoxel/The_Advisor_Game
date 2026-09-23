@@ -357,6 +357,10 @@ return (() => {
           terrainPreload: renderer.terrainPreload || null,
           terrainCacheTelemetry: window.AppUI?.terrainCacheTelemetry?.() || null,
           interiorObjectPresentation: renderer.interiorObjectPresentation || null,
+          worldAssetPreparation: renderer.worldAssetPreparation || null,
+          worldAssetCache: renderer.worldAssetCache || null,
+          worldAssetProof: renderer.worldAssetProof || null,
+          characterAssetPreparation: renderer.characterAssetPreparation || null,
           characterProof: renderer.characterProof || null,
           bootstrapMode: window.RendererBootstrap?.status?.().mode || null,
           bootstrapLegacyAvailable: Boolean(window.RendererBootstrap?.status?.().legacyRendererAvailable),
@@ -2562,6 +2566,28 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         initial, moved, returned = builds
         initial_cache, moved_cache, returned_cache = caches
 
+        world_preparations=[(item.get("gpuRenderer") or {}).get("worldAssetPreparation") or {} for item in builds]
+        world_caches=[(item.get("gpuRenderer") or {}).get("worldAssetCache") or {} for item in builds]
+        world_proofs=[(item.get("gpuRenderer") or {}).get("worldAssetProof") or {} for item in builds]
+        character_preparations=[(item.get("gpuRenderer") or {}).get("characterAssetPreparation") or {} for item in builds]
+
+        for index,(world_prep,world_cache,world_proof,char_cache) in enumerate(zip(world_preparations,world_caches,world_proofs,character_preparations),start=1):
+            if world_prep.get("ready") is not True or int(world_prep.get("regionCount") or 0) < 1 or int(world_prep.get("keyCount") or 0) < 1:
+                raise RuntimeError(f"WP-S003-005 world preparation gate is not ready in frame {index}: {world_prep}")
+            if int(world_cache.get("registered") or 0) < 10 or int(world_cache.get("meshContainers") or 0) < 1 or int(world_cache.get("materials") or 0) < 3:
+                raise RuntimeError(f"WP-S003-005 logical 3D world catalog is incomplete in frame {index}: {world_cache}")
+            if int(world_cache.get("networkLoads") or 0) < 1 or int(world_cache.get("containerParses") or 0) < 1:
+                raise RuntimeError(f"WP-S003-005 real glTF preparation was not exercised in frame {index}: {world_cache}")
+            if int(world_cache.get("pending") or 0) != 0 or int(world_cache.get("cached") or 0) > int(world_cache.get("cacheLimit") or 0):
+                raise RuntimeError(f"WP-S003-005 world asset retention is not ready/bounded in frame {index}: {world_cache}")
+            if world_proof.get("logicalKeys") is not True or world_proof.get("bounded") is not True or world_proof.get("preparedRegions") is not True or world_proof.get("noVisiblePathLoads") is not True:
+                raise RuntimeError(f"WP-S003-005 world asset proof failed in frame {index}: {world_proof}")
+            if int(char_cache.get("characterAssets") or 0) < 1:
+                raise RuntimeError(f"WP-S003-005 separate 2D character preparation path missing in frame {index}: {char_cache}")
+        world_network=[int(cache.get("networkLoads") or 0) for cache in world_caches]
+        world_parses=[int(cache.get("containerParses") or 0) for cache in world_caches]
+        if len(set(world_network)) != 1 or len(set(world_parses)) != 1:
+            raise RuntimeError(f"WP-S003-005 visible movement initiated new world network/parse work: network={world_network}, parses={world_parses}")
         if not initial_cache.get("ready"):
             raise RuntimeError(f"WP-S003-005 initial asset cache is not ready: {initial_cache}")
         if int(initial_cache.get("preparedRegionCount") or 0) < 9:
