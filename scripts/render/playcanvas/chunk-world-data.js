@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.0.0";
+const VERSION="1.1.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -23,6 +23,20 @@ function floorDiv(value,divisor){
   return q;
 }
 function chunkCoordinate(value,size){return floorDiv(value,size);}
+function ownsCoordinate(x,y,chunkX,chunkY,size){
+  return chunkCoordinate(x,size)===BigInt(chunkX)&&chunkCoordinate(y,size)===BigInt(chunkY);
+}
+function sparseStaticKind(cell){
+  const type=String(cell?.type||"");
+  if(type!=="forest"&&type!=="rock")return null;
+  try{
+    const x=BigInt(cell.x),y=BigInt(cell.y);
+    const hash=((x*73856093n)^(y*19349663n))&0xffffffffn;
+    if(type==="forest"&&hash%19n===0n)return "tree";
+    if(type==="rock"&&hash%13n===0n)return "rock";
+  }catch(_){}
+  return null;
+}
 function boundsFor(chunkX,chunkY,size){
   const s=BigInt(size);
   const minX=BigInt(chunkX)*s,minY=BigInt(chunkY)*s;
@@ -151,10 +165,16 @@ function generate(spec){
       if(cell.textureKey)textureKeys.add(cell.textureKey);
       if(cell.overlayTextureKey)overlayTextureKeys.add(cell.overlayTextureKey);
       if(cell.buildingId)buildingIds.add(cell.buildingId);
-      if(!STANDARD_TERRAIN.has(cell.type)&&!cell.buildingId){
+      const sparseKind=sparseStaticKind(cell);
+      if(sparseKind&&staticObjects.length<2){
+        staticObjects.push(Object.freeze({
+          id:"static:"+cell.x+":"+cell.y+":"+sparseKind,
+          type:sparseKind,x:cell.x,y:cell.y,sourceTerrain:cell.type
+        }));
+      }else if(!STANDARD_TERRAIN.has(cell.type)&&!cell.buildingId&&staticObjects.length<2){
         staticObjects.push(Object.freeze({
           id:"static:"+cell.x+":"+cell.y+":"+cell.type,
-          type:cell.type,x:cell.x,y:cell.y
+          type:cell.type,x:cell.x,y:cell.y,sourceTerrain:cell.type
         }));
       }
     }
@@ -162,6 +182,10 @@ function generate(spec){
 
   const buildings=buildingReferences(seed,bounds);
   for(const building of buildings)buildingIds.add(building.id);
+  const ownedBuildings=buildings.filter(building=>{
+    const anchor=building.entrance||{x:building.bounds.minX,y:building.bounds.minY};
+    return ownsCoordinate(anchor.x,anchor.y,spec.x,spec.y,size);
+  });
   const elapsed=performance.now()-started;
   totalGenerationMs+=elapsed;maxGenerationMs=Math.max(maxGenerationMs,elapsed);
   completeChunkGenerations++;
@@ -191,12 +215,15 @@ function generate(spec){
     staticObjects:Object.freeze(staticObjects),
     presentation:Object.freeze({
       terrainMeshRequired:true,
-      buildingDescriptors:Object.freeze(buildings.map(item=>Object.freeze({
-        id:item.id,kind:item.kind,source:item.source,bounds:item.bounds
+      source:"seed-chunk-world-data",
+      buildingDescriptors:Object.freeze(ownedBuildings.map(item=>Object.freeze({
+        id:item.id,kind:item.kind,label:item.label||item.kind,source:item.source,
+        bounds:item.bounds,entrance:item.entrance||null
       }))),
       propDescriptors:Object.freeze(staticObjects.map(item=>Object.freeze({
-        id:item.id,type:item.type,x:item.x,y:item.y
-      })))
+        id:item.id,type:item.type,x:item.x,y:item.y,sourceTerrain:item.sourceTerrain||null
+      }))),
+      hardCodedSampleGeometry:false
     }),
     generationMs:Number(elapsed.toFixed(3)),
     generatedTerrainCalls:size*size,
@@ -323,11 +350,17 @@ function collectView({seed,center,columns,rows,chunkSize,signature}){
 }
 function stats(){
   let surfaceCellCount=0,buildingReferenceCount=0,staticObjectReferenceCount=0,completeEntryCount=0;
+  let presentationBuildingCount=0,presentationPropCount=0,roadCellCount=0,waterCellCount=0,bridgeCellCount=0;
   for(const entry of cache.values()){
     const snapshot=entry.snapshot;
     surfaceCellCount+=Number(snapshot?.cells?.length||0);
     buildingReferenceCount+=Number(snapshot?.buildings?.length||0);
     staticObjectReferenceCount+=Number(snapshot?.staticObjects?.length||0);
+    presentationBuildingCount+=Number(snapshot?.presentation?.buildingDescriptors?.length||0);
+    presentationPropCount+=Number(snapshot?.presentation?.propDescriptors?.length||0);
+    roadCellCount+=Number(snapshot?.terrain?.surfaceCounts?.road||0)+Number(snapshot?.terrain?.surfaceCounts?.path||0)+Number(snapshot?.terrain?.surfaceCounts?.square||0);
+    waterCellCount+=Number(snapshot?.terrain?.surfaceCounts?.water||0);
+    bridgeCellCount+=Number(snapshot?.terrain?.surfaceCounts?.bridge||0);
     if(snapshot?.complete)completeEntryCount++;
   }
   return Object.freeze({
@@ -337,6 +370,8 @@ function stats(){
     surfaceCellCount,
     buildingReferenceCount,
     staticObjectReferenceCount,
+    presentationBuildingCount,presentationPropCount,
+    roadCellCount,waterCellCount,bridgeCellCount,
     cacheHits,cacheMisses,
     completeChunkGenerations,
     uniqueGeneratedChunkCount:everGenerated.size,
@@ -353,6 +388,8 @@ function stats(){
     stableChunkIdentity:true,
     completeChunksOnly:true,
     boundedByRendererRetention:true,
+    seedDerivedPresentation:true,
+    hardCodedSampleGeometry:false,
     simulationAuthorityPreserved:true
   });
 }
