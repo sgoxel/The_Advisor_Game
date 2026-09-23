@@ -1218,48 +1218,34 @@ def _pinch_gameplay(driver, scale: float) -> str:
 
 
 def _focus_starting_village_gateway(driver) -> str:
-    result = driver.execute_script(
+    result = driver.execute_async_script(
         """
-        const campaign = window.SeedSystem?.getCampaign?.();
-        const village = window.StartingVillage;
-        const camera = window.Camera;
-        if (!campaign || !village?.plan || !camera?.pan) {
-          return {ok:false, reason:'starting-village-runtime-unavailable'};
-        }
-        const plan = village.plan(campaign.seed);
-        const moves = {
-          East:[18,0],
-          South:[0,18],
-          West:[-18,0],
-          North:[0,-18]
-        };
-        const move = moves[plan.gatewayDirection] || [0,0];
-        camera.pan(String(move[0]), String(move[1]));
-        window.dispatchEvent(new Event('resize'));
-        document.dispatchEvent(new KeyboardEvent('keydown', {key:'Shift'}));
-        return {ok:true, direction:plan.gatewayDirection, move};
-        """);
+        const done = arguments[arguments.length - 1];
+        (async () => {
+          const campaign = window.SeedSystem?.getCampaign?.();
+          const village = window.StartingVillage;
+          const camera = window.Camera;
+          const ui = window.AppUI;
+          if (!campaign || !village?.plan || !camera?.pan || !ui?.refreshTerrain) {
+            done({ok:false, reason:'starting-village-runtime-unavailable'});
+            return;
+          }
+          const plan = village.plan(campaign.seed);
+          const moves = {
+            East:[18,0],
+            South:[0,18],
+            West:[-18,0],
+            North:[0,-18]
+          };
+          const move = moves[plan.gatewayDirection] || [0,0];
+          camera.pan(String(move[0]), String(move[1]));
+          await ui.refreshTerrain();
+          done({ok:true, direction:plan.gatewayDirection, move});
+        })().catch(error => done({ok:false, reason:String(error)}));
+        """
+    )
     if isinstance(result, dict) and result.get("ok"):
-        # Force the current UI renderer to react through a harmless center-key path:
-        # one arrow step and its reverse redraw the camera window deterministically.
-        direction = result.get("direction")
-        key_pairs = {
-            "East": ("ArrowRight", "ArrowLeft"),
-            "South": ("ArrowDown", "ArrowUp"),
-            "West": ("ArrowLeft", "ArrowRight"),
-            "North": ("ArrowUp", "ArrowDown"),
-        }
-        first, second = key_pairs.get(direction, ("ArrowDown", "ArrowUp"))
-        driver.execute_script(
-            """
-            const first = arguments[0], second = arguments[1];
-            document.dispatchEvent(new KeyboardEvent('keydown',{key:first,bubbles:true}));
-            document.dispatchEvent(new KeyboardEvent('keydown',{key:second,bubbles:true}));
-            """,
-            first,
-            second,
-        )
-        return f"focus-gateway:{direction}"
+        return f"focus-gateway:{result.get('direction')}"
     return f"focus-gateway-skipped:{result}"
 
 
