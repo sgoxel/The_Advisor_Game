@@ -756,3 +756,11 @@
 - Attempt 1 run 35921592597 exposed a legacy social-target helper regression; fixed in 8c0420ac26a23e1318f4ad4ab3c776c1c4760f57 without changing WP assignment semantics.
 - Final Visual Evidence run 35921858512 passed on exact tested head 8c0420ac26a23e1318f4ad4ab3c776c1c4760f57 with all 12/12 routes passing (18–42 steps). All 3 fresh screenshots were directly inspected; the assignment table is complete/readable with all six checks visible as PASS and no clipping, overlap, malformed text or broken layout. VISUAL 8.6/10 PASS.
 - Automatic regression run 35921764854 passed and GitHub Pages run 35921763924 successfully deployed the exact tested head.
+2026-09-24 00:45 +03:00 | WP-S004-003 | Deterministic daily activity + action targets — evidence incomplete
+- Implemented deterministic 24-hour resident schedules from Campaign SEED + resident ID with authoritative fantasy-time selection, non-overlapping state blocks, WP-S004-002 home/work assignment preservation, and action-compatible authoritative interaction targets.
+- Removed the direct real-world UTC fallback from schedule resolution; no movement, teleport, action execution, dialogue, economy, combat, or external LLM behavior was added.
+- Attempt 1 exposed missing legal prepare targets in compact homes and was corrected with authoritative interaction-action fallbacks; automatic regression run 35923672964 then passed.
+- Attempt 2 exposed a first-frame startup/evidence pin race. The pin contract was hardened on main at 922c3c21719f9be2a58d5e5fac01572fbf2992c3; automatic regression run 35923945376 and Pages run 35923943921 passed on that head.
+- Attempt 3 run 35924050079 still failed the representative-time validator because frame 1 reverted to live fantasy time: expected [2,7,12,19], observed [21,7,12,19].
+- All four fresh attempt-3 screenshots were directly inspected. Frames 2–4 show a clean/readable schedule proof with all six visible checks PASS; frame 1 shows the normal gameplay view. VISUAL 8.5/10 PASS, but functional certification remains incomplete.
+- The three-attempt limit was reached. Issue #31 remains open and the ROADMAP is intentionally not marked COMPLETED.
