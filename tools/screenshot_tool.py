@@ -103,6 +103,7 @@ SCENARIOS = {
     "wp-s006-005",
     "wp-s006-006",
     "wp-s007-001",
+    "wp-s007-002",
     "playcanvas-root-cutover",
 }
 
@@ -158,6 +159,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s006-005": 6,
     "wp-s006-006": 6,
     "wp-s007-001": 6,
+    "wp-s007-002": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -368,6 +370,52 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        worldContext: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.WorldContext?.proof
+              ? window.WorldContext.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        worldContextPanel: (() => {
+          const root=document.querySelector("#worldContextProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            targetId:root.dataset.targetId||null,
+            countryId:root.dataset.countryId||null,
+            regionId:root.dataset.regionId||null,
+            contextRevision:root.dataset.contextRevision||null,
+            contextSignature:root.dataset.contextSignature||null,
+            countryRevision:root.dataset.countryRevision||null,
+            countryDeltaRevision:Number(root.dataset.countryDeltaRevision||0),
+            regionRevision:root.dataset.regionRevision||null,
+            settlementRevision:root.dataset.settlementRevision||null,
+            cacheHit:root.dataset.cacheHit==="true",
+            cacheEntries:Number(root.dataset.cacheEntries||0),
+            cacheHits:Number(root.dataset.cacheHits||0),
+            cacheMisses:Number(root.dataset.cacheMisses||0),
+            staleRefreshes:Number(root.dataset.staleRefreshes||0),
+            fanOutInvalidations:Number(root.dataset.fanOutInvalidations||0),
+            wealth:Number(root.dataset.wealth||0),
+            trade:Number(root.dataset.trade||0),
+            agriculturePotential:Number(root.dataset.agriculturePotential||0),
+            miningPotential:Number(root.dataset.miningPotential||0),
+            transportAccess:Number(root.dataset.transportAccess||0),
+            lazyNoFanout:root.dataset.lazyNoFanout==="true",
+            cacheEntriesBeforeMutation:Number(root.dataset.cacheEntriesBeforeMutation||0),
+            cacheEntriesAfterMutation:Number(root.dataset.cacheEntriesAfterMutation||0),
+            queriesBeforeMutation:Number(root.dataset.queriesBeforeMutation||0),
+            queriesAfterMutation:Number(root.dataset.queriesAfterMutation||0),
+            rematerialized:root.dataset.rematerialized==="true",
+            layerRows:root.querySelectorAll("#worldContextLayers li").length,
+            comparisonRows:root.querySelectorAll("#worldContextComparison li").length,
+            behaviorRows:root.querySelectorAll("#worldContextBehavior .region-profile-bar").length,
+          };
         })(),
         worldState: (() => {
           try {
@@ -2173,6 +2221,101 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_world_context_proof(driver, frame_index: int) -> str:
+    camera_action = _drag_canvas(driver, 120, 0) if frame_index == 3 else None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const context=window.WorldContext;
+        if(!campaign?.seed||!context||!window.WorldState||!window.SettlementArchetypes||!window.RegionProfile||!window.CountryProfile){
+          return {ok:false,error:'world-context-unavailable'};
+        }
+        const seed=campaign.seed;
+        const targets=context.evidenceTargets(seed);
+        if(!targets?.primary||!targets?.contrast)return {ok:false,error:'world-context-targets-missing',targets};
+
+        let lazyNoFanout=null;
+        let beforeMutation=null;
+        let afterMutation=null;
+        let rematerialized=false;
+        if(index===0){
+          context.clearCaches({resetTelemetry:true});
+        }
+        if(index===1){
+          beforeMutation=context.telemetry();
+          const applied=context.applyEvidenceCountryDelta(seed);
+          if(!applied?.ok)return {ok:false,error:'world-context-country-delta-failed',applied};
+          afterMutation=context.telemetry();
+          lazyNoFanout=Boolean(
+            beforeMutation.cacheEntries===afterMutation.cacheEntries &&
+            beforeMutation.queries===afterMutation.queries &&
+            beforeMutation.hits===afterMutation.hits &&
+            beforeMutation.misses===afterMutation.misses &&
+            beforeMutation.staleRefreshes===afterMutation.staleRefreshes &&
+            afterMutation.fanOutInvalidations===0
+          );
+          if(!lazyNoFanout)return {ok:false,error:'country-change-triggered-context-fanout',beforeMutation,afterMutation};
+        }
+        if(index===4){
+          context.clearCaches();
+          rematerialized=true;
+        }
+
+        const target=index===2?targets.contrast:targets.primary;
+        const fixedTime={year:1200,month:6,day:15,hour:12,minute:0,second:0};
+        const resolved=context.resolve(seed,target,fixedTime);
+        if(!resolved)return {ok:false,error:'world-context-resolve-failed',index};
+        const proof=context.proof(seed);
+        if(!proof.pass)return {ok:false,error:'world-context-proof-failed',proof};
+
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#worldContextProof');
+        if(!section||!root)return {ok:false,error:'world-context-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=context.renderDebugPanel(seed,target,root,fixedTime);
+        if(!rendered?.context)return {ok:false,error:'world-context-render-failed'};
+        root.dataset.lazyNoFanout=String(lazyNoFanout===true);
+        root.dataset.cacheEntriesBeforeMutation=String(beforeMutation?.cacheEntries||0);
+        root.dataset.cacheEntriesAfterMutation=String(afterMutation?.cacheEntries||0);
+        root.dataset.queriesBeforeMutation=String(beforeMutation?.queries||0);
+        root.dataset.queriesAfterMutation=String(afterMutation?.queries||0);
+        root.dataset.rematerialized=String(rematerialized);
+        root.scrollIntoView({block:'start'});
+        return {
+          ok:Boolean(rendered.verification?.pass),
+          index,
+          targetId:rendered.context.target.id,
+          countryId:rendered.context.country.id,
+          regionId:rendered.context.region.id,
+          contextSignature:rendered.context.signature,
+          contextRevision:rendered.context.revision,
+          countryRevision:rendered.context.revisions.country,
+          countryDeltaRevision:rendered.context.country.campaignDeltaRevision,
+          wealth:rendered.context.country.wealth,
+          trade:rendered.context.country.tendencies.tradeOpenness,
+          agriculturePotential:rendered.context.behavior.agriculturePotential,
+          miningPotential:rendered.context.behavior.miningPotential,
+          transportAccess:rendered.context.behavior.transportAccess,
+          lazyNoFanout,
+          rematerialized,
+          telemetry:context.telemetry()
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"WorldContext proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    return (
+        prefix+
+        f"world-context:{frame_index}:{result.get('targetId')}:"
+        f"countryDelta={result.get('countryDeltaRevision')}:cache={result.get('telemetry',{}).get('cacheEntries')}"
+    )
+
+
 def _show_world_state_proof(driver, frame_index: int) -> str:
     if frame_index == 3:
         camera_action = _drag_canvas(driver, 120, 0)
@@ -3716,7 +3859,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3882,6 +4025,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_world_state_proof(driver,frame_index)
         return _show_world_state_proof(driver,frame_index)
+    if scenario == "wp-s007-002":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_world_context_proof(driver,frame_index)
+        return _show_world_context_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3916,6 +4064,89 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s007-002":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s007-002 requires six WorldContext evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        proofs=[build.get("worldContext") or {} for build in builds]
+        panels=[build.get("worldContextPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"WorldContext evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"WorldContext proof mutated Protagonist world position: {protagonists}")
+
+        required={
+            "pass":True,"deterministic":True,"sameCountryDifferentRegions":True,
+            "regionalTerrainDifference":True,"regionalBehaviorDifference":True,
+            "localAuthorityPreserved":True,"complete":True,"parentRevisionsRecorded":True,
+            "cachedRepeat":True,"noStateMutation":True,"childInheritance":True,
+            "renderIndependent":True,"currentStateIntegrated":True,"noFanOut":True,
+            "worldStateMutation":False,"renderDependency":False,"globalFanOut":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"WorldContext proof {key} mismatch in frame {index}: {proof}")
+            if proof.get("hierarchy")!="Country → Region → Local Geography/Resources → Settlement → Building/Job/NPC Context":
+                raise RuntimeError(f"WorldContext hierarchy mismatch in frame {index}: {proof}")
+            if float(proof.get("differenceScore") or 0)<=0:
+                raise RuntimeError(f"WorldContext regional evidence has no local difference in frame {index}: {proof}")
+
+        for panel in panels:
+            if not panel.get("open") or int(panel.get("layerRows") or 0)!=6 or int(panel.get("comparisonRows") or 0)!=2:
+                raise RuntimeError(f"WorldContext inspector hierarchy/comparison incomplete: {panel}")
+            if int(panel.get("behaviorRows") or 0)<10:
+                raise RuntimeError(f"WorldContext behavior evidence incomplete: {panel}")
+            if not panel.get("targetId") or not panel.get("countryId") or not panel.get("regionId") or not panel.get("contextSignature"):
+                raise RuntimeError(f"WorldContext inspector missing identity/signature: {panel}")
+            if int(panel.get("fanOutInvalidations") or 0)!=0:
+                raise RuntimeError(f"WorldContext performed fan-out invalidation: {panel}")
+
+        baseline=panels[0]
+        changed=panels[1]
+        contrast=panels[2]
+        repeated=panels[3]
+        rematerialized=panels[4]
+        reloaded=panels[5]
+
+        if int(baseline.get("countryDeltaRevision") or 0)!=0:
+            raise RuntimeError(f"WorldContext baseline unexpectedly had country delta: {baseline}")
+        if int(changed.get("countryDeltaRevision") or 0)!=1:
+            raise RuntimeError(f"Country change did not increment context delta revision exactly once: {changed}")
+        if not changed.get("lazyNoFanout"):
+            raise RuntimeError(f"Country change caused eager context fan-out: {changed}")
+        if changed.get("cacheEntriesBeforeMutation")!=changed.get("cacheEntriesAfterMutation") or changed.get("queriesBeforeMutation")!=changed.get("queriesAfterMutation"):
+            raise RuntimeError(f"Country change touched WorldContext cache before query: {changed}")
+        if changed.get("countryRevision")==baseline.get("countryRevision"):
+            raise RuntimeError(f"Country parent revision did not change after country delta: {baseline} -> {changed}")
+        if changed.get("contextSignature")==baseline.get("contextSignature"):
+            raise RuntimeError(f"Same settlement behavior/context did not change after country wealth/trade change: {baseline} -> {changed}")
+        if changed.get("wealth")==baseline.get("wealth") or changed.get("trade")==baseline.get("trade"):
+            raise RuntimeError(f"Country wealth/trade evidence did not change: {baseline} -> {changed}")
+
+        if contrast.get("countryId")!=changed.get("countryId") or contrast.get("regionId")==changed.get("regionId"):
+            raise RuntimeError(f"Regional comparison is not two different regions in one country: {changed} vs {contrast}")
+        local_values=("agriculturePotential","miningPotential","transportAccess")
+        if all(abs(float(contrast.get(key) or 0)-float(changed.get(key) or 0))<1e-9 for key in local_values):
+            raise RuntimeError(f"Regional/local geography did not change lower behavior modifiers: {changed} vs {contrast}")
+
+        if repeated.get("targetId")!=changed.get("targetId") or repeated.get("contextSignature")!=changed.get("contextSignature"):
+            raise RuntimeError(f"Repeated loaded context changed unexpectedly: {changed} -> {repeated}")
+        if not repeated.get("cacheHit"):
+            raise RuntimeError(f"Repeated context did not report a final-cache hit: {repeated}")
+        if "drag-" not in str(frames[3].get("action") or ""):
+            raise RuntimeError(f"WorldContext render-independence frame did not move camera: {frames[3].get('action')}")
+
+        if not rematerialized.get("rematerialized") or rematerialized.get("contextSignature")!=changed.get("contextSignature"):
+            raise RuntimeError(f"Newly materialized context differs from continuously loaded context: {changed} -> {rematerialized}")
+        if reloaded.get("contextSignature")!=changed.get("contextSignature") or reloaded.get("countryRevision")!=changed.get("countryRevision"):
+            raise RuntimeError(f"WorldContext changed after full page reload: {changed} -> {reloaded}")
+        if int(reloaded.get("countryDeltaRevision") or 0)!=1:
+            raise RuntimeError(f"Country delta was not restored after full page reload: {reloaded}")
+        return
+
     if scenario == "wp-s007-001":
         if len(frames) < 6:
             raise RuntimeError("wp-s007-001 requires six world-state evidence frames")
@@ -6844,12 +7075,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
