@@ -309,7 +309,8 @@ function evidenceStep(seedValue,indexValue){
   if(!planValue)return deepFreeze({ok:false,reason:"target-missing"});
   if(index===0){reset(seed);evidenceMemory={seed,focusId:planValue.id,mutatedSignature:null,demotedSignature:null,reactivatedSignature:null};}
   let requested="global";
-  if(index===1)requested="regional";
+  if(index===0)requested="global";
+  else if(index===1)requested="regional";
   else if(index===2)requested="local";
   else if(index===3)requested="exact";
   else if(index===4)requested="global";
