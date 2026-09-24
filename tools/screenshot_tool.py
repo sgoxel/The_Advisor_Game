@@ -5339,6 +5339,28 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_world_context_proof(driver,frame_index)
         return _show_world_context_proof(driver,frame_index)
+    if scenario == "wp-s003-008-002":
+        if frame_index == 0:
+            driver.set_window_size(1440, 900)
+            return _set_scene_loading_proof(driver, "renderer")
+        if frame_index == 1:
+            return _set_scene_loading_proof(driver, "world")
+        if frame_index == 2:
+            return _set_scene_loading_proof(driver, "assets")
+        if frame_index == 3:
+            return _set_scene_loading_proof(driver, "finalizing")
+        if frame_index == 4:
+            return _set_scene_loading_proof(driver, None)
+        if frame_index == 5:
+            return _set_scene_loading_proof(driver, "error")
+        if frame_index == 6:
+            driver.set_window_size(390, 844)
+            return "phone-portrait+" + _set_scene_loading_proof(driver, "world")
+        if frame_index == 7:
+            driver.set_window_size(844, 390)
+            return "phone-landscape+" + _set_scene_loading_proof(driver, "assets")
+        driver.set_window_size(1280, 800)
+        return "reduced-motion+" + _set_scene_loading_proof(driver, "finalizing", reduced_motion=True)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
