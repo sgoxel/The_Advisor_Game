@@ -100,6 +100,7 @@ SCENARIOS = {
     "wp-s003-008-003",
     "wp-s003-009-001",
     "wp-s003-009-002",
+    "wp-s003-009-003",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -177,6 +178,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-003": 8,
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
+    "wp-s003-009-003": 9,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1543,7 +1545,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
-    if scenario in {"wp-s003-009-001", "wp-s003-009-002"}:
+    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 120.0)
     if scenario == "wp-s003-005-006":
@@ -1584,7 +1586,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=128, directional=True, background=True
                 )
-            if scenario == "wp-s003-009-002":
+            if scenario in {"wp-s003-009-002", "wp-s003-009-003"}:
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
                 )
@@ -1599,7 +1601,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1697,6 +1699,24 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               Number(chunks.roadLiftWorldUnits || 0) > 0 &&
                               Number(chunks.pathLiftWorldUnits || 0) > 0 &&
                               Number(chunks.roadProfileVertexCount || 0) > 0 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-009-003' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            const chars=renderer?.characterPresentation || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              chunks.contactShadowStaticPass === true &&
+                              chunks.contactShadowRendererOnly === true &&
+                              Number(chunks.contactShadowBuildingCount || 0) > 0 &&
+                              Number(chunks.contactShadowTreeCount || 0) > 0 &&
+                              Number(chunks.contactShadowInstancedGroupCount || 0) > 0 &&
+                              Number(chunks.contactShadowMaterialCount || 0) > 0 &&
+                              Number(chars.contactShadowCount || 0) > 0 &&
+                              chars.contactShadowHardwareInstanced === true &&
+                              chars.contactShadowFeetCoordinateAnchored === true &&
+                              Number(chars.contactShadowTerrainAlignedCount || 0) === Number(chars.contactShadowCount || 0) &&
                               Number(renderer?.terrainPreload?.queueDepth || 0) === 0
                             );
                           })()) &&
@@ -5353,6 +5373,31 @@ def _place_npc_on_road_profile_target(driver, kind: str) -> str:
     )
 
 
+def _set_graphics_quality_mode(driver, mode: str) -> str:
+    result = driver.execute_script(
+        """
+        const mode=String(arguments[0]||'standard');
+        const api=window.RuntimeRenderQuality;
+        if(!api?.setMode)return {ok:false,reason:'runtime-render-quality-api-missing'};
+        const state=api.setMode(mode);
+        return {
+          ok:true,
+          mode:String(state?.mode||''),
+          activeLevel:String(state?.activeLevel||''),
+          shadowsEnabled:Boolean(state?.shadowsEnabled),
+          shadowQuality:String(state?.shadowQuality||'off')
+        };
+        """,
+        mode,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to set graphics quality {mode!r}: {result}")
+    return (
+        f"graphics-quality:{result.get('mode')}:{result.get('activeLevel')}:"
+        f"nativeShadows={str(bool(result.get('shadowsEnabled'))).lower()}"
+    )
+
+
 def _set_material_lifetime_texture_quality(driver, profile: str) -> dict:
     result = driver.execute_async_script(
         """
@@ -5740,6 +5785,29 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-003":
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return _set_graphics_quality_mode(driver, "standard") + "+grounding:overview+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        if frame_index == 1:
+            return "grounding:flat-characters+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 2:
+            return "grounding:raised-road-npc+" + _place_npc_on_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 1.50, timeout=30.0)
+        if frame_index == 3:
+            return "grounding:building-foundation+" + _focus_road_connector(driver, "house") + "+" + _set_camera_zoom_and_render(driver, 1.25, timeout=30.0)
+        if frame_index == 4:
+            return "grounding:tree-contact+" + _focus_tree_sample_chunk(driver) + "+" + _set_camera_zoom_and_render(driver, 1.25, timeout=30.0)
+        if frame_index == 5:
+            return _set_graphics_quality_mode(driver, "high") + "+grounding:high-quality+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 6:
+            return _set_graphics_quality_mode(driver, "low") + "+grounding:low-quality+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 7:
+            _set_graphics_quality_mode(driver, "standard")
+            driver.set_window_size(390, 844)
+            return "grounding:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        _set_graphics_quality_mode(driver, "standard")
+        driver.set_window_size(844, 390)
+        return "grounding:phone-landscape+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
     if scenario == "wp-s003-009-002":
         if frame_index == 0:
             driver.set_window_size(1280, 800)
@@ -6474,6 +6542,98 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-003":
+        if len(frames) < 9:
+            raise RuntimeError("wp-s003-009-003 requires nine contact-shadow grounding evidence frames")
+        expected_zooms=("0.75×","1.00×","1.50×","1.25×","1.25×","1.00×","1.00×","0.75×","0.75×")
+        protagonist_locations=[]
+        saw_multiple_characters=False
+        saw_building_contacts=False
+        saw_tree_contacts=False
+        saw_raised_character=False
+        max_static_shadow_draws=0
+        max_frame_ms=0.0
+        quality_opacity={}
+        for index,frame in enumerate(frames[:9]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            chars=gpu.get("characterPresentation") or {}
+            grounding=gpu.get("contactGrounding") or {}
+            preload=gpu.get("terrainPreload") or {}
+            quality=gpu.get("quality") or {}
+            perf=gpu.get("performance") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Grounding zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Contact-shadow grounding changed Simulation authority in frame {index+1}: {gpu}")
+            if chunks.get("contactShadowStaticPass") is not True or chunks.get("contactShadowRendererOnly") is not True:
+                raise RuntimeError(f"Static contact-shadow contract failed in frame {index+1}: {chunks}")
+            if chunks.get("contactShadowTerrainSampled") is not True:
+                raise RuntimeError(f"Static contacts are not terrain-grounded in frame {index+1}: {chunks}")
+            if int(chunks.get("contactShadowMaterialCount") or 0)<=0 or int(chunks.get("contactShadowMaterialCount") or 0)>2:
+                raise RuntimeError(f"Static contact-shadow material count is not bounded in frame {index+1}: {chunks}")
+            if int(chunks.get("contactShadowBuildingCount") or 0)>0:saw_building_contacts=True
+            if int(chunks.get("contactShadowTreeCount") or 0)>0:saw_tree_contacts=True
+            max_static_shadow_draws=max(max_static_shadow_draws,int(chunks.get("contactShadowDrawCalls") or 0))
+            count=int(chars.get("contactShadowCount") or 0)
+            active=int(chars.get("activeCharacterCount") or 0)
+            if count!=active or count<=0:
+                raise RuntimeError(f"Character contact-shadow count does not match visible characters in frame {index+1}: active={active}, shadows={count}")
+            if chars.get("contactShadowHardwareInstanced") is not True or int(chars.get("contactShadowDrawCalls") or 0)!=1:
+                raise RuntimeError(f"Character contacts are not one hardware-instanced draw in frame {index+1}: {chars}")
+            if chars.get("contactShadowFeetCoordinateAnchored") is not True:
+                raise RuntimeError(f"Character contacts lost authoritative feet-coordinate anchoring in frame {index+1}: {chars}")
+            if int(chars.get("contactShadowTerrainAlignedCount") or 0)!=count:
+                raise RuntimeError(f"Character contacts are not terrain-aligned in frame {index+1}: {chars}")
+            if chars.get("contactShadowTerrainGroundSampler")!="indexed-triangle-exact":
+                raise RuntimeError(f"Character contacts use the wrong terrain sampler in frame {index+1}: {chars}")
+            if float(chars.get("contactShadowGroundLift") or 0)<=0 or float(chars.get("contactShadowGroundLift") or 0)>0.05:
+                raise RuntimeError(f"Character contact lift is detached/excessive in frame {index+1}: {chars}")
+            if int(chars.get("contactShadowMaterialCount") or 0)!=1:
+                raise RuntimeError(f"Character contact-shadow material is not shared in frame {index+1}: {chars}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Contact grounding triggered visible-frame asset work in frame {index+1}: {preload}")
+            if int(chunks.get("visibleFrameTerrainRebuildCount") or 0)!=0:
+                raise RuntimeError(f"Contact grounding triggered visible-frame terrain rebuilds in frame {index+1}: {chunks}")
+            if chunks.get("oneEntityPerTile") is not False:
+                raise RuntimeError(f"Contact grounding introduced one-entity-per-tile rendering in frame {index+1}: {chunks}")
+            if quality.get("shadowsEnabled") is not False or str(quality.get("shadowQuality") or "off")!="off":
+                raise RuntimeError(f"Contact grounding accidentally enabled dynamic shadow maps in frame {index+1}: {quality}")
+            if active>=3:saw_multiple_characters=True
+            if index==2 and float(grounding.get("maxSlopeMagnitude") or 0)>=0:
+                saw_raised_character=True
+            max_frame_ms=max(max_frame_ms,float(perf.get("frameMs") or 0))
+            level=str(chars.get("contactShadowQuality") or quality.get("activeLevel") or "")
+            if level:
+                quality_opacity[level]=float(chars.get("contactShadowOpacity") or 0)
+            protagonist_locations.append(build.get("protagonistLocation"))
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Grounding evidence changed authoritative protagonist position: {protagonist_locations}")
+        if not saw_multiple_characters or not saw_building_contacts or not saw_tree_contacts or not saw_raised_character:
+            raise RuntimeError(f"Grounding coverage incomplete: multipleCharacters={saw_multiple_characters}, building={saw_building_contacts}, tree={saw_tree_contacts}, raisedCharacter={saw_raised_character}")
+        if max_static_shadow_draws<=0:
+            raise RuntimeError(f"Static contact-shadow draw-call evidence missing: {max_static_shadow_draws}")
+        if "low" not in quality_opacity or "high" not in quality_opacity or not (quality_opacity["low"] < quality_opacity["high"]):
+            raise RuntimeError(f"Contact-shadow quality scaling did not reduce low-quality opacity: {quality_opacity}")
+        actions=[str(frame.get("action") or "") for frame in frames[:9]]
+        for required in (
+            "grounding:flat-characters",
+            "grounding:raised-road-npc",
+            "grounding:building-foundation",
+            "grounding:tree-contact",
+            "grounding:high-quality",
+            "grounding:low-quality",
+        ):
+            if not any(required in action for action in actions):
+                raise RuntimeError(f"Required grounding scene {required} missing: {actions}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:9]]
+        if int(viewports[7].get("height") or 0)<=int(viewports[7].get("width") or 0):
+            raise RuntimeError(f"Phone portrait grounding evidence missing: {viewports[7]}")
+        if int(viewports[8].get("width") or 0)<=int(viewports[8].get("height") or 0):
+            raise RuntimeError(f"Phone landscape grounding evidence missing: {viewports[8]}")
         return
 
     if scenario == "wp-s003-009-002":
@@ -10849,12 +11009,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
