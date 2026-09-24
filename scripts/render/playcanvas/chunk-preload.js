@@ -142,6 +142,7 @@ function createManager({
   let idleChunksGenerated=0,idleCacheHits=0,idleStarts=0,idleStops=0;
   let lastIdleStartReason=null,lastIdleStopReason="not-started";
   let lastHeadroom=Object.freeze({ok:false,reason:"no-sample",frameMs:0,budgetMs:Number((1000/60).toFixed(3)),headroomMs:0,targetFps:60});
+  let headroomGoodChecks=0;
   let lastIdleWorkMs=0,totalIdleWorkMs=0,maxIdleWorkMs=0;
   let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,cacheReuses=0,frameBudgetSpikes=0,invalidations=0;
   let activations=0,deactivations=0,stateReuses=0,resourceCreations=0,resourceDestructions=0;
@@ -274,6 +275,7 @@ function createManager({
     clearIdleQueue();
     cancelIdleTimer();
     if(resetLevel)idleExpansionLevel=0;
+    headroomGoodChecks=0;
     if(wasActive)idleStops++;
     lastIdleStopReason=String(reason||"idle-stopped");
   }
@@ -317,6 +319,12 @@ function createManager({
     const headroom=headroomState();
     if(!headroom.ok){
       stopIdleExpansion(headroom.reason,true);
+      scheduleIdleCheck();
+      return;
+    }
+    headroomGoodChecks++;
+    if(headroomGoodChecks<2){
+      lastIdleStopReason="confirming-sustained-headroom";
       scheduleIdleCheck();
       return;
     }
@@ -621,6 +629,7 @@ function createManager({
       recentFrameTargetFps:lastHeadroom.targetFps,
       headroomAvailable:lastHeadroom.ok,
       headroomReason:lastHeadroom.reason,
+      headroomGoodChecks,
       lastIdleWorkMs:Number(lastIdleWorkMs.toFixed(3)),
       maxIdleWorkMs:Number(maxIdleWorkMs.toFixed(3)),
       averageIdleWorkMs:Number((idleChunksGenerated?totalIdleWorkMs/idleChunksGenerated:0).toFixed(3)),
