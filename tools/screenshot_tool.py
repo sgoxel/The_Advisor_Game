@@ -1272,63 +1272,32 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
         print(f"Zoom-out skipped: {reason}")
 
 
-def _reload_with_queued_campaign_start(driver, timeout: float = 45.0) -> str:
+def _queue_campaign_start_during_application_start(driver, timeout: float = 20.0) -> str:
     from selenium.webdriver.support.ui import WebDriverWait
 
-    script = r"""
-    (() => {
-      window.__WP_S003_008_002_EARLY_CLICK = {
-        installedAtMs: Date.now(),
-        clicked: false,
-        clickedAtMs: null,
-        gateBefore: null
-      };
-      const timer = setInterval(() => {
-        const button = document.querySelector('#newCampaignButton');
-        const gate = window.AppUI?.applicationStartupSnapshot?.();
-        if (!button || typeof button.onclick !== 'function' || gate?.state !== 'pending') return;
-        clearInterval(timer);
-        window.__WP_S003_008_002_EARLY_CLICK.gateBefore = gate;
-        window.__WP_S003_008_002_EARLY_CLICK.clickedAtMs = Date.now();
-        window.__WP_S003_008_002_EARLY_CLICK.clicked = true;
-        button.click();
-      }, 0);
-      setTimeout(() => clearInterval(timer), 30000);
-    })();
-    """
-    registration = driver.execute_cdp_cmd(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {"source": script},
-    )
-    identifier = registration.get("identifier") if isinstance(registration, dict) else None
-    try:
-        driver.refresh()
-        WebDriverWait(driver, timeout).until(
-            lambda d: bool(
-                d.execute_script(
-                    """
-                    return Boolean(
-                      window.__WP_S003_008_002_EARLY_CLICK?.clicked &&
-                      window.__WP_S003_008_002_EARLY_CLICK?.gateBefore?.state === 'pending'
-                    );
-                    """
-                )
-            )
+    proof = WebDriverWait(driver, timeout).until(
+        lambda d: d.execute_script(
+            """
+            if(window.__WP_S003_008_002_EARLY_CLICK?.clicked){
+              return window.__WP_S003_008_002_EARLY_CLICK;
+            }
+            const button=document.querySelector('#newCampaignButton');
+            const gate=window.AppUI?.applicationStartupSnapshot?.();
+            if(!button||typeof button.onclick!=='function'||gate?.state!=='pending')return null;
+            const result={
+              installedAtMs:Date.now(),
+              clicked:true,
+              clickedAtMs:Date.now(),
+              gateBefore:gate
+            };
+            window.__WP_S003_008_002_EARLY_CLICK=result;
+            button.click();
+            return result;
+            """
         )
-    finally:
-        if identifier:
-            try:
-                driver.execute_cdp_cmd(
-                    "Page.removeScriptToEvaluateOnNewDocument",
-                    {"identifier": identifier},
-                )
-            except Exception:
-                pass
-    proof = driver.execute_script(
-        "return window.__WP_S003_008_002_EARLY_CLICK || null"
     )
-    if not isinstance(proof, dict) or not proof.get("clicked"):
-        raise RuntimeError(f"Early campaign-start click was not exercised: {proof}")
+    if not isinstance(proof, dict) or not proof.get("clicked") or (proof.get("gateBefore") or {}).get("state")!="pending":
+        raise RuntimeError(f"Early campaign-start click was not exercised during pending startup: {proof}")
     return "scene-loading:queued-new-campaign-during-application-start"
 
 
@@ -1336,7 +1305,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     queued_start_action = None
     if scenario == "wp-s003-008-002":
         timeout = max(timeout, 180.0)
-        queued_start_action = _reload_with_queued_campaign_start(driver, min(timeout, 60.0))
+        queued_start_action = _queue_campaign_start_during_application_start(driver, min(timeout, 30.0))
     if scenario == "wp-s003-005":
         # Use a representative desktop/tablet-landscape viewport so the prepared
         # glTF/material proof is readable instead of being lost inside an ultra-wide
@@ -9369,7 +9338,7 @@ def take_screenshots(
 
             # Deterministic delay. The old utility used a random delay; CI evidence
             # should be reproducible, so use the midpoint of the supplied range.
-            delay = (wait_min + wait_max) / 2.0
+            delay = 0.0 if scenario == "wp-s003-008-002" else (wait_min + wait_max) / 2.0
             print(f"Opening: {browser_url}")
             print(f"Viewport: {width}x{height}")
             print(f"Waiting {delay:.2f}s before capture")
