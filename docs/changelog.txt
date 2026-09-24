@@ -1272,3 +1272,18 @@
 - Verified verification/suggestion documentation head 2df87f30c0672f4ca301b92ff029086878a4a70a through successful GitHub Pages run 36037279753.
 - Marked WP-S007-005 COMPLETED in docs/ROADMAP.md only after the required deployment gates succeeded.
 - Final classification: FUNCTIONAL. VISUAL: N/A. Functional verification score: 9.3/10.
+2026-09-24 21:19:50 +03:00 | WP-S007-006 | Regional + Settlement Aggregate Simulation with Lazy Revision Propagation final verification
+- Classification: FUNCTIONAL. VISUAL: N/A — regional/settlement aggregate authority, revision propagation, dormant history and reconciliation are functional state requirements rather than visual-quality requirements.
+- Added scripts/world/regional-settlement-simulation.js with deterministic scheduled aggregate systems: 48-fantasy-hour regional updates and 24-fantasy-hour settlement updates.
+- Runtime aggregate scheduling is bounded to 16 regions and 24 settlements per catalog, processes only due subsystem events, performs zero resident iteration and takes no render/camera inputs.
+- Regional CampaignDelta state now carries prosperity/stability, food supply, production, trade, employment, security, hazard, migration, infrastructure/maintenance pressure, parent-country revision seen, last simulated fantasy timestamp and bounded ledger history.
+- Settlement CampaignDelta state now carries population/capacity, food, prosperity, trade, production, employment, security, disease/hazard, migration, infrastructure/maintenance, growth/decline, fortification pressure, parent country/region/diplomacy revisions seen, last simulated fantasy timestamp and bounded ledger history.
+- Settlement aggregate writes expose reconciliation totals for later exact NPC materialization without creating NPC deltas.
+- SimulationTiers relevance materialization now asks RegionalSettlementSimulation to refresh a stale relevant settlement before WorldContext consumption; unchanged parents cause no aggregate write.
+- Dedicated browser evidence run 36040014516 succeeded on first implementation attempt at head aac206d9e9b6638e747bbcaba69e6b080419abb8.
+- PASS: agricultural and mining settlement aggregates both advanced while producing different food/production responses under the same country; controlled country revision changed no settlement delta until relevance refresh; the relevant settlement then consumed the new parent revision and advanced its aggregate delta.
+- PASS: a dormant settlement advanced aggregate history again after a controlled 30-fantasy-day absence, retained reconciliation data, created no NPC delta, and camera drag did not change authoritative state.
+- Evidence artifact 10826157334, digest sha256:b2973b301475d375484e9d209f3d9598ec27efe2073a3fef41edf7f8a3e3b5f4.
+- Tested implementation head aac206d9e9b6638e747bbcaba69e6b080419abb8 deployed successfully through GitHub Pages run 36039989404.
+- Functional verification score: 9.4/10. ROADMAP completion remains pending successful deployment verification of this documentation commit.
+
