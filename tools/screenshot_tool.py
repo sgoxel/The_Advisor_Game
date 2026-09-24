@@ -6722,6 +6722,23 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Stale building material binding in {profile}: {generator}")
             if building.get("sharedSurfaceTextures") is not True or int(building.get("gpuTextureCount") or 0)!=4:
                 raise RuntimeError(f"Building shared surface-texture budget mismatch in {profile}: {building}")
+            if str(building.get("uvPolicy") or "")!="full-texture-0-1":
+                raise RuntimeError(f"Building UV policy mismatch in {profile}: {building}")
+            bindings=generator.get("buildingSurfaceVariantBindings") or []
+            if len(bindings)<8:
+                raise RuntimeError(f"Building runtime binding evidence is incomplete in {profile}: {bindings}")
+            for binding in bindings:
+                if not str(binding.get("textureName") or ""):
+                    raise RuntimeError(f"Building material has no bound texture in {profile}: {binding}")
+                if (int(binding.get("textureWidth") or 0),int(binding.get("textureHeight") or 0))!=(want[1],want[1]):
+                    raise RuntimeError(f"Building material texture size mismatch in {profile}: {binding}")
+                scale=tuple(float(v) for v in (binding.get("uvScale") or []))
+                offset=tuple(float(v) for v in (binding.get("uvOffset") or []))
+                if scale!=(1.0,1.0) or offset!=(0.0,0.0):
+                    raise RuntimeError(f"Building material is not bound to full standalone UVs in {profile}: {binding}")
+                tint=tuple(float(v) for v in (binding.get("tint") or []))
+                if len(tint)!=3 or min(tint)<=0.0:
+                    raise RuntimeError(f"Building material tint evidence is invalid in {profile}: {binding}")
             pixel_stats=building.get("surfacePixelStats") or {}
             for surface_key in ("building:house-wall","building:special-wall","building:roof","building:door"):
                 sample=pixel_stats.get(surface_key) or {}
