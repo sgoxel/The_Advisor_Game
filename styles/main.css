@@ -96,6 +96,172 @@ input:focus{border-color:#92ad83}
 .gameplay-placeholder strong{color:#dfe4da;font-size:22px}
 .gameplay-placeholder span{font-size:13px}
 .gameplay-placeholder[hidden]{display:none}
+
+/* WP-S003-008-002 — startup scene loading / ready transition */
+.scene-loading-overlay{
+  position:absolute;
+  inset:0;
+  z-index:40;
+  display:grid;
+  place-items:center;
+  padding:clamp(14px,4vw,42px);
+  background:
+    radial-gradient(circle at 18% 22%,rgba(79,151,141,.22),transparent 34%),
+    radial-gradient(circle at 82% 18%,rgba(178,116,76,.20),transparent 31%),
+    radial-gradient(circle at 70% 78%,rgba(117,91,164,.18),transparent 36%),
+    linear-gradient(145deg,rgba(14,19,15,.96),rgba(24,31,22,.93));
+  opacity:1;
+  transition:opacity .28s ease,visibility .28s ease;
+  pointer-events:none;
+}
+.scene-loading-overlay[hidden]{display:none}
+.scene-loading-overlay.is-ready{opacity:0;visibility:hidden}
+.scene-loading-card{
+  width:min(460px,100%);
+  display:grid;
+  justify-items:center;
+  gap:10px;
+  padding:clamp(20px,4vw,38px);
+  border:1px solid rgba(199,222,185,.30);
+  border-radius:22px;
+  background:linear-gradient(160deg,rgba(24,31,22,.92),rgba(14,18,13,.84));
+  box-shadow:0 22px 70px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.05);
+  backdrop-filter:blur(9px);
+  text-align:center;
+}
+.scene-loading-emblem{
+  position:relative;
+  width:84px;
+  height:84px;
+  margin-bottom:2px;
+  border-radius:50%;
+}
+.scene-loading-emblem::before{
+  content:"";
+  position:absolute;
+  inset:24px;
+  border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#f4df9f,#9cc884 46%,#4f8f86 72%,#5d4f83);
+  box-shadow:0 0 28px rgba(135,187,142,.38);
+  animation:scene-loading-heart 1.8s ease-in-out infinite;
+}
+.scene-loading-emblem span{
+  position:absolute;
+  inset:6px;
+  border-radius:50%;
+  border:2px solid transparent;
+  border-top-color:#e9c66e;
+  border-right-color:#76b6a8;
+  animation:scene-loading-orbit 2.4s linear infinite;
+}
+.scene-loading-emblem span:nth-child(2){
+  inset:13px;
+  border-top-color:#9f8bd5;
+  border-right-color:#d08362;
+  animation-duration:1.8s;
+  animation-direction:reverse;
+}
+.scene-loading-emblem span:nth-child(3){
+  inset:20px;
+  border-top-color:#93c476;
+  border-right-color:#d8b67b;
+  animation-duration:1.35s;
+}
+.scene-loading-title{
+  max-width:100%;
+  overflow-wrap:anywhere;
+  font-size:clamp(24px,4vw,38px);
+  line-height:1.05;
+  letter-spacing:.02em;
+  background:linear-gradient(90deg,#f2d47e,#9fd083,#72b7b0,#b29adf,#e49b77,#f2d47e);
+  background-size:220% auto;
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  animation:scene-loading-spectrum 3.6s linear infinite;
+}
+.scene-loading-phase{
+  max-width:36ch;
+  color:#dce6d6;
+  font-size:clamp(12px,1.8vw,15px);
+  line-height:1.45;
+}
+.scene-loading-trail{display:flex;align-items:center;justify-content:center;gap:7px;height:18px}
+.scene-loading-trail i{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#9fc88c;
+  box-shadow:0 0 10px rgba(159,200,140,.45);
+  animation:scene-loading-dot 1.2s ease-in-out infinite;
+}
+.scene-loading-trail i:nth-child(2){background:#72b4ae;animation-delay:.12s}
+.scene-loading-trail i:nth-child(3){background:#aa92d2;animation-delay:.24s}
+.scene-loading-trail i:nth-child(4){background:#db9c70;animation-delay:.36s}
+.scene-loading-retry{
+  margin-top:4px;
+  min-width:138px;
+  border-color:#b86d68;
+  background:#6e3734;
+  color:#fff1ee;
+  pointer-events:auto;
+}
+.scene-loading-retry:hover:not(:disabled){background:#82413d}
+.scene-loading-overlay[data-state="error"]{
+  pointer-events:auto;
+  background:
+    radial-gradient(circle at 50% 30%,rgba(154,74,67,.22),transparent 42%),
+    linear-gradient(145deg,rgba(24,16,15,.97),rgba(31,22,18,.94));
+}
+.scene-loading-overlay[data-state="error"] .scene-loading-card{border-color:rgba(219,135,122,.5)}
+.scene-loading-overlay[data-state="error"] .scene-loading-emblem span{animation:none;border-color:rgba(205,105,93,.55)}
+.scene-loading-overlay[data-state="error"] .scene-loading-emblem::before{
+  animation:none;
+  background:radial-gradient(circle at 35% 30%,#f2c4a6,#c66f61 56%,#743d44);
+  box-shadow:0 0 28px rgba(188,89,79,.30);
+}
+.scene-loading-overlay[data-state="error"] .scene-loading-title{
+  background:linear-gradient(90deg,#ffd09d,#ee8d7d,#d8a4bc);
+  background-size:100% auto;
+  -webkit-background-clip:text;
+  background-clip:text;
+  animation:none;
+}
+.scene-loading-overlay.scene-loading-proof-reduced .scene-loading-emblem::before,
+.scene-loading-overlay.scene-loading-proof-reduced .scene-loading-emblem span,
+.scene-loading-overlay.scene-loading-proof-reduced .scene-loading-title,
+.scene-loading-overlay.scene-loading-proof-reduced .scene-loading-trail i{animation:none!important}
+
+@keyframes scene-loading-orbit{to{transform:rotate(360deg)}}
+@keyframes scene-loading-heart{0%,100%{transform:scale(.92);opacity:.82}50%{transform:scale(1.08);opacity:1}}
+@keyframes scene-loading-spectrum{to{background-position:220% center}}
+@keyframes scene-loading-dot{0%,100%{transform:translateY(2px);opacity:.45}50%{transform:translateY(-4px);opacity:1}}
+
+@media (prefers-reduced-motion:reduce){
+  .scene-loading-overlay{transition:none}
+  .scene-loading-emblem::before,
+  .scene-loading-emblem span,
+  .scene-loading-title,
+  .scene-loading-trail i{animation:none!important}
+}
+@media (max-width:560px){
+  .scene-loading-card{width:min(360px,100%);padding:22px 18px;border-radius:18px}
+  .scene-loading-emblem{width:68px;height:68px}
+  .scene-loading-emblem::before{inset:20px}
+  .scene-loading-title{font-size:25px}
+  .scene-loading-phase{font-size:12px}
+}
+@media (max-height:430px) and (orientation:landscape){
+  .scene-loading-overlay{padding:8px 14px}
+  .scene-loading-card{width:min(440px,76vw);grid-template-columns:auto minmax(0,1fr);justify-items:start;align-items:center;gap:3px 13px;padding:10px 14px;border-radius:14px;text-align:left}
+  .scene-loading-emblem{grid-row:1/4;width:54px;height:54px;margin:0}
+  .scene-loading-emblem::before{inset:16px}
+  .scene-loading-title{font-size:20px;line-height:1.05}
+  .scene-loading-phase{font-size:10px;line-height:1.25}
+  .scene-loading-trail{justify-content:flex-start;height:12px;gap:5px}
+  .scene-loading-trail i{width:5px;height:5px}
+  .scene-loading-retry{grid-column:2;min-width:110px;margin-top:2px;padding:5px 8px;font-size:10px}
+}
 .protagonist-marker{
   position:absolute;
   left:50%;
