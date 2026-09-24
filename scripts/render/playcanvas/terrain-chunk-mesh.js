@@ -16,7 +16,7 @@ function signed01(seed,x,z,salt){
 }
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 
-function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedProvider=()=>"",registerRoof=()=>{}}={}){
+function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildingSurfaceAtlasProvider=()=>null,seedProvider=()=>"",registerRoof=()=>{}}={}){
   if(!pc||!device||!parent||!material)throw new Error("PlayCanvasTerrainChunkMesh requires pc/device/parent/material");
   material.vertexColors=true;
   material.diffuseVertexColor=true;
@@ -26,6 +26,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedPro
   material.update();
 
   const presentationMaterials=new Map();
+  const surfaceBoundMaterials=new Set();
   const primitiveMeshes=new Map();
   const baseBox=new pc.BoxGeometry();
   let creations=0,destroys=0,totalBuildMs=0,maxBuildMs=0;
@@ -33,15 +34,36 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedPro
   let staticBatchMeshCreations=0,staticBatchSourcePrimitiveCount=0,instancedGroupCreations=0,instancedObjectCount=0;
   let instancingBufferUpdates=0,frustumCulledMeshInstances=0;
 
-  function presentationMaterial(name,r,g,b,gloss=0.10){
-    if(presentationMaterials.has(name))return presentationMaterials.get(name);
-    const m=new pc.StandardMaterial();
-    m.name="chunk-"+name;
+  function applyBuildingSurfaceMaterial(m,name,r,g,b){
+    const atlas=buildingSurfaceAtlasProvider?.()||null;
+    const state=atlas?.stats?.()||null;
+    const rect=state?.ready?atlas?.rectForMaterial?.(name):null;
+    const texture=state?.ready?atlas?.texture?.():null;
+    if(rect&&texture){
+      m.diffuseMap=texture;
+      m.diffuse.set(1,1,1);
+      if(m.diffuseMapTiling?.set)m.diffuseMapTiling.set(rect.uScale,rect.vScale);
+      else m.diffuseMapTiling=new pc.Vec2(rect.uScale,rect.vScale);
+      if(m.diffuseMapOffset?.set)m.diffuseMapOffset.set(rect.u0,rect.v0);
+      else m.diffuseMapOffset=new pc.Vec2(rect.u0,rect.v0);
+      surfaceBoundMaterials.add(name);
+      return true;
+    }
+    m.diffuseMap=null;
     m.diffuse.set(r,g,b);
-    m.gloss=gloss;
-    m.metalness=0;
+    return false;
+  }
+  function presentationMaterial(name,r,g,b,gloss=0.10){
+    let m=presentationMaterials.get(name)||null;
+    if(!m){
+      m=new pc.StandardMaterial();
+      m.name="chunk-"+name;
+      m.gloss=gloss;
+      m.metalness=0;
+      presentationMaterials.set(name,m);
+    }
+    applyBuildingSurfaceMaterial(m,name,r,g,b);
     m.update();
-    presentationMaterials.set(name,m);
     return m;
   }
   function primitive(root,name,type,position,scale,mat,euler=null){
@@ -160,11 +182,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedPro
     return new Map();
   }
   function batchFor(collector,key,mat){
-    if(!collector.has(key))collector.set(key,{key,material:mat,positions:[],normals:[],indices:[],sourcePrimitiveCount:0});
+    if(!collector.has(key))collector.set(key,{key,material:mat,positions:[],normals:[],uvs:[],indices:[],sourcePrimitiveCount:0});
     return collector.get(key);
   }
   function appendBoxBatch(batch,position,scale,eulerZ=0){
-    const p=baseBox.positions||[],n=baseBox.normals||[],idx=baseBox.indices||[];
+    const p=baseBox.positions||[],n=baseBox.normals||[],uv=baseBox.uvs||[],idx=baseBox.indices||[];
     const base=batch.positions.length/3;
     const sx=Number(scale[0]),sy=Number(scale[1]),sz=Number(scale[2]);
     const tx=Number(position[0]),ty=Number(position[1]),tz=Number(position[2]);
@@ -174,6 +196,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedPro
       batch.positions.push(x*c-y*s+tx,x*s+y*c+ty,z+tz);
       const nx=n[i],ny=n[i+1],nz=n[i+2];
       batch.normals.push(nx*c-ny*s,nx*s+ny*c,nz);
+      const uvIndex=(i/3)*2;
+      batch.uvs.push(Number(uv[uvIndex]??0),Number(uv[uvIndex+1]??0));
     }
     for(const value of idx)batch.indices.push(base+value);
     batch.sourcePrimitiveCount++;
@@ -186,6 +210,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedPro
       const mesh=new pc.Mesh(device);
       mesh.setPositions(batch.positions);
       mesh.setNormals(batch.normals);
+      if(batch.uvs.length===(batch.positions.length/3)*2)mesh.setUvs(0,batch.uvs);
       mesh.setIndices(batch.indices);
       mesh.update();
       const batchEntity=new pc.Entity("ChunkStaticBatch_"+String(batch.key).replace(/[^a-z0-9_-]+/gi,"-"));
@@ -498,6 +523,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedPro
       savedDrawCalls,
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       buildingPresentationCount:buildings.length,
+      buildingTexturedMaterialCount:surfaceBoundMaterials.size,
+      buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
+      buildingSurfaceAtlas:buildingSurfaceAtlasProvider?.()?.stats?.()||null,
+      staticBatchUvEnabled:staticBatches.every(item=>Boolean(item.mesh)),
       roofProfileCount:roofProfiles.length,
       roofNormalProfileCount:roofProfiles.filter(item=>item.source!=="special").length,
       roofSpecialProfileCount:roofProfiles.filter(item=>item.source==="special").length,
@@ -548,6 +577,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedPro
       instancedGroupCreations,instancedObjectCount,instancingBufferUpdates,
       frustumCulledMeshInstances,
       sharedPresentationMaterialCount:presentationMaterials.size,
+      buildingTexturedMaterialCount:surfaceBoundMaterials.size,
+      buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
+      buildingSurfaceAtlas:buildingSurfaceAtlasProvider?.()?.stats?.()||null,
       oneEntityPerChunk:true,
       oneEntityPerTile:false,
       sharedMaterial:true,

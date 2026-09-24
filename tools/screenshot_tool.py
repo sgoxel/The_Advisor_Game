@@ -81,6 +81,7 @@ SCENARIOS = {
     "wp-s003-004-004",
     "wp-s003-005-002",
     "wp-s003-005-003",
+    "wp-s003-005-004",
     "wp-s003-006-002",
     "wp-s003-006-001",
     "wp-s003-006",
@@ -140,6 +141,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-004-004": 11,
     "wp-s003-005-002": 4,
     "wp-s003-005-003": 7,
+    "wp-s003-005-004": 7,
     "wp-s003-006-002": 8,
     "wp-s003-006-001": 14,
     "wp-s003-006": 7,
@@ -1237,7 +1239,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=True
                 )
-            if scenario == "wp-s003-005-003":
+            if scenario in {"wp-s003-005-003", "wp-s003-005-004"}:
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=128, directional=True, background=False
                 )
@@ -1246,7 +1248,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     driver, radius=1, cache=256, directional=True, background=True
                 )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1273,6 +1275,19 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               atlas.sharedAtlas === true &&
                               Number(atlas.gpuTextureCount || 0) === 1 &&
                               Number(chunks.texturedBlockCount || 0) > 0 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-005-004' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            const atlas=chunks?.buildingSurfaceAtlas || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              Number(chunks.visibleChunkCount || 0) > 0 &&
+                              Number(chunks.buildingPresentationCount || 0) > 0 &&
+                              atlas.ready === true &&
+                              atlas.sharedAtlas === true &&
+                              Number(atlas.gpuTextureCount || 0) === 1 &&
                               Number(renderer?.terrainPreload?.queueDepth || 0) === 0
                             );
                           })()) &&
@@ -4160,6 +4175,27 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         driver.set_window_size(1280, 800)
         returned = _set_camera_center_and_render_active(driver, 0, 0)
         return returned + "+" + _set_camera_zoom_and_render(driver, 1.00)
+    if scenario == "wp-s003-005-004":
+        if frame_index == 0:
+            _set_building_proof_state(driver, "outside")
+            return "building-textures:outside+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 1:
+            return "building-textures:outside+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 2:
+            return "building-textures:detail+" + _set_camera_zoom_and_render(driver, 2.00)
+        if frame_index == 3:
+            zoomed=_set_camera_zoom_and_render(driver, 1.00)
+            return zoomed+"+"+_set_building_proof_state(driver, "inside")
+        if frame_index == 4:
+            driver.set_window_size(390, 844)
+            _set_building_proof_state(driver, "outside")
+            return "building-textures:phone-portrait+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 5:
+            driver.set_window_size(844, 390)
+            return "building-textures:phone-landscape+" + _set_camera_zoom_and_render(driver, 0.50)
+        driver.set_window_size(1280, 800)
+        _set_building_proof_state(driver, "outside")
+        return "building-textures:return+" + _set_camera_zoom_and_render(driver, 1.00)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
@@ -4381,6 +4417,53 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-005-004":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-005-004 requires seven building-surface evidence frames")
+        expected_zooms=("0.50×","1.00×","2.00×","1.00×","0.50×","0.50×","1.00×")
+        locations=[]
+        for index,frame in enumerate(frames[:7]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            atlas=chunks.get("buildingSurfaceAtlas") or {}
+            generator=chunks.get("generator") or {}
+            preload=gpu.get("terrainPreload") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Building texture zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True or atlas.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Building surface presentation changed Simulation authority in frame {index+1}: {gpu}")
+            if atlas.get("ready") is not True or atlas.get("sharedAtlas") is not True or int(atlas.get("gpuTextureCount") or 0)!=1:
+                raise RuntimeError(f"Shared building surface atlas is not ready in frame {index+1}: {atlas}")
+            if int(atlas.get("sourceFamilyCount") or 0)!=4 or int(atlas.get("pngAttemptCount") or 0)!=4:
+                raise RuntimeError(f"Building surface family/PNG-first policy mismatch in frame {index+1}: {atlas}")
+            if int(atlas.get("svgFallbackCount") or 0)!=4 or len(atlas.get("svgFallbackKeys") or [])!=4:
+                raise RuntimeError(f"SVG fallback not proven for all building surface families in frame {index+1}: {atlas}")
+            if atlas.get("colorFallbackKeys"):
+                raise RuntimeError(f"Building surface fell through to color fallback in frame {index+1}: {atlas.get('colorFallbackKeys')}")
+            if atlas.get("preparationOnly") is not True or int(atlas.get("frameDecodeCount") or 0)!=0 or int(atlas.get("frameRasterizeCount") or 0)!=0:
+                raise RuntimeError(f"Building asset preparation leaked into visible frame path in frame {index+1}: {atlas}")
+            names=set(chunks.get("buildingTexturedMaterialNames") or generator.get("buildingTexturedMaterialNames") or [])
+            required={"building-house-wall","building-special-wall","building-roof","building-door"}
+            if not required.issubset(names):
+                raise RuntimeError(f"Not all building material families are texture-bound in frame {index+1}: names={sorted(names)}")
+            if int(chunks.get("roofNormalProfileCount") or 0)<=0 or int(chunks.get("roofSpecialProfileCount") or 0)<=0:
+                raise RuntimeError(f"Normal and special building coverage missing in frame {index+1}: {chunks}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Visible-frame building asset work detected in frame {index+1}: {preload}")
+            locations.append(build.get("protagonistLocation"))
+        if len(set(locations))!=1 or not locations[0]:
+            raise RuntimeError(f"Building texture evidence changed protagonist authority: {locations}")
+        cutaway=frames[3].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer",{}).get("buildingPresentation") or {}
+        if cutaway.get("cutawayActive") is not True or int(cutaway.get("hiddenRoofCount") or 0)!=2 or not cutaway.get("cutawayBuildingId"):
+            raise RuntimeError(f"Building texture cutaway did not preserve local roof pair behavior: {cutaway}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:7]]
+        if int(viewports[4].get("height") or 0)<=int(viewports[4].get("width") or 0):
+            raise RuntimeError(f"Phone portrait building-texture evidence missing: {viewports[4]}")
+        if int(viewports[5].get("width") or 0)<=int(viewports[5].get("height") or 0):
+            raise RuntimeError(f"Phone landscape building-texture evidence missing: {viewports[5]}")
+        return
+
     if scenario == "wp-s003-005-003":
         if len(frames) < 7:
             raise RuntimeError("wp-s003-005-003 requires seven terrain-texture evidence frames")
