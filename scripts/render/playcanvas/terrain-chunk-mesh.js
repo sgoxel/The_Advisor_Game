@@ -38,14 +38,32 @@ function heightfieldSegments(size){
 function heightfieldStep(size){return Math.max(1,Math.trunc(Number(size)||16)/heightfieldSegments(size));}
 function referenceElevation(seed){
   const key=String(seed||"");
+  if(!key)return 0;
   if(heightReferenceCache.has(key))return heightReferenceCache.get(key);
   const value=Number(window.GeographyFoundation?.environment?.(key,"0","0")?.elevationMeters||0);
   heightReferenceCache.set(key,value);
   return value;
 }
+function heightfieldColor(seed,x,z,value){
+  const text=String(value||"").trim();
+  const match=/^#([0-9a-f]{6})$/i.exec(text);
+  if(match){
+    const n=parseInt(match[1],16);
+    return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255,1];
+  }
+  const noise=signed01(seed,x,z,"color");
+  return [
+    clamp(0.29+noise*0.018,0.20,0.40),
+    clamp(0.42+noise*0.025,0.30,0.55),
+    clamp(0.215+noise*0.012,0.14,0.30),
+    1
+  ];
+}
 function terrainHeightVertex(seed,xValue,yValue){
+  const seedKey=String(seed||"");
   const x=String(xValue),y=String(yValue);
-  const cacheKey=String(seed||"")+"|"+x+"|"+y;
+  if(!seedKey)return Object.freeze({height:0,type:"grass",color:[0.29,0.42,0.215,1],elevationMeters:0});
+  const cacheKey=seedKey+"|"+x+"|"+y;
   const cached=heightVertexCache.get(cacheKey);
   if(cached){
     heightVertexCacheHits++;
@@ -69,7 +87,7 @@ function terrainHeightVertex(seed,xValue,yValue){
   const sample=Object.freeze({
     height:clamp(height,-3.4,3.4),
     type,
-    color:parseHexColor(tile?.color)||sampleColor(seed,x,y),
+    color:heightfieldColor(seed,x,y,tile?.color),
     elevationMeters:elevation
   });
   heightVertexCache.set(cacheKey,sample);
@@ -80,6 +98,7 @@ function terrainHeightVertex(seed,xValue,yValue){
   return sample;
 }
 function terrainHeightAtTile(seed,xValue,yValue,size=16,offsetX=0,offsetY=0){
+  if(!String(seed||""))return 0;
   heightGroundSampleCalls++;
   const step=heightfieldStep(size);
   const x=Number(xValue)+0.5+Number(offsetX||0);
