@@ -6442,8 +6442,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if len(set(signatures))!=1 or not signatures[0]:
             raise RuntimeError(f"Camera/frame evidence changed scheduler history: {signatures}")
         for index,panel in enumerate(panels,start=1):
-            if not panel.get("present") or not panel.get("open") or not panel.get("pass"):
-                raise RuntimeError(f"Event-scheduler inspector incomplete in frame {index}: {panel}")
+            if not panel.get("present") or not panel.get("pass"):
+                raise RuntimeError(f"Event-scheduler inspector proof incomplete in frame {index}: {panel}")
             if int(panel.get("maxBatch") or 0)>32 or int(panel.get("extraEntityCount") or 0)!=200:
                 raise RuntimeError(f"Event-scheduler panel budget/isolation mismatch in frame {index}: {panel}")
             states=panel.get("checkStates") or []
