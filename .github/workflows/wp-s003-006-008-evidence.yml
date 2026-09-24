@@ -5,17 +5,14 @@ on:
     branches: [main]
     paths:
       - .github/workflows/wp-s003-006-008-evidence.yml
-      - scripts/render/playcanvas/app.js
-      - scripts/render/playcanvas/terrain-texture-atlas.js
-      - tools/screenshot_tool.py
 
 permissions:
   contents: read
   issues: write
 
 concurrency:
-  group: wp-s003-006-008-evidence
-  cancel-in-progress: true
+  group: wp-s003-006-008-evidence-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   capture:
