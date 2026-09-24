@@ -801,3 +801,13 @@
 - Dedicated Visual Evidence run 35935407511 passed on tested SHA 9d8433d8b071dec6a7652dd4ce7547194e263a4f; protagonist/resident shared schema, deterministic IDs, uncertainty preservation, traceability, advice references, storage round-trip, actual page reload persistence and world-position isolation all passed.
 - All 4 fresh screenshots were directly inspected. The protagonist and resident timelines are readable with no major clipping, overlap or broken layout; uncertain rumor state and reload persistence are visibly demonstrated. VISUAL 8.5/10 PASS.
 - GitHub Pages run 35935394946 successfully deployed the tested implementation SHA.
+2026-09-24 03:20 +03:00 | WP-S005-003 | Local Dialogue, Social Context + Trust Framing
+- Added deterministic DialogueContext resolution for Starting Village resident conversations/advice responses using stable speaker/listener identity, authoritative DailyActivity location/activity, explicit social-state snapshots and fantasy time.
+- Added context-derived tone framing for friendly, guarded, formal, urgent and private cases without changing factual content; working, traveling and sleeping states now produce distinct dialogue context.
+- Integrated WP-S005-002 CharacterMemory grounding: factual response text comes from a stable remembered entry when available, while unsupported topics explicitly refuse to invent facts.
+- Kept dialogue presentation-only: no relationship persistence, authority, resource creation or world mutation is introduced; persistent social state remains reserved for WP-S005-005.
+- Added a Development Mode context scenario inspector showing speaker/listener, location, activity, tone, fantasy time, six social-state fields, response grounding and authority boundary.
+- First dedicated evidence run 35937546366 exposed a screenshot-tool frame-0 setup omission; tools/screenshot_tool.py was corrected in 124c0bb6fd474abb187963194add9dd11df2ddee and rerun.
+- Corrected Visual Evidence run 35937675154 passed on exact head 124c0bb6fd474abb187963194add9dd11df2ddee. All five runtime frames passed identity/context, social normalization, meaningful activity framing, deterministic tone sequence, memory grounding and world-authority isolation.
+- All 5 fresh screenshots were directly inspected: friendly tavern, guarded home, formal work, urgent travel and private sleep frames are readable with no major clipping/overlap/broken layout. VISUAL 8.7/10 PASS.
+- GitHub Pages run 35937660792 successfully deployed the tested head.
