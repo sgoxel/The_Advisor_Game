@@ -347,6 +347,40 @@ input:focus{border-color:#92ad83}
   .region-profile-comparison li>span:nth-of-type(n+4){display:none}
 }
 
+.country-relations-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+.country-relations-toolbar label{color:#aab5a3;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.country-relations-toolbar select{min-width:min(520px,70vw);border:1px solid #465040;border-radius:7px;background:#141914;color:#e8eee3;padding:7px 9px;font:inherit;font-size:12px}
+.country-relations-grid strong{white-space:normal;overflow-wrap:anywhere}
+.country-relations-section{margin:10px 0;border:1px solid #343d31;border-radius:8px;background:#171c16;padding:9px}
+.country-relations-section h4{margin:0 0 8px;color:#dfe7d9;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.country-relations-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.diplomacy-metric{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 7px;border-radius:6px;background:#111510;padding:7px}
+.diplomacy-metric span{color:#a8b3a2;font-size:8px;font-weight:700;text-transform:uppercase}
+.diplomacy-metric strong{color:#e3eadf;font-size:9px}
+.diplomacy-metric i{grid-column:1/-1;display:block;height:5px;border-radius:999px;background:#252c22;overflow:hidden}
+.diplomacy-metric i b{display:block;height:100%;border-radius:999px;background:#819775}
+.country-relations-agreements{display:flex;flex-wrap:wrap;gap:6px}
+.diplomacy-agreement{border:1px solid #424b3e;border-radius:999px;padding:4px 8px;font-size:8px;text-transform:uppercase}
+.diplomacy-agreement.active{background:#1d2b1d;color:#d9efd1;border-color:#61785b}
+.diplomacy-agreement.inactive{background:#111510;color:#86917f}
+.country-relations-directions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.country-relations-directions article{display:grid;gap:3px;border-radius:6px;background:#111510;padding:8px}
+.country-relations-directions strong{color:#dde6d8;font-size:9px}
+.country-relations-directions small{color:#9ba696;font-size:8px;line-height:1.35}
+.country-relations-comparison{list-style:none;display:grid;gap:5px;margin:0;padding:0}
+.country-relations-comparison li{display:grid;grid-template-columns:minmax(260px,2fr) repeat(4,minmax(55px,.45fr));gap:5px;align-items:center;border:1px solid #30382e;border-radius:6px;background:#111510;padding:6px 7px}
+.country-relations-comparison li.selected{border-color:#718667;background:#192018}
+.country-relations-comparison li>div{display:grid;gap:2px;min-width:0}
+.country-relations-comparison strong{color:#dce4d7;font-size:9px}
+.country-relations-comparison small{color:#8f9a89;font-size:7px}
+.country-relations-comparison li>span{color:#b9c4b3;font:7px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;text-align:right}
+@media (max-width:900px){
+  .country-relations-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .country-relations-directions{grid-template-columns:1fr}
+  .country-relations-comparison li{grid-template-columns:minmax(190px,1fr) repeat(3,minmax(50px,.4fr))}
+  .country-relations-comparison li>span:nth-of-type(n+4){display:none}
+}
+
 /* FULL-SCREEN POPUPS */
 .fullscreen-popup{position:fixed;inset:0;z-index:1000;display:grid;grid-template-rows:auto minmax(0,1fr);background:#151713}
 .fullscreen-popup[hidden]{display:none}

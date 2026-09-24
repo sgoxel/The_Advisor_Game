@@ -99,6 +99,7 @@ SCENARIOS = {
     "wp-s006-001",
     "wp-s006-002",
     "wp-s006-003",
+    "wp-s006-004",
     "playcanvas-root-cutover",
 }
 
@@ -150,6 +151,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s006-001": 5,
     "wp-s006-002": 5,
     "wp-s006-003": 5,
+    "wp-s006-004": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -360,6 +362,43 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        countryRelations: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.CountryRelations?.proof
+              ? window.CountryRelations.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        countryRelationsPanel: (() => {
+          const root=document.querySelector("#countryRelationsProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            relationIndex:Number(root.dataset.relationIndex||0),
+            relationId:root.dataset.relationId||null,
+            revision:root.dataset.revision||null,
+            kind:root.dataset.kind||null,
+            state:root.dataset.state||null,
+            score:Number(root.dataset.score||0),
+            trade:Number(root.dataset.trade||0),
+            tension:Number(root.dataset.tension||0),
+            openness:Number(root.dataset.openness||0),
+            lowCountryId:root.dataset.lowCountryId||null,
+            highCountryId:root.dataset.highCountryId||null,
+            lowTradeOpenness:Number(root.dataset.lowTradeOpenness||0),
+            highTradeOpenness:Number(root.dataset.highTradeOpenness||0),
+            lowMilitary:Number(root.dataset.lowMilitary||0),
+            highMilitary:Number(root.dataset.highMilitary||0),
+            pair:root.querySelector("#countryRelationsPair")?.textContent?.trim()||null,
+            border:root.querySelector("#countryRelationsBorder")?.textContent?.trim()||null,
+            agreementCount:root.querySelectorAll("#countryRelationsAgreements .diplomacy-agreement").length,
+            directionCount:root.querySelectorAll("#countryRelationsDirections article").length,
+            comparisonRows:root.querySelectorAll("#countryRelationsComparison li").length,
+          };
         })(),
         regionProfile: (() => {
           try {
@@ -2026,6 +2065,66 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_country_relations_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const diplomacy=window.CountryRelations;
+        if(!campaign?.seed||!diplomacy||!window.CountryProfile||!window.PoliticalGeography){
+          return {ok:false,error:'country-relations-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=diplomacy.proof(seed);
+        if(!proof.pass)return {ok:false,error:'country-relations-proof-failed',proof};
+        const count=proof.representatives?.length||0;
+        if(count<4)return {ok:false,error:'country-relations-representatives-missing',count};
+        const requested=index===4?0:index%Math.min(count,4);
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#countryRelationsProof');
+        if(!section||!root)return {ok:false,error:'country-relations-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=diplomacy.renderDebugPanel(seed,requested,root);
+        root.scrollIntoView({block:'start'});
+        const r=rendered?.relation;
+        const low=r?.countries?.[r?.pair?.lowCountryId];
+        const high=r?.countries?.[r?.pair?.highCountryId];
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,requested,count,
+          relationId:r?.id||null,
+          revision:r?.revision||null,
+          kind:rendered?.selected?.reason||null,
+          state:r?.shared?.state||null,
+          score:r?.shared?.relationshipScore??null,
+          trade:r?.shared?.tradeAccess??null,
+          tension:r?.shared?.militaryTension??null,
+          openness:r?.shared?.borderOpenness??null,
+          lowCountryId:r?.pair?.lowCountryId||null,
+          highCountryId:r?.pair?.highCountryId||null,
+          lowProfileRevision:low?.profileRevision||null,
+          highProfileRevision:high?.profileRevision||null,
+          lowTradeOpenness:low?.tradeOpenness??null,
+          highTradeOpenness:high?.tradeOpenness??null,
+          lowMilitary:low?.militaryEmphasis??null,
+          highMilitary:high?.militaryEmphasis??null,
+          warState:r?.shared?.warState??null,
+          agreements:r?.agreements||null,
+          directional:r?.directional||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Country relations proof frame failed: {result}")
+    return (
+        f"country-relations:{frame_index}:{result.get('kind')}:{result.get('state')}:"
+        f"score={result.get('score')}:trade={result.get('trade')}:tension={result.get('tension')}"
+    )
+
+
 def _show_region_profile_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -3347,7 +3446,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3493,6 +3592,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_region_profile_proof(driver,frame_index)
         return _show_region_profile_proof(driver,frame_index)
+    if scenario == "wp-s006-004":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_country_relations_proof(driver,frame_index)
+        return _show_country_relations_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3527,6 +3631,59 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s006-004":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s006-004 requires five country-relations evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("countryRelations") or {} for build in builds]
+        panels=[build.get("countryRelationsPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Country-relations evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Country diplomacy mutated Protagonist world position: {protagonists}")
+        required={
+            "pass":True,"deterministic":True,"reversedSymmetric":True,"timeIndependent":True,
+            "numericValid":True,"agreementSymmetry":True,"directionalSupported":True,
+            "orientationSeparated":True,"mercantileNotUniversal":True,"militaristicNotWar":True,
+            "adjacencyContext":True,"lazyQueryable":True,"overlayReady":True,
+            "liveDiplomacy":False,"warDeclarations":False,"treatyNegotiation":False,
+            "countryProfileMutation":False,"politicalMutation":False,"renderDependency":False,"fullWorldMaterialized":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Country-relations proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("relationCount") or 0)<8 or int(proof.get("representativeCount") or 0)<4:
+                raise RuntimeError(f"Country-relations sample set too small in frame {index}: {proof}")
+            if int(proof.get("tradeFriendlyCount") or 0)<1 or int(proof.get("tenseRivalCount") or 0)<1 or int(proof.get("stateCount") or 0)<3:
+                raise RuntimeError(f"Country-relations variety insufficient in frame {index}: {proof}")
+
+        first_four=panels[:4]
+        if len({panel.get("relationId") for panel in first_four})<3:
+            raise RuntimeError(f"Country-relations evidence did not inspect three pairs: {first_four}")
+        if "trade-friendly" not in {panel.get("kind") for panel in first_four}:
+            raise RuntimeError(f"Country-relations evidence lacks trade-friendly pair: {first_four}")
+        if "tense-rival" not in {panel.get("kind") for panel in first_four}:
+            raise RuntimeError(f"Country-relations evidence lacks tense/rival pair: {first_four}")
+        for panel in panels:
+            if not panel.get("open") or int(panel.get("comparisonRows") or 0)<4:
+                raise RuntimeError(f"Country-relations panel/comparison incomplete: {panel}")
+            if int(panel.get("agreementCount") or 0)!=4 or int(panel.get("directionCount") or 0)!=2:
+                raise RuntimeError(f"Country-relations agreements/directions incomplete: {panel}")
+        if panels[0].get("kind")!="trade-friendly":
+            raise RuntimeError(f"First relation is not trade-friendly: {panels[0]}")
+        if panels[1].get("kind")!="tense-rival":
+            raise RuntimeError(f"Second relation is not tense/rival: {panels[1]}")
+        if panels[0].get("trade",0)<0.60 or panels[1].get("tension",0)<0.58:
+            raise RuntimeError(f"Trade/tension evidence thresholds not met: {panels[:2]}")
+        if panels[0].get("relationId")!=panels[4].get("relationId") or panels[0].get("revision")!=panels[4].get("revision"):
+            raise RuntimeError("Country relation changed after reload")
+        if json.dumps(proofs[0],sort_keys=True)!=json.dumps(proofs[4],sort_keys=True):
+            raise RuntimeError("Country-relations foundation changed after reload")
+        return
+
     if scenario == "wp-s006-003":
         if len(frames) < 5:
             raise RuntimeError("wp-s006-003 requires five region-profile evidence frames")
@@ -6224,12 +6381,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

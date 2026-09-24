@@ -940,6 +940,48 @@
     </div>
   </details>
 
+  <details id="countryRelationsProof">
+    <summary>WP-S006-004 Country Relations + Diplomacy Baseline</summary>
+    <div class="accordion-content technical-info">
+      <div class="country-relations-toolbar">
+        <label for="countryRelationsSelect">Inspect bilateral relation</label>
+        <select id="countryRelationsSelect" aria-label="Country relation representative"></select>
+      </div>
+      <div class="detail-grid country-relations-grid">
+        <div><span>Country pair</span><strong id="countryRelationsPair">—</strong></div>
+        <div><span>Relation ID</span><strong id="countryRelationsId">—</strong></div>
+        <div><span>Relationship state</span><strong id="countryRelationsState">—</strong></div>
+        <div><span>Internal profiles (separate)</span><strong id="countryRelationsProfiles">—</strong></div>
+        <div><span>Shared border / routes</span><strong id="countryRelationsBorder">—</strong></div>
+        <div><span>Resource context</span><strong id="countryRelationsResources">—</strong></div>
+        <div><span>Evidence role</span><strong id="countryRelationsKind">—</strong></div>
+        <div><span>Foundation revision</span><strong id="countryRelationsRevision">—</strong></div>
+      </div>
+      <section class="country-relations-section">
+        <h4>Bilateral shared facts</h4>
+        <div id="countryRelationsMetrics" class="country-relations-metrics"></div>
+      </section>
+      <section class="country-relations-section">
+        <h4>Agreement slots</h4>
+        <div id="countryRelationsAgreements" class="country-relations-agreements"></div>
+      </section>
+      <section class="country-relations-section">
+        <h4>Directional economic / political reliance</h4>
+        <div id="countryRelationsDirections" class="country-relations-directions"></div>
+      </section>
+      <section class="country-relations-section">
+        <h4>Representative diplomatic comparison</h4>
+        <ul id="countryRelationsComparison" class="country-relations-comparison"></ul>
+      </section>
+      <div class="check"><span>Same SEED/country pair reproduces the same bilateral record, reverse lookup preserves shared facts, and fantasy time does not alter foundation diplomacy</span><b id="vDiplomacyDeterministic">WAITING</b></div>
+      <div class="check"><span>Relevant pairs include both trade-friendly and tense/rival baselines plus multiple relationship states</span><b id="vDiplomacyVariety">WAITING</b></div>
+      <div class="check"><span>CountryProfile orientation stays separate: mercantile does not mean universally friendly and militaristic does not create automatic war</span><b id="vDiplomacyOrientation">WAITING</b></div>
+      <div class="check"><span>Shared border, routes, resource complementarity/competition and country profiles contribute to context-aware diplomacy</span><b id="vDiplomacyContext">WAITING</b></div>
+      <div class="check"><span>Shared facts/agreement slots are bilateral while trade reliance, dependency and leverage may differ by direction</span><b id="vDiplomacySymmetry">WAITING</b></div>
+      <div class="check"><span>Diplomacy is lazy immutable foundation data; live declarations, treaty negotiation and campaign-state changes remain future overlays</span><b id="vDiplomacyAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -971,6 +1013,7 @@
 <script src="scripts/world/political-geography.js"></script>
 <script src="scripts/world/country-profile.js"></script>
 <script src="scripts/world/region-profile.js"></script>
+<script src="scripts/world/country-relations.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
 <script src="scripts/world/special-lots.js"></script>
