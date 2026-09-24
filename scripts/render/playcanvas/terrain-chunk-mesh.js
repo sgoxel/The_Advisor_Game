@@ -270,6 +270,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       mesh.setUvs(0,[0,1, 1,1, 0,0, 1,0]);
       mesh.setIndices([0,1,2, 1,3,2]);
       mesh.update();
+    }else if(kind==="box"){
+      mesh=pc.Mesh.fromGeometry(device,new pc.BoxGeometry());
     }else{
       const geometry=new pc.SphereGeometry({radius:0.5,latitudeBands:8,longitudeBands:8});
       mesh=pc.Mesh.fromGeometry(device,geometry);
@@ -656,7 +658,114 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     appendBoxBatch(batchFor(batches,mat.name,mat),[p.x,groundY+spec.y,p.z],spec.scale,0);
     return 1;
   }
-  function collectPropInstances(worldData,descriptor,treeVariants,rocks,treeVariationSamples){
+  function rotateOffset(dx,dz,yawDegrees){
+    const a=Number(yawDegrees||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
+    return [dx*c-dz*s,dx*s+dz*c];
+  }
+  function collectDressingInstances(worldData,descriptor,groups,samples){
+    const p=localTileCenter(worldData,descriptor.x,descriptor.y);
+    const seed=String(seedProvider()||"");
+    const groundY=terrainHeightAtTile(seed,descriptor.x,descriptor.y,worldData?.chunkSize||16);
+    const yaw=Number(descriptor.rotation||0);
+    const variant=Math.max(0,Math.min(2,Number(descriptor.variant||0)));
+    const semantic=String(descriptor.semantic||"bush");
+    let primitiveCount=0;
+    const addBox=(target,dx,dz,sx,sy,sz,y=sy*0.5,localYaw=yaw)=>{
+      const [ox,oz]=rotateOffset(dx,dz,yaw);
+      target.push({position:[p.x+ox,groundY+y,p.z+oz],scale:[sx,sy,sz],euler:[0,localYaw,0]});
+      primitiveCount++;
+    };
+    const addSphere=(target,dx,dz,sx,sy,sz,y=sy*0.5)=>{
+      const [ox,oz]=rotateOffset(dx,dz,yaw);
+      target.push({position:[p.x+ox,groundY+y,p.z+oz],scale:[sx,sy,sz],euler:[0,0,0]});
+      primitiveCount++;
+    };
+    const fenceSegment=(offsetX=0,offsetZ=0,segmentYaw=yaw)=>{
+      const [ox,oz]=rotateOffset(offsetX,offsetZ,yaw);
+      const q={x:p.x+ox,z:p.z+oz};
+      const addFenceBox=(dx,dz,sx,sy,sz,y,localYaw=segmentYaw)=>{
+        const [rx,rz]=rotateOffset(dx,dz,segmentYaw);
+        groups.woodBoxes.push({position:[q.x+rx,groundY+y,q.z+rz],scale:[sx,sy,sz],euler:[0,localYaw,0]});
+        primitiveCount++;
+      };
+      addFenceBox(-0.72,0,0.14,0.92,0.14,0.46);
+      addFenceBox(0.72,0,0.14,0.92,0.14,0.46);
+      addFenceBox(0,0,1.58,0.12,0.12,0.33);
+      addFenceBox(0,0,1.58,0.12,0.12,0.68);
+    };
+
+    if(semantic==="fence"){
+      fenceSegment();
+    }else if(semantic==="pen"){
+      fenceSegment(-0.32,0,0);
+      fenceSegment(0.32,0,90);
+    }else if(semantic==="bush"){
+      addSphere(groups.foliage,0,0,1.05+variant*0.10,0.75+variant*0.08,0.95,0.40);
+      addSphere(groups.foliage,0.35,-0.15,0.62,0.54,0.62,0.34);
+    }else if(semantic==="flower"){
+      addSphere(groups.foliage,0,0,0.48,0.32,0.48,0.20);
+      addSphere(groups.accent,-0.20,0.05,0.18,0.22,0.18,0.34);
+      addSphere(groups.accent,0.12,-0.10,0.20,0.24,0.20,0.36);
+      addSphere(groups.accent,0.28,0.12,0.16,0.20,0.16,0.33);
+    }else if(semantic==="woodpile"){
+      addBox(groups.woodBoxes,-0.34,-0.22,0.72,0.18,0.18,0.14,yaw);
+      addBox(groups.woodBoxes,0.32,-0.20,0.72,0.18,0.18,0.14,yaw);
+      addBox(groups.woodBoxes,-0.18,0.20,0.72,0.18,0.18,0.34,yaw);
+      addBox(groups.woodBoxes,0.36,0.18,0.72,0.18,0.18,0.34,yaw);
+    }else if(semantic==="crate"){
+      addBox(groups.woodBoxes,0,0,0.78,0.72,0.78,0.36,yaw);
+    }else if(semantic==="barrel"){
+      addBox(groups.woodBoxes,0,0,0.62,0.82,0.62,0.41,yaw);
+      addBox(groups.darkBoxes,0,0,0.66,0.08,0.66,0.20,yaw);
+      addBox(groups.darkBoxes,0,0,0.66,0.08,0.66,0.62,yaw);
+    }else if(semantic==="sack"){
+      addSphere(groups.cloth,0,0,0.66,0.82,0.58,0.42);
+    }else if(semantic==="cart"){
+      addBox(groups.woodBoxes,0,0,1.28,0.26,0.74,0.38,yaw);
+      addBox(groups.woodBoxes,-0.62,0,0.18,0.62,0.18,0.32,yaw+18);
+      addSphere(groups.darkSpheres,-0.42,0.42,0.36,0.52,0.18,0.33);
+      addSphere(groups.darkSpheres,0.42,0.42,0.36,0.52,0.18,0.33);
+    }else if(semantic==="signpost"){
+      addBox(groups.woodBoxes,0,0,0.16,1.42,0.16,0.71,yaw);
+      addBox(groups.woodBoxes,0.18,0,0.78,0.34,0.12,1.18,yaw);
+    }else if(semantic==="well"){
+      for(let i=0;i<8;i++){
+        const a=(Math.PI*2*i)/8;
+        addSphere(groups.stone,Math.cos(a)*0.58,Math.sin(a)*0.58,0.34,0.28,0.34,0.20);
+      }
+      addBox(groups.woodBoxes,-0.54,0,0.12,1.18,0.12,0.59,yaw);
+      addBox(groups.woodBoxes,0.54,0,0.12,1.18,0.12,0.59,yaw);
+      addBox(groups.woodBoxes,0,0,1.18,0.12,0.12,1.08,yaw);
+    }else if(semantic==="garden"){
+      addBox(groups.soil,0,0,1.48,0.08,1.48,0.05,yaw);
+      for(const [dx,dz] of [[-0.42,-0.38],[0.0,-0.38],[0.42,-0.38],[-0.28,0.24],[0.28,0.24]]){
+        addSphere(groups.foliage,dx,dz,0.34,0.30+variant*0.03,0.34,0.22);
+      }
+    }else if(semantic==="bench"){
+      addBox(groups.woodBoxes,0,0,1.24,0.16,0.42,0.48,yaw);
+      addBox(groups.woodBoxes,-0.46,0,0.16,0.62,0.16,0.31,yaw);
+      addBox(groups.woodBoxes,0.46,0,0.16,0.62,0.16,0.31,yaw);
+      addBox(groups.woodBoxes,0,-0.18,1.24,0.54,0.12,0.76,yaw);
+    }else if(semantic==="work-prop"){
+      addBox(groups.woodBoxes,0,0,1.05,0.68,0.68,0.34,yaw);
+      addBox(groups.darkBoxes,0.30,-0.18,0.34,0.18,0.34,0.78,yaw+24);
+      addBox(groups.darkBoxes,-0.28,0.16,0.28,0.16,0.28,0.74,yaw-18);
+    }else{
+      addSphere(groups.foliage,0,0,0.72,0.58,0.72,0.32);
+    }
+    if(samples.length<24)samples.push(Object.freeze({
+      id:String(descriptor.id||""),
+      semantic,context:String(descriptor.context||""),
+      buildingId:String(descriptor.buildingId||""),
+      x:String(descriptor.x),y:String(descriptor.y),
+      routeSafe:descriptor.routeSafe!==false,
+      roadAdjacent:Boolean(descriptor.roadAdjacent),
+      rotation:yaw,variant,
+      primitiveCount
+    }));
+    return primitiveCount;
+  }
+  function collectPropInstances(worldData,descriptor,treeVariants,rocks,treeVariationSamples,dressingGroups,dressingSamples){
     const p=localTileCenter(worldData,descriptor.x,descriptor.y);
     const type=String(descriptor.type||"");
     if(type==="tree"){
@@ -686,6 +795,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       }));
       return 1;
     }
+    if(type==="dressing")return collectDressingInstances(worldData,descriptor,dressingGroups,dressingSamples);
     const rockGroundY=terrainHeightAtTile(String(seedProvider()||""),descriptor.x,descriptor.y,worldData?.chunkSize||16);
     rocks.push({position:[p.x,rockGroundY+0.34,p.z],scale:[0.70,0.48,0.62],euler:[0,0,0]});
     return 1;
@@ -797,14 +907,26 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
 
     const staticBatches=finalizeStaticBatches(entity,batches);
 
-    const treeVariants=[[],[]],rocks=[],treeVariationSamples=[];
-    for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeVariants,rocks,treeVariationSamples);
+    const treeVariants=[[],[]],rocks=[],treeVariationSamples=[],dressingSamples=[];
+    const dressingGroups={woodBoxes:[],darkBoxes:[],foliage:[],accent:[],stone:[],soil:[],cloth:[],darkSpheres:[]};
+    for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeVariants,rocks,treeVariationSamples,dressingGroups,dressingSamples);
     const treeGroups=[
       createInstancedGroup(entity,"ChunkTrees_Variant0",primitiveMesh("tree-plane"),treeSpriteMaterial(0),treeVariants[0]),
       createInstancedGroup(entity,"ChunkTrees_Variant1",primitiveMesh("tree-plane"),treeSpriteMaterial(1),treeVariants[1])
     ].filter(Boolean);
+    const dressingInstancedGroups=[
+      createInstancedGroup(entity,"ChunkDressing_Wood",primitiveMesh("box"),presentationMaterial("dressing-wood",0.54,0.34,0.16,0.08),dressingGroups.woodBoxes),
+      createInstancedGroup(entity,"ChunkDressing_DarkWood",primitiveMesh("box"),presentationMaterial("dressing-dark",0.24,0.15,0.09,0.05),dressingGroups.darkBoxes),
+      createInstancedGroup(entity,"ChunkDressing_Foliage",primitiveMesh("sphere"),presentationMaterial("dressing-foliage",0.29,0.52,0.23,0.04),dressingGroups.foliage),
+      createInstancedGroup(entity,"ChunkDressing_Accent",primitiveMesh("sphere"),presentationMaterial("dressing-accent",0.86,0.56,0.20,0.03),dressingGroups.accent),
+      createInstancedGroup(entity,"ChunkDressing_Stone",primitiveMesh("sphere"),presentationMaterial("dressing-stone",0.48,0.48,0.43,0.04),dressingGroups.stone),
+      createInstancedGroup(entity,"ChunkDressing_Soil",primitiveMesh("box"),presentationMaterial("dressing-soil",0.38,0.24,0.13,0.02),dressingGroups.soil),
+      createInstancedGroup(entity,"ChunkDressing_Cloth",primitiveMesh("sphere"),presentationMaterial("dressing-cloth",0.67,0.54,0.33,0.03),dressingGroups.cloth),
+      createInstancedGroup(entity,"ChunkDressing_Wheels",primitiveMesh("sphere"),presentationMaterial("dressing-wheel",0.18,0.13,0.09,0.02),dressingGroups.darkSpheres)
+    ].filter(Boolean);
     const instancedGroups=[
       ...treeGroups,
+      ...dressingInstancedGroups,
       createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks)
     ].filter(Boolean);
 
@@ -874,7 +996,16 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       staticBatchCount,
       staticBatchSourcePrimitiveCount:staticBatches.reduce((sum,item)=>sum+item.sourcePrimitiveCount,0),
       instancedGroupCount,
-      instancedObjectCount:treeVariants[0].length+treeVariants[1].length+rocks.length,
+      instancedObjectCount:treeVariants[0].length+treeVariants[1].length+rocks.length+Object.values(dressingGroups).reduce((sum,items)=>sum+items.length,0),
+      dressingDescriptorCount:props.filter(item=>String(item.type||"")==="dressing").length,
+      dressingPrimitiveInstanceCount:Object.values(dressingGroups).reduce((sum,items)=>sum+items.length,0),
+      dressingInstancedGroupCount:dressingInstancedGroups.length,
+      dressingRouteSafeCount:props.filter(item=>String(item.type||"")==="dressing"&&item.routeSafe!==false).length,
+      dressingContextCounts:Object.freeze({...((presentation.dressing||{}).contexts||{})}),
+      dressingSemanticCounts:Object.freeze({...((presentation.dressing||{}).semantics||{})}),
+      dressingSamples:Object.freeze(dressingSamples.slice()),
+      dressingDeterministic:Boolean(presentation.dressing?.deterministic),
+      dressingRendererOnly:Boolean(presentation.dressing?.rendererOnly),
       treePresentationCount:treeVariants[0].length+treeVariants[1].length,
       treeVariant0Count:treeVariants[0].length,
       treeVariant1Count:treeVariants[1].length,
@@ -927,6 +1058,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       roofProfiles:Object.freeze(roofProfiles.slice()),
       interiorObjectPresentationCount:interiorObjects.length,
       propPresentationCount:props.length,
+      dressingPresentationCount:props.filter(item=>String(item.type||"")==="dressing").length,
       roadCellCount:Number(surfaceCounts.road||0)+Number(surfaceCounts.path||0)+Number(surfaceCounts.square||0),
       waterCellCount:Number(surfaceCounts.water||0),
       bridgeCellCount:Number(surfaceCounts.bridge||0),
@@ -979,6 +1111,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeSpriteUnlitEmissive:true,
       treeSpriteAlphaTest:0.12,
       treeCylinderSpherePlaceholders:false,
+      dressingSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("dressing-")).length,
+      dressingHardwareInstanced:true,
       buildingTexturedMaterialCount:surfaceBoundMaterials.size,
       buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
       buildingSurfaceMaterialRebinds,buildingSurfaceMaterialRefreshes,
