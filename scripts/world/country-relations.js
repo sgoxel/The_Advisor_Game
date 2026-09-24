@@ -3,6 +3,9 @@
 
 const VERSION=1;
 const relationCache=new Map();
+const relevantCache=new Map();
+const representativesCache=new Map();
+const proofCache=new Map();
 
 function clamp01(value){
   const n=Number(value);
@@ -289,7 +292,13 @@ function relationKind(record){
 }
 function relevantRelations(seedValue){
   const seed=String(seedValue==null?"":seedValue);
-  const profiles=CountryProfile.sampleCountries(seed);
+  if(relevantCache.has(seed))return relevantCache.get(seed);
+  const origin=PoliticalGeography.countryAt(seed,"0","0");
+  const sampleProfiles=CountryProfile.sampleCountries(seed);
+  const profiles=[
+    CountryProfile.build(seed,origin.id),
+    ...sampleProfiles.filter(profile=>profile.countryId!==origin.id)
+  ].filter(Boolean);
   const seen=new Set(),relations=[];
   for(const profile of profiles){
     const country=PoliticalGeography.countryById(seed,profile.countryId);
@@ -301,11 +310,15 @@ function relevantRelations(seedValue){
       const relation=build(seed,pair.low,pair.high);
       if(relation?.context.adjacent)relations.push(relation);
     }
+    if(relations.length>=20)break;
   }
-  return Object.freeze(relations.sort((a,b)=>a.id.localeCompare(b.id)));
+  const frozen=Object.freeze(relations.sort((a,b)=>a.id.localeCompare(b.id)));
+  relevantCache.set(seed,frozen);
+  return frozen;
 }
 function representatives(seedValue){
   const seed=String(seedValue==null?"":seedValue);
+  if(representativesCache.has(seed))return representativesCache.get(seed);
   const relations=[...relevantRelations(seed)];
   if(!relations.length)return Object.freeze([]);
   const picks=[];
@@ -333,10 +346,13 @@ function representatives(seedValue){
     return depB-depA||a.id.localeCompare(b.id);
   })[0],"directional-dependency");
   for(const record of relations)if(picks.length<5)add(record,"mixed-context");
-  return Object.freeze(picks.slice(0,5));
+  const frozen=Object.freeze(picks.slice(0,5));
+  representativesCache.set(seed,frozen);
+  return frozen;
 }
 function proof(seedValue){
   const seed=String(seedValue==null?"":seedValue);
+  if(proofCache.has(seed))return proofCache.get(seed);
   const relations=relevantRelations(seed);
   const reps=representatives(seed);
   const repeated=reps.map(item=>Object.freeze({reason:item.reason,record:build(seed,item.record.pair.lowCountryId,item.record.pair.highCountryId)}));
@@ -393,7 +409,7 @@ function proof(seedValue){
     directionalSupported&&tradeFriendlyCount>=1&&tenseRivalCount>=1&&stateCount>=3&&relationValueCount>=5&&
     orientationSeparated&&mercantileNotUniversal&&militaristicNotWar&&adjacencyContext&&lazyQueryable&&overlayReady
   );
-  return Object.freeze({
+  const result=Object.freeze({
     pass,campaignSeed:seed,
     relationCount:relations.length,representativeCount:reps.length,
     deterministic,reversedSymmetric,timeIndependent,numericValid,agreementSymmetry,directionalSupported,
@@ -404,6 +420,8 @@ function proof(seedValue){
     liveDiplomacy:false,warDeclarations:false,treatyNegotiation:false,
     countryProfileMutation:false,politicalMutation:false,renderDependency:false,fullWorldMaterialized:false
   });
+  proofCache.set(seed,result);
+  return result;
 }
 function escapeHtml(value){
   return String(value==null?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
