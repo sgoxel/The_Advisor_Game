@@ -50,7 +50,8 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
   function rectForMaterial(materialName){
     const index=SURFACES.findIndex(item=>item.material===String(materialName||""));
     if(index<0)return null;
-    const size=resolution(),rows=Math.ceil(SURFACES.length/COLUMNS),stride=size+PAD*2;
+    const size=resolution(),rows=Math.ceil(SURFACES.length/COLUMNS),stride=size;
+    const contentSize=Math.max(8,size-PAD*2);
     const slot={index,col:index%COLUMNS,row:Math.floor(index/COLUMNS)};
     const width=COLUMNS*stride,height=rows*stride;
     const x=slot.col*stride+PAD,y=slot.row*stride+PAD;
@@ -61,11 +62,11 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       u0:(x+half)/width,
       // Canvas rows are top-down while PlayCanvas material UVs are bottom-up.
       // Flip the atlas row here so each material samples its authored cell.
-      v0:(height-(y+size)+half)/height,
-      u1:(x+size-half)/width,
+      v0:(height-(y+contentSize)+half)/height,
+      u1:(x+contentSize-half)/width,
       v1:(height-y-half)/height,
-      uScale:(size-1)/width,
-      vScale:(size-1)/height
+      uScale:(contentSize-1)/width,
+      vScale:(contentSize-1)/height
     });
   }
   async function prepare(){
@@ -78,7 +79,11 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       return lastStats;
     }
 
-    const rows=Math.ceil(SURFACES.length/COLUMNS),stride=size+PAD*2;
+    // Keep every quality tier power-of-two and bounded. At Ultra this is
+    // exactly 1024x1024 instead of 1032x1032, avoiding WebGL implementations
+    // that reject/black-sample textures just above a 1024px device limit.
+    const rows=Math.ceil(SURFACES.length/COLUMNS),stride=size;
+    const contentSize=Math.max(8,size-PAD*2);
     const canvas=document.createElement("canvas");
     canvas.width=COLUMNS*stride;canvas.height=rows*stride;
     const ctx=canvas.getContext("2d",{alpha:false});
@@ -111,12 +116,12 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
         }
       }
       if(image){
-        ctx.drawImage(image,x,y,size,size);
+        ctx.drawImage(image,x,y,contentSize,contentSize);
         resolvedSources[surface.logicalKey]=source;
       }else{
         // Safe warm neutral fallback only if both authored sources are absent.
         ctx.fillStyle=index===2?"#6f3327":index===3?"#5b331d":index===1?"#8f826d":"#a78f67";
-        ctx.fillRect(x,y,size,size);
+        ctx.fillRect(x,y,contentSize,contentSize);
         colorFallbackKeys.push(surface.logicalKey);
         failedKeys.push(Object.freeze({
           key:surface.logicalKey,
@@ -127,10 +132,10 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       }
       // Duplicate edge pixels into gutters to prevent atlas bleeding.
       try{
-        ctx.drawImage(canvas,x,y,size,1,x,y-PAD,size,PAD);
-        ctx.drawImage(canvas,x,y+size-1,size,1,x,y+size,size,PAD);
-        ctx.drawImage(canvas,x,y,1,size,x-PAD,y,PAD,size);
-        ctx.drawImage(canvas,x+size-1,y,1,size,x+size,y,PAD,size);
+        ctx.drawImage(canvas,x,y,contentSize,1,x,y-PAD,contentSize,PAD);
+        ctx.drawImage(canvas,x,y+contentSize-1,contentSize,1,x,y+contentSize,contentSize,PAD);
+        ctx.drawImage(canvas,x,y,1,contentSize,x-PAD,y,PAD,contentSize);
+        ctx.drawImage(canvas,x+contentSize-1,y,1,contentSize,x+contentSize,y,PAD,contentSize);
       }catch(_){}
     }
 
@@ -152,8 +157,9 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
     if(previous&&previous!==next)retiredTextures.push(previous);
 
     lastStats=Object.freeze({
-      ready:true,signature,runtimeResolution:size,
+      ready:true,signature,runtimeResolution:size,contentResolution:contentSize,
       atlasWidth:canvas.width,atlasHeight:canvas.height,
+      powerOfTwoAtlas:(canvas.width&(canvas.width-1))===0&&(canvas.height&(canvas.height-1))===0,
       sourceFamilyCount:SURFACES.length,
       logicalKeys:Object.freeze(SURFACES.map(item=>item.logicalKey)),
       resolvedSourceCount:SURFACES.length-colorFallbackKeys.length,
