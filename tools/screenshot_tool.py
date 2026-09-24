@@ -3178,26 +3178,65 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
             let requestedNpc=null;
             if(focusKind==='npc'){
               const initial=renderer.snapshot?.()||{};
-              const candidates=Array.isArray(initial.frame?.visibleCharacters)?initial.frame.visibleCharacters:[];
+              const campaign=window.SeedSystem?.getCampaign?.();
+              const seed=campaign?.seed||null;
+              const movement=window.ResidentMovement?.snapshot?.()||null;
+              const roster=seed&&window.DailyActivity?.build?window.DailyActivity.build(seed):[];
+              const rosterById=new Map(roster.map(item=>[String(item.id),item]));
+              const bounds=[
+                ...(seed&&window.HousePlans?.build?window.HousePlans.build(seed):[]),
+                ...(seed&&window.SpecialLots?.build?window.SpecialLots.build(seed):[])
+              ].map(item=>item?.bounds).filter(Boolean);
+              const clearance=(point)=>{
+                if(!point)return -1;
+                const x=Number(BigInt(String(point.x))),y=Number(BigInt(String(point.y)));
+                let best=999;
+                for(const b of bounds){
+                  const dx=x<Number(b.minX)?Number(b.minX)-x:x>Number(b.maxX)?x-Number(b.maxX):0;
+                  const dy=y<Number(b.minY)?Number(b.minY)-y:y>Number(b.maxY)?y-Number(b.maxY):0;
+                  best=Math.min(best,Math.max(dx,dy));
+                }
+                return best;
+              };
               const existing=window.__advisorBillboardNpcProof||null;
-              let raw=existing?candidates.find(item=>String(item?.id||'')===String(existing.id)):null;
-              if(!raw){
-                raw=candidates.find(item=>item?.id!=='protagonist'&&item?.point&&!item?.buildingId)||
-                    candidates.find(item=>item?.id!=='protagonist'&&item?.point)||
-                    null;
+              let state=existing
+                ?(movement?.residents||[]).find(item=>String(item?.residentId||'')===String(existing.residentId))
+                :null;
+              if(!state){
+                const ranked=(movement?.residents||[])
+                  .filter(item=>item?.position&&!item?.buildingId)
+                  .map(item=>({item,clearanceTiles:clearance(item.position)}))
+                  .filter(item=>item.clearanceTiles>=4)
+                  .sort((a,b)=>
+                    (a.item.status==='arrived'?0:1)-(b.item.status==='arrived'?0:1)||
+                    b.clearanceTiles-a.clearanceTiles||
+                    String(a.item.residentId).localeCompare(String(b.item.residentId))
+                  );
+                state=ranked[0]?.item||null;
               }
-              if(!raw&&!existing){
-                done({ok:false,error:'no-simulated-npc-candidate',candidateCount:candidates.length});
+              const clearanceTiles=state?clearance(state.position):-1;
+              if(!state||state.buildingId||clearanceTiles<4){
+                done({
+                  ok:false,error:'no-visibly-clear-outdoor-npc',
+                  residentCount:Number(movement?.residentCount||0),
+                  selected:state||null,clearanceTiles
+                });
                 return;
               }
-              requestedNpc=existing||{
-                id:String(raw.id),
-                x:String(raw.point.x),
-                y:String(raw.point.y),
-                residentName:raw.residentName||null,
-                profession:raw.profession||null
+              const resident=rosterById.get(String(state.residentId))||null;
+              requestedNpc={
+                id:'resident:'+String(state.residentId),
+                residentId:String(state.residentId),
+                x:String(state.position.x),
+                y:String(state.position.y),
+                residentName:resident?.name||null,
+                profession:resident?.profession||null,
+                status:state.status||null,
+                buildingId:state.buildingId||null,
+                navigationCategory:state.navigationCategory||null,
+                clearanceTiles
               };
-              window.__advisorBillboardNpcProof=requestedNpc;
+              window.__advisorBillboardNpcProof={residentId:requestedNpc.residentId};
               const center=camera.getCenter?.()||initial.frame?.center||{x:'0',y:'0'};
               const dx=(BigInt(requestedNpc.x)-BigInt(String(center.x))).toString();
               const dy=(BigInt(requestedNpc.y)-BigInt(String(center.y))).toString();
@@ -3229,6 +3268,8 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
               zoom:Number(camera.getZoom?.()||zoom),
               state,label,focusKind,
               focus,protagonist,npc,requestedNpc,
+              npcClearanceTiles:Number(requestedNpc?.clearanceTiles??-1),
+              npcMovementStatus:requestedNpc?.status||null,
               cameraCenter:camera.getCenter?.()||null,
               active:Number(presentation.activeCharacterCount||0),
               simulated:Number(presentation.simulatedCharacterCount||0),
@@ -3258,6 +3299,7 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
         f"character-billboard:{label}:zoom={zoom:.2f}:state={state}:focus={focus_kind}:"
         f"{focus.get('id')}:px={float(focus.get('renderedPixelHeight') or 0):.2f}:"
         f"scale={float(focus.get('presentationScale') or 0):.2f}:"
+        f"clearance={float(result.get('npcClearanceTiles') or 0):.1f}:"
         f"active={result.get('active')}:sim={result.get('simulated')}"
     )
 
@@ -4346,7 +4388,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Presentation scaling moved authoritative protagonist feet: {protagonist_feet}")
 
         npc_instances=[]
-        for offset,presentation in enumerate((presentations[9],presentations[10]),start=10):
+        for offset,(frame,presentation) in enumerate(zip(frames[9:11],presentations[9:11]),start=10):
             npc=next((item for item in presentation.get("instances") or [] if item.get("id")!="protagonist"),None)
             if not npc:
                 raise RuntimeError(f"NPC billboard missing from dedicated NPC frame {offset}: {presentation}")
@@ -4354,9 +4396,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"NPC billboard orientation failed in frame {offset}: {npc}")
             if float(npc.get("renderedPixelHeight") or 0)+0.6<float(npc.get("targetPixelHeight") or 0):
                 raise RuntimeError(f"NPC billboard readability target failed in frame {offset}: {npc}")
+            if npc.get("buildingId"):
+                raise RuntimeError(f"NPC visual proof selected a building-interior resident in frame {offset}: {npc}")
+            action=str(frame.get("action") or "")
+            if "focus=npc" not in action or "clearance=" not in action:
+                raise RuntimeError(f"NPC evidence action is missing outdoor-clearance proof in frame {offset}: {action}")
+            try:
+                clearance=float(action.split("clearance=",1)[1].split(":",1)[0])
+            except Exception as error:
+                raise RuntimeError(f"NPC clearance telemetry could not be parsed in frame {offset}: {action}") from error
+            if clearance<4:
+                raise RuntimeError(f"NPC is not sufficiently separated from building footprints in frame {offset}: clearance={clearance}, action={action}")
             npc_instances.append(npc)
-        if npc_instances[0].get("id")!=npc_instances[1].get("id") or npc_instances[0].get("world")!=npc_instances[1].get("world"):
-            raise RuntimeError(f"NPC 0.50x/1.00x frames did not inspect the same authoritative resident: {npc_instances}")
+        if npc_instances[0].get("id")!=npc_instances[1].get("id"):
+            raise RuntimeError(f"NPC 0.50x/1.00x frames did not inspect the same deterministic resident: {npc_instances}")
 
         phone_portrait=presentations[7]
         phone_landscape=presentations[8]
