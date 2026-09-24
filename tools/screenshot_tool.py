@@ -77,6 +77,7 @@ SCENARIOS = {
     "playcanvas-scene",
     "wp-s003-003",
     "wp-s003-004-002",
+    "wp-s003-004-003",
     "wp-s003-005-002",
     "wp-s003-006-002",
     "wp-s003-006-001",
@@ -133,6 +134,7 @@ SCENARIO_MIN_SHOTS = {
     "playcanvas-scene": 6,
     "wp-s003-003": 3,
     "wp-s003-004-002": 8,
+    "wp-s003-004-003": 6,
     "wp-s003-005-002": 4,
     "wp-s003-006-002": 8,
     "wp-s003-006-001": 14,
@@ -3140,6 +3142,98 @@ def _legacy_control(driver, action: str) -> str:
     return f"legacy-skipped:{action}:{reason}"
 
 
+def _show_gabled_roof_proof(driver, frame_index: int) -> str:
+    configs = (
+        (1920, 1080, 0.50, "outside", "desktop-0.50x"),
+        (1920, 1080, 1.00, "outside", "desktop-1.00x"),
+        (1920, 1080, 2.00, "outside", "desktop-2.00x"),
+        (430, 932, 1.00, "outside", "phone-portrait"),
+        (932, 430, 1.00, "outside", "phone-landscape"),
+        (1920, 1080, 1.00, "inside", "cutaway-inside"),
+    )
+    width, height, zoom, state, label = configs[min(frame_index, len(configs) - 1)]
+    driver.set_window_size(width, height)
+    result = driver.execute_async_script(
+        """
+        const zoom=Number(arguments[0]);
+        const state=String(arguments[1]);
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const camera=window.Camera;
+            const renderer=window.GameRenderer;
+            if(!camera?.setZoom||!renderer?.setBuildingProofState){
+              done({ok:false,error:'roof-proof-api-missing'});
+              return;
+            }
+            camera.setZoom(zoom);
+            if(window.AppUI?.refreshTerrain)await window.AppUI.refreshTerrain();
+            renderer.setBuildingProofState(state);
+            try{window.AppUI?.refreshBuildingPresentation?.()}catch(_){}
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            const snapshot=renderer.snapshot?.()||{};
+            const chunks=snapshot.terrainChunks||{};
+            const presentation=snapshot.buildingPresentation||{};
+            const samples=Array.isArray(chunks.roofProfileSamples)?chunks.roofProfileSamples:[];
+            const profilePass=Boolean(
+              chunks.roofProfilePass===true &&
+              chunks.roofCenterRidgeHigher===true &&
+              chunks.roofEaveContactPass===true &&
+              chunks.roofFootprintDriven===true &&
+              Number(chunks.roofProfileCount||0)>0 &&
+              Number(chunks.roofNormalProfileCount||0)>0 &&
+              Number(chunks.roofSpecialProfileCount||0)>0 &&
+              samples.length>0 &&
+              samples.every(item=>
+                item.centerRidgeHigher===true &&
+                item.eaveContact===true &&
+                item.restrainedOverhang===true &&
+                item.footprintDriven===true &&
+                Number(item.ridgeBottomY)>Number(item.eaveBottomY) &&
+                Number(item.eaveBottomY)<=Number(item.wallTopY)+0.001
+              )
+            );
+            done({
+              ok:profilePass,
+              zoom:Number(camera.getZoom?.()||zoom),
+              state,
+              chunks:{
+                roofProfileCount:Number(chunks.roofProfileCount||0),
+                roofNormalProfileCount:Number(chunks.roofNormalProfileCount||0),
+                roofSpecialProfileCount:Number(chunks.roofSpecialProfileCount||0),
+                roofProfilePass:Boolean(chunks.roofProfilePass),
+                sampleCount:samples.length,
+              },
+              presentation:{
+                cutawayActive:Boolean(presentation.cutawayActive),
+                cutawayBuildingId:presentation.cutawayBuildingId||null,
+                hiddenRoofCount:Number(presentation.hiddenRoofCount||0),
+                totalRoofCount:Number(presentation.totalRoofCount||0),
+              }
+            });
+          }catch(error){done({ok:false,error:String(error)})}
+        })();
+        """,
+        zoom,
+        state,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Gabled-roof proof frame failed: {result}")
+    if abs(float(result.get("zoom") or 0)-zoom)>1e-9:
+        raise RuntimeError(f"Gabled-roof zoom mismatch: expected {zoom}, got {result}")
+    if state == "inside":
+        presentation=result.get("presentation") or {}
+        if not presentation.get("cutawayActive") or int(presentation.get("hiddenRoofCount") or 0)!=2 or not presentation.get("cutawayBuildingId"):
+            raise RuntimeError(f"Gabled-roof cutaway did not hide exactly one building roof pair: {result}")
+    driver.execute_script("window.scrollTo(0,0)")
+    return (
+        f"roof-geometry:{label}:zoom={zoom:.2f}:state={state}:"
+        f"profiles={result.get('chunks',{}).get('roofProfileCount')}:"
+        f"normal={result.get('chunks',{}).get('roofNormalProfileCount')}:"
+        f"special={result.get('chunks',{}).get('roofSpecialProfileCount')}"
+    )
+
+
 def _set_building_proof_state(driver, state: str) -> str:
     result = driver.execute_script(
         """
@@ -3843,6 +3937,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         ready = _wait_for_playcanvas_world_assets(driver)
         proof_on = _set_asset_preparation_proof(driver, True)
         return proof_off + "+" + action + "+" + ready + "+" + proof_on
+    if scenario == "wp-s003-004-003":
+        return _show_gabled_roof_proof(driver, frame_index)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
@@ -4064,6 +4160,55 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-004-003":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-004-003 requires six gabled-roof evidence frames")
+        expected_actions=("desktop-0.50x","desktop-1.00x","desktop-2.00x","phone-portrait","phone-landscape","cutaway-inside")
+        for index,frame in enumerate(frames[:6]):
+            action=str(frame.get("action") or "")
+            if expected_actions[index] not in action:
+                raise RuntimeError(f"Gabled-roof evidence action mismatch in frame {index+1}: {action}")
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            scene=gpu.get("scene") or {}
+            presentation=gpu.get("buildingPresentation") or {}
+            hot=gpu.get("navigationHotPath") or {}
+            if chunks.get("roofProfilePass") is not True or chunks.get("roofCenterRidgeHigher") is not True:
+                raise RuntimeError(f"Gabled-roof ridge geometry failed in frame {index+1}: {chunks}")
+            if chunks.get("roofEaveContactPass") is not True or chunks.get("roofFootprintDriven") is not True:
+                raise RuntimeError(f"Gabled-roof wall contact/footprint scaling failed in frame {index+1}: {chunks}")
+            if int(chunks.get("roofProfileCount") or 0)<=0:
+                raise RuntimeError(f"No gabled-roof profiles were captured in frame {index+1}: {chunks}")
+            if int(chunks.get("roofNormalProfileCount") or 0)<=0 or int(chunks.get("roofSpecialProfileCount") or 0)<=0:
+                raise RuntimeError(f"Normal + special building roof coverage missing in frame {index+1}: {chunks}")
+            samples=chunks.get("roofProfileSamples") or []
+            if not samples:
+                raise RuntimeError(f"Gabled-roof sample telemetry missing in frame {index+1}: {chunks}")
+            for sample in samples:
+                ridge=float(sample.get("ridgeBottomY") or 0)
+                eave=float(sample.get("eaveBottomY") or 0)
+                wall=float(sample.get("wallTopY") or 0)
+                if not sample.get("centerRidgeHigher") or ridge<=eave:
+                    raise RuntimeError(f"Roof center is not higher than eave in frame {index+1}: {sample}")
+                if not sample.get("eaveContact") or abs(wall-eave)>0.081:
+                    raise RuntimeError(f"Roof eave is detached/buried in frame {index+1}: {sample}")
+                if not sample.get("restrainedOverhang") or not sample.get("footprintDriven"):
+                    raise RuntimeError(f"Roof overhang/footprint rule failed in frame {index+1}: {sample}")
+            if scene.get("roofStyle")!="gabled-center-ridge-two-plane":
+                raise RuntimeError(f"Unexpected roof style in frame {index+1}: {scene}")
+            if gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Roof renderer changed Simulation authority in frame {index+1}: {gpu}")
+            if hot.get("fullSceneRebuilds") not in (0,0.0):
+                raise RuntimeError(f"Roof proof introduced per-frame scene reconstruction in frame {index+1}: {hot}")
+
+        cutaway=(frames[5].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer",{}).get("buildingPresentation") or {})
+        if cutaway.get("cutawayActive") is not True or int(cutaway.get("hiddenRoofCount") or 0)!=2 or not cutaway.get("cutawayBuildingId"):
+            raise RuntimeError(f"Cutaway did not target exactly one two-plane roof: {cutaway}")
+        if int(cutaway.get("totalRoofCount") or 0)<=2:
+            raise RuntimeError(f"Cutaway evidence did not retain other building roofs: {cutaway}")
+        return
+
     if scenario == "wp-s007-002":
         if len(frames) < 6:
             raise RuntimeError("wp-s007-002 requires six WorldContext evidence frames")
