@@ -1335,8 +1335,8 @@ def _reload_with_queued_campaign_start(driver, timeout: float = 45.0) -> str:
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
     queued_start_action = None
     if scenario == "wp-s003-008-002":
-        timeout = max(timeout, 45.0)
-        queued_start_action = _reload_with_queued_campaign_start(driver, timeout)
+        timeout = max(timeout, 180.0)
+        queued_start_action = _reload_with_queued_campaign_start(driver, min(timeout, 60.0))
     if scenario == "wp-s003-005":
         # Use a representative desktop/tablet-landscape viewport so the prepared
         # glTF/material proof is readable instead of being lost inside an ultra-wide
@@ -1366,7 +1366,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         result = driver.execute_script(CURRENT_BUILD_PREP_SCRIPT)
         action = result.get("action", "unknown") if isinstance(result, dict) else "unknown"
 
-    if action in {"started-current-campaign", "campaign-already-active"}:
+    if action in {"started-current-campaign", "campaign-already-active"} or queued_start_action:
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
