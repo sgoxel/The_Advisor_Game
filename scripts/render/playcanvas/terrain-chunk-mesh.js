@@ -1514,7 +1514,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
             surfaceName:String(item._advisorBuildingSurfaceName||""),
             variantIndex:Number(item._advisorBuildingVariantIndex??-1),
             atlasSignature:String(item._advisorBuildingAtlasSignature||""),
-            textureName:String(item._advisorBuildingTextureName||item.diffuseMap?.name||"")
+            textureName:String(item._advisorBuildingTextureName||item.diffuseMap?.name||""),
+            uvScale:Object.freeze([
+              Number(item.diffuseMapTiling?.x??1),
+              Number(item.diffuseMapTiling?.y??1)
+            ]),
+            uvOffset:Object.freeze([
+              Number(item.diffuseMapOffset?.x??0),
+              Number(item.diffuseMapOffset?.y??0)
+            ]),
+            tint:Object.freeze([
+              Number(item.diffuse?.r??1),
+              Number(item.diffuse?.g??1),
+              Number(item.diffuse?.b??1)
+            ])
           }))
           .sort((a,b)=>a.materialName.localeCompare(b.materialName))
       ),
