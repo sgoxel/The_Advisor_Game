@@ -183,6 +183,15 @@ function settlementRef(seedValue,planValue){
     classHint:plan.generation.classHint||null,nameHint:plan.generation.nameHint||null
   });
 }
+function diplomacyRef(seedValue,relationValue){
+  const seed=normalizeSeed(seedValue),relation=relationValue;
+  if(!relation?.id||!relation?.pair?.lowCountryId||!relation?.pair?.highCountryId)return null;
+  return refBase("diplomacy",relation.id,{
+    seedHash:hashText(seed),
+    lowCountryId:String(relation.pair.lowCountryId),
+    highCountryId:String(relation.pair.highCountryId)
+  });
+}
 function structuralRef(seedValue,kindValue,parentIdValue,structuralKeyValue,initialValue){
   const seed=normalizeSeed(seedValue),kind=String(kindValue||"entity"),parentId=String(parentIdValue||"WORLD");
   const structuralKey=String(structuralKeyValue||"root");
@@ -217,6 +226,9 @@ function materialize(seedValue,refValue){
       countryId:ref.key.countryId,role:ref.key.role,classHint:ref.key.classHint,nameHint:ref.key.nameHint
     });
     if(plan&&plan.id===ref.id)payload=Object.assign({kind:"settlement"},clone(plan));
+  }else if(ref.kind==="diplomacy"){
+    const relation=window.CountryRelations?.build?.(seed,ref.key.lowCountryId,ref.key.highCountryId)||null;
+    if(relation&&relation.id===ref.id)payload=Object.assign({kind:"diplomacy"},clone(relation));
   }else{
     payload={
       id:ref.id,kind:ref.kind,parentId:ref.key.parentId||null,
@@ -513,7 +525,7 @@ function renderDebugPanel(seedValue,rootNode){
 
 const api=Object.freeze({
   FOUNDATION_SCHEMA_VERSION,DELTA_SCHEMA_VERSION,CURRENT_WORLD_SCHEMA_VERSION,WORLD_GENERATOR_VERSION,DELTA_DOMAINS,STORAGE_KEY,
-  bindCampaign,deltaSnapshot,terrainRef,countryRef,regionRef,settlementRef,structuralRef,
+  bindCampaign,deltaSnapshot,terrainRef,countryRef,regionRef,settlementRef,diplomacyRef,structuralRef,
   materialize,resolve,applyDelta,removeDelta,evictFoundation,clearFoundationCache,
   representatives,focusReference,previewMerge,applyEvidenceDelta,proof,renderDebugPanel
 });
