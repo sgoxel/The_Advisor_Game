@@ -69,7 +69,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S005-001` — Advisor Interface + Persistent Advice Channel — COMPLETED
 - `WP-S005-002` — Character Memory, Observation Log + World Fact Model — COMPLETED
 - `WP-S005-003` — Local Dialogue, Social Context + Trust Framing — COMPLETED
-- `WP-S005-004` — Advice Acceptance, Rejection + Influence Resolution
+- `WP-S005-004` — Advice Acceptance, Rejection + Influence Resolution — COMPLETED
 - `WP-S005-005` — Relationship, Reputation + Duty State Foundation
 
 # Stage 6 — Political Geography + Settlement Diversity Foundation
