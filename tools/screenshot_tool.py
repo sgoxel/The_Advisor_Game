@@ -1272,6 +1272,32 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
 
 
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
+    if scenario == "wp-s003-008-002":
+        from selenium.webdriver.support.ui import WebDriverWait
+
+        # The campaign button is wired before AppUI initialization finishes. For
+        # this startup-lifecycle proof, do not manufacture a race by clicking the
+        # hidden New Campaign control while the application-start renderer cycle
+        # is still active. First prove that real application startup completed.
+        timeout = max(timeout, 45.0)
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                """
+                const loading=window.AppUI?.sceneLoadingSnapshot?.();
+                const current=loading?.current || {};
+                return Boolean(
+                  current.origin === 'application-start' &&
+                  current.state === 'hidden' &&
+                  Number(current.startedAtMs || 0) > 0 &&
+                  Number(current.readyAtMs || 0) >= Number(current.startedAtMs || 0) &&
+                  Number(current.hiddenAtMs || 0) >= Number(current.readyAtMs || 0) &&
+                  current.readiness?.interactionReady === true &&
+                  loading?.overlay?.hidden === true &&
+                  window.GameRenderer?.snapshot?.()?.ready === true
+                );
+                """
+            )
+        )
     if scenario == "wp-s003-005":
         # Use a representative desktop/tablet-landscape viewport so the prepared
         # glTF/material proof is readable instead of being lost inside an ultra-wide
@@ -1549,6 +1575,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     return {
                       campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
                       statusMessage: document.querySelector('#statusMessage')?.textContent?.trim() || null,
+                      sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
                       pixi: Boolean(window.PIXI),
                       renderer: window.GameRenderer?.snapshot?.() || null,
                       assets: window.TextureAssets?.stats?.() || null,
