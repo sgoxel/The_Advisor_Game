@@ -5,6 +5,11 @@ const FOUNDATION_SCHEMA_VERSION=1;
 const DELTA_SCHEMA_VERSION=1;
 const CURRENT_WORLD_SCHEMA_VERSION=1;
 const WORLD_GENERATOR_VERSION="advisor-world-foundation-v1";
+const DELTA_DOMAINS=Object.freeze([
+  "wealth-prosperity-stability","diplomacy-treaties-war","territorial-control",
+  "construction-destruction-ownership","settlement-growth-decline","resource-stocks-depletion",
+  "npc-life-state","relationships","duties"
+]);
 const STORAGE_KEY=GameConfig.campaignStorageKey+".world-state-delta.v1";
 const foundationCache=new Map();
 let state=null;
@@ -399,12 +404,15 @@ function proof(seedValue){
   const structuralKinds=new Set(reps.map(item=>item.ref.kind));
   const structuralIdentityCoverage=["terrain","country","region","settlement"].every(kind=>structuralKinds.has(kind))&&
     (!window.HousePlans||structuralKinds.has("building"))&&(!window.DailyActivity||structuralKinds.has("npc"));
+  const deltaDomainCoverage=DELTA_DOMAINS.length===9&&
+    ["wealth-prosperity-stability","diplomacy-treaties-war","territorial-control","construction-destruction-ownership","settlement-growth-decline","resource-stocks-depletion","npc-life-state","relationships","duties"]
+      .every(domain=>DELTA_DOMAINS.includes(domain));
   const renderingZeroAuthority=true;
   const noWholeWorldSave=Boolean(sparseDeltaSchema&&before.entryCount===Object.keys(activeState(seed)?.entries||{}).length);
   const pass=Boolean(
     deterministic&&stableIds&&immutable&&schemasVersioned&&foundationUnaffected&&currentMergeDeterministic&&
     untouchedQuerySparse&&sparseDeltaSchema&&unloadReloadStable&&liveDeltaMerged&&persistedMatchesMemory&&
-    structuralIdentityCoverage&&renderingZeroAuthority&&noWholeWorldSave
+    structuralIdentityCoverage&&deltaDomainCoverage&&renderingZeroAuthority&&noWholeWorldSave
   );
   return deepFreeze({
     pass,campaignSeed:seed,
@@ -412,7 +420,7 @@ function proof(seedValue){
     currentWorldSchemaVersion:CURRENT_WORLD_SCHEMA_VERSION,worldGeneratorVersion:WORLD_GENERATOR_VERSION,
     deterministic,stableIds,immutable,schemasVersioned,foundationUnaffected,currentMergeDeterministic,
     untouchedQuerySparse,sparseDeltaSchema,unloadReloadStable,liveDeltaMerged,persistedMatchesMemory,
-    structuralIdentityCoverage,renderingZeroAuthority,noWholeWorldSave,
+    structuralIdentityCoverage,deltaDomainCoverage,supportedDeltaDomains:DELTA_DOMAINS,renderingZeroAuthority,noWholeWorldSave,
     representativeCount:reps.length,representatives:reps,
     focusRef:focus,focusFoundationSignature:focusAfterEvict?.foundationSignature||null,
     focusCurrentSignature:focusAfterEvict?.currentSignature||null,
@@ -489,7 +497,7 @@ function renderDebugPanel(seedValue,rootNode){
 }
 
 const api=Object.freeze({
-  FOUNDATION_SCHEMA_VERSION,DELTA_SCHEMA_VERSION,CURRENT_WORLD_SCHEMA_VERSION,WORLD_GENERATOR_VERSION,STORAGE_KEY,
+  FOUNDATION_SCHEMA_VERSION,DELTA_SCHEMA_VERSION,CURRENT_WORLD_SCHEMA_VERSION,WORLD_GENERATOR_VERSION,DELTA_DOMAINS,STORAGE_KEY,
   bindCampaign,deltaSnapshot,terrainRef,countryRef,regionRef,settlementRef,structuralRef,
   materialize,resolve,applyDelta,removeDelta,evictFoundation,clearFoundationCache,
   representatives,focusReference,previewMerge,applyEvidenceDelta,proof,renderDebugPanel
