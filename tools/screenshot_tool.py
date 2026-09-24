@@ -5258,8 +5258,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             protagonist_locations.append(build.get("protagonistLocation"))
             protagonist=(proximity.get("protagonist") or {}).get("nearestRoad") or {}
             npc=(proximity.get("nearestNpc") or {}).get("nearestRoad") or {}
-            if protagonist and float(protagonist.get("distanceTiles") or 99)<=3.0:protagonist_near_road=True
-            if npc and float(npc.get("distanceTiles") or 99)<=3.0:npc_near_road=True
+            protagonist_distance=protagonist.get("distanceTiles")
+            npc_distance=npc.get("distanceTiles")
+            if protagonist and protagonist_distance is not None and float(protagonist_distance)<=3.0:protagonist_near_road=True
+            if npc and npc_distance is not None and float(npc_distance)<=3.0:npc_near_road=True
         if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
             raise RuntimeError(f"Raised-road camera evidence changed authoritative protagonist location: {protagonist_locations}")
         if not saw_path or not saw_square:
