@@ -2769,6 +2769,10 @@ def _show_simulation_tiers_proof(driver, frame_index: int) -> str:
           ok:Boolean(rendered?.verification?.pass),
           index,
           requestedTier:step.requestedTier,
+          requestedPoint:step.requestedPoint||null,
+          requestedClassification:step.requestedClassification||null,
+          targetCenter:step.targetCenter||null,
+          catalogTargetCenter:step.catalogTargetCenter||null,
           focusTier:step.focus?.tier||null,
           focusId:step.focus?.id||null,
           focusSignature:step.focus?.contextSignature||null,
@@ -2792,6 +2796,8 @@ def _show_simulation_tiers_proof(driver, frame_index: int) -> str:
     return (
         prefix+
         f"simulation-tiers:{frame_index}:{result.get('focusTier')}:"
+        f"requested={result.get('requestedTier')}/{(result.get('requestedClassification') or {}).get('tier')}:"
+        f"point={result.get('requestedPoint')}:target={result.get('targetCenter')}:"
         f"exact={counts.get('exactNpcHandles')}:population={counts.get('representedPopulation')}"
     )
 
