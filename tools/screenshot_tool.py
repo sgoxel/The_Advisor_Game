@@ -99,6 +99,7 @@ SCENARIOS = {
     "wp-s003-008-002",
     "wp-s003-008-003",
     "wp-s003-009-001",
+    "wp-s003-009-002",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -175,6 +176,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-002": 9,
     "wp-s003-008-003": 8,
     "wp-s003-009-001": 8,
+    "wp-s003-009-002": 11,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1541,7 +1543,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
-    if scenario == "wp-s003-009-001":
+    if scenario in {"wp-s003-009-001", "wp-s003-009-002"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 120.0)
     if scenario == "wp-s003-005-006":
@@ -1582,6 +1584,10 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=128, directional=True, background=True
                 )
+            if scenario == "wp-s003-009-002":
+                _set_terrain_preload_settings(
+                    driver, radius=2, cache=256, directional=True, background=False
+                )
             if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
@@ -1590,10 +1596,10 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
                 )
-            if scenario in {"wp-s003-006-007", "wp-s003-006-009"}:
+            if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1691,6 +1697,32 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               Number(chunks.roadLiftWorldUnits || 0) > 0 &&
                               Number(chunks.pathLiftWorldUnits || 0) > 0 &&
                               Number(chunks.roadProfileVertexCount || 0) > 0 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-009-002' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            const bindings=chunks?.routeSurfaceBindings || {};
+                            const world=chunks?.worldData || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              chunks.heightfieldPass === true &&
+                              chunks.sharedBorderEquality === true &&
+                              chunks.roadProfileEnabled === true &&
+                              chunks.roadHierarchyPresentationPass === true &&
+                              chunks.routeSurfaceRendererOnly === true &&
+                              chunks.routeNetworkDeterministic === true &&
+                              chunks.routeNetworkRouteSafetyPass === true &&
+                              Number(chunks.routeSurfaceStaleBindingCount || 0) === 0 &&
+                              Number(chunks.routeSurfaceCellCount || 0) > 0 &&
+                              Number(chunks.routeMainRoadCellCount || 0) > 0 &&
+                              Number(chunks.routeSquareCellCount || 0) > 0 &&
+                              Number(chunks.routeSurfaceMaterialCount || 0) >= 2 &&
+                              bindings?.road?.textureBound === true &&
+                              bindings?.path?.textureBound === true &&
+                              bindings?.square?.textureBound === true &&
+                              world?.connectorRendererOnly === true &&
+                              world?.connectorDeterministic === true &&
                               Number(renderer?.terrainPreload?.queueDepth || 0) === 0
                             );
                           })()) &&
@@ -1810,7 +1842,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-            if scenario == "wp-s003-009-001":
+            if scenario in {"wp-s003-009-001", "wp-s003-009-002"}:
                 recovery = driver.execute_script(
                     """
                     const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
@@ -5207,6 +5239,64 @@ def _focus_road_profile_target(driver, kind: str) -> str:
     )
 
 
+def _focus_road_connector(driver, source_kind: str) -> str:
+    result = driver.execute_script(
+        """
+        const source=String(arguments[0]||'house');
+        const seed=window.SeedSystem?.getCampaign?.()?.seed;
+        if(!seed||!window.HousePlans?.build||!window.SpecialLots?.build){
+          return {ok:false,reason:'building-plan-api-unavailable'};
+        }
+        const candidates=[];
+        if(source==='house'){
+          for(const plan of window.HousePlans.build(seed)||[]){
+            const e=plan?.entrance;
+            if(!e?.target)continue;
+            candidates.push({
+              id:String(plan.id||''),kind:String(plan.kind||'house'),source:'house',
+              door:{x:Number(e.x),y:Number(e.y),side:String(e.side||'')},
+              target:{x:Number(e.target.x),y:Number(e.target.y)},
+              accessLengthTiles:Number(e.accessLengthTiles||0)
+            });
+          }
+        }else{
+          for(const lot of window.SpecialLots.build(seed)||[]){
+            if(lot?.enterable===false)continue;
+            const e=lot?.access;
+            if(!e?.target)continue;
+            candidates.push({
+              id:String(lot.id||''),kind:String(lot.kind||'special'),source:'special',
+              door:{x:Number(e.x),y:Number(e.y),side:String(e.side||'')},
+              target:{x:Number(e.target.x),y:Number(e.target.y)},
+              accessLengthTiles:Number(e.accessLengthTiles||0)
+            });
+          }
+        }
+        candidates.sort((a,b)=>
+          Number(b.accessLengthTiles||0)-Number(a.accessLengthTiles||0) ||
+          String(a.id).localeCompare(String(b.id))
+        );
+        const best=candidates.find(item=>Number(item.accessLengthTiles||0)>=2)||candidates[0]||null;
+        if(!best)return {ok:false,reason:'connector-candidate-not-found',source};
+        const centerX=Math.round((best.door.x+best.target.x)/2);
+        const centerY=Math.round((best.door.y+best.target.y)/2);
+        return {ok:true,...best,centerX,centerY};
+        """,
+        source_kind,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Road connector target {source_kind!r} not found: {result}")
+    action=_set_camera_center_and_render_active(
+        driver, int(result["centerX"]), int(result["centerY"]), timeout=30.0
+    )
+    return (
+        f"road-hierarchy-connector:{result.get('source')}:{result.get('id')}:{result.get('kind')}:"
+        f"door={result.get('door',{}).get('x')},{result.get('door',{}).get('y')}:"
+        f"target={result.get('target',{}).get('x')},{result.get('target',{}).get('y')}:"
+        f"length={result.get('accessLengthTiles')}+" + action
+    )
+
+
 def _set_material_lifetime_texture_quality(driver, profile: str) -> dict:
     result = driver.execute_async_script(
         """
@@ -5594,6 +5684,31 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-002":
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "road-hierarchy:overview+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        if frame_index == 1:
+            return _focus_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 2:
+            return _focus_road_profile_target(driver, "dirt-mud") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 3:
+            return _focus_road_connector(driver, "house") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+        if frame_index == 4:
+            return _focus_road_connector(driver, "special") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+        if frame_index == 5:
+            return _focus_road_profile_target(driver, "square") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 6:
+            return _focus_road_profile_target(driver, "rolling") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 7:
+            return _focus_road_profile_target(driver, "chunk-boundary") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 8:
+            return "road-hierarchy:close+" + _focus_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
+        if frame_index == 9:
+            driver.set_window_size(390, 844)
+            return "road-hierarchy:phone-portrait+" + _focus_road_connector(driver, "house") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+        driver.set_window_size(844, 390)
+        return "road-hierarchy:phone-landscape+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
     if scenario == "wp-s003-006-009":
         if frame_index == 0:
             return "road-profile:origin-wide+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
@@ -6303,6 +6418,124 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-002":
+        if len(frames) < 11:
+            raise RuntimeError("wp-s003-009-002 requires eleven road-hierarchy evidence frames")
+        expected_zooms=("0.75×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","2.00×","0.75×","0.75×")
+        protagonist_locations=[]
+        saw_path=False
+        saw_square=False
+        saw_connector=False
+        saw_core_delta=False
+        protagonist_near_road=False
+        npc_near_road=False
+        max_route_cells=0
+        max_route_triangles=0
+        max_saved_draws=0
+        for index,frame in enumerate(frames[:11]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            preload=gpu.get("terrainPreload") or {}
+            world=chunks.get("worldData") or {}
+            bindings=chunks.get("routeSurfaceBindings") or {}
+            proximity=build.get("roadProfileCharacterProximity") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Road hierarchy zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Road hierarchy changed Simulation authority in frame {index+1}: {gpu}")
+            if chunks.get("heightfieldPass") is not True or chunks.get("sharedBorderEquality") is not True:
+                raise RuntimeError(f"Road hierarchy broke shared heightfield continuity in frame {index+1}: {chunks}")
+            if chunks.get("roadProfileEnabled") is not True or chunks.get("roadProfileGroundingShared") is not True:
+                raise RuntimeError(f"Raised road profile missing in frame {index+1}: {chunks}")
+            road_lift=float(chunks.get("roadLiftWorldUnits") or 0)
+            path_lift=float(chunks.get("pathLiftWorldUnits") or 0)
+            square_lift=float(chunks.get("squareLiftWorldUnits") or 0)
+            if abs(road_lift-0.12)>1e-6 or abs(path_lift-0.08)>1e-6 or abs(square_lift-0.055)>1e-6:
+                raise RuntimeError(f"Road/path/square lift mismatch in frame {index+1}: {chunks}")
+            if chunks.get("roadHierarchyPresentationPass") is not True:
+                raise RuntimeError(f"Road hierarchy presentation contract failed in frame {index+1}: {chunks}")
+            if chunks.get("routeSurfaceRendererOnly") is not True or chunks.get("routeNetworkDeterministic") is not True:
+                raise RuntimeError(f"Road hierarchy renderer-only/deterministic contract failed in frame {index+1}: {chunks}")
+            if chunks.get("routeSurfaceRouteSafe") is not True or chunks.get("routeNetworkRouteSafetyPass") is not True:
+                raise RuntimeError(f"Road connector safety failed in frame {index+1}: {chunks}")
+            if int(chunks.get("routeSurfaceStaleBindingCount") or 0)!=0:
+                raise RuntimeError(f"Stale road material binding detected in frame {index+1}: {chunks}")
+            material_count=int(chunks.get("routeSurfaceMaterialCount") or 0)
+            if material_count<2 or material_count>3:
+                raise RuntimeError(f"Road hierarchy material count is not bounded in frame {index+1}: {chunks}")
+            for surface in ("road","path","square"):
+                binding=bindings.get(surface) or {}
+                if binding.get("textureKey")!=f"tile:{surface}" or binding.get("textureBound") is not True:
+                    raise RuntimeError(f"{surface} road-hierarchy texture binding missing in frame {index+1}: {binding}")
+                if int(binding.get("runtimeResolution") or 0)<16 or not binding.get("uvRect"):
+                    raise RuntimeError(f"{surface} road-hierarchy texture sampling invalid in frame {index+1}: {binding}")
+                if float(binding.get("opacity") or 0)<0.99 or float(binding.get("blendWeightInterior") or 0)<0.99:
+                    raise RuntimeError(f"{surface} road-hierarchy interior is not opaque/fully weighted in frame {index+1}: {binding}")
+                if binding.get("vertexColorTint") is not False:
+                    raise RuntimeError(f"{surface} road-hierarchy texture is still washed by vertex tint in frame {index+1}: {binding}")
+            route_cells=int(chunks.get("routeSurfaceCellCount") or 0)
+            if route_cells<=0 or int(chunks.get("routeMainRoadCellCount") or 0)<=0:
+                raise RuntimeError(f"No visible batched road hierarchy in frame {index+1}: {chunks}")
+            max_route_cells=max(max_route_cells,route_cells)
+            max_route_triangles=max(max_route_triangles,int(chunks.get("routeSurfaceTriangleCount") or 0))
+            max_saved_draws=max(max_saved_draws,int(chunks.get("savedDrawCalls") or 0))
+            if int(chunks.get("routeLocalPathCellCount") or 0)>0:saw_path=True
+            if int(chunks.get("routeSquareCellCount") or 0)>0:saw_square=True
+            if int(chunks.get("routeConnectorCellCount") or 0)>0:saw_connector=True
+            if int(chunks.get("roadProfileRoadVertexCount") or 0)>0 and int(chunks.get("roadProfileCoreVertexCount") or 0)>0:
+                lo=float(chunks.get("minRoadCoreHeightDelta") or 0)
+                hi=float(chunks.get("maxRoadCoreHeightDelta") or 0)
+                if lo>0 and hi>=lo:saw_core_delta=True
+            if int(chunks.get("visibleFrameTerrainRebuildCount") or 0)!=0:
+                raise RuntimeError(f"Road hierarchy triggered visible-frame terrain rebuilds in frame {index+1}: {chunks}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Road hierarchy triggered visible-frame asset work in frame {index+1}: {preload}")
+            if chunks.get("oneEntityPerTile") is not False:
+                raise RuntimeError(f"Road hierarchy introduced one-entity-per-tile rendering in frame {index+1}: {chunks}")
+            if world.get("connectorRendererOnly") is not True or world.get("connectorDeterministic") is not True:
+                raise RuntimeError(f"Connector world-data contract missing in frame {index+1}: {world}")
+            if world.get("connectorRouteSafetyPass") is not True:
+                raise RuntimeError(f"Connector world-data route safety failed in frame {index+1}: {world}")
+            total_routes=int(chunks.get("routeNetworkTotalRouteCount") or 0)
+            connected_routes=int(chunks.get("routeNetworkConnectedRouteCount") or 0)
+            if total_routes<=0 or connected_routes!=total_routes:
+                raise RuntimeError(f"Not all real entrances reached the circulation network in frame {index+1}: connected={connected_routes}, total={total_routes}")
+            protagonist_locations.append(build.get("protagonistLocation"))
+            protagonist=(proximity.get("protagonist") or {}).get("nearestRoad") or {}
+            npc=(proximity.get("nearestNpc") or {}).get("nearestRoad") or {}
+            if protagonist and protagonist.get("distanceTiles") is not None and float(protagonist.get("distanceTiles"))<=3.0:
+                protagonist_near_road=True
+            if npc and npc.get("distanceTiles") is not None and float(npc.get("distanceTiles"))<=3.0:
+                npc_near_road=True
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Road hierarchy camera evidence changed authoritative protagonist location: {protagonist_locations}")
+        if not saw_path or not saw_square or not saw_connector or not saw_core_delta:
+            raise RuntimeError(f"Road hierarchy coverage incomplete: path={saw_path}, square={saw_square}, connector={saw_connector}, raisedCore={saw_core_delta}")
+        if not protagonist_near_road or not npc_near_road:
+            raise RuntimeError(f"Character/road proximity coverage incomplete: protagonist={protagonist_near_road}, npc={npc_near_road}")
+        if max_route_cells<=0 or max_route_triangles<=0 or max_saved_draws<=0:
+            raise RuntimeError(f"Road hierarchy batching/performance evidence incomplete: cells={max_route_cells}, triangles={max_route_triangles}, savedDraws={max_saved_draws}")
+        actions=[str(frame.get("action") or "") for frame in frames[:11]]
+        for required in (
+            "road-profile-target:grass",
+            "road-profile-target:dirt-mud",
+            "road-hierarchy-connector:house",
+            "road-hierarchy-connector:special",
+            "road-profile-target:square",
+            "road-profile-target:rolling",
+            "road-profile-target:chunk-boundary",
+            "road-hierarchy:close",
+        ):
+            if not any(required in action for action in actions):
+                raise RuntimeError(f"Required road hierarchy scene {required} missing: {actions}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:11]]
+        if int(viewports[9].get("height") or 0)<=int(viewports[9].get("width") or 0):
+            raise RuntimeError(f"Phone portrait road-hierarchy evidence missing: {viewports[9]}")
+        if int(viewports[10].get("width") or 0)<=int(viewports[10].get("height") or 0):
+            raise RuntimeError(f"Phone landscape road-hierarchy evidence missing: {viewports[10]}")
         return
 
     if scenario == "wp-s003-006-009":
@@ -10557,12 +10790,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
