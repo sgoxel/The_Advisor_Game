@@ -828,6 +828,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let meshResourceCount=0,activeMeshCount=0,preparedMeshCount=0,cachedMeshCount=0;
     let meshInstanceCount=0,vertices=0,triangles=0;
     let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,interiorObjectPresentationCount=0,propPresentationCount=0;
+    let dressingPresentationCount=0,dressingDescriptorCount=0,dressingPrimitiveInstanceCount=0,dressingInstancedGroupCount=0,dressingRouteSafeCount=0;
+    const dressingContextCounts={},dressingSemanticCounts={},dressingSamples=[];
+    let dressingDeterministic=true,dressingRendererOnly=true;
     let treePresentationCount=0,treeVariant0Count=0,treeVariant1Count=0,treeInstancedGroupCount=0,treeCylinderSpherePlaceholderCount=0;
     let roofProfileCount=0,roofNormalProfileCount=0,roofSpecialProfileCount=0,roofProfilePass=true,roofCenterRidgeHigher=true,roofEaveContactPass=true,roofFootprintDriven=true;
     const roofProfileSamples=[],treeVariationSamples=[],treeSampleChunks=[];
@@ -928,6 +931,21 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       }
       interiorObjectPresentationCount+=Number(resource.interiorObjectPresentationCount||0);
       propPresentationCount+=Number(resource.propPresentationCount||0);
+      dressingPresentationCount+=Number(resource.dressingPresentationCount||0);
+      dressingDescriptorCount+=Number(resource.dressingDescriptorCount||0);
+      dressingPrimitiveInstanceCount+=Number(resource.dressingPrimitiveInstanceCount||0);
+      dressingInstancedGroupCount+=Number(resource.dressingInstancedGroupCount||0);
+      dressingRouteSafeCount+=Number(resource.dressingRouteSafeCount||0);
+      dressingDeterministic=dressingDeterministic&&resource.dressingDeterministic!==false;
+      dressingRendererOnly=dressingRendererOnly&&resource.dressingRendererOnly!==false;
+      for(const [key,value] of Object.entries(resource.dressingContextCounts||{}))dressingContextCounts[key]=(dressingContextCounts[key]||0)+Number(value||0);
+      for(const [key,value] of Object.entries(resource.dressingSemanticCounts||{}))dressingSemanticCounts[key]=(dressingSemanticCounts[key]||0)+Number(value||0);
+      if(dressingSamples.length<32){
+        for(const item of resource.dressingSamples||[]){
+          if(dressingSamples.length>=32)break;
+          dressingSamples.push(item);
+        }
+      }
       treePresentationCount+=Number(resource.treePresentationCount||0);
       treeVariant0Count+=Number(resource.treeVariant0Count||0);
       treeVariant1Count+=Number(resource.treeVariant1Count||0);
@@ -1032,6 +1050,14 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       roofProfileSamples:Object.freeze(roofProfileSamples.slice()),
       roofGeometryAuthority:"renderer-only building footprints",
       interiorObjectPresentationCount,propPresentationCount,
+      dressingPresentationCount,dressingDescriptorCount,dressingPrimitiveInstanceCount,dressingInstancedGroupCount,dressingRouteSafeCount,
+      dressingContextCounts:Object.freeze({...dressingContextCounts}),
+      dressingSemanticCounts:Object.freeze({...dressingSemanticCounts}),
+      dressingSamples:Object.freeze(dressingSamples.slice()),
+      dressingDeterministic,dressingRendererOnly,
+      dressingHardwareInstanced:generatorStats.dressingHardwareInstanced===true,
+      dressingSharedMaterialCount:Number(generatorStats.dressingSharedMaterialCount||0),
+      dressingRouteProtectionPass:dressingPresentationCount>0&&dressingRouteSafeCount===dressingPresentationCount,
       treePresentationCount,treeVariant0Count,treeVariant1Count,treeInstancedGroupCount,
       treeCylinderSpherePlaceholderCount,
       treePlanePresentation:treePresentationCount>0&&treeCylinderSpherePlaceholderCount===0,
