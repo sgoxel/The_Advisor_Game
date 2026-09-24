@@ -4580,6 +4580,30 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 5:
             return _set_camera_center_and_render(driver, 0, 0)
         return _set_camera_zoom_and_render(driver, 0.75)
+    if scenario == "wp-s003-006-009":
+        if frame_index == 0:
+            return "road-profile:origin-wide+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 1:
+            return _focus_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 2:
+            return _focus_road_profile_target(driver, "dirt-mud") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 3:
+            return _focus_road_profile_target(driver, "water") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 4:
+            return _focus_road_profile_target(driver, "rolling") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 5:
+            return _focus_road_profile_target(driver, "square") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 6:
+            return _focus_road_profile_target(driver, "chunk-boundary") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 7:
+            return "road-profile:origin-close+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 2.00)
+        if frame_index == 8:
+            return "road-profile:origin-standard+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 9:
+            driver.set_window_size(390, 844)
+            return "road-profile:phone-portrait+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        driver.set_window_size(844, 390)
+        return "road-profile:phone-landscape+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
     if scenario == "wp-s003-006-008":
         pairs=(("road",False),("road",True),("dirt",False),("dirt",True),("rock",False),("rock",True),("farmland",False),("farmland",True))
         if frame_index < len(pairs):
