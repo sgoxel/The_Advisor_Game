@@ -48,9 +48,11 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       logicalKey:SURFACES[index].logicalKey,
       material:SURFACES[index].material,
       u0:(x+half)/width,
-      v0:(y+half)/height,
+      // Canvas rows are top-down while PlayCanvas material UVs are bottom-up.
+      // Flip the atlas row here so each material samples its authored cell.
+      v0:(height-(y+size)+half)/height,
       u1:(x+size-half)/width,
-      v1:(y+size-half)/height,
+      v1:(height-y-half)/height,
       uScale:(size-1)/width,
       vScale:(size-1)/height
     });
