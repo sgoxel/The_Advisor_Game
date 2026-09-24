@@ -154,20 +154,26 @@ function findConnectorPath(seed,building){
   const sx=BigInt(start.x),sy=BigInt(start.y),tx=BigInt(String(target.x)),ty=BigInt(String(target.y));
   const minX=(sx<tx?sx:tx)-3n,maxX=(sx>tx?sx:tx)+3n;
   const minY=(sy<ty?sy:ty)-3n,maxY=(sy>ty?sy:ty)+3n;
-  const queue=[{x:sx,y:sy,path:[Object.freeze({x:String(sx),y:String(sy)})]}];
+  const queue=[{x:sx,y:sy,dir:null,path:[Object.freeze({x:String(sx),y:String(sy)})]}];
   const visited=new Set([connectorKey(sx,sy)]);
   while(queue.length){
     const current=queue.shift();
     const key=connectorKey(current.x,current.y);
     if(key===targetKey)return Object.freeze(current.path);
     const neighbors=[
-      {x:current.x+1n,y:current.y},{x:current.x-1n,y:current.y},
-      {x:current.x,y:current.y+1n},{x:current.x,y:current.y-1n}
+      {x:current.x+1n,y:current.y,dir:"E"},{x:current.x-1n,y:current.y,dir:"W"},
+      {x:current.x,y:current.y+1n,dir:"S"},{x:current.x,y:current.y-1n,dir:"N"}
     ].filter(point=>point.x>=minX&&point.x<=maxX&&point.y>=minY&&point.y<=maxY);
     neighbors.sort((a,b)=>{
       const da=(a.x>tx?a.x-tx:tx-a.x)+(a.y>ty?a.y-ty:ty-a.y);
       const db=(b.x>tx?b.x-tx:tx-b.x)+(b.y>ty?b.y-ty:ty-b.y);
       if(da!==db)return da<db?-1:1;
+      // Prefer staying on the current heading when multiple shortest steps are
+      // available. This keeps short door connectors as one or two clean runs
+      // instead of a hash-driven zig-zag staircase.
+      const turnA=current.dir&&a.dir!==current.dir?1:0;
+      const turnB=current.dir&&b.dir!==current.dir?1:0;
+      if(turnA!==turnB)return turnA-turnB;
       const ah=presentationHash32(seed,String(a.x),String(a.y),"connector:"+building.id);
       const bh=presentationHash32(seed,String(b.x),String(b.y),"connector:"+building.id);
       return bh-ah;
@@ -177,7 +183,7 @@ function findConnectorPath(seed,building){
       if(visited.has(nextKey)||!connectorPassable(seed,next.x,next.y,targetKey))continue;
       visited.add(nextKey);
       queue.push({
-        x:next.x,y:next.y,
+        x:next.x,y:next.y,dir:next.dir,
         path:[...current.path,Object.freeze({x:String(next.x),y:String(next.y)})]
       });
       if(visited.size>160)break;
