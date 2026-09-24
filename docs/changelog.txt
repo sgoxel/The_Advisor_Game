@@ -822,3 +822,16 @@
 - Corrected Visual Evidence run 35940569274 passed on exact head 2798af023ed6bcb034c2c7f949840d2ecb844a12. Accepted/deferred/rejected/modified coverage, Advisor+memory synchronization, confidence effects, deterministic replay/IDs, storage/reload persistence, Simulation gating and world-position isolation all passed.
 - All 5 fresh screenshots were directly inspected. Decision framing, event log, reasoning, Simulation validation and memory linkage are readable with no major clipping, overlap or broken layout. VISUAL 8.6/10 PASS.
 - GitHub Pages run 35940559873 successfully deployed the tested head.
+2026-09-24 04:36 +03:00 | WP-S005-005 | Relationship, Reputation + Duty State Foundation
+- Added a campaign-scoped event-sourced SocialState ledger with directional trust, fear, respect, suspicion, loyalty and resentment between characters.
+- Added persistent protagonist reputation tracking across role, house, guild, family and settlement scopes, bounded to deterministic -1..1 scores with stable event provenance.
+- Added durable duties/obligations for family, work, oath, service, debt, public office and promises with inspectable active/fulfilled/breached/released states and priorities.
+- Added deterministic social events for truthful advice, promises, observed help/harm and duty outcomes; every social mutation now derives from a stable replayable event ID rather than hidden UI state.
+- Integrated SocialState into DialogueContext when no explicit social snapshot is supplied, so persistent relationship/reputation state changes conversation tone without changing facts.
+- Integrated SocialState into AdviceResolution through optional resident-target social acceptability, preserving protagonist choice and the existing Simulation validation boundary.
+- Added a Development Mode social inspector with resident selector, six relationship metrics, five reputation scopes, duties/obligations, social event history, dialogue influence and advice influence.
+- Dedicated evidence shows the deterministic smith resident's trust rising 50%→77% after truthful/helpful history, then falling to 30% after a broken promise/duty breach; suspicion rises to 67%, dialogue shifts friendly→guarded, and advice shifts accepted→rejected.
+- First dedicated evidence run 35943324170 captured correct state progression but failed because the validator demanded future duty states in the baseline frame. The staged evidence assertion was corrected in f11d879089ce36a2adb4b37bbf8da560a8d88cb1 without weakening game rules.
+- Corrected Visual Evidence run 35943458284 passed on exact head f11d879089ce36a2adb4b37bbf8da560a8d88cb1. Deterministic event IDs/replay, storage round-trip, exact reload persistence, relationship/reputation/duty validity, social-system integration and world-authority isolation all passed.
+- All 5 fresh screenshots were directly inspected. The social panel remains readable with no major clipping, overlap or broken layout across baseline, positive, negative, steady-state and reload frames. VISUAL 8.6/10 PASS.
+- GitHub Pages run 35943444753 successfully deployed the tested head.
