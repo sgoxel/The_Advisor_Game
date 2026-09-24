@@ -102,7 +102,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S007-001` — Immutable SEED Foundation + Campaign Delta State Model — COMPLETED
 - `WP-S007-002` — Hierarchical World Context Resolver + Influence Inheritance — COMPLETED
 - `WP-S007-003` — Multi-Resolution Lazy Simulation Tiers + Relevance Activation — COMPLETED
-- `WP-S007-004` — Deterministic Event Scheduler + Stable Random Streams
+- `WP-S007-004` — Deterministic Event Scheduler + Stable Random Streams — COMPLETED
 - `WP-S007-005` — Global Country/Diplomacy Aggregate Simulation
 - `WP-S007-006` — Regional + Settlement Aggregate Simulation with Lazy Revision Propagation
 - `WP-S007-007` — NPC Materialization, Dematerialization + Schedule Reconstruction
