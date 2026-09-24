@@ -151,7 +151,9 @@ permissions:
   issues: write
 
 concurrency:
-  group: visual-evidence-${{ github.repository }}
+  # Keep repeated evidence for the same Issue/scenario serialized, but never let
+  # another WP replace a pending run. Push self-tests are isolated by commit.
+  group: visual-evidence-${{ github.repository }}-${{ github.event_name }}-${{ github.event.issue.number || inputs.scenario || github.sha }}
   cancel-in-progress: false
 
 jobs:
