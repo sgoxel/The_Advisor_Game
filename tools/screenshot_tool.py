@@ -101,6 +101,7 @@ SCENARIOS = {
     "wp-s003-009-001",
     "wp-s003-009-002",
     "wp-s003-009-003",
+    "wp-s003-009-004",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -179,6 +180,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
     "wp-s003-009-003": 9,
+    "wp-s003-009-004": 6,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1545,7 +1547,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
-    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003"}:
+    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 120.0)
     if scenario == "wp-s003-005-006":
@@ -1586,7 +1588,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=128, directional=True, background=True
                 )
-            if scenario in {"wp-s003-009-002", "wp-s003-009-003"}:
+            if scenario in {"wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004"}:
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
                 )
@@ -1601,7 +1603,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -5908,6 +5910,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-004":
+        profiles=("low","standard","high","ultra")
+        if frame_index < 4:
+            profile=profiles[frame_index]
+            quality=_set_material_lifetime_texture_quality(driver, profile)
+            return f"material-quality:{profile}:same-camera+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=60.0)
+        if frame_index == 4:
+            _ensure_texture_quality_profile(driver, "ultra")
+            return "material-quality:ultra:close-building+" + _focus_road_connector(driver, "house") + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=45.0)
+        _ensure_texture_quality_profile(driver, "ultra")
+        driver.set_window_size(844, 390)
+        return "material-quality:ultra:phone-landscape+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=60.0)
     if scenario == "wp-s003-009-003":
         if frame_index == 0:
             driver.set_window_size(1280, 800)
@@ -6665,6 +6679,68 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-004":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-009-004 requires six material-quality evidence frames")
+        expected_profiles=("low","standard","high","ultra")
+        expected={
+            "low":(16,64,192),
+            "standard":(32,128,256),
+            "high":(64,256,320),
+            "ultra":(128,512,384),
+        }
+        protagonist_locations=[]
+        camera_coordinates=[]
+        signatures=[]
+        for index,frame in enumerate(frames[:4]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            generator=chunks.get("generator") or {}
+            terrain=chunks.get("textureAtlas") or {}
+            building=chunks.get("buildingSurfaceAtlas") or generator.get("buildingSurfaceAtlas") or {}
+            tree=chunks.get("treeSpriteAtlas") or generator.get("treeSpriteAtlas") or {}
+            mq=gpu.get("materialTextureQuality") or {}
+            profile=expected_profiles[index]
+            if str(mq.get("profile") or "")!=profile:
+                raise RuntimeError(f"Effective renderer profile mismatch in frame {index+1}: {mq}")
+            want=expected[profile]
+            actual=(int(terrain.get("runtimeResolution") or 0),int(building.get("runtimeResolution") or 0),int(tree.get("runtimeWidth") or 0))
+            if actual!=want:
+                raise RuntimeError(f"Bound texture dimensions mismatch for {profile}: expected={want}, actual={actual}")
+            if int(generator.get("buildingMaterialVariantPaletteSize") or 0)!=4:
+                raise RuntimeError(f"Building material palette is not bounded to four variants: {generator}")
+            if int(generator.get("buildingMaterialVariantCount") or 0)<2:
+                raise RuntimeError(f"Visible/prepared settlement did not demonstrate material variation: {generator}")
+            if int(generator.get("buildingMaterialVariantMaterialCount") or 0)>int(generator.get("buildingMaterialVariantMaterialBudget") or 16):
+                raise RuntimeError(f"Building material variant budget exceeded: {generator}")
+            if generator.get("buildingMaterialVariationDeterministic") is not True:
+                raise RuntimeError(f"Building material variation is not deterministic: {generator}")
+            if int(generator.get("buildingSurfaceStaleBindingCount") or 0)!=0:
+                raise RuntimeError(f"Stale building material binding in {profile}: {generator}")
+            if int(chunks.get("visibleFrameTerrainRebuildCount") or 0)!=0:
+                raise RuntimeError(f"Quality switch rebuilt terrain in visible frame for {profile}: {chunks}")
+            if gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Quality switch changed Simulation authority for {profile}: {gpu}")
+            protagonist_locations.append(build.get("protagonistLocation"))
+            camera_coordinates.append(build.get("cameraCoordinate"))
+            signatures.append(str(mq.get("cacheSignature") or terrain.get("signature") or ""))
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Texture-quality cycle changed protagonist authority: {protagonist_locations}")
+        if len(set(camera_coordinates))!=1 or not camera_coordinates[0]:
+            raise RuntimeError(f"Low/Standard/High/Ultra were not captured at the same camera: {camera_coordinates}")
+        if len(set(signatures))!=4:
+            raise RuntimeError(f"Quality profiles did not produce distinct cache signatures: {signatures}")
+        ultra=frames[3].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer",{})
+        ug=(ultra.get("terrainChunks") or {}).get("generator") or {}
+        samples=ug.get("buildingMaterialVariantSamples") or []
+        if len({int(item.get("variantIndex") or 0) for item in samples})<2:
+            raise RuntimeError(f"Ultra building variant samples do not demonstrate deterministic variety: {samples}")
+        phone=frames[5].get("runtime",{}).get("viewport",{})
+        if int(phone.get("width") or 0)<=int(phone.get("height") or 0):
+            raise RuntimeError(f"Phone-landscape material evidence missing: {phone}")
         return
 
     if scenario == "wp-s003-009-003":
@@ -11142,7 +11218,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
