@@ -36,10 +36,10 @@ const CATALOG=Object.freeze([
   def({id:"elite-residence",category:"residential",label:"Elite / Noble Residence",classes:classes(["town","city","national-capital"]),populationMin:1400,prosperityMin:0.48,capacity:18,maxCount:45,enterable:true,assetKey:"building:function:elite-residence",road:"structured",publicSpace:"communal",modifiers:def({prosperity:0.50,publicSpace:0.18,trade:0.10}),threshold:0.55}),
   def({id:"well-cistern",category:"community",label:"Well / Cistern",classes:classes(ALL_CLASSES),capacity:420,maxCount:140,enterable:false,assetKey:"building:function:well-cistern",road:"local",publicSpace:"communal",score:0.84}),
   def({id:"barn",category:"food-agriculture",label:"Barn / Agricultural Support",classes:classes(RURAL_CLASSES),resourceMin:def({agriculture:0.28}),capacity:180,maxCount:80,enterable:true,assetKey:"building:function:barn",road:"local",publicSpace:"none",legacyLotKinds:Object.freeze(["barn"]),modifiers:def({agriculture:0.64,prosperity:0.08}),threshold:0.44}),
-  def({id:"granary",category:"food-agriculture",label:"Granary / Food Store",classes:classes(NON_HAMLET),resourceMin:def({agriculture:0.30}),capacity:520,maxCount:48,enterable:true,assetKey:"building:function:granary",road:"structured",publicSpace:"communal",modifiers:def({agriculture:0.54,prosperity:0.12,publicSpace:0.10}),threshold:0.46}),
+  def({id:"granary",category:"food-agriculture",label:"Granary / Food Store",classes:classes(ALL_CLASSES),populationMin:35,resourceMin:def({agriculture:0.28}),capacity:520,maxCount:48,enterable:true,assetKey:"building:function:granary",road:"structured",publicSpace:"communal",modifiers:def({agriculture:0.54,prosperity:0.12,publicSpace:0.10}),threshold:0.46}),
   def({id:"mill",category:"food-agriculture",label:"Mill",classes:classes(["village","town","city","national-capital"]),resourceMin:def({agriculture:0.34}),capacity:900,maxCount:24,enterable:true,assetKey:"building:function:mill",road:"local",publicSpace:"none",modifiers:def({agriculture:0.56,route:0.16,prosperity:0.08}),threshold:0.54}),
   def({id:"livestock-yard",category:"food-agriculture",label:"Livestock Yard",classes:classes(["hamlet","village","town"]),resourceMin:def({agriculture:0.30}),capacity:260,maxCount:36,enterable:false,assetKey:"building:function:livestock-yard",road:"local",publicSpace:"none",modifiers:def({agriculture:0.48,route:0.08}),threshold:0.58}),
-  def({id:"general-shop",category:"trade",label:"Shop",classes:classes(NON_HAMLET),populationMin:160,capacity:650,maxCount:180,enterable:true,assetKey:"building:function:general-shop",road:"local",publicSpace:"communal",legacyLotKinds:Object.freeze(["shop"]),modifiers:def({trade:0.42,market:0.30,route:0.18}),threshold:0.45}),
+  def({id:"general-shop",category:"trade",label:"Shop",classes:classes(ALL_CLASSES),populationMin:35,capacity:650,maxCount:180,enterable:true,assetKey:"building:function:general-shop",road:"local",publicSpace:"communal",legacyLotKinds:Object.freeze(["shop"]),modifiers:def({trade:0.42,market:0.30,route:0.18}),threshold:0.45}),
   def({id:"market-stalls",category:"trade",label:"Market Stalls",classes:classes(["village","town","city","national-capital"]),populationMin:240,capacity:1000,maxCount:90,enterable:false,assetKey:"building:function:market-stalls",road:"structured",publicSpace:"communal",modifiers:def({trade:0.36,market:0.34,publicSpace:0.20}),threshold:0.52}),
   def({id:"market-hall",category:"trade",label:"Market Hall",classes:classes(["town","city","national-capital"]),populationMin:1100,prosperityMin:0.35,capacity:4200,maxCount:18,enterable:true,assetKey:"building:function:market-hall",road:"structured",publicSpace:"civic",modifiers:def({trade:0.38,market:0.34,prosperity:0.12,publicSpace:0.10}),threshold:0.58}),
   def({id:"inn-tavern",category:"trade",label:"Inn / Tavern",classes:classes(NON_HAMLET),populationMin:150,capacity:260,maxCount:70,enterable:true,assetKey:"building:function:inn-tavern",road:"local",publicSpace:"communal",legacyLotKinds:Object.freeze(["tavern"]),modifiers:def({trade:0.28,market:0.24,route:0.28,prosperity:0.08}),threshold:0.46}),
@@ -48,15 +48,15 @@ const CATALOG=Object.freeze([
   def({id:"storehouse",category:"production-storage",label:"Storehouse",classes:classes(ALL_CLASSES),populationMin:70,capacity:700,maxCount:100,enterable:true,assetKey:"building:function:storehouse",road:"local",publicSpace:"none",legacyLotKinds:Object.freeze(["storehouse"]),modifiers:def({route:0.22,prosperity:0.12,agriculture:0.14,trade:0.12}),threshold:0.40}),
   def({id:"craft-workshop",category:"production-storage",label:"Craft Workshop",classes:classes(NON_HAMLET),populationMin:180,capacity:340,maxCount:160,enterable:true,assetKey:"building:function:craft-workshop",road:"local",publicSpace:"none",legacyLotKinds:Object.freeze(["workshop"]),modifiers:def({trade:0.16,prosperity:0.18,forest:0.20,mining:0.20,route:0.10}),threshold:0.48}),
   def({id:"smithy",category:"production-storage",label:"Smithy",classes:classes(["village","town","city","national-capital"]),populationMin:260,resourceMin:def({mineral:0.20}),capacity:520,maxCount:60,enterable:true,assetKey:"building:function:smithy",road:"local",publicSpace:"none",modifiers:def({mining:0.42,prosperity:0.14,route:0.14}),threshold:0.53}),
-  def({id:"ore-depot",category:"production-storage",label:"Ore Depot",classes:classes(["village","town","city","national-capital"]),populationMin:220,resourceMin:def({mineral:0.32}),capacity:1200,maxCount:36,enterable:true,assetKey:"building:function:ore-depot",road:"structured",publicSpace:"none",modifiers:def({mining:0.58,route:0.18}),threshold:0.47}),
+  def({id:"ore-depot",category:"production-storage",label:"Ore Depot",classes:classes(ALL_CLASSES),populationMin:35,resourceMin:def({mineral:0.28}),capacity:1200,maxCount:36,enterable:true,assetKey:"building:function:ore-depot",road:"structured",publicSpace:"none",modifiers:def({mining:0.58,route:0.18}),threshold:0.47}),
   def({id:"smelter",category:"production-storage",label:"Smelter / Processing Works",classes:classes(["town","city","national-capital"]),populationMin:800,resourceMin:def({mineral:0.38}),capacity:1700,maxCount:30,enterable:true,assetKey:"building:function:smelter",road:"structured",publicSpace:"none",modifiers:def({mining:0.58,prosperity:0.10,route:0.14}),threshold:0.56}),
   def({id:"timber-yard",category:"production-storage",label:"Timber Yard",classes:classes(["village","town","city","national-capital"]),resourceMin:def({timber:0.36}),capacity:1100,maxCount:40,enterable:false,assetKey:"building:function:timber-yard",road:"structured",publicSpace:"none",modifiers:def({forest:0.62,route:0.16}),threshold:0.50}),
   def({id:"workyard",category:"production-storage",label:"Outdoor Workyard",classes:classes(ALL_CLASSES),populationMin:80,capacity:500,maxCount:80,enterable:false,assetKey:"building:function:workyard",road:"local",publicSpace:"none",legacyLotKinds:Object.freeze(["workyard"]),modifiers:def({prosperity:0.12,route:0.12,forest:0.14,mining:0.14}),threshold:0.44}),
   def({id:"meeting-hall",category:"civic",label:"Meeting / Community Hall",classes:classes(NON_HAMLET),populationMin:130,capacity:650,maxCount:8,enterable:true,assetKey:"building:function:meeting-hall",road:"structured",publicSpace:"communal",legacyLotKinds:Object.freeze(["meeting-hall"]),modifiers:def({publicSpace:0.40,prosperity:0.12}),threshold:0.40}),
   def({id:"town-hall",category:"civic",label:"Town Hall / Administration",classes:classes(["town","city","national-capital"]),populationMin:700,capacity:2800,maxCount:8,enterable:true,assetKey:"building:function:town-hall",road:"structured",publicSpace:"civic",modifiers:def({publicSpace:0.38,prosperity:0.14,route:0.08}),threshold:0.48}),
-  def({id:"city-administration",category:"civic",label:"City Administration",classes:classes(LARGE_CLASSES),populationMin:3200,capacity:9000,maxCount:10,enterable:true,assetKey:"building:function:city-administration",road:"major",publicSpace:"civic",modifiers:def({publicSpace:0.36,prosperity:0.16,route:0.10}),threshold:0.54}),
+  def({id:"city-administration",category:"civic",label:"City Administration",classes:classes(LARGE_CLASSES),populationMin:2600,capacity:9000,maxCount:10,enterable:true,assetKey:"building:function:city-administration",road:"major",publicSpace:"civic",modifiers:def({publicSpace:0.36,prosperity:0.16,route:0.10}),threshold:0.54}),
   def({id:"court-records",category:"civic",label:"Court / Records Office",classes:classes(["town","city","national-capital"]),populationMin:1700,prosperityMin:0.35,capacity:5200,maxCount:8,enterable:true,assetKey:"building:function:court-records",road:"structured",publicSpace:"civic",modifiers:def({publicSpace:0.30,prosperity:0.24,trade:0.08}),threshold:0.58}),
-  def({id:"guard-post",category:"security-military",label:"Guard Post",classes:classes(NON_HAMLET),capacity:420,maxCount:60,enterable:true,assetKey:"building:function:guard-post",road:"structured",publicSpace:"none",modifiers:def({defense:0.46,frontier:0.24,fortified:0.20}),threshold:0.46}),
+  def({id:"guard-post",category:"security-military",label:"Guard Post",classes:classes(ALL_CLASSES),capacity:420,maxCount:60,enterable:true,assetKey:"building:function:guard-post",road:"structured",publicSpace:"none",modifiers:def({defense:0.46,frontier:0.24,fortified:0.20}),threshold:0.46}),
   def({id:"watchtower",category:"security-military",label:"Watchtower",classes:classes(["village","town","city","national-capital"]),capacity:1200,maxCount:32,enterable:true,assetKey:"building:function:watchtower",road:"local",publicSpace:"none",modifiers:def({defense:0.42,frontier:0.34,fortified:0.18}),threshold:0.58}),
   def({id:"barracks",category:"security-military",label:"Barracks",classes:classes(["town","city","national-capital"]),populationMin:900,capacity:1800,maxCount:28,enterable:true,assetKey:"building:function:barracks",road:"structured",publicSpace:"communal",modifiers:def({defense:0.46,fortified:0.26,frontier:0.14}),threshold:0.55}),
   def({id:"armory",category:"security-military",label:"Armory",classes:classes(["city","national-capital"]),populationMin:3600,capacity:5200,maxCount:8,enterable:true,assetKey:"building:function:armory",road:"major",publicSpace:"communal",modifiers:def({defense:0.50,fortified:0.26,prosperity:0.08}),threshold:0.62}),
@@ -65,7 +65,7 @@ const CATALOG=Object.freeze([
   def({id:"temple-cultural-hall",category:"religious-cultural-community",label:"Temple / Cultural Hall",classes:classes(["town","city","national-capital"]),populationMin:1500,prosperityMin:0.38,capacity:5000,maxCount:18,enterable:true,assetKey:"building:function:temple-cultural-hall",road:"structured",publicSpace:"civic",modifiers:def({publicSpace:0.32,prosperity:0.24,trade:0.06}),threshold:0.60}),
   def({id:"stable-road-service",category:"transport",label:"Stable / Road Service",classes:classes(ALL_CLASSES),populationMin:60,capacity:700,maxCount:90,enterable:true,assetKey:"building:function:stable-road-service",road:"local",publicSpace:"none",modifiers:def({route:0.46,trade:0.18,market:0.10}),threshold:0.40}),
   def({id:"caravan-yard",category:"transport",label:"Caravan Yard",classes:classes(["town","city","national-capital"]),populationMin:800,capacity:2600,maxCount:36,enterable:false,assetKey:"building:function:caravan-yard",road:"major",publicSpace:"communal",modifiers:def({route:0.44,trade:0.30,market:0.16}),threshold:0.56}),
-  def({id:"dock-wharf",category:"transport",label:"Dock / Wharf",classes:classes(["village","town","city","national-capital"]),populationMin:240,coastalOnly:true,resourceMin:def({water:0.28}),capacity:2600,maxCount:42,enterable:false,assetKey:"building:function:dock-wharf",road:"structured",publicSpace:"none",modifiers:def({port:0.54,trade:0.18,route:0.10}),threshold:0.45}),
+  def({id:"dock-wharf",category:"transport",label:"Dock / Wharf",classes:classes(ALL_CLASSES),populationMin:35,coastalOnly:true,resourceMin:def({water:0.28}),capacity:2600,maxCount:42,enterable:false,assetKey:"building:function:dock-wharf",road:"structured",publicSpace:"none",modifiers:def({port:0.54,trade:0.18,route:0.10}),threshold:0.45}),
   def({id:"fish-market",category:"transport",label:"Fish Market",classes:classes(["village","town","city","national-capital"]),populationMin:260,coastalOnly:true,resourceMin:def({water:0.30}),capacity:1800,maxCount:24,enterable:false,assetKey:"building:function:fish-market",road:"structured",publicSpace:"communal",modifiers:def({port:0.42,trade:0.24,market:0.18}),threshold:0.52}),
   def({id:"government-complex",category:"capital-government",label:"National Government Complex",classes:classes(["national-capital"]),populationMin:10000,capacity:24000,maxCount:4,enterable:true,assetKey:"building:function:government-complex",road:"major",publicSpace:"monumental",capitalOnly:true,score:0.96}),
   def({id:"palace-castle",category:"capital-government",label:"Palace / Castle",classes:classes(["national-capital"]),populationMin:10000,capacity:30000,maxCount:2,enterable:true,assetKey:"building:function:palace-castle",road:"major",publicSpace:"monumental",capitalOnly:true,modifiers:def({defense:0.28,prosperity:0.28,publicSpace:0.20,fortified:0.18}),threshold:0.52}),
@@ -87,7 +87,7 @@ const SIGNAL_CANDIDATES=Object.freeze({
   "major-civic-space":Object.freeze(["great-civic-hall"]),
   "garrison":Object.freeze(["barracks","armory"]),
   "food-storage":Object.freeze(["granary"]),
-  "ore-storage":Object.freeze(["ore-depot"]),
+  "ore-storage":Object.freeze(["ore-depot","storehouse"]),
   "dock-or-wharf":Object.freeze(["dock-wharf"]),
   "defensive-post":Object.freeze(["guard-post","watchtower"]),
   "farm-support":Object.freeze(["barn","livestock-yard"]),
@@ -383,6 +383,11 @@ function proof(seedValue){
     for(const item of reps)if(!byClass.has(item.plan.classId))byClass.set(item.plan.classId,compositionSignature(item.composition));
     return ["village","town","city","national-capital"].every(id=>byClass.has(id))&&new Set(byClass.values()).size>=4;
   })();
+  const requiredSignalsSatisfied=comps.every((composition,index)=>
+    plans[index].buildingFunctions.required.every(signal=>
+      composition.selected.some(item=>item.source==="required"&&item.signal===signal)
+    )
+  );
   const selectedHasReasons=comps.every(item=>item.selected.every(entry=>entry.reasons.length>=1&&entry.source));
   const logicalAssetOnly=comps.every(item=>item.logicalAssetOnly);
   const noTemplateClone=(()=>{
@@ -398,14 +403,14 @@ function proof(seedValue){
     plans.length>=12&&comps.length===plans.length&&reps.length===5&&deterministic&&timeIndependent&&
     catalogCoverage&&metadataComplete&&contextualValidity&&portConstraint&&agricultureConstraint&&miningConstraint&&
     scaleLeakagePrevented&&capitalFunctions&&startingVillageMapped&&classCoverage&&contextualDiversity&&classDifferences&&
-    selectedHasReasons&&logicalAssetOnly&&noTemplateClone&&authorityPreserved
+    requiredSignalsSatisfied&&selectedHasReasons&&logicalAssetOnly&&noTemplateClone&&authorityPreserved
   );
   const result=Object.freeze({
     pass,campaignSeed:seed,planCount:plans.length,compositionCount:comps.length,catalogCount:CATALOG.length,
     categoryCount:catalogCategories.size,representativeCount:reps.length,
     deterministic,timeIndependent,catalogCoverage,metadataComplete,contextualValidity,
     portConstraint,agricultureConstraint,miningConstraint,scaleLeakagePrevented,capitalFunctions,
-    startingVillageMapped,classCoverage,contextualDiversity,classDifferences,selectedHasReasons,
+    startingVillageMapped,classCoverage,contextualDiversity,classDifferences,requiredSignalsSatisfied,selectedHasReasons,
     logicalAssetOnly,noTemplateClone,authorityPreserved,
     startingVillageMapping:villageMap,representatives:reps,
     authority:"settlement-building-composition-foundation",
@@ -483,7 +488,7 @@ function renderDebugPanel(seedValue,indexValue,rootNode){
   }
   setCheck("vBuildingCatalogDeterministic",verification.deterministic&&verification.timeIndependent);
   setCheck("vBuildingCatalogCoverage",verification.catalogCoverage&&verification.metadataComplete&&verification.logicalAssetOnly);
-  setCheck("vBuildingCatalogContext",verification.contextualValidity&&verification.contextualDiversity&&verification.classDifferences&&verification.noTemplateClone);
+  setCheck("vBuildingCatalogContext",verification.contextualValidity&&verification.contextualDiversity&&verification.classDifferences&&verification.noTemplateClone&&verification.requiredSignalsSatisfied);
   setCheck("vBuildingCatalogConstraints",verification.portConstraint&&verification.agricultureConstraint&&verification.miningConstraint&&verification.scaleLeakagePrevented);
   setCheck("vBuildingCatalogVillage",verification.startingVillageMapped);
   setCheck("vBuildingCatalogAuthority",verification.authorityPreserved&&!verification.physicalLayoutCreated&&!verification.terrainMutation&&!verification.resourceMutation&&!verification.npcStateCreated&&!verification.finalArtRequired&&!verification.renderDependency);
