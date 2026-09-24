@@ -3300,6 +3300,7 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
         f"{focus.get('id')}:px={float(focus.get('renderedPixelHeight') or 0):.2f}:"
         f"scale={float(focus.get('presentationScale') or 0):.2f}:"
         f"clearance={float(result.get('npcClearanceTiles') or 0):.1f}:"
+        f"movementBuilding={(result.get('requestedNpc') or {}).get('buildingId') or 'none'}:"
         f"active={result.get('active')}:sim={result.get('simulated')}"
     )
 
@@ -4396,11 +4397,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"NPC billboard orientation failed in frame {offset}: {npc}")
             if float(npc.get("renderedPixelHeight") or 0)+0.6<float(npc.get("targetPixelHeight") or 0):
                 raise RuntimeError(f"NPC billboard readability target failed in frame {offset}: {npc}")
-            if npc.get("buildingId"):
-                raise RuntimeError(f"NPC visual proof selected a building-interior resident in frame {offset}: {npc}")
             action=str(frame.get("action") or "")
-            if "focus=npc" not in action or "clearance=" not in action:
-                raise RuntimeError(f"NPC evidence action is missing outdoor-clearance proof in frame {offset}: {action}")
+            if "focus=npc" not in action or "clearance=" not in action or "movementBuilding=none" not in action:
+                raise RuntimeError(f"NPC evidence action is missing authoritative outdoor-clearance proof in frame {offset}: {action}")
             try:
                 clearance=float(action.split("clearance=",1)[1].split(":",1)[0])
             except Exception as error:
