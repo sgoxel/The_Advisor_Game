@@ -192,6 +192,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   material.update();
 
   const presentationMaterials=new Map();
+  const routeSurfaceMaterials=new Map();
   const treeSpriteMaterials=new Map();
   const surfaceBoundMaterials=new Set();
   const primitiveMeshes=new Map();
@@ -202,6 +203,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   let instancingBufferUpdates=0,instancingParentRepositions=0,frustumCulledMeshInstances=0;
   let treeSpriteMaterialRebinds=0,treeSpriteMaterialRefreshes=0;
   let buildingSurfaceMaterialRebinds=0,buildingSurfaceMaterialRefreshes=0;
+  let routeSurfaceMaterialRebinds=0,routeSurfaceMaterialRefreshes=0;
 
   function applyBuildingSurfaceMaterial(m,name,r,g,b){
     const atlas=buildingSurfaceAtlasProvider?.()||null;
@@ -311,6 +313,92 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     treeSpriteMaterialRebinds++;
     return true;
   }
+  function bindRouteSurfaceMaterial(m,type){
+    const atlas=textureAtlasProvider?.()||null;
+    const state=atlas?.stats?.()||null;
+    const texture=state?.ready?atlas?.texture?.():null;
+    const rect=state?.ready?atlas?.uvRect?.(type):null;
+    const fallback={
+      road:[0.53,0.43,0.31],
+      path:[0.60,0.48,0.34],
+      square:[0.54,0.51,0.45]
+    }[String(type)]||[0.53,0.43,0.31];
+    m._advisorRouteSurfaceType=String(type||"road");
+    m._advisorRouteFallbackColor=Object.freeze(fallback.slice());
+    m.vertexColors=false;
+    m.diffuseVertexColor=false;
+    m.metalness=0;
+    m.gloss=String(type)==="square"?0.10:0.04;
+    m.opacity=1;
+    m.blendType=pc.BLEND_NONE;
+    m.depthWrite=true;
+    m.depthTest=true;
+    if(texture&&rect){
+      const previousTexture=m.diffuseMap||null;
+      const previousSignature=String(m._advisorTerrainAtlasSignature||"");
+      m.diffuseMap=texture;
+      m.diffuse.set(1,1,1);
+      setMapRect(m,"diffuse",{
+        u0:Number(rect.u0),v0:Number(rect.v0),
+        uScale:Number(rect.u1)-Number(rect.u0),
+        vScale:Number(rect.v1)-Number(rect.v0)
+      });
+      m._advisorTerrainAtlasSignature=String(state?.signature||"");
+      if(previousTexture!==texture||previousSignature!==m._advisorTerrainAtlasSignature)routeSurfaceMaterialRebinds++;
+    }else{
+      m.diffuseMap=null;
+      m.diffuse.set(...fallback);
+      m._advisorTerrainAtlasSignature="";
+    }
+    m.update();
+    return Boolean(texture&&rect);
+  }
+  function routeSurfaceMaterial(type){
+    const key=String(type||"road");
+    let m=routeSurfaceMaterials.get(key)||null;
+    if(!m){
+      m=new pc.StandardMaterial();
+      m.name="chunk-route-surface-"+key;
+      routeSurfaceMaterials.set(key,m);
+    }
+    bindRouteSurfaceMaterial(m,key);
+    return m;
+  }
+  function refreshRouteSurfaceMaterials(){
+    let refreshed=0;
+    for(const [type,m] of routeSurfaceMaterials){
+      if(bindRouteSurfaceMaterial(m,type))refreshed++;
+    }
+    if(refreshed)routeSurfaceMaterialRefreshes++;
+    return refreshed;
+  }
+  function routeSurfaceBindings(){
+    const atlas=textureAtlasProvider?.()||null,state=atlas?.stats?.()||null;
+    const out={};
+    for(const type of ["road","path","square"]){
+      const rect=state?.ready?atlas?.uvRect?.(type):null;
+      const material=routeSurfaceMaterials.get(type)||null;
+      out[type]=Object.freeze({
+        type,
+        materialName:material?.name||("chunk-route-surface-"+type),
+        textureKey:"tile:"+type,
+        textureBound:Boolean(material?.diffuseMap),
+        atlasSignature:String(material?._advisorTerrainAtlasSignature||""),
+        runtimeResolution:Number(state?.runtimeResolution||0),
+        atlasWidth:Number(state?.atlasWidth||0),
+        atlasHeight:Number(state?.atlasHeight||0),
+        uvRect:rect?Object.freeze({
+          u0:Number(rect.u0),v0:Number(rect.v0),u1:Number(rect.u1),v1:Number(rect.v1),
+          uScale:Number(rect.u1)-Number(rect.u0),vScale:Number(rect.v1)-Number(rect.v0)
+        }):null,
+        opacity:1,
+        blendWeightInterior:1,
+        vertexColorTint:false
+      });
+    }
+    return Object.freeze(out);
+  }
+
   function treeSpriteMaterial(variant){
     const index=Math.max(0,Math.min(1,Math.trunc(Number(variant)||0)));
     let m=treeSpriteMaterials.get(index)||null;
@@ -485,6 +573,141 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     }
     return meshes;
   }
+  function appendRouteQuad(batch,worldData,xValue,yValue,halfX,halfZ,yOffset=0.024){
+    const p=localTileCenter(worldData,xValue,yValue);
+    const seed=String(seedProvider()||"");
+    const tileOffsetX=Number(halfX)/WORLD_TILE_METERS;
+    const tileOffsetZ=Number(halfZ)/WORLD_TILE_METERS;
+    const hNW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,-tileOffsetX,-tileOffsetZ)+yOffset;
+    const hNE=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,tileOffsetX,-tileOffsetZ)+yOffset;
+    const hSW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,-tileOffsetX,tileOffsetZ)+yOffset;
+    const hSE=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,tileOffsetX,tileOffsetZ)+yOffset;
+    const base=batch.positions.length/3;
+    batch.positions.push(
+      p.x-halfX,hNW,p.z-halfZ,
+      p.x+halfX,hNE,p.z-halfZ,
+      p.x-halfX,hSW,p.z+halfZ,
+      p.x+halfX,hSE,p.z+halfZ
+    );
+    const dx=((hNE+hSE)-(hNW+hSW))/(Math.max(0.001,halfX*4));
+    const dz=((hSW+hSE)-(hNW+hNE))/(Math.max(0.001,halfZ*4));
+    const nx=-dx,ny=1,nz=-dz,len=Math.hypot(nx,ny,nz)||1;
+    for(let i=0;i<4;i++)batch.normals.push(nx/len,ny/len,nz/len);
+    batch.uvs.push(0,0,1,0,0,1,1,1);
+    batch.indices.push(base,base+2,base+1,base+1,base+2,base+3);
+    batch.sourcePrimitiveCount++;
+    staticBatchSourcePrimitiveCount++;
+    return 2;
+  }
+  function routeNeighborType(seed,xValue,yValue,dx,dy){
+    try{
+      const x=BigInt(String(xValue))+BigInt(dx),y=BigInt(String(yValue))+BigInt(dy);
+      return String(window.TerrainFoundation?.getTile?.(seed,String(x),String(y))?.type||"");
+    }catch(_){return "";}
+  }
+  function routeOrientation(seed,cell){
+    const type=String(cell?.type||"");
+    const connected=neighbor=>{
+      if(type==="path")return ["path","road","square","bridge"].includes(neighbor);
+      return ["road","path","square","bridge"].includes(neighbor);
+    };
+    const n=connected(routeNeighborType(seed,cell.x,cell.y,0,-1));
+    const e=connected(routeNeighborType(seed,cell.x,cell.y,1,0));
+    const s=connected(routeNeighborType(seed,cell.x,cell.y,0,1));
+    const w=connected(routeNeighborType(seed,cell.x,cell.y,-1,0));
+    const horizontal=e||w,vertical=n||s;
+    if(horizontal&&vertical)return "corner";
+    if(horizontal)return "horizontal";
+    if(vertical)return "vertical";
+    return "terminal";
+  }
+  function routeExtents(type,orientation){
+    if(type==="road")return {halfX:0.97,halfZ:0.97};
+    if(type==="square")return {halfX:0.985,halfZ:0.985};
+    if(orientation==="horizontal")return {halfX:1.04,halfZ:0.42};
+    if(orientation==="vertical")return {halfX:0.42,halfZ:1.04};
+    return {halfX:0.48,halfZ:0.48};
+  }
+  function buildRoutePresentation(worldData,connectorDescriptors,batches){
+    const seed=String(seedProvider()||"");
+    const counts={road:0,path:0,square:0,connector:0};
+    const samples=[];
+    let triangleCount=0,edgeStripCount=0;
+    const routeTypes=new Set(["road","path","square"]);
+    const edgeMaterial=presentationMaterial("route-edge",0.25,0.18,0.11,0.02);
+    const edgeBatch=batchFor(batches,edgeMaterial.name,edgeMaterial);
+    const appendEdge=(cell,side)=>{
+      const inset=0.92,width=0.075;
+      if(side==="n")triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,0.94,width,0.034);
+      else if(side==="s")triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,0.94,width,0.034);
+      else if(side==="e")triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,width,0.94,0.034);
+      else triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,width,0.94,0.034);
+      // Shift the narrow strip from the tile center onto the requested outer edge.
+      const vertexStart=edgeBatch.positions.length-12;
+      const shiftX=side==="e"?inset:side==="w"?-inset:0;
+      const shiftZ=side==="s"?inset:side==="n"?-inset:0;
+      for(let i=vertexStart;i<edgeBatch.positions.length;i+=3){
+        edgeBatch.positions[i]+=shiftX;
+        edgeBatch.positions[i+2]+=shiftZ;
+      }
+      edgeStripCount++;
+    };
+
+    for(const cell of worldData?.cells||[]){
+      const type=String(cell?.type||"");
+      if(!routeTypes.has(type))continue;
+      const orientation=routeOrientation(seed,cell);
+      const extents=routeExtents(type,orientation);
+      const mat=routeSurfaceMaterial(type);
+      const batch=batchFor(batches,mat.name,mat);
+      triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,extents.halfX,extents.halfZ,type==="square"?0.028:0.032);
+      counts[type]++;
+      if(samples.length<24)samples.push(Object.freeze({
+        x:String(cell.x),y:String(cell.y),type,orientation,
+        materialName:mat.name,textureKey:"tile:"+type,
+        halfWidthMeters:Number(extents.halfX.toFixed(3)),
+        halfDepthMeters:Number(extents.halfZ.toFixed(3))
+      }));
+      if(type==="road"||type==="square"){
+        for(const [side,dx,dy] of [["n",0,-1],["e",1,0],["s",0,1],["w",-1,0]]){
+          const neighbor=routeNeighborType(seed,cell.x,cell.y,dx,dy);
+          if(!["road","path","square","bridge"].includes(neighbor))appendEdge(cell,side);
+        }
+      }
+    }
+
+    const connectorMat=routeSurfaceMaterial("path");
+    const connectorBatch=batchFor(batches,connectorMat.name,connectorMat);
+    for(const descriptor of connectorDescriptors||[]){
+      const orientation=String(descriptor?.orientation||"terminal");
+      const extents=routeExtents("path",orientation);
+      triangleCount+=appendRouteQuad(connectorBatch,worldData,descriptor.x,descriptor.y,extents.halfX,extents.halfZ,0.026);
+      counts.connector++;
+      if(samples.length<24)samples.push(Object.freeze({
+        x:String(descriptor.x),y:String(descriptor.y),type:"connector",orientation,
+        buildingId:String(descriptor.buildingId||""),
+        materialName:connectorMat.name,textureKey:"tile:path",
+        routeSafe:descriptor.routeSafe!==false
+      }));
+    }
+
+    return Object.freeze({
+      counts:Object.freeze({...counts}),
+      surfaceCellCount:counts.road+counts.path+counts.square,
+      connectorCellCount:counts.connector,
+      edgeStripCount,
+      sourcePrimitiveCount:counts.road+counts.path+counts.square+counts.connector+edgeStripCount,
+      triangleCount,
+      samples:Object.freeze(samples),
+      routeSurfaceMaterialCount:routeSurfaceMaterials.size,
+      routeSurfaceMaterialNames:Object.freeze([...routeSurfaceMaterials.values()].map(m=>m.name).sort()),
+      surfaceBindings:routeSurfaceBindings(),
+      routeSafe:(connectorDescriptors||[]).every(item=>item?.routeSafe!==false),
+      rendererOnly:true,
+      simulationAuthorityPreserved:true
+    });
+  }
+
   function matrixDataFor(instances){
     const data=new Float32Array(instances.length*16);
     const matrix=new pc.Mat4(),pos=new pc.Vec3(),rot=new pc.Quat(),scale=new pc.Vec3();
@@ -899,11 +1122,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const buildings=Array.isArray(presentation.buildingDescriptors)?presentation.buildingDescriptors:[];
     const props=Array.isArray(presentation.propDescriptors)?presentation.propDescriptors:[];
     const interiorObjects=Array.isArray(presentation.interiorObjectDescriptors)?presentation.interiorObjectDescriptors:[];
+    const connectorDescriptors=Array.isArray(presentation.connectorDescriptors)?presentation.connectorDescriptors:[];
     const batches=staticBatchCollector();
     const roofProfiles=[];
     let sourcePresentationPrimitiveCount=0;
     for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles);
     for(let i=0;i<interiorObjects.length;i++)sourcePresentationPrimitiveCount+=buildInteriorObject(spec.worldData,interiorObjects[i],batches);
+    const routePresentation=buildRoutePresentation(spec.worldData,connectorDescriptors,batches);
+    sourcePresentationPrimitiveCount+=routePresentation.sourcePrimitiveCount;
 
     const staticBatches=finalizeStaticBatches(entity,batches);
 
@@ -1059,6 +1285,23 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       interiorObjectPresentationCount:interiorObjects.length,
       propPresentationCount:props.length,
       dressingPresentationCount:props.filter(item=>String(item.type||"")==="dressing").length,
+      routeSurfaceCellCount:routePresentation.surfaceCellCount,
+      routeMainRoadCellCount:Number(routePresentation.counts.road||0),
+      routeLocalPathCellCount:Number(routePresentation.counts.path||0),
+      routeSquareCellCount:Number(routePresentation.counts.square||0),
+      routeConnectorCellCount:Number(routePresentation.connectorCellCount||0),
+      routeEdgeStripCount:Number(routePresentation.edgeStripCount||0),
+      routeSurfaceTriangleCount:Number(routePresentation.triangleCount||0),
+      routeSurfaceMaterialCount:Number(routePresentation.routeSurfaceMaterialCount||0),
+      routeSurfaceMaterialNames:routePresentation.routeSurfaceMaterialNames,
+      routeSurfaceBindings:routePresentation.surfaceBindings,
+      routeSurfaceSamples:routePresentation.samples,
+      routeSurfaceRouteSafe:routePresentation.routeSafe===true,
+      routeSurfaceRendererOnly:routePresentation.rendererOnly===true,
+      routeNetworkDeterministic:presentation?.routeNetwork?.deterministic===true,
+      routeNetworkConnectedRouteCount:Number(presentation?.routeNetwork?.connectedRouteCount||0),
+      routeNetworkTotalRouteCount:Number(presentation?.routeNetwork?.totalRouteCount||0),
+      routeNetworkRouteSafetyPass:presentation?.routeNetwork?.routeSafetyPass===true,
       roadCellCount:Number(surfaceCounts.road||0)+Number(surfaceCounts.path||0)+Number(surfaceCounts.square||0),
       waterCellCount:Number(surfaceCounts.water||0),
       bridgeCellCount:Number(surfaceCounts.bridge||0),
@@ -1113,6 +1356,15 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeCylinderSpherePlaceholders:false,
       dressingSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("dressing-")).length,
       dressingHardwareInstanced:true,
+      routeSurfaceMaterialCount:routeSurfaceMaterials.size,
+      routeSurfaceMaterialNames:Object.freeze([...routeSurfaceMaterials.values()].map(m=>m.name).sort()),
+      routeSurfaceMaterialRebinds,routeSurfaceMaterialRefreshes,
+      routeSurfaceMaterialAtlasSignatures:Object.freeze([...routeSurfaceMaterials.values()].map(m=>String(m._advisorTerrainAtlasSignature||"")).sort()),
+      routeSurfaceStaleBindingCount:(()=>{
+        const current=String(textureAtlasProvider?.()?.stats?.()?.signature||"");
+        return [...routeSurfaceMaterials.values()].filter(m=>String(m._advisorTerrainAtlasSignature||"")!==current).length;
+      })(),
+      routeSurfaceBindings:routeSurfaceBindings(),
       buildingTexturedMaterialCount:surfaceBoundMaterials.size,
       buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
       buildingSurfaceMaterialRebinds,buildingSurfaceMaterialRefreshes,
@@ -1164,7 +1416,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function heightAtTile(x,y,chunkSize=16,offsetX=0,offsetY=0){
     return terrainHeightAtTile(String(seedProvider()||""),x,y,chunkSize,offsetX,offsetY);
   }
-  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials,refreshBuildingMaterials});
+  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials});
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});
