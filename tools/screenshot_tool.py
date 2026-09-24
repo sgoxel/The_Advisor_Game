@@ -5297,6 +5297,62 @@ def _focus_road_connector(driver, source_kind: str) -> str:
     )
 
 
+def _place_npc_on_road_profile_target(driver, kind: str) -> str:
+    result = driver.execute_async_script(
+        """
+        const kind=String(arguments[0]||'grass');
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const campaign=window.SeedSystem?.getCampaign?.();
+            const target=window.__wpS003006009RoadTargets?.targets?.[kind]||null;
+            const movement=window.ResidentMovement;
+            const ui=window.AppUI;
+            const renderer=window.GameRenderer;
+            if(!campaign||!target||!movement?.beginProof||!movement?.proofPlaceAt||!ui?.refreshTerrain||!renderer?.snapshot){
+              done({ok:false,error:'road-npc-proof-api-or-target-missing',kind,target});
+              return;
+            }
+            const started=movement.beginProof(campaign.seed);
+            if(!started?.residentId){
+              done({ok:false,error:'road-npc-proof-resident-missing'});
+              return;
+            }
+            const point={x:String(target.x),y:String(target.y)};
+            const placed=movement.proofPlaceAt(point,'road-hierarchy-road-proof');
+            if(!placed?.position){
+              done({ok:false,error:'road-npc-proof-placement-failed',point});
+              return;
+            }
+            window.Camera?.setCenter?.(point.x,point.y);
+            await ui.refreshTerrain();
+            await ui.refreshResidentCharacters();
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            const snap=renderer.snapshot?.()||{};
+            const id='resident:'+String(placed.residentId);
+            const visible=Boolean((snap.characterPresentation?.visibleCharacterIds||[]).includes(id));
+            done({
+              ok:visible,
+              error:visible?null:'road-npc-proof-resident-not-visible',
+              residentId:String(placed.residentId),
+              position:placed.position,
+              target:{x:Number(target.x),y:Number(target.y),type:String(target.type||'')},
+              visible,
+              visibleIds:snap.characterPresentation?.visibleCharacterIds||[]
+            });
+          }catch(error){done({ok:false,error:String(error?.stack||error)});}
+        })();
+        """,
+        kind,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Road NPC proof target {kind!r} failed: {result}")
+    return (
+        f"road-hierarchy-npc:{kind}:{result.get('residentId')}@"
+        f"{result.get('position')}:target={result.get('target')}"
+    )
+
+
 def _set_material_lifetime_texture_quality(driver, profile: str) -> dict:
     result = driver.execute_async_script(
         """
@@ -5703,7 +5759,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 7:
             return _focus_road_profile_target(driver, "chunk-boundary") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
         if frame_index == 8:
-            return "road-hierarchy:close+" + _focus_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
+            return "road-hierarchy:close+" + _place_npc_on_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
         if frame_index == 9:
             driver.set_window_size(390, 844)
             return "road-hierarchy:phone-portrait+" + _focus_road_connector(driver, "house") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
@@ -6433,6 +6489,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         npc_near_road=False
         max_route_cells=0
         max_route_triangles=0
+        max_diagonal_bridges=0
         max_saved_draws=0
         for index,frame in enumerate(frames[:11]):
             build=frame.get("runtime",{}).get("currentBuild",{})
@@ -6481,6 +6538,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"No visible batched road hierarchy in frame {index+1}: {chunks}")
             max_route_cells=max(max_route_cells,route_cells)
             max_route_triangles=max(max_route_triangles,int(chunks.get("routeSurfaceTriangleCount") or 0))
+            max_diagonal_bridges=max(max_diagonal_bridges,int(chunks.get("routeDiagonalBridgeCount") or 0))
             max_saved_draws=max(max_saved_draws,int(chunks.get("savedDrawCalls") or 0))
             if int(chunks.get("routeLocalPathCellCount") or 0)>0:saw_path=True
             if int(chunks.get("routeSquareCellCount") or 0)>0:saw_square=True
@@ -6516,8 +6574,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Road hierarchy coverage incomplete: path={saw_path}, square={saw_square}, connector={saw_connector}, raisedCore={saw_core_delta}")
         if not protagonist_near_road or not npc_near_road:
             raise RuntimeError(f"Character/road proximity coverage incomplete: protagonist={protagonist_near_road}, npc={npc_near_road}")
-        if max_route_cells<=0 or max_route_triangles<=0 or max_saved_draws<=0:
-            raise RuntimeError(f"Road hierarchy batching/performance evidence incomplete: cells={max_route_cells}, triangles={max_route_triangles}, savedDraws={max_saved_draws}")
+        if max_route_cells<=0 or max_route_triangles<=0 or max_diagonal_bridges<=0 or max_saved_draws<=0:
+            raise RuntimeError(f"Road hierarchy batching/continuity evidence incomplete: cells={max_route_cells}, triangles={max_route_triangles}, diagonalBridges={max_diagonal_bridges}, savedDraws={max_saved_draws}")
         actions=[str(frame.get("action") or "") for frame in frames[:11]]
         for required in (
             "road-profile-target:grass",
@@ -6528,6 +6586,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             "road-profile-target:rolling",
             "road-profile-target:chunk-boundary",
             "road-hierarchy:close",
+            "road-hierarchy-npc:grass",
         ):
             if not any(required in action for action in actions):
                 raise RuntimeError(f"Required road hierarchy scene {required} missing: {actions}")
