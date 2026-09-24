@@ -60,7 +60,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-004` — Persistent PlayCanvas Scene Graph + Navigation Hot-Path Elimination — COMPLETED
 - `WP-S003-006-005` — 3D Culling, Static Batching + Hardware Instancing — COMPLETED
 - `WP-S003-006-006` — Detailed 2D Tree Plane Presentation + Instancing — COMPLETED
-- `WP-S003-006-007` — Low-Poly Chunk Heightfield Terrain + Shared Elevation Anchoring — IN PROGRESS (VISUAL 6.5/10; opaque black tree-plane rectangles block completion)
+- `WP-S003-006-007` — Low-Poly Chunk Heightfield Terrain + Shared Elevation Anchoring — IN PROGRESS (FINAL VALIDATION 8.2/10 PASS; deployment/bookkeeping pending)
 - `WP-S003-006-008` — Low-Cost Terrain Surface Micro-Relief + Material Depth
 - `WP-S003-006-009` — Raised Road + Path Surface Profiles on Heightfield Terrain
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
