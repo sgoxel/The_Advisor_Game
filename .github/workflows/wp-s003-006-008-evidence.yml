@@ -43,7 +43,7 @@ jobs:
             visual-wp-s003-006-008 \
             --profile landscape \
             --scenario wp-s003-006-008 \
-            --shots 10 \
+            --shots 11 \
             --timestamp-names \
             --wait-min 1 \
             --wait-max 1 \
