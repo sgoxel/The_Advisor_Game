@@ -6720,6 +6720,15 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Building material variation is not deterministic: {generator}")
             if int(generator.get("buildingSurfaceStaleBindingCount") or 0)!=0:
                 raise RuntimeError(f"Stale building material binding in {profile}: {generator}")
+            if building.get("sharedSurfaceTextures") is not True or int(building.get("gpuTextureCount") or 0)!=4:
+                raise RuntimeError(f"Building shared surface-texture budget mismatch in {profile}: {building}")
+            pixel_stats=building.get("surfacePixelStats") or {}
+            for surface_key in ("building:house-wall","building:special-wall","building:roof","building:door"):
+                sample=pixel_stats.get(surface_key) or {}
+                if int(sample.get("sampleCount") or 0)<=0 or not str(sample.get("checksum") or ""):
+                    raise RuntimeError(f"Missing pre-upload building pixel proof for {surface_key} in {profile}: {pixel_stats}")
+                if float(sample.get("averageLuminance") or 0)<=20:
+                    raise RuntimeError(f"Pre-upload building surface is unexpectedly dark for {surface_key} in {profile}: {sample}")
             if int(chunks.get("visibleFrameTerrainRebuildCount") or 0)!=0:
                 raise RuntimeError(f"Quality switch rebuilt terrain in visible frame for {profile}: {chunks}")
             if gpu.get("simulationAuthorityPreserved") is not True:
