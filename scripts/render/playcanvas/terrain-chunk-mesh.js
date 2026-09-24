@@ -219,7 +219,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const state=atlas?.stats?.()||null;
     const knownSurface=Boolean(atlas?.surfaces?.some?.(item=>item?.material===String(name||"")));
     const rect=state?.ready?atlas?.rectForMaterial?.(name):null;
-    const texture=state?.ready?atlas?.texture?.():null;
+    const texture=state?.ready?(atlas?.textureForMaterial?.(name)||atlas?.texture?.()||null):null;
     const tintValue=[
       clamp(Number(tint?.[0]??1),0.65,1.08),
       clamp(Number(tint?.[1]??1),0.65,1.08),
