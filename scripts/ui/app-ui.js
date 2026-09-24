@@ -3,6 +3,12 @@
 const e={};
 let restoredCampaign=false;
 let clockTimer=null;
+let lastNpcVisibilityState=Object.freeze({
+  hiddenIndoorIds:Object.freeze([]),
+  hiddenOccludedIds:Object.freeze([]),
+  visibleResidentIds:Object.freeze([]),
+  simulationAuthorityPreserved:true
+});
 const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
 const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
@@ -73,6 +79,7 @@ function saveDevelopmentMode(){
 }
 
 const CHARACTER_VISIBILITY_MARGIN_TILES=1;
+const NPC_BUILDING_OCCLUSION_MAX_RAY_TILES=1.65;
 function characterTextureUrlForProfession(profession){
   switch(String(profession||"")){
     case "farmer":return "assets/characters/npc_farmer_male_01.png";
@@ -83,6 +90,37 @@ function characterTextureUrlForProfession(profession){
     case "guard":return "assets/characters/npc_guard_male_01.png";
     default:return "assets/characters/npc_market_vendor_female_01.png";
   }
+}
+
+function relativeTileNumber(value,base,limit=16){
+  try{
+    const delta=BigInt(String(value))-BigInt(String(base));
+    const cap=BigInt(Math.max(1,Math.floor(Number(limit)||16)));
+    if(delta>cap||delta<-cap)return null;
+    return Number(delta);
+  }catch(_){return null}
+}
+function npcOccludedByBuilding(seed,point,presentationOffset){
+  if(!point||!window.BuildingInteriors?.build)return false;
+  const ox=Number(presentationOffset?.x||0),oy=Number(presentationOffset?.y||0);
+  for(const building of BuildingInteriors.build(seed)||[]){
+    const b=building?.bounds;
+    if(!b)continue;
+    const rx=relativeTileNumber(point.x,b.minX,8);
+    const ry=relativeTileNumber(point.y,b.minY,8);
+    if(rx===null||ry===null)continue;
+    const px=rx+ox,py=ry+oy;
+    const maxX=Number(b.maxX-b.minX),maxY=Number(b.maxY-b.minY);
+    if(px>=0&&px<=maxX&&py>=0&&py<=maxY)return true;
+    // Orthographic camera is fixed at +X/+Y looking toward the village. Trace a
+    // short parallel ground ray from the NPC toward the camera; if it enters an
+    // opaque building footprint within the close-occlusion distance, suppress
+    // the whole billboard instead of showing a head/torso above the roof.
+    const enter=Math.max(0,-px,-py);
+    const exit=Math.min(maxX-px,maxY-py);
+    if(exit+1e-9>=enter&&enter<=NPC_BUILDING_OCCLUSION_MAX_RAY_TILES)return true;
+  }
+  return false;
 }
 
 function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
@@ -97,6 +135,8 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
   const halfRows=Math.floor(Number(rows||0)/2);
   const maxX=BigInt(halfCols+CHARACTER_VISIBILITY_MARGIN_TILES);
   const maxY=BigInt(halfRows+CHARACTER_VISIBILITY_MARGIN_TILES);
+  const hiddenIndoorIds=[];
+  const hiddenOccludedIds=[];
 
   if(protagonist){
     visibleCharacters.push(Object.freeze({
@@ -118,12 +158,24 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     const authoritative=movement?.position||activity?.target;
     if(!authoritative)continue;
     const presentation=window.ResidentMovement?.presentation?.(resident.id)||null;
+    const presentationOffset=presentation?.offset||Object.freeze({x:0,y:0});
+    const id=`resident:${resident.id}`;
+    // Current navigation occupancy is authoritative. A future home/work target
+    // must never make a still-outdoor resident disappear early.
+    if(movement?.buildingId){
+      hiddenIndoorIds.push(id);
+      continue;
+    }
+    if(npcOccludedByBuilding(campaign.seed,authoritative,presentationOffset)){
+      hiddenOccludedIds.push(id);
+      continue;
+    }
     const offset=Camera.offsetFrom(authoritative);
     if(!offset)continue;
     const dx=BigInt(offset.x),dy=BigInt(offset.y);
     if(dx<-maxX||dx>maxX||dy<-maxY||dy>maxY)continue;
     visibleCharacters.push(Object.freeze({
-      id:`resident:${resident.id}`,
+      id,
       role:"resident",
       residentId:resident.id,
       residentName:resident.name,
@@ -131,10 +183,10 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
       activity:activity.action,
       activityLabel:activity.label,
       actionExecution:window.ActionExecutor?.get?.("resident",resident.id)||null,
-      buildingId:movement?.buildingId||activity.buildingId||null,
+      buildingId:null,
       textureUrl:characterTextureUrlForProfession(resident.profession),
       point:Object.freeze({x:authoritative.x,y:authoritative.y}),
-      presentationOffset:presentation?.offset||Object.freeze({x:0,y:0}),
+      presentationOffset,
       height:movementProofResidentId===resident.id?2.15:1.74,
       elevation:movementProofResidentId===resident.id?0.05:0.03,
       flipX:(BigInt(resident.id.slice(1)||"0")&1n)===1n,
@@ -142,6 +194,12 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     }));
   }
 
+  lastNpcVisibilityState=Object.freeze({
+    hiddenIndoorIds:Object.freeze(hiddenIndoorIds.slice()),
+    hiddenOccludedIds:Object.freeze(hiddenOccludedIds.slice()),
+    visibleResidentIds:Object.freeze(visibleCharacters.filter(item=>item.role==="resident").map(item=>item.id)),
+    simulationAuthorityPreserved:true
+  });
   return Object.freeze({
     visibleCharacters:Object.freeze(visibleCharacters),
     simulatedCharacterCount:roster.length+(protagonist?1:0)
@@ -2158,6 +2216,7 @@ window.AppUI=Object.freeze({
   residentScheduleSnapshot:()=>lastResidentScheduleProof,
   refreshResidentCharacters,
   residentMovementSnapshot:()=>window.ResidentMovement?.snapshot?.()||null,
+  npcVisibilitySnapshot:()=>lastNpcVisibilityState,
   refreshResidentMovementProof:()=>renderResidentMovementProof(),
   residentMovementProofSnapshot:()=>window.ResidentMovement?.proofSnapshot?.()||lastResidentMovementProof,
   refreshResidentActionProof:()=>renderResidentActionProof(),
