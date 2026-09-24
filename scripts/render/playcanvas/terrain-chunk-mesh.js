@@ -211,12 +211,15 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const m=new pc.StandardMaterial();
     m.name="chunk-tree-sprite-"+index;
     m.diffuse.set(1,1,1);
+    m.emissive.set(1,1,1);
     m.diffuseMap=texture;
+    m.emissiveMap=texture;
     m.opacityMap=texture;
     m.opacityMapChannel="a";
     setMapRect(m,"diffuse",rect);
+    setMapRect(m,"emissive",rect);
     setMapRect(m,"opacity",rect);
-    m.alphaTest=0.10;
+    m.alphaTest=0.12;
     m.blendType=pc.BLEND_NONE;
     m.depthWrite=true;
     m.depthTest=true;
@@ -808,6 +811,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeSpriteMaterialCount:treeSpriteMaterials.size,
       treeSpriteAtlas:treeSpriteAtlasProvider?.()?.stats?.()||null,
       treePlaneMeshPrepared:primitiveMeshes.has("tree-plane"),
+      treeSpriteUnlitEmissive:true,
+      treeSpriteAlphaTest:0.12,
       treeCylinderSpherePlaceholders:false,
       buildingTexturedMaterialCount:surfaceBoundMaterials.size,
       buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
