@@ -308,6 +308,13 @@ function ensureScheduled(seedValue,nowValue){
 }
 function tick(seedValue,nowValue,optionsValue){
   const seed=normalizeSeed(seedValue),now=normalizeTimestamp(nowValue),options=optionsValue||{},state=stateFor(seed);
+  if(evidenceMemory?.seed===seed&&options.ensure!==false&&options.allowDuringEvidence!==true){
+    return deepFreeze({
+      evidenceIsolation:true,ensured:null,
+      batch:Object.freeze({now,limit:0,processed:Object.freeze([]),processedCount:0,pending:EventScheduler.snapshot(seed).pending,hasMoreDue:false,bounded:true}),
+      snapshot:snapshot(seed)
+    });
+  }
   const started=performance.now();
   const ensured=options.ensure===false?null:ensureScheduled(seed,now);
   const batch=EventScheduler.processDue(seed,now,{
