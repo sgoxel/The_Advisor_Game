@@ -4,6 +4,7 @@
 const PNG_URL="assets/environment/trees/tree_oak_atlas.png";
 const SVG_URL="assets/environment/trees/tree_oak_atlas.svg";
 const VARIANT_COUNT=2;
+const QUALITY_WIDTH=Object.freeze({low:192,standard:256,high:320,ultra:384});
 
 function loadImage(url){
   return new Promise((resolve,reject)=>{
@@ -27,7 +28,14 @@ function create({pc,device,resolutionProvider=()=>320,qualitySignatureProvider=(
     simulationAuthorityPreserved:true
   });
 
+  function qualityProfile(){
+    const signature=String(qualitySignatureProvider?.()||"").toLowerCase();
+    const match=/pc-material-quality@([a-z]+)/.exec(signature);
+    return QUALITY_WIDTH[match?.[1]]?match[1]:null;
+  }
   function width(){
+    const profile=qualityProfile();
+    if(profile)return QUALITY_WIDTH[profile];
     const value=Math.round(Number(resolutionProvider?.()||320));
     return Math.max(192,Math.min(384,value));
   }
