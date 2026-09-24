@@ -174,12 +174,12 @@ function build(seedValue,countryAValue,countryBValue){
     cooperationSeed*0.08
   );
   const tradeAccess=clamp01(
-    0.12+
-    avgTrade*0.36+
-    context.routeAccess*0.20+
+    0.18+
+    avgTrade*0.42+
+    context.routeAccess*0.22+
     context.resourceComplementarity*0.16+
-    Math.max(0,score)*0.18-
-    militaryTension*0.14
+    Math.max(0,score)*0.26-
+    militaryTension*0.10
   );
   const cooperation=clamp01(
     0.10+
