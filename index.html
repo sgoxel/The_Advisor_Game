@@ -1145,6 +1145,34 @@
     </div>
   </details>
 
+  <details id="simulationTiersProof">
+    <summary>WP-S007-003 Multi-Resolution Lazy Simulation Tiers + Relevance Activation</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>Focused settlement / tier</span><strong id="simulationTierFocus">—</strong></div>
+        <div><span>Tier counts</span><strong id="simulationTierCounts">—</strong></div>
+        <div><span>Population / exact objects</span><strong id="simulationTierPopulation">—</strong></div>
+        <div><span>Hard budgets</span><strong id="simulationTierBudget">—</strong></div>
+        <div><span>Last bounded update cost</span><strong id="simulationTierCost">—</strong></div>
+        <div><span>Authoritative source/signature</span><strong id="simulationTierAuthority">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Simulation resolution tiers</h4>
+        <ul id="simulationTierRows" class="region-profile-comparison"></ul>
+      </section>
+      <section class="region-profile-section">
+        <h4>Recent deterministic promotion / demotion</h4>
+        <ul id="simulationTierHistory" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Global / regional / local / exact tiers are explicit and inspectable</span><b id="vSimulationTierExplicit">WAITING</b></div>
+      <div class="check"><span>Candidate, local and exact workloads stay inside hard synchronous/object budgets</span><b id="vSimulationTierBounded">WAITING</b></div>
+      <div class="check"><span>Promotion/demotion is deterministic and reconstructs the same authoritative context</span><b id="vSimulationTierDeterministic">WAITING</b></div>
+      <div class="check"><span>Demotion discards only derived detail; meaningful state remains in WorldState</span><b id="vSimulationTierHistory">WAITING</b></div>
+      <div class="check"><span>Render visibility/camera state is not a Simulation activation authority</span><b id="vSimulationTierRender">WAITING</b></div>
+      <div class="check"><span>Runtime telemetry exposes tier counts and bounded update cost</span><b id="vSimulationTierTelemetry">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1188,6 +1216,7 @@
 <script src="scripts/world/daily-activity.js"></script>
 <script src="scripts/world/world-state.js"></script>
 <script src="scripts/world/world-context.js"></script>
+<script src="scripts/world/simulation-tiers.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/world/walkability.js"></script>
 <script src="scripts/world/route-planner.js"></script>

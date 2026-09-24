@@ -2332,6 +2332,13 @@ function renderWorldContextProof(target=null){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.WorldContext.renderDebugPanel(seed,target,document.getElementById("worldContextProof"));
 }
+function renderSimulationTiersProof(){
+  if(typeof window.SimulationTiers?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  if(campaign)window.SimulationTiers.refreshFromProtagonist(seed);
+  return window.SimulationTiers.renderDebugPanel(seed,document.getElementById("simulationTiersProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -2354,6 +2361,7 @@ function renderStatic(){
   renderSettlementBuildingCatalogProof();
   renderWorldStateProof();
   renderWorldContextProof();
+  renderSimulationTiersProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2585,6 +2593,8 @@ window.AppUI=Object.freeze({
   worldStateVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.WorldState?WorldState.proof(campaign.seed):null;},
   refreshWorldContext:(target=null)=>renderWorldContextProof(target),
   worldContextVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.WorldContext?WorldContext.proof(campaign.seed):null;},
+  refreshSimulationTiers:()=>renderSimulationTiersProof(),
+  simulationTiersVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SimulationTiers?SimulationTiers.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

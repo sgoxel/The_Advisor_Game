@@ -117,6 +117,7 @@ SCENARIOS = {
     "wp-s006-006",
     "wp-s007-001",
     "wp-s007-002",
+    "wp-s007-003",
     "playcanvas-root-cutover",
 }
 
@@ -186,6 +187,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s006-006": 6,
     "wp-s007-001": 6,
     "wp-s007-002": 6,
+    "wp-s007-003": 7,
     "playcanvas-root-cutover": 3,
 }
 
@@ -435,6 +437,43 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        simulationTiers: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.SimulationTiers?.proof
+              ? window.SimulationTiers.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        simulationTiersPanel: (() => {
+          const root=document.querySelector("#simulationTiersProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            focusId:root.dataset.focusId||null,
+            focusTier:root.dataset.focusTier||null,
+            focusSignature:root.dataset.focusSignature||null,
+            focusReason:root.dataset.focusReason||null,
+            candidateCount:Number(root.dataset.candidateCount||0),
+            globalCount:Number(root.dataset.globalCount||0),
+            regionalCount:Number(root.dataset.regionalCount||0),
+            localCount:Number(root.dataset.localCount||0),
+            exactCount:Number(root.dataset.exactCount||0),
+            exactNpcHandles:Number(root.dataset.exactNpcHandles||0),
+            representedPopulation:Number(root.dataset.representedPopulation||0),
+            lastCostMs:Number(root.dataset.lastCostMs||0),
+            bounded:root.dataset.bounded==="true",
+            renderIndependent:root.dataset.renderIndependent==="true",
+            historyPreserved:root.dataset.historyPreserved==="true",
+            mutatedSignature:root.dataset.mutatedSignature||null,
+            demotedSignature:root.dataset.demotedSignature||null,
+            reactivatedSignature:root.dataset.reactivatedSignature||null,
+            tierRows:root.querySelectorAll("#simulationTierRows li").length,
+            historyRows:root.querySelectorAll("#simulationTierHistory li").length,
+          };
         })(),
         worldContext: (() => {
           try {
@@ -2696,6 +2735,64 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     return (
         f"advice-resolution:{frame_index}:{result.get('selectedDecision')}:"
         f"validation={result.get('validationOk')}:{result.get('validationReason')}"
+    )
+
+
+def _show_simulation_tiers_proof(driver, frame_index: int) -> str:
+    camera_action = _drag_canvas(driver, 120, 0) if frame_index == 6 else None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const tiers=window.SimulationTiers;
+        if(!campaign?.seed||!tiers||!window.WorldState||!window.WorldContext){
+          return {ok:false,error:'simulation-tiers-unavailable'};
+        }
+        const seed=campaign.seed;
+        const step=tiers.evidenceStep(seed,index);
+        if(!step?.ok)return {ok:false,error:'simulation-tier-step-failed',step};
+        const proof=tiers.proof(seed);
+        if(!proof.pass)return {ok:false,error:'simulation-tier-proof-failed',proof};
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#simulationTiersProof');
+        if(!section||!root)return {ok:false,error:'simulation-tier-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=tiers.renderDebugPanel(seed,root);
+        root.dataset.historyPreserved=String(step.historyPreserved===true);
+        root.dataset.mutatedSignature=step.mutatedSignature||'';
+        root.dataset.demotedSignature=step.demotedSignature||'';
+        root.dataset.reactivatedSignature=step.reactivatedSignature||'';
+        root.scrollIntoView({block:'start'});
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,
+          requestedTier:step.requestedTier,
+          focusTier:step.focus?.tier||null,
+          focusId:step.focus?.id||null,
+          focusSignature:step.focus?.contextSignature||null,
+          focusReason:step.focus?.reason||null,
+          historyPreserved:Boolean(step.historyPreserved),
+          counts:step.snapshot?.counts||null,
+          bounded:Boolean(step.snapshot?.bounded),
+          telemetry:step.snapshot?.telemetry||null,
+          mutatedSignature:step.mutatedSignature||null,
+          demotedSignature:step.demotedSignature||null,
+          reactivatedSignature:step.reactivatedSignature||null,
+          proof
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Simulation tiers proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    counts=result.get("counts") or {}
+    return (
+        prefix+
+        f"simulation-tiers:{frame_index}:{result.get('focusTier')}:"
+        f"exact={counts.get('exactNpcHandles')}:population={counts.get('representedPopulation')}"
     )
 
 
@@ -5255,7 +5352,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -5423,6 +5520,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_world_state_proof(driver,frame_index)
         return _show_world_state_proof(driver,frame_index)
+    if scenario == "wp-s007-003":
+        return _show_simulation_tiers_proof(driver,frame_index)
     if scenario == "wp-s007-002":
         if frame_index == 5:
             action=_reload_current_build(driver)
@@ -6206,6 +6305,67 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Cutaway did not target exactly one two-plane roof: {cutaway}")
         if int(cutaway.get("totalRoofCount") or 0)<=2:
             raise RuntimeError(f"Cutaway evidence did not retain other building roofs: {cutaway}")
+        return
+
+    if scenario == "wp-s007-003":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s007-003 requires seven Simulation-tier evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:7]]
+        proofs=[build.get("simulationTiers") or {} for build in builds]
+        panels=[build.get("simulationTiersPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Simulation-tier evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Simulation-tier proof mutated Protagonist position: {protagonists}")
+        for index,proof in enumerate(proofs,start=1):
+            required={
+                "pass":True,"deterministicActivation":True,"tierChangesOutcome":False,
+                "contextStableAcrossTierChanges":True,"proofDoesNotMutateWorldState":True,
+                "renderIndependent":True,"renderVisibilityActivation":False,
+                "boundedCandidates":True,"boundedExactObjects":True,
+                "compactDistantState":True,"noFullWorldObjectGraph":True,
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Simulation-tier proof {key} mismatch in frame {index}: {proof}")
+            if proof.get("promotionSequence")!=["global","regional","local","exact","global","exact"]:
+                raise RuntimeError(f"Simulation-tier deterministic sequence mismatch in frame {index}: {proof}")
+            budgets=proof.get("budgets") or {}
+            if int(budgets.get("candidateSettlements") or 0)>12 or int(budgets.get("exactNpcHandles") or 0)>24:
+                raise RuntimeError(f"Simulation-tier budgets are not bounded: {budgets}")
+            if int(proof.get("representedPopulation") or 0)<=int(proof.get("exactHandleSampleCount") or 0):
+                raise RuntimeError(f"Simulation-tier evidence did not show aggregate population > exact objects: {proof}")
+
+        expected=["global","regional","local","exact","global","exact","exact"]
+        actual=[panel.get("focusTier") for panel in panels]
+        if actual!=expected:
+            raise RuntimeError(f"Simulation-tier promotion/demotion sequence mismatch: expected={expected}, actual={actual}")
+        for index,panel in enumerate(panels,start=1):
+            if not panel.get("open") or int(panel.get("tierRows") or 0)!=4:
+                raise RuntimeError(f"Simulation-tier inspector incomplete in frame {index}: {panel}")
+            if not panel.get("bounded") or not panel.get("renderIndependent"):
+                raise RuntimeError(f"Simulation-tier bounds/render independence failed in frame {index}: {panel}")
+            if int(panel.get("candidateCount") or 0)>12 or int(panel.get("exactCount") or 0)>1 or int(panel.get("exactNpcHandles") or 0)>24:
+                raise RuntimeError(f"Simulation-tier active counts exceed budgets in frame {index}: {panel}")
+            if int(panel.get("representedPopulation") or 0)<=int(panel.get("exactNpcHandles") or 0):
+                raise RuntimeError(f"Simulation-tier aggregate population is not larger than exact object count in frame {index}: {panel}")
+
+        if int(panels[0].get("exactNpcHandles") or 0)!=0:
+            raise RuntimeError(f"Distant aggregate frame unexpectedly materialized exact NPC handles: {panels[0]}")
+        if int(panels[3].get("exactNpcHandles") or 0)<=0:
+            raise RuntimeError(f"Exact-tier frame did not materialize bounded exact NPC handles: {panels[3]}")
+        demoted=panels[4]
+        reactivated=panels[5]
+        if not demoted.get("historyPreserved") or not demoted.get("mutatedSignature") or demoted.get("demotedSignature")!=demoted.get("mutatedSignature"):
+            raise RuntimeError(f"Demotion did not preserve authoritative changed state: {demoted}")
+        if not reactivated.get("historyPreserved") or reactivated.get("reactivatedSignature")!=demoted.get("mutatedSignature"):
+            raise RuntimeError(f"Reactivation did not reconstruct the preserved authoritative result: {reactivated}")
+        if panels[6].get("focusTier")!="exact" or panels[6].get("focusSignature")!=reactivated.get("focusSignature"):
+            raise RuntimeError(f"Camera/render movement changed Simulation tier/outcome: {reactivated} -> {panels[6]}")
+        if "drag-" not in str(frames[6].get("action") or ""):
+            raise RuntimeError(f"Render-independence frame did not exercise camera movement: {frames[6].get('action')}")
         return
 
     if scenario == "wp-s007-002":
