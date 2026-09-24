@@ -3199,27 +3199,41 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
                 return best;
               };
               const existing=window.__advisorBillboardNpcProof||null;
-              let state=existing
-                ?(movement?.residents||[]).find(item=>String(item?.residentId||'')===String(existing.residentId))
-                :null;
-              if(!state){
-                const ranked=(movement?.residents||[])
-                  .filter(item=>item?.position&&!item?.buildingId)
-                  .map(item=>({item,clearanceTiles:clearance(item.position)}))
-                  .filter(item=>item.clearanceTiles>=4)
-                  .sort((a,b)=>
-                    (a.item.status==='arrived'?0:1)-(b.item.status==='arrived'?0:1)||
-                    b.clearanceTiles-a.clearanceTiles||
-                    String(a.item.residentId).localeCompare(String(b.item.residentId))
-                  );
-                state=ranked[0]?.item||null;
+              let state=null;
+              let proof=window.ResidentMovement?.proofSnapshot?.()||null;
+              if(!existing){
+                if(!window.ResidentMovement?.beginProof||
+                   !window.ResidentMovement?.proofAdvanceToTarget||
+                   !window.ResidentMovement?.proofBeginOutbound||
+                   !window.ResidentMovement?.proofAdvanceSeconds){
+                  done({ok:false,error:'resident-movement-proof-api-missing'});
+                  return;
+                }
+                proof=window.ResidentMovement.beginProof(seed);
+                if(!proof){
+                  done({ok:false,error:'resident-movement-proof-start-failed'});
+                  return;
+                }
+                window.ResidentMovement.proofAdvanceToTarget();
+                window.ResidentMovement.proofBeginOutbound();
+                for(let step=0;step<180;step++){
+                  proof=window.ResidentMovement.proofAdvanceSeconds(0.5);
+                  state=window.ResidentMovement.get(proof?.residentId);
+                  const clear=state?clearance(state.position):-1;
+                  if(state?.position&&!state.buildingId&&clear>=4)break;
+                  state=null;
+                }
+              }else{
+                proof=window.ResidentMovement?.proofSnapshot?.()||null;
+                state=proof&&String(proof.residentId)===String(existing.residentId)
+                  ?window.ResidentMovement.get(existing.residentId)
+                  :null;
               }
               const clearanceTiles=state?clearance(state.position):-1;
-              if(!state||state.buildingId||clearanceTiles<4){
+              if(!proof||!state||!state.position||state.buildingId||clearanceTiles<4){
                 done({
-                  ok:false,error:'no-visibly-clear-outdoor-npc',
-                  residentCount:Number(movement?.residentCount||0),
-                  selected:state||null,clearanceTiles
+                  ok:false,error:'no-deterministic-clear-proof-npc',
+                  proof:proof||null,selected:state||null,clearanceTiles
                 });
                 return;
               }
@@ -3236,7 +3250,12 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
                 navigationCategory:state.navigationCategory||null,
                 clearanceTiles
               };
-              window.__advisorBillboardNpcProof={residentId:requestedNpc.residentId};
+              window.__advisorBillboardNpcProof={
+                residentId:requestedNpc.residentId,
+                x:requestedNpc.x,
+                y:requestedNpc.y,
+                clearanceTiles:requestedNpc.clearanceTiles
+              };
               const center=camera.getCenter?.()||initial.frame?.center||{x:'0',y:'0'};
               const dx=(BigInt(requestedNpc.x)-BigInt(String(center.x))).toString();
               const dy=(BigInt(requestedNpc.y)-BigInt(String(center.y))).toString();
@@ -4407,8 +4426,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if clearance<4:
                 raise RuntimeError(f"NPC is not sufficiently separated from building footprints in frame {offset}: clearance={clearance}, action={action}")
             npc_instances.append(npc)
-        if npc_instances[0].get("id")!=npc_instances[1].get("id"):
-            raise RuntimeError(f"NPC 0.50x/1.00x frames did not inspect the same deterministic resident: {npc_instances}")
+        if npc_instances[0].get("id")!=npc_instances[1].get("id") or npc_instances[0].get("world")!=npc_instances[1].get("world"):
+            raise RuntimeError(f"NPC 0.50x/1.00x frames did not inspect the same frozen authoritative resident/coordinate: {npc_instances}")
 
         phone_portrait=presentations[7]
         phone_landscape=presentations[8]
