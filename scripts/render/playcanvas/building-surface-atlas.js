@@ -143,12 +143,17 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       name:"building-surface-atlas-"+nextSignature,
       width:canvas.width,height:canvas.height,
       format:pc.PIXELFORMAT_R8_G8_B8_A8,
-      mipmaps:true,
-      minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,
+      // This is a multi-cell atlas. Generated mip chains can blend unrelated
+      // surface cells and have produced black/incomplete Ultra wall sampling
+      // on WebGL implementations at the 1024x1024 atlas tier. Keep the full
+      // base resolution and use linear sampling without mip levels.
+      mipmaps:false,
+      minFilter:pc.FILTER_LINEAR,
       magFilter:pc.FILTER_LINEAR,
       addressU:pc.ADDRESS_CLAMP_TO_EDGE,
       addressV:pc.ADDRESS_CLAMP_TO_EDGE
     });
+    next._advisorDisableMipSampling=true;
     next.setSource(canvas);
     const previous=texture;
     texture=next;signature=nextSignature;atlasBuilds++;textureGeneration++;
@@ -172,6 +177,7 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       prepareCalls,atlasBuilds,cacheReuses,
       textureGeneration,textureDestructions,retiredTextureCount:retiredTextures.length,
       sharedAtlas:true,gpuTextureCount:1,preparationOnly:true,
+      mipmaps:false,samplingPolicy:"linear-base-level",
       frameDecodeCount:0,frameRasterizeCount:0,
       simulationAuthorityPreserved:true
     });
