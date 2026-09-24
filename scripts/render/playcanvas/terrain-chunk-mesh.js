@@ -573,26 +573,64 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     }
     return meshes;
   }
-  function appendRouteQuad(batch,worldData,xValue,yValue,halfX,halfZ,yOffset=0.024){
+  function appendRouteQuad(batch,worldData,xValue,yValue,halfX,halfZ,yOffset=0.024,centerOffsetX=0,centerOffsetZ=0){
     const p=localTileCenter(worldData,xValue,yValue);
     const seed=String(seedProvider()||"");
+    const centerTileOffsetX=Number(centerOffsetX||0)/WORLD_TILE_METERS;
+    const centerTileOffsetZ=Number(centerOffsetZ||0)/WORLD_TILE_METERS;
     const tileOffsetX=Number(halfX)/WORLD_TILE_METERS;
     const tileOffsetZ=Number(halfZ)/WORLD_TILE_METERS;
-    const hNW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,-tileOffsetX,-tileOffsetZ)+yOffset;
-    const hNE=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,tileOffsetX,-tileOffsetZ)+yOffset;
-    const hSW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,-tileOffsetX,tileOffsetZ)+yOffset;
-    const hSE=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,tileOffsetX,tileOffsetZ)+yOffset;
+    const hNW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,centerTileOffsetX-tileOffsetX,centerTileOffsetZ-tileOffsetZ)+yOffset;
+    const hNE=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,centerTileOffsetX+tileOffsetX,centerTileOffsetZ-tileOffsetZ)+yOffset;
+    const hSW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,centerTileOffsetX-tileOffsetX,centerTileOffsetZ+tileOffsetZ)+yOffset;
+    const hSE=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,centerTileOffsetX+tileOffsetX,centerTileOffsetZ+tileOffsetZ)+yOffset;
+    const cx=p.x+Number(centerOffsetX||0),cz=p.z+Number(centerOffsetZ||0);
     const base=batch.positions.length/3;
     batch.positions.push(
-      p.x-halfX,hNW,p.z-halfZ,
-      p.x+halfX,hNE,p.z-halfZ,
-      p.x-halfX,hSW,p.z+halfZ,
-      p.x+halfX,hSE,p.z+halfZ
+      cx-halfX,hNW,cz-halfZ,
+      cx+halfX,hNE,cz-halfZ,
+      cx-halfX,hSW,cz+halfZ,
+      cx+halfX,hSE,cz+halfZ
     );
     const dx=((hNE+hSE)-(hNW+hSW))/(Math.max(0.001,halfX*4));
     const dz=((hSW+hSE)-(hNW+hNE))/(Math.max(0.001,halfZ*4));
     const nx=-dx,ny=1,nz=-dz,len=Math.hypot(nx,ny,nz)||1;
     for(let i=0;i<4;i++)batch.normals.push(nx/len,ny/len,nz/len);
+    batch.uvs.push(0,0,1,0,0,1,1,1);
+    batch.indices.push(base,base+2,base+1,base+1,base+2,base+3);
+    batch.sourcePrimitiveCount++;
+    staticBatchSourcePrimitiveCount++;
+    return 2;
+  }
+  function appendDiagonalRouteBridge(batch,worldData,xValue,yValue,dxTile,dzTile,halfWidth=0.72,yOffset=0.033){
+    const seed=String(seedProvider()||"");
+    const p0=localTileCenter(worldData,xValue,yValue);
+    const nx=BigInt(String(xValue))+BigInt(dxTile),ny=BigInt(String(yValue))+BigInt(dzTile);
+    const p1=localTileCenter(worldData,String(nx),String(ny));
+    const vx=p1.x-p0.x,vz=p1.z-p0.z,length=Math.hypot(vx,vz)||1;
+    const ux=vx/length,uz=vz/length,px=-uz,pz=ux;
+    const halfLength=length*0.54;
+    const cx=(p0.x+p1.x)*0.5,cz=(p0.z+p1.z)*0.5;
+    const corners=[
+      [cx-ux*halfLength-px*halfWidth,cz-uz*halfLength-pz*halfWidth],
+      [cx-ux*halfLength+px*halfWidth,cz-uz*halfLength+pz*halfWidth],
+      [cx+ux*halfLength-px*halfWidth,cz+uz*halfLength-pz*halfWidth],
+      [cx+ux*halfLength+px*halfWidth,cz+uz*halfLength+pz*halfWidth]
+    ];
+    const heights=corners.map(([x,z])=>
+      terrainHeightAtTile(
+        seed,xValue,yValue,worldData?.chunkSize||16,
+        (x-p0.x)/WORLD_TILE_METERS,(z-p0.z)/WORLD_TILE_METERS
+      )+yOffset
+    );
+    const base=batch.positions.length/3;
+    for(let i=0;i<4;i++)batch.positions.push(corners[i][0],heights[i],corners[i][1]);
+    const ax=corners[2][0]-corners[0][0],ay=heights[2]-heights[0],az=corners[2][1]-corners[0][1];
+    const bx=corners[1][0]-corners[0][0],by=heights[1]-heights[0],bz=corners[1][1]-corners[0][1];
+    let nnx=ay*bz-az*by,nny=az*bx-ax*bz,nnz=ax*by-ay*bx;
+    if(nny<0){nnx=-nnx;nny=-nny;nnz=-nnz;}
+    const nlen=Math.hypot(nnx,nny,nnz)||1;
+    for(let i=0;i<4;i++)batch.normals.push(nnx/nlen,nny/nlen,nnz/nlen);
     batch.uvs.push(0,0,1,0,0,1,1,1);
     batch.indices.push(base,base+2,base+1,base+1,base+2,base+3);
     batch.sourcePrimitiveCount++;
@@ -626,30 +664,32 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     if(type==="square")return {halfX:0.985,halfZ:0.985};
     if(orientation==="horizontal")return {halfX:1.04,halfZ:0.42};
     if(orientation==="vertical")return {halfX:0.42,halfZ:1.04};
-    return {halfX:0.48,halfZ:0.48};
+    if(orientation==="corner")return {halfX:0.98,halfZ:0.98};
+    return {halfX:0.58,halfZ:0.58};
   }
   function buildRoutePresentation(worldData,connectorDescriptors,batches){
     const seed=String(seedProvider()||"");
     const counts={road:0,path:0,square:0,connector:0};
     const samples=[];
-    let triangleCount=0,edgeStripCount=0;
+    let triangleCount=0,edgeStripCount=0,diagonalBridgeCount=0;
     const routeTypes=new Set(["road","path","square"]);
     const edgeMaterial=presentationMaterial("route-edge",0.25,0.18,0.11,0.02);
     const edgeBatch=batchFor(batches,edgeMaterial.name,edgeMaterial);
+    const routeLike=type=>["road","path","square","bridge"].includes(String(type||""));
+    const diagonalRoadAcrossSide=(cell,side)=>{
+      const tests=side==="e"?[[1,-1],[1,1]]:
+        side==="w"?[[-1,-1],[-1,1]]:
+        side==="n"?[[-1,-1],[1,-1]]:
+        [[-1,1],[1,1]];
+      return tests.some(([dx,dy])=>routeNeighborType(seed,cell.x,cell.y,dx,dy)==="road");
+    };
     const appendEdge=(cell,side)=>{
       const inset=0.92,width=0.075;
-      if(side==="n")triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,0.94,width,0.034);
-      else if(side==="s")triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,0.94,width,0.034);
-      else if(side==="e")triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,width,0.94,0.034);
-      else triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,width,0.94,0.034);
-      // Shift the narrow strip from the tile center onto the requested outer edge.
-      const vertexStart=edgeBatch.positions.length-12;
-      const shiftX=side==="e"?inset:side==="w"?-inset:0;
-      const shiftZ=side==="s"?inset:side==="n"?-inset:0;
-      for(let i=vertexStart;i<edgeBatch.positions.length;i+=3){
-        edgeBatch.positions[i]+=shiftX;
-        edgeBatch.positions[i+2]+=shiftZ;
-      }
+      const offsetX=side==="e"?inset:side==="w"?-inset:0;
+      const offsetZ=side==="s"?inset:side==="n"?-inset:0;
+      const halfX=(side==="e"||side==="w")?width:0.94;
+      const halfZ=(side==="n"||side==="s")?width:0.94;
+      triangleCount+=appendRouteQuad(edgeBatch,worldData,cell.x,cell.y,halfX,halfZ,0.034,offsetX,offsetZ);
       edgeStripCount++;
     };
 
@@ -668,10 +708,25 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         halfWidthMeters:Number(extents.halfX.toFixed(3)),
         halfDepthMeters:Number(extents.halfZ.toFixed(3))
       }));
+      if(type==="road"){
+        // The one-tile gateway centerline may change lateral offset by one tile
+        // between consecutive forward coordinates. Simulation already treats
+        // that diagonal pair as continuous; bridge only that visual corner so
+        // the road no longer appears broken while authoritative cells stay unchanged.
+        for(const [dx,dy] of [[1,-1],[1,1]]){
+          const diagonal=routeNeighborType(seed,cell.x,cell.y,dx,dy);
+          if(diagonal!=="road")continue;
+          const sideA=routeNeighborType(seed,cell.x,cell.y,dx,0);
+          const sideB=routeNeighborType(seed,cell.x,cell.y,0,dy);
+          if(routeLike(sideA)||routeLike(sideB))continue;
+          triangleCount+=appendDiagonalRouteBridge(batch,worldData,cell.x,cell.y,dx,dy,0.72,0.033);
+          diagonalBridgeCount++;
+        }
+      }
       if(type==="road"||type==="square"){
         for(const [side,dx,dy] of [["n",0,-1],["e",1,0],["s",0,1],["w",-1,0]]){
           const neighbor=routeNeighborType(seed,cell.x,cell.y,dx,dy);
-          if(!["road","path","square","bridge"].includes(neighbor))appendEdge(cell,side);
+          if(!routeLike(neighbor)&&!diagonalRoadAcrossSide(cell,side))appendEdge(cell,side);
         }
       }
     }
@@ -695,8 +750,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       counts:Object.freeze({...counts}),
       surfaceCellCount:counts.road+counts.path+counts.square,
       connectorCellCount:counts.connector,
-      edgeStripCount,
-      sourcePrimitiveCount:counts.road+counts.path+counts.square+counts.connector+edgeStripCount,
+      edgeStripCount,diagonalBridgeCount,
+      sourcePrimitiveCount:counts.road+counts.path+counts.square+counts.connector+edgeStripCount+diagonalBridgeCount,
       triangleCount,
       samples:Object.freeze(samples),
       routeSurfaceMaterialCount:routeSurfaceMaterials.size,
@@ -1291,6 +1346,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       routeSquareCellCount:Number(routePresentation.counts.square||0),
       routeConnectorCellCount:Number(routePresentation.connectorCellCount||0),
       routeEdgeStripCount:Number(routePresentation.edgeStripCount||0),
+      routeDiagonalBridgeCount:Number(routePresentation.diagonalBridgeCount||0),
       routeSurfaceTriangleCount:Number(routePresentation.triangleCount||0),
       routeSurfaceMaterialCount:Number(routePresentation.routeSurfaceMaterialCount||0),
       routeSurfaceMaterialNames:routePresentation.routeSurfaceMaterialNames,
