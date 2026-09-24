@@ -725,9 +725,20 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const texture=buildingSurfaceAtlas.texture?.()||null;
     if(texture)applyTextureSampling(texture,textureQualitySnapshot());
     const materialRefreshCount=Number(terrainChunkMeshFactory?.refreshBuildingMaterials?.()||0);
+    // Keep the superseded atlas alive while PlayCanvas applies the updated
+    // material/sampler state to GPU draw bindings. Two rAF boundaries are
+    // bounded and deterministic, and avoid destroying a texture still queued
+    // by a long-lived variant material.
+    let rebindGraceFrames=0;
+    if(typeof requestAnimationFrame==="function"){
+      for(let i=0;i<2;i++){
+        await new Promise(resolve=>requestAnimationFrame(()=>resolve()));
+        rebindGraceFrames++;
+      }
+    }
     const retiredTextureReleaseCount=Number(buildingSurfaceAtlas.releaseRetiredTextures?.()||0);
     const finalState=buildingSurfaceAtlas.stats?.()||state;
-    return Object.freeze({...finalState,materialRefreshCount,retiredTextureReleaseCount});
+    return Object.freeze({...finalState,materialRefreshCount,retiredTextureReleaseCount,rebindGraceFrames});
   }
   function terrainMicroReliefEffective(q=textureQualitySnapshot()){
     return Boolean(q.auxiliaryMaps)&&terrainMicroReliefProofOverride!==false;
