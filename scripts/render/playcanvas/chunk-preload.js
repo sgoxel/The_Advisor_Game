@@ -4,6 +4,13 @@
 const STORAGE_KEY="the-advisor-game:terrain-preload:v1";
 const ALLOWED_RADIUS=Object.freeze([1,2,3,4]);
 const ALLOWED_CACHE=Object.freeze([16,32,64,128,256]);
+const IDLE_START_MS=1500;
+const IDLE_LEVEL2_MS=3500;
+const IDLE_RECHECK_MS=250;
+const IDLE_CACHE_HARD_CEILING=256;
+const IDLE_QUEUE_PRIORITY=1000;
+const IDLE_HEADROOM_RATIO=0.80;
+const IDLE_HEADROOM_RESERVE_MS=2.5;
 const DEFAULTS=Object.freeze({
   preloadRadius:2,
   maxCachedChunks:64,
@@ -110,7 +117,8 @@ function createManager({
   activateChunk,
   deactivateChunk,
   destroyChunk,
-  signatureProvider=()=>"standard"
+  signatureProvider=()=>"standard",
+  performanceProvider=()=>null
 }={}){
   if(typeof prepareChunk!=="function")throw new Error("TerrainChunkPreload manager requires prepareChunk");
   let size=Math.max(1,Number(chunkSize)||16);
@@ -126,6 +134,15 @@ function createManager({
   let lastCenterChunk=null;
   let lastRequest=null;
   let settings=get();
+  let idleTimer=0;
+  let stationarySince=performance.now();
+  let lastNavigationKey=null;
+  let idleExpansionLevel=0;
+  let retainedCacheLimit=Math.min(IDLE_CACHE_HARD_CEILING,settings.maxCachedChunks);
+  let idleChunksGenerated=0,idleCacheHits=0,idleStarts=0,idleStops=0;
+  let lastIdleStartReason=null,lastIdleStopReason="not-started";
+  let lastHeadroom=Object.freeze({ok:false,reason:"no-sample",frameMs:0,budgetMs:Number((1000/60).toFixed(3)),headroomMs:0,targetFps:60});
+  let lastIdleWorkMs=0,totalIdleWorkMs=0,maxIdleWorkMs=0;
   let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,cacheReuses=0,frameBudgetSpikes=0,invalidations=0;
   let activations=0,deactivations=0,stateReuses=0,resourceCreations=0,resourceDestructions=0;
   let updateCalls=0,lastUpdateMs=0,maxUpdateMs=0,totalUpdateMs=0,transitionCalls=0,totalTransitionMs=0,maxTransitionMs=0;
@@ -136,6 +153,8 @@ function createManager({
   let lastQueuePreview=Object.freeze([]);
   const unsubscribe=subscribe(next=>{
     settings=next;
+    retainedCacheLimit=Math.min(IDLE_CACHE_HARD_CEILING,settings.maxCachedChunks);
+    stopIdleExpansion("settings-changed",true);
     trimCached();
     if(lastRequest)update(lastRequest);
   });
@@ -190,6 +209,144 @@ function createManager({
       cancelAnimationFrame(frameHandle);
       frameHandle=0;
     }
+    cancelIdleTimer();
+  }
+  function cancelIdleTimer(){
+    if(idleTimer){
+      clearTimeout(idleTimer);
+      idleTimer=0;
+    }
+  }
+  function normalCacheTarget(){return Math.min(IDLE_CACHE_HARD_CEILING,Math.max(0,Number(settings.maxCachedChunks)||0));}
+  function idleCacheTarget(level){
+    const normal=normalCacheTarget();
+    if(level>=2)return Math.min(IDLE_CACHE_HARD_CEILING,normal*3);
+    if(level>=1)return Math.min(IDLE_CACHE_HARD_CEILING,normal*2);
+    return normal;
+  }
+  function cachedCount(){
+    let count=0;
+    for(const entry of entries.values())if(entry.state==="Cached")count++;
+    return count;
+  }
+  function queueCounts(){
+    let normal=0,idle=0;
+    for(const item of queue){if(item.source==="idle")idle++;else normal++;}
+    return {normal,idle};
+  }
+  function headroomState(){
+    let sample=null;
+    try{sample=performanceProvider?.()||null;}catch(_){sample=null;}
+    const frameMs=Math.max(0,Number(sample?.lastFrameMs||0));
+    const targetFps=Math.max(1,Number(sample?.targetFps||60));
+    const minimumFps=Math.max(1,Math.min(targetFps,Number(sample?.minimumFps||30)));
+    const targetBudget=1000/targetFps;
+    const fallbackBudget=1000/minimumFps;
+    const budgetMs=frameMs>targetBudget*1.05?fallbackBudget:targetBudget;
+    const reserveMs=Math.max(IDLE_HEADROOM_RESERVE_MS,budgetMs*(1-IDLE_HEADROOM_RATIO));
+    const headroomMs=Math.max(0,budgetMs-frameMs);
+    const ok=frameMs>0&&frameMs<=fallbackBudget&&headroomMs>=reserveMs;
+    const reason=frameMs<=0?"no-frame-sample":ok?"headroom-available":frameMs>fallbackBudget?"below-minimum-fps":"insufficient-headroom";
+    lastHeadroom=Object.freeze({
+      ok,reason,
+      frameMs:Number(frameMs.toFixed(3)),
+      budgetMs:Number(budgetMs.toFixed(3)),
+      headroomMs:Number(headroomMs.toFixed(3)),
+      targetFps:budgetMs===fallbackBudget?minimumFps:targetFps
+    });
+    return lastHeadroom;
+  }
+  function clearIdleQueue(){
+    if(!queue.length)return 0;
+    const keep=[],removed=[];
+    for(const item of queue){
+      if(item.source==="idle")removed.push(item);
+      else keep.push(item);
+    }
+    if(!removed.length)return 0;
+    queue=keep;
+    for(const item of removed)queued.delete(item.fullKey);
+    lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance,source:item.source||"normal"})));
+    return removed.length;
+  }
+  function stopIdleExpansion(reason="idle-stopped",resetLevel=true){
+    const wasActive=idleExpansionLevel>0||queue.some(item=>item.source==="idle");
+    clearIdleQueue();
+    cancelIdleTimer();
+    if(resetLevel)idleExpansionLevel=0;
+    if(wasActive)idleStops++;
+    lastIdleStopReason=String(reason||"idle-stopped");
+  }
+  function scheduleIdleCheck(delay=IDLE_RECHECK_MS){
+    cancelIdleTimer();
+    if(destroyed||!settings.backgroundChunkGeneration||!lastRequest)return;
+    idleTimer=setTimeout(runIdleCheck,Math.max(0,Number(delay)||0));
+  }
+  function idleCandidates(needed){
+    if(!lastRequest||!lastCenterChunk||needed<=0)return [];
+    const rx=Math.max(0,lastRequest.activeRadiusX|0),ry=Math.max(0,lastRequest.activeRadiusY|0);
+    const bounds=makeBounds(lastCenterChunk,rx,ry);
+    const sig=currentSignature();
+    const result=[];
+    const maxDistance=Math.max(settings.preloadRadius+2,Math.ceil(Math.sqrt(needed))+settings.preloadRadius+8);
+    for(let distance=1;distance<=maxDistance&&result.length<needed;distance++){
+      for(let y=bounds.minY-distance;y<=bounds.maxY+distance&&result.length<needed;y++){
+        for(let x=bounds.minX-distance;x<=bounds.maxX+distance&&result.length<needed;x++){
+          if(distanceToRect(x,y,bounds)!==distance)continue;
+          const fullKey=entryKey(sig,x,y);
+          if(entries.has(fullKey)||queued.has(fullKey))continue;
+          const dx=x-lastCenterChunk.x,dy=y-lastCenterChunk.y;
+          const dot=dx*lastDirection.x+dy*lastDirection.y;
+          const directionBias=dot>0?-1:dot<0?1:0;
+          result.push({
+            x,y,signature:sig,state:"Cached",source:"idle",
+            priority:IDLE_QUEUE_PRIORITY+distance*10+directionBias,
+            distance
+          });
+        }
+      }
+    }
+    return result;
+  }
+  function runIdleCheck(){
+    idleTimer=0;
+    if(destroyed||!settings.backgroundChunkGeneration||!lastRequest)return;
+    if(queue.some(item=>item.source!=="idle")){scheduleIdleCheck();return;}
+    const idleMs=Math.max(0,performance.now()-stationarySince);
+    if(idleMs<IDLE_START_MS){scheduleIdleCheck(Math.min(IDLE_RECHECK_MS,IDLE_START_MS-idleMs));return;}
+    const headroom=headroomState();
+    if(!headroom.ok){
+      stopIdleExpansion(headroom.reason,true);
+      scheduleIdleCheck();
+      return;
+    }
+    const nextLevel=idleMs>=IDLE_LEVEL2_MS?2:1;
+    const target=idleCacheTarget(nextLevel);
+    const current=cachedCount();
+    if(current>=target){
+      if(nextLevel>idleExpansionLevel){
+        idleExpansionLevel=nextLevel;
+        idleStarts++;
+        lastIdleStartReason="stationary-headroom-level-"+nextLevel;
+      }
+      retainedCacheLimit=Math.max(retainedCacheLimit,target);
+      lastIdleStopReason="target-reached";
+      scheduleIdleCheck();
+      return;
+    }
+    if(nextLevel!==idleExpansionLevel){
+      idleExpansionLevel=nextLevel;
+      idleStarts++;
+      lastIdleStartReason="stationary-headroom-level-"+nextLevel;
+    }
+    retainedCacheLimit=Math.max(retainedCacheLimit,target);
+    const items=idleCandidates(target-current);
+    if(!items.length){
+      lastIdleStopReason="no-idle-candidates";
+      scheduleIdleCheck();
+      return;
+    }
+    schedulePrepared(items);
   }
   function chunkFromCenter(center){
     return Object.freeze({
@@ -242,13 +399,15 @@ function createManager({
     const [x,y]=key.split(",").map(Number);
     return {x,y};
   }
-  function prepareNow(x,y,state,isVisible){
+  function prepareNow(x,y,state,isVisible,source="normal"){
     const sig=currentSignature();
     const key=entryKey(sig,x,y);
     let entry=entries.get(key);
     if(entry){
       hits++;
+      const promotedIdle=Boolean(entry.idleGenerated&&entry.state==="Cached"&&(state==="Active"||state==="Prepared"));
       if(entry.state==="Cached"&&(state==="Active"||state==="Prepared"))cacheReuses++;
+      if(promotedIdle)idleCacheHits++;
       entry.lastUsed=performance.now();
       setEntryState(entry,state);
       return entry;
@@ -260,10 +419,11 @@ function createManager({
     const elapsed=performance.now()-started;
     lastWorkMs=elapsed;maxWorkMs=Math.max(maxWorkMs,elapsed);
     if(elapsed>settings.frameBudgetMs*1.5)frameBudgetSpikes++;
-    entry={key,x,y,state,signature:sig,resource,lastUsed:performance.now()};
+    entry={key,x,y,state,signature:sig,resource,lastUsed:performance.now(),idleGenerated:source==="idle"};
     entries.set(key,entry);
     compositions++;
     resourceCreations++;
+    if(source==="idle")idleChunksGenerated++;
     if(state==="Active"){
       activateChunk?.(resource,entry);
       activations++;
@@ -279,20 +439,25 @@ function createManager({
     for(const item of items){
       const sig=currentSignature();
       const fullKey=entryKey(sig,item.x,item.y);
+      const source=item.source==="idle"?"idle":"normal";
+      const desiredState=item.state||"Prepared";
       if(entries.has(fullKey)){
         const entry=entries.get(fullKey);
+        if(source==="idle")continue;
         hits++;
+        const promotedIdle=Boolean(entry.idleGenerated&&entry.state==="Cached");
         if(entry.state==="Cached")cacheReuses++;
+        if(promotedIdle)idleCacheHits++;
         entry.lastUsed=performance.now();
-        setEntryState(entry,"Prepared");
+        setEntryState(entry,desiredState);
         continue;
       }
       if(queued.has(fullKey))continue;
       queued.add(fullKey);
-      queue.push({...item,fullKey});
+      queue.push({...item,fullKey,source,state:desiredState});
     }
     queue.sort((a,b)=>a.priority-b.priority||a.distance-b.distance||a.x-b.x||a.y-b.y);
-    lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance})));
+    lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance,source:item.source||"normal"})));
     if(queue.length&&!frameHandle)frameHandle=requestAnimationFrame(processQueue);
   }
   function processQueue(){
@@ -305,6 +470,17 @@ function createManager({
       if(processed>0&&performance.now()-started>=settings.frameBudgetMs)break;
       const item=queue.shift();queued.delete(item.fullKey);
       if(item.signature!==currentSignature())continue;
+      if(item.source==="idle"){
+        const headroom=headroomState();
+        if(!headroom.ok){
+          clearIdleQueue();
+          idleExpansionLevel=0;
+          idleStops++;
+          lastIdleStopReason=headroom.reason;
+          scheduleIdleCheck();
+          break;
+        }
+      }
       // A viewport/orientation change can promote a chunk to Active while an
       // older background-prepare item for the same chunk is still queued.
       // Never let that stale item demote and disable a now-visible resource.
@@ -313,7 +489,14 @@ function createManager({
         processed++;
         continue;
       }
-      prepareNow(item.x,item.y,"Prepared",false);
+      const itemStarted=performance.now();
+      prepareNow(item.x,item.y,item.state||"Prepared",false,item.source||"normal");
+      const itemElapsed=performance.now()-itemStarted;
+      if(item.source==="idle"){
+        lastIdleWorkMs=itemElapsed;
+        totalIdleWorkMs+=itemElapsed;
+        maxIdleWorkMs=Math.max(maxIdleWorkMs,itemElapsed);
+      }
       preparedKeys.push(coordKey(item.x,item.y));
       processed++;
     }
@@ -323,12 +506,14 @@ function createManager({
     if(preparedKeys.length)lastPreparedOrder=Object.freeze(preparedKeys);
     trimCached();
     if(queue.length)frameHandle=requestAnimationFrame(processQueue);
+    else scheduleIdleCheck();
   }
   function trimCached(){
     const cached=[...entries.values()]
       .filter(e=>e.state==="Cached")
       .sort((a,b)=>a.lastUsed-b.lastUsed||a.x-b.x||a.y-b.y);
-    while(cached.length>settings.maxCachedChunks){
+    const limit=Math.min(IDLE_CACHE_HARD_CEILING,Math.max(normalCacheTarget(),retainedCacheLimit));
+    while(cached.length>limit){
       const entry=cached.shift();
       entries.delete(entry.key);
       destroyEntry(entry);
@@ -341,11 +526,21 @@ function createManager({
     updateCalls++;
     const sig=currentSignature();
     if(sig!==signature){invalidate("signature");signature=sig;}
-    lastRequest={
+    const nextRequest={
       center:Object.freeze({x:String(request.center.x),y:String(request.center.y)}),
       activeRadiusX:Math.max(0,Number(request.activeRadiusX||0)),
       activeRadiusY:Math.max(0,Number(request.activeRadiusY||0))
     };
+    const navigationKey=[nextRequest.center.x,nextRequest.center.y,nextRequest.activeRadiusX,nextRequest.activeRadiusY].join("|");
+    if(lastNavigationKey===null){
+      stationarySince=performance.now();
+    }else if(navigationKey!==lastNavigationKey){
+      stationarySince=performance.now();
+      stopIdleExpansion("navigation-resumed",true);
+    }
+    lastNavigationKey=navigationKey;
+    lastRequest=nextRequest;
+    clearIdleQueue();
     const targets=targetSets(lastRequest);
     const activeCoords=new Map([...targets.active].map(key=>[key,parseCoord(key)]));
     const preparedCoords=new Map([...targets.prepared].map(key=>[key,parseCoord(key)]));
@@ -373,6 +568,7 @@ function createManager({
     schedulePrepared(prepItems);
     trimCached();
     lastCenterChunk=targets.centerChunk;
+    scheduleIdleCheck();
     lastUpdateMs=performance.now()-updateStarted;
     totalUpdateMs+=lastUpdateMs;
     maxUpdateMs=Math.max(maxUpdateMs,lastUpdateMs);
@@ -408,6 +604,26 @@ function createManager({
       Cached:cached,
       protectedCount:active+prepared,
       queueDepth:queue.length,
+      normalQueueDepth:queueCounts().normal,
+      idleQueueDepth:queueCounts().idle,
+      normalCacheTarget:normalCacheTarget(),
+      adaptiveIdleTarget:idleCacheTarget(idleExpansionLevel),
+      retainedCacheLimit:Math.min(IDLE_CACHE_HARD_CEILING,Math.max(normalCacheTarget(),retainedCacheLimit)),
+      idleCacheHardCeiling:IDLE_CACHE_HARD_CEILING,
+      idleExpansionLevel,
+      stationaryMs:lastRequest?Number(Math.max(0,performance.now()-stationarySince).toFixed(1)):0,
+      idleStartMs:IDLE_START_MS,
+      idleLevel2Ms:IDLE_LEVEL2_MS,
+      idleChunksGenerated,idleCacheHits,idleStarts,idleStops,lastIdleStartReason,lastIdleStopReason,
+      recentFrameTimeMs:lastHeadroom.frameMs,
+      recentFrameBudgetMs:lastHeadroom.budgetMs,
+      recentFrameHeadroomMs:lastHeadroom.headroomMs,
+      recentFrameTargetFps:lastHeadroom.targetFps,
+      headroomAvailable:lastHeadroom.ok,
+      headroomReason:lastHeadroom.reason,
+      lastIdleWorkMs:Number(lastIdleWorkMs.toFixed(3)),
+      maxIdleWorkMs:Number(maxIdleWorkMs.toFixed(3)),
+      averageIdleWorkMs:Number((idleChunksGenerated?totalIdleWorkMs/idleChunksGenerated:0).toFixed(3)),
       hits,misses,compositions,evictions,visibleWaits,cacheReuses,invalidations,lastInvalidationReason,
       activations,deactivations,stateReuses,resourceCreations,resourceDestructions,
       updateCalls,lastUpdateMs:Number(lastUpdateMs.toFixed(3)),maxUpdateMs:Number(maxUpdateMs.toFixed(3)),
@@ -423,7 +639,7 @@ function createManager({
       backgroundFrames,
       lastPreparedOrder,
       lastQueuePreview,
-      bounded:cached<=settings.maxCachedChunks,
+      bounded:cached<=Math.min(IDLE_CACHE_HARD_CEILING,Math.max(normalCacheTarget(),retainedCacheLimit)),
       backgroundEnabled:settings.backgroundChunkGeneration,
       directionalEnabled:settings.directionalPreload,
       simulationAuthorityPreserved:true
@@ -432,7 +648,7 @@ function createManager({
   function proof(){
     const s=stats();
     return Object.freeze({
-      defaultsValid:DEFAULTS.preloadRadius===2&&DEFAULTS.maxCachedChunks===64&&DEFAULTS.directionalPreload&&DEFAULTS.backgroundChunkGeneration,
+      defaultsValid:DEFAULTS.preloadRadius===2&&DEFAULTS.maxCachedChunks===64&&DEFAULTS.directionalPreload&&DEFAULTS.backgroundChunkGeneration&&IDLE_CACHE_HARD_CEILING===256,
       allowedRadius:Object.freeze([...ALLOWED_RADIUS]),
       allowedCache:Object.freeze([...ALLOWED_CACHE]),
       activePreparedCachedSeparate:true,
@@ -442,7 +658,7 @@ function createManager({
     });
   }
   function destroy(){
-    destroyed=true;cancelWork();unsubscribe();
+    destroyed=true;stopIdleExpansion("destroy",true);cancelWork();unsubscribe();
     for(const entry of entries.values())destroyEntry(entry);
     entries.clear();queue=[];queued.clear();
   }
