@@ -1596,6 +1596,75 @@ def _safe_click(driver, selector: str) -> str:
     return f"click:{selector}"
 
 
+def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool = False) -> str:
+    if phase is None:
+        result = driver.execute_script(
+            """
+            const api=window.AppUI;
+            if(!api?.clearSceneLoadingProof||!api?.sceneLoadingSnapshot)return null;
+            api.clearSceneLoadingProof();
+            return api.sceneLoadingSnapshot();
+            """
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError(f"Scene-loading proof clear failed: {result}")
+        overlay=result.get("overlay") or {}
+        if not overlay.get("hidden"):
+            raise RuntimeError(f"Scene-loading proof did not return to actual hidden ready state: {result}")
+        return "scene-loading:ready-hidden"
+
+    if reduced_motion:
+        try:
+            driver.execute_cdp_cmd(
+                "Emulation.setEmulatedMedia",
+                {
+                    "media": "",
+                    "features": [
+                        {"name": "prefers-reduced-motion", "value": "reduce"}
+                    ],
+                },
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Could not emulate reduced motion for scene-loading evidence: {exc}") from exc
+    else:
+        try:
+            driver.execute_cdp_cmd(
+                "Emulation.setEmulatedMedia",
+                {
+                    "media": "",
+                    "features": [
+                        {"name": "prefers-reduced-motion", "value": "no-preference"}
+                    ],
+                },
+            )
+        except Exception:
+            pass
+
+    result = driver.execute_script(
+        """
+        const phase=String(arguments[0]);
+        const reduced=Boolean(arguments[1]);
+        const api=window.AppUI;
+        if(!api?.setSceneLoadingProof||!api?.sceneLoadingSnapshot)return null;
+        api.setSceneLoadingProof(phase,{reducedMotion:reduced});
+        return api.sceneLoadingSnapshot();
+        """,
+        phase,
+        reduced_motion,
+    )
+    if not isinstance(result, dict):
+        raise RuntimeError(f"Scene-loading proof phase {phase!r} failed: {result}")
+    overlay=result.get("overlay") or {}
+    expected_state="error" if phase=="error" else "loading"
+    if overlay.get("hidden") or overlay.get("phase")!=phase or overlay.get("state")!=expected_state:
+        raise RuntimeError(f"Scene-loading proof phase mismatch for {phase!r}: {result}")
+    return (
+        f"scene-loading:{phase}:"
+        f"state={overlay.get('state')}:"
+        f"reduced={str(bool(result.get('reducedMotionPreferred'))).lower()}"
+    )
+
+
 def _reload_current_build(driver, timeout: float = 20.0) -> str:
     from selenium.webdriver.support.ui import WebDriverWait
 
