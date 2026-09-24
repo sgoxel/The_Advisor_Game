@@ -743,7 +743,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     if(detailTexture)applyTextureSampling(detailTexture,q);
     if(normalDetailTexture)applyTextureSampling(normalDetailTexture,q);
     mat.update();
-    return state;
+    // The material now references the new terrain-detail generation, so any
+    // superseded shared terrain textures can be safely released.
+    const retiredTextureReleaseCount=Number(terrainTextureAtlas.releaseRetiredTextures?.()||0);
+    const finalState=terrainTextureAtlas.stats?.()||state;
+    return Object.freeze({...finalState,materialRebindCount:1,retiredTextureReleaseCount});
   }
   function terrainChunkSignature(){
     // Chunk resources contain deterministic geometry plus references to shared
