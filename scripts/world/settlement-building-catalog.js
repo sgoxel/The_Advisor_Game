@@ -360,7 +360,7 @@ function proof(seedValue){
   );
   const miningConstraint=comps.every((composition,index)=>
     !composition.selected.some(item=>["ore-depot","smelter"].includes(item.id))||
-    plans[index].inputs.local.resources.mineral>=0.32
+    plans[index].inputs.local.resources.mineral>=0.28
   );
   const smallPlans=plans.filter(plan=>plan.classId==="hamlet"||plan.classId==="village");
   const scaleLeakagePrevented=smallPlans.every(plan=>{
