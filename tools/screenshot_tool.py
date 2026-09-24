@@ -4898,7 +4898,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         expected_profiles=("low","standard","low","standard","low","standard","low","standard","standard","standard")
         expected_zooms=("1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","2.00×","1.00×")
         pair_centers=[]
-        baseline_topology=None
+        pair_topology=[]
         for index,frame in enumerate(frames[:10]):
             build=frame.get("runtime",{}).get("currentBuild",{})
             gpu=build.get("gpuRenderer") or {}
@@ -4921,10 +4921,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if int(atlas.get("totalGpuTextureCount") or 0)!=3:
                 raise RuntimeError(f"Terrain texture set is not bounded to atlas+detail+normal in frame {index+1}: {atlas}")
             topology=(int(chunks.get("vertices") or 0),int(chunks.get("triangles") or 0),int(chunks.get("presentationMeshInstanceCount") or 0))
-            if baseline_topology is None:
-                baseline_topology=topology
-            elif topology!=baseline_topology:
-                raise RuntimeError(f"Micro-relief changed terrain topology/draw resources: baseline={baseline_topology}, frame{index+1}={topology}")
+            pair_topology.append(topology)
             if gpu.get("simulationAuthorityPreserved") is not True:
                 raise RuntimeError(f"Micro-relief changed Simulation authority in frame {index+1}: {gpu}")
             if int(atlas.get("frameDecodeCount") or 0)!=0 or int(atlas.get("frameRasterizeCount") or 0)!=0 or int(atlas.get("frameAtlasBuildCount") or 0)!=0:
@@ -4933,6 +4930,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         for a,b in ((0,1),(2,3),(4,5),(6,7)):
             if pair_centers[a]!=pair_centers[b]:
                 raise RuntimeError(f"OFF/ON comparison moved camera for pair {a//2+1}: {pair_centers[a]} vs {pair_centers[b]}")
+            if pair_topology[a]!=pair_topology[b]:
+                raise RuntimeError(f"Micro-relief changed topology/draw resources within OFF/ON pair {a//2+1}: off={pair_topology[a]}, on={pair_topology[b]}")
         viewport=frames[9].get("runtime",{}).get("viewport",{})
         if int(viewport.get("width") or 0)<=int(viewport.get("height") or 0):
             raise RuntimeError(f"Phone landscape micro-relief evidence missing: {viewport}")
