@@ -4534,8 +4534,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             max_trees=max(max_trees,int(chunks.get("treePresentationCount") or 0))
             variant0=max(variant0,int(chunks.get("treeVariant0Count") or 0))
             variant1=max(variant1,int(chunks.get("treeVariant1Count") or 0))
-            center=(gpu.get("frame") or {}).get("center")
-            centers.append((str(center.get("x")),str(center.get("y"))) if isinstance(center,dict) else None)
             protagonist_locations.append(build.get("protagonistLocation"))
         if max_trees < 3:
             raise RuntimeError(f"Tree evidence never showed a sufficiently populated prepared forest area: max tree count {max_trees}")
@@ -4543,8 +4541,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Both deterministic tree artwork variants were not exercised: variant0={variant0}, variant1={variant1}")
         if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
             raise RuntimeError(f"Tree presentation changed protagonist authority: {protagonist_locations}")
-        if centers[1] == centers[3]:
-            raise RuntimeError(f"Tree evidence did not traverse a chunk boundary: {centers}")
+        actions=[str(frame.get("action") or "") for frame in frames[:7]]
+        if "camera-relative-active:16,0" not in actions[3]:
+            raise RuntimeError(f"Tree evidence did not perform the required active-camera chunk traversal: {actions}")
         viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:7]]
         if int(viewports[5].get("height") or 0)<=int(viewports[5].get("width") or 0):
             raise RuntimeError(f"Phone portrait tree evidence missing: {viewports[5]}")

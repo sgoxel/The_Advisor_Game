@@ -86,7 +86,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       mesh=new pc.Mesh(device);
       mesh.setPositions([-0.5,0,0, 0.5,0,0, -0.5,1,0, 0.5,1,0]);
       mesh.setNormals([0,0,1, 0,0,1, 0,0,1, 0,0,1]);
-      mesh.setUvs(0,[0,0, 1,0, 0,1, 1,1]);
+      // Browser image sources are top-down while PlayCanvas UV V=0 is the
+      // texture bottom. Flip V once in the shared plane mesh so authored tree
+      // trunks remain grounded and canopies stay above them.
+      mesh.setUvs(0,[0,1, 1,1, 0,0, 1,0]);
       mesh.setIndices([0,1,2, 1,3,2]);
       mesh.update();
     }else{

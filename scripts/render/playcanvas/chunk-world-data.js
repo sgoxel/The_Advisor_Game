@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.3.0";
+const VERSION="1.4.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -168,7 +168,7 @@ function generate(spec){
       if(cell.buildingId)buildingIds.add(cell.buildingId);
       const sparseKind=sparseStaticKind(cell);
       const allowSparse=sparseKind==="tree"
-        ?treePresentationCount<5
+        ?treePresentationCount<3
         :sparseKind==="rock"
           ?rockPresentationCount<2
           :Boolean(sparseKind&&otherPresentationCount<2);
