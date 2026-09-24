@@ -4016,14 +4016,19 @@ def _focus_heightfield_target(driver, kind: str) -> str:
             consider(x,y,slope,{elevationMeters:e,type,slope});
           }
         }else if(['dirt','rock','farmland'].includes(kind)){
-          for(let y=-256;y<=256;y+=2)for(let x=-256;x<=256;x+=2){
+          const radius=kind==='rock'?2048:256;
+          const step=kind==='rock'?8:2;
+          search:
+          for(let y=-radius;y<=radius;y+=step)for(let x=-radius;x<=radius;x+=step){
             const type=terrain(x,y);
             if(type!==kind)continue;
             let same=0;
-            for(const [dx,dy] of [[-2,0],[2,0],[0,-2],[0,2],[-2,-2],[2,-2],[-2,2],[2,2]]){
+            const neighborStep=Math.max(2,step);
+            for(const [dx,dy] of [[-neighborStep,0],[neighborStep,0],[0,-neighborStep],[0,neighborStep],[-neighborStep,-neighborStep],[neighborStep,-neighborStep],[-neighborStep,neighborStep],[neighborStep,neighborStep]]){
               if(terrain(x+dx,y+dy)===kind)same++;
             }
             consider(x,y,same,{elevationMeters:elevation(x,y),type,sameTypeNeighbors:same});
+            if(kind==='rock'&&same>=6)break search;
           }
         }
         return best||{ok:false,reason:'target-not-found',kind};
