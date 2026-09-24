@@ -238,7 +238,16 @@ function snapshot(seedValue){
 }
 function refreshFromProtagonist(seedValue,signalsValue){
   const pos=Protagonist?.getPosition?.();
-  return apply(seedValue,{...(signalsValue||{}),point:pos});
+  const supplied=signalsValue||{};
+  let scheduledDue=[];
+  try{
+    const now=window.GameTime?.getTimestampKey?.();
+    if(now&&window.EventScheduler?.dueEntityIds){
+      scheduledDue=EventScheduler.dueEntityIds(seedValue,now,BUDGETS.candidateSettlements);
+    }
+  }catch(_){}
+  const dueEntityIds=[...new Set([...(supplied.dueEntityIds||[]),...scheduledDue])];
+  return apply(seedValue,{...supplied,dueEntityIds,point:pos});
 }
 function reset(seedValue){
   const seed=String(seedValue??"");

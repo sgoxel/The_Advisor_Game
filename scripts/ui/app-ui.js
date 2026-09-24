@@ -2339,6 +2339,12 @@ function renderSimulationTiersProof(){
   if(campaign)window.SimulationTiers.refreshFromProtagonist(seed);
   return window.SimulationTiers.renderDebugPanel(seed,document.getElementById("simulationTiersProof"));
 }
+function renderEventSchedulerProof(){
+  if(typeof window.EventScheduler?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.EventScheduler.renderDebugPanel(seed,document.getElementById("eventSchedulerProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -2362,6 +2368,7 @@ function renderStatic(){
   renderWorldStateProof();
   renderWorldContextProof();
   renderSimulationTiersProof();
+  renderEventSchedulerProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2595,6 +2602,8 @@ window.AppUI=Object.freeze({
   worldContextVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.WorldContext?WorldContext.proof(campaign.seed):null;},
   refreshSimulationTiers:()=>renderSimulationTiersProof(),
   simulationTiersVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SimulationTiers?SimulationTiers.proof(campaign.seed):null;},
+  refreshEventScheduler:()=>renderEventSchedulerProof(),
+  eventSchedulerVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.EventScheduler?EventScheduler.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

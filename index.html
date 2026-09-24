@@ -1173,6 +1173,30 @@
     </div>
   </details>
 
+  <details id="eventSchedulerProof">
+    <summary>WP-S007-004 Deterministic Event Scheduler + Stable Random Streams</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>Hard process budget</span><strong id="eventSchedulerBatch">—</strong></div>
+        <div><span>Pending queue</span><strong id="eventSchedulerPending">—</strong></div>
+        <div><span>Random address</span><strong id="eventSchedulerRandom">—</strong></div>
+        <div><span>Canonical history signature</span><strong id="eventSchedulerSignature">—</strong></div>
+        <div><span>200-entity isolation proof</span><strong id="eventSchedulerNoise">—</strong></div>
+        <div><span>Persistence contract</span><strong id="eventSchedulerPersistence">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Equal-due canonical order</h4>
+        <ul id="eventSchedulerOrder" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Different FPS/checkpoint patterns, loading order and batch sizes reproduce one authoritative history</span><b id="vEventSchedulerHistory">WAITING</b></div>
+      <div class="check"><span>Equal due timestamps use deterministic system/entity/slot tie ordering</span><b id="vEventSchedulerOrder">WAITING</b></div>
+      <div class="check"><span>Stable addressed randomness is unchanged by 200 unrelated scheduled entities</span><b id="vEventSchedulerRandom">WAITING</b></div>
+      <div class="check"><span>Only due work is processed and every processDue call is hard-bounded</span><b id="vEventSchedulerBounded">WAITING</b></div>
+      <div class="check"><span>Camera/render state never enters scheduler ordering, time or randomness</span><b id="vEventSchedulerRender">WAITING</b></div>
+      <div class="check"><span>Pending scheduler state is compact, serializable and schema-versioned</span><b id="vEventSchedulerPersistence">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1223,6 +1247,7 @@
 <script src="scripts/world/advisor-channel.js"></script>
 <script src="scripts/world/building-interiors.js"></script>
 <script src="scripts/core/game-time.js"></script>
+<script src="scripts/core/event-scheduler.js"></script>
 <script src="scripts/world/character-memory.js"></script>
 <script src="scripts/world/social-state.js"></script>
 <script src="scripts/world/dialogue-context.js"></script>

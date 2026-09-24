@@ -118,6 +118,7 @@ SCENARIOS = {
     "wp-s007-001",
     "wp-s007-002",
     "wp-s007-003",
+    "wp-s007-004",
     "playcanvas-root-cutover",
 }
 
@@ -188,6 +189,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s007-001": 6,
     "wp-s007-002": 6,
     "wp-s007-003": 7,
+    "wp-s007-004": 2,
     "playcanvas-root-cutover": 3,
 }
 
@@ -447,6 +449,29 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        eventScheduler: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.EventScheduler?.proof
+              ? window.EventScheduler.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        eventSchedulerPanel: (() => {
+          const root=document.querySelector("#eventSchedulerProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            pass:root.dataset.pass==="true",
+            signature:root.dataset.signature||null,
+            noiseSignature:root.dataset.noiseSignature||null,
+            maxBatch:Number(root.dataset.maxBatch||0),
+            extraEntityCount:Number(root.dataset.extraEntityCount||0),
+            checkStates:Array.from(root.querySelectorAll(".check b")).map(node=>node.textContent?.trim()||"")
+          };
         })(),
         simulationTiersPanel: (() => {
           const root=document.querySelector("#simulationTiersProof");
@@ -2799,6 +2824,70 @@ def _show_simulation_tiers_proof(driver, frame_index: int) -> str:
         f"requested={result.get('requestedTier')}/{(result.get('requestedClassification') or {}).get('tier')}:"
         f"point={result.get('requestedPoint')}:target={result.get('targetCenter')}:"
         f"exact={counts.get('exactNpcHandles')}:population={counts.get('representedPopulation')}"
+    )
+
+
+def _show_event_scheduler_proof(driver, frame_index: int) -> str:
+    camera_action = _drag_canvas(driver, 120, 0) if frame_index == 1 else None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const scheduler=window.EventScheduler;
+        if(!campaign?.seed||!scheduler||!window.PRNG){
+          return {ok:false,error:'event-scheduler-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=scheduler.proof(seed);
+        if(!proof.pass)return {ok:false,error:'event-scheduler-proof-failed',proof};
+
+        const isolated=seed+'|WP-S007-004|browser';
+        scheduler.reset(isolated);
+        scheduler.scheduleMany(isolated,[
+          {fantasyTimestamp:'1200-06-15 12:00:02',systemKind:'proof',entityId:'B',slotKey:'same-time'},
+          {fantasyTimestamp:'1200-06-15 12:00:02',systemKind:'proof',entityId:'A',slotKey:'same-time'},
+          {fantasyTimestamp:'1200-06-15 12:00:03',systemKind:'proof',entityId:'C',slotKey:'later'}
+        ]);
+        const first=scheduler.processDue(isolated,'1200-06-15 12:00:02',{maxEvents:1});
+        const saved=scheduler.serialize(isolated);
+        const restored=scheduler.restore(isolated,saved);
+        const final=scheduler.processDue(isolated,'1200-06-15 12:00:08',{maxEvents:32});
+        const runtimeApiPass=Boolean(
+          first.processedCount===1&&first.processed?.[0]?.event?.entityId==='A'&&
+          first.hasMoreDue===true&&restored?.ok===true&&
+          final.processedCount===2&&final.pending===0
+        );
+        scheduler.reset(isolated);
+        if(!runtimeApiPass)return {ok:false,error:'event-scheduler-runtime-api-failed',first,restored,final};
+
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#eventSchedulerProof');
+        if(!section||!root)return {ok:false,error:'event-scheduler-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=scheduler.renderDebugPanel(seed,root);
+        root.scrollIntoView({block:'start'});
+        return {
+          ok:Boolean(rendered?.verification?.pass&&runtimeApiPass),
+          index,
+          runtimeApiPass,
+          signature:proof.canonicalHistorySignature,
+          noiseSignature:proof.noiseHistoryBaseSignature,
+          maxBatch:proof.maxBatch,
+          extraEntityCount:proof.extraEntityCount,
+          proof
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Event scheduler proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    return (
+        prefix+
+        f"event-scheduler:{frame_index}:signature={result.get('signature')}:"
+        f"noise={result.get('noiseSignature')}:batch={result.get('maxBatch')}"
     )
 
 
@@ -5528,6 +5617,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_world_state_proof(driver,frame_index)
     if scenario == "wp-s007-003":
         return _show_simulation_tiers_proof(driver,frame_index)
+    if scenario == "wp-s007-004":
+        return _show_event_scheduler_proof(driver,frame_index)
     if scenario == "wp-s007-002":
         if frame_index == 5:
             action=_reload_current_build(driver)
@@ -6311,6 +6402,53 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Cutaway did not target exactly one two-plane roof: {cutaway}")
         if int(cutaway.get("totalRoofCount") or 0)<=2:
             raise RuntimeError(f"Cutaway evidence did not retain other building roofs: {cutaway}")
+        return
+
+
+    if scenario == "wp-s007-004":
+        if len(frames) < 2:
+            raise RuntimeError("wp-s007-004 requires two deterministic scheduler evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:2]]
+        proofs=[build.get("eventScheduler") or {} for build in builds]
+        panels=[build.get("eventSchedulerPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Event-scheduler evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Event-scheduler proof mutated Protagonist position: {protagonists}")
+        required={
+            "pass":True,"fpsInvariant":True,"loadingOrderInvariant":True,
+            "cameraPathInvariant":True,"batchingInvariant":True,
+            "unrelatedEntityInvariant":True,"equalDueOrderStable":True,
+            "addressedRandomStable":True,"secondPrecision":True,
+            "renderFrameRandomness":False,"renderOrCameraInputs":False,
+            "realWorldEntropy":False,"dueOnlyProcessing":True,
+            "boundedProcessing":True,"versionedCompactState":True,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Event-scheduler proof {key} mismatch in frame {index}: {proof}")
+            if proof.get("randomSource")!="PRNG.liveAddressedUint32":
+                raise RuntimeError(f"Event-scheduler random source mismatch in frame {index}: {proof}")
+            if int(proof.get("extraEntityCount") or 0)!=200:
+                raise RuntimeError(f"Event-scheduler extra-entity isolation count mismatch: {proof}")
+            if int(proof.get("maxBatch") or 0)>32:
+                raise RuntimeError(f"Event-scheduler batch budget exceeded: {proof}")
+            if proof.get("canonicalHistorySignature")!=proof.get("noiseHistoryBaseSignature"):
+                raise RuntimeError(f"Unrelated entities shifted base outcomes: {proof}")
+        signatures=[proof.get("canonicalHistorySignature") for proof in proofs]
+        if len(set(signatures))!=1 or not signatures[0]:
+            raise RuntimeError(f"Camera/frame evidence changed scheduler history: {signatures}")
+        for index,panel in enumerate(panels,start=1):
+            if not panel.get("present") or not panel.get("open") or not panel.get("pass"):
+                raise RuntimeError(f"Event-scheduler inspector incomplete in frame {index}: {panel}")
+            if int(panel.get("maxBatch") or 0)>32 or int(panel.get("extraEntityCount") or 0)!=200:
+                raise RuntimeError(f"Event-scheduler panel budget/isolation mismatch in frame {index}: {panel}")
+            states=panel.get("checkStates") or []
+            if len(states)!=6 or any(state!="PASS" for state in states):
+                raise RuntimeError(f"Event-scheduler panel checks did not all pass in frame {index}: {panel}")
         return
 
     if scenario == "wp-s007-003":
