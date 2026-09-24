@@ -1236,3 +1236,15 @@
 - All seven fresh screenshots were retrieved and directly inspected. The Simulation inspector remained aligned/readable across all tier states with no overlap, broken layout or clipped panel elements. Dense transition subtext is secondary but orderly. VISUAL 8.4/10 PASS.
 - Exact tested implementation head 3cd6488f200a08e5db0854e10b0ffd4bff3eec0b deployed successfully through GitHub Pages run 36031198661.
 - ROADMAP completion remains pending successful deployment verification of this documentation commit.
+2026-09-24 20:29:30 +03:00 | WP-S007-004 | Deterministic Event Scheduler + Stable Random Streams final verification
+- Classification: FUNCTIONAL. VISUAL: N/A — deterministic event ordering, random addressing, batching and persistence are not meaningfully judged from rendered screenshots.
+- Added scripts/core/event-scheduler.js with a canonical fantasy-time priority queue ordered by timestamp, system/event kind, stable entity ID, deterministic slot key and event ID.
+- Added PRNG.liveAddressedUint32 so live event randomness is addressed by Campaign SEED + second-precision FantasyTimestamp + system/event kind + stable entity ID + slot/sub-event key; unrelated event/loading call counts cannot shift outcomes.
+- Event processing is due-only and hard-bounded to 32 events per processDue call, with compact schema-versioned pending-event serialization/restoration and queue telemetry.
+- SimulationTiers now consumes due scheduler entity IDs as a bounded relevance input without giving rendering/camera state Simulation authority.
+- Dedicated browser evidence attempt 1 / run 36034010516 proved all six scheduler checks and matching 483BBFFB base/noise signatures, but failed because the harness incorrectly required the technical accordion to be open in the pre-interaction frame.
+- Evidence-harness timing assertion was corrected without weakening any scheduler invariant; attempt 2 / run 36034359468 completed successfully on head daa2628dc6d76873312336c4f2fe9d27eec9d42f.
+- PASS: FPS/checkpoint invariance, reversed loading/insertion order invariance, batch-size invariance, deterministic equal-due ordering, addressed-random repeatability, second-precision timestamp enforcement, zero render/camera/random-entropy inputs and versioned persistence.
+- PASS: adding 200 unrelated scheduled entities preserved the base authoritative history signature exactly (483BBFFB); runtime API also verified bounded one-event processing, deterministic same-time order, serialize/restore and final drain.
+- Functional verification score: 9.4/10. ROADMAP completion remains pending successful deployment verification of this documentation commit.
+
