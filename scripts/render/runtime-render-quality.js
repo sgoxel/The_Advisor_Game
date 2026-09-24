@@ -12,17 +12,17 @@ const GOOD_STREAK_FRAMES=360;
 
 const PROFILES=Object.freeze({
   low:Object.freeze({
-    id:"low",label:"Low",maxPixelRatio:1.0,renderScale:0.65,textureProfile:"low",
+    id:"low",label:"Low",maxPixelRatio:1.0,renderScale:0.65,recommendedTextureProfile:"low",
     lightCount:1,shadowQuality:"off",shadowsEnabled:false,lodDistanceScale:0.70,
     propDensityScale:0.70,antialiasing:"off",postProcessing:"off"
   }),
   standard:Object.freeze({
-    id:"standard",label:"Standard",maxPixelRatio:1.25,renderScale:0.85,textureProfile:"standard",
+    id:"standard",label:"Standard",maxPixelRatio:1.25,renderScale:0.85,recommendedTextureProfile:"standard",
     lightCount:2,shadowQuality:"off",shadowsEnabled:false,lodDistanceScale:1.0,
     propDensityScale:1.0,antialiasing:"off",postProcessing:"off"
   }),
   high:Object.freeze({
-    id:"high",label:"High",maxPixelRatio:1.5,renderScale:1.0,textureProfile:"high",
+    id:"high",label:"High",maxPixelRatio:1.5,renderScale:1.0,recommendedTextureProfile:"high",
     lightCount:2,shadowQuality:"off",shadowsEnabled:false,lodDistanceScale:1.20,
     propDensityScale:1.0,antialiasing:"off",postProcessing:"off"
   })
@@ -91,7 +91,9 @@ function snapshot(){
     deviceClass:deviceClass(),
     maxPixelRatio:profile.maxPixelRatio,
     renderScale:profile.renderScale,
-    textureProfile:profile.textureProfile,
+    textureProfile:window.RuntimeTextureQuality?.getProfile?.()||"standard",
+    recommendedTextureProfile:profile.recommendedTextureProfile,
+    textureQualityCoupled:false,
     lightCount:profile.lightCount,
     shadowQuality:profile.shadowQuality,
     shadowsEnabled:profile.shadowsEnabled,
@@ -125,14 +127,8 @@ function syncSettingsControl(){
       :s.activeLabel+" · "+Math.round(s.renderScale*100)+"% render scale · DPR cap "+s.maxPixelRatio;
   }
 }
-function applyTextureProfile(){
-  const api=window.RuntimeTextureQuality;
-  const profile=activeProfile().textureProfile;
-  if(api?.getProfile?.()!==profile)api?.setProfile?.(profile);
-}
 function emit(reason){
   lastTransitionReason=reason||lastTransitionReason;
-  applyTextureProfile();
   const state=snapshot();
   syncSettingsControl();
   window.dispatchEvent(new CustomEvent("advisor:render-quality-change",{detail:state}));
@@ -210,7 +206,7 @@ function installSettingsControl(){
   const strong=document.createElement("strong");
   strong.textContent="Graphics Quality";
   const help=document.createElement("small");
-  help.textContent="Auto adapts presentation only after sustained performance changes. Simulation, collision and routes stay unchanged.";
+  help.textContent="Auto adapts render scale and lighting only after sustained performance changes. 3D Texture Quality is selected independently; Simulation, collision and routes stay unchanged.";
   text.append(strong,help);
   const select=document.createElement("select");
   select.id="renderQualityMode";
@@ -264,12 +260,10 @@ window.RuntimeRenderQuality=Object.freeze({
 if(document.readyState==="loading"){
   document.addEventListener("DOMContentLoaded",()=>{
     installSettingsControl();
-    applyTextureProfile();
     syncSettingsControl();
   },{once:true});
 }else{
   installSettingsControl();
-  applyTextureProfile();
   syncSettingsControl();
 }
 resizeHandler=handleResize;
