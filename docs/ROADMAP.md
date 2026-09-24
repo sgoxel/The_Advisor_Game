@@ -74,7 +74,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 # Stage 6 — Political Geography + Settlement Diversity Foundation
 
-- `WP-S006-001` — Deterministic Country Territories + Political Centers
+- `WP-S006-001` — Deterministic Country Territories + Political Centers — COMPLETED
 - `WP-S006-002` — Country Profile: Wealth, Governance + Strategic Orientation
 - `WP-S006-003` — Region/Province Profiles + Terrain/Resource Identity
 - `WP-S006-004` — Country Relations + Diplomacy Baseline
