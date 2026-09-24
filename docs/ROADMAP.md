@@ -78,7 +78,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S006-002` — Country Profile: Wealth, Governance + Strategic Orientation — COMPLETED
 - `WP-S006-003` — Region/Province Profiles + Terrain/Resource Identity — COMPLETED
 - `WP-S006-004` — Country Relations + Diplomacy Baseline — COMPLETED
-- `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance
+- `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance — COMPLETED
 - `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules
 
 # Stage 7 — Hierarchical Lazy World Simulation + Deterministic Persistence
