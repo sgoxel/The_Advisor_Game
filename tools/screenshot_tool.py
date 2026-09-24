@@ -4175,6 +4175,27 @@ def _focus_road_profile_target(driver, kind: str) -> str:
         if(!seed||!window.TerrainFoundation?.getTile||!window.GeographyFoundation?.environment){
           return {ok:false,reason:'terrain-foundation-unavailable'};
         }
+        if(kind==='water'&&window.StartingVillage?.direction&&window.StartingVillage?.plan){
+          const dir=window.StartingVillage.direction(seed);
+          const plan=window.StartingVillage.plan(seed);
+          const start=Number(plan?.bridgeWindow?.startTiles||20);
+          const length=Math.max(1,Number(plan?.bridgeWindow?.lengthTiles||8));
+          for(let forward=start;forward<start+length;forward++){
+            for(let lateral=-6;lateral<=6;lateral++){
+              const x=forward*Number(dir.dx)-lateral*Number(dir.dy);
+              const y=forward*Number(dir.dy)+lateral*Number(dir.dx);
+              const type=String(window.TerrainFoundation.getTile(seed,String(x),String(y))?.type||'');
+              if(type==='bridge'){
+                return {
+                  ok:true,x,y,type,score:1000,
+                  adjacentNatural:'water-edge+approach-road',
+                  gatewayDirection:String(dir.name||''),
+                  bridgeStart:start,bridgeLength:length
+                };
+              }
+            }
+          }
+        }
         if(!window.__wpS003006009RoadTargets||window.__wpS003006009RoadTargets.seed!==seed){
           const terrainCache=new Map(),elevationCache=new Map();
           const terrain=(x,y)=>{
