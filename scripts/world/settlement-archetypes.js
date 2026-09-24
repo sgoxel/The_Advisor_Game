@@ -343,8 +343,19 @@ function representatives(seedValue){
   const picks=[];
   const add=(reason,plan)=>{if(plan&&!picks.some(item=>item.plan.id===plan.id))picks.push(Object.freeze({reason,plan}))};
   for(const reason of ["agricultural","mining","trade","frontier-fortified","capital"]){
-    const ranked=[...plans].sort((a,b)=>scoreReason(b,reason)-scoreReason(a,reason)||a.id.localeCompare(b.id));
-    add(reason,ranked[0]);
+    let pool=[...plans];
+    if(reason==="agricultural"){
+      const sized=pool.filter(plan=>plan.classId==="village"||plan.classId==="hamlet");
+      if(sized.length)pool=sized;
+    }else if(reason==="trade"){
+      const sized=pool.filter(plan=>plan.classId==="town"||plan.classId==="city");
+      if(sized.length)pool=sized;
+    }else if(reason==="capital"){
+      const capitals=pool.filter(plan=>plan.classId==="national-capital");
+      if(capitals.length)pool=capitals;
+    }
+    const ranked=pool.sort((a,b)=>scoreReason(b,reason)-scoreReason(a,reason)||a.id.localeCompare(b.id));
+    add(reason,ranked.find(plan=>!picks.some(item=>item.plan.id===plan.id))||ranked[0]);
   }
   for(const plan of plans)if(picks.length<5)add("mixed",plan);
   return Object.freeze(picks.slice(0,5));
