@@ -266,7 +266,12 @@ function sceneLoadingSnapshot(){
       reducedMotionProof:Boolean(overlay?.classList?.contains("scene-loading-proof-reduced")),
       retryVisible:Boolean(e.sceneLoadingRetry&&!e.sceneLoadingRetry.hidden),
       title:e.sceneLoadingTitle?.textContent?.trim()||null,
-      message:e.sceneLoadingPhase?.textContent?.trim()||null
+      message:e.sceneLoadingPhase?.textContent?.trim()||null,
+      titleAnimationName:e.sceneLoadingTitle?getComputedStyle(e.sceneLoadingTitle).animationName:null,
+      emblemAnimationName:overlay?.querySelector(".scene-loading-emblem span")
+        ?getComputedStyle(overlay.querySelector(".scene-loading-emblem span")).animationName:null,
+      dotAnimationName:overlay?.querySelector(".scene-loading-trail i")
+        ?getComputedStyle(overlay.querySelector(".scene-loading-trail i")).animationName:null
     }),
     simulationAuthorityPreserved:true
   });
