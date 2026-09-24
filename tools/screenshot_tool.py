@@ -98,6 +98,7 @@ SCENARIOS = {
     "wp-s003-008-001",
     "wp-s003-008-002",
     "wp-s003-008-003",
+    "wp-s003-009-001",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -173,6 +174,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
     "wp-s003-008-003": 8,
+    "wp-s003-009-001": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1539,6 +1541,9 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
+    if scenario == "wp-s003-009-001":
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 45.0)
     if scenario == "wp-s003-005-006":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
@@ -1573,6 +1578,10 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=128, directional=True, background=False
                 )
+            if scenario == "wp-s003-009-001":
+                _set_terrain_preload_settings(
+                    driver, radius=2, cache=128, directional=True, background=True
+                )
             if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
@@ -1584,7 +1593,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -4733,6 +4742,47 @@ def _focus_tree_sample_chunk(driver) -> str:
     return f"tree-focus:{sample['chunkX']},{sample['chunkY']}:trees={sample['count']}{point}+"+action
 
 
+def _focus_dressing_sample(driver, context: str | None = None, *, road_adjacent: bool = False) -> str:
+    sample = driver.execute_script(
+        """
+        const context=arguments[0] ? String(arguments[0]) : null;
+        const requireRoad=Boolean(arguments[1]);
+        const snap=window.GameRenderer?.snapshot?.();
+        const chunks=snap?.terrainChunks || {};
+        const samples=Array.isArray(chunks.dressingSamples)?chunks.dressingSamples:[];
+        const filtered=samples.filter(item=>{
+          if(context && String(item?.context||'')!==context)return false;
+          if(requireRoad && item?.roadAdjacent!==true)return false;
+          return Number.isFinite(Number(item?.x)) && Number.isFinite(Number(item?.y));
+        });
+        if(!filtered.length)return null;
+        const semanticPriority={
+          signpost:0,cart:1,well:2,garden:3,pen:4,barrel:5,crate:6,
+          woodpile:7,bench:8,flower:9,bush:10,sack:11,'work-prop':12,fence:13
+        };
+        filtered.sort((a,b)=>{
+          const ap=semanticPriority[String(a?.semantic||'')] ?? 50;
+          const bp=semanticPriority[String(b?.semantic||'')] ?? 50;
+          return ap-bp || String(a?.id||'').localeCompare(String(b?.id||''));
+        });
+        return filtered[0];
+        """,
+        context,
+        road_adjacent,
+    )
+    if not isinstance(sample, dict):
+        qualifier=f"context={context}" if context else "any-context"
+        if road_adjacent:
+            qualifier += ",road-adjacent"
+        raise RuntimeError(f"No prepared dressing sample available for {qualifier}: {sample}")
+    action=_set_camera_center_and_render_active(driver, int(sample["x"]), int(sample["y"]), timeout=25.0)
+    return (
+        f"dressing-focus:{sample.get('context')}:{sample.get('semantic')}:"
+        f"{sample.get('x')},{sample.get('y')}:road={str(bool(sample.get('roadAdjacent'))).lower()}+"
+        + action
+    )
+
+
 def _move_camera_relative_active(driver, dx: int, dy: int) -> str:
     center=driver.execute_script("return window.Camera?.getCenter?.() || null")
     if not isinstance(center, dict):
@@ -5474,6 +5524,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 5:
             return _set_camera_center_and_render(driver, 0, 0)
         return _set_camera_zoom_and_render(driver, 0.75)
+    if scenario == "wp-s003-009-001":
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "dressing:village-overview+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        if frame_index == 1:
+            return _focus_dressing_sample(driver, "residential") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 2:
+            return _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 3:
+            return _focus_dressing_sample(driver, "farm") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 4:
+            return _focus_dressing_sample(driver, None, road_adjacent=True) + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=25.0)
+        if frame_index == 5:
+            return "dressing:quiet-open+" + _set_camera_view_and_render_active(driver, 64, 64, 1.00, timeout=45.0)
+        if frame_index == 6:
+            driver.set_window_size(390, 844)
+            return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        driver.set_window_size(844, 390)
+        return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
     if scenario == "wp-s003-006-009":
         if frame_index == 0:
             return "road-profile:origin-wide+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
@@ -6115,6 +6184,79 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait sustained-runtime evidence missing: {viewports[3]}")
         if int(viewports[4].get("width") or 0)<=int(viewports[4].get("height") or 0):
             raise RuntimeError(f"Phone landscape sustained-runtime evidence missing: {viewports[4]}")
+        return
+
+    if scenario == "wp-s003-009-001":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-009-001 requires eight village-dressing evidence frames")
+        expected_zooms=("0.75×","1.00×","1.00×","1.00×","1.00×","1.00×","0.75×","0.75×")
+        protagonist_locations=[]
+        contexts=set()
+        semantics=set()
+        max_dressing=0
+        multi_character_frames=0
+        for index,frame in enumerate(frames[:8]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            preload=gpu.get("terrainPreload") or {}
+            characters=gpu.get("characterPresentation") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Dressing zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Dressing presentation changed Simulation authority in frame {index+1}: {gpu}")
+            if chunks.get("dressingDeterministic") is not True or chunks.get("dressingRendererOnly") is not True:
+                raise RuntimeError(f"Dressing determinism/renderer-only contract missing in frame {index+1}: {chunks}")
+            if chunks.get("dressingHardwareInstanced") is not True or chunks.get("hardwareInstancing") is not True or chunks.get("frustumCulling") is not True:
+                raise RuntimeError(f"Dressing instancing/culling contract missing in frame {index+1}: {chunks}")
+            count=int(chunks.get("dressingPresentationCount") or 0)
+            max_dressing=max(max_dressing,count)
+            if count>0:
+                if int(chunks.get("dressingRouteSafeCount") or 0)!=count or chunks.get("dressingRouteProtectionPass") is not True:
+                    raise RuntimeError(f"Dressing route protection failed in frame {index+1}: {chunks}")
+                if int(chunks.get("dressingInstancedGroupCount") or 0)<=0:
+                    raise RuntimeError(f"No dressing instanced groups in frame {index+1}: {chunks}")
+                if int(chunks.get("dressingPrimitiveInstanceCount") or 0)<count:
+                    raise RuntimeError(f"Dressing primitive count is below descriptor count in frame {index+1}: {chunks}")
+            if int(chunks.get("dressingSharedMaterialCount") or 0)>8:
+                raise RuntimeError(f"Dressing material reuse is not bounded in frame {index+1}: {chunks}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Visible-frame dressing asset work detected in frame {index+1}: {preload}")
+            if chunks.get("oneEntityPerTile") is not False:
+                raise RuntimeError(f"Dressing introduced per-tile entities in frame {index+1}: {chunks}")
+            for key,value in (chunks.get("dressingContextCounts") or {}).items():
+                if int(value or 0)>0:contexts.add(str(key))
+            for key,value in (chunks.get("dressingSemanticCounts") or {}).items():
+                if int(value or 0)>0:semantics.add(str(key))
+            if int(characters.get("activeCharacterCount") or 0)>=3:
+                multi_character_frames+=1
+            protagonist_locations.append(build.get("protagonistLocation"))
+        if max_dressing < 12:
+            raise RuntimeError(f"Village dressing evidence is too sparse: max descriptors={max_dressing}")
+        required_contexts={"residential","commercial","farm","civic"}
+        if not required_contexts.issubset(contexts):
+            raise RuntimeError(f"Dressing context coverage incomplete: contexts={sorted(contexts)}")
+        if len(semantics)<8:
+            raise RuntimeError(f"Dressing semantic variety too low: semantics={sorted(semantics)}")
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Dressing camera evidence changed protagonist authority: {protagonist_locations}")
+        if multi_character_frames<2:
+            raise RuntimeError(f"Dressing evidence did not preserve multiple-character coverage often enough: {multi_character_frames}")
+        actions=[str(frame.get("action") or "") for frame in frames[:8]]
+        for required in (
+            "dressing-focus:residential",
+            "dressing-focus:commercial",
+            "dressing-focus:farm",
+            "road=true",
+            "dressing:quiet-open",
+        ):
+            if not any(required in action for action in actions):
+                raise RuntimeError(f"Required dressing scene {required} missing: {actions}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:8]]
+        if int(viewports[6].get("height") or 0)<=int(viewports[6].get("width") or 0):
+            raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
+        if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
+            raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
         return
 
     if scenario == "wp-s003-006-009":
@@ -10369,12 +10511,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
