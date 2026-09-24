@@ -182,7 +182,7 @@ function terrainHeightAtTile(seed,xValue,yValue,size=16,offsetX=0,offsetY=0){
   return h11+(1-tz)*(h10-h11)+(1-tx)*(h01-h11);
 }
 
-function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildingSurfaceAtlasProvider=()=>null,treeSpriteAtlasProvider=()=>null,treeYawProvider=()=>45,seedProvider=()=>"",registerRoof=()=>{}}={}){
+function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildingSurfaceAtlasProvider=()=>null,treeSpriteAtlasProvider=()=>null,treeYawProvider=()=>45,seedProvider=()=>"",qualityProvider=()=>null,registerRoof=()=>{}}={}){
   if(!pc||!device||!parent||!material)throw new Error("PlayCanvasTerrainChunkMesh requires pc/device/parent/material");
   material.vertexColors=true;
   material.diffuseVertexColor=true;
@@ -192,6 +192,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   material.update();
 
   const presentationMaterials=new Map();
+  const contactShadowMaterials=new Map();
   const routeSurfaceMaterials=new Map();
   const treeSpriteMaterials=new Map();
   const surfaceBoundMaterials=new Set();
@@ -203,6 +204,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   let instancingBufferUpdates=0,instancingParentRepositions=0,frustumCulledMeshInstances=0;
   let treeSpriteMaterialRebinds=0,treeSpriteMaterialRefreshes=0;
   let buildingSurfaceMaterialRebinds=0,buildingSurfaceMaterialRefreshes=0;
+  let contactShadowMaterialRefreshes=0;
   let routeSurfaceMaterialRebinds=0,routeSurfaceMaterialRefreshes=0;
 
   function applyBuildingSurfaceMaterial(m,name,r,g,b){
@@ -234,6 +236,45 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     if(knownSurface)m._advisorBuildingAtlasSignature="";
     return false;
   }
+  function contactShadowProfile(){
+    const q=qualityProvider?.()||{};
+    const level=String(q.activeLevel||q.mode||"standard");
+    const opacity=level==="low"?0.105:level==="high"?0.185:0.145;
+    return Object.freeze({level,opacity});
+  }
+  function bindContactShadowMaterial(m){
+    const profile=contactShadowProfile();
+    m.diffuse.set(0.035,0.028,0.022);
+    m.emissive.set(0.018,0.014,0.011);
+    m.opacity=profile.opacity;
+    m.blendType=pc.BLEND_NORMAL;
+    m.depthWrite=false;
+    m.depthTest=true;
+    m.cull=pc.CULLFACE_NONE;
+    m.useLighting=false;
+    m.gloss=0;
+    m.metalness=0;
+    m._advisorContactShadowOpacity=profile.opacity;
+    m._advisorContactShadowQuality=profile.level;
+    m.update();
+    return m;
+  }
+  function contactShadowMaterial(name="ground-contact"){
+    const key=String(name||"ground-contact");
+    let m=contactShadowMaterials.get(key)||null;
+    if(!m){
+      m=new pc.StandardMaterial();
+      m.name="chunk-contact-shadow-"+key;
+      contactShadowMaterials.set(key,m);
+    }
+    return bindContactShadowMaterial(m);
+  }
+  function refreshContactShadowMaterials(){
+    for(const m of contactShadowMaterials.values())bindContactShadowMaterial(m);
+    if(contactShadowMaterials.size)contactShadowMaterialRefreshes++;
+    return contactShadowMaterials.size;
+  }
+
   function presentationMaterial(name,r,g,b,gloss=0.10){
     let m=presentationMaterials.get(name)||null;
     if(!m){
@@ -274,6 +315,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       mesh.update();
     }else if(kind==="box"){
       mesh=pc.Mesh.fromGeometry(device,new pc.BoxGeometry());
+    }else if(kind==="contact-disc"){
+      mesh=new pc.Mesh(device);
+      const positions=[0,0,0],normals=[0,1,0],uvs=[0.5,0.5],indices=[];
+      const segments=16;
+      for(let i=0;i<=segments;i++){
+        const a=Math.PI*2*i/segments,x=Math.cos(a)*0.5,z=Math.sin(a)*0.5;
+        positions.push(x,0,z);normals.push(0,1,0);uvs.push(x+0.5,z+0.5);
+      }
+      for(let i=0;i<segments;i++)indices.push(0,i+1,i+2);
+      mesh.setPositions(positions);
+      mesh.setNormals(normals);
+      mesh.setUvs(0,uvs);
+      mesh.setIndices(indices);
+      mesh.update();
     }else{
       const geometry=new pc.SphereGeometry({radius:0.5,latitudeBands:8,longitudeBands:8});
       mesh=pc.Mesh.fromGeometry(device,geometry);
@@ -757,6 +812,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       sourcePrimitiveCount:counts.road+counts.path+counts.square+counts.connector+edgeStripCount+diagonalBridgeCount,
       triangleCount,
       samples:Object.freeze(samples),
+      contactShadowMaterialCount:contactShadowMaterials.size,
+      contactShadowQuality:String(contactShadowProfile().level),
+      contactShadowOpacity:Number(contactShadowProfile().opacity.toFixed(3)),
+      contactShadowMaterialRefreshes,
       routeSurfaceMaterialCount:routeSurfaceMaterials.size,
       routeSurfaceMaterialNames:Object.freeze([...routeSurfaceMaterials.values()].map(m=>m.name).sort()),
       surfaceBindings:routeSurfaceBindings(),
@@ -895,15 +954,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       :presentationMaterial("building-house-wall",0.61,0.52,0.36,0.10);
     const roof=presentationMaterial("building-roof",0.33,0.15,0.10,0.08);
     const door=presentationMaterial("building-door",0.20,0.11,0.06,0.06);
+    const contact=contactShadowMaterial("foundation");
     const rootName="ChunkBuilding_"+String(descriptor.id||index).replace(/[^a-z0-9_-]+/gi,"-");
     const outerW=b.width*0.90,outerD=b.depth*0.90,thickness=0.22;
+    // One batched, very shallow translucent footprint extends slightly beyond
+    // the wall line. The building hides the center, leaving a restrained
+    // foundation-contact halo with one shared material instead of dynamic lights.
+    appendBoxBatch(batchFor(batches,contact.name,contact),[b.x,groundY+0.012,b.z],[outerW+0.34,0.024,outerD+0.34],0);
     const wallBatch=batchFor(batches,wall.name,wall);
     appendBoxBatch(wallBatch,[b.x,groundY+height*0.5,b.z-outerD*0.5],[outerW,height,thickness],0);
     appendBoxBatch(wallBatch,[b.x,groundY+height*0.5,b.z+outerD*0.5],[outerW,height,thickness],0);
     appendBoxBatch(wallBatch,[b.x-outerW*0.5,groundY+height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
     appendBoxBatch(wallBatch,[b.x+outerW*0.5,groundY+height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
     buildGabledRoof(root,descriptor,rootName,b,wallTopY,outerW,outerD,roof,roofProfiles);
-    let count=6;
+    let count=7;
     if(descriptor.entrance){
       const p=localTileCenter(worldData,descriptor.entrance.x,descriptor.entrance.y);
       const entranceX=String(descriptor.entrance.x),entranceY=String(descriptor.entrance.y);
@@ -1194,6 +1258,34 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const treeVariants=[[],[]],rocks=[],treeVariationSamples=[],dressingSamples=[];
     const dressingGroups={woodBoxes:[],darkBoxes:[],foliage:[],accent:[],stone:[],soil:[],cloth:[],darkSpheres:[]};
     for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeVariants,rocks,treeVariationSamples,dressingGroups,dressingSamples);
+    const contactShadowInstances=[];
+    for(const variants of treeVariants){
+      for(const item of variants){
+        const width=Math.abs(Number(item.scale?.[0]||1));
+        contactShadowInstances.push({
+          position:[Number(item.position?.[0]||0),Number(item.position?.[1]||0)-0.037,Number(item.position?.[2]||0)],
+          scale:[Math.max(0.82,width*0.36),1,Math.max(0.52,width*0.22)],
+          euler:[0,0,0],
+          contactKind:"tree"
+        });
+      }
+    }
+    for(const item of rocks){
+      contactShadowInstances.push({
+        position:[Number(item.position?.[0]||0),Number(item.position?.[1]||0)-0.322,Number(item.position?.[2]||0)],
+        scale:[0.74,1,0.50],euler:[0,0,0],contactKind:"rock"
+      });
+    }
+    const majorContactSemantics=new Set(["well","cart","bench","work-prop","woodpile","crate","barrel"]);
+    for(const descriptor of props){
+      if(String(descriptor?.type||"")!=="dressing"||!majorContactSemantics.has(String(descriptor?.semantic||"")))continue;
+      const p=localTileCenter(spec.worldData,descriptor.x,descriptor.y);
+      const groundY=terrainHeightAtTile(seed,descriptor.x,descriptor.y,spec.worldData?.chunkSize||16);
+      const scale=String(descriptor.semantic)==="cart"?[1.25,1,0.74]:
+        String(descriptor.semantic)==="well"?[1.05,1,1.05]:
+        String(descriptor.semantic)==="bench"?[1.05,1,0.58]:[0.86,1,0.64];
+      contactShadowInstances.push({position:[p.x,groundY+0.018,p.z],scale,euler:[0,Number(descriptor.rotation||0),0],contactKind:"prop"});
+    }
     const treeGroups=[
       createInstancedGroup(entity,"ChunkTrees_Variant0",primitiveMesh("tree-plane"),treeSpriteMaterial(0),treeVariants[0]),
       createInstancedGroup(entity,"ChunkTrees_Variant1",primitiveMesh("tree-plane"),treeSpriteMaterial(1),treeVariants[1])
@@ -1208,10 +1300,18 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       createInstancedGroup(entity,"ChunkDressing_Cloth",primitiveMesh("sphere"),presentationMaterial("dressing-cloth",0.67,0.54,0.33,0.03),dressingGroups.cloth),
       createInstancedGroup(entity,"ChunkDressing_Wheels",primitiveMesh("sphere"),presentationMaterial("dressing-wheel",0.18,0.13,0.09,0.02),dressingGroups.darkSpheres)
     ].filter(Boolean);
+    const contactShadowGroup=createInstancedGroup(
+      entity,
+      "ChunkGroundContacts",
+      primitiveMesh("contact-disc"),
+      contactShadowMaterial("object"),
+      contactShadowInstances
+    );
     const instancedGroups=[
       ...treeGroups,
       ...dressingInstancedGroups,
-      createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks)
+      createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks),
+      contactShadowGroup
     ].filter(Boolean);
 
     const roofPrimitiveCount=buildings.length*2;
@@ -1290,6 +1390,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       dressingSamples:Object.freeze(dressingSamples.slice()),
       dressingDeterministic:Boolean(presentation.dressing?.deterministic),
       dressingRendererOnly:Boolean(presentation.dressing?.rendererOnly),
+      contactShadowTechnique:"batched-foundation-halo+instanced-ground-disc",
+      contactShadowMaterialCount:contactShadowMaterials.size,
+      contactShadowQuality:String(contactShadowProfile().level),
+      contactShadowOpacity:Number(contactShadowProfile().opacity.toFixed(3)),
+      contactShadowBuildingCount:buildings.length,
+      contactShadowTreeCount:treeVariants[0].length+treeVariants[1].length,
+      contactShadowPropCount:contactShadowInstances.filter(item=>item.contactKind!=="tree").length,
+      contactShadowObjectCount:contactShadowInstances.length,
+      contactShadowInstancedGroupCount:contactShadowGroup?1:0,
+      contactShadowDrawCalls:(buildings.length?1:0)+(contactShadowGroup?1:0),
+      contactShadowSharedMesh:true,
+      contactShadowDepthWrite:false,
+      contactShadowRendererOnly:true,
+      contactShadowTerrainSampled:true,
       treePresentationCount:treeVariants[0].length+treeVariants[1].length,
       treeVariant0Count:treeVariants[0].length,
       treeVariant1Count:treeVariants[1].length,
@@ -1475,7 +1589,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function heightAtTile(x,y,chunkSize=16,offsetX=0,offsetY=0){
     return terrainHeightAtTile(String(seedProvider()||""),x,y,chunkSize,offsetX,offsetY);
   }
-  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials});
+  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials,refreshContactShadowMaterials});
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});
