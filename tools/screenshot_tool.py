@@ -4167,6 +4167,85 @@ def _focus_heightfield_target(driver, kind: str) -> str:
     return f"heightfield-target:{kind}:{result.get('type')}:{result.get('elevationMeters')}+" + action
 
 
+def _focus_road_profile_target(driver, kind: str) -> str:
+    result = driver.execute_script(
+        r"""
+        const kind=String(arguments[0]||'road');
+        const seed=window.SeedSystem?.getCampaign?.()?.seed;
+        if(!seed||!window.TerrainFoundation?.getTile||!window.GeographyFoundation?.environment){
+          return {ok:false,reason:'terrain-foundation-unavailable'};
+        }
+        if(!window.__wpS003006009RoadTargets||window.__wpS003006009RoadTargets.seed!==seed){
+          const terrainCache=new Map(),elevationCache=new Map();
+          const terrain=(x,y)=>{
+            const key=x+','+y;
+            if(!terrainCache.has(key))terrainCache.set(key,String(window.TerrainFoundation.getTile(seed,String(x),String(y))?.type||''));
+            return terrainCache.get(key);
+          };
+          const elevation=(x,y)=>{
+            const key=x+','+y;
+            if(!elevationCache.has(key))elevationCache.set(key,Number(window.GeographyFoundation.environment(seed,String(x),String(y))?.elevationMeters||0));
+            return elevationCache.get(key);
+          };
+          const roadlike=t=>t==='road'||t==='path'||t==='square';
+          const targets={};
+          const consider=(name,x,y,score,extra={})=>{
+            const distance=Math.abs(x)+Math.abs(y);
+            const current=targets[name];
+            if(!current||score>current.score||(score===current.score&&distance<current.distance)){
+              targets[name]={ok:true,x,y,score,distance,type:terrain(x,y),...extra};
+            }
+          };
+          const radius=160;
+          for(let y=-radius;y<=radius;y++){
+            for(let x=-radius;x<=radius;x++){
+              const type=terrain(x,y);
+              if(!roadlike(type))continue;
+              const neighbors=[];
+              let grass=0,dirtMud=0,water=0,square=type==='square'?4:0;
+              for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]]){
+                const t=terrain(x+dx,y+dy);
+                neighbors.push(t);
+                if(t==='grass')grass++;
+                if(t==='dirt'||t==='mud')dirtMud++;
+                if(t==='water')water++;
+                if(t==='square')square++;
+              }
+              const e=elevation(x,y);
+              const slope=Math.max(
+                Math.abs(elevation(x+4,y)-e),Math.abs(elevation(x-4,y)-e),
+                Math.abs(elevation(x,y+4)-e),Math.abs(elevation(x,y-4)-e)
+              );
+              if(grass>0)consider('grass',x,y,grass*20+slope,{adjacentNatural:'grass',neighborCount:grass,slope});
+              if(dirtMud>0)consider('dirt-mud',x,y,dirtMud*20+slope,{adjacentNatural:'dirt-mud',neighborCount:dirtMud,slope});
+              if(water>0)consider('water',x,y,water*24+slope,{adjacentNatural:'water',neighborCount:water,slope});
+              consider('rolling',x,y,slope,{slope,elevationMeters:e});
+              if(square>0)consider('square',x,y,square*25+slope,{squareNeighbors:square,slope});
+              const mx=((x%16)+16)%16,my=((y%16)+16)%16;
+              let crossing=false,across=null;
+              if(mx===15&&roadlike(terrain(x+1,y))){crossing=true;across=[x+1,y];}
+              else if(mx===0&&roadlike(terrain(x-1,y))){crossing=true;across=[x-1,y];}
+              else if(my===15&&roadlike(terrain(x,y+1))){crossing=true;across=[x,y+1];}
+              else if(my===0&&roadlike(terrain(x,y-1))){crossing=true;across=[x,y-1];}
+              if(crossing)consider('chunk-boundary',x,y,100+slope,{across,slope});
+            }
+          }
+          window.__wpS003006009RoadTargets={seed,targets};
+        }
+        const target=window.__wpS003006009RoadTargets.targets?.[kind]||null;
+        return target||{ok:false,reason:'target-not-found',kind,available:Object.keys(window.__wpS003006009RoadTargets.targets||{})};
+        """,
+        kind,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Road-profile target {kind!r} not found: {result}")
+    action = _set_camera_center_and_render(driver, int(result["x"]), int(result["y"]))
+    return (
+        f"road-profile-target:{kind}:{result.get('type')}:{result.get('x')},{result.get('y')}"
+        f":score={result.get('score')}+" + action
+    )
+
+
 def _set_material_lifetime_texture_quality(driver, profile: str) -> dict:
     result = driver.execute_async_script(
         """
