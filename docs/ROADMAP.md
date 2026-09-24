@@ -69,7 +69,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
 - `WP-S003-008-001` — Screen-Space Camera Navigation Mapping for Rotated PlayCanvas View — COMPLETED
 - `WP-S003-008-002` — Colorful Animated Scene Loading Status + Ready Transition — COMPLETED
-- `WP-S003-008-003` — Functional Projection-Aware Mini Map
+- `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
