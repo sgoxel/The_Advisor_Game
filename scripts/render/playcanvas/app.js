@@ -1021,6 +1021,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     }
     const heightfieldPass=heightfieldResourceCount>0&&indexedHeightfieldResourceCount===heightfieldResourceCount&&sharedBorderMaxError<=1e-7;
     const generatorStats=terrainChunkMeshFactory?.stats?.()||{};
+    const routeSurfaceMaterialCount=Number(generatorStats.routeSurfaceMaterialCount||0);
 
     return Object.freeze({
       resourceKind:"chunk-mesh",
@@ -1050,7 +1051,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       roadProfileGroundingShared:generatorStats.roadProfileGroundingShared===true,
       routeSurfaceCellCount,routeMainRoadCellCount,routeLocalPathCellCount,routeSquareCellCount,routeConnectorCellCount,
       routeEdgeStripCount,routeSurfaceTriangleCount,
-      routeSurfaceMaterialCount:Number(generatorStats.routeSurfaceMaterialCount||0),
+      routeSurfaceMaterialCount,
       routeSurfaceMaterialNames:generatorStats.routeSurfaceMaterialNames||Object.freeze([]),
       routeSurfaceMaterialRebinds:Number(generatorStats.routeSurfaceMaterialRebinds||0),
       routeSurfaceMaterialRefreshes:Number(generatorStats.routeSurfaceMaterialRefreshes||0),
