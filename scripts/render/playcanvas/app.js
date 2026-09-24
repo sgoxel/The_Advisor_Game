@@ -172,7 +172,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     if(!texture)return false;
     try{
       if("anisotropy" in texture)texture.anisotropy=Math.max(1,Math.min(q.anisotropy,Number(device?.maxAnisotropy||q.anisotropy)));
-      if(q.filtering==="bilinear"){
+      if(texture._advisorDisableMipSampling===true){
+        if(pc?.FILTER_LINEAR!==undefined)texture.magFilter=pc.FILTER_LINEAR;
+        if(pc?.FILTER_LINEAR!==undefined)texture.minFilter=pc.FILTER_LINEAR;
+      }else if(q.filtering==="bilinear"){
         if(pc?.FILTER_LINEAR!==undefined)texture.magFilter=pc.FILTER_LINEAR;
         if(pc?.FILTER_LINEAR!==undefined)texture.minFilter=pc.FILTER_LINEAR;
       }else{
