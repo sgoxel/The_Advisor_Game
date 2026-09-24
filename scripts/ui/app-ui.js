@@ -1946,6 +1946,12 @@ function renderPoliticalGeographyProof(borderIndex=0){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.PoliticalGeography.renderDebugPanel(seed,borderIndex,document.getElementById("politicalGeographyProof"));
 }
+function renderCountryProfileProof(profileIndex=0){
+  if(typeof window.CountryProfile?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.CountryProfile.renderDebugPanel(seed,profileIndex,document.getElementById("countryProfileProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1961,6 +1967,7 @@ function renderStatic(){
   renderAdviceResolutionProof();
   renderSocialStateProof();
   renderPoliticalGeographyProof();
+  renderCountryProfileProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2121,6 +2128,8 @@ window.AppUI=Object.freeze({
   socialStateVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SocialState?SocialState.proof(campaign.seed):null;},
   refreshPoliticalGeography:(borderIndex=0)=>renderPoliticalGeographyProof(borderIndex),
   politicalGeographyVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.PoliticalGeography?PoliticalGeography.proof(campaign.seed):null;},
+  refreshCountryProfile:(profileIndex=0)=>renderCountryProfileProof(profileIndex),
+  countryProfileVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CountryProfile?CountryProfile.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

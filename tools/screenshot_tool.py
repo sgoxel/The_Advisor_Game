@@ -97,6 +97,7 @@ SCENARIOS = {
     "wp-s005-004",
     "wp-s005-005",
     "wp-s006-001",
+    "wp-s006-002",
     "playcanvas-root-cutover",
 }
 
@@ -146,6 +147,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s005-004": 5,
     "wp-s005-005": 5,
     "wp-s006-001": 5,
+    "wp-s006-002": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -356,6 +358,40 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        countryProfile: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.CountryProfile?.proof
+              ? window.CountryProfile.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        countryProfilePanel: (() => {
+          const root=document.querySelector("#countryProfileProof");
+          if(!root)return null;
+          return {
+            present:true,
+            open:Boolean(root.open),
+            profileIndex:Number(root.dataset.profileIndex||0),
+            profileId:root.dataset.profileId||null,
+            countryId:root.dataset.countryId||null,
+            wealth:Number(root.dataset.wealth||0),
+            wealthBand:root.dataset.wealthBand||null,
+            maritime:Number(root.dataset.maritime||0),
+            mining:Number(root.dataset.mining||0),
+            waterAccess:Number(root.dataset.waterAccess||0),
+            mineralPotential:Number(root.dataset.mineralPotential||0),
+            mix:root.dataset.mix||null,
+            revision:root.dataset.revision||null,
+            countryName:root.querySelector("#countryProfileCountry")?.textContent?.trim()||null,
+            governance:root.querySelector("#countryProfileGovernance")?.textContent?.trim()||null,
+            geography:root.querySelector("#countryProfileGeography")?.textContent?.trim()||null,
+            tendencyLabels:Array.from(root.querySelectorAll("#countryProfileTendencies .country-profile-bar > span")).map(node=>node.textContent.trim()),
+            comparisonRows:root.querySelectorAll("#countryProfileComparison li").length,
+          };
         })(),
         politicalGeography: (() => {
           try {
@@ -1954,6 +1990,60 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_country_profile_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const profiles=window.CountryProfile;
+        if(!campaign?.seed||!profiles||!window.PoliticalGeography||!window.GeographyFoundation){
+          return {ok:false,error:'country-profile-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=profiles.proof(seed);
+        if(!proof.pass)return {ok:false,error:'country-profile-proof-failed',proof};
+        const count=proof.representatives?.length||0;
+        if(count<3)return {ok:false,error:'country-profile-representatives-missing',count};
+        const requested=index===4?0:index%Math.min(count,4);
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#countryProfileProof');
+        if(!section||!root)return {ok:false,error:'country-profile-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=profiles.renderDebugPanel(seed,requested,root);
+        root.scrollIntoView({block:'start'});
+        const p=rendered?.profile;
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,requested,count,
+          profileId:p?.id||null,
+          countryId:p?.countryId||null,
+          countryName:p?.countryName||null,
+          wealth:p?.wealth?.value??null,
+          wealthBand:p?.wealth?.band||null,
+          governance:p?.governance?.id||null,
+          maritime:p?.tendencies?.maritime??null,
+          mining:p?.tendencies?.mining??null,
+          waterAccess:p?.geography?.waterAccess??null,
+          mineralPotential:p?.geography?.mineralPotential??null,
+          mix:p?[
+            p.tendencies.tradeOpenness,p.tendencies.militaryEmphasis,p.tendencies.agriculture,
+            p.tendencies.craftProduction,p.tendencies.maritime,p.tendencies.mining
+          ].map(v=>Math.round(v*10)).join(':'):null,
+          revision:p?.revision||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Country profile proof frame failed: {result}")
+    return (
+        f"country-profile:{frame_index}:{result.get('countryId')}:"
+        f"wealth={result.get('wealth')}:{result.get('wealthBand')}:mix={result.get('mix')}"
+    )
+
+
 def _show_political_geography_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -3163,7 +3253,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3299,6 +3389,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_political_geography_proof(driver,frame_index)
         return _show_political_geography_proof(driver,frame_index)
+    if scenario == "wp-s006-002":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_country_profile_proof(driver,frame_index)
+        return _show_country_profile_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3333,6 +3428,66 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s006-002":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s006-002 requires five country-profile evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("countryProfile") or {} for build in builds]
+        panels=[build.get("countryProfilePanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Country-profile evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Country profiles mutated Protagonist world position: {protagonists}")
+        required={
+            "pass":True,
+            "deterministic":True,
+            "timeIndependent":True,
+            "numericValid":True,
+            "maritimePlausible":True,
+            "miningPlausible":True,
+            "geographyPreserved":True,
+            "capitalLinked":True,
+            "weightedNotExclusive":True,
+            "overlayReady":True,
+            "dynamicStateCreated":False,
+            "terrainMutation":False,
+            "resourceMutation":False,
+            "renderDependency":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Country-profile proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("profileCount") or 0)<9 or int(proof.get("representativeCount") or 0)<3:
+                raise RuntimeError(f"Country-profile sample set too small in frame {index}: {proof}")
+            if int(proof.get("wealthBandCount") or 0)<3 or int(proof.get("strategicMixCount") or 0)<3 or int(proof.get("geographyVariety") or 0)<3:
+                raise RuntimeError(f"Country-profile diversity insufficient in frame {index}: {proof}")
+
+        for panel in panels:
+            if not panel.get("open") or int(panel.get("comparisonRows") or 0)<3:
+                raise RuntimeError(f"Country-profile panel/comparison incomplete: {panel}")
+            if len(panel.get("tendencyLabels") or [])!=8:
+                raise RuntimeError(f"Country-profile weighted tendencies incomplete: {panel}")
+            if float(panel.get("maritime") or 0)>0.080001 and float(panel.get("waterAccess") or 0)<0.08:
+                raise RuntimeError(f"Landlocked maritime emphasis is implausible: {panel}")
+            if float(panel.get("mining") or 0)>float(panel.get("mineralPotential") or 0)+1e-9:
+                raise RuntimeError(f"Mining emphasis exceeds mineral potential: {panel}")
+
+        first_four=panels[:4]
+        if len({panel.get("countryId") for panel in first_four})<3:
+            raise RuntimeError(f"Country-profile evidence did not inspect three countries: {first_four}")
+        if len({panel.get("mix") for panel in first_four})<3:
+            raise RuntimeError(f"Country-profile evidence did not inspect three strategic mixes: {first_four}")
+        if len({round(float(panel.get("wealth") or 0),3) for panel in first_four})<3:
+            raise RuntimeError(f"Country-profile evidence did not inspect three wealth values: {first_four}")
+        if panels[0].get("profileId")!=panels[4].get("profileId") or panels[0].get("revision")!=panels[4].get("revision"):
+            raise RuntimeError("Country profile changed after reload")
+        if json.dumps(proofs[0],sort_keys=True)!=json.dumps(proofs[4],sort_keys=True):
+            raise RuntimeError("Country-profile foundation changed after reload")
+        return
+
     if scenario == "wp-s006-001":
         if len(frames) < 5:
             raise RuntimeError("wp-s006-001 requires five political-geography evidence frames")
@@ -5917,12 +6072,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

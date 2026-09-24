@@ -292,6 +292,33 @@ input:focus{border-color:#92ad83}
   .political-country-cards{grid-template-columns:1fr}
 }
 
+.country-profile-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+.country-profile-toolbar label{color:#aab5a3;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.country-profile-toolbar select{min-width:min(470px,66vw);border:1px solid #465040;border-radius:7px;background:#141914;color:#e8eee3;padding:7px 9px;font:inherit;font-size:12px}
+.country-profile-grid strong{white-space:normal;overflow-wrap:anywhere}
+.country-profile-section{margin:10px 0;border:1px solid #343d31;border-radius:8px;background:#171c16;padding:9px}
+.country-profile-section h4{margin:0 0 8px;color:#dfe7d9;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.country-profile-tendencies{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.country-profile-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 7px;border-radius:6px;background:#111510;padding:7px}
+.country-profile-bar span{color:#a8b3a2;font-size:8px;font-weight:700;text-transform:uppercase}
+.country-profile-bar strong{color:#e3eadf;font-size:9px}
+.country-profile-bar i{grid-column:1/-1;display:block;height:5px;border-radius:999px;background:#252c22;overflow:hidden}
+.country-profile-bar i b{display:block;height:100%;border-radius:999px;background:#819775}
+.country-profile-keys{display:flex;flex-wrap:wrap;gap:5px}
+.country-profile-keys span{border:1px solid #44503f;border-radius:999px;background:#111510;color:#c9d4c3;padding:3px 7px;font-size:8px}
+.country-profile-comparison{list-style:none;display:grid;gap:5px;margin:0;padding:0}
+.country-profile-comparison li{display:grid;grid-template-columns:minmax(210px,1.8fr) repeat(6,minmax(42px,.45fr));gap:5px;align-items:center;border:1px solid #30382e;border-radius:6px;background:#111510;padding:6px 7px}
+.country-profile-comparison li.selected{border-color:#718667;background:#192018}
+.country-profile-comparison li>div{display:grid;gap:2px;min-width:0}
+.country-profile-comparison strong{color:#dce4d7;font-size:9px}
+.country-profile-comparison small{color:#8f9a89;font-size:7px}
+.country-profile-comparison li>span{color:#b9c4b3;font:7px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;text-align:right}
+@media (max-width:900px){
+  .country-profile-tendencies{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .country-profile-comparison li{grid-template-columns:minmax(170px,1fr) repeat(3,minmax(46px,.4fr))}
+  .country-profile-comparison li>span:nth-of-type(n+4){display:none}
+}
+
 /* FULL-SCREEN POPUPS */
 .fullscreen-popup{position:fixed;inset:0;z-index:1000;display:grid;grid-template-rows:auto minmax(0,1fr);background:#151713}
 .fullscreen-popup[hidden]{display:none}

@@ -863,6 +863,44 @@
     </div>
   </details>
 
+  <details id="countryProfileProof">
+    <summary>WP-S006-002 Country Profile: Wealth, Governance + Strategic Orientation</summary>
+    <div class="accordion-content technical-info">
+      <div class="country-profile-toolbar">
+        <label for="countryProfileSelect">Inspect generated country profile</label>
+        <select id="countryProfileSelect" aria-label="Country profile representative"></select>
+      </div>
+      <div class="detail-grid country-profile-grid">
+        <div><span>Country</span><strong id="countryProfileCountry">—</strong></div>
+        <div><span>Country ID</span><strong id="countryProfileId">—</strong></div>
+        <div><span>National capital</span><strong id="countryProfileCapital">—</strong></div>
+        <div><span>Wealth / prosperity</span><strong id="countryProfileWealth">—</strong></div>
+        <div><span>Governance</span><strong id="countryProfileGovernance">—</strong></div>
+        <div><span>Administrative baseline</span><strong id="countryProfileAdmin">—</strong></div>
+        <div><span>Fixed geography/resources</span><strong id="countryProfileGeography">—</strong></div>
+        <div><span>Foundation revision</span><strong id="countryProfileRevision">—</strong></div>
+      </div>
+      <section class="country-profile-section">
+        <h4>Weighted strategic tendencies</h4>
+        <div id="countryProfileTendencies" class="country-profile-tendencies"></div>
+      </section>
+      <section class="country-profile-section">
+        <h4>Cultural / architectural tendency keys</h4>
+        <div id="countryProfileKeys" class="country-profile-keys"></div>
+      </section>
+      <section class="country-profile-section">
+        <h4>Representative profile comparison</h4>
+        <ul id="countryProfileComparison" class="country-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Same SEED/country reproduces the same profile and fantasy time does not change the foundation</span><b id="vCountryProfileDeterministic">WAITING</b></div>
+      <div class="check"><span>Country ID/capital, wealth, governance, administration/tax and numeric tendencies are structured and queryable</span><b id="vCountryProfileStructured">WAITING</b></div>
+      <div class="check"><span>Strategic orientation uses multiple weighted tendencies rather than one exclusive country archetype</span><b id="vCountryProfileWeighted">WAITING</b></div>
+      <div class="check"><span>Landlocked realms cannot become strongly maritime and mining emphasis stays constrained by fixed mineral/terrain potential</span><b id="vCountryProfileGeography">WAITING</b></div>
+      <div class="check"><span>Nearby generated profiles demonstrate multiple wealth levels and meaningfully different strategic mixes</span><b id="vCountryProfileDiversity">WAITING</b></div>
+      <div class="check"><span>Profile is immutable foundation data, mutates no terrain/resources, and exposes a separate future dynamic-overlay boundary</span><b id="vCountryProfileAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -892,6 +930,7 @@
 <script src="scripts/render/renderer-bootstrap.js"></script>
 <script src="scripts/world/geography.js"></script>
 <script src="scripts/world/political-geography.js"></script>
+<script src="scripts/world/country-profile.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
 <script src="scripts/world/special-lots.js"></script>
