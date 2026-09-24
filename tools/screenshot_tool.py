@@ -83,6 +83,7 @@ SCENARIOS = {
     "wp-s003-005-002",
     "wp-s003-005-003",
     "wp-s003-005-004",
+    "wp-s003-005-006",
     "wp-s003-006-002",
     "wp-s003-006-001",
     "wp-s003-006",
@@ -146,6 +147,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-005-002": 4,
     "wp-s003-005-003": 7,
     "wp-s003-005-004": 7,
+    "wp-s003-005-006": 7,
     "wp-s003-006-002": 8,
     "wp-s003-006-001": 14,
     "wp-s003-006": 7,
@@ -873,6 +875,7 @@ return (() => {
           assetPreparationProof: renderer.assetPreparationProof || null,
           materialTextureQuality: renderer.materialTextureQuality || null,
           renderQualityManager: window.RuntimeRenderQuality?.snapshot?.() || null,
+          materialLifetimeProof: window.__WP_S003_005_006_PROOF || null,
           worldAssetPreparation: renderer.worldAssetPreparation || null,
           worldAssetCache: renderer.worldAssetCache || null,
           worldAssetProof: renderer.worldAssetProof || null,
@@ -4021,7 +4024,182 @@ def _focus_heightfield_target(driver, kind: str) -> str:
     return f"heightfield-target:{kind}:{result.get('type')}:{result.get('elevationMeters')}+" + action
 
 
+def _set_material_lifetime_texture_quality(driver, profile: str) -> dict:
+    result = driver.execute_async_script(
+        """
+        const profile=String(arguments[0]);
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const quality=window.RuntimeTextureQuality;
+            if(!quality?.setProfile||!window.AppUI?.refreshTerrain){
+              done({ok:false,error:'texture-quality-api-missing'});
+              return;
+            }
+            const before=window.GameRenderer?.snapshot?.()||{};
+            quality.setProfile(profile);
+            await Promise.resolve(window.AppUI.refreshTerrain());
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            const after=window.GameRenderer?.snapshot?.()||{};
+            const generator=after.terrainChunks?.generator||{};
+            done({
+              ok:true,
+              profile:String(quality.snapshot?.()?.qualityProfile||profile),
+              buildingGeneration:Number(generator.buildingSurfaceAtlas?.textureGeneration||0),
+              treeGeneration:Number(generator.treeSpriteAtlas?.textureGeneration||0),
+              buildingRefreshes:Number(generator.buildingSurfaceMaterialRefreshes||0),
+              treeRefreshes:Number(generator.treeSpriteMaterialRefreshes||0),
+              buildingRetired:Number(generator.buildingSurfaceAtlas?.retiredTextureCount||0),
+              treeRetired:Number(generator.treeSpriteAtlas?.retiredTextureCount||0),
+              beforeProfile:String(before.materialTextureQuality?.profile||'')
+            });
+          }catch(error){done({ok:false,error:String(error?.stack||error)})}
+        })();
+        """,
+        str(profile),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Material lifetime texture-quality transition failed: {result}")
+    if result.get("profile") != profile:
+        raise RuntimeError(f"Texture-quality profile did not settle to {profile}: {result}")
+    return result
+
+
+def _material_lifetime_telemetry(driver) -> dict:
+    result = driver.execute_script(
+        """
+        const snap=window.GameRenderer?.snapshot?.()||{};
+        const chunks=snap.terrainChunks||{};
+        const generator=chunks.generator||{};
+        return {
+          profile:String(window.RuntimeTextureQuality?.snapshot?.()?.qualityProfile||''),
+          cameraCenter:window.Camera?.getCenter?.()||null,
+          protagonist:window.RendererContract?.simulationSnapshot?.()?.protagonist||null,
+          buildingPresentationCount:Number(chunks.buildingPresentationCount||0),
+          treePresentationCount:Number(chunks.treePresentationCount||0),
+          buildingTexturedMaterialCount:Number(generator.buildingTexturedMaterialCount||0),
+          treeSpriteMaterialCount:Number(generator.treeSpriteMaterialCount||0),
+          buildingSurfaceMaterialRebinds:Number(generator.buildingSurfaceMaterialRebinds||0),
+          buildingSurfaceMaterialRefreshes:Number(generator.buildingSurfaceMaterialRefreshes||0),
+          buildingSurfaceStaleBindingCount:Number(generator.buildingSurfaceStaleBindingCount||0),
+          treeSpriteMaterialRebinds:Number(generator.treeSpriteMaterialRebinds||0),
+          treeSpriteMaterialRefreshes:Number(generator.treeSpriteMaterialRefreshes||0),
+          buildingSurfaceAtlas:generator.buildingSurfaceAtlas||null,
+          treeSpriteAtlas:generator.treeSpriteAtlas||null,
+          terrainPreload:snap.terrainPreload||null,
+          simulationAuthorityPreserved:Boolean(snap.simulationAuthorityPreserved)
+        };
+        """
+    )
+    return result if isinstance(result, dict) else {}
+
+
+def _exercise_material_lifetime(driver) -> str:
+    _set_terrain_preload_settings(
+        driver, radius=1, cache=16, directional=True, background=True
+    )
+    _set_camera_center_and_render_active(driver, 0, 0)
+    _set_material_lifetime_texture_quality(driver, "standard")
+    initial = _material_lifetime_telemetry(driver)
+
+    start = time.monotonic()
+    visited = []
+    quality_events = []
+    plan = ((64, 0), (128, 0), (192, 0), (128, 0), (64, 0), (0, 0))
+    switched = {"low": False, "high": False, "standard2": False, "high2": False}
+    index = 0
+    while time.monotonic() - start < 92.0:
+        x, y = plan[index % len(plan)]
+        _set_camera_center_and_render_active(driver, x, y)
+        visited.append({"x": x, "y": y, "elapsed": round(time.monotonic() - start, 3)})
+        elapsed = time.monotonic() - start
+        if elapsed >= 18.0 and not switched["low"]:
+            quality_events.append(_set_material_lifetime_texture_quality(driver, "low"))
+            switched["low"] = True
+        if elapsed >= 42.0 and not switched["high"]:
+            quality_events.append(_set_material_lifetime_texture_quality(driver, "high"))
+            switched["high"] = True
+        if elapsed >= 66.0 and not switched["standard2"]:
+            quality_events.append(_set_material_lifetime_texture_quality(driver, "standard"))
+            switched["standard2"] = True
+        if elapsed >= 84.0 and not switched["high2"]:
+            quality_events.append(_set_material_lifetime_texture_quality(driver, "high"))
+            switched["high2"] = True
+        index += 1
+        if time.monotonic() - start < 92.0:
+            time.sleep(2.5)
+
+    if not switched["high2"]:
+        quality_events.append(_set_material_lifetime_texture_quality(driver, "high"))
+        switched["high2"] = True
+    _set_camera_center_and_render_active(driver, 0, 0)
+    visited.append({"x": 0, "y": 0, "elapsed": round(time.monotonic() - start, 3)})
+    _set_camera_zoom_and_render(driver, 1.00)
+    final = _material_lifetime_telemetry(driver)
+    elapsed = time.monotonic() - start
+
+    try:
+        logs = driver.get_log("browser")
+    except Exception:
+        logs = []
+    graphics_errors = []
+    for item in logs:
+        message = str(item.get("message") or "").lower() if isinstance(item, dict) else str(item).lower()
+        if (
+            "context lost" in message or
+            "gl_invalid" in message or
+            "webgl: invalid" in message or
+            ("shader" in message and "error" in message)
+        ):
+            graphics_errors.append(str(item.get("message") if isinstance(item, dict) else item)[:500])
+
+    non_origin_seen = any(int(item["x"]) != 0 or int(item["y"]) != 0 for item in visited[:-1])
+    reentered_origin = non_origin_seen and visited[-1]["x"] == 0 and visited[-1]["y"] == 0
+    proof = {
+        "elapsedRealSeconds": round(elapsed, 3),
+        "visitedCenters": visited,
+        "qualityEvents": quality_events,
+        "initial": initial,
+        "final": final,
+        "reenteredOrigin": reentered_origin,
+        "graphicsErrorCount": len(graphics_errors),
+        "graphicsErrors": graphics_errors,
+    }
+    driver.execute_script("window.__WP_S003_005_006_PROOF=arguments[0]", proof)
+    preload = final.get("terrainPreload") or {}
+    return (
+        f"material-lifetime:elapsed={elapsed:.1f}s:"
+        f"moves={len(visited)}:evictions={int(preload.get('evictions') or 0)}:"
+        f"destroys={int(preload.get('resourceDestructions') or 0)}:"
+        f"buildingGen={int((final.get('buildingSurfaceAtlas') or {}).get('textureGeneration') or 0)}:"
+        f"treeGen={int((final.get('treeSpriteAtlas') or {}).get('textureGeneration') or 0)}"
+    )
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-005-006":
+        if frame_index == 0:
+            driver.set_window_size(1920, 1080)
+            _set_terrain_preload_settings(driver, radius=1, cache=16, directional=True, background=True)
+            quality=_set_material_lifetime_texture_quality(driver, "standard")
+            driver.execute_script("window.__WP_S003_005_006_PROOF=null")
+            return "material-lifetime:baseline+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
+        if frame_index == 1:
+            return _exercise_material_lifetime(driver)
+        if frame_index == 2:
+            return "material-lifetime:post-close+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 2.00)
+        if frame_index == 3:
+            driver.set_window_size(390, 844)
+            return "material-lifetime:phone-portrait+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 4:
+            driver.set_window_size(844, 390)
+            return "material-lifetime:phone-landscape+" + _focus_tree_sample_chunk(driver) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 5:
+            driver.set_window_size(1920, 1080)
+            return "material-lifetime:return-high+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        driver.set_window_size(1920, 1080)
+        quality=_set_material_lifetime_texture_quality(driver, "standard")
+        return "material-lifetime:return-standard+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
     if scenario == "wp-s003-007-001":
         if frame_index == 0:
             return _render_quality_step(driver, mode="low", viewport=(1920, 1080))
@@ -4594,6 +4772,92 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-005-006":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-005-006 requires seven sustained material-lifetime evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:7]]
+        gpus=[build.get("gpuRenderer") or {} for build in builds]
+        chunks=[gpu.get("terrainChunks") or {} for gpu in gpus]
+        generators=[chunk.get("generator") or {} for chunk in chunks]
+        preloads=[gpu.get("terrainPreload") or {} for gpu in gpus]
+        protagonist_locations=[build.get("protagonistLocation") for build in builds]
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Material-lifetime exercise changed protagonist authority: {protagonist_locations}")
+
+        proof=builds[1].get("materialLifetimeProof") or {}
+        if float(proof.get("elapsedRealSeconds") or 0)<90.0:
+            raise RuntimeError(f"Sustained runtime did not reach 90 seconds: {proof}")
+        if proof.get("reenteredOrigin") is not True:
+            raise RuntimeError(f"Chunk active-set leave/re-entry was not proven: {proof}")
+        profiles=[str(item.get("profile") or "") for item in proof.get("qualityEvents") or []]
+        if not {"low","standard","high"}.issubset(set(profiles)):
+            raise RuntimeError(f"Texture-quality lifecycle was not exercised across low/standard/high: {profiles}")
+        if int(proof.get("graphicsErrorCount") or 0)!=0:
+            raise RuntimeError(f"WebGL/shader errors occurred during sustained material lifecycle: {proof.get('graphicsErrors')}")
+        initial=proof.get("initial") or {}
+        final=proof.get("final") or {}
+        initial_preload=initial.get("terrainPreload") or {}
+        final_preload=final.get("terrainPreload") or {}
+        if int(final_preload.get("resourceDestructions") or 0)<=int(initial_preload.get("resourceDestructions") or 0):
+            raise RuntimeError(f"Chunk resource destruction/cleanup was not exercised: initial={initial_preload}, final={final_preload}")
+        if int(final_preload.get("evictions") or 0)<=int(initial_preload.get("evictions") or 0):
+            raise RuntimeError(f"Chunk cache eviction was not exercised: initial={initial_preload}, final={final_preload}")
+
+        building_frames=0
+        tree_frames=0
+        for index,(gpu,chunk,generator,preload) in enumerate(zip(gpus,chunks,generators,preloads),start=1):
+            if gpu.get("simulationAuthorityPreserved") is not True or chunk.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Material lifetime changed Simulation authority in frame {index}: {gpu}")
+            building=generator.get("buildingSurfaceAtlas") or {}
+            tree=generator.get("treeSpriteAtlas") or {}
+            if building.get("ready") is not True or int(building.get("gpuTextureCount") or 0)!=1:
+                raise RuntimeError(f"Building atlas unavailable in frame {index}: {building}")
+            if tree.get("ready") is not True or int(tree.get("gpuTextureCount") or 0)!=1:
+                raise RuntimeError(f"Tree atlas unavailable in frame {index}: {tree}")
+            if int(building.get("retiredTextureCount") or 0)!=0 or int(tree.get("retiredTextureCount") or 0)!=0:
+                raise RuntimeError(f"Retired shared textures leaked after rebind in frame {index}: building={building}, tree={tree}")
+            if int(generator.get("buildingSurfaceStaleBindingCount") or 0)!=0:
+                raise RuntimeError(f"Stale building atlas binding detected in frame {index}: {generator}")
+            building_sig=str(building.get("signature") or "")
+            for signature in generator.get("buildingSurfaceMaterialAtlasSignatures") or []:
+                if signature!=building_sig:
+                    raise RuntimeError(f"Building material references a stale atlas generation in frame {index}: {generator}")
+            tree_sig=str(tree.get("signature") or "")
+            for signature in generator.get("treeSpriteMaterialAtlasSignatures") or []:
+                if signature!=tree_sig:
+                    raise RuntimeError(f"Tree material references a stale atlas generation in frame {index}: {generator}")
+            if int(building.get("frameDecodeCount") or 0)!=0 or int(building.get("frameRasterizeCount") or 0)!=0:
+                raise RuntimeError(f"Building atlas work leaked into frame path in frame {index}: {building}")
+            if int(tree.get("frameDecodeCount") or 0)!=0 or int(tree.get("frameRasterizeCount") or 0)!=0:
+                raise RuntimeError(f"Tree atlas work leaked into frame path in frame {index}: {tree}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Visible-frame asset work detected in frame {index}: {preload}")
+            building_frames+=int(chunk.get("buildingPresentationCount") or 0)>0
+            tree_frames+=int(chunk.get("treePresentationCount") or 0)>0
+
+        post_generator=generators[1]
+        initial_building=initial.get("buildingSurfaceAtlas") or {}
+        initial_tree=initial.get("treeSpriteAtlas") or {}
+        post_building=post_generator.get("buildingSurfaceAtlas") or {}
+        post_tree=post_generator.get("treeSpriteAtlas") or {}
+        if int(post_building.get("textureGeneration") or 0)<=int(initial_building.get("textureGeneration") or 0):
+            raise RuntimeError(f"Building atlas generation did not advance during quality lifecycle: initial={initial_building}, post={post_building}")
+        if int(post_tree.get("textureGeneration") or 0)<=int(initial_tree.get("textureGeneration") or 0):
+            raise RuntimeError(f"Tree atlas generation did not advance during quality lifecycle: initial={initial_tree}, post={post_tree}")
+        if int(post_generator.get("buildingSurfaceMaterialRefreshes") or 0)<=0 or int(post_generator.get("treeSpriteMaterialRefreshes") or 0)<=0:
+            raise RuntimeError(f"Shared material refresh paths were not exercised: {post_generator}")
+        if int(post_building.get("textureDestructions") or 0)<=0 or int(post_tree.get("textureDestructions") or 0)<=0:
+            raise RuntimeError(f"Superseded shared textures were not released after safe rebind: building={post_building}, tree={post_tree}")
+        if building_frames<5 or tree_frames<2:
+            raise RuntimeError(f"Insufficient visible building/tree coverage in sustained evidence: buildings={building_frames}, trees={tree_frames}")
+
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:7]]
+        if int(viewports[3].get("height") or 0)<=int(viewports[3].get("width") or 0):
+            raise RuntimeError(f"Phone portrait sustained-runtime evidence missing: {viewports[3]}")
+        if int(viewports[4].get("width") or 0)<=int(viewports[4].get("height") or 0):
+            raise RuntimeError(f"Phone landscape sustained-runtime evidence missing: {viewports[4]}")
+        return
+
     if scenario == "wp-s003-006-007":
         if len(frames) < 10:
             raise RuntimeError("wp-s003-006-007 requires ten heightfield evidence frames")
