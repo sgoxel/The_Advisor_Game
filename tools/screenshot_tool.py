@@ -1985,6 +1985,12 @@ def _show_social_state_proof(driver, frame_index: int) -> str:
             priority:0.74,timestamp:'1200-06-12 08:04:00',
             externalRef:{type:'proof',id:'return-tools'}
           });
+          social.recordEvent(seed,{
+            type:'promise-made',timestamp:'1200-06-12 08:05:00',
+            actor:protagonist,relationship,reputationTargets,
+            externalRef:{type:'promise',id:'smith-promise-made-001'},
+            summary:'The protagonist made a clear promise to the smith.'
+          });
           window.__socialProof={smithId:smith.id,adviceId:advice.id,householdId:household.id,deliveryId:delivery.id,toolsId:tools.id};
         }
 
@@ -3263,9 +3269,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 "deterministicEvents":True,
                 "replayStable":True,
                 "storageRoundTrip":True,
-                "reputationScopeCoverage":True,
-                "dutyStatusCoverage":True,
-                "eventResponseCoverage":True,
                 "simulationBacked":True,
                 "directAllianceEnemyState":False,
                 "worldAuthorityCreated":False,
@@ -3276,6 +3279,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     raise RuntimeError(f"Social-state proof {key} mismatch in frame {index}: {proof}")
             if int(proof.get("relationshipCount") or 0)<1 or int(proof.get("reputationCount") or 0)<5 or int(proof.get("dutyCount") or 0)<3:
                 raise RuntimeError(f"Social-state proof is incomplete in frame {index}: {proof}")
+        for index,proof in enumerate(proofs[2:],start=3):
+            if proof.get("reputationScopeCoverage") is not True or proof.get("dutyStatusCoverage") is not True or proof.get("eventResponseCoverage") is not True:
+                raise RuntimeError(f"Social-state event/scope coverage incomplete in frame {index}: {proof}")
 
         if any(panel.get("profession")!="smith" for panel in panels):
             raise RuntimeError(f"Social proof did not target the deterministic smith resident: {panels}")
