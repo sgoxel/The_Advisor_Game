@@ -311,6 +311,7 @@ return (() => {
       currentBuild: {
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
         sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
+        sceneLoadingEarlyClick: window.__WP_S003_008_002_EARLY_CLICK || null,
         campaignSeed: window.SeedSystem?.getCampaign?.()?.seed || null,
         campaignRealStartMs: Number(window.SeedSystem?.getCampaign?.()?.realStartMs || 0) || null,
         campaignFantasyStart: window.SeedSystem?.getCampaign?.()?.fantasyStart || null,
@@ -1271,46 +1272,71 @@ def force_max_zoom_out(driver, settle_seconds: float = 0.15) -> None:
         print(f"Zoom-out skipped: {reason}")
 
 
-def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
-    if scenario == "wp-s003-008-002":
-        from selenium.webdriver.support.ui import WebDriverWait
+def _reload_with_queued_campaign_start(driver, timeout: float = 45.0) -> str:
+    from selenium.webdriver.support.ui import WebDriverWait
 
-        # The campaign button is wired before AppUI initialization finishes. For
-        # this startup-lifecycle proof, do not manufacture a race by clicking the
-        # hidden New Campaign control while the application-start renderer cycle
-        # is still active. First prove that real application startup completed.
-        timeout = max(timeout, 180.0)
-        try:
-            WebDriverWait(driver, timeout).until(
-                lambda d: d.execute_script(
+    script = r"""
+    (() => {
+      window.__WP_S003_008_002_EARLY_CLICK = {
+        installedAtMs: Date.now(),
+        clicked: false,
+        clickedAtMs: null,
+        gateBefore: null
+      };
+      const timer = setInterval(() => {
+        const button = document.querySelector('#newCampaignButton');
+        const gate = window.AppUI?.applicationStartupSnapshot?.();
+        if (!button || typeof button.onclick !== 'function' || gate?.state !== 'pending') return;
+        clearInterval(timer);
+        window.__WP_S003_008_002_EARLY_CLICK.gateBefore = gate;
+        window.__WP_S003_008_002_EARLY_CLICK.clickedAtMs = Date.now();
+        window.__WP_S003_008_002_EARLY_CLICK.clicked = true;
+        button.click();
+      }, 0);
+      setTimeout(() => clearInterval(timer), 30000);
+    })();
+    """
+    registration = driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": script},
+    )
+    identifier = registration.get("identifier") if isinstance(registration, dict) else None
+    try:
+        driver.refresh()
+        WebDriverWait(driver, timeout).until(
+            lambda d: bool(
+                d.execute_script(
                     """
-                    const loading=window.AppUI?.sceneLoadingSnapshot?.();
-                    const current=loading?.current || {};
                     return Boolean(
-                      current.origin === 'application-start' &&
-                      current.state === 'hidden' &&
-                      Number(current.startedAtMs || 0) > 0 &&
-                      Number(current.readyAtMs || 0) >= Number(current.startedAtMs || 0) &&
-                      Number(current.hiddenAtMs || 0) >= Number(current.readyAtMs || 0) &&
-                      current.readiness?.interactionReady === true &&
-                      loading?.overlay?.hidden === true &&
-                      window.GameRenderer?.snapshot?.()?.ready === true
+                      window.__WP_S003_008_002_EARLY_CLICK?.clicked &&
+                      window.__WP_S003_008_002_EARLY_CLICK?.gateBefore?.state === 'pending'
                     );
                     """
                 )
             )
-        except Exception as exc:
-            state=driver.execute_script(
-                """
-                return {
-                  loading:window.AppUI?.sceneLoadingSnapshot?.()||null,
-                  renderer:window.GameRenderer?.snapshot?.()||null,
-                  campaign:window.SeedSystem?.getCampaign?.()||null,
-                  status:document.querySelector('#statusMessage')?.textContent?.trim()||null
-                };
-                """
-            )
-            raise RuntimeError(f"Application-start loading readiness exceeded {timeout:.0f}s: {state}") from exc
+        )
+    finally:
+        if identifier:
+            try:
+                driver.execute_cdp_cmd(
+                    "Page.removeScriptToEvaluateOnNewDocument",
+                    {"identifier": identifier},
+                )
+            except Exception:
+                pass
+    proof = driver.execute_script(
+        "return window.__WP_S003_008_002_EARLY_CLICK || null"
+    )
+    if not isinstance(proof, dict) or not proof.get("clicked"):
+        raise RuntimeError(f"Early campaign-start click was not exercised: {proof}")
+    return "scene-loading:queued-new-campaign-during-application-start"
+
+
+def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
+    queued_start_action = None
+    if scenario == "wp-s003-008-002":
+        timeout = max(timeout, 45.0)
+        queued_start_action = _reload_with_queued_campaign_start(driver, timeout)
     if scenario == "wp-s003-005":
         # Use a representative desktop/tablet-landscape viewport so the prepared
         # glTF/material proof is readable instead of being lost inside an ultra-wide
@@ -1333,8 +1359,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             )
         )
         return "asset-standard-proof-ready"
-    result = driver.execute_script(CURRENT_BUILD_PREP_SCRIPT)
-    action = result.get("action", "unknown") if isinstance(result, dict) else "unknown"
+    if queued_start_action:
+        result = {"action": "started-current-campaign"}
+        action = queued_start_action
+    else:
+        result = driver.execute_script(CURRENT_BUILD_PREP_SCRIPT)
+        action = result.get("action", "unknown") if isinstance(result, dict) else "unknown"
 
     if action in {"started-current-campaign", "campaign-already-active"}:
         try:
@@ -7311,6 +7341,22 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         current=ready.get("current") or {}
         if current.get("state")!="hidden" or current.get("origin")!="new-campaign":
             raise RuntimeError(f"Actual loading cycle is not a completed new-campaign transition: {current}")
+        startup_gate=ready.get("startupGate") or {}
+        early_click=builds[4].get("sceneLoadingEarlyClick") or {}
+        if startup_gate.get("state")!="ready" or int(startup_gate.get("queuedCampaignStarts") or 0)<1:
+            raise RuntimeError(f"Immediate campaign start was not queued behind application startup: {startup_gate}")
+        gate_started=int(startup_gate.get("startedAtMs") or 0)
+        queued_at=int(startup_gate.get("lastQueuedAtMs") or 0)
+        gate_ready=int(startup_gate.get("readyAtMs") or 0)
+        released_at=int(startup_gate.get("lastReleasedAtMs") or 0)
+        campaign_started=int(current.get("startedAtMs") or 0)
+        if not (gate_started>0 and gate_started<=queued_at<=gate_ready<=released_at<=campaign_started):
+            raise RuntimeError(
+                f"Application/campaign startup serialization order is invalid: "
+                f"gate={startup_gate}, campaign={current}"
+            )
+        if early_click.get("clicked") is not True or (early_click.get("gateBefore") or {}).get("state")!="pending":
+            raise RuntimeError(f"Evidence did not click New Campaign during pending application startup: {early_click}")
         if current.get("renderSucceeded") is not True or (current.get("readiness") or {}).get("playableReady") is not True:
             raise RuntimeError(f"Loading ended without playable scene readiness: {current}")
         started=int(current.get("startedAtMs") or 0)
