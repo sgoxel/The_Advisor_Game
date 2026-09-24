@@ -186,7 +186,7 @@ function create({pc,device}={}){
       prepareCalls,atlasBuilds,cacheReuses,
       gpuTextureCount:1,sharedAtlas:true,preparationOnly:true,
       detailGpuTextureCount:1,totalGpuTextureCount:2,
-      detailTextureReady:true,detailTextureShared:true,detailTextureSourceKey,
+      detailTextureReady:true,detailTextureShared:true,detailTextureSourceKey:detailSourceKey,
       heightfieldSurfaceMode:"shared-neutral-detail+semantic-vertex-color",
       frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
       simulationAuthorityPreserved:true
