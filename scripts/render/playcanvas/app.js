@@ -842,6 +842,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const dressingContextCounts={},dressingSemanticCounts={},dressingSamples=[];
     let dressingDeterministic=true,dressingRendererOnly=true;
     let treePresentationCount=0,treeVariant0Count=0,treeVariant1Count=0,treeInstancedGroupCount=0,treeCylinderSpherePlaceholderCount=0;
+    let contactShadowBuildingCount=0,contactShadowTreeCount=0,contactShadowPropCount=0,contactShadowObjectCount=0,contactShadowInstancedGroupCount=0,contactShadowDrawCalls=0;
+    let contactShadowRendererOnly=true,contactShadowTerrainSampled=true;
     let roofProfileCount=0,roofNormalProfileCount=0,roofSpecialProfileCount=0,roofProfilePass=true,roofCenterRidgeHigher=true,roofEaveContactPass=true,roofFootprintDriven=true;
     const roofProfileSamples=[],treeVariationSamples=[],treeSampleChunks=[];
     let staticBatchCount=0,staticBatchSourcePrimitiveCount=0,instancedGroupCount=0,instancedObjectCount=0;
@@ -930,6 +932,14 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         }
       }
       buildingPresentationCount+=Number(resource.buildingPresentationCount||0);
+      contactShadowBuildingCount+=Number(resource.contactShadowBuildingCount||0);
+      contactShadowTreeCount+=Number(resource.contactShadowTreeCount||0);
+      contactShadowPropCount+=Number(resource.contactShadowPropCount||0);
+      contactShadowObjectCount+=Number(resource.contactShadowObjectCount||0);
+      contactShadowInstancedGroupCount+=Number(resource.contactShadowInstancedGroupCount||0);
+      contactShadowDrawCalls+=Number(resource.contactShadowDrawCalls||0);
+      contactShadowRendererOnly=contactShadowRendererOnly&&resource.contactShadowRendererOnly!==false;
+      contactShadowTerrainSampled=contactShadowTerrainSampled&&resource.contactShadowTerrainSampled!==false;
       routeSurfaceCellCount+=Number(resource.routeSurfaceCellCount||0);
       routeMainRoadCellCount+=Number(resource.routeMainRoadCellCount||0);
       routeLocalPathCellCount+=Number(resource.routeLocalPathCellCount||0);
@@ -1098,6 +1108,16 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       frustumCulledResourceCount,hardwareInstancedResourceCount,batchedResourceCount,
       renderMeshInstanceCount,visibleMeshInstanceCount,culledMeshInstanceCount,cullEnabledMeshInstanceCount,
       buildingPresentationCount,
+      contactShadowTechnique:"batched-foundation-halo+instanced-ground-disc+dynamic-character-disc",
+      contactShadowBuildingCount,contactShadowTreeCount,contactShadowPropCount,contactShadowObjectCount,
+      contactShadowInstancedGroupCount,contactShadowDrawCalls,
+      contactShadowMaterialCount:Number(generatorStats.contactShadowMaterialCount||0),
+      contactShadowQuality:String(generatorStats.contactShadowQuality||renderQualitySnapshot()?.activeLevel||"standard"),
+      contactShadowOpacity:Number(generatorStats.contactShadowOpacity||0),
+      contactShadowMaterialRefreshes:Number(generatorStats.contactShadowMaterialRefreshes||0),
+      contactShadowRendererOnly:Boolean(contactShadowRendererOnly),
+      contactShadowTerrainSampled:Boolean(contactShadowTerrainSampled),
+      contactShadowStaticPass:Boolean(contactShadowBuildingCount>0&&contactShadowTreeCount>0&&contactShadowInstancedGroupCount>0&&contactShadowRendererOnly&&contactShadowTerrainSampled),
       roofProfileCount,roofNormalProfileCount,roofSpecialProfileCount,
       roofProfilePass:Boolean(roofProfileCount>0&&roofProfilePass&&roofCenterRidgeHigher&&roofEaveContactPass&&roofFootprintDriven),
       roofCenterRidgeHigher:Boolean(roofProfileCount>0&&roofCenterRidgeHigher),
