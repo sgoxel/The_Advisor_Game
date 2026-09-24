@@ -4163,12 +4163,17 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "wp-s003-004-003":
         if len(frames) < 6:
             raise RuntimeError("wp-s003-004-003 requires six gabled-roof evidence frames")
-        expected_actions=("desktop-0.50x","desktop-1.00x","desktop-2.00x","phone-portrait","phone-landscape","cutaway-inside")
+        expected_actions=(None,"desktop-1.00x","desktop-2.00x","phone-portrait","phone-landscape","cutaway-inside")
         for index,frame in enumerate(frames[:6]):
             action=str(frame.get("action") or "")
-            if expected_actions[index] not in action:
+            if index==0:
+                if "started-current-campaign" not in action and "campaign-already-active" not in action:
+                    raise RuntimeError(f"Gabled-roof 0.50x startup action mismatch in frame 1: {action}")
+            elif expected_actions[index] not in action:
                 raise RuntimeError(f"Gabled-roof evidence action mismatch in frame {index+1}: {action}")
             build=frame.get("runtime",{}).get("currentBuild",{})
+            if index==0 and build.get("cameraZoom")!="0.50×":
+                raise RuntimeError(f"Gabled-roof frame 1 was not captured at required 0.50x zoom: {build.get('cameraZoom')}")
             gpu=build.get("gpuRenderer") or {}
             chunks=gpu.get("terrainChunks") or {}
             scene=gpu.get("scene") or {}
