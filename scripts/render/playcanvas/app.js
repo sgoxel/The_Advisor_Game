@@ -753,7 +753,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // Chunk resources contain deterministic geometry plus references to shared
     // materials. Framebuffer scale and material-quality changes do not alter
     // geometry, so they must not invalidate prepared chunk meshes/entities.
-    return "geometry=heightfield-v2";
+    return "geometry=heightfield-v3-road-profile";
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -837,6 +837,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let minConditionedHeight=Infinity,maxConditionedHeight=-Infinity;
     let minSourceElevationMeters=Infinity,maxSourceElevationMeters=-Infinity;
     let heightfieldGridResolution=0,heightfieldStepTiles=0,visibleFrameTerrainRebuildCount=0;
+    let roadProfileResourceCount=0,roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
+    let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
+    let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreHeightDelta=Infinity,maxRoadCoreHeightDelta=-Infinity;
     const heightfieldResources=new Map();
     const materialNames=new Set();
     terrainPreloadManager?.forEachResource?.((resource,entry)=>{
@@ -858,6 +861,23 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         minSourceElevationMeters=Math.min(minSourceElevationMeters,Number(resource.minSourceElevationMeters||0));
         maxSourceElevationMeters=Math.max(maxSourceElevationMeters,Number(resource.maxSourceElevationMeters||0));
         visibleFrameTerrainRebuildCount+=Number(resource.visibleFrameTerrainRebuildCount||0);
+        if(resource.roadProfileEnabled===true){
+          roadProfileResourceCount++;
+          roadProfileVertexCount+=Number(resource.roadProfileVertexCount||0);
+          roadProfileCoreVertexCount+=Number(resource.roadProfileCoreVertexCount||0);
+          roadProfileShoulderVertexCount+=Number(resource.roadProfileShoulderVertexCount||0);
+          roadProfileRoadVertexCount+=Number(resource.roadProfileRoadVertexCount||0);
+          roadProfilePathVertexCount+=Number(resource.roadProfilePathVertexCount||0);
+          roadProfileSquareVertexCount+=Number(resource.roadProfileSquareVertexCount||0);
+          if(Number(resource.roadProfileVertexCount||0)>0){
+            minRoadProfileDelta=Math.min(minRoadProfileDelta,Number(resource.minRoadProfileDelta||0));
+            maxRoadProfileDelta=Math.max(maxRoadProfileDelta,Number(resource.maxRoadProfileDelta||0));
+          }
+          if(Number(resource.roadProfileRoadVertexCount||0)>0&&Number(resource.roadProfileCoreVertexCount||0)>0){
+            minRoadCoreHeightDelta=Math.min(minRoadCoreHeightDelta,Number(resource.minRoadCoreHeightDelta||0));
+            maxRoadCoreHeightDelta=Math.max(maxRoadCoreHeightDelta,Number(resource.maxRoadCoreHeightDelta||0));
+          }
+        }
         heightfieldResources.set(Number(resource.x)+","+Number(resource.y),resource);
       }
       presentationMeshInstanceCount+=Number(resource.presentationMeshInstanceCount||0);
@@ -950,6 +970,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       compareBorders(resource.borderHeights?.south,heightfieldResources.get(Number(resource.x)+","+(Number(resource.y)+1))?.borderHeights?.north);
     }
     const heightfieldPass=heightfieldResourceCount>0&&indexedHeightfieldResourceCount===heightfieldResourceCount&&sharedBorderMaxError<=1e-7;
+    const generatorStats=terrainChunkMeshFactory?.stats?.()||{};
 
     return Object.freeze({
       resourceKind:"chunk-mesh",
@@ -967,6 +988,27 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       sharedBorderMaxError:Number(sharedBorderMaxError.toFixed(8)),
       sharedBorderEquality:sharedBorderPairCount>0&&sharedBorderMaxError<=1e-7,
       terrainGroundSampler:"indexed-triangle-exact",
+      roadProfileEnabled:roadProfileResourceCount>0&&generatorStats.roadProfileEnabled===true,
+      roadProfileMode:String(generatorStats.roadProfileMode||""),
+      roadLiftWorldUnits:Number(generatorStats.roadLiftWorldUnits||0),
+      pathLiftWorldUnits:Number(generatorStats.pathLiftWorldUnits||0),
+      squareLiftWorldUnits:Number(generatorStats.squareLiftWorldUnits||0),
+      roadShoulderCoreRadiusTiles:Number(generatorStats.roadShoulderCoreRadiusTiles||0),
+      roadShoulderBlendWidthTiles:Number(generatorStats.roadShoulderBlendWidthTiles||0),
+      roadShoulderBlendWidthWorldUnits:Number(generatorStats.roadShoulderBlendWidthWorldUnits||0),
+      bridgeClearanceWorldUnits:Number(generatorStats.bridgeClearanceWorldUnits||0),
+      roadProfileGroundingShared:generatorStats.roadProfileGroundingShared===true,
+      roadProfileResourceCount,
+      roadProfileVertexCount,
+      roadProfileCoreVertexCount,
+      roadProfileShoulderVertexCount,
+      roadProfileRoadVertexCount,
+      roadProfilePathVertexCount,
+      roadProfileSquareVertexCount,
+      minRoadProfileDelta:Number.isFinite(minRoadProfileDelta)?Number(minRoadProfileDelta.toFixed(6)):0,
+      maxRoadProfileDelta:Number.isFinite(maxRoadProfileDelta)?Number(maxRoadProfileDelta.toFixed(6)):0,
+      minRoadCoreHeightDelta:Number.isFinite(minRoadCoreHeightDelta)?Number(minRoadCoreHeightDelta.toFixed(6)):0,
+      maxRoadCoreHeightDelta:Number.isFinite(maxRoadCoreHeightDelta)?Number(maxRoadCoreHeightDelta.toFixed(6)):0,
       visibleFrameTerrainRebuildCount,
       materialCount:materialNames.size,
       presentationMeshInstanceCount,presentationEntityCount,sourcePresentationEntityCount,
@@ -992,12 +1034,12 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       treeSampleChunks:Object.freeze(treeSampleChunks.sort((a,b)=>b.count-a.count||a.chunkY-b.chunkY||a.chunkX-b.chunkX).slice(0,24)),
       treeSpriteAtlas:treeSpriteAtlas?.stats?.()||null,
       treeSharedTextureCount:Number(treeSpriteAtlas?.stats?.()?.gpuTextureCount||0),
-      treeSharedMaterialCount:Number(terrainChunkMeshFactory?.stats?.()?.treeSpriteMaterialCount||0),
-      instancingCoordinateSpace:String(terrainChunkMeshFactory?.stats?.()?.instancingCoordinateSpace||""),
-      instancingParentTranslationAppliedOnce:terrainChunkMeshFactory?.stats?.()?.instancingParentTranslationAppliedOnce===true,
+      treeSharedMaterialCount:Number(generatorStats.treeSpriteMaterialCount||0),
+      instancingCoordinateSpace:String(generatorStats.instancingCoordinateSpace||""),
+      instancingParentTranslationAppliedOnce:generatorStats.instancingParentTranslationAppliedOnce===true,
       instancingRepositionViaParent:true,
-      instancingBufferUpdates:Number(terrainChunkMeshFactory?.stats?.()?.instancingBufferUpdates||0),
-      instancingParentRepositions:Number(terrainChunkMeshFactory?.stats?.()?.instancingParentRepositions||0),
+      instancingBufferUpdates:Number(generatorStats.instancingBufferUpdates||0),
+      instancingParentRepositions:Number(generatorStats.instancingParentRepositions||0),
       roadCellCount,waterCellCount,bridgeCellCount,terrainTypeCount,
       texturedBlockCount,colorFallbackBlockCount,
       texturedSurfaceTypes:Object.freeze([...texturedSurfaceTypes].sort()),
@@ -1014,12 +1056,12 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       terrainMicroReliefGeometryVerticesAdded:Number(terrainTextureAtlas?.stats?.()?.microReliefGeometryVerticesAdded||0),
       terrainMicroReliefMaterialVariantsAdded:Number(terrainTextureAtlas?.stats?.()?.microReliefMaterialVariantsAdded||0),
       buildingSurfaceAtlas:buildingSurfaceAtlas?.stats?.()||null,
-      buildingTexturedMaterialCount:Number(terrainChunkMeshFactory?.stats?.()?.buildingTexturedMaterialCount||0),
-      buildingTexturedMaterialNames:terrainChunkMeshFactory?.stats?.()?.buildingTexturedMaterialNames||Object.freeze([]),
+      buildingTexturedMaterialCount:Number(generatorStats.buildingTexturedMaterialCount||0),
+      buildingTexturedMaterialNames:generatorStats.buildingTexturedMaterialNames||Object.freeze([]),
       seedDerivedPresentation,
       hardCodedSampleGeometry,
       normalWorldSource:"seed-chunk-world-data",
-      generator:terrainChunkMeshFactory?.stats?.()||null,
+      generator:generatorStats,
       worldData:window.PlayCanvasChunkWorldData?.stats?.()||null,
       oneEntityPerTile:false,
       chunkLocalStaticBatching:true,
