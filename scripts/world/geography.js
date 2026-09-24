@@ -155,7 +155,7 @@ function hierarchy(seed,x,y){
   return Object.freeze({
     continent:generatedName(seed,"continent:"+cellKey(continent.x,continent.y),"Continent"),
     country:window.PoliticalGeography?.countryAt?.(seed,x,y)?.name||generatedName(seed,"country:"+cellKey(country.x,country.y),"Realm"),
-    region:generatedName(seed,"region:"+cellKey(region.x,region.y),"Region"),
+    region:window.RegionProfile?.at?.(seed,x,y)?.name||generatedName(seed,"region:"+cellKey(region.x,region.y),"Region"),
     city:generatedName(seed,"city:"+cellKey(city.x,city.y),"City"),
     district:generatedName(seed,"district:"+cellKey(district.x,district.y),"District"),
     village:village?village.name:"Unsettled Lands",

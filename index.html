@@ -901,6 +901,45 @@
     </div>
   </details>
 
+  <details id="regionProfileProof">
+    <summary>WP-S006-003 Region/Province Profiles + Terrain/Resource Identity</summary>
+    <div class="accordion-content technical-info">
+      <div class="region-profile-toolbar">
+        <label for="regionProfileSelect">Inspect same-country region</label>
+        <select id="regionProfileSelect" aria-label="Region profile representative"></select>
+      </div>
+      <div class="detail-grid region-profile-grid">
+        <div><span>Region / province</span><strong id="regionProfileName">—</strong></div>
+        <div><span>Region ID</span><strong id="regionProfileId">—</strong></div>
+        <div><span>Parent country</span><strong id="regionProfileCountry">—</strong></div>
+        <div><span>Administrative seat</span><strong id="regionProfileSeat">—</strong></div>
+        <div><span>Terrain / biome</span><strong id="regionProfileTerrain">—</strong></div>
+        <div><span>Climate / elevation</span><strong id="regionProfileClimate">—</strong></div>
+        <div><span>Regional resources</span><strong id="regionProfileResources">—</strong></div>
+        <div><span>Access / defense / prosperity</span><strong id="regionProfileAccess">—</strong></div>
+        <div><span>Foundation revision</span><strong id="regionProfileRevision">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Dominant terrain mix</h4>
+        <div id="regionTerrainMix" class="region-terrain-mix"></div>
+      </section>
+      <section class="region-profile-section">
+        <h4>Country orientation redirected by regional geography</h4>
+        <div id="regionSpecializationBars" class="region-specialization-bars"></div>
+      </section>
+      <section class="region-profile-section">
+        <h4>Same-country regional comparison</h4>
+        <ul id="regionProfileComparison" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Same SEED/region reproduces the same profile and fantasy time does not change the foundation</span><b id="vRegionDeterministic">WAITING</b></div>
+      <div class="check"><span>Region identity resolves under exactly one authoritative parent country and Geography hierarchy uses that same region</span><b id="vRegionHierarchy">WAITING</b></div>
+      <div class="check"><span>Terrain, biome, climate, agriculture, timber, mineral, water, transport, hazard and defensibility identity is structured/queryable</span><b id="vRegionIdentity">WAITING</b></div>
+      <div class="check"><span>The same CountryProfile produces meaningfully different regional specialization because fixed local geography/resources constrain it</span><b id="vRegionSpecialization">WAITING</b></div>
+      <div class="check"><span>Country, region and tile terrain remain separate consumable layers; RegionProfile never overwrites terrain/resources</span><b id="vRegionIndependent">WAITING</b></div>
+      <div class="check"><span>Region lookup is lazy immutable foundation data with no live regional economy or renderer authority</span><b id="vRegionLazy">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -931,6 +970,7 @@
 <script src="scripts/world/geography.js"></script>
 <script src="scripts/world/political-geography.js"></script>
 <script src="scripts/world/country-profile.js"></script>
+<script src="scripts/world/region-profile.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
 <script src="scripts/world/special-lots.js"></script>

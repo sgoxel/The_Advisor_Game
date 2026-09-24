@@ -98,6 +98,7 @@ SCENARIOS = {
     "wp-s005-005",
     "wp-s006-001",
     "wp-s006-002",
+    "wp-s006-003",
     "playcanvas-root-cutover",
 }
 
@@ -148,6 +149,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s005-005": 5,
     "wp-s006-001": 5,
     "wp-s006-002": 5,
+    "wp-s006-003": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -358,6 +360,40 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        regionProfile: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.RegionProfile?.proof
+              ? window.RegionProfile.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        regionProfilePanel: (() => {
+          const root=document.querySelector("#regionProfileProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            regionIndex:Number(root.dataset.regionIndex||0),
+            regionId:root.dataset.regionId||null,
+            parentCountryId:root.dataset.parentCountryId||null,
+            countryRevision:root.dataset.countryRevision||null,
+            identity:root.dataset.identity||null,
+            specialization:root.dataset.specialization||null,
+            dominantTerrain:root.dataset.dominantTerrain||null,
+            agriculture:Number(root.dataset.agriculture||0),
+            timber:Number(root.dataset.timber||0),
+            mineral:Number(root.dataset.mineral||0),
+            water:Number(root.dataset.water||0),
+            revision:root.dataset.revision||null,
+            regionName:root.querySelector("#regionProfileName")?.textContent?.trim()||null,
+            parentCountry:root.querySelector("#regionProfileCountry")?.textContent?.trim()||null,
+            resources:root.querySelector("#regionProfileResources")?.textContent?.trim()||null,
+            specializationLabels:Array.from(root.querySelectorAll("#regionSpecializationBars .region-profile-bar > span")).map(node=>node.textContent.trim()),
+            comparisonRows:root.querySelectorAll("#regionProfileComparison li").length,
+          };
         })(),
         countryProfile: (() => {
           try {
@@ -1990,6 +2026,64 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_region_profile_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const regions=window.RegionProfile;
+        if(!campaign?.seed||!regions||!window.CountryProfile||!window.PoliticalGeography||!window.GeographyFoundation){
+          return {ok:false,error:'region-profile-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=regions.proof(seed);
+        if(!proof.pass)return {ok:false,error:'region-profile-proof-failed',proof};
+        const count=proof.representatives?.length||0;
+        if(count<3)return {ok:false,error:'region-profile-representatives-missing',count};
+        const requested=index===4?0:index%Math.min(count,4);
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#regionProfileProof');
+        if(!section||!root)return {ok:false,error:'region-profile-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=regions.renderDebugPanel(seed,requested,root);
+        root.scrollIntoView({block:'start'});
+        const p=rendered?.region;
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,requested,count,
+          regionId:p?.id||null,
+          regionName:p?.name||null,
+          parentCountryId:p?.parentCountryId||null,
+          countryRevision:p?.countryProfileRevision||null,
+          dominantTerrain:p?.identity?.dominantTerrain||null,
+          agriculture:p?.identity?.agriculturalSuitability??null,
+          timber:p?.identity?.timberAvailability??null,
+          mineral:p?.identity?.mineralPotential??null,
+          water:p?.identity?.waterAccess??null,
+          identity:p?[
+            p.identity.dominantTerrain,p.identity.dominantBiome,
+            Math.round(p.identity.agriculturalSuitability*5),Math.round(p.identity.timberAvailability*5),
+            Math.round(p.identity.mineralPotential*5),Math.round(p.identity.waterAccess*5)
+          ].join(':'):null,
+          specialization:p?[
+            p.specialization.agriculture,p.specialization.forestry,p.specialization.mining,p.specialization.trade,
+            p.specialization.maritime,p.specialization.defense,p.specialization.craft
+          ].map(v=>Math.round(v*10)).join(':'):null,
+          revision:p?.revision||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Region profile proof frame failed: {result}")
+    return (
+        f"region-profile:{frame_index}:{result.get('regionId')}:"
+        f"terrain={result.get('dominantTerrain')}:specialization={result.get('specialization')}"
+    )
+
+
 def _show_country_profile_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -3253,7 +3347,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3394,6 +3488,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_country_profile_proof(driver,frame_index)
         return _show_country_profile_proof(driver,frame_index)
+    if scenario == "wp-s006-003":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_region_profile_proof(driver,frame_index)
+        return _show_region_profile_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3428,6 +3527,59 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s006-003":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s006-003 requires five region-profile evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("regionProfile") or {} for build in builds]
+        panels=[build.get("regionProfilePanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Region-profile evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Region profiles mutated Protagonist world position: {protagonists}")
+        required={
+            "pass":True,"deterministic":True,"timeIndependent":True,
+            "parentCountryCorrect":True,"hierarchyIntegrated":True,"numericValid":True,
+            "sameCountry":True,"sameCountryProfile":True,"geographyRedirectsCountry":True,
+            "independentLayers":True,"lazyQueryable":True,"overlayReady":True,
+            "duplicateOwnership":False,"terrainMutation":False,"resourceMutation":False,
+            "liveRegionalEconomy":False,"renderDependency":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Region-profile proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("regionCount") or 0)<5 or int(proof.get("representativeCount") or 0)<3:
+                raise RuntimeError(f"Region-profile sample set too small in frame {index}: {proof}")
+            if int(proof.get("identityCount") or 0)<3 or int(proof.get("specializationCount") or 0)<3:
+                raise RuntimeError(f"Region-profile diversity insufficient in frame {index}: {proof}")
+            if float(proof.get("maxRegionalDifference") or 0)<0.55:
+                raise RuntimeError(f"Same-country regional difference too weak in frame {index}: {proof}")
+
+        first_four=panels[:4]
+        if len({panel.get("parentCountryId") for panel in first_four})!=1:
+            raise RuntimeError(f"Region evidence does not remain inside one parent country: {first_four}")
+        if len({panel.get("countryRevision") for panel in first_four})!=1:
+            raise RuntimeError(f"Region evidence does not share one CountryProfile orientation: {first_four}")
+        if len({panel.get("regionId") for panel in first_four})<3:
+            raise RuntimeError(f"Region evidence did not inspect at least three regions: {first_four}")
+        if len({panel.get("identity") for panel in first_four})<3:
+            raise RuntimeError(f"Region terrain/resource identities are not diverse: {first_four}")
+        if len({panel.get("specialization") for panel in first_four})<3:
+            raise RuntimeError(f"Same-country regional specialization did not diverge: {first_four}")
+        for panel in panels:
+            if not panel.get("open") or int(panel.get("comparisonRows") or 0)<3:
+                raise RuntimeError(f"Region-profile panel/comparison incomplete: {panel}")
+            if len(panel.get("specializationLabels") or [])!=7:
+                raise RuntimeError(f"Region specialization bars incomplete: {panel}")
+        if panels[0].get("regionId")!=panels[4].get("regionId") or panels[0].get("revision")!=panels[4].get("revision"):
+            raise RuntimeError("Region profile changed after reload")
+        if json.dumps(proofs[0],sort_keys=True)!=json.dumps(proofs[4],sort_keys=True):
+            raise RuntimeError("Region-profile foundation changed after reload")
+        return
+
     if scenario == "wp-s006-002":
         if len(frames) < 5:
             raise RuntimeError("wp-s006-002 requires five country-profile evidence frames")
@@ -6072,12 +6224,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
