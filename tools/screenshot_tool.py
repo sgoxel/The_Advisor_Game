@@ -1862,7 +1862,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-            if scenario in {"wp-s003-009-001", "wp-s003-009-002"}:
+            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003"}:
                 recovery = driver.execute_script(
                     """
                     const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
@@ -1871,6 +1871,8 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                       campaignState,
                       overlayState: loading?.overlay?.state || null,
                       overlayHidden: Boolean(loading?.overlay?.hidden),
+                      loadingState: loading?.current?.state || null,
+                      playableReady: loading?.current?.readiness?.playableReady === true,
                       hasCampaign: Boolean(window.SeedSystem?.getCampaign?.()),
                       simulationCampaignActive: Boolean(window.GameRenderer?.snapshot?.()?.simulationSnapshot?.campaignActive)
                     };
@@ -1881,6 +1883,8 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     or recovery.get("campaignState") != "ACTIVE"
                     or recovery.get("overlayState") == "error"
                     or recovery.get("overlayHidden") is not True
+                    or recovery.get("loadingState") != "hidden"
+                    or recovery.get("playableReady") is not True
                 ):
                     # A cold CI run can finish the expensive renderer/chunk preparation
                     # just after the new-campaign readiness gate reports its bounded
@@ -6592,10 +6596,15 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             max_static_shadow_draws=max(max_static_shadow_draws,int(chunks.get("contactShadowDrawCalls") or 0))
             count=int(chars.get("contactShadowCount") or 0)
             active=int(chars.get("activeCharacterCount") or 0)
-            if count!=active or count<=0:
+            action=str(frame.get("action") or "")
+            object_only=any(tag in action for tag in ("grounding:tree-contact","grounding:building-foundation"))
+            if count!=active:
                 raise RuntimeError(f"Character contact-shadow count does not match visible characters in frame {index+1}: active={active}, shadows={count}")
-            if chars.get("contactShadowHardwareInstanced") is not True or int(chars.get("contactShadowDrawCalls") or 0)!=1:
-                raise RuntimeError(f"Character contacts are not one hardware-instanced draw in frame {index+1}: {chars}")
+            if not object_only and count<=0:
+                raise RuntimeError(f"Character-focused grounding frame has no visible character contacts in frame {index+1}: {action}")
+            expected_draw_calls=1 if active>0 else 0
+            if chars.get("contactShadowHardwareInstanced") is not True or int(chars.get("contactShadowDrawCalls") or 0)!=expected_draw_calls:
+                raise RuntimeError(f"Character contacts do not use the expected shared instanced draw count in frame {index+1}: active={active}, expectedDrawCalls={expected_draw_calls}, state={chars}")
             if chars.get("contactShadowFeetCoordinateAnchored") is not True:
                 raise RuntimeError(f"Character contacts lost authoritative feet-coordinate anchoring in frame {index+1}: {chars}")
             if int(chars.get("contactShadowTerrainAlignedCount") or 0)!=count:
@@ -11034,6 +11043,21 @@ def take_screenshots(
                     time.sleep(interval)
                 else:
                     action = prep_action
+                if scenario == "wp-s003-009-003":
+                    WebDriverWait(driver, max(30.0, ready_timeout)).until(
+                        lambda d: d.execute_script(
+                            """
+                            const state=document.querySelector('#campaignState')?.textContent?.trim();
+                            const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                            return Boolean(
+                              state==='ACTIVE' &&
+                              loading?.current?.state==='hidden' &&
+                              loading?.current?.readiness?.playableReady===true &&
+                              loading?.overlay?.hidden===true
+                            );
+                            """
+                        )
+                    )
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
