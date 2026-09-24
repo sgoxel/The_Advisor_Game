@@ -7,7 +7,7 @@ const SURFACES=Object.freeze([
   Object.freeze({material:"building-roof",logicalKey:"building:roof",base:"assets/buildings/surfaces/roof_tiles"}),
   Object.freeze({material:"building-door",logicalKey:"building:door",base:"assets/buildings/surfaces/door_wood"})
 ]);
-const COLUMNS=2;
+const COLUMNS=SURFACES.length;
 const PAD=2;
 const QUALITY_RESOLUTION=Object.freeze({low:64,standard:128,high:256,ultra:512});
 
@@ -79,9 +79,9 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       return lastStats;
     }
 
-    // Keep every quality tier power-of-two and bounded. At Ultra this is
-    // exactly 1024x1024 instead of 1032x1032, avoiding WebGL implementations
-    // that reject/black-sample textures just above a 1024px device limit.
+    // Keep all four authored surface families in one horizontal row. This
+    // preserves one shared GPU texture and the same total texel budget while
+    // avoiding the multi-row vertical UV path that black-sampled Ultra walls.
     const rows=Math.ceil(SURFACES.length/COLUMNS),stride=size;
     const contentSize=Math.max(8,size-PAD*2);
     const canvas=document.createElement("canvas");
@@ -165,6 +165,7 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       ready:true,signature,runtimeResolution:size,contentResolution:contentSize,
       atlasWidth:canvas.width,atlasHeight:canvas.height,
       powerOfTwoAtlas:(canvas.width&(canvas.width-1))===0&&(canvas.height&(canvas.height-1))===0,
+      atlasColumns:COLUMNS,atlasRows:rows,layout:"single-row-surface-atlas",
       sourceFamilyCount:SURFACES.length,
       logicalKeys:Object.freeze(SURFACES.map(item=>item.logicalKey)),
       resolvedSourceCount:SURFACES.length-colorFallbackKeys.length,
