@@ -156,7 +156,8 @@ function materializeRecord(seed,planValue,desired,t,previous){
 }
 function apply(seedValue,optionsValue){
   const seed=String(seedValue??"");
-  const plans=candidatePlans(seed);
+  const suppliedPlans=Array.isArray(optionsValue?.candidatePlans)?optionsValue.candidatePlans:null;
+  const plans=(suppliedPlans||candidatePlans(seed)).slice(0,BUDGETS.candidateSettlements);
   const state=runtime(seed);
   const focus=point(optionsValue?.point)||point(Protagonist?.getPosition?.())||WorldCoordinates.origin();
   const signals=normalizeSignals(optionsValue||{});
@@ -303,7 +304,8 @@ function proof(seedValue){
   });
 }
 function evidenceStep(seedValue,indexValue){
-  const seed=String(seedValue??""),index=Math.max(0,Math.floor(Number(indexValue)||0)),planValue=targetPlan(seed);
+  const seed=String(seedValue??""),index=Math.max(0,Math.floor(Number(indexValue)||0));
+  const plans=candidatePlans(seed),planValue=plans[0]||WorldContext.evidenceTargets(seed)?.primary||null;
   if(!planValue)return deepFreeze({ok:false,reason:"target-missing"});
   if(index===0){reset(seed);evidenceMemory={seed,focusId:planValue.id,mutatedSignature:null,demotedSignature:null,reactivatedSignature:null};}
   let requested="global";
@@ -313,14 +315,16 @@ function evidenceStep(seedValue,indexValue){
   else if(index===4)requested="global";
   else requested="exact";
   if(index===4){
-    const promoted=apply(seed,{point:evidencePoint(planValue,"exact"),fantasyTime:FIXED_EVIDENCE_TIME});
+    const promoted=apply(seed,{point:evidencePoint(planValue,"exact"),fantasyTime:FIXED_EVIDENCE_TIME,candidatePlans:plans});
     const applied=applyEvidenceChange(seed,planValue);
     if(!applied?.ok)return deepFreeze({ok:false,reason:"evidence-delta-failed",applied});
     WorldContext.clearCaches();
-    const refreshed=apply(seed,{point:evidencePoint(planValue,"exact"),fantasyTime:FIXED_EVIDENCE_TIME});
+    const refreshed=apply(seed,{point:evidencePoint(planValue,"exact"),fantasyTime:FIXED_EVIDENCE_TIME,candidatePlans:plans});
     evidenceMemory.mutatedSignature=refreshed.records.find(r=>r.id===planValue.id)?.contextSignature||null;
   }
-  const state=apply(seed,{point:evidencePoint(planValue,requested),fantasyTime:FIXED_EVIDENCE_TIME});
+  const requestedPoint=evidencePoint(planValue,requested);
+  const requestedClassification=desiredTier(planValue,requestedPoint,normalizeSignals({}));
+  const state=apply(seed,{point:requestedPoint,fantasyTime:FIXED_EVIDENCE_TIME,candidatePlans:plans});
   const focus=state.records.find(r=>r.id===planValue.id)||null;
   if(index===4)evidenceMemory.demotedSignature=focus?.contextSignature||null;
   if(index>=5)evidenceMemory.reactivatedSignature=focus?.contextSignature||null;
@@ -331,7 +335,10 @@ function evidenceStep(seedValue,indexValue){
     )
   );
   return deepFreeze({
-    ok:Boolean(focus),index,requestedTier:requested,focus,
+    ok:Boolean(focus),index,requestedTier:requested,requestedPoint,
+    requestedClassification,focus,
+    targetCenter:point(planValue.center),
+    catalogTargetCenter:point(plans.find(item=>item.id===planValue.id)?.center),
     snapshot:state,historyPreserved,
     mutatedSignature:evidenceMemory?.mutatedSignature||null,
     demotedSignature:evidenceMemory?.demotedSignature||null,
