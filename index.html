@@ -982,6 +982,52 @@
     </div>
   </details>
 
+  <details id="settlementArchetypeProof">
+    <summary>WP-S006-005 Settlement Archetypes + Country/Region/Terrain Inheritance</summary>
+    <div class="accordion-content technical-info">
+      <div class="region-profile-toolbar">
+        <label for="settlementArchetypeSelect">Inspect settlement archetype</label>
+        <select id="settlementArchetypeSelect" aria-label="Settlement archetype representative"></select>
+      </div>
+      <div class="detail-grid region-profile-grid">
+        <div><span>Settlement</span><strong id="settlementArchetypeName">—</strong></div>
+        <div><span>Stable settlement ID</span><strong id="settlementArchetypeId">—</strong></div>
+        <div><span>Country inheritance</span><strong id="settlementArchetypeCountry">—</strong></div>
+        <div><span>Region inheritance</span><strong id="settlementArchetypeRegion">—</strong></div>
+        <div><span>Class / evidence role</span><strong id="settlementArchetypeClass">—</strong></div>
+        <div><span>Legal center / terrain</span><strong id="settlementArchetypeCenter">—</strong></div>
+        <div><span>Population / capacity band</span><strong id="settlementArchetypePopulation">—</strong></div>
+        <div><span>Prosperity</span><strong id="settlementArchetypeProsperity">—</strong></div>
+        <div><span>Local context</span><strong id="settlementArchetypeContext">—</strong></div>
+        <div><span>Planning scale</span><strong id="settlementArchetypePlanning">—</strong></div>
+        <div><span>Foundation revision</span><strong id="settlementArchetypeRevision">—</strong></div>
+      </div>
+      <section class="country-relations-section">
+        <h4>Weighted settlement subtype tags</h4>
+        <div id="settlementArchetypeTags" class="country-relations-agreements"></div>
+      </section>
+      <section class="region-profile-section">
+        <h4>Country + region + local geography influence</h4>
+        <div id="settlementArchetypeWeights" class="region-specialization-bars"></div>
+      </section>
+      <section class="region-profile-section">
+        <h4>Later physical-layout inputs</h4>
+        <p id="settlementArchetypeFunctions">—</p>
+        <p id="settlementArchetypeArchitecture">—</p>
+      </section>
+      <section class="region-profile-section">
+        <h4>Deterministic representative settlements</h4>
+        <ul id="settlementArchetypeComparison" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Same SEED and original generation inputs reproduce the same settlement archetype, independent of fantasy time</span><b id="vSettlementDeterministic">WAITING</b></div>
+      <div class="check"><span>Hamlet, village, town, city and national-capital scales share one planner; capitals have non-village civic scale</span><b id="vSettlementClasses">WAITING</b></div>
+      <div class="check"><span>Country orientation, RegionProfile identity, local resources/routes and border/diplomacy context visibly change planning output</span><b id="vSettlementContext">WAITING</b></div>
+      <div class="check"><span>Authoritative local geography constrains placement and port weighting; water tiles are never selected as settlement centers</span><b id="vSettlementGeography">WAITING</b></div>
+      <div class="check"><span>Outputs expose subtype weights/tags, population, prosperity, defense/market scale, roads/public space and building/architecture functions</span><b id="vSettlementOutputs">WAITING</b></div>
+      <div class="check"><span>Planner stays lazy/immutable and creates no NPC population, physical layout, terrain/resource mutation or live economy</span><b id="vSettlementAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1014,6 +1060,7 @@
 <script src="scripts/world/country-profile.js"></script>
 <script src="scripts/world/region-profile.js"></script>
 <script src="scripts/world/country-relations.js"></script>
+<script src="scripts/world/settlement-archetypes.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
 <script src="scripts/world/special-lots.js"></script>
