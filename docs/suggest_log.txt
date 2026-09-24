@@ -215,3 +215,6 @@ Suggestion: WP-S003-005 should derive required roof, wall, furniture, character,
 
 2026-09-25 00:07 +03:00 | WP-S003-009-002 | Phase 1
 Suggestion: later consider a dedicated authored corner/diagonal road atlas treatment so diagonal gateway shifts can use a cleaner tapered turn instead of the current bounded renderer bridge, while preserving authoritative road cells, deterministic route connectivity, chunk batching, the three shared route materials, and mobile/WebGL2 performance. Do not implement unless explicitly requested.
+
+2026-09-25 00:40 +03:00 | WP-S003-009-003 | Phase 1
+Suggestion: before any future retry of this WP, harden the dedicated visual-evidence preparation path so it requires campaignState=ACTIVE, sceneLoading.current.state=hidden, overlay.hidden=true and playableReady=true immediately before every screenshot, and uses the existing real Retry Startup recovery path if cold CI startup falls into the error overlay. Also allow object-only/tree-focused frames to have zero visible characters while requiring character/contact parity only on character-focused frames. Do not implement unless explicitly requested.
