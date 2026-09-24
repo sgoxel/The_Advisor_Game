@@ -61,7 +61,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-005` — 3D Culling, Static Batching + Hardware Instancing — COMPLETED
 - `WP-S003-006-006` — Detailed 2D Tree Plane Presentation + Instancing — COMPLETED
 - `WP-S003-006-007` — Low-Poly Chunk Heightfield Terrain + Shared Elevation Anchoring — COMPLETED
-- `WP-S003-006-008` — Low-Cost Terrain Surface Micro-Relief + Material Depth
+- `WP-S003-006-008` — Low-Cost Terrain Surface Micro-Relief + Material Depth — COMPLETED
 - `WP-S003-006-009` — Raised Road + Path Surface Profiles on Heightfield Terrain
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
