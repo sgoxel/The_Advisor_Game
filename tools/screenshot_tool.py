@@ -3147,8 +3147,8 @@ def _show_gabled_roof_proof(driver, frame_index: int) -> str:
         (1920, 1080, 0.50, "outside", "desktop-0.50x"),
         (1920, 1080, 1.00, "outside", "desktop-1.00x"),
         (1920, 1080, 2.00, "outside", "desktop-2.00x"),
-        (430, 932, 1.00, "outside", "phone-portrait"),
-        (932, 430, 1.00, "outside", "phone-landscape"),
+        (430, 932, 0.50, "outside", "phone-portrait"),
+        (932, 430, 0.50, "outside", "phone-landscape"),
         (1920, 1080, 1.00, "inside", "cutaway-inside"),
     )
     width, height, zoom, state, label = configs[min(frame_index, len(configs) - 1)]
@@ -4164,6 +4164,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if len(frames) < 6:
             raise RuntimeError("wp-s003-004-003 requires six gabled-roof evidence frames")
         expected_actions=(None,"desktop-1.00x","desktop-2.00x","phone-portrait","phone-landscape","cutaway-inside")
+        expected_zooms=("0.50×","1.00×","2.00×","0.50×","0.50×","1.00×")
         for index,frame in enumerate(frames[:6]):
             action=str(frame.get("action") or "")
             if index==0:
@@ -4172,8 +4173,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             elif expected_actions[index] not in action:
                 raise RuntimeError(f"Gabled-roof evidence action mismatch in frame {index+1}: {action}")
             build=frame.get("runtime",{}).get("currentBuild",{})
-            if index==0 and build.get("cameraZoom")!="0.50×":
-                raise RuntimeError(f"Gabled-roof frame 1 was not captured at required 0.50x zoom: {build.get('cameraZoom')}")
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Gabled-roof frame {index+1} zoom mismatch: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
             gpu=build.get("gpuRenderer") or {}
             chunks=gpu.get("terrainChunks") or {}
             scene=gpu.get("scene") or {}
