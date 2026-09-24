@@ -482,6 +482,8 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       buildingPresentationCount:buildings.length,
       roofProfileCount:roofProfiles.length,
+      roofNormalProfileCount:roofProfiles.filter(item=>item.source!=="special").length,
+      roofSpecialProfileCount:roofProfiles.filter(item=>item.source==="special").length,
       roofProfilePass:roofProfiles.length===buildings.length&&roofProfiles.every(item=>item.centerRidgeHigher&&item.eaveContact&&item.restrainedOverhang&&item.footprintDriven),
       roofCenterRidgeHigher:roofProfiles.every(item=>item.centerRidgeHigher),
       roofEaveContactPass:roofProfiles.every(item=>item.eaveContact),
