@@ -44,6 +44,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World — COMPLETED
 - `WP-S003-004-003` — Correct Gabled Roof Geometry + Building Contact — COMPLETED
 - `WP-S003-004-004` — Camera-Facing Character Billboards + Zoom Readability — COMPLETED
+- `WP-S003-004-005` — 2× Active Character Billboard Presentation Scale
 - `WP-S003-005` — PlayCanvas 3D Asset + Material Preparation Pipeline — COMPLETED
 - `WP-S003-005-001` — Adaptive 3D Texture Quality + Mobile GPU Budget — COMPLETED
 - `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard — COMPLETED
