@@ -1227,6 +1227,9 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
+    if scenario == "wp-s003-005-006":
+        driver.set_window_size(1920, 1080)
+        timeout = max(timeout, 30.0)
     if scenario == "wp-s003-005-002":
         from selenium.webdriver.support.ui import WebDriverWait
         WebDriverWait(driver, timeout).until(
@@ -1265,7 +1268,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario == "wp-s003-006-007":
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1305,6 +1308,20 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               atlas.ready === true &&
                               atlas.sharedAtlas === true &&
                               Number(atlas.gpuTextureCount || 0) === 1 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-005-006' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            const building=chunks?.generator?.buildingSurfaceAtlas || chunks?.buildingSurfaceAtlas || {};
+                            const tree=chunks?.generator?.treeSpriteAtlas || chunks?.treeSpriteAtlas || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              Number(chunks.visibleChunkCount || 0) > 0 &&
+                              building.ready === true &&
+                              Number(building.gpuTextureCount || 0) === 1 &&
+                              tree.ready === true &&
+                              Number(tree.gpuTextureCount || 0) === 1 &&
                               Number(renderer?.terrainPreload?.queueDepth || 0) === 0
                             );
                           })()) &&
@@ -8469,7 +8486,7 @@ def take_screenshots(
         finally:
             driver.quit()
     except Exception as exc:
-        print(f"Error taking screenshot: {exc}", file=sys.stderr)
+        print(f"Error taking screenshot: {type(exc).__name__}: {exc}", file=sys.stderr)
         return False
 
 
