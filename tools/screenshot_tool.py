@@ -7235,6 +7235,105 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Same-SEED identity roster changed across evidence frames: {static_rosters}")
         return
 
+    if scenario == "wp-s003-008-002":
+        if len(frames) < 9:
+            raise RuntimeError("wp-s003-008-002 requires nine scene-loading evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:9]]
+        loadings=[build.get("sceneLoading") or {} for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Scene-loading proof changed/missed protagonist authority: {protagonists}")
+
+        expected_phases=("renderer","world","assets","finalizing")
+        for index,phase in enumerate(expected_phases):
+            loading=loadings[index]
+            overlay=loading.get("overlay") or {}
+            proof=loading.get("proofOverride") or {}
+            if proof.get("phase")!=phase:
+                raise RuntimeError(f"Scene-loading proof override mismatch in frame {index+1}: expected {phase}, got {loading}")
+            if overlay.get("hidden") is True or overlay.get("state")!="loading" or overlay.get("phase")!=phase:
+                raise RuntimeError(f"Scene-loading overlay phase mismatch in frame {index+1}: {loading}")
+            if not overlay.get("title") or not overlay.get("message"):
+                raise RuntimeError(f"Scene-loading copy missing in frame {index+1}: {loading}")
+            if str(overlay.get("titleAnimationName") or "none")=="none":
+                raise RuntimeError(f"Colorful loading title is not animated in frame {index+1}: {overlay}")
+            if str(overlay.get("emblemAnimationName") or "none")=="none":
+                raise RuntimeError(f"Loading emblem is not animated in frame {index+1}: {overlay}")
+            if str(overlay.get("dotAnimationName") or "none")=="none":
+                raise RuntimeError(f"Loading trail is not animated in frame {index+1}: {overlay}")
+            if loading.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Scene-loading presentation changed Simulation authority in frame {index+1}: {loading}")
+
+        ready=loadings[4]
+        ready_overlay=ready.get("overlay") or {}
+        if ready.get("proofOverride") is not None or ready_overlay.get("hidden") is not True:
+            raise RuntimeError(f"Ready scene did not remove loading presentation in frame 5: {ready}")
+        current=ready.get("current") or {}
+        if current.get("state")!="hidden" or current.get("origin")!="new-campaign":
+            raise RuntimeError(f"Actual loading cycle is not a completed new-campaign transition: {current}")
+        if current.get("renderSucceeded") is not True or (current.get("readiness") or {}).get("playableReady") is not True:
+            raise RuntimeError(f"Loading ended without playable scene readiness: {current}")
+        started=int(current.get("startedAtMs") or 0)
+        ready_at=int(current.get("readyAtMs") or 0)
+        hidden_at=int(current.get("hiddenAtMs") or 0)
+        if started<=0 or ready_at<started or hidden_at<ready_at:
+            raise RuntimeError(f"Scene-loading timestamps are not monotonic: {current}")
+        events=current.get("phaseEvents") or []
+        phases=[str(event.get("phase") or "") for event in events]
+        for required in ("world","assets","finalizing","ready"):
+            if required not in phases:
+                raise RuntimeError(f"Actual campaign loading phase {required!r} missing: {events}")
+        ready_event=next((event for event in events if event.get("phase")=="ready"),None)
+        if not ready_event or (ready_event.get("readiness") or {}).get("playableReady") is not True:
+            raise RuntimeError(f"Ready event was recorded before playable readiness: {events}")
+        for event in events:
+            if event.get("phase")=="ready":
+                continue
+            if (event.get("readiness") or {}).get("playableReady") is True:
+                raise RuntimeError(f"Loading had already declared playable before ready transition: {events}")
+
+        cycles=ready.get("cycles") or []
+        application=next((cycle for cycle in cycles if cycle.get("origin")=="application-start"),None)
+        if not application:
+            raise RuntimeError(f"Application-start loading cycle missing from telemetry: {cycles}")
+        app_events=application.get("phaseEvents") or []
+        renderer_event=next((event for event in app_events if event.get("phase")=="renderer"),None)
+        if not renderer_event or (renderer_event.get("readiness") or {}).get("rendererReady") is True:
+            raise RuntimeError(f"Application loading did not begin before renderer readiness: {application}")
+        if not any(event.get("phase")=="ready" for event in app_events):
+            raise RuntimeError(f"Application loading never reached ready: {application}")
+
+        error=loadings[5]
+        error_overlay=error.get("overlay") or {}
+        if (error.get("proofOverride") or {}).get("phase")!="error":
+            raise RuntimeError(f"Startup-error proof override missing: {error}")
+        if error_overlay.get("state")!="error" or error_overlay.get("hidden") is True or error_overlay.get("retryVisible") is not True:
+            raise RuntimeError(f"Startup-error state is not readable/retryable: {error}")
+
+        portrait=frames[6].get("runtime",{}).get("viewport",{})
+        landscape=frames[7].get("runtime",{}).get("viewport",{})
+        if int(portrait.get("height") or 0)<=int(portrait.get("width") or 0):
+            raise RuntimeError(f"Phone portrait loading evidence missing: {portrait}")
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
+            raise RuntimeError(f"Phone landscape loading evidence missing: {landscape}")
+        for index in (6,7):
+            overlay=(loadings[index].get("overlay") or {})
+            if overlay.get("hidden") is True or overlay.get("state")!="loading":
+                raise RuntimeError(f"Mobile loading overlay missing in frame {index+1}: {loadings[index]}")
+
+        reduced=loadings[8]
+        reduced_overlay=reduced.get("overlay") or {}
+        if reduced.get("reducedMotionPreferred") is not True:
+            raise RuntimeError(f"Reduced-motion media preference was not active: {reduced}")
+        if reduced_overlay.get("reducedMotionProof") is not True:
+            raise RuntimeError(f"Reduced-motion proof class missing: {reduced}")
+        for key in ("titleAnimationName","emblemAnimationName","dotAnimationName"):
+            if str(reduced_overlay.get(key) or "")!="none":
+                raise RuntimeError(f"Reduced-motion loading still animates {key}: {reduced_overlay}")
+        if reduced_overlay.get("hidden") is True or reduced_overlay.get("phase")!="finalizing":
+            raise RuntimeError(f"Reduced-motion loading fallback is not readable: {reduced}")
+        return
+
     if scenario == "wp-s003-008-001":
         if len(frames) < 16:
             raise RuntimeError("wp-s003-008-001 requires sixteen evidence frames")
