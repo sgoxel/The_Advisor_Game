@@ -96,6 +96,7 @@ SCENARIOS = {
     "wp-s005-003",
     "wp-s005-004",
     "wp-s005-005",
+    "wp-s006-001",
     "playcanvas-root-cutover",
 }
 
@@ -144,6 +145,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s005-003": 5,
     "wp-s005-004": 5,
     "wp-s005-005": 5,
+    "wp-s006-001": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -354,6 +356,35 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        politicalGeography: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.PoliticalGeography?.proof
+              ? window.PoliticalGeography.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        politicalGeographyPanel: (() => {
+          const root=document.querySelector("#politicalGeographyProof");
+          if(!root)return null;
+          return {
+            present:true,
+            open:Boolean(root.open),
+            borderIndex:Number(root.dataset.borderIndex||0),
+            borderId:root.dataset.borderId||null,
+            countryId:root.dataset.countryId||null,
+            borderA:root.dataset.borderA||null,
+            borderB:root.dataset.borderB||null,
+            featureShift:Number(root.dataset.featureShift||0),
+            mapCells:Number(root.dataset.mapCells||0),
+            countryName:root.querySelector("#politicalCountry")?.textContent?.trim()||null,
+            capital:root.querySelector("#politicalCapital")?.textContent?.trim()||null,
+            naturalFeature:root.querySelector("#politicalNaturalFeature")?.textContent?.trim()||null,
+            lookupBudget:root.querySelector("#politicalLookupBudget")?.textContent?.trim()||null,
+          };
         })(),
         socialState: (() => {
           try {
@@ -1923,6 +1954,55 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_political_geography_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const political=window.PoliticalGeography;
+        if(!campaign?.seed||!political||!window.GeographyFoundation){
+          return {ok:false,error:'political-geography-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=political.proof(seed);
+        if(!proof.pass)return {ok:false,error:'political-proof-failed',proof};
+        const borderCount=proof.borders?.length||0;
+        if(borderCount<1)return {ok:false,error:'political-border-missing'};
+        const requested=index===4?0:index%borderCount;
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#politicalGeographyProof');
+        if(!section||!root)return {ok:false,error:'political-proof-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=political.renderDebugPanel(seed,requested,root);
+        root.scrollIntoView({block:'start'});
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,
+          requested,
+          borderCount,
+          borderId:rendered?.border?.id||null,
+          countryId:rendered?.verification?.origin?.id||null,
+          countryName:rendered?.verification?.origin?.name||null,
+          capitalId:rendered?.verification?.origin?.capital?.id||null,
+          featureShift:rendered?.border?.featureShiftTiles??null,
+          terrain:rendered?.border?.terrain||null,
+          borderA:rendered?.border?.countryA?.id||null,
+          borderB:rendered?.border?.countryB?.id||null,
+          neighborCount:rendered?.verification?.neighbors?.length||0
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Political geography proof frame failed: {result}")
+    return (
+        f"political-geography:{frame_index}:{result.get('countryId')}:"
+        f"{result.get('borderA')}->{result.get('borderB')}:shift={result.get('featureShift')}"
+    )
+
+
 def _show_social_state_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -3083,7 +3163,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3214,6 +3294,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_social_state_proof(driver,frame_index)
         return _show_social_state_proof(driver,frame_index)
+    if scenario == "wp-s006-001":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_political_geography_proof(driver,frame_index)
+        return _show_political_geography_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3248,6 +3333,70 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s006-001":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s006-001 requires five political-geography evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("politicalGeography") or {} for build in builds]
+        panels=[build.get("politicalGeographyPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Political-geography evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Political geography mutated Protagonist world position: {protagonists}")
+        required={
+            "pass":True,
+            "deterministic":True,
+            "neighborsStable":True,
+            "timeIndependent":True,
+            "terrainAuthorityPreserved":True,
+            "hierarchyIntegrated":True,
+            "lazyQueryable":True,
+            "fullWorldMaterialized":False,
+            "capitalInside":True,
+            "borderSamplePass":True,
+            "naturalFeatureInfluence":True,
+            "nonRectangular":True,
+            "liveBorderChanges":False,
+            "terrainMutation":False,
+            "renderDependency":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Political-geography proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("candidateCountPerLookup") or 0)!=9:
+                raise RuntimeError(f"Political lookup is not bounded to nine candidates in frame {index}: {proof}")
+            if len(proof.get("neighbors") or [])<2 or len(proof.get("borders") or [])<1:
+                raise RuntimeError(f"Political neighbors/borders are missing in frame {index}: {proof}")
+            if not proof.get("origin",{}).get("capital",{}).get("id"):
+                raise RuntimeError(f"Political capital missing in frame {index}: {proof}")
+
+        country_ids=[panel.get("countryId") for panel in panels]
+        if len(set(country_ids))!=1 or not country_ids[0]:
+            raise RuntimeError(f"Political origin country changed across evidence: {country_ids}")
+        for panel in panels:
+            if not panel.get("open") or panel.get("mapCells")!=91:
+                raise RuntimeError(f"Political evidence panel/map incomplete: {panel}")
+            if not panel.get("capital") or "local candidates" not in str(panel.get("lookupBudget") or ""):
+                raise RuntimeError(f"Political capital/lazy lookup not visible: {panel}")
+            if float(panel.get("featureShift") or 0)<1:
+                raise RuntimeError(f"Selected political border lacks measured geographic influence: {panel}")
+            if not panel.get("borderA") or not panel.get("borderB") or panel.get("borderA")==panel.get("borderB"):
+                raise RuntimeError(f"Political border owners invalid: {panel}")
+
+        distinct_pairs={(panel.get("borderA"),panel.get("borderB")) for panel in panels[:4]}
+        if len(distinct_pairs)<2:
+            raise RuntimeError(f"Political evidence did not inspect multiple borders: {panels}")
+        before=proofs[0]
+        after=proofs[4]
+        if json.dumps(before,sort_keys=True)!=json.dumps(after,sort_keys=True):
+            raise RuntimeError("Political foundation changed after page reload")
+        if panels[0].get("borderId")!=panels[4].get("borderId"):
+            raise RuntimeError("Political border selection changed after reload")
+        return
+
     if scenario == "wp-s005-005":
         if len(frames) < 5:
             raise RuntimeError("wp-s005-005 requires five social-state evidence frames")
@@ -5768,12 +5917,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

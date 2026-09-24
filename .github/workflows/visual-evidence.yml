@@ -66,6 +66,7 @@ on:
           - wp-s005-003
           - wp-s005-004
           - wp-s005-005
+          - wp-s006-001
           - playcanvas-root-cutover
       shots:
         description: Requested screenshot count; scenario minimums still apply
@@ -87,6 +88,7 @@ on:
       - .github/workflows/visual-evidence.yml
       - index.html
       - scripts/world/geography.js
+      - scripts/world/political-geography.js
       - scripts/world/starting-village.js
       - scripts/world/house-plans.js
       - scripts/world/special-lots.js
@@ -216,7 +218,7 @@ jobs:
           fi
 
           case "$scenario" in
-            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005|playcanvas-foundation|playcanvas-scene|wp-s003-003|wp-s003-004-002|wp-s003-005-002|wp-s003-006-002|wp-s003-006-001|wp-s003-006|wp-s003-006-003|wp-s003-006-004|wp-s003-006-005|wp-s003-007-001|wp-s003-008-001|wp-s004-001|wp-s004-002|wp-s004-003|wp-s004-004|wp-s004-005|wp-s005-001|wp-s005-002|wp-s005-003|wp-s005-004|wp-s005-005|playcanvas-root-cutover) ;;
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005|playcanvas-foundation|playcanvas-scene|wp-s003-003|wp-s003-004-002|wp-s003-005-002|wp-s003-006-002|wp-s003-006-001|wp-s003-006|wp-s003-006-003|wp-s003-006-004|wp-s003-006-005|wp-s003-007-001|wp-s003-008-001|wp-s004-001|wp-s004-002|wp-s004-003|wp-s004-004|wp-s004-005|wp-s005-001|wp-s005-002|wp-s005-003|wp-s005-004|wp-s005-005|wp-s006-001|playcanvas-root-cutover) ;;
             *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
           esac
           case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac

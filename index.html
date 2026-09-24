@@ -826,6 +826,43 @@
     </div>
   </details>
 
+  <details id="politicalGeographyProof">
+    <summary>WP-S006-001 Deterministic Country Territories + Political Centers</summary>
+    <div class="accordion-content technical-info">
+      <div class="political-toolbar">
+        <label for="politicalBorderSelect">Inspect authoritative border</label>
+        <select id="politicalBorderSelect" aria-label="Political border sample"></select>
+      </div>
+      <div class="detail-grid political-detail-grid">
+        <div><span>Origin country</span><strong id="politicalCountry">—</strong></div>
+        <div><span>Country ID</span><strong id="politicalCountryId">—</strong></div>
+        <div><span>National capital</span><strong id="politicalCapital">—</strong></div>
+        <div><span>Neighbors</span><strong id="politicalNeighbors">—</strong></div>
+        <div><span>Selected border</span><strong id="politicalBorderPair">—</strong></div>
+        <div><span>Border coordinate</span><strong id="politicalBorderCoordinate">—</strong></div>
+        <div><span>Geographic influence</span><strong id="politicalNaturalFeature">—</strong></div>
+        <div><span>Lazy lookup</span><strong id="politicalLookupBudget">—</strong></div>
+      </div>
+      <section class="political-map-section">
+        <div class="political-map-heading">
+          <div><strong>Local political border sample</strong><small>Country color + terrain initial · 384-tile sampling</small></div>
+          <span>13 × 7 lazy queries</span>
+        </div>
+        <div id="politicalBorderMap" class="political-border-map" aria-label="Political border sample grid"></div>
+      </section>
+      <section class="political-country-section">
+        <h4>Nearby authoritative countries</h4>
+        <div id="politicalCountryCards" class="political-country-cards"></div>
+      </section>
+      <div class="check"><span>Same Campaign SEED reproduces country IDs, names, capitals, neighbors and borders independent of fantasy time</span><b id="vPoliticalDeterministic">WAITING</b></div>
+      <div class="check"><span>Samples on both sides resolve to different authoritative countries and final borders are not exposed macro-cell rectangles</span><b id="vPoliticalBorders">WAITING</b></div>
+      <div class="check"><span>Terrain, elevation, moisture and strategic routes measurably influence at least one sampled border</span><b id="vPoliticalNatural">WAITING</b></div>
+      <div class="check"><span>Every sampled national capital remains inside its own starting territory</span><b id="vPoliticalCapital">WAITING</b></div>
+      <div class="check"><span>Coordinate ownership uses only nine local political candidates; the infinite world is never fully materialized</span><b id="vPoliticalLazy">WAITING</b></div>
+      <div class="check"><span>Political geography changes no terrain and depends on no renderer/camera state or live border mutation</span><b id="vPoliticalAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -854,6 +891,7 @@
 <script src="scripts/render/playcanvas/app.js"></script>
 <script src="scripts/render/renderer-bootstrap.js"></script>
 <script src="scripts/world/geography.js"></script>
+<script src="scripts/world/political-geography.js"></script>
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
 <script src="scripts/world/special-lots.js"></script>

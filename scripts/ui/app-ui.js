@@ -1940,6 +1940,12 @@ function renderSocialStateProof(residentId=""){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.SocialState.renderDebugPanel(seed,residentId,document.getElementById("socialStateProof"));
 }
+function renderPoliticalGeographyProof(borderIndex=0){
+  if(typeof window.PoliticalGeography?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.PoliticalGeography.renderDebugPanel(seed,borderIndex,document.getElementById("politicalGeographyProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1954,6 +1960,7 @@ function renderStatic(){
   renderDialogueContextProof();
   renderAdviceResolutionProof();
   renderSocialStateProof();
+  renderPoliticalGeographyProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2112,6 +2119,8 @@ window.AppUI=Object.freeze({
   refreshSocialState:(residentId="")=>renderSocialStateProof(residentId),
   socialStateSnapshot:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SocialState?SocialState.snapshot(campaign.seed):null;},
   socialStateVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SocialState?SocialState.proof(campaign.seed):null;},
+  refreshPoliticalGeography:(borderIndex=0)=>renderPoliticalGeographyProof(borderIndex),
+  politicalGeographyVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.PoliticalGeography?PoliticalGeography.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{
