@@ -367,9 +367,18 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let count=6;
     if(descriptor.entrance){
       const p=localTileCenter(worldData,descriptor.entrance.x,descriptor.entrance.y);
+      const entranceX=String(descriptor.entrance.x),entranceY=String(descriptor.entrance.y);
       const minX=String(descriptor.bounds?.minX),maxX=String(descriptor.bounds?.maxX);
-      const sideX=String(descriptor.entrance.x)===minX||String(descriptor.entrance.x)===maxX;
-      appendBoxBatch(batchFor(batches,door.name,door),[p.x,0.65,p.z],sideX?[0.12,1.20,0.62]:[0.62,1.20,0.12],0);
+      const minY=String(descriptor.bounds?.minY),maxY=String(descriptor.bounds?.maxY);
+      const onMinX=entranceX===minX,onMaxX=entranceX===maxX,onMinY=entranceY===minY,onMaxY=entranceY===maxY;
+      const faceOffset=thickness*0.5+0.08;
+      const doorPosition=[p.x,0.70,p.z];
+      let doorScale=[0.82,1.34,0.10];
+      if(onMinX){doorPosition[0]=b.x-outerW*0.5-faceOffset;doorScale=[0.10,1.34,0.82];}
+      else if(onMaxX){doorPosition[0]=b.x+outerW*0.5+faceOffset;doorScale=[0.10,1.34,0.82];}
+      else if(onMinY){doorPosition[2]=b.z-outerD*0.5-faceOffset;}
+      else if(onMaxY){doorPosition[2]=b.z+outerD*0.5+faceOffset;}
+      appendBoxBatch(batchFor(batches,door.name,door),doorPosition,doorScale,0);
       count++;
     }
     return count;
