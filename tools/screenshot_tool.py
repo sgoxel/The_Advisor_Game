@@ -93,6 +93,7 @@ SCENARIOS = {
     "wp-s003-006-006",
     "wp-s003-006-007",
     "wp-s003-006-008",
+    "wp-s003-006-009",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s004-001",
@@ -158,6 +159,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-006": 7,
     "wp-s003-006-007": 10,
     "wp-s003-006-008": 11,
+    "wp-s003-006-009": 11,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s004-001": 3,
@@ -1261,14 +1263,14 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
                 )
-            if scenario in {"wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008"}:
+            if scenario in {"wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009"}:
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
                 )
-            if scenario == "wp-s003-006-007":
+            if scenario in {"wp-s003-006-007", "wp-s003-006-009"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -8509,7 +8511,7 @@ def take_screenshots(
         browser_url = normalize_target(target)
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
-        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006-008", "wp-s003-007-001"}:
+        if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001"}:
             browser_url += ("&" if "?" in browser_url else "?") + "gpu=webgl2"
         paths = output_paths(output_file, shots, timestamp_names)
         driver = create_driver(width, height)
