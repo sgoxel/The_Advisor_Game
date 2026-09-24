@@ -3740,7 +3740,7 @@ def _set_camera_center_and_render(driver, x: int, y: int) -> str:
 
 
 
-def _set_camera_center_and_render_active(driver, x: int, y: int) -> str:
+def _set_camera_center_and_render_active(driver, x: int, y: int, timeout: float = 8.0) -> str:
     result = driver.execute_async_script(
         """
         const done = arguments[arguments.length - 1];
@@ -3768,7 +3768,7 @@ def _set_camera_center_and_render_active(driver, x: int, y: int) -> str:
         raise RuntimeError(f"Failed to move camera and render: {result}")
 
     from selenium.webdriver.support.ui import WebDriverWait
-    WebDriverWait(driver, 8).until(
+    WebDriverWait(driver, timeout).until(
         lambda d: d.execute_script(
             """
             const camera = window.Camera?.getCenter?.();
@@ -4110,7 +4110,7 @@ def _exercise_material_lifetime(driver) -> str:
     _set_terrain_preload_settings(
         driver, radius=1, cache=16, directional=True, background=True
     )
-    _set_camera_center_and_render_active(driver, 0, 0)
+    _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0)
     _set_material_lifetime_texture_quality(driver, "standard")
     initial = _material_lifetime_telemetry(driver)
 
@@ -4122,7 +4122,7 @@ def _exercise_material_lifetime(driver) -> str:
     index = 0
     while time.monotonic() - start < 92.0:
         x, y = plan[index % len(plan)]
-        _set_camera_center_and_render_active(driver, x, y)
+        _set_camera_center_and_render_active(driver, x, y, timeout=20.0)
         visited.append({"x": x, "y": y, "elapsed": round(time.monotonic() - start, 3)})
         elapsed = time.monotonic() - start
         if elapsed >= 18.0 and not switched["low"]:
@@ -4144,7 +4144,7 @@ def _exercise_material_lifetime(driver) -> str:
     if not switched["high2"]:
         quality_events.append(_set_material_lifetime_texture_quality(driver, "high"))
         switched["high2"] = True
-    _set_camera_center_and_render_active(driver, 0, 0)
+    _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0)
     visited.append({"x": 0, "y": 0, "elapsed": round(time.monotonic() - start, 3)})
     _set_camera_zoom_and_render(driver, 1.00)
     final = _material_lifetime_telemetry(driver)
@@ -8415,12 +8415,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
@@ -8444,8 +8444,6 @@ def take_screenshots(
                 )
                 print(f"Saved: {path} [{scenario}:{action}]")
 
-            validate_scenario_frames(scenario, frames)
-
             if evidence_json:
                 manifest_path = screenshots_directory() / Path(evidence_json).name
                 _write_evidence_manifest(
@@ -8455,6 +8453,8 @@ def take_screenshots(
                     issue=issue,
                     frames=frames,
                 )
+
+            validate_scenario_frames(scenario, frames)
 
             if pause_seconds > 0:
                 print(f"Pausing browser for {pause_seconds:.1f}s before close")
