@@ -1220,3 +1220,19 @@
 - Exact tested implementation head 07da2e218285b9c37db7719f14f61388a49bab2d deployed successfully through GitHub Pages run 36025463011.
 - Automatic generic push Visual Evidence run 36025463448 separately timed out in Selenium during the generic starting-village scenario before producing screenshots; the dedicated WP-specific run on the same head completed successfully and is the acceptance evidence for this WP.
 - ROADMAP completion remains pending deployment verification of this documentation commit.
+
+2026-09-24 20:05:25 +03:00 | WP-S007-003 | Multi-Resolution Lazy Simulation Tiers + Relevance Activation final verification
+- Classification: MIXED.
+- Added scripts/world/simulation-tiers.js with explicit Global / Regional / Local / Exact Simulation tiers driven by bounded relevance inputs rather than renderer visibility.
+- Activation inputs include protagonist proximity, observed/inspected entities, due scheduled events, direct dependencies and travel destinations. Render/camera state contributes zero Simulation activation inputs.
+- Hard synchronous/materialization budgets are explicit: 12 candidate settlements, 8 regional, 4 local, 1 exact settlement and 24 exact NPC handles.
+- Distant settlements retain compact aggregate authority; local/exact detail is derived and discardable. Meaningful mutation remains in WorldState and is reconstructed through WorldContext after demotion/reactivation.
+- Continuation attempt 1 / run 36030449786 still exposed frame-0 as exact; a stable single candidate-catalog snapshot was added for each activation update.
+- Continuation attempt 2 / run 36030847980 diagnostics isolated the actual control-flow defect: frame 0 requested exact because a trailing else overwrote the intended global default.
+- Continuation attempt 3 / final run 36031211061 succeeded on exact head 3cd6488f200a08e5db0854e10b0ffd4bff3eec0b. Artifact 10821307911, digest sha256:3725831903c3ee21ba2962f05a707ddb685c5b80f3187cea892d9be5c739cd8d.
+- Final dedicated sequence PASS: global → regional → local → exact → global → exact → exact. Exact NPC handles were 0 / 0 / 0 / 24 / 0 / 24 / 24 while 85,005 population remained represented.
+- The controlled campaign mutation changed the focused context signature from 47D778E6 to BAFC63E9; demotion retained BAFC63E9 and exact reactivation reconstructed BAFC63E9. Camera-only movement left the exact tier/signature unchanged.
+- Runtime proof PASS: boundedCandidates=true, boundedExactObjects=true, compactDistantState=true, noFullWorldObjectGraph=true, deterministicActivation=true, proofDoesNotMutateWorldState=true, renderIndependent=true, renderVisibilityActivation=false.
+- All seven fresh screenshots were retrieved and directly inspected. The Simulation inspector remained aligned/readable across all tier states with no overlap, broken layout or clipped panel elements. Dense transition subtext is secondary but orderly. VISUAL 8.4/10 PASS.
+- Exact tested implementation head 3cd6488f200a08e5db0854e10b0ffd4bff3eec0b deployed successfully through GitHub Pages run 36031198661.
+- ROADMAP completion remains pending successful deployment verification of this documentation commit.
