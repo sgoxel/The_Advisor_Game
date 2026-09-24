@@ -4784,7 +4784,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
             raise RuntimeError(f"Material-lifetime exercise changed protagonist authority: {protagonist_locations}")
 
-        proof=builds[1].get("materialLifetimeProof") or {}
+        proof=gpus[1].get("materialLifetimeProof") or {}
         if float(proof.get("elapsedRealSeconds") or 0)<90.0:
             raise RuntimeError(f"Sustained runtime did not reach 90 seconds: {proof}")
         if proof.get("reenteredOrigin") is not True:
