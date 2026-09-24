@@ -3289,9 +3289,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         for panel in panels:
             if sorted(panel.get("reputationScopes") or [])!=required_scopes:
                 raise RuntimeError(f"Social reputation scopes are incomplete: {panel}")
+        if "active" not in (panels[0].get("dutyStatuses") or []):
+            raise RuntimeError(f"Baseline active duty is not inspectable: {panels[0]}")
+        if not all(state in (panels[1].get("dutyStatuses") or []) for state in ["active","fulfilled"]):
+            raise RuntimeError(f"Fulfilled duty progression is not inspectable: {panels[1]}")
+        for panel in panels[2:]:
             statuses=panel.get("dutyStatuses") or []
             if not all(state in statuses for state in ["active","fulfilled","breached"]):
-                raise RuntimeError(f"Social duty states are not simultaneously inspectable: {panel}")
+                raise RuntimeError(f"Final active/fulfilled/breached duty states are not simultaneously inspectable: {panel}")
 
         trusts=[float(panel.get("trust") or 0) for panel in panels]
         suspicions=[float(panel.get("suspicion") or 0) for panel in panels]
