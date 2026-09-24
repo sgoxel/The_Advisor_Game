@@ -4152,6 +4152,16 @@ def _set_material_lifetime_texture_quality(driver, profile: str) -> dict:
     return result
 
 
+def _ensure_texture_quality_profile(driver, profile: str) -> dict:
+    current = driver.execute_script(
+        "return String(window.RuntimeTextureQuality?.snapshot?.()?.qualityProfile||'')"
+    )
+    if str(current) == str(profile):
+        return {"ok": True, "profile": str(profile), "refreshed": False}
+    result = _set_material_lifetime_texture_quality(driver, profile)
+    return {**result, "refreshed": True}
+
+
 def _set_terrain_micro_relief_proof(driver, enabled: bool | None) -> dict:
     value = None if enabled is None else bool(enabled)
     result = driver.execute_script(
@@ -4439,7 +4449,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         pairs=(("road",False),("road",True),("dirt",False),("dirt",True),("rock",False),("rock",True),("farmland",False),("farmland",True))
         if frame_index < len(pairs):
             kind,enabled=pairs[frame_index]
-            _set_material_lifetime_texture_quality(driver, "standard")
+            _ensure_texture_quality_profile(driver, "standard")
             proof=_set_terrain_micro_relief_proof(driver, enabled)
             return (
                 f"micro-relief:{kind}:standard:{'on' if enabled else 'off'}+"
@@ -4448,15 +4458,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 + _set_camera_zoom_and_render(driver, 1.00)
             )
         if frame_index == 8:
-            _set_material_lifetime_texture_quality(driver, "low")
+            _ensure_texture_quality_profile(driver, "low")
             proof=_set_terrain_micro_relief_proof(driver, True)
             return "micro-relief:road:low:quality-gated+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 1.00)
         if frame_index == 9:
-            _set_material_lifetime_texture_quality(driver, "standard")
+            _ensure_texture_quality_profile(driver, "standard")
             proof=_set_terrain_micro_relief_proof(driver, True)
             return "micro-relief:road:standard:close+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 2.00)
         driver.set_window_size(844, 390)
-        _set_material_lifetime_texture_quality(driver, "standard")
+        _ensure_texture_quality_profile(driver, "standard")
         proof=_set_terrain_micro_relief_proof(driver, True)
         return "micro-relief:road:standard:phone-landscape+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 1.00)
     if scenario == "wp-s003-006-007":
