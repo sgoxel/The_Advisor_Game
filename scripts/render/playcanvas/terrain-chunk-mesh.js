@@ -133,24 +133,35 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   let staticBatchMeshCreations=0,staticBatchSourcePrimitiveCount=0,instancedGroupCreations=0,instancedObjectCount=0;
   let instancingBufferUpdates=0,instancingParentRepositions=0,frustumCulledMeshInstances=0;
   let treeSpriteMaterialRebinds=0,treeSpriteMaterialRefreshes=0;
+  let buildingSurfaceMaterialRebinds=0,buildingSurfaceMaterialRefreshes=0;
 
   function applyBuildingSurfaceMaterial(m,name,r,g,b){
     const atlas=buildingSurfaceAtlasProvider?.()||null;
     const state=atlas?.stats?.()||null;
+    const knownSurface=Boolean(atlas?.surfaces?.some?.(item=>item?.material===String(name||"")));
     const rect=state?.ready?atlas?.rectForMaterial?.(name):null;
     const texture=state?.ready?atlas?.texture?.():null;
+    if(knownSurface){
+      m._advisorBuildingSurfaceName=String(name||"");
+      m._advisorBuildingFallbackColor=Object.freeze([Number(r),Number(g),Number(b)]);
+    }
     if(rect&&texture){
+      const previousTexture=m.diffuseMap||null;
+      const previousSignature=String(m._advisorBuildingAtlasSignature||"");
       m.diffuseMap=texture;
       m.diffuse.set(1,1,1);
       if(m.diffuseMapTiling?.set)m.diffuseMapTiling.set(rect.uScale,rect.vScale);
       else m.diffuseMapTiling=new pc.Vec2(rect.uScale,rect.vScale);
       if(m.diffuseMapOffset?.set)m.diffuseMapOffset.set(rect.u0,rect.v0);
       else m.diffuseMapOffset=new pc.Vec2(rect.u0,rect.v0);
+      m._advisorBuildingAtlasSignature=String(state?.signature||"");
       surfaceBoundMaterials.add(name);
+      if(previousTexture!==texture||previousSignature!==m._advisorBuildingAtlasSignature)buildingSurfaceMaterialRebinds++;
       return true;
     }
     m.diffuseMap=null;
     m.diffuse.set(r,g,b);
+    if(knownSurface)m._advisorBuildingAtlasSignature="";
     return false;
   }
   function presentationMaterial(name,r,g,b,gloss=0.10){
@@ -248,6 +259,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       if(bindTreeSpriteMaterial(m,index))refreshed++;
     }
     if(refreshed)treeSpriteMaterialRefreshes++;
+    return refreshed;
+  }
+  function refreshBuildingMaterials(){
+    let refreshed=0;
+    for(const material of presentationMaterials.values()){
+      const name=String(material?._advisorBuildingSurfaceName||"");
+      if(!name)continue;
+      const fallback=material._advisorBuildingFallbackColor||[1,1,1];
+      if(applyBuildingSurfaceMaterial(material,name,fallback[0],fallback[1],fallback[2])){
+        material.update();
+        refreshed++;
+      }
+    }
+    if(refreshed)buildingSurfaceMaterialRefreshes++;
     return refreshed;
   }
   function sampleColor(seed,x,z){
@@ -771,6 +796,19 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       buildingPresentationCount:buildings.length,
       buildingTexturedMaterialCount:surfaceBoundMaterials.size,
       buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
+      buildingSurfaceMaterialRebinds,buildingSurfaceMaterialRefreshes,
+      buildingSurfaceMaterialAtlasSignatures:Object.freeze(
+        [...presentationMaterials.values()]
+          .filter(item=>item?._advisorBuildingSurfaceName)
+          .map(item=>String(item._advisorBuildingAtlasSignature||""))
+          .sort()
+      ),
+      buildingSurfaceStaleBindingCount:(()=>{
+        const current=String(buildingSurfaceAtlasProvider?.()?.stats?.()?.signature||"");
+        return [...presentationMaterials.values()].filter(item=>
+          item?._advisorBuildingSurfaceName&&String(item._advisorBuildingAtlasSignature||"")!==current
+        ).length;
+      })(),
       buildingSurfaceAtlas:buildingSurfaceAtlasProvider?.()?.stats?.()||null,
       staticBatchUvEnabled:staticBatches.every(item=>Boolean(item.mesh)),
       roofProfileCount:roofProfiles.length,
@@ -837,6 +875,19 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeCylinderSpherePlaceholders:false,
       buildingTexturedMaterialCount:surfaceBoundMaterials.size,
       buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
+      buildingSurfaceMaterialRebinds,buildingSurfaceMaterialRefreshes,
+      buildingSurfaceMaterialAtlasSignatures:Object.freeze(
+        [...presentationMaterials.values()]
+          .filter(item=>item?._advisorBuildingSurfaceName)
+          .map(item=>String(item._advisorBuildingAtlasSignature||""))
+          .sort()
+      ),
+      buildingSurfaceStaleBindingCount:(()=>{
+        const current=String(buildingSurfaceAtlasProvider?.()?.stats?.()?.signature||"");
+        return [...presentationMaterials.values()].filter(item=>
+          item?._advisorBuildingSurfaceName&&String(item._advisorBuildingAtlasSignature||"")!==current
+        ).length;
+      })(),
       buildingSurfaceAtlas:buildingSurfaceAtlasProvider?.()?.stats?.()||null,
       oneEntityPerChunk:true,
       oneEntityPerTile:false,
@@ -863,7 +914,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function heightAtTile(x,y,chunkSize=16,offsetX=0,offsetY=0){
     return terrainHeightAtTile(String(seedProvider()||""),x,y,chunkSize,offsetX,offsetY);
   }
-  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials});
+  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials,refreshBuildingMaterials});
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});

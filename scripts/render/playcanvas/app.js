@@ -695,7 +695,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const texture=treeSpriteAtlas.texture?.()||null;
     if(texture)applyTextureSampling(texture,textureQualitySnapshot());
     const materialRefreshCount=Number(terrainChunkMeshFactory?.refreshTreeMaterials?.()||0);
-    return Object.freeze({...state,materialRefreshCount});
+    const retiredTextureReleaseCount=Number(treeSpriteAtlas.releaseRetiredTextures?.()||0);
+    const finalState=treeSpriteAtlas.stats?.()||state;
+    return Object.freeze({...finalState,materialRefreshCount,retiredTextureReleaseCount});
   }
   async function prepareBuildingSurfaceAtlas(){
     if(!window.PlayCanvasBuildingSurfaceAtlas)throw new Error("PlayCanvas building surface atlas is unavailable");
@@ -707,7 +709,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const state=await buildingSurfaceAtlas.prepare();
     const texture=buildingSurfaceAtlas.texture?.()||null;
     if(texture)applyTextureSampling(texture,textureQualitySnapshot());
-    return state;
+    const materialRefreshCount=Number(terrainChunkMeshFactory?.refreshBuildingMaterials?.()||0);
+    const retiredTextureReleaseCount=Number(buildingSurfaceAtlas.releaseRetiredTextures?.()||0);
+    const finalState=buildingSurfaceAtlas.stats?.()||state;
+    return Object.freeze({...finalState,materialRefreshCount,retiredTextureReleaseCount});
   }
   async function prepareTerrainTextureAtlas(){
     if(!window.PlayCanvasTerrainTextureAtlas)throw new Error("PlayCanvas terrain texture atlas is unavailable");

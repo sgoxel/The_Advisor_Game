@@ -18,8 +18,11 @@ function loadImage(url){
 function create({pc,device,resolutionProvider=()=>320,qualitySignatureProvider=()=>""}={}){
   if(!pc||!device)throw new Error("PlayCanvasTreeSpriteAtlas requires pc/device");
   let texture=null,signature="",prepareCalls=0,atlasBuilds=0,cacheReuses=0;
+  let textureGeneration=0,textureDestructions=0;
+  const retiredTextures=[];
   let lastStats=Object.freeze({
-    ready:false,pngFirstPolicy:true,sharedTexture:true,gpuTextureCount:0,
+    ready:false,pngFirstPolicy:true,sharedTexture:true,gpuTextureCount:0,retiredTextureCount:0,
+    textureGeneration:0,textureDestructions:0,
     variantCount:VARIANT_COUNT,preparationOnly:true,frameDecodeCount:0,frameRasterizeCount:0,
     simulationAuthorityPreserved:true
   });
@@ -84,8 +87,10 @@ function create({pc,device,resolutionProvider=()=>320,qualitySignatureProvider=(
     });
     next.setSource(canvas);
     const previous=texture;
-    texture=next;signature=nextSignature;atlasBuilds++;
-    if(previous&&previous!==next)try{previous.destroy()}catch(_){}
+    texture=next;signature=nextSignature;atlasBuilds++;textureGeneration++;
+    // Keep the superseded shared atlas alive until all long-lived tree
+    // materials have rebound to the new generation.
+    if(previous&&previous!==next)retiredTextures.push(previous);
 
     lastStats=Object.freeze({
       ready:true,signature,sourceUrl,sourceKind,
@@ -95,18 +100,30 @@ function create({pc,device,resolutionProvider=()=>320,qualitySignatureProvider=(
       transparentSource:true,alphaTested:true,
       preparationOnly:true,frameDecodeCount:0,frameRasterizeCount:0,
       prepareCalls,atlasBuilds,cacheReuses,
+      textureGeneration,textureDestructions,retiredTextureCount:retiredTextures.length,
       simulationAuthorityPreserved:true
     });
     return lastStats;
   }
   function getTexture(){return texture}
   function stats(){return lastStats}
-  function destroy(){
-    if(texture)try{texture.destroy()}catch(_){}
-    texture=null;signature="";
-    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0});
+  function releaseRetiredTextures(){
+    let released=0;
+    while(retiredTextures.length){
+      const retired=retiredTextures.shift();
+      try{retired?.destroy?.()}catch(_){}
+      released++;textureDestructions++;
+    }
+    lastStats=Object.freeze({...lastStats,textureDestructions,retiredTextureCount:retiredTextures.length});
+    return released;
   }
-  return Object.freeze({prepare,texture:getTexture,rect,stats,destroy});
+  function destroy(){
+    releaseRetiredTextures();
+    if(texture){try{texture.destroy()}catch(_){}textureDestructions++;}
+    texture=null;signature="";
+    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0,textureDestructions,retiredTextureCount:0});
+  }
+  return Object.freeze({prepare,texture:getTexture,rect,stats,releaseRetiredTextures,destroy});
 }
 
 window.PlayCanvasTreeSpriteAtlas=Object.freeze({create,PNG_URL,SVG_URL,VARIANT_COUNT});

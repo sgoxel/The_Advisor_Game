@@ -23,8 +23,11 @@ function loadImage(url){
 function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=()=>""}={}){
   if(!pc||!device)throw new Error("PlayCanvasBuildingSurfaceAtlas requires pc/device");
   let texture=null,signature="",prepareCalls=0,atlasBuilds=0,cacheReuses=0;
+  let textureGeneration=0,textureDestructions=0;
+  const retiredTextures=[];
   let lastStats=Object.freeze({
-    ready:false,sharedAtlas:true,gpuTextureCount:0,preparationOnly:true,
+    ready:false,sharedAtlas:true,gpuTextureCount:0,retiredTextureCount:0,
+    textureGeneration:0,textureDestructions:0,preparationOnly:true,
     frameDecodeCount:0,frameRasterizeCount:0,simulationAuthorityPreserved:true
   });
 
@@ -135,8 +138,10 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
     });
     next.setSource(canvas);
     const previous=texture;
-    texture=next;signature=nextSignature;atlasBuilds++;
-    if(previous&&previous!==next)try{previous.destroy()}catch(_){}
+    texture=next;signature=nextSignature;atlasBuilds++;textureGeneration++;
+    // Keep the superseded shared atlas alive until all long-lived building
+    // materials have rebound to the new generation.
+    if(previous&&previous!==next)retiredTextures.push(previous);
 
     lastStats=Object.freeze({
       ready:true,signature,runtimeResolution:size,
@@ -151,6 +156,7 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       failedKeys:Object.freeze(failedKeys.slice()),
       resolvedSources:Object.freeze({...resolvedSources}),
       prepareCalls,atlasBuilds,cacheReuses,
+      textureGeneration,textureDestructions,retiredTextureCount:retiredTextures.length,
       sharedAtlas:true,gpuTextureCount:1,preparationOnly:true,
       frameDecodeCount:0,frameRasterizeCount:0,
       simulationAuthorityPreserved:true
@@ -159,12 +165,23 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
   }
   function getTexture(){return texture}
   function stats(){return lastStats}
-  function destroy(){
-    if(texture)try{texture.destroy()}catch(_){}
-    texture=null;signature="";
-    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0});
+  function releaseRetiredTextures(){
+    let released=0;
+    while(retiredTextures.length){
+      const retired=retiredTextures.shift();
+      try{retired?.destroy?.()}catch(_){}
+      released++;textureDestructions++;
+    }
+    lastStats=Object.freeze({...lastStats,textureDestructions,retiredTextureCount:retiredTextures.length});
+    return released;
   }
-  return Object.freeze({prepare,texture:getTexture,rectForMaterial,stats,destroy,surfaces:SURFACES});
+  function destroy(){
+    releaseRetiredTextures();
+    if(texture){try{texture.destroy()}catch(_){}textureDestructions++;}
+    texture=null;signature="";
+    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0,textureDestructions,retiredTextureCount:0});
+  }
+  return Object.freeze({prepare,texture:getTexture,rectForMaterial,stats,releaseRetiredTextures,destroy,surfaces:SURFACES});
 }
 window.PlayCanvasBuildingSurfaceAtlas=Object.freeze({create,surfaces:SURFACES});
 })();
