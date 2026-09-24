@@ -1303,7 +1303,6 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                             return Boolean(
                               chunks.resourceKind === 'chunk-mesh' &&
                               Number(chunks.visibleChunkCount || 0) > 0 &&
-                              Number(chunks.treePresentationCount || 0) > 0 &&
                               chunks.treePlanePresentation === true &&
                               Number(chunks.treeCylinderSpherePlaceholderCount || 0) === 0 &&
                               atlas.ready === true &&

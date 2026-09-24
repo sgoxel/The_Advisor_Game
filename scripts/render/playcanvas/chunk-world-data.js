@@ -208,7 +208,7 @@ function generate(spec){
   // the first row-major hash hits; this avoids diagonal/grid bands across
   // adjacent chunks while preserving bounded density and Simulation authority.
   const forestCellCount=treeCandidates.length;
-  const treeTarget=forestCellCount<24?0:Math.min(3,1+Math.floor((forestCellCount-24)/72));
+  const treeTarget=forestCellCount?Math.min(3,Math.ceil(forestCellCount/64)):0;
   const rankedTrees=treeCandidates.slice().sort((a,b)=>b.score-a.score||a.cell.localY-b.cell.localY||a.cell.localX-b.cell.localX);
   const selectedTrees=[];
   const minTreeSeparationSq=20;
