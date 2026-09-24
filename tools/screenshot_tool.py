@@ -3792,6 +3792,16 @@ def _focus_tree_sample_chunk(driver) -> str:
     return f"tree-focus:{sample['chunkX']},{sample['chunkY']}:trees={sample['count']}+"+action
 
 
+def _move_camera_relative_active(driver, dx: int, dy: int) -> str:
+    center=driver.execute_script("return window.Camera?.getCenter?.() || null")
+    if not isinstance(center, dict):
+        raise RuntimeError(f"Camera center unavailable before relative active move: {center}")
+    target_x=int(center.get("x") or 0)+int(dx)
+    target_y=int(center.get("y") or 0)+int(dy)
+    action=_set_camera_center_and_render_active(driver,target_x,target_y)
+    return f"camera-relative-active:{dx},{dy}+"+action
+
+
 def _set_camera_zoom_and_render(driver, zoom: float) -> str:
     result = driver.execute_async_script(
         """
@@ -4061,7 +4071,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 2:
             return "tree-planes:near-far+" + _set_camera_zoom_and_render(driver, 0.50)
         if frame_index == 3:
-            return _keyboard_pan_tiles(driver, 16, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
+            return _move_camera_relative_active(driver, 16, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
         if frame_index == 4:
             focused=_focus_tree_sample_chunk(driver)
             return "tree-planes:return+"+focused+"+"+_set_camera_zoom_and_render(driver, 1.00)

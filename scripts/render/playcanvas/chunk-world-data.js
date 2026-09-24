@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.2.0";
+const VERSION="1.3.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -147,6 +147,7 @@ function generate(spec){
   const surfaceCounts={};
   const textureKeys=new Set(),overlayTextureKeys=new Set(),buildingIds=new Set();
   const staticObjects=[];
+  let treePresentationCount=0,rockPresentationCount=0,otherPresentationCount=0;
   let walkableCount=0,blockedCount=0;
 
   for(let localY=0;localY<size;localY++){
@@ -166,16 +167,25 @@ function generate(spec){
       if(cell.overlayTextureKey)overlayTextureKeys.add(cell.overlayTextureKey);
       if(cell.buildingId)buildingIds.add(cell.buildingId);
       const sparseKind=sparseStaticKind(cell);
-      if(sparseKind&&staticObjects.length<2){
+      const allowSparse=sparseKind==="tree"
+        ?treePresentationCount<5
+        :sparseKind==="rock"
+          ?rockPresentationCount<2
+          :Boolean(sparseKind&&otherPresentationCount<2);
+      if(sparseKind&&allowSparse){
         staticObjects.push(Object.freeze({
           id:"static:"+cell.x+":"+cell.y+":"+sparseKind,
           type:sparseKind,x:cell.x,y:cell.y,sourceTerrain:cell.type
         }));
-      }else if(!STANDARD_TERRAIN.has(cell.type)&&!cell.buildingId&&staticObjects.length<2){
+        if(sparseKind==="tree")treePresentationCount++;
+        else if(sparseKind==="rock")rockPresentationCount++;
+        else otherPresentationCount++;
+      }else if(!STANDARD_TERRAIN.has(cell.type)&&!cell.buildingId&&otherPresentationCount<2){
         staticObjects.push(Object.freeze({
           id:"static:"+cell.x+":"+cell.y+":"+cell.type,
           type:cell.type,x:cell.x,y:cell.y,sourceTerrain:cell.type
         }));
+        otherPresentationCount++;
       }
     }
   }

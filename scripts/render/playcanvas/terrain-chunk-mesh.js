@@ -448,8 +448,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const h=hash32(seed+"|"+String(descriptor.x)+"|"+String(descriptor.y)+"|tree-sprite");
       const variant=h&1,scaleIndex=(h>>>1)%3,flipX=Boolean((h>>>3)&1);
       const scaleChoices=[0.92,1.0,1.08],scaleChoice=scaleChoices[scaleIndex];
-      const baseHeight=variant===0?3.75:4.05,height=baseHeight*scaleChoice;
-      const width=height*(variant===0?0.73:0.66);
+      const baseHeight=variant===0?5.35:5.75,height=baseHeight*scaleChoice;
+      const width=height*(variant===0?0.70:0.64);
       const yaw=Number(treeYawProvider?.()??45);
       const item={
         position:[p.x,0.055,p.z],

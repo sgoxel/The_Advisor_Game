@@ -861,7 +861,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       treeVariant1Count+=Number(resource.treeVariant1Count||0);
       treeInstancedGroupCount+=Number(resource.treeInstancedGroupCount||0);
       treeCylinderSpherePlaceholderCount+=Number(resource.treeCylinderSpherePlaceholderCount||0);
-      if(Number(resource.treePresentationCount||0)>0&&treeSampleChunks.length<24)treeSampleChunks.push(Object.freeze({
+      if(Number(resource.treePresentationCount||0)>0)treeSampleChunks.push(Object.freeze({
         chunkX:Number(resource.x),chunkY:Number(resource.y),count:Number(resource.treePresentationCount||0),state:String(entry?.state||"")
       }));
       if(treeVariationSamples.length<24){
@@ -908,7 +908,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       treePlanePresentation:treePresentationCount>0&&treeCylinderSpherePlaceholderCount===0,
       treeDeterministicVariation:true,
       treeVariationSamples:Object.freeze(treeVariationSamples.slice()),
-      treeSampleChunks:Object.freeze(treeSampleChunks.sort((a,b)=>b.count-a.count||a.chunkY-b.chunkY||a.chunkX-b.chunkX)),
+      treeSampleChunks:Object.freeze(treeSampleChunks.sort((a,b)=>b.count-a.count||a.chunkY-b.chunkY||a.chunkX-b.chunkX).slice(0,24)),
       treeSpriteAtlas:treeSpriteAtlas?.stats?.()||null,
       treeSharedTextureCount:Number(treeSpriteAtlas?.stats?.()?.gpuTextureCount||0),
       treeSharedMaterialCount:Number(terrainChunkMeshFactory?.stats?.()?.treeSpriteMaterialCount||0),
