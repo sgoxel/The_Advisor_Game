@@ -1028,6 +1028,44 @@
     </div>
   </details>
 
+  <details id="settlementBuildingCatalogProof">
+    <summary>WP-S006-006 Settlement Building Catalog + Contextual Composition Rules</summary>
+    <div class="accordion-content technical-info">
+      <div class="region-profile-toolbar">
+        <label for="settlementBuildingSelect">Inspect settlement composition</label>
+        <select id="settlementBuildingSelect" aria-label="Settlement building composition representative"></select>
+      </div>
+      <div class="detail-grid region-profile-grid">
+        <div><span>Settlement</span><strong id="settlementBuildingName">—</strong></div>
+        <div><span>Class / evidence role</span><strong id="settlementBuildingClass">—</strong></div>
+        <div><span>Population / prosperity</span><strong id="settlementBuildingPopulation">—</strong></div>
+        <div><span>Country / region / terrain context</span><strong id="settlementBuildingContext">—</strong></div>
+        <div><span>Selected mix</span><strong id="settlementBuildingCounts">—</strong></div>
+        <div><span>Functional capacity</span><strong id="settlementBuildingCapacity">—</strong></div>
+        <div><span>Starting Village mapping</span><strong id="settlementBuildingMapping">—</strong></div>
+        <div><span>Composition revision</span><strong id="settlementBuildingRevision">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Selected building functions + why</h4>
+        <ul id="settlementBuildingFunctions" class="region-profile-comparison"></ul>
+      </section>
+      <section class="region-profile-section">
+        <h4>Village → town → city → capital comparison</h4>
+        <ul id="settlementBuildingComparison" class="region-profile-comparison"></ul>
+      </section>
+      <section class="country-relations-section">
+        <h4>Existing Starting Village special-lot mapping</h4>
+        <div id="settlementBuildingVillageMap" class="country-relations-agreements"></div>
+      </section>
+      <div class="check"><span>Same SEED + settlement archetype reproduces the same building-function composition and fantasy time does not alter foundation planning</span><b id="vBuildingCatalogDeterministic">WAITING</b></div>
+      <div class="check"><span>Reusable catalog covers residential, agriculture, trade, production/storage, civic, security, community/cultural, transport and capital-government roles with logical asset keys</span><b id="vBuildingCatalogCoverage">WAITING</b></div>
+      <div class="check"><span>Village, town, city and capital compositions differ contextually; composition is not a cloned one-of-everything template</span><b id="vBuildingCatalogContext">WAITING</b></div>
+      <div class="check"><span>Agriculture, mining, port and scale-specific facilities obey terrain/resource/settlement-class constraints</span><b id="vBuildingCatalogConstraints">WAITING</b></div>
+      <div class="check"><span>All seven existing Starting Village special lots map to reusable generic catalog functions with compatible enterability</span><b id="vBuildingCatalogVillage">WAITING</b></div>
+      <div class="check"><span>Catalog remains lazy immutable planning data: no physical layout, NPC state, terrain/resource mutation, final art dependency or render authority</span><b id="vBuildingCatalogAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1064,6 +1102,7 @@
 <script src="scripts/world/starting-village.js"></script>
 <script src="scripts/world/house-plans.js"></script>
 <script src="scripts/world/special-lots.js"></script>
+<script src="scripts/world/settlement-building-catalog.js"></script>
 <script src="scripts/world/daily-activity.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/world/walkability.js"></script>
