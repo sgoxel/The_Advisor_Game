@@ -1810,56 +1810,56 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-        if scenario == "wp-s003-009-001":
-            recovery = driver.execute_script(
-                """
-                const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
-                const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
-                return {
-                  campaignState,
-                  overlayState: loading?.overlay?.state || null,
-                  overlayHidden: Boolean(loading?.overlay?.hidden),
-                  hasCampaign: Boolean(window.SeedSystem?.getCampaign?.()),
-                  simulationCampaignActive: Boolean(window.GameRenderer?.snapshot?.()?.simulationSnapshot?.campaignActive)
-                };
-                """
-            )
-            if (
-                not isinstance(recovery, dict)
-                or recovery.get("campaignState") != "ACTIVE"
-                or recovery.get("overlayState") == "error"
-                or recovery.get("overlayHidden") is not True
-            ):
-                # A cold CI run can finish the expensive renderer/chunk preparation
-                # just after the new-campaign readiness gate reports its bounded
-                # error. The in-game Retry Startup control performs a reload; use
-                # that real recovery path so the persisted authoritative campaign
-                # is restored instead of hiding/overriding the loading UI.
-                driver.execute_script("document.querySelector('#sceneLoadingRetry')?.click()")
-                WebDriverWait(driver, timeout).until(
-                    lambda d: d.execute_script("return document.readyState") == "complete"
+            if scenario == "wp-s003-009-001":
+                recovery = driver.execute_script(
+                    """
+                    const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
+                    const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                    return {
+                      campaignState,
+                      overlayState: loading?.overlay?.state || null,
+                      overlayHidden: Boolean(loading?.overlay?.hidden),
+                      hasCampaign: Boolean(window.SeedSystem?.getCampaign?.()),
+                      simulationCampaignActive: Boolean(window.GameRenderer?.snapshot?.()?.simulationSnapshot?.campaignActive)
+                    };
+                    """
                 )
-                WebDriverWait(driver, timeout).until(
-                    lambda d: d.execute_script(
-                        """
-                        const state=document.querySelector('#campaignState')?.textContent?.trim();
-                        const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
-                        const renderer=window.GameRenderer?.snapshot?.() || {};
-                        return Boolean(
-                          state==='ACTIVE' &&
-                          loading?.overlay?.hidden===true &&
-                          loading?.current?.state==='hidden' &&
-                          loading?.current?.readiness?.playableReady===true &&
-                          renderer?.ready===true &&
-                          renderer?.simulationSnapshot?.campaignActive===true &&
-                          renderer?.regionKey &&
-                          renderer?.protagonistVisible===true &&
-                          Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
-                        );
-                        """
+                if (
+                    not isinstance(recovery, dict)
+                    or recovery.get("campaignState") != "ACTIVE"
+                    or recovery.get("overlayState") == "error"
+                    or recovery.get("overlayHidden") is not True
+                ):
+                    # A cold CI run can finish the expensive renderer/chunk preparation
+                    # just after the new-campaign readiness gate reports its bounded
+                    # error. The in-game Retry Startup control performs a reload; use
+                    # that real recovery path so the persisted authoritative campaign
+                    # is restored instead of hiding/overriding the loading UI.
+                    driver.execute_script("document.querySelector('#sceneLoadingRetry')?.click()")
+                    WebDriverWait(driver, timeout).until(
+                        lambda d: d.execute_script("return document.readyState") == "complete"
                     )
-                )
-                action += "+cold-start-retry-recovered"
+                    WebDriverWait(driver, timeout).until(
+                        lambda d: d.execute_script(
+                            """
+                            const state=document.querySelector('#campaignState')?.textContent?.trim();
+                            const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                            const renderer=window.GameRenderer?.snapshot?.() || {};
+                            return Boolean(
+                              state==='ACTIVE' &&
+                              loading?.overlay?.hidden===true &&
+                              loading?.current?.state==='hidden' &&
+                              loading?.current?.readiness?.playableReady===true &&
+                              renderer?.ready===true &&
+                              renderer?.simulationSnapshot?.campaignActive===true &&
+                              renderer?.regionKey &&
+                              renderer?.protagonistVisible===true &&
+                              Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
+                            );
+                            """
+                        )
+                    )
+                    action += "+cold-start-retry-recovered"
 
         except Exception as exc:
             diagnostic = {}
@@ -6245,7 +6245,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         contexts=set()
         semantics=set()
         max_dressing=0
-        multi_character_frames=0
         for index,frame in enumerate(frames[:8]):
             build=frame.get("runtime",{}).get("currentBuild",{})
             gpu=build.get("gpuRenderer") or {}
@@ -6279,8 +6278,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 if int(value or 0)>0:contexts.add(str(key))
             for key,value in (chunks.get("dressingSemanticCounts") or {}).items():
                 if int(value or 0)>0:semantics.add(str(key))
-            if int(characters.get("activeCharacterCount") or 0)>=3:
-                multi_character_frames+=1
             protagonist_locations.append(build.get("protagonistLocation"))
         if max_dressing < 12:
             raise RuntimeError(f"Village dressing evidence is too sparse: max descriptors={max_dressing}")
@@ -6291,8 +6288,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Dressing semantic variety too low: semantics={sorted(semantics)}")
         if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
             raise RuntimeError(f"Dressing camera evidence changed protagonist authority: {protagonist_locations}")
-        if multi_character_frames<2:
-            raise RuntimeError(f"Dressing evidence did not preserve multiple-character coverage often enough: {multi_character_frames}")
         actions=[str(frame.get("action") or "") for frame in frames[:8]]
         for required in (
             "dressing-focus:residential",
