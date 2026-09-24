@@ -102,6 +102,7 @@ SCENARIOS = {
     "wp-s006-004",
     "wp-s006-005",
     "wp-s006-006",
+    "wp-s007-001",
     "playcanvas-root-cutover",
 }
 
@@ -156,6 +157,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s006-004": 5,
     "wp-s006-005": 6,
     "wp-s006-006": 6,
+    "wp-s007-001": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -366,6 +368,38 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        worldState: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.WorldState?.proof
+              ? window.WorldState.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        worldStatePanel: (() => {
+          const root=document.querySelector("#worldStateProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            focusId:root.dataset.focusId||null,
+            foundationSignature:root.dataset.foundationSignature||null,
+            currentSignature:root.dataset.currentSignature||null,
+            deltaRevision:Number(root.dataset.deltaRevision||0),
+            deltaSequence:Number(root.dataset.deltaSequence||0),
+            deltaEntryCount:Number(root.dataset.deltaEntryCount||0),
+            serializedBytes:Number(root.dataset.serializedBytes||0),
+            liveDelta:root.dataset.liveDelta==="true",
+            status:root.dataset.status||null,
+            cacheSize:Number(root.dataset.cacheSize||0),
+            generator:root.querySelector("#worldStateGenerator")?.textContent?.trim()||null,
+            schemas:root.querySelector("#worldStateSchemas")?.textContent?.trim()||null,
+            campaign:root.querySelector("#worldStateCampaign")?.textContent?.trim()||null,
+            layerRows:root.querySelectorAll("#worldStateLayers li").length,
+            representativeRows:root.querySelectorAll("#worldStateRepresentatives li").length,
+          };
         })(),
         settlementBuildingCatalog: (() => {
           try {
@@ -2139,6 +2173,76 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_world_state_proof(driver, frame_index: int) -> str:
+    if frame_index == 3:
+        camera_action = _drag_canvas(driver, 120, 0)
+    else:
+        camera_action = None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const world=window.WorldState;
+        if(!campaign?.seed||!world||!window.SettlementArchetypes||!window.RegionProfile||!window.PoliticalGeography||!window.GeographyFoundation){
+          return {ok:false,error:'world-state-unavailable'};
+        }
+        const seed=campaign.seed;
+        if(index===1){
+          const applied=world.applyEvidenceDelta(seed);
+          if(!applied?.ok)return {ok:false,error:'world-state-evidence-delta-failed',applied};
+        }
+        const focus=world.focusReference(seed);
+        if(!focus)return {ok:false,error:'world-state-focus-missing'};
+        if(index===2)world.evictFoundation(seed,focus);
+        let distantSparse=null;
+        if(index===4){
+          const before=world.deltaSnapshot(seed);
+          const distant=world.terrainRef(seed,"1000000","-1000000");
+          const resolved=world.resolve(seed,distant);
+          const after=world.deltaSnapshot(seed);
+          distantSparse=Boolean(resolved&&before.entryCount===after.entryCount&&before.serializedBytes===after.serializedBytes);
+          if(!distantSparse)return {ok:false,error:'distant-query-created-save-payload',before,after};
+        }
+        const proof=world.proof(seed);
+        if(!proof.pass)return {ok:false,error:'world-state-proof-failed',proof};
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#worldStateProof');
+        if(!section||!root)return {ok:false,error:'world-state-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=world.renderDebugPanel(seed,root);
+        root.scrollIntoView({block:'start'});
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,
+          focusId:root.dataset.focusId||null,
+          foundationSignature:root.dataset.foundationSignature||null,
+          currentSignature:root.dataset.currentSignature||null,
+          deltaRevision:Number(root.dataset.deltaRevision||0),
+          deltaSequence:Number(root.dataset.deltaSequence||0),
+          deltaEntryCount:Number(root.dataset.deltaEntryCount||0),
+          serializedBytes:Number(root.dataset.serializedBytes||0),
+          liveDelta:root.dataset.liveDelta==='true',
+          status:root.dataset.status||null,
+          representativeRows:root.querySelectorAll('#worldStateRepresentatives li').length,
+          layerRows:root.querySelectorAll('#worldStateLayers li').length,
+          distantSparse,
+          camera:window.Camera?.snapshot?.()||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"World-state proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    return (
+        prefix+
+        f"world-state:{frame_index}:{result.get('status')}:"
+        f"delta={result.get('deltaRevision')}:entries={result.get('deltaEntryCount')}"
+    )
+
+
 def _show_settlement_building_catalog_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -3612,7 +3716,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3773,6 +3877,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_settlement_building_catalog_proof(driver,frame_index)
         return _show_settlement_building_catalog_proof(driver,frame_index)
+    if scenario == "wp-s007-001":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_world_state_proof(driver,frame_index)
+        return _show_world_state_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3807,6 +3916,73 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s007-001":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s007-001 requires six world-state evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        proofs=[build.get("worldState") or {} for build in builds]
+        panels=[build.get("worldStatePanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"World-state evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"World-state proof mutated Protagonist world position: {protagonists}")
+        required={
+            "pass":True,"deterministic":True,"stableIds":True,"immutable":True,
+            "schemasVersioned":True,"foundationUnaffected":True,"currentMergeDeterministic":True,
+            "untouchedQuerySparse":True,"sparseDeltaSchema":True,"unloadReloadStable":True,
+            "liveDeltaMerged":True,"persistedMatchesMemory":True,"structuralIdentityCoverage":True,
+            "renderingZeroAuthority":True,"noWholeWorldSave":True,
+            "foundationMutation":False,"wholeWorldSerialized":False,"renderDependency":False,
+            "cameraDependency":False,"assetLoadingDependency":False,"deviceSpeedDependency":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"World-state proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("representativeCount") or 0)<6:
+                raise RuntimeError(f"World-state stable identity coverage incomplete in frame {index}: {proof}")
+            if int(proof.get("foundationSchemaVersion") or 0)<1 or int(proof.get("deltaSchemaVersion") or 0)<1 or int(proof.get("currentWorldSchemaVersion") or 0)<1:
+                raise RuntimeError(f"World-state schemas are not versioned in frame {index}: {proof}")
+            if not proof.get("worldGeneratorVersion"):
+                raise RuntimeError(f"World-state generator version missing in frame {index}: {proof}")
+
+        for panel in panels:
+            if not panel.get("open") or int(panel.get("layerRows") or 0)!=3 or int(panel.get("representativeRows") or 0)<6:
+                raise RuntimeError(f"World-state inspector incomplete: {panel}")
+            if not panel.get("focusId") or not panel.get("foundationSignature") or not panel.get("currentSignature"):
+                raise RuntimeError(f"World-state inspector missing stable identity/signatures: {panel}")
+            if int(panel.get("serializedBytes") or 0)<=0:
+                raise RuntimeError(f"World-state sparse storage telemetry missing: {panel}")
+
+        baseline=panels[0]
+        changed=panels[1:]
+        if baseline.get("liveDelta") or int(baseline.get("deltaEntryCount") or 0)!=0 or int(baseline.get("deltaRevision") or 0)!=0:
+            raise RuntimeError(f"World-state baseline was not sparse/clean: {baseline}")
+        if baseline.get("status")!="foundation-only" or baseline.get("currentSignature")!=baseline.get("foundationSignature"):
+            raise RuntimeError(f"World-state baseline CurrentWorld did not equal foundation: {baseline}")
+        if any(not panel.get("liveDelta") for panel in changed):
+            raise RuntimeError(f"World-state campaign delta disappeared after mutation: {changed}")
+        if any(int(panel.get("deltaEntryCount") or 0)!=1 or int(panel.get("deltaRevision") or 0)!=1 for panel in changed):
+            raise RuntimeError(f"World-state sparse delta count/revision changed unexpectedly: {changed}")
+        if any(panel.get("status")!="persistent-change" for panel in changed):
+            raise RuntimeError(f"World-state CurrentWorld lost persistent campaign status: {changed}")
+        foundation_signatures={panel.get("foundationSignature") for panel in panels}
+        if len(foundation_signatures)!=1:
+            raise RuntimeError(f"SeedFoundation changed across delta/cache/camera/reload evidence: {panels}")
+        if changed[0].get("currentSignature")==baseline.get("currentSignature") or changed[0].get("currentSignature")==changed[0].get("foundationSignature"):
+            raise RuntimeError(f"Campaign delta did not alter CurrentWorld: {baseline} -> {changed[0]}")
+        if len({panel.get("currentSignature") for panel in changed})!=1:
+            raise RuntimeError(f"CurrentWorld changed across eviction/camera/distant-query/reload: {changed}")
+        if len({panel.get("serializedBytes") for panel in changed})!=1:
+            raise RuntimeError(f"Sparse save payload changed without campaign changes: {changed}")
+        if panels[5].get("focusId")!=panels[1].get("focusId") or panels[5].get("currentSignature")!=panels[1].get("currentSignature"):
+            raise RuntimeError(f"World-state changed after full page reload: {panels[1]} -> {panels[5]}")
+        if "drag:" not in str(frames[3].get("action") or ""):
+            raise RuntimeError(f"World-state camera-independence frame did not move camera: {frames[3].get('action')}")
+        return
+
     if scenario == "wp-s006-006":
         if len(frames) < 6:
             raise RuntimeError("wp-s006-006 requires six settlement-building evidence frames")
@@ -6668,12 +6844,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
