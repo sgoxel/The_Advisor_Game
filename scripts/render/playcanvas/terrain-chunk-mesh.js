@@ -233,7 +233,15 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     if(rect&&texture){
       const previousTexture=m.diffuseMap||null;
       const previousSignature=String(m._advisorBuildingAtlasSignature||"");
+      // PlayCanvas can apply sampler changes lazily. Explicitly detach a
+      // superseded atlas generation before rebinding so every long-lived
+      // deterministic material variant drops the old GPU texture reference.
+      if(previousTexture&&previousTexture!==texture){
+        m.diffuseMap=null;
+        try{m.update?.()}catch(_){}
+      }
       m.diffuseMap=texture;
+      m._advisorBuildingTextureName=String(texture.name||"");
       // Diffuse color multiplies the authored atlas, preserving texture detail
       // while adding bounded deterministic settlement variation.
       m.diffuse.set(...tintValue);
@@ -1497,6 +1505,18 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           .filter(item=>item?._advisorBuildingSurfaceName)
           .map(item=>String(item._advisorBuildingAtlasSignature||""))
           .sort()
+      ),
+      buildingSurfaceVariantBindings:Object.freeze(
+        [...presentationMaterials.values()]
+          .filter(item=>item?._advisorBuildingSurfaceName)
+          .map(item=>Object.freeze({
+            materialName:String(item.name||""),
+            surfaceName:String(item._advisorBuildingSurfaceName||""),
+            variantIndex:Number(item._advisorBuildingVariantIndex??-1),
+            atlasSignature:String(item._advisorBuildingAtlasSignature||""),
+            textureName:String(item._advisorBuildingTextureName||item.diffuseMap?.name||"")
+          }))
+          .sort((a,b)=>a.materialName.localeCompare(b.materialName))
       ),
       buildingSurfaceStaleBindingCount:(()=>{
         const current=String(buildingSurfaceAtlasProvider?.()?.stats?.()?.signature||"");
