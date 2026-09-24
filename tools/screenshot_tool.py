@@ -3162,6 +3162,7 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
         """
         const zoom=Number(arguments[0]);
         const state=String(arguments[1]);
+        const label=String(arguments[2]);
         const done=arguments[arguments.length-1];
         (async()=>{
           try{
@@ -3210,6 +3211,7 @@ def _show_character_billboard_readability_proof(driver, frame_index: int) -> str
         """,
         zoom,
         state,
+        label,
     )
     if not isinstance(result, dict) or not result.get("ok"):
         raise RuntimeError(f"Character billboard readability proof failed: {result}")
