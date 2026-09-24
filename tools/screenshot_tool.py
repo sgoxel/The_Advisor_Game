@@ -119,6 +119,7 @@ SCENARIOS = {
     "wp-s007-002",
     "wp-s007-003",
     "wp-s007-004",
+    "wp-s007-005",
     "playcanvas-root-cutover",
 }
 
@@ -190,6 +191,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s007-002": 6,
     "wp-s007-003": 7,
     "wp-s007-004": 2,
+    "wp-s007-005": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -459,6 +461,42 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        globalCountrySimulation: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.GlobalCountrySimulation?.proof
+              ? window.GlobalCountrySimulation.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        globalCountrySimulationPanel: (() => {
+          const root=document.querySelector("#globalCountrySimulationProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),pass:root.dataset.pass==="true",
+            lastStep:Number(root.dataset.lastStep||0),
+            trackedCountries:Number(root.dataset.trackedCountries||0),
+            trackedRelations:Number(root.dataset.trackedRelations||0),
+            processedCountryEvents:Number(root.dataset.processedCountryEvents||0),
+            processedDiplomacyEvents:Number(root.dataset.processedDiplomacyEvents||0),
+            countryARevision:Number(root.dataset.countryARevision||0),
+            countryBRevision:Number(root.dataset.countryBRevision||0),
+            countryASignature:root.dataset.countryASignature||null,
+            countryBSignature:root.dataset.countryBSignature||null,
+            relationRevision:Number(root.dataset.relationRevision||0),
+            relationRestricted:root.dataset.relationRestricted==="true",
+            contextBeforeRevision:root.dataset.contextBeforeRevision||null,
+            contextAfterRevision:root.dataset.contextAfterRevision||null,
+            contextBeforeTrade:Number(root.dataset.contextBeforeTrade||0),
+            contextAfterTrade:Number(root.dataset.contextAfterTrade||0),
+            settlementDeltaCount:Number(root.dataset.settlementDeltaCount||0),
+            dueOnlyPass:root.dataset.dueOnlyPass==="true",
+            stableAfterCamera:root.dataset.stableAfterCamera==="true",
+            checkStates:Array.from(root.querySelectorAll(".check b")).map(node=>node.textContent?.trim()||"")
+          };
         })(),
         eventSchedulerPanel: (() => {
           const root=document.querySelector("#eventSchedulerProof");
@@ -2888,6 +2926,53 @@ def _show_event_scheduler_proof(driver, frame_index: int) -> str:
         prefix+
         f"event-scheduler:{frame_index}:signature={result.get('signature')}:"
         f"noise={result.get('noiseSignature')}:batch={result.get('maxBatch')}"
+    )
+
+
+def _show_global_country_simulation_proof(driver, frame_index: int) -> str:
+    camera_action = _drag_canvas(driver, 120, 0) if frame_index == 4 else None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const sim=window.GlobalCountrySimulation;
+        if(!campaign?.seed||!sim||!window.EventScheduler||!window.WorldState||!window.WorldContext){
+          return {ok:false,error:'global-country-simulation-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=sim.proof(seed);
+        if(!proof.pass)return {ok:false,error:'global-country-proof-failed',proof};
+        const step=sim.evidenceStep(seed,index);
+        if(!step?.ok)return {ok:false,error:'global-country-evidence-step-failed',step};
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#globalCountrySimulationProof');
+        if(!section||!root)return {ok:false,error:'global-country-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=sim.renderDebugPanel(seed,root);
+        root.scrollIntoView({block:'start'});
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,
+          proof,
+          evidence:step.evidence||null,
+          deltaEntryCount:step.deltaEntryCount,
+          deltaSequence:step.deltaSequence,
+          snapshot:step.snapshot||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Global country Simulation proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    evidence=result.get("evidence") or {}
+    return (
+        prefix+
+        f"global-country:{frame_index}:step={evidence.get('lastStep')}:"
+        f"country={evidence.get('countryARevision')}/{evidence.get('countryBRevision')}:"
+        f"relation={evidence.get('relationRevision')}:restricted={evidence.get('relationRestricted')}"
     )
 
 
@@ -5619,6 +5704,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_simulation_tiers_proof(driver,frame_index)
     if scenario == "wp-s007-004":
         return _show_event_scheduler_proof(driver,frame_index)
+    if scenario == "wp-s007-005":
+        return _show_global_country_simulation_proof(driver,frame_index)
     if scenario == "wp-s007-002":
         if frame_index == 5:
             action=_reload_current_build(driver)
@@ -6404,6 +6491,73 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Cutaway evidence did not retain other building roofs: {cutaway}")
         return
 
+
+
+    if scenario == "wp-s007-005":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s007-005 requires five global aggregate evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("globalCountrySimulation") or {} for build in builds]
+        panels=[build.get("globalCountrySimulationPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Global aggregate evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Global aggregate Simulation mutated Protagonist position: {protagonists}")
+        required={
+            "pass":True,"deterministic":True,"countriesEvolveDifferently":True,
+            "profileGeographyInfluence":True,"controlledRestriction":True,
+            "eventDriven":True,"scheduledAggregateUpdates":True,
+            "currentWorldDeltaAuthority":True,"immutableCountryFoundation":True,
+            "revisionBasedLazyPropagation":True,"noSettlementFanOut":True,
+            "noNpcFanOut":True,"offscreenEquivalent":True,
+            "militaristicWeightNotForcedWar":True,"mercantileWeightNotForcedFriendship":True,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Global aggregate proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("renderInputs") or 0)!=0 or int(proof.get("perFrameCountryIterations") or 0)!=0:
+                raise RuntimeError(f"Global aggregate proof gained render/frame authority in frame {index}: {proof}")
+            if int(proof.get("perCitizenGlobalIterations") or 0)!=0:
+                raise RuntimeError(f"Global aggregate proof performed per-citizen global work: {proof}")
+            if int(proof.get("maxCountries") or 0)>25 or int(proof.get("maxRelations") or 0)>20:
+                raise RuntimeError(f"Global aggregate scope exceeds bounded catalogs: {proof}")
+
+        active=[panel for panel in panels if int(panel.get("lastStep") or 0)>=1]
+        if not active:
+            raise RuntimeError(f"Global aggregate evidence never executed a controlled step: {panels}")
+        country=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=1),None)
+        if not country or int(country.get("countryARevision") or 0)<=0 or int(country.get("countryBRevision") or 0)<=0:
+            raise RuntimeError(f"Two-country aggregate revisions were not created: {panels}")
+        if country.get("countryASignature")==country.get("countryBSignature"):
+            raise RuntimeError(f"Different countries produced identical aggregate outcomes: {country}")
+
+        relation=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=2),None)
+        if not relation or int(relation.get("relationRevision") or 0)<=0 or relation.get("relationRestricted") is not True:
+            raise RuntimeError(f"Diplomacy restriction evidence missing: {panels}")
+        if relation.get("contextAfterRevision")==relation.get("contextBeforeRevision"):
+            raise RuntimeError(f"WorldContext did not lazily refresh after diplomacy revision: {relation}")
+        if float(relation.get("contextAfterTrade") or 0)>=float(relation.get("contextBeforeTrade") or 0):
+            raise RuntimeError(f"Trade restriction did not reduce downstream settlement trade: {relation}")
+        if int(relation.get("settlementDeltaCount") or 0)!=0:
+            raise RuntimeError(f"Global update fanned out into settlement CampaignDelta entries: {relation}")
+
+        due=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=3),None)
+        if not due or due.get("dueOnlyPass") is not True:
+            raise RuntimeError(f"Future country event was processed before it became due: {panels}")
+        final=next((panel for panel in reversed(panels) if int(panel.get("lastStep") or 0)>=4),None)
+        if not final or final.get("stableAfterCamera") is not True:
+            raise RuntimeError(f"Camera movement changed global authoritative state: {panels}")
+
+        for index,panel in enumerate(panels,start=1):
+            if not panel.get("present") or not panel.get("pass"):
+                raise RuntimeError(f"Global aggregate inspector proof incomplete in frame {index}: {panel}")
+            states=panel.get("checkStates") or []
+            if len(states)!=6 or any(state!="PASS" for state in states):
+                raise RuntimeError(f"Global aggregate panel checks did not all pass in frame {index}: {panel}")
+        return
 
     if scenario == "wp-s007-004":
         if len(frames) < 2:

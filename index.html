@@ -1197,6 +1197,32 @@
     </div>
   </details>
 
+  <details id="globalCountrySimulationProof">
+    <summary>WP-S007-005 Global Country/Diplomacy Aggregate Simulation</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>Tracked aggregate scope</span><strong id="globalCountryTracked">—</strong></div>
+        <div><span>Fantasy-time cadence</span><strong id="globalCountryCadence">—</strong></div>
+        <div><span>Processed due events</span><strong id="globalCountryEvents">—</strong></div>
+        <div><span>Last bounded update cost</span><strong id="globalCountryCost">—</strong></div>
+        <div><span>Evidence country pair</span><strong id="globalCountryPair">—</strong></div>
+        <div><span>Country outcome signatures</span><strong id="globalCountrySignatures">—</strong></div>
+        <div><span>Evidence bilateral relation</span><strong id="globalCountryRelation">—</strong></div>
+        <div><span>Lazy downstream refresh</span><strong id="globalCountryLazy">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Recent aggregate event/state ledger</h4>
+        <ul id="globalCountryLedger" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Country and diplomacy outcomes are deterministic scheduled aggregate events, not render-frame work</span><b id="vGlobalCountryDeterministic">WAITING</b></div>
+      <div class="check"><span>Different country profiles/geography/resources produce different live aggregate outcomes</span><b id="vGlobalCountryDifferent">WAITING</b></div>
+      <div class="check"><span>Country/relation revisions propagate lazily through WorldContext without settlement/NPC fan-out</span><b id="vGlobalCountryLazy">WAITING</b></div>
+      <div class="check"><span>Off-screen and camera-moved histories produce the same authoritative aggregate state</span><b id="vGlobalCountryOffscreen">WAITING</b></div>
+      <div class="check"><span>Global work is bounded to country/relation aggregates with zero per-citizen global iteration</span><b id="vGlobalCountryBounded">WAITING</b></div>
+      <div class="check"><span>Due-only processing and sparse CampaignDelta ledgers keep global changes traceable</span><b id="vGlobalCountryLedger">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1248,6 +1274,7 @@
 <script src="scripts/world/building-interiors.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/core/event-scheduler.js"></script>
+<script src="scripts/world/global-country-simulation.js"></script>
 <script src="scripts/world/character-memory.js"></script>
 <script src="scripts/world/social-state.js"></script>
 <script src="scripts/world/dialogue-context.js"></script>

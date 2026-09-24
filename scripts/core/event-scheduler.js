@@ -106,8 +106,23 @@ function boundedLimit(value){
 function processDue(seedValue,nowValue,optionsValue){
   const seed=normalizeSeed(seedValue),now=normalizeTimestamp(nowValue),options=optionsValue||{};
   const state=stateFor(seed),limit=boundedLimit(options.maxEvents),processed=[];
-  while(processed.length<limit&&state.queue.length&&state.queue[0].fantasyTimestamp<=now){
-    const event=state.queue.shift();
+  const systems=Array.isArray(options.systemKinds)&&options.systemKinds.length
+    ?new Set(options.systemKinds.map(required).map(String))
+    :null;
+  const matchingIndex=()=>{
+    if(!state.queue.length)return -1;
+    if(!systems)return state.queue[0].fantasyTimestamp<=now?0:-1;
+    for(let i=0;i<state.queue.length;i++){
+      const item=state.queue[i];
+      if(item.fantasyTimestamp>now)break;
+      if(systems.has(item.systemKind))return i;
+    }
+    return -1;
+  };
+  while(processed.length<limit){
+    const index=matchingIndex();
+    if(index<0)break;
+    const event=state.queue.splice(index,1)[0];
     const randomUint32=addressedRandom(seed,event);
     const outcome=typeof options.handle==="function"?options.handle(event,randomUint32):null;
     const record=deepFreeze({event,randomUint32,outcome:clone(outcome)});
@@ -116,11 +131,13 @@ function processDue(seedValue,nowValue,optionsValue){
     state.history.push(deepFreeze({id:event.id,address:event.address,randomUint32}));
     if(state.history.length>HISTORY_LIMIT)state.history.splice(0,state.history.length-HISTORY_LIMIT);
   }
+  const relevant=systems?state.queue.filter(item=>systems.has(item.systemKind)):state.queue;
   state.batches++;state.lastBatchSize=processed.length;state.maxObservedBatch=Math.max(state.maxObservedBatch,processed.length);
   return deepFreeze({
     now,limit,processed:Object.freeze(processed),processedCount:processed.length,
-    pending:state.queue.length,nextDue:state.queue[0]?.fantasyTimestamp||null,
-    hasMoreDue:Boolean(state.queue.length&&state.queue[0].fantasyTimestamp<=now),bounded:processed.length<=MAX_BATCH
+    pending:state.queue.length,pendingMatching:relevant.length,nextDue:relevant[0]?.fantasyTimestamp||null,
+    hasMoreDue:Boolean(relevant.length&&relevant[0].fantasyTimestamp<=now),bounded:processed.length<=MAX_BATCH,
+    systemKinds:systems?Object.freeze([...systems].sort()):null
   });
 }
 function peekDue(seedValue,nowValue,maxValue){

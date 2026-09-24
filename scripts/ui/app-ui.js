@@ -3,6 +3,7 @@
 const e={};
 let restoredCampaign=false;
 let clockTimer=null;
+let lastGlobalAggregateMinuteKey=null;
 let lastNpcVisibilityState=Object.freeze({
   hiddenIndoorIds:Object.freeze([]),
   hiddenOccludedIds:Object.freeze([]),
@@ -2345,6 +2346,12 @@ function renderEventSchedulerProof(){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.EventScheduler.renderDebugPanel(seed,document.getElementById("eventSchedulerProof"));
 }
+function renderGlobalCountrySimulationProof(){
+  if(typeof window.GlobalCountrySimulation?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.GlobalCountrySimulation.renderDebugPanel(seed,document.getElementById("globalCountrySimulationProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -2369,6 +2376,7 @@ function renderStatic(){
   renderWorldContextProof();
   renderSimulationTiersProof();
   renderEventSchedulerProof();
+  renderGlobalCountrySimulationProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2394,6 +2402,14 @@ function renderClock(){
   e.gameDate.textContent=date;e.gameTime.textContent=time;
   e.detailGameDate.textContent=date;e.detailGameTime.textContent=time;
   renderPRNG(fantasyTimestampMs);
+  const campaign=SeedSystem.getCampaign();
+  const timestampKey=GameTime.toTimestampKey(t);
+  const aggregateMinuteKey=timestampKey?timestampKey.slice(0,16):null;
+  if(campaign?.seed&&aggregateMinuteKey&&aggregateMinuteKey!==lastGlobalAggregateMinuteKey){
+    lastGlobalAggregateMinuteKey=aggregateMinuteKey;
+    try{window.GlobalCountrySimulation?.tick?.(campaign.seed,timestampKey,{maxEvents:EventScheduler?.MAX_BATCH||32})}
+    catch(error){console.error("Global aggregate Simulation tick failed.",error)}
+  }
   if(residentDateKey(t)!==lastResidentRosterDateKey)renderResidentRosterProof(t);
   if(!residentSchedulePinned&&residentScheduleHourKey(t)!==lastResidentScheduleHourKey){
     renderResidentScheduleProof(t,false);
@@ -2424,6 +2440,9 @@ async function startNewCampaign(){
     return;
   }
   WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
+  EventScheduler?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   closePopup("mainMenuPopup");
@@ -2462,6 +2481,9 @@ async function restartCampaign(){
     return;
   }
   WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
+  EventScheduler?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   closePopup("mainMenuPopup");
@@ -2604,6 +2626,8 @@ window.AppUI=Object.freeze({
   simulationTiersVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SimulationTiers?SimulationTiers.proof(campaign.seed):null;},
   refreshEventScheduler:()=>renderEventSchedulerProof(),
   eventSchedulerVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.EventScheduler?EventScheduler.proof(campaign.seed):null;},
+  refreshGlobalCountrySimulation:()=>renderGlobalCountrySimulationProof(),
+  globalCountrySimulationVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.GlobalCountrySimulation?GlobalCountrySimulation.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{
