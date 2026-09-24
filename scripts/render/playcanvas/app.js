@@ -721,13 +721,23 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const mat=material("terrain-chunk-surface",1,1,1);
     const texture=terrainTextureAtlas.texture?.()||null;
     const detailTexture=terrainTextureAtlas.detailTexture?.()||null;
+    const normalDetailTexture=terrainTextureAtlas.normalDetailTexture?.()||null;
+    const q=textureQualitySnapshot();
     mat.vertexColors=true;
     mat.diffuseVertexColor=true;
     mat.diffuseMap=state?.ready?detailTexture:null;
+    // Micro-relief is a single shared normal map prepared with the terrain
+    // detail texture. Low quality disables auxiliary maps cleanly; Standard+
+    // keeps the bounded shading detail without adding geometry/material variants.
+    const origin=rememberMaterialOrigin(mat)||{};
+    materialQualityOrigins.set(mat,{...origin,normalMap:state?.ready?normalDetailTexture:null});
+    mat.normalMap=(state?.ready&&q.auxiliaryMaps)?normalDetailTexture:null;
+    mat.bumpiness=q.auxiliaryMaps?0.28:0;
     mat.gloss=0.06;
     mat.metalness=0;
-    if(texture)applyTextureSampling(texture,textureQualitySnapshot());
-    if(detailTexture)applyTextureSampling(detailTexture,textureQualitySnapshot());
+    if(texture)applyTextureSampling(texture,q);
+    if(detailTexture)applyTextureSampling(detailTexture,q);
+    if(normalDetailTexture)applyTextureSampling(normalDetailTexture,q);
     mat.update();
     return state;
   }
@@ -987,6 +997,12 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       textureAtlas:terrainTextureAtlas?.stats?.()||null,
       terrainSurfaceMode:String(terrainTextureAtlas?.stats?.()?.heightfieldSurfaceMode||""),
       terrainDetailTextureReady:terrainTextureAtlas?.stats?.()?.detailTextureReady===true,
+      terrainNormalDetailTextureReady:terrainTextureAtlas?.stats?.()?.normalDetailTextureReady===true,
+      terrainMicroReliefMode:String(terrainTextureAtlas?.stats?.()?.microReliefMode||"off"),
+      terrainMicroReliefEnabled:terrainTextureAtlas?.stats?.()?.normalDetailTextureReady===true&&textureQualitySnapshot().auxiliaryMaps,
+      terrainMicroReliefStrength:Number(terrainTextureAtlas?.stats?.()?.normalDetailStrength||0),
+      terrainMicroReliefGeometryVerticesAdded:Number(terrainTextureAtlas?.stats?.()?.microReliefGeometryVerticesAdded||0),
+      terrainMicroReliefMaterialVariantsAdded:Number(terrainTextureAtlas?.stats?.()?.microReliefMaterialVariantsAdded||0),
       buildingSurfaceAtlas:buildingSurfaceAtlas?.stats?.()||null,
       buildingTexturedMaterialCount:Number(terrainChunkMeshFactory?.stats?.()?.buildingTexturedMaterialCount||0),
       buildingTexturedMaterialNames:terrainChunkMeshFactory?.stats?.()?.buildingTexturedMaterialNames||Object.freeze([]),
