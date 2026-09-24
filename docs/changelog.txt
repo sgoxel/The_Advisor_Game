@@ -835,3 +835,16 @@
 - Corrected Visual Evidence run 35943458284 passed on exact head f11d879089ce36a2adb4b37bbf8da560a8d88cb1. Deterministic event IDs/replay, storage round-trip, exact reload persistence, relationship/reputation/duty validity, social-system integration and world-authority isolation all passed.
 - All 5 fresh screenshots were directly inspected. The social panel remains readable with no major clipping, overlap or broken layout across baseline, positive, negative, steady-state and reload frames. VISUAL 8.6/10 PASS.
 - GitHub Pages run 35943444753 successfully deployed the tested head.
+2026-09-24 05:17 +03:00 | WP-S006-001 | Deterministic Country Territories + Political Centers
+- Added lazy Campaign-SEED political geography with stable country IDs/names, jittered political centers, national capitals, coordinate ownership lookup and direct geographic-neighbor discovery.
+- Replaced the old rectangular country label in GeographyFoundation hierarchy with the authoritative PoliticalGeography owner while preserving existing terrain, environment and coordinate authority.
+- Country ownership evaluates only a bounded 3×3 neighborhood (9 political candidates) around the queried coordinate; no finite political world map is materialized.
+- Final borders use center influence plus smooth deterministic border warp and geography-sensitive elevation/moisture/terrain/strategic-route weighting, producing irregular non-macro-cell boundaries.
+- National capitals are selected deterministically near their political centers with land/elevation preference; evidence confirms sampled capitals remain inside their own country.
+- Added robust shared-border neighbor semantics: a geographic neighbor is exposed only when multiple samples on both sides of the direct border consistently resolve to the two countries.
+- Added a Development Mode political inspector with selectable borders, country/capital metadata, neighbor list, geographic influence measurements and a 13×7 lazy territory/terrain sample.
+- First dedicated evidence run 35946272288 exposed that ring proximity alone could include a nearby country without a robust shared border. Commit 34267018834b325b0808682c08b30391a145c6e2 tightened neighbor classification to require stable direct shared-border samples.
+- Corrected Visual Evidence run 35946445000 passed on exact head 34267018834b325b0808682c08b30391a145c6e2. All five runtime frames passed deterministic country/capital/border reproduction, time independence, hierarchy integration, capital containment, border-side ownership, geographic border influence, non-rectangular final shape, bounded lazy lookup and terrain/render isolation.
+- Inspected borders included forest/water/grass contexts with measured geography shifts of 358.2, 156.9, 138.9 and 70.0 tiles; reload reproduced the first border exactly.
+- All 5 fresh screenshots were directly inspected. The political border panel is clear and stable with no major clipping, overlap or broken layout. VISUAL 8.7/10 PASS.
+- Generic regression Visual Evidence run 35946432954 passed; GitHub Pages run 35946432409 successfully deployed the tested head.
