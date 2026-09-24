@@ -1864,7 +1864,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003"}:
+            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004"}:
                 recovery = driver.execute_script(
                     """
                     const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
@@ -11231,7 +11231,7 @@ def take_screenshots(
                     time.sleep(interval)
                 else:
                     action = prep_action
-                if scenario == "wp-s003-009-003":
+                if scenario in {"wp-s003-009-003", "wp-s003-009-004"}:
                     WebDriverWait(driver, max(30.0, ready_timeout)).until(
                         lambda d: d.execute_script(
                             """
