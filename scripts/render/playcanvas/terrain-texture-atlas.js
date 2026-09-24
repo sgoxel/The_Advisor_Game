@@ -40,8 +40,13 @@ function create({pc,device}={}){
     const stride=size+PAD*2,width=COLUMNS*stride,height=rows*stride;
     const x=slot.col*stride+PAD,y=slot.row*stride+PAD,half=0.5;
     return Object.freeze({
-      u0:(x+half)/width,v0:(y+half)/height,
-      u1:(x+size-half)/width,v1:(y+size-half)/height,
+      u0:(x+half)/width,
+      // Canvas rows are top-down while PlayCanvas UV V=0 samples from the
+      // texture bottom. Flip the atlas row so every terrain family samples
+      // its authored slot instead of the vertically mirrored row.
+      v0:(height-(y+size)+half)/height,
+      u1:(x+size-half)/width,
+      v1:(height-y-half)/height,
       type:CORE_TYPES[slot.index]
     });
   }
