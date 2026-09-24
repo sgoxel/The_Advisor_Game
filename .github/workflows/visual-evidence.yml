@@ -229,7 +229,9 @@ jobs:
             scenario='starting-village'
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
+            requested_profile="$(printf '%s' "$COMMENT_BODY" | awk '{print $3}')"
             [ -n "$requested" ] && scenario="$requested"
+            [ -n "$requested_profile" ] && profile="$requested_profile"
             if [ "$scenario" = 'playcanvas-root-cutover' ]; then
               target='https://sgoxel.github.io/The_Advisor_Game/'
             else
