@@ -49,7 +49,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard — COMPLETED
 - `WP-S003-005-003` — PlayCanvas Terrain PNG-First + SVG-Fallback Textures — COMPLETED
 - `WP-S003-005-004` — Building Surface Textures + SVG Asset Fallback — COMPLETED
-- `WP-S003-005-005` — Fix Terrain Atlas UV Row Orientation + Black Surface Regression
+- `WP-S003-005-005` — Fix Terrain Atlas UV Row Orientation + Black Surface Regression — COMPLETED
 - `WP-S003-006` — PlayCanvas 3D Terrain Chunk Mesh + Background Preparation — COMPLETED
 - `WP-S003-006-001` — Adjustable Terrain Chunk Size — COMPLETED
 - `WP-S003-006-002` — Adjustable Terrain Preload + Chunk Cache Budget — COMPLETED
