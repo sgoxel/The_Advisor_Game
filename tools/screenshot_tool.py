@@ -5318,6 +5318,18 @@ def _focus_road_connector(driver, source_kind: str) -> str:
 
 
 def _place_npc_on_road_profile_target(driver, kind: str) -> str:
+    target_ready = driver.execute_script(
+        """
+        const seed=window.SeedSystem?.getCampaign?.()?.seed;
+        const cache=window.__wpS003006009RoadTargets;
+        return Boolean(seed && cache?.seed===seed && cache?.targets?.[String(arguments[0])]);
+        """,
+        kind,
+    )
+    if not target_ready:
+        # Reuse the deterministic road-profile target discovery so this helper
+        # is self-contained in scenarios that did not previously focus a road.
+        _focus_road_profile_target(driver, kind)
     result = driver.execute_async_script(
         """
         const kind=String(arguments[0]||'grass');
