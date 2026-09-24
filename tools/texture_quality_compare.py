@@ -253,9 +253,19 @@ try:
     wait.until(lambda d:d.execute_script("return document.readyState") == "complete")
     wait.until(lambda d:d.execute_script("""
       const s=window.RendererContract?.simulationSnapshot?.()||{};
-      return Boolean(window.RuntimeTextureQuality && window.RuntimeRenderQuality && window.GameRenderer?.snapshot?.()?.ready && s.campaignActive && s.protagonist);
+      const r=window.GameRenderer?.snapshot?.()||{};
+      const q=window.RuntimeTextureQuality?.snapshot?.()||{};
+      return Boolean(
+        window.RuntimeRenderQuality &&
+        r?.ready &&
+        s.campaignActive && s.protagonist &&
+        q.qualityProfile==='ultra' &&
+        r?.materialTextureQuality?.profile==='ultra' &&
+        r?.worldAssetPreparation?.ready &&
+        Number(r?.worldAssetCache?.pending||0)===0 &&
+        Number(r?.terrainChunks?.textureAtlas?.runtimeResolution||0)===128
+      );
     """))
-    refresh()
     persisted=driver.execute_script("return {texture:RuntimeTextureQuality.snapshot(),render:RuntimeRenderQuality.snapshot()}")
     after_reload=identity()
     if persisted["texture"].get("qualityProfile")!="ultra":
