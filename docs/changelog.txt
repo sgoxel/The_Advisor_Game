@@ -1167,3 +1167,10 @@
 - Removed resident-movement-driven roof cutaway and added bounded deterministic screen-space NPC billboard separation without changing Simulation coordinates.
 - Added a dedicated six-frame visual evidence scenario covering door approach, doorway disappearance, indoor hiding, rear/front building occlusion, visible-face door policy, wall-clearance routing and same-coordinate NPC separation.
 - Validation and fresh screenshot inspection pending.
+
+2026-09-24 17:53 +03:00 | WP-S004-004-001 | NPC building coherence — FUNCTIONAL PASS / VISUAL FAIL
+- Dedicated evidence attempt 1 (run 36014765300) and attempt 2 (run 36015161392) exposed scenario-harness frame-zero routing defects; the harness was corrected without weakening acceptance criteria.
+- Final permitted attempt 3 (run 36015640734) succeeded functionally across all six controlled states. The proof resident remained visible exactly one tile before the real E-side exterior door, disappeared on authoritative exterior-door occupancy, stayed fully hidden indoors with cutawayActive=false and hiddenRoofCount=0, was fully suppressed behind the house, remained visible on the camera-facing side, and two synthetic same-coordinate NPC billboards received deterministic presentation-only separation while preserving identical authoritative world coordinates.
+- ResidentMovement.verify passed deterministically with wallClearancePass=true and wallClearanceViolationCount=0. HousePlans and enterable SpecialLots both reported visibleEntranceSidesPass=true; Simulation authority remained preserved.
+- All six fresh screenshots from run 36015640734 were retrieved and directly inspected. Every frame was covered by the current unrelated "Startup interrupted" scene-loading error overlay/dimming, preventing honest visual inspection of the NPC/building result. VISUAL 3.0/10 FAIL because the intended gameplay evidence is materially obscured.
+- The three allowed test/improvement attempts are exhausted for this run. WP-S004-004-001 remains OPEN and is not marked COMPLETED.
