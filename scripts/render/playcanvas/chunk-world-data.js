@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.5.1";
+const VERSION="1.6.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -46,6 +46,139 @@ function sparseStaticKind(cell){
   }catch(_){}
   return null;
 }
+
+const DRESSING_BLOCKED_TERRAIN=new Set(["road","path","square","bridge","water","door","wall","floor","building"]);
+const DRESSING_ALLOWED_TERRAIN=new Set(["grass","dirt","farmland","plot","mud"]);
+const DRESSING_CONTEXTS=Object.freeze({
+  residential:Object.freeze(["garden","woodpile","bush","flower","fence"]),
+  commercial:Object.freeze(["signpost","barrel","crate","cart","sack"]),
+  workshop:Object.freeze(["woodpile","crate","barrel","cart","work-prop"]),
+  farm:Object.freeze(["fence","garden","pen","sack","cart"]),
+  civic:Object.freeze(["well","signpost","flower","bush","bench"])
+});
+function buildingDressingContext(building){
+  const kind=String(building?.kind||"").toLowerCase();
+  if(building?.source!=="special")return "residential";
+  if(kind==="tavern"||kind==="shop"||kind==="storehouse")return "commercial";
+  if(kind==="workshop"||kind==="workyard")return "workshop";
+  if(kind==="barn")return "farm";
+  if(kind==="meeting-hall")return "civic";
+  return "commercial";
+}
+function buildingCatalog(seed){
+  const out=[];
+  for(const plan of HousePlans.build(seed)){
+    out.push(Object.freeze({
+      id:String(plan.id),
+      kind:String(plan.kind||"house"),
+      source:"house",
+      bounds:Object.freeze({
+        minX:String(plan.bounds.minX),minY:String(plan.bounds.minY),
+        maxX:String(plan.bounds.maxX),maxY:String(plan.bounds.maxY)
+      }),
+      entrance:plan.entrance?Object.freeze({x:String(plan.entrance.x),y:String(plan.entrance.y)}):null
+    }));
+  }
+  for(const lot of SpecialLots.build(seed)){
+    out.push(Object.freeze({
+      id:String(lot.id),
+      kind:String(lot.kind||"special"),
+      label:String(lot.label||lot.kind||"special"),
+      source:"special",
+      enterable:Boolean(lot.enterable),
+      bounds:Object.freeze({
+        minX:String(lot.bounds.minX),minY:String(lot.bounds.minY),
+        maxX:String(lot.bounds.maxX),maxY:String(lot.bounds.maxY)
+      }),
+      entrance:lot.access?Object.freeze({x:String(lot.access.x),y:String(lot.access.y)}):null
+    }));
+  }
+  return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+}
+function roadAdjacent(seed,x,y){
+  const bx=BigInt(String(x)),by=BigInt(String(y));
+  for(const [dx,dy] of [[1n,0n],[-1n,0n],[0n,1n],[0n,-1n]]){
+    const tile=TerrainFoundation.getTile(seed,String(bx+dx),String(by+dy));
+    if(["road","path","square"].includes(String(tile?.type||"")))return true;
+  }
+  return false;
+}
+function dressingCell(seed,x,y,building,semantic,used){
+  const sx=String(x),sy=String(y),key=sx+","+sy;
+  if(used.has(key))return null;
+  const bx=BigInt(sx),by=BigInt(sy);
+  const b=building.bounds||{};
+  const minX=BigInt(String(b.minX)),maxX=BigInt(String(b.maxX));
+  const minY=BigInt(String(b.minY)),maxY=BigInt(String(b.maxY));
+  if(bx>=minX&&bx<=maxX&&by>=minY&&by<=maxY)return null;
+  if(building.entrance){
+    const ex=BigInt(String(building.entrance.x)),ey=BigInt(String(building.entrance.y));
+    if((bx>ex?bx-ex:ex-bx)+(by>ey?by-ey:ey-by)<=2n)return null;
+  }
+  const tile=TerrainFoundation.getTile(seed,sx,sy);
+  const type=String(tile?.type||"");
+  if(!tile||tile.buildingId||DRESSING_BLOCKED_TERRAIN.has(type)||!DRESSING_ALLOWED_TERRAIN.has(type))return null;
+  const local=window.StartingVillage?.local?.(seed,sx,sy)||null;
+  if(local&&window.StartingVillage?.isRoadReserved?.(seed,local))return null;
+  if((semantic==="garden"||semantic==="pen")&&!["grass","farmland","plot","dirt"].includes(type))return null;
+  const adjacentRoad=roadAdjacent(seed,sx,sy);
+  return Object.freeze({x:sx,y:sy,type,roadAdjacent:adjacentRoad});
+}
+function dressingCandidates(seed,building,semantic,used){
+  const b=building.bounds||{};
+  const minX=BigInt(String(b.minX)),maxX=BigInt(String(b.maxX));
+  const minY=BigInt(String(b.minY)),maxY=BigInt(String(b.maxY));
+  const candidates=[];
+  for(let ring=1;ring<=3;ring++){
+    const r=BigInt(ring);
+    for(let y=minY-r;y<=maxY+r;y++){
+      for(let x=minX-r;x<=maxX+r;x++){
+        if(x!==minX-r&&x!==maxX+r&&y!==minY-r&&y!==maxY+r)continue;
+        const cell=dressingCell(seed,x,y,building,semantic,used);
+        if(!cell)continue;
+        const h=presentationHash32(seed,cell.x,cell.y,"dressing:"+building.id+":"+semantic);
+        const roadPreference=(semantic==="signpost"||semantic==="cart"||semantic==="barrel")&&cell.roadAdjacent?0x100000000:0;
+        candidates.push(Object.freeze({...cell,ring,score:roadPreference+h}));
+      }
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score||a.ring-b.ring||Number(BigInt(a.y)-BigInt(b.y))||Number(BigInt(a.x)-BigInt(b.x)));
+  return candidates;
+}
+function semanticDressing(seed){
+  const used=new Set();
+  const out=[];
+  for(const building of buildingCatalog(seed)){
+    const context=buildingDressingContext(building);
+    const palette=DRESSING_CONTEXTS[context]||DRESSING_CONTEXTS.residential;
+    const target=building.source==="special"?4:3;
+    const shift=presentationHash32(seed,building.id,"0","dressing-palette")%palette.length;
+    for(let i=0;i<target;i++){
+      const semantic=palette[(i+shift)%palette.length];
+      const candidates=dressingCandidates(seed,building,semantic,used);
+      const selected=candidates[0];
+      if(!selected)continue;
+      const key=selected.x+","+selected.y;
+      used.add(key);
+      const h=presentationHash32(seed,selected.x,selected.y,"dressing-transform:"+semantic);
+      out.push(Object.freeze({
+        id:"dressing:"+building.id+":"+i+":"+semantic,
+        type:"dressing",
+        semantic,
+        context,
+        buildingId:String(building.id),
+        x:selected.x,y:selected.y,
+        sourceTerrain:selected.type,
+        roadAdjacent:Boolean(selected.roadAdjacent),
+        routeSafe:true,
+        rotation:(h%4)*90,
+        variant:(h>>>3)%3,
+        presentationScore:h
+      }));
+    }
+  }
+  return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+}
 function boundsFor(chunkX,chunkY,size){
   const s=BigInt(size);
   const minX=BigInt(chunkX)*s,minY=BigInt(chunkY)*s;
@@ -81,36 +214,7 @@ function intersects(bounds,other){
   return !(aMaxX<bMinX||bMaxX<aMinX||aMaxY<bMinY||bMaxY<aMinY);
 }
 function buildingReferences(seed,bounds){
-  const out=[];
-  for(const plan of HousePlans.build(seed)){
-    if(!intersects(bounds,plan.bounds))continue;
-    out.push(Object.freeze({
-      id:String(plan.id),
-      kind:String(plan.kind||"house"),
-      source:"house",
-      bounds:Object.freeze({
-        minX:String(plan.bounds.minX),minY:String(plan.bounds.minY),
-        maxX:String(plan.bounds.maxX),maxY:String(plan.bounds.maxY)
-      }),
-      entrance:plan.entrance?Object.freeze({x:String(plan.entrance.x),y:String(plan.entrance.y)}):null
-    }));
-  }
-  for(const lot of SpecialLots.build(seed)){
-    if(!intersects(bounds,lot.bounds))continue;
-    out.push(Object.freeze({
-      id:String(lot.id),
-      kind:String(lot.kind||"special"),
-      label:String(lot.label||lot.kind||"special"),
-      source:"special",
-      enterable:Boolean(lot.enterable),
-      bounds:Object.freeze({
-        minX:String(lot.bounds.minX),minY:String(lot.bounds.minY),
-        maxX:String(lot.bounds.maxX),maxY:String(lot.bounds.maxY)
-      }),
-      entrance:lot.access?Object.freeze({x:String(lot.access.x),y:String(lot.access.y)}):null
-    }));
-  }
-  return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+  return Object.freeze(buildingCatalog(seed).filter(item=>intersects(bounds,item.bounds)));
 }
 function freezeMovement(state){
   if(!state)return null;
@@ -238,6 +342,8 @@ function generate(spec){
 
   const buildings=buildingReferences(seed,bounds);
   for(const building of buildings)buildingIds.add(building.id);
+  const dressing=semanticDressing(seed).filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
+  for(const item of dressing)staticObjects.push(item);
   const ownedBuildings=buildings.filter(building=>{
     const anchor=building.entrance||{x:building.bounds.minX,y:building.bounds.minY};
     return ownsCoordinate(anchor.x,anchor.y,spec.x,spec.y,size);
@@ -288,8 +394,19 @@ function generate(spec){
         bounds:item.bounds,entrance:item.entrance||null
       }))),
       propDescriptors:Object.freeze(staticObjects.map(item=>Object.freeze({
-        id:item.id,type:item.type,x:item.x,y:item.y,sourceTerrain:item.sourceTerrain||null
+        id:item.id,type:item.type,x:item.x,y:item.y,sourceTerrain:item.sourceTerrain||null,
+        semantic:item.semantic||null,context:item.context||null,buildingId:item.buildingId||null,
+        roadAdjacent:Boolean(item.roadAdjacent),routeSafe:item.routeSafe!==false,
+        rotation:Number(item.rotation||0),variant:Number(item.variant||0)
       }))),
+      dressing:Object.freeze({
+        count:dressing.length,
+        routeSafeCount:dressing.filter(item=>item.routeSafe!==false).length,
+        contexts:Object.freeze(dressing.reduce((acc,item)=>{acc[item.context]=(acc[item.context]||0)+1;return acc;},{})),
+        semantics:Object.freeze(dressing.reduce((acc,item)=>{acc[item.semantic]=(acc[item.semantic]||0)+1;return acc;},{})),
+        deterministic:true,
+        rendererOnly:true
+      }),
       interiorObjectDescriptors:Object.freeze(interiorObjects),
       hardCodedSampleGeometry:false
     }),
@@ -418,7 +535,8 @@ function collectView({seed,center,columns,rows,chunkSize,signature}){
 }
 function stats(){
   let surfaceCellCount=0,buildingReferenceCount=0,staticObjectReferenceCount=0,completeEntryCount=0;
-  let presentationBuildingCount=0,presentationPropCount=0,presentationInteriorObjectCount=0,roadCellCount=0,waterCellCount=0,bridgeCellCount=0;
+  let presentationBuildingCount=0,presentationPropCount=0,presentationInteriorObjectCount=0,presentationDressingCount=0,dressingRouteSafeCount=0,roadCellCount=0,waterCellCount=0,bridgeCellCount=0;
+  const dressingContexts={},dressingSemantics={};
   for(const entry of cache.values()){
     const snapshot=entry.snapshot;
     surfaceCellCount+=Number(snapshot?.cells?.length||0);
@@ -427,6 +545,10 @@ function stats(){
     presentationBuildingCount+=Number(snapshot?.presentation?.buildingDescriptors?.length||0);
     presentationPropCount+=Number(snapshot?.presentation?.propDescriptors?.length||0);
     presentationInteriorObjectCount+=Number(snapshot?.presentation?.interiorObjectDescriptors?.length||0);
+    presentationDressingCount+=Number(snapshot?.presentation?.dressing?.count||0);
+    dressingRouteSafeCount+=Number(snapshot?.presentation?.dressing?.routeSafeCount||0);
+    for(const [key,value] of Object.entries(snapshot?.presentation?.dressing?.contexts||{}))dressingContexts[key]=(dressingContexts[key]||0)+Number(value||0);
+    for(const [key,value] of Object.entries(snapshot?.presentation?.dressing?.semantics||{}))dressingSemantics[key]=(dressingSemantics[key]||0)+Number(value||0);
     roadCellCount+=Number(snapshot?.terrain?.surfaceCounts?.road||0)+Number(snapshot?.terrain?.surfaceCounts?.path||0)+Number(snapshot?.terrain?.surfaceCounts?.square||0);
     waterCellCount+=Number(snapshot?.terrain?.surfaceCounts?.water||0);
     bridgeCellCount+=Number(snapshot?.terrain?.surfaceCounts?.bridge||0);
@@ -440,6 +562,11 @@ function stats(){
     buildingReferenceCount,
     staticObjectReferenceCount,
     presentationBuildingCount,presentationPropCount,presentationInteriorObjectCount,
+    presentationDressingCount,dressingRouteSafeCount,
+    dressingContexts:Object.freeze({...dressingContexts}),
+    dressingSemantics:Object.freeze({...dressingSemantics}),
+    dressingDeterministic:true,
+    dressingRendererOnly:true,
     roadCellCount,waterCellCount,bridgeCellCount,
     cacheHits,cacheMisses,
     completeChunkGenerations,
