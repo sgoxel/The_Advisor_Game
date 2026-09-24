@@ -5322,7 +5322,7 @@ def _focus_road_connector(driver, source_kind: str) -> str:
 
 
 def _prepare_multi_character_grounding(driver) -> str:
-    """Advance authoritative resident movement to a deterministic outdoor village scene."""
+    """Place real resident movement states on verified walkable village cells for evidence."""
     result = driver.execute_async_script(
         """
         const done=arguments[arguments.length-1];
@@ -5333,36 +5333,64 @@ def _prepare_multi_character_grounding(driver) -> str:
             const ui=window.AppUI;
             const renderer=window.GameRenderer;
             const camera=window.Camera;
-            const now=window.GameTime?.getNow?.();
-            if(!campaign||!movement?.reset||!movement?.advance||!ui?.refreshTerrain||
-               !ui?.refreshResidentCharacters||!renderer?.snapshot||!camera?.setCenter||
-               !camera?.setZoom||!now||!window.DailyActivity?.build){
-              done({ok:false,error:'multi-character-grounding-api-missing'});
+            if(!campaign||!movement?.beginProof||!movement?.proofPlaceResidentsAt||
+               !movement?.snapshot||!ui?.refreshTerrain||!ui?.refreshResidentCharacters||
+               !renderer?.snapshot||!camera?.setCenter||!camera?.setZoom){
+              done({ok:false,error:'multi-character-proof-api-missing'});
               return;
             }
 
-            const residents=DailyActivity.build(campaign.seed)||[];
-            let bestHour=12,bestScore=-1;
-            for(let hour=6;hour<=20;hour++){
-              const sample={year:now.year,month:now.month,day:now.day,hour,minute:30,second:0};
-              let score=0;
-              for(const resident of residents){
-                const activity=DailyActivity.resolveActionTarget?.(campaign.seed,resident,sample);
-                const target=activity?.target;
-                if(!target)continue;
-                const nav=window.InteriorObjects?.classifyNavigation
-                  ?InteriorObjects.classifyNavigation(campaign.seed,target.x,target.y)
-                  :window.Walkability?.classify?.(campaign.seed,target.x,target.y);
-                const x=Number(target.x),y=Number(target.y);
-                if(nav?.walkable&&!nav?.buildingId&&Number.isFinite(x)&&Number.isFinite(y)&&
-                   Math.max(Math.abs(x),Math.abs(y))<=24)score++;
-              }
-              if(score>bestScore){bestScore=score;bestHour=hour;}
+            const started=movement.beginProof(campaign.seed);
+            if(!started?.residentId){
+              done({ok:false,error:'multi-character-proof-start-failed'});
+              return;
             }
 
-            const sample={year:now.year,month:now.month,day:now.day,hour:bestHour,minute:30,second:0};
-            movement.reset(campaign.seed);
-            for(let i=0;i<90;i++)movement.advance(campaign.seed,sample,2);
+            const residentIds=(movement.snapshot()?.residents||[])
+              .map(item=>String(item?.residentId||''))
+              .filter(Boolean)
+              .slice(0,3);
+            if(residentIds.length<3){
+              done({ok:false,error:'multi-character-proof-residents-missing',residentIds});
+              return;
+            }
+
+            const used=new Set(['0,0']);
+            const anchors=[[-4,0],[4,0],[0,4]];
+            const placements=[];
+            const classify=(x,y)=>window.InteriorObjects?.classifyNavigation
+              ?InteriorObjects.classifyNavigation(campaign.seed,String(x),String(y))
+              :window.Walkability?.classify?.(campaign.seed,String(x),String(y));
+            for(let index=0;index<anchors.length;index++){
+              const [ax,ay]=anchors[index];
+              let selected=null;
+              for(let radius=0;radius<=5&&!selected;radius++){
+                for(let dy=-radius;dy<=radius&&!selected;dy++){
+                  for(let dx=-radius;dx<=radius;dx++){
+                    if(radius>0&&Math.max(Math.abs(dx),Math.abs(dy))!==radius)continue;
+                    const x=ax+dx,y=ay+dy,key=x+','+y;
+                    if(used.has(key)||Math.max(Math.abs(x),Math.abs(y))>9)continue;
+                    const nav=classify(x,y);
+                    if(nav?.walkable&&!nav?.buildingId){
+                      selected={x:String(x),y:String(y)};
+                      used.add(key);
+                      break;
+                    }
+                  }
+                }
+              }
+              if(!selected){
+                done({ok:false,error:'multi-character-proof-open-cell-missing',anchor:[ax,ay]});
+                return;
+              }
+              placements.push({residentId:residentIds[index],position:selected});
+            }
+
+            const placed=movement.proofPlaceResidentsAt(placements,'contact-grounding-flat');
+            if(!placed?.residentIds||placed.residentIds.length!==3){
+              done({ok:false,error:'multi-character-proof-placement-failed',placements,placed});
+              return;
+            }
 
             camera.setCenter('0','0');
             camera.setZoom(1);
@@ -5373,26 +5401,29 @@ def _prepare_multi_character_grounding(driver) -> str:
             const snap=renderer.snapshot?.()||{};
             const chars=snap.characterPresentation||{};
             const ids=chars.visibleCharacterIds||[];
-            const residentIds=ids.filter(id=>String(id).startsWith('resident:'));
+            const visibleResidents=ids.filter(id=>String(id).startsWith('resident:'));
+            const ok=chars.visibleProtagonist===true&&visibleResidents.length>=2;
             done({
-              ok:chars.visibleProtagonist===true&&residentIds.length>=2,
-              error:chars.visibleProtagonist===true&&residentIds.length>=2?null:'insufficient-flat-visible-characters',
-              bestHour,bestScore,
+              ok,
+              error:ok?null:'multi-character-proof-not-visible',
+              placements,
               visibleIds:ids,
-              residentIds,
+              visibleResidents,
               activeCharacterCount:Number(chars.activeCharacterCount||0),
               center:camera.getCenter?.()||null,
-              zoom:Number(camera.getZoom?.()||0)
+              zoom:Number(camera.getZoom?.()||0),
+              simulationAuthorityPreserved:snap.simulationAuthorityPreserved!==false
             });
           }catch(error){done({ok:false,error:String(error?.stack||error)});}
         })();
         """
     )
     if not isinstance(result, dict) or not result.get("ok"):
-        raise RuntimeError(f"Multi-character flat grounding scene failed: {result}")
+        raise RuntimeError(f"Multi-character flat grounding proof failed: {result}")
+    if result.get("simulationAuthorityPreserved") is not True:
+        raise RuntimeError(f"Multi-character grounding proof lost Simulation authority: {result}")
     return (
-        f"grounding-flat-authoritative:hour={result.get('bestHour')}:"
-        f"residents={len(result.get('residentIds') or [])}:"
+        f"grounding-flat-authoritative:residents={len(result.get('visibleResidents') or [])}:"
         f"active={result.get('activeCharacterCount')}"
     )
 
@@ -6699,6 +6730,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Contact grounding introduced one-entity-per-tile rendering in frame {index+1}: {chunks}")
             if quality.get("shadowsEnabled") is not False or str(quality.get("shadowQuality") or "off")!="off":
                 raise RuntimeError(f"Contact grounding accidentally enabled dynamic shadow maps in frame {index+1}: {quality}")
+            if "grounding:flat-characters" in action:
+                visible_ids=[str(value) for value in (chars.get("visibleCharacterIds") or [])]
+                resident_visible=sum(1 for value in visible_ids if value.startswith("resident:"))
+                if chars.get("visibleProtagonist") is not True or resident_visible<2:
+                    raise RuntimeError(f"Flat grounding frame requires protagonist plus multiple residents in frame {index+1}: {chars}")
             if active>=3:saw_multiple_characters=True
             if index==2 and float(grounding.get("maxSlopeMagnitude") or 0)>=0:
                 saw_raised_character=True
