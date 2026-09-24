@@ -36,6 +36,35 @@ function sameSimulation(a,b){
   return JSON.stringify(a)===JSON.stringify(b);
 }
 
+function localTerrainFrame(model){
+  const columns=Math.max(0,Number(model?.columns||0));
+  const rows=Math.max(0,Number(model?.rows||0));
+  const tiles=Array.isArray(model?.tiles)?model.tiles:[];
+  const center=freezePoint(model?.center);
+  const ready=Boolean(columns>0&&rows>0&&center&&tiles.length===columns*rows);
+  const cells=ready?tiles.map((tile,index)=>Object.freeze({
+    row:Number(tile?.row??Math.floor(index/columns)),
+    col:Number(tile?.col??(index%columns)),
+    x:stringCoordinate(tile?.x),
+    y:stringCoordinate(tile?.y),
+    type:String(tile?.type||"grass")
+  })):Object.freeze([]);
+  return Object.freeze({
+    ready,
+    source:"renderer-frame",
+    generatedForMiniMap:false,
+    columns,
+    rows,
+    tileCount:cells.length,
+    center,
+    regionKey:model?.regionKey??null,
+    projection:"soft-dimetric",
+    projectionBasis:Object.freeze({x:.66,y:.28}),
+    cells:Object.freeze(cells),
+    simulationAuthorityPreserved:true
+  });
+}
+
 function frameFromModel(model){
   if(!model)return null;
   const visibleCharacters=Array.isArray(model.visibleCharacters)
@@ -68,6 +97,7 @@ function frameFromModel(model){
     seed:model.seed??null,
     regionKey:model.regionKey??null,
     tileCount:Array.isArray(model.tiles)?model.tiles.length:0,
+    localTerrain:localTerrainFrame(model),
     protagonistWorld:freezePoint(model.protagonistWorld),
     buildingCount:Array.isArray(model.buildingInteriors)?model.buildingInteriors.length:0,
     interiorObjectCount:Array.isArray(model.interiorObjects)?model.interiorObjects.length:0,

@@ -16,6 +16,9 @@ const TERRAIN_COLORS=Object.freeze({
   sand:"#aa946c",
   farmland:"#857143",
   road:"#8b7d68",
+  path:"#8a7559",
+  square:"#9a8b72",
+  bridge:"#9c8766",
   floor:"#8c785d"
 });
 
@@ -25,6 +28,7 @@ let downButton=null;
 let upButton=null;
 let miniMap=null;
 let miniCtx=null;
+let miniMapState=Object.freeze({ready:false,source:"none",simulationAuthorityPreserved:true});
 let lastPointerInput=null;
 let intersectionObserver=null;
 let mutationObserver=null;
@@ -140,18 +144,23 @@ function drawMiniMap(){
   miniCtx.fillStyle="#10140f";
   miniCtx.fillRect(0,0,width,height);
 
-  const snapshot=window.GameRenderer?.snapshot?.()||{};
-  const cells=Array.isArray(snapshot.cells)?snapshot.cells:[];
-  const grid=snapshot.grid||{};
-  const columns=Number(grid.columns||0);
-  const rows=Number(grid.rows||0);
-  if(columns>0&&rows>0&&cells.length===columns*rows){
-    const basis=window.GameRenderer?.projectionBasis||{x:.66,y:.28};
-    const basisX=Math.max(.01,Number(basis.x)||.66);
-    const basisY=Math.max(.01,Number(basis.y)||.28);
+  const renderer=window.GameRenderer?.snapshot?.()||{};
+  const terrain=renderer?.frame?.localTerrain||renderer?.localTerrain||null;
+  const simulation=renderer?.simulationSnapshot||window.RendererContract?.simulationSnapshot?.()||null;
+  const cells=Array.isArray(terrain?.cells)?terrain.cells:[];
+  const columns=Number(terrain?.columns||0);
+  const rows=Number(terrain?.rows||0);
+  const ready=Boolean(terrain?.ready&&columns>0&&rows>0&&cells.length===columns*rows);
+  const basis=terrain?.projectionBasis||{x:.66,y:.28};
+  const basisX=Math.max(.01,Number(basis.x)||.66);
+  const basisY=Math.max(.01,Number(basis.y)||.28);
+  const padding=10;
+  let scale=1;
+  let markerPoint=()=>null;
+
+  if(ready){
     const logicalSpan=Math.max(1,columns+rows-2);
-    const padding=8;
-    const scale=Math.max(.1,Math.min(
+    scale=Math.max(.1,Math.min(
       (width-padding*2)/(logicalSpan*basisX),
       (height-padding*2)/(logicalSpan*basisY)
     ));
@@ -160,45 +169,114 @@ function drawMiniMap(){
     const centerCol=(columns-1)/2;
     const centerRow=(rows-1)/2;
 
-    for(let row=0;row<rows;row++){
-      for(let col=0;col<columns;col++){
-        const raw=cells[row*columns+col];
-        const type=typeof raw==="string"?raw:(raw?.type||"grass");
-        const dx=col-centerCol;
-        const dy=row-centerRow;
-        const x=width/2+(dx-dy)*basisX*scale;
-        const y=height/2+(dx+dy)*basisY*scale;
-        miniCtx.fillStyle=TERRAIN_COLORS[type]||"#65705f";
-        miniCtx.beginPath();
-        miniCtx.moveTo(x,y-halfH);
-        miniCtx.lineTo(x+halfW,y);
-        miniCtx.lineTo(x,y+halfH);
-        miniCtx.lineTo(x-halfW,y);
-        miniCtx.closePath();
-        miniCtx.fill();
-      }
+    for(const cell of cells){
+      const col=Number(cell?.col);
+      const row=Number(cell?.row);
+      if(!Number.isFinite(col)||!Number.isFinite(row))continue;
+      const dx=col-centerCol;
+      const dy=row-centerRow;
+      const x=width/2+(dx-dy)*basisX*scale;
+      const y=height/2+(dx+dy)*basisY*scale;
+      miniCtx.fillStyle=TERRAIN_COLORS[String(cell?.type||"grass")]||"#65705f";
+      miniCtx.beginPath();
+      miniCtx.moveTo(x,y-halfH);
+      miniCtx.lineTo(x+halfW,y);
+      miniCtx.lineTo(x,y+halfH);
+      miniCtx.lineTo(x-halfW,y);
+      miniCtx.closePath();
+      miniCtx.fill();
     }
+
+    markerPoint=point=>{
+      if(!point||!terrain?.center)return null;
+      try{
+        const dx=Number(BigInt(String(point.x))-BigInt(String(terrain.center.x)));
+        const dy=Number(BigInt(String(point.y))-BigInt(String(terrain.center.y)));
+        if(!Number.isSafeInteger(dx)||!Number.isSafeInteger(dy))return null;
+        return Object.freeze({
+          x:Number((width/2+(dx-dy)*basisX*scale).toFixed(3)),
+          y:Number((height/2+(dx+dy)*basisY*scale).toFixed(3)),
+          dx,dy
+        });
+      }catch(_){return null}
+    };
   }else{
     miniCtx.strokeStyle="rgba(190,205,181,.16)";
     miniCtx.lineWidth=1;
     for(let x=0;x<=width;x+=24){miniCtx.beginPath();miniCtx.moveTo(x,0);miniCtx.lineTo(x,height);miniCtx.stroke();}
     for(let y=0;y<=height;y+=22){miniCtx.beginPath();miniCtx.moveTo(0,y);miniCtx.lineTo(width,y);miniCtx.stroke();}
   }
-  miniCtx.strokeStyle="rgba(244,248,238,.9)";
-  miniCtx.lineWidth=2;
-  miniCtx.beginPath();
-  miniCtx.moveTo(width/2-7,height/2);
-  miniCtx.lineTo(width/2+7,height/2);
-  miniCtx.moveTo(width/2,height/2-7);
-  miniCtx.lineTo(width/2,height/2+7);
-  miniCtx.stroke();
 
-  const camera=document.getElementById("cameraCoordinate")?.textContent?.trim()||"(0,0)";
-  const protagonist=document.getElementById("protagonistLocation")?.textContent?.trim()||"—";
+  const camera=simulation?.cameraCenter||terrain?.center||null;
+  const protagonist=simulation?.protagonist||renderer?.frame?.protagonistWorld||null;
+  const cameraMarker=ready?markerPoint(camera):null;
+  const protagonistMarker=ready?markerPoint(protagonist):null;
+
+  if(cameraMarker){
+    miniCtx.save();
+    miniCtx.strokeStyle="rgba(244,248,238,.98)";
+    miniCtx.fillStyle="#f4f8ee";
+    miniCtx.lineWidth=2;
+    miniCtx.beginPath();
+    miniCtx.moveTo(cameraMarker.x-7,cameraMarker.y);
+    miniCtx.lineTo(cameraMarker.x+7,cameraMarker.y);
+    miniCtx.moveTo(cameraMarker.x,cameraMarker.y-7);
+    miniCtx.lineTo(cameraMarker.x,cameraMarker.y+7);
+    miniCtx.stroke();
+    miniCtx.font="700 9px Arial";
+    miniCtx.fillText("C",cameraMarker.x+8,cameraMarker.y-5);
+    miniCtx.restore();
+  }
+  if(protagonistMarker){
+    miniCtx.save();
+    miniCtx.strokeStyle="#f2c968";
+    miniCtx.fillStyle="rgba(242,201,104,.24)";
+    miniCtx.lineWidth=2.5;
+    miniCtx.beginPath();
+    miniCtx.arc(protagonistMarker.x,protagonistMarker.y,6,0,Math.PI*2);
+    miniCtx.fill();
+    miniCtx.stroke();
+    miniCtx.font="700 9px Arial";
+    miniCtx.fillStyle="#ffe29a";
+    miniCtx.fillText("P",protagonistMarker.x+8,protagonistMarker.y+10);
+    miniCtx.restore();
+  }
+
+  const formatPoint=point=>point?"("+String(point.x)+","+String(point.y)+")":"—";
   const cameraReadout=document.getElementById("miniMapCamera");
   const protagonistReadout=document.getElementById("miniMapProtagonist");
-  if(cameraReadout)cameraReadout.textContent=camera;
-  if(protagonistReadout)protagonistReadout.textContent=protagonist;
+  if(cameraReadout)cameraReadout.textContent=formatPoint(camera);
+  if(protagonistReadout)protagonistReadout.textContent=formatPoint(protagonist);
+
+  miniMapState=Object.freeze({
+    ready,
+    source:ready?String(terrain?.source||"renderer-frame"):"none",
+    generatedForMiniMap:Boolean(terrain?.generatedForMiniMap),
+    columns,
+    rows,
+    tileCount:cells.length,
+    regionKey:terrain?.regionKey||renderer?.regionKey||null,
+    center:terrain?.center||null,
+    projection:String(terrain?.projection||"soft-dimetric"),
+    projectionBasis:Object.freeze({x:basisX,y:basisY}),
+    camera,
+    protagonist,
+    cameraMarker,
+    protagonistMarker,
+    cameraProtagonistDistinct:Boolean(cameraMarker&&protagonistMarker&&(Math.abs(cameraMarker.x-protagonistMarker.x)>1||Math.abs(cameraMarker.y-protagonistMarker.y)>1)),
+    chunkSize:Number(renderer?.terrainChunks?.chunkSize||0),
+    zoom:Number(simulation?.cameraZoom||renderer?.frame?.cameraZoom||0),
+    revisionKey:ready?[
+      String(terrain?.regionKey||""),
+      String(terrain?.center?.x||""),
+      String(terrain?.center?.y||""),
+      String(cells.length),
+      String(simulation?.cameraZoom||renderer?.frame?.cameraZoom||"")
+    ].join("|"):"",
+    orientationMatchesGameplay:ready&&String(terrain?.projection||"")==="soft-dimetric",
+    usesPreparedRendererFrame:ready&&String(terrain?.source||"")==="renderer-frame"&&!terrain?.generatedForMiniMap,
+    simulationAuthorityPreserved:terrain?.simulationAuthorityPreserved!==false
+  });
 }
 function syncOrientation(){
   document.body.classList.toggle("control-deck-portrait",isPortrait());
@@ -265,6 +343,7 @@ function snapshot(){
     touchUsed:deck?.dataset.touchUsed==="true",
     lastInput:deck?.dataset.lastInput||null,
     lastAction:deck?.dataset.lastAction||null,
+    miniMap:miniMapState,
     panels
   };
 }

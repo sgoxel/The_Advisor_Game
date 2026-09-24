@@ -97,6 +97,7 @@ SCENARIOS = {
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s003-008-002",
+    "wp-s003-008-003",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -165,6 +166,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
+    "wp-s003-008-003": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1303,6 +1305,25 @@ def _queue_campaign_start_during_application_start(driver, timeout: float = 20.0
 
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
     queued_start_action = None
+    if scenario == "wp-s003-008-003":
+        if frame_index == 0:
+            return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
+        if frame_index == 1:
+            return _set_minimap_view(driver, 6, 4, 1.00)
+        if frame_index == 2:
+            chunk_size = int(driver.execute_script(
+                "return Number(window.TerrainChunkSizeSettings?.get?.()?.chunkSize||16)"
+            ))
+            return _set_minimap_view(driver, chunk_size + 2, 0, 1.00)
+        if frame_index == 3:
+            return _set_minimap_view(driver, 0, 0, 0.50)
+        if frame_index == 4:
+            return _set_minimap_view(driver, 0, 0, 1.00)
+        if frame_index == 5:
+            return _set_minimap_view(driver, 6, 4, 1.00, viewport=(390, 844), focus_map=True)
+        if frame_index == 6:
+            return _set_minimap_view(driver, 6, 4, 1.00, viewport=(844, 390))
+        return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
     if scenario == "wp-s003-008-002":
         timeout = max(timeout, 180.0)
         queued_start_action = _queue_campaign_start_during_application_start(driver, min(timeout, 30.0))
@@ -4777,6 +4798,40 @@ def _exercise_material_lifetime(driver) -> str:
     )
 
 
+def _set_minimap_view(
+    driver,
+    x: int,
+    y: int,
+    zoom: float,
+    *,
+    viewport: tuple[int, int] | None = None,
+    focus_map: bool = False,
+) -> str:
+    if viewport:
+        driver.set_window_size(int(viewport[0]), int(viewport[1]))
+        time.sleep(0.25)
+    action = _set_camera_view_and_render_active(driver, int(x), int(y), float(zoom), timeout=45.0)
+    result = driver.execute_script(
+        """
+        const focus=Boolean(arguments[0]);
+        window.ResponsiveControlDeck?.drawMiniMap?.();
+        if(focus)window.ResponsiveControlDeck?.focusPanel?.('map','keyboard');
+        const snap=window.ResponsiveControlDeck?.snapshot?.()?.miniMap||null;
+        return snap;
+        """,
+        bool(focus_map),
+    )
+    if not isinstance(result, dict) or result.get("ready") is not True:
+        raise RuntimeError(f"Mini Map did not reach a prepared renderer-frame state: {result}")
+    if result.get("usesPreparedRendererFrame") is not True:
+        raise RuntimeError(f"Mini Map used an unexpected terrain source: {result}")
+    return (
+        f"mini-map:{int(x)},{int(y)}@{float(zoom):.2f}:"
+        f"{int(result.get('columns') or 0)}x{int(result.get('rows') or 0)}:"
+        f"region={result.get('regionKey')}"
+    )
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-005-006":
         if frame_index == 0:
@@ -7389,6 +7444,65 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Reduced-motion loading fallback is not readable: {reduced}")
         return
 
+    if scenario == "wp-s003-008-003":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-008-003 requires eight Mini Map evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
+        maps=[(build.get("responsiveControlDeck") or {}).get("miniMap") or {} for build in builds]
+        protagonist_positions=[build.get("protagonistLocation") for build in builds]
+        if len(set(protagonist_positions))!=1 or not protagonist_positions[0]:
+            raise RuntimeError(f"Mini Map exercise changed Protagonist authority: {protagonist_positions}")
+        for index,item in enumerate(maps,start=1):
+            columns=int(item.get("columns") or 0)
+            rows=int(item.get("rows") or 0)
+            tile_count=int(item.get("tileCount") or 0)
+            if item.get("ready") is not True or item.get("source")!="renderer-frame":
+                raise RuntimeError(f"Mini Map frame {index} has no prepared renderer-frame terrain: {item}")
+            if columns<=0 or rows<=0 or tile_count!=columns*rows:
+                raise RuntimeError(f"Mini Map frame {index} source dimensions are invalid: {item}")
+            if item.get("usesPreparedRendererFrame") is not True or item.get("generatedForMiniMap") is not False:
+                raise RuntimeError(f"Mini Map frame {index} generated/used unexpected world data: {item}")
+            if item.get("orientationMatchesGameplay") is not True:
+                raise RuntimeError(f"Mini Map frame {index} orientation does not match dimetric gameplay: {item}")
+            if item.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Mini Map frame {index} changed Simulation authority: {item}")
+            if not item.get("cameraMarker") or not item.get("protagonistMarker"):
+                raise RuntimeError(f"Mini Map frame {index} is missing camera/protagonist markers: {item}")
+
+        start_map=maps[0]
+        panned_map=maps[1]
+        start_camera=start_map.get("camera") or {}
+        start_protagonist=start_map.get("protagonist") or {}
+        if start_camera.get("x")!=start_protagonist.get("x") or start_camera.get("y")!=start_protagonist.get("y"):
+            raise RuntimeError(f"Mini Map start frame is not centered on protagonist: {start_map}")
+        if start_map.get("cameraProtagonistDistinct") is True:
+            raise RuntimeError(f"Mini Map start markers should coincide: {start_map}")
+        if panned_map.get("cameraProtagonistDistinct") is not True:
+            raise RuntimeError(f"Mini Map panned frame did not separate camera and protagonist markers: {panned_map}")
+        if start_map.get("revisionKey")==panned_map.get("revisionKey"):
+            raise RuntimeError("Mini Map did not refresh after camera pan")
+
+        boundary_map=maps[2]
+        chunk_size=int(boundary_map.get("chunkSize") or 0)
+        boundary_camera=boundary_map.get("camera") or {}
+        if chunk_size<=0 or abs(int(boundary_camera.get("x") or 0))<=chunk_size:
+            raise RuntimeError(f"Mini Map chunk-boundary frame did not cross a chunk boundary: {boundary_map}")
+        if boundary_map.get("revisionKey")==panned_map.get("revisionKey"):
+            raise RuntimeError("Mini Map stayed stale across chunk-boundary movement")
+
+        if builds[3].get("cameraZoom")!="0.50×":
+            raise RuntimeError(f"Mini Map 0.50x evidence missing: {builds[3].get('cameraZoom')}")
+        if builds[4].get("cameraZoom")!="1.00×":
+            raise RuntimeError(f"Mini Map 1.00x evidence missing: {builds[4].get('cameraZoom')}")
+
+        portrait=frames[5].get("runtime",{}).get("viewport",{})
+        landscape=frames[6].get("runtime",{}).get("viewport",{})
+        if int(portrait.get("height") or 0)<=int(portrait.get("width") or 0):
+            raise RuntimeError(f"Mini Map phone portrait evidence missing: {portrait}")
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
+            raise RuntimeError(f"Mini Map phone landscape evidence missing: {landscape}")
+        return
+
     if scenario == "wp-s003-008-001":
         if len(frames) < 16:
             raise RuntimeError("wp-s003-008-001 requires sixteen evidence frames")
@@ -9349,12 +9463,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
