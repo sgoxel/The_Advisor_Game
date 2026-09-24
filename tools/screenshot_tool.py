@@ -3933,7 +3933,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             "schemasVersioned":True,"foundationUnaffected":True,"currentMergeDeterministic":True,
             "untouchedQuerySparse":True,"sparseDeltaSchema":True,"unloadReloadStable":True,
             "liveDeltaMerged":True,"persistedMatchesMemory":True,"structuralIdentityCoverage":True,
-            "renderingZeroAuthority":True,"noWholeWorldSave":True,
+            "deltaDomainCoverage":True,"renderingZeroAuthority":True,"noWholeWorldSave":True,
             "foundationMutation":False,"wholeWorldSerialized":False,"renderDependency":False,
             "cameraDependency":False,"assetLoadingDependency":False,"deviceSpeedDependency":False,
         }
@@ -3979,7 +3979,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Sparse save payload changed without campaign changes: {changed}")
         if panels[5].get("focusId")!=panels[1].get("focusId") or panels[5].get("currentSignature")!=panels[1].get("currentSignature"):
             raise RuntimeError(f"World-state changed after full page reload: {panels[1]} -> {panels[5]}")
-        if "drag:" not in str(frames[3].get("action") or ""):
+        if "drag-" not in str(frames[3].get("action") or ""):
             raise RuntimeError(f"World-state camera-independence frame did not move camera: {frames[3].get('action')}")
         return
 
