@@ -94,9 +94,7 @@ function buildingCatalog(seed){
       entrance:lot.access?Object.freeze({x:String(lot.access.x),y:String(lot.access.y)}):null
     }));
   }
-  const result=Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
-  dressingCache.set(cacheKey,result);
-  return result;
+  return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
 }
 function roadAdjacent(seed,x,y){
   const bx=BigInt(String(x)),by=BigInt(String(y));
@@ -183,7 +181,9 @@ function semanticDressing(seed){
       }));
     }
   }
-  return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+  const result=Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+  dressingCache.set(cacheKey,result);
+  return result;
 }
 function boundsFor(chunkX,chunkY,size){
   const s=BigInt(size);
