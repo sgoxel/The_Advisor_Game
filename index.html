@@ -1098,6 +1098,42 @@
     </div>
   </details>
 
+  <details id="worldContextProof">
+    <summary>WP-S007-002 Hierarchical World Context Resolver + Influence Inheritance</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>Focused settlement</span><strong id="worldContextTarget">—</strong></div>
+        <div><span>Country current state</span><strong id="worldContextCountry">—</strong></div>
+        <div><span>Region current state</span><strong id="worldContextRegion">—</strong></div>
+        <div><span>Local geography / route</span><strong id="worldContextLocal">—</strong></div>
+        <div><span>Local resource authority</span><strong id="worldContextResources">—</strong></div>
+        <div><span>Diplomacy / border</span><strong id="worldContextDiplomacy">—</strong></div>
+        <div><span>Settlement current state</span><strong id="worldContextSettlement">—</strong></div>
+        <div><span>Resolved context revision</span><strong id="worldContextRevision">—</strong></div>
+        <div><span>Parent revisions</span><strong id="worldContextParents">—</strong></div>
+        <div><span>Cache telemetry</span><strong id="worldContextCache">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Resolved behavior modifiers</h4>
+        <div id="worldContextBehavior" class="region-specialization-bars"></div>
+      </section>
+      <section class="region-profile-section">
+        <h4>Influence chain + revision stamps</h4>
+        <ul id="worldContextLayers" class="region-profile-comparison"></ul>
+      </section>
+      <section class="region-profile-section">
+        <h4>Same country, different regional/local context</h4>
+        <ul id="worldContextComparison" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Same authoritative state + fantasy timestamp resolves deterministically and repeated queries hit cache</span><b id="vWorldContextDeterministic">WAITING</b></div>
+      <div class="check"><span>Country → region → local geography/resources → settlement revisions are recorded for downstream economy/job/NPC consumers</span><b id="vWorldContextHierarchy">WAITING</b></div>
+      <div class="check"><span>Two settlements in one country differ because regional terrain/resources remain locally authoritative</span><b id="vWorldContextRegional">WAITING</b></div>
+      <div class="check"><span>National agriculture/mining/maritime tendencies cannot exceed local resource/geography ceilings</span><b id="vWorldContextLocal">WAITING</b></div>
+      <div class="check"><span>Upper-level changes require no world-wide fan-out; dependent context refreshes lazily on next query</span><b id="vWorldContextLazy">WAITING</b></div>
+      <div class="check"><span>Resolver reads CurrentWorld but never mutates Simulation state and remains independent of rendering/loading state</span><b id="vWorldContextAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1137,6 +1173,7 @@
 <script src="scripts/world/settlement-building-catalog.js"></script>
 <script src="scripts/world/daily-activity.js"></script>
 <script src="scripts/world/world-state.js"></script>
+<script src="scripts/world/world-context.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/world/walkability.js"></script>
 <script src="scripts/world/route-planner.js"></script>
