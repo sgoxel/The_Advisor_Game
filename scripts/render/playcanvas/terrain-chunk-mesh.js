@@ -202,6 +202,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   const routeSurfaceMaterials=new Map();
   const treeSpriteMaterials=new Map();
   const surfaceBoundMaterials=new Set();
+  const buildingMaterialVariantEvidence=new Map();
   const primitiveMeshes=new Map();
   const baseBox=new pc.BoxGeometry();
   let creations=0,destroys=0,totalBuildMs=0,maxBuildMs=0;
@@ -992,14 +993,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       :buildingVariantMaterial(wallBase,variantIndex,0.61,0.52,0.36,0.10,variant.wall);
     const roof=buildingVariantMaterial("building-roof",variantIndex,0.33,0.15,0.10,0.08,variant.roof);
     const door=buildingVariantMaterial("building-door",variantIndex,0.20,0.11,0.06,0.06,variant.trim);
-    buildingMaterialVariants.push(Object.freeze({
+    const variantSample=Object.freeze({
       buildingId:String(descriptor.id||index),source:String(descriptor.source||"normal"),
       variantIndex,
       wallSurface:wallBase,
       wallTint:Object.freeze(variant.wall.slice()),
       roofTint:Object.freeze(variant.roof.slice()),
       trimTint:Object.freeze(variant.trim.slice())
-    }));
+    });
+    buildingMaterialVariants.push(variantSample);
+    buildingMaterialVariantEvidence.set(variantSample.buildingId,variantSample);
+    if(buildingMaterialVariantEvidence.size>64){
+      const oldest=buildingMaterialVariantEvidence.keys().next().value;
+      if(oldest!==undefined)buildingMaterialVariantEvidence.delete(oldest);
+    }
     const contact=contactShadowMaterial("foundation");
     const rootName="ChunkBuilding_"+String(descriptor.id||index).replace(/[^a-z0-9_-]+/gi,"-");
     const outerW=b.width*0.90,outerD=b.depth*0.90,thickness=0.22;
@@ -1572,6 +1579,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       instancingParentTranslationAppliedOnce:true,
       frustumCulledMeshInstances,
       sharedPresentationMaterialCount:presentationMaterials.size,
+      buildingMaterialVariationDeterministic:true,
+      buildingMaterialVariantPaletteSize:BUILDING_MATERIAL_VARIANTS.length,
+      buildingMaterialVariantCount:new Set([...buildingMaterialVariantEvidence.values()].map(item=>item.variantIndex)).size,
+      buildingMaterialVariantMaterialBudget:16,
+      buildingMaterialVariantMaterialCount:[...presentationMaterials.keys()].filter(name=>/^building-(?:house-wall|special-wall|roof|door)-v\d+$/.test(String(name))).length,
+      buildingMaterialVariantSamples:Object.freeze([...buildingMaterialVariantEvidence.values()].slice(0,24)),
       treeSpriteMaterialCount:treeSpriteMaterials.size,
       treeSpriteMaterialRebinds,treeSpriteMaterialRefreshes,
       treeSpriteMaterialAtlasSignatures:Object.freeze([...treeSpriteMaterials.values()].map(m=>String(m._advisorTreeAtlasSignature||"")).sort()),
