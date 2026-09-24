@@ -77,7 +77,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment — COMPLETED
 - `WP-S004-003` — Deterministic Daily Activity + Action Targets — COMPLETED
 - `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement — COMPLETED
-- `WP-S004-004-001` — NPC Building Approach, Occlusion + Separation
+- `WP-S004-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
 - `WP-S004-005` — Interior Action Execution + Character State Presentation — COMPLETED
 
 # Stage 5 — Advisor Interaction + Social Foundation
