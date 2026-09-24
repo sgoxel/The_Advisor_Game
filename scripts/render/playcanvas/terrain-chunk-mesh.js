@@ -20,6 +20,11 @@ const HEIGHTFIELD_VERTICAL_SCALE=0.0022;
 const HEIGHTFIELD_RELIEF=0.065;
 const HEIGHTFIELD_WATER_Y=-0.22;
 const HEIGHTFIELD_BRIDGE_CLEARANCE=0.18;
+const WORLD_TILE_METERS=2;
+const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
+const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
+const ROAD_PROFILE_OUTER_RADIUS_TILES=2.15;
+const ROAD_PROFILE_SHOULDER_WIDTH_TILES=ROAD_PROFILE_OUTER_RADIUS_TILES-ROAD_PROFILE_CORE_RADIUS_TILES;
 const heightReferenceCache=new Map();
 const heightVertexCache=new Map();
 const HEIGHT_VERTEX_CACHE_LIMIT=16384;
@@ -44,6 +49,66 @@ function referenceElevation(seed){
   heightReferenceCache.set(key,value);
   return value;
 }
+function macroHeight(seed,x,y){
+  const elevation=Number(window.GeographyFoundation?.environment?.(seed,String(x),String(y))?.elevationMeters||referenceElevation(seed));
+  return Object.freeze({elevation,macro:(elevation-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE});
+}
+function smoothstep01(value){
+  const t=clamp(Number(value)||0,0,1);
+  return t*t*(3-2*t);
+}
+function roadProfileAtVertex(seed,xValue,yValue,naturalHeight,macro,type){
+  if(type==="water"||type==="bridge")return null;
+  let originX,originY;
+  try{originX=BigInt(String(xValue));originY=BigInt(String(yValue));}
+  catch(_){return null;}
+  let bestInfluence=0,weightSum=0,weightedMacro=0,weightedLift=0,primaryType=null,primaryLift=0;
+  for(let dy=-1;dy<=1;dy++){
+    for(let dx=-1;dx<=1;dx++){
+      const tx=originX+BigInt(dx),ty=originY+BigInt(dy);
+      const candidate=String(window.TerrainFoundation?.getTile?.(seed,String(tx),String(ty))?.type||"");
+      const lift=Number(ROAD_PROFILE_LIFTS[candidate]||0);
+      if(lift<=0)continue;
+      const distance=Math.hypot(dx+0.5,dy+0.5);
+      if(distance>ROAD_PROFILE_OUTER_RADIUS_TILES)continue;
+      const linear=1-clamp(
+        (distance-ROAD_PROFILE_CORE_RADIUS_TILES)/ROAD_PROFILE_SHOULDER_WIDTH_TILES,
+        0,1
+      );
+      const influence=smoothstep01(linear);
+      if(influence<=0)continue;
+      const sampleMacro=macroHeight(seed,String(tx),String(ty)).macro;
+      weightSum+=influence;
+      weightedMacro+=sampleMacro*influence;
+      weightedLift+=lift*influence;
+      if(influence>bestInfluence+1e-9||(Math.abs(influence-bestInfluence)<=1e-9&&lift>primaryLift)){
+        bestInfluence=influence;primaryType=candidate;primaryLift=lift;
+      }
+    }
+  }
+  if(weightSum<=0||bestInfluence<=0)return null;
+  const averageMacro=weightedMacro/weightSum;
+  const averageLift=weightedLift/weightSum;
+  // Core road/path/square vertices use the locally averaged macro slope, which
+  // removes high-frequency natural relief from the constructed surface. The
+  // bounded shoulder blends back into natural terrain without a second mesh.
+  const smoothedTarget=averageMacro+averageLift;
+  const blended=naturalHeight+(smoothedTarget-naturalHeight)*bestInfluence;
+  const minimumRaised=naturalHeight+averageLift*bestInfluence*0.55;
+  const height=Math.max(blended,minimumRaised);
+  return Object.freeze({
+    active:true,
+    primaryType,
+    influence:Number(bestInfluence.toFixed(4)),
+    core:bestInfluence>=0.999,
+    targetMacro:Number(averageMacro.toFixed(6)),
+    liftWorldUnits:Number(averageLift.toFixed(6)),
+    baseHeight:Number(naturalHeight.toFixed(6)),
+    height:Number(height.toFixed(6)),
+    delta:Number((height-naturalHeight).toFixed(6))
+  });
+}
+
 function heightfieldColor(seed,x,z,value){
   const text=String(value||"").trim();
   const match=/^#([0-9a-f]{6})$/i.exec(text);
@@ -76,19 +141,22 @@ function terrainHeightVertex(seed,xValue,yValue){
   const macro=(elevation-reference)*HEIGHTFIELD_VERTICAL_SCALE;
   const tile=window.TerrainFoundation?.getTile?.(seed,x,y)||null;
   const type=String(tile?.type||"grass");
-  let height=macro;
-  if(type==="water")height=HEIGHTFIELD_WATER_Y;
-  else if(type==="bridge")height=Math.max(HEIGHTFIELD_WATER_Y+HEIGHTFIELD_BRIDGE_CLEARANCE,macro);
+  let naturalHeight=macro;
+  if(type==="water")naturalHeight=HEIGHTFIELD_WATER_Y;
+  else if(type==="bridge")naturalHeight=Math.max(HEIGHTFIELD_WATER_Y+HEIGHTFIELD_BRIDGE_CLEARANCE,macro);
   else if(type==="road"||type==="path"||type==="square"||type==="building"||type==="floor"||type==="door"||type==="wall"){
-    height=macro;
+    naturalHeight=macro;
   }else{
-    height+=signed01(seed,x,y,"heightfield-relief")*HEIGHTFIELD_RELIEF;
+    naturalHeight+=signed01(seed,x,y,"heightfield-relief")*HEIGHTFIELD_RELIEF;
   }
+  const roadProfile=roadProfileAtVertex(seed,x,y,naturalHeight,macro,type);
+  const height=roadProfile?.active?roadProfile.height:naturalHeight;
   const sample=Object.freeze({
     height:clamp(height,-3.4,3.4),
     type,
     color:heightfieldColor(seed,x,y,tile?.color),
-    elevationMeters:elevation
+    elevationMeters:elevation,
+    roadProfile
   });
   heightVertexCache.set(cacheKey,sample);
   if(heightVertexCache.size>HEIGHT_VERTEX_CACHE_LIMIT){
@@ -640,6 +708,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
     const localSamples=new Map();
     let minHeight=Infinity,maxHeight=-Infinity,minElevation=Infinity,maxElevation=-Infinity;
+    let roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
+    let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
+    let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity;
     const sampleVertex=(wx,wz)=>{
       const key=String(wx)+","+String(wz);
       if(localSamples.has(key))return localSamples.get(key);
@@ -666,6 +737,16 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         uvs.push(Number(wx)*0.25,Number(wz)*0.25);
         minHeight=Math.min(minHeight,sample.height);maxHeight=Math.max(maxHeight,sample.height);
         minElevation=Math.min(minElevation,sample.elevationMeters);maxElevation=Math.max(maxElevation,sample.elevationMeters);
+        if(sample.roadProfile?.active){
+          const profile=sample.roadProfile;
+          roadProfileVertexCount++;
+          if(profile.core)roadProfileCoreVertexCount++;else roadProfileShoulderVertexCount++;
+          if(profile.primaryType==="road")roadProfileRoadVertexCount++;
+          else if(profile.primaryType==="path")roadProfilePathVertexCount++;
+          else if(profile.primaryType==="square")roadProfileSquareVertexCount++;
+          minRoadProfileDelta=Math.min(minRoadProfileDelta,Number(profile.delta||0));
+          maxRoadProfileDelta=Math.max(maxRoadProfileDelta,Number(profile.delta||0));
+        }
         if(detailReady)texturedSurfaceTypes.add(sample.type);else fallbackSurfaceTypes.add(sample.type);
       }
     }
@@ -751,6 +832,24 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       borderHeights,
       terrainGroundSampler:"indexed-triangle-exact",
       terrainHeightPreparedOnly:true,
+      roadProfileEnabled:true,
+      roadProfileMode:"shared-heightfield-smoothed-roadbed+bounded-shoulder",
+      roadLiftWorldUnits:ROAD_PROFILE_LIFTS.road,
+      pathLiftWorldUnits:ROAD_PROFILE_LIFTS.path,
+      squareLiftWorldUnits:ROAD_PROFILE_LIFTS.square,
+      roadShoulderCoreRadiusTiles:ROAD_PROFILE_CORE_RADIUS_TILES,
+      roadShoulderBlendWidthTiles:ROAD_PROFILE_SHOULDER_WIDTH_TILES,
+      roadShoulderBlendWidthWorldUnits:Number((ROAD_PROFILE_SHOULDER_WIDTH_TILES*WORLD_TILE_METERS).toFixed(3)),
+      bridgeClearanceWorldUnits:HEIGHTFIELD_BRIDGE_CLEARANCE,
+      roadProfileVertexCount,
+      roadProfileCoreVertexCount,
+      roadProfileShoulderVertexCount,
+      roadProfileRoadVertexCount,
+      roadProfilePathVertexCount,
+      roadProfileSquareVertexCount,
+      minRoadProfileDelta:Number.isFinite(minRoadProfileDelta)?Number(minRoadProfileDelta.toFixed(6)):0,
+      maxRoadProfileDelta:Number.isFinite(maxRoadProfileDelta)?Number(maxRoadProfileDelta.toFixed(6)):0,
+      roadProfileGroundingShared:true,
       visibleFrameTerrainRebuildCount:0,
       meshInstanceCount:1,
       materialCount:1,
@@ -901,6 +1000,16 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       heightfieldGridResolutionDefault:9,
       heightfieldVerticalScale:HEIGHTFIELD_VERTICAL_SCALE,
       heightfieldWaterY:HEIGHTFIELD_WATER_Y,
+      roadProfileEnabled:true,
+      roadProfileMode:"shared-heightfield-smoothed-roadbed+bounded-shoulder",
+      roadLiftWorldUnits:ROAD_PROFILE_LIFTS.road,
+      pathLiftWorldUnits:ROAD_PROFILE_LIFTS.path,
+      squareLiftWorldUnits:ROAD_PROFILE_LIFTS.square,
+      roadShoulderCoreRadiusTiles:ROAD_PROFILE_CORE_RADIUS_TILES,
+      roadShoulderBlendWidthTiles:ROAD_PROFILE_SHOULDER_WIDTH_TILES,
+      roadShoulderBlendWidthWorldUnits:Number((ROAD_PROFILE_SHOULDER_WIDTH_TILES*WORLD_TILE_METERS).toFixed(3)),
+      bridgeClearanceWorldUnits:HEIGHTFIELD_BRIDGE_CLEARANCE,
+      roadProfileGroundingShared:true,
       heightVertexSampleCalls,
       heightVertexCacheHits,
       heightVertexCacheEntries:heightVertexCache.size,
