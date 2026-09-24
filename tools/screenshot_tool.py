@@ -3848,6 +3848,59 @@ def _move_camera_relative_active(driver, dx: int, dy: int) -> str:
     return f"camera-relative-active:{dx},{dy}+"+action
 
 
+def _set_camera_view_and_render_active(driver, x: int, y: int, zoom: float, timeout: float = 45.0) -> str:
+    result = driver.execute_async_script(
+        """
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            if(!window.Camera?.setCenter||!window.Camera?.setZoom||!window.AppUI?.refreshTerrain){
+              done({ok:false,reason:'camera-view-refresh-api-missing'});
+              return;
+            }
+            window.Camera.setCenter(String(arguments[0]),String(arguments[1]));
+            const selected=window.Camera.setZoom(Number(arguments[2]));
+            await Promise.resolve(window.AppUI.refreshTerrain());
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            done({
+              ok:true,
+              center:window.Camera.getCenter?.()||null,
+              zoom:Number(window.Camera.getZoom?.()||selected),
+              terrainPreload:window.GameRenderer?.snapshot?.()?.terrainPreload||null
+            });
+          }catch(error){done({ok:false,reason:String(error?.stack||error)})}
+        })();
+        """,
+        int(x), int(y), float(zoom),
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Failed to set camera view and render: {result}")
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, timeout).until(
+        lambda d: d.execute_script(
+            """
+            const camera=window.Camera?.getCenter?.();
+            const z=Number(window.Camera?.getZoom?.()||0);
+            const snap=window.GameRenderer?.snapshot?.();
+            const frame=snap?.frame;
+            const chunks=snap?.terrainChunks;
+            return Boolean(
+              camera && frame?.center &&
+              String(camera.x)===String(arguments[0]) &&
+              String(camera.y)===String(arguments[1]) &&
+              String(frame.center.x)===String(arguments[0]) &&
+              String(frame.center.y)===String(arguments[1]) &&
+              Math.abs(z-Number(arguments[2]))<0.001 &&
+              Number(chunks?.visibleChunkCount||0)>0 &&
+              chunks?.resourceKind==='chunk-mesh'
+            );
+            """,
+            str(x), str(y), float(zoom),
+        )
+    )
+    return f"camera-view-active:{x},{y}@{zoom:.2f}"
+
+
 def _set_camera_zoom_and_render(driver, zoom: float, timeout: float = 15.0) -> str:
     result = driver.execute_async_script(
         """
@@ -4258,10 +4311,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "material-lifetime:phone-landscape+" + _focus_tree_sample_chunk(driver) + "+" + _set_camera_zoom_and_render(driver, 0.50, timeout=30.0)
         if frame_index == 5:
             driver.set_window_size(1920, 1080)
-            return "material-lifetime:return-high+" + _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0) + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+            time.sleep(0.75)
+            return "material-lifetime:return-high+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
         driver.set_window_size(1920, 1080)
+        time.sleep(0.75)
         quality=_set_material_lifetime_texture_quality(driver, "standard")
-        return "material-lifetime:return-standard+" + _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0) + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
+        return "material-lifetime:return-standard+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
     if scenario == "wp-s003-007-001":
         if frame_index == 0:
             return _render_quality_step(driver, mode="low", viewport=(1920, 1080))
