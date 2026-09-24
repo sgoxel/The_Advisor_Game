@@ -1928,6 +1928,12 @@ function renderDialogueContextProof(residentId="R03",caseId="public-friendly"){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.DialogueContext.renderDebugPanel(seed,residentId,caseId,document.getElementById("dialogueProof"));
 }
+function renderAdviceResolutionProof(adviceId=""){
+  if(typeof window.AdviceResolution?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.AdviceResolution.renderDebugPanel(seed,adviceId,document.getElementById("adviceResolutionProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1940,6 +1946,7 @@ function renderStatic(){
   renderAdviceLog();
   renderCharacterMemoryProof();
   renderDialogueContextProof();
+  renderAdviceResolutionProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2093,6 +2100,8 @@ window.AppUI=Object.freeze({
   characterMemoryVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CharacterMemory?CharacterMemory.verify(campaign.seed):null;},
   refreshDialogueContext:(residentId="R03",caseId="public-friendly")=>renderDialogueContextProof(residentId,caseId),
   dialogueContextVerify:(residentId="R03")=>{const campaign=SeedSystem.getCampaign();return campaign&&window.DialogueContext?DialogueContext.proof(campaign.seed,residentId):null;},
+  refreshAdviceResolution:(adviceId="")=>renderAdviceResolutionProof(adviceId),
+  adviceResolutionVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.AdviceResolution?AdviceResolution.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

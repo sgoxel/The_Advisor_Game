@@ -9,14 +9,16 @@ const VALID_STATUSES=Object.freeze([
   "accepted",
   "rejected",
   "deferred",
+  "modified",
   "forgotten"
 ]);
 const TRANSITIONS=Object.freeze({
   delivered:Object.freeze(["considered","deferred","forgotten"]),
-  considered:Object.freeze(["accepted","rejected","deferred","forgotten"]),
-  deferred:Object.freeze(["considered","accepted","rejected","forgotten"]),
+  considered:Object.freeze(["accepted","rejected","deferred","modified","forgotten"]),
+  deferred:Object.freeze(["considered","accepted","rejected","modified","forgotten"]),
   accepted:Object.freeze(["forgotten"]),
   rejected:Object.freeze(["forgotten"]),
+  modified:Object.freeze(["forgotten"]),
   forgotten:Object.freeze([])
 });
 

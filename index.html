@@ -757,6 +757,36 @@
     </div>
   </details>
 
+  <details id="adviceResolutionProof">
+    <summary>WP-S005-004 Advice Acceptance, Rejection + Influence Resolution</summary>
+    <div class="accordion-content technical-info">
+      <div class="advice-resolution-toolbar">
+        <label for="adviceResolutionSelect">Decision event</label>
+        <select id="adviceResolutionSelect" aria-label="Advice resolution decision event"></select>
+      </div>
+      <div class="detail-grid advice-resolution-grid">
+        <div><span>Decision</span><strong id="adviceResolutionDecision" class="advice-decision">—</strong></div>
+        <div><span>Advice</span><strong id="adviceResolutionAdvice">—</strong></div>
+        <div><span>Recommendation</span><strong id="adviceResolutionRecommendation">—</strong></div>
+        <div><span>Simulation validation</span><strong id="adviceResolutionSimulation">—</strong></div>
+        <div><span>Memory record</span><strong id="adviceResolutionMemory">—</strong></div>
+        <div><span>Execution boundary</span><strong id="adviceResolutionExecution">—</strong></div>
+      </div>
+      <article class="advice-resolution-card">
+        <span>Protagonist reasoning</span>
+        <strong id="adviceResolutionReasoning">—</strong>
+        <small id="adviceResolutionInfluence">—</small>
+        <small>Advice persuades; it never executes the action. Simulation remains authoritative.</small>
+      </article>
+      <ol id="adviceResolutionEvents" class="advice-resolution-events" aria-label="Advice decision event log"></ol>
+      <div class="check"><span>Accepted, rejected, deferred and modified choices are all supported without bypassing protagonist agency</span><b id="vAdviceDecisionStates">WAITING</b></div>
+      <div class="check"><span>Every outcome is traceable in both Advisor history and Protagonist memory with confidence/relevance effect</span><b id="vAdviceDualRecord">WAITING</b></div>
+      <div class="check"><span>Simulation compatibility is checked before any accepted/modified intent is eligible for execution</span><b id="vAdviceSimulation">WAITING</b></div>
+      <div class="check"><span>Same state and input reproduce the same decision, ID and validation result after persistence</span><b id="vAdviceDeterministic">WAITING</b></div>
+      <div class="check"><span>Resolution executes no action, creates no world truth and introduces no relationship authority shortcut</span><b id="vAdviceAgency">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -797,6 +827,7 @@
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/world/character-memory.js"></script>
 <script src="scripts/world/dialogue-context.js"></script>
+<script src="scripts/world/advice-resolution.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/ui/responsive-control-deck.js"></script>
 <script src="scripts/main.js"></script>

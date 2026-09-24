@@ -94,6 +94,7 @@ SCENARIOS = {
     "wp-s005-001",
     "wp-s005-002",
     "wp-s005-003",
+    "wp-s005-004",
     "playcanvas-root-cutover",
 }
 
@@ -140,6 +141,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s005-001": 4,
     "wp-s005-002": 4,
     "wp-s005-003": 5,
+    "wp-s005-004": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -350,6 +352,31 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        adviceResolution: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.AdviceResolution?.proof
+              ? window.AdviceResolution.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        adviceResolutionPanel: (() => {
+          const root=document.querySelector("#adviceResolutionProof");
+          if(!root)return null;
+          return {
+            present:true,
+            open:Boolean(root.open),
+            adviceId:root.dataset.adviceId||null,
+            decision:root.dataset.decision||null,
+            entryCount:Number(root.dataset.entryCount||0),
+            simulation:root.querySelector("#adviceResolutionSimulation")?.textContent?.trim()||null,
+            memoryId:root.querySelector("#adviceResolutionMemory")?.textContent?.trim()||null,
+            reasoning:root.querySelector("#adviceResolutionReasoning")?.textContent?.trim()||null,
+            eventDecisions:Array.from(root.querySelectorAll("#adviceResolutionEvents .advice-decision")).map(node=>node.textContent.trim().toLowerCase()),
+          };
         })(),
         dialogueContext: (() => {
           try {
@@ -1729,6 +1756,141 @@ def _show_dialogue_context_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_advice_resolution_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const channel=window.AdvisorChannel;
+        const memory=window.CharacterMemory;
+        const resolution=window.AdviceResolution;
+        if(!campaign?.seed||!channel||!memory||!resolution||!window.ActionExecutor||!window.DailyActivity){
+          return {ok:false,error:'advice-resolution-unavailable'};
+        }
+        const seed=campaign.seed;
+        const protagonistId='protagonist';
+
+        if(index===0){
+          localStorage.removeItem(channel.storageKey(seed,protagonistId));
+          memory.clear(seed);
+          resolution.clear(seed);
+
+          const resident=DailyActivity.roster(seed).find(item=>item.id==='R03');
+          const lunchBlock=resident?.schedule?.find(item=>item.state==='lunch');
+          if(!resident||!lunchBlock)return {ok:false,error:'proof-lunch-block-missing'};
+          const mid=Math.floor((lunchBlock.startMinute+lunchBlock.endMinute)/2);
+          const when={year:1200,month:6,day:12,hour:Math.floor(mid/60),minute:mid%60,second:0};
+          const activity=DailyActivity.resolve(seed,resident,when);
+          if(!activity)return {ok:false,error:'proof-activity-missing'};
+          const validIntent={position:{x:activity.target.x,y:activity.target.y},activity};
+          const invalidActivity={
+            ...activity,
+            action:'work',intendedAction:'work',
+            supportedActions:['eat']
+          };
+          const invalidIntent={position:{x:activity.target.x,y:activity.target.y},activity:invalidActivity};
+
+          const samples=[
+            {
+              topic:'Eat at the tavern before returning to work.',
+              target:'Tavern meal',
+              timestamp:'1200-06-12 12:20:00',
+              decisionTimestamp:'1200-06-12 12:21:00',
+              value:0.95,urgency:0.9,socialAcceptability:0.86,
+              intent:validIntent,
+              recommendation:'Take the meal now while the action is timely.'
+            },
+            {
+              topic:'Check the market notices when there is time.',
+              target:'Market notices',
+              timestamp:'1200-06-12 12:22:00',
+              decisionTimestamp:'1200-06-12 12:23:00',
+              value:0.82,urgency:0.25,socialAcceptability:0.8,
+              intent:validIntent,
+              recommendation:'Keep the useful suggestion for later.'
+            },
+            {
+              topic:'Insult the village elder to force immediate access.',
+              target:'Village elder',
+              timestamp:'1200-06-12 12:24:00',
+              decisionTimestamp:'1200-06-12 12:25:00',
+              value:0.75,urgency:0.9,socialAcceptability:0.1,
+              intent:validIntent,
+              recommendation:'Force the request despite the social cost.'
+            },
+            {
+              topic:'Use the tavern table as a workbench immediately.',
+              target:'Tavern table',
+              timestamp:'1200-06-12 12:26:00',
+              decisionTimestamp:'1200-06-12 12:27:00',
+              value:0.86,urgency:0.75,socialAcceptability:0.72,
+              intent:invalidIntent,
+              modifiedIntent:validIntent,
+              recommendation:'Use the tavern table as a workbench.',
+              modification:'Take a short meal at the tavern table instead.'
+            }
+          ];
+
+          for(const sample of samples){
+            const advice=channel.recordAdvice(seed,{
+              topic:sample.topic,
+              target:{kind:'topic',label:sample.target},
+              timestamp:sample.timestamp
+            },protagonistId);
+            const resolved=resolution.resolveAdvice(seed,{
+              adviceId:advice.id,
+              timestamp:sample.decisionTimestamp,
+              value:sample.value,
+              urgency:sample.urgency,
+              socialAcceptability:sample.socialAcceptability,
+              intent:sample.intent,
+              modifiedIntent:sample.modifiedIntent||null,
+              recommendation:sample.recommendation,
+              modification:sample.modification||''
+            });
+            if(!resolved)return {ok:false,error:'resolution-failed',adviceId:advice.id};
+          }
+        }
+
+        const entries=resolution.list(seed);
+        if(entries.length!==4)return {ok:false,error:'unexpected-resolution-count',count:entries.length};
+        const expected=['accepted','deferred','rejected','modified','accepted'];
+        const decision=expected[Math.min(index,expected.length-1)];
+        const selected=entries.find(entry=>entry.decision===decision);
+        if(!selected)return {ok:false,error:'expected-decision-missing',decision};
+
+        const section=document.querySelector('#developmentDetails');
+        const proof=document.querySelector('#adviceResolutionProof');
+        if(!section||!proof)return {ok:false,error:'resolution-proof-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        proof.open=true;
+        const rendered=resolution.renderDebugPanel(seed,selected.adviceId,proof);
+        proof.scrollIntoView({block:'start'});
+        const verify=resolution.proof(seed);
+        return {
+          ok:Boolean(verify.pass),
+          index,
+          selectedDecision:rendered?.entry?.decision||null,
+          selectedAdviceId:rendered?.entry?.adviceId||null,
+          entryCount:entries.length,
+          decisions:entries.map(entry=>entry.decision),
+          executionAllowed:rendered?.entry?.executionAllowed??null,
+          validationOk:rendered?.entry?.finalValidation?.ok??null,
+          validationReason:rendered?.entry?.finalValidation?.reason||null,
+          memoryId:rendered?.entry?.memoryId||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Advice resolution proof frame failed: {result}")
+    return (
+        f"advice-resolution:{frame_index}:{result.get('selectedDecision')}:"
+        f"validation={result.get('validationOk')}:{result.get('validationReason')}"
+    )
+
+
 def _show_advisor_channel_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -2732,7 +2894,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -2853,6 +3015,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_character_memory_proof(driver,frame_index)
     if scenario == "wp-s005-003":
         return _show_dialogue_context_proof(driver,frame_index)
+    if scenario == "wp-s005-004":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_advice_resolution_proof(driver,frame_index)
+        return _show_advice_resolution_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2887,6 +3054,72 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s005-004":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s005-004 requires five advice resolution evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("adviceResolution") or {} for build in builds]
+        panels=[build.get("adviceResolutionPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Advice resolution evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Advice resolution mutated Protagonist world position: {protagonists}")
+        for index,proof in enumerate(proofs,start=1):
+            required={
+                "pass":True,
+                "adviceStatusSync":True,
+                "memoryLinked":True,
+                "memoryEffects":True,
+                "simulationValidated":True,
+                "executionBoundary":True,
+                "decisionsCovered":True,
+                "deterministicIds":True,
+                "deterministicReplay":True,
+                "storageRoundTrip":True,
+                "protagonistAgencyPreserved":True,
+                "worldMutationApi":False,
+                "actionExecutionInvoked":False,
+                "relationshipPersistenceIntroduced":False,
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Advice resolution proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("entryCount") or 0)!=4:
+                raise RuntimeError(f"Advice resolution entry count mismatch in frame {index}: {proof}")
+        expected=["accepted","deferred","rejected","modified","accepted"]
+        actual=[panel.get("decision") for panel in panels]
+        if actual!=expected:
+            raise RuntimeError(f"Advice resolution decision sequence mismatch: {actual}")
+        if any(int(panel.get("entryCount") or 0)!=4 for panel in panels):
+            raise RuntimeError(f"Advice resolution panel lost event records: {panels}")
+        for panel in panels:
+            decisions=panel.get("eventDecisions") or []
+            if sorted(decisions)!=sorted(["accepted","deferred","rejected","modified"]):
+                raise RuntimeError(f"Advice decision event log incomplete: {panel}")
+            if not str(panel.get("memoryId") or "").startswith("MEM-protagonist-"):
+                raise RuntimeError(f"Advice decision memory link missing: {panel}")
+        before=proofs[0].get("entries") or []
+        after=proofs[4].get("entries") or []
+        if json.dumps(before,sort_keys=True)!=json.dumps(after,sort_keys=True):
+            raise RuntimeError("Advice resolution ledger changed after page reload")
+        accepted=next((entry for entry in before if entry.get("decision")=="accepted"),None)
+        modified=next((entry for entry in before if entry.get("decision")=="modified"),None)
+        rejected=next((entry for entry in before if entry.get("decision")=="rejected"),None)
+        deferred=next((entry for entry in before if entry.get("decision")=="deferred"),None)
+        if not accepted or not accepted.get("executionAllowed") or not (accepted.get("finalValidation") or {}).get("ok"):
+            raise RuntimeError(f"Accepted advice did not pass Simulation gate: {accepted}")
+        if not modified or not modified.get("executionAllowed") or not (modified.get("finalValidation") or {}).get("ok"):
+            raise RuntimeError(f"Modified advice did not pass revised Simulation gate: {modified}")
+        if (modified.get("originalValidation") or {}).get("ok") is not False:
+            raise RuntimeError(f"Modified proof did not demonstrate incompatible original intent: {modified}")
+        if rejected and rejected.get("executionAllowed"):
+            raise RuntimeError(f"Rejected advice became executable: {rejected}")
+        if deferred and deferred.get("executionAllowed"):
+            raise RuntimeError(f"Deferred advice became executable: {deferred}")
+        return
+
     if scenario == "wp-s005-003":
         if len(frames) < 5:
             raise RuntimeError("wp-s005-003 requires five dialogue context evidence frames")
@@ -5272,12 +5505,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
