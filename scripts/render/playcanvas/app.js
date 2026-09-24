@@ -940,9 +940,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       dressingRendererOnly=dressingRendererOnly&&resource.dressingRendererOnly!==false;
       for(const [key,value] of Object.entries(resource.dressingContextCounts||{}))dressingContextCounts[key]=(dressingContextCounts[key]||0)+Number(value||0);
       for(const [key,value] of Object.entries(resource.dressingSemanticCounts||{}))dressingSemanticCounts[key]=(dressingSemanticCounts[key]||0)+Number(value||0);
-      if(dressingSamples.length<32){
+      if(dressingSamples.length<96){
         for(const item of resource.dressingSamples||[]){
-          if(dressingSamples.length>=32)break;
+          if(dressingSamples.length>=96)break;
           dressingSamples.push(item);
         }
       }
