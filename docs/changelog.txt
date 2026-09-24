@@ -1050,3 +1050,13 @@
 - All 10 fresh screenshots were downloaded and directly inspected across origin 0.50x/1.00x/2.00x, rolling terrain, highland/rock, water edge, sloped-road target, chunk border, phone portrait and phone landscape.
 - VISUAL 6.5/10 FAIL. Terrain is coherent and seam-free with grounded buildings/characters and readable water/highland variation, but multiple desktop and mobile frames contain large opaque black rectangular tree planes. This is an obvious major visual defect, so Issue #79 remains open and ROADMAP is intentionally not marked COMPLETED.
 - Three correction/test cycles were used in this run; no fourth improvement loop was started. The next continuation must correct the black tree-plane rendering regression and obtain new fresh visual evidence >=8/10 before completion.
+
+2026-09-24 14:22 +03:00 | WP-S003-005-005 | Terrain black-surface regression — FINAL VALIDATED
+- Corrected terrain-atlas V row orientation so browser-canvas rows map to PlayCanvas UV space without vertically mirrored terrain-family slots.
+- Made every authored transparent terrain SVG/PNG safe for the 3D material path by compositing it over the terrain family's opaque base before upload; transparent detail pixels can no longer expose black atlas texels.
+- Validated the correction against the current low-poly heightfield renderer, which uses one shared neutral detail texture multiplied by semantic terrain vertex colors. Shared atlas/detail resources stay prepared and cached; no visible-frame decode, rasterization or atlas rebuild was introduced.
+- Attempt 1 (UV flip only) and Attempt 2 (opaque underlay) were directly inspected and rejected because black terrain holes remained. Attempt 3 on current main passed after the renderer's continuous semantic-color/detail path removed the remaining empty-cell exposure.
+- Exact-head landscape Visual Evidence run 35992147899 and phone-portrait run 35992184514 both passed on commit ab55e039273180c13984571432fcec3778716f19. All 6 fresh screenshots were downloaded and directly inspected.
+- VISUAL 8.4/10 PASS for this WP: terrain is continuous and opaque across desktop and portrait views, with readable grass/road/water differentiation and no large black/missing terrain regions. Minor softness/repetition remains a production-art quality concern, not a rendering failure.
+- Portrait telemetry reported terrainDetailTextureReady=true, heightfieldPass=true, sharedBorderEquality=true, colorFallbackBlockCount=0, frameDecodeCount=0, frameRasterizeCount=0, frameAtlasBuildCount=0, and Simulation authority preserved.
+- Extended issue-triggered visual evidence so an optional third token can request landscape or portrait capture without changing normal workflow defaults.
