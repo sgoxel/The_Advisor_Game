@@ -1340,6 +1340,23 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               Number(renderer?.terrainPreload?.queueDepth || 0) === 0
                             );
                           })()) &&
+                          (arguments[0] !== 'wp-s003-006-009' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              chunks.heightfieldPass === true &&
+                              chunks.indexedSharedVertices === true &&
+                              Number(chunks.heightfieldGridResolution || 0) === 9 &&
+                              Number(chunks.heightfieldStepTiles || 0) === 2 &&
+                              chunks.sharedBorderEquality === true &&
+                              chunks.roadProfileEnabled === true &&
+                              chunks.roadProfileGroundingShared === true &&
+                              Number(chunks.roadLiftWorldUnits || 0) > 0 &&
+                              Number(chunks.pathLiftWorldUnits || 0) > 0 &&
+                              Number(chunks.roadProfileVertexCount || 0) > 0 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
                           (arguments[0] !== 'wp-s003-006-006' || (() => {
                             const chunks=renderer?.terrainChunks || {};
                             const atlas=chunks?.treeSpriteAtlas || {};
