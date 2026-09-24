@@ -3839,11 +3839,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if int(proof.get("planCount") or 0)<12 or int(proof.get("representativeCount") or 0)!=5:
                 raise RuntimeError(f"Settlement-building proof sample set insufficient in frame {index}: {proof}")
 
-        expected=["starting-village","agricultural-village","trade-town","city","national-capital"]
+        expected=["agricultural-village","trade-town","city","national-capital","resource-specialist"]
         if [panel.get("reason") for panel in panels[:5]]!=expected:
             raise RuntimeError(f"Settlement-building representative order mismatch: {panels[:5]}")
         classes=[panel.get("classId") for panel in panels[:5]]
-        if classes[0]!="village" or classes[1]!="village" or classes[2]!="town" or classes[3]!="city" or classes[4]!="national-capital":
+        if classes[0]!="village" or classes[1]!="town" or classes[2]!="city" or classes[3]!="national-capital":
             raise RuntimeError(f"Village/town/city/capital evidence incomplete: {classes}")
         if len({panel.get("signature") for panel in panels[:5]})<4:
             raise RuntimeError(f"Settlement-building compositions are too template-like: {panels[:5]}")
@@ -3854,8 +3854,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Settlement-building function/mapping evidence incomplete: {panel}")
             if not panel.get("villageMapped") or not panel.get("capitalFunctions"):
                 raise RuntimeError(f"Settlement-building village/capital proof missing: {panel}")
-        if panels[4].get("functionCount",0)<=panels[0].get("functionCount",0):
-            raise RuntimeError(f"Capital composition is not richer than Starting Village: {panels[:5]}")
+        if panels[3].get("functionCount",0)<=panels[0].get("functionCount",0):
+            raise RuntimeError(f"Capital composition is not richer than village composition: {panels[:5]}")
         if panels[0].get("compositionId")!=panels[5].get("compositionId") or panels[0].get("revision")!=panels[5].get("revision"):
             raise RuntimeError("Settlement-building composition changed after reload")
         if json.dumps(proofs[0],sort_keys=True)!=json.dumps(proofs[5],sort_keys=True):
