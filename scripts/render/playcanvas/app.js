@@ -749,17 +749,20 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     if(detailTexture)applyTextureSampling(detailTexture,q);
     if(normalDetailTexture)applyTextureSampling(normalDetailTexture,q);
     mat.update();
-    // The material now references the new terrain-detail generation, so any
+    // Route hierarchy materials bind authored road/path/square atlas slots.
+    // Refresh them before retired atlas generations are released.
+    const routeMaterialRefreshCount=Number(terrainChunkMeshFactory?.refreshRouteSurfaceMaterials?.()||0);
+    // The materials now reference the new terrain-detail/atlas generation, so
     // superseded shared terrain textures can be safely released.
     const retiredTextureReleaseCount=Number(terrainTextureAtlas.releaseRetiredTextures?.()||0);
     const finalState=terrainTextureAtlas.stats?.()||state;
-    return Object.freeze({...finalState,materialRebindCount:1,retiredTextureReleaseCount});
+    return Object.freeze({...finalState,materialRebindCount:1,routeMaterialRefreshCount,retiredTextureReleaseCount});
   }
   function terrainChunkSignature(){
     // Chunk resources contain deterministic geometry plus references to shared
     // materials. Framebuffer scale and material-quality changes do not alter
     // geometry, so they must not invalidate prepared chunk meshes/entities.
-    return "geometry=heightfield-v3-road-profile";
+    return "geometry=heightfield-v4-road-hierarchy";
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -849,6 +852,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let roadProfileResourceCount=0,roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreHeightDelta=Infinity,maxRoadCoreHeightDelta=-Infinity;
+    let routeSurfaceCellCount=0,routeMainRoadCellCount=0,routeLocalPathCellCount=0,routeSquareCellCount=0,routeConnectorCellCount=0;
+    let routeEdgeStripCount=0,routeSurfaceTriangleCount=0,routeNetworkConnectedRouteCount=0,routeNetworkTotalRouteCount=0;
+    let routeSurfaceRouteSafe=true,routeNetworkRouteSafetyPass=true,routeSurfaceRendererOnly=true,routeNetworkDeterministic=true;
+    const routeSurfaceSamples=[];
     const heightfieldResources=new Map();
     const materialNames=new Set();
     terrainPreloadManager?.forEachResource?.((resource,entry)=>{
@@ -916,6 +923,25 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         }
       }
       buildingPresentationCount+=Number(resource.buildingPresentationCount||0);
+      routeSurfaceCellCount+=Number(resource.routeSurfaceCellCount||0);
+      routeMainRoadCellCount+=Number(resource.routeMainRoadCellCount||0);
+      routeLocalPathCellCount+=Number(resource.routeLocalPathCellCount||0);
+      routeSquareCellCount+=Number(resource.routeSquareCellCount||0);
+      routeConnectorCellCount+=Number(resource.routeConnectorCellCount||0);
+      routeEdgeStripCount+=Number(resource.routeEdgeStripCount||0);
+      routeSurfaceTriangleCount+=Number(resource.routeSurfaceTriangleCount||0);
+      routeNetworkConnectedRouteCount=Math.max(routeNetworkConnectedRouteCount,Number(resource.routeNetworkConnectedRouteCount||0));
+      routeNetworkTotalRouteCount=Math.max(routeNetworkTotalRouteCount,Number(resource.routeNetworkTotalRouteCount||0));
+      routeSurfaceRouteSafe=routeSurfaceRouteSafe&&resource.routeSurfaceRouteSafe!==false;
+      routeNetworkRouteSafetyPass=routeNetworkRouteSafetyPass&&resource.routeNetworkRouteSafetyPass!==false;
+      routeSurfaceRendererOnly=routeSurfaceRendererOnly&&resource.routeSurfaceRendererOnly!==false;
+      routeNetworkDeterministic=routeNetworkDeterministic&&resource.routeNetworkDeterministic!==false;
+      if(routeSurfaceSamples.length<48){
+        for(const item of resource.routeSurfaceSamples||[]){
+          if(routeSurfaceSamples.length>=48)break;
+          routeSurfaceSamples.push(item);
+        }
+      }
       roofProfileCount+=Number(resource.roofProfileCount||0);
       roofNormalProfileCount+=Number(resource.roofNormalProfileCount||0);
       roofSpecialProfileCount+=Number(resource.roofSpecialProfileCount||0);
@@ -1022,6 +1048,27 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       roadShoulderBlendWidthWorldUnits:Number(generatorStats.roadShoulderBlendWidthWorldUnits||0),
       bridgeClearanceWorldUnits:Number(generatorStats.bridgeClearanceWorldUnits||0),
       roadProfileGroundingShared:generatorStats.roadProfileGroundingShared===true,
+      routeSurfaceCellCount,routeMainRoadCellCount,routeLocalPathCellCount,routeSquareCellCount,routeConnectorCellCount,
+      routeEdgeStripCount,routeSurfaceTriangleCount,
+      routeSurfaceMaterialCount:Number(generatorStats.routeSurfaceMaterialCount||0),
+      routeSurfaceMaterialNames:generatorStats.routeSurfaceMaterialNames||Object.freeze([]),
+      routeSurfaceMaterialRebinds:Number(generatorStats.routeSurfaceMaterialRebinds||0),
+      routeSurfaceMaterialRefreshes:Number(generatorStats.routeSurfaceMaterialRefreshes||0),
+      routeSurfaceMaterialAtlasSignatures:generatorStats.routeSurfaceMaterialAtlasSignatures||Object.freeze([]),
+      routeSurfaceStaleBindingCount:Number(generatorStats.routeSurfaceStaleBindingCount||0),
+      routeSurfaceBindings:generatorStats.routeSurfaceBindings||Object.freeze({}),
+      routeSurfaceSamples:Object.freeze(routeSurfaceSamples.slice()),
+      routeSurfaceRouteSafe:Boolean(routeSurfaceRouteSafe),
+      routeSurfaceRendererOnly:Boolean(routeSurfaceRendererOnly),
+      routeNetworkConnectedRouteCount,routeNetworkTotalRouteCount,
+      routeNetworkRouteSafetyPass:Boolean(routeNetworkRouteSafetyPass),
+      routeNetworkDeterministic:Boolean(routeNetworkDeterministic),
+      roadHierarchyPresentationPass:Boolean(
+        routeMainRoadCellCount>0&&routeSquareCellCount>0&&
+        routeSurfaceMaterialCount>0&&routeSurfaceMaterialCount<=3&&
+        routeSurfaceRouteSafe&&routeNetworkRouteSafetyPass&&routeSurfaceRendererOnly&&routeNetworkDeterministic&&
+        Number(generatorStats.routeSurfaceStaleBindingCount||0)===0
+      ),
       roadProfileResourceCount,
       roadProfileVertexCount,
       roadProfileCoreVertexCount,
