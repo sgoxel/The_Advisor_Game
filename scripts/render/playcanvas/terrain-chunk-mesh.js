@@ -632,7 +632,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const nlen=Math.hypot(nnx,nny,nnz)||1;
     for(let i=0;i<4;i++)batch.normals.push(nnx/nlen,nny/nlen,nnz/nlen);
     batch.uvs.push(0,0,1,0,0,1,1,1);
-    batch.indices.push(base,base+2,base+1,base+1,base+2,base+3);
+    // Diagonal bridge corners are ordered start-left/start-right/end-left/end-right,
+    // so use the opposite winding from axis-aligned route quads to keep the
+    // surface front-facing under normal back-face culling.
+    batch.indices.push(base,base+1,base+2,base+1,base+3,base+2);
     batch.sourcePrimitiveCount++;
     staticBatchSourcePrimitiveCount++;
     return 2;
@@ -719,7 +722,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           const sideA=routeNeighborType(seed,cell.x,cell.y,dx,0);
           const sideB=routeNeighborType(seed,cell.x,cell.y,0,dy);
           if(routeLike(sideA)||routeLike(sideB))continue;
-          triangleCount+=appendDiagonalRouteBridge(batch,worldData,cell.x,cell.y,dx,dy,0.72,0.033);
+          triangleCount+=appendDiagonalRouteBridge(batch,worldData,cell.x,cell.y,dx,dy,0.88,0.033);
           diagonalBridgeCount++;
         }
       }
