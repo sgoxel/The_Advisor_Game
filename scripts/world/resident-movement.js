@@ -506,6 +506,22 @@ function proofAdvanceSeconds(seconds){
   }
   return proofSnapshot();
 }
+function proofPlaceAt(value,phase="proof-position"){
+  const state=states.get(proofContext?.residentId);
+  if(!state||!value)return null;
+  const candidate=point(value);
+  const nav=navigation(seedKey,candidate);
+  if(!nav?.walkable||nav.buildingId)return null;
+  state.position=candidate;
+  state.route=null;
+  state.routeIndex=0;
+  state.segmentElapsed=0;
+  state.presentationOffset=Object.freeze({x:0,y:0});
+  state.status="idle";
+  state.lastReason="proof-position";
+  proofContext.phase=String(phase||"proof-position");
+  return proofSnapshot();
+}
 function recordEvidence(values){
   if(!proofContext)return null;
   if(values&&"cameraIndependencePass" in values)proofContext.cameraIndependencePass=Boolean(values.cameraIndependencePass);
@@ -534,7 +550,7 @@ function endProof(){proofContext=null;return snapshot()}
 
 window.ResidentMovement=Object.freeze({
   FIXED_STEP_SECONDS,WALL_CLEARANCE_PENALTY_SECONDS,ensure,reset,advance,snapshot,get,position,presentation,verify,
-  beginProof,proofAdvanceToDoor,proofAdvanceToTarget,proofBeginOutbound,proofAdvanceSeconds,
+  beginProof,proofAdvanceToDoor,proofAdvanceToTarget,proofBeginOutbound,proofAdvanceSeconds,proofPlaceAt,
   recordEvidence,proofSnapshot,endProof
 });
 })();
