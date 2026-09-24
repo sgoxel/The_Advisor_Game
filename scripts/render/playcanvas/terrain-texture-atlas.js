@@ -88,6 +88,13 @@ function create({pc,device}={}){
         source=window.TextureAssets.get(key);
       }catch(caught){error=caught}
       if(source){
+        // The current SVG terrain artwork is detail/overlay art with transparent
+        // regions. Composite it over the terrain family's opaque base color so
+        // transparent texels never become black in the StandardMaterial path.
+        // Future opaque PNGs simply cover this underlay; transparent PNGs retain
+        // the same safe behavior.
+        ctx.fillStyle=FALLBACK[type]||FALLBACK.grass;
+        ctx.fillRect(x,y,size,size);
         ctx.drawImage(source,x,y,size,size);
         const resolved=String(window.TextureAssets.source(key)||"");
         resolvedSources[key]=resolved;
