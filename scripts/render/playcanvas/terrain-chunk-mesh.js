@@ -16,6 +16,85 @@ function signed01(seed,x,z,salt){
 }
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 
+const HEIGHTFIELD_VERTICAL_SCALE=0.0022;
+const HEIGHTFIELD_RELIEF=0.065;
+const HEIGHTFIELD_WATER_Y=-0.22;
+const HEIGHTFIELD_BRIDGE_CLEARANCE=0.18;
+const heightReferenceCache=new Map();
+const heightVertexCache=new Map();
+const HEIGHT_VERTEX_CACHE_LIMIT=16384;
+let heightVertexSampleCalls=0,heightVertexCacheHits=0,heightGroundSampleCalls=0;
+
+function floorDivBig(value,divisor){
+  let q=value/divisor,r=value%divisor;
+  if(r<0n)q-=1n;
+  return q;
+}
+function heightfieldSegments(size){
+  const bounded=Math.max(1,Math.trunc(Number(size)||16));
+  for(let candidate=Math.min(8,bounded);candidate>=1;candidate--)if(bounded%candidate===0)return candidate;
+  return 1;
+}
+function heightfieldStep(size){return Math.max(1,Math.trunc(Number(size)||16)/heightfieldSegments(size));}
+function referenceElevation(seed){
+  const key=String(seed||"");
+  if(heightReferenceCache.has(key))return heightReferenceCache.get(key);
+  const value=Number(window.GeographyFoundation?.environment?.(key,"0","0")?.elevationMeters||0);
+  heightReferenceCache.set(key,value);
+  return value;
+}
+function terrainHeightVertex(seed,xValue,yValue){
+  const x=String(xValue),y=String(yValue);
+  const cacheKey=String(seed||"")+"|"+x+"|"+y;
+  const cached=heightVertexCache.get(cacheKey);
+  if(cached){
+    heightVertexCacheHits++;
+    return cached;
+  }
+  heightVertexSampleCalls++;
+  const env=window.GeographyFoundation?.environment?.(seed,x,y)||null;
+  const elevation=Number(env?.elevationMeters||referenceElevation(seed));
+  const reference=referenceElevation(seed);
+  const macro=(elevation-reference)*HEIGHTFIELD_VERTICAL_SCALE;
+  const tile=window.TerrainFoundation?.getTile?.(seed,x,y)||null;
+  const type=String(tile?.type||"grass");
+  let height=macro;
+  if(type==="water")height=HEIGHTFIELD_WATER_Y;
+  else if(type==="bridge")height=Math.max(HEIGHTFIELD_WATER_Y+HEIGHTFIELD_BRIDGE_CLEARANCE,macro);
+  else if(type==="road"||type==="path"||type==="square"||type==="building"||type==="floor"||type==="door"||type==="wall"){
+    height=macro;
+  }else{
+    height+=signed01(seed,x,y,"heightfield-relief")*HEIGHTFIELD_RELIEF;
+  }
+  const sample=Object.freeze({
+    height:clamp(height,-3.4,3.4),
+    type,
+    color:parseHexColor(tile?.color)||sampleColor(seed,x,y),
+    elevationMeters:elevation
+  });
+  heightVertexCache.set(cacheKey,sample);
+  if(heightVertexCache.size>HEIGHT_VERTEX_CACHE_LIMIT){
+    const oldest=heightVertexCache.keys().next().value;
+    if(oldest!==undefined)heightVertexCache.delete(oldest);
+  }
+  return sample;
+}
+function terrainHeightAtTile(seed,xValue,yValue,size=16,offsetX=0,offsetY=0){
+  heightGroundSampleCalls++;
+  const step=heightfieldStep(size);
+  const x=Number(xValue)+0.5+Number(offsetX||0);
+  const y=Number(yValue)+0.5+Number(offsetY||0);
+  if(!Number.isFinite(x)||!Number.isFinite(y))return 0;
+  const x0=Math.floor(x/step)*step,y0=Math.floor(y/step)*step;
+  const tx=(x-x0)/step,tz=(y-y0)/step;
+  const h00=terrainHeightVertex(seed,String(x0),String(y0)).height;
+  const h10=terrainHeightVertex(seed,String(x0+step),String(y0)).height;
+  const h01=terrainHeightVertex(seed,String(x0),String(y0+step)).height;
+  const h11=terrainHeightVertex(seed,String(x0+step),String(y0+step)).height;
+  if(tx+tz<=1)return h00+tx*(h10-h00)+tz*(h01-h00);
+  return h11+(1-tz)*(h10-h11)+(1-tx)*(h01-h11);
+}
+
 function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildingSurfaceAtlasProvider=()=>null,treeSpriteAtlasProvider=()=>null,treeYawProvider=()=>45,seedProvider=()=>"",registerRoof=()=>{}}={}){
   if(!pc||!device||!parent||!material)throw new Error("PlayCanvasTerrainChunkMesh requires pc/device/parent/material");
   material.vertexColors=true;
@@ -391,6 +470,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const b=localBounds(worldData,descriptor.bounds||{});
     const special=descriptor.source==="special";
     const height=special?2.25:1.75;
+    const anchor=descriptor.entrance||descriptor.bounds||{};
+    const groundY=terrainHeightAtTile(String(seedProvider()||""),anchor.x??descriptor.bounds?.minX??"0",anchor.y??descriptor.bounds?.minY??"0",worldData?.chunkSize||16);
+    const wallTopY=groundY+height;
     const wall=special
       ?presentationMaterial("building-special-wall",0.53,0.45,0.31,0.10)
       :presentationMaterial("building-house-wall",0.61,0.52,0.36,0.10);
@@ -399,11 +481,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const rootName="ChunkBuilding_"+String(descriptor.id||index).replace(/[^a-z0-9_-]+/gi,"-");
     const outerW=b.width*0.90,outerD=b.depth*0.90,thickness=0.22;
     const wallBatch=batchFor(batches,wall.name,wall);
-    appendBoxBatch(wallBatch,[b.x,height*0.5,b.z-outerD*0.5],[outerW,height,thickness],0);
-    appendBoxBatch(wallBatch,[b.x,height*0.5,b.z+outerD*0.5],[outerW,height,thickness],0);
-    appendBoxBatch(wallBatch,[b.x-outerW*0.5,height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
-    appendBoxBatch(wallBatch,[b.x+outerW*0.5,height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
-    buildGabledRoof(root,descriptor,rootName,b,height,outerW,outerD,roof,roofProfiles);
+    appendBoxBatch(wallBatch,[b.x,groundY+height*0.5,b.z-outerD*0.5],[outerW,height,thickness],0);
+    appendBoxBatch(wallBatch,[b.x,groundY+height*0.5,b.z+outerD*0.5],[outerW,height,thickness],0);
+    appendBoxBatch(wallBatch,[b.x-outerW*0.5,groundY+height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
+    appendBoxBatch(wallBatch,[b.x+outerW*0.5,groundY+height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
+    buildGabledRoof(root,descriptor,rootName,b,wallTopY,outerW,outerD,roof,roofProfiles);
     let count=6;
     if(descriptor.entrance){
       const p=localTileCenter(worldData,descriptor.entrance.x,descriptor.entrance.y);
@@ -412,7 +494,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const minY=String(descriptor.bounds?.minY),maxY=String(descriptor.bounds?.maxY);
       const onMinX=entranceX===minX,onMaxX=entranceX===maxX,onMinY=entranceY===minY,onMaxY=entranceY===maxY;
       const faceOffset=thickness*0.5+0.08;
-      const doorPosition=[p.x,0.70,p.z];
+      const doorPosition=[p.x,groundY+0.70,p.z];
       let doorScale=[0.82,1.34,0.10];
       if(onMinX){doorPosition[0]=b.x-outerW*0.5-faceOffset;doorScale=[0.10,1.34,0.82];}
       else if(onMaxX){doorPosition[0]=b.x+outerW*0.5+faceOffset;doorScale=[0.10,1.34,0.82];}
@@ -436,7 +518,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     };
     const spec=specs[type]||{scale:[0.78,0.60,0.78],y:0.34,color:[0.36,0.29,0.20]};
     const mat=presentationMaterial("interior-"+type,...spec.color,0.08);
-    appendBoxBatch(batchFor(batches,mat.name,mat),[p.x,spec.y,p.z],spec.scale,0);
+    const groundY=terrainHeightAtTile(String(seedProvider()||""),descriptor.x,descriptor.y,worldData?.chunkSize||16);
+    appendBoxBatch(batchFor(batches,mat.name,mat),[p.x,groundY+spec.y,p.z],spec.scale,0);
     return 1;
   }
   function collectPropInstances(worldData,descriptor,treeVariants,rocks,treeVariationSamples){
@@ -452,8 +535,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const jitterX=((((h>>>8)&255)/255)-0.5)*1.0;
       const jitterZ=((((h>>>16)&255)/255)-0.5)*1.0;
       const yaw=Number(treeYawProvider?.()??45);
+      const groundY=terrainHeightAtTile(seed,descriptor.x,descriptor.y,worldData?.chunkSize||16,jitterX/2,jitterZ/2);
       const item={
-        position:[p.x+jitterX,0.055,p.z+jitterZ],
+        position:[p.x+jitterX,groundY+0.055,p.z+jitterZ],
         scale:[(flipX?-1:1)*width,height,1],
         euler:[0,yaw,0],
         anchorBottom:true,
@@ -468,15 +552,16 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       }));
       return 1;
     }
-    rocks.push({position:[p.x,0.34,p.z],scale:[0.70,0.48,0.62],euler:[0,0,0]});
+    const rockGroundY=terrainHeightAtTile(String(seedProvider()||""),descriptor.x,descriptor.y,worldData?.chunkSize||16);
+    rocks.push({position:[p.x,rockGroundY+0.34,p.z],scale:[0.70,0.48,0.62],euler:[0,0,0]});
     return 1;
   }
 
   function build(spec){
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
-    const segments=Math.min(8,size);
-    const step=size/segments;
+    const segments=heightfieldSegments(size);
+    const step=heightfieldStep(size);
     const metersPerTile=2;
     const half=size*metersPerTile/2;
     const seed=String(seedProvider()||"");
@@ -484,35 +569,53 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const baseZ=BigInt(Math.trunc(Number(spec.y)||0))*BigInt(size);
     const positions=[],normals=[],colors32=[],uvs=[],indices=[];
     const activeAtlas=textureAtlasProvider?.()||null;
-    let texturedBlockCount=0,colorFallbackBlockCount=0;
+    const detailReady=Boolean(activeAtlas?.stats?.()?.detailTextureReady);
+    let texturedBlockCount=detailReady?segments*segments:0,colorFallbackBlockCount=detailReady?0:segments*segments;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
-
-    for(let bz=0;bz<segments;bz++){
-      for(let bx=0;bx<segments;bx++){
-        const startX=Math.round(bx*step),endX=Math.round((bx+1)*step);
-        const startZ=Math.round(bz*step),endZ=Math.round((bz+1)*step);
-        const worldX=baseX+BigInt(startX);
-        const worldZ=baseZ+BigInt(startZ);
-        const fallback=sampleColor(seed,Number(worldX),Number(worldZ));
-        const surface=blockSurface(spec.worldData,startX,startZ,endX,endZ,fallback);
-        const rect=activeAtlas?.stats?.()?.ready?activeAtlas.uvRect?.(surface.type):null;
-        const x0=startX*metersPerTile-half,x1=endX*metersPerTile-half;
-        const z0=startZ*metersPerTile-half,z1=endZ*metersPerTile-half;
-        const base=positions.length/3;
-        positions.push(x0,0.05,z0, x1,0.05,z0, x0,0.05,z1, x1,0.05,z1);
-        normals.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
-        if(rect){
-          appendColor32(colors32,[1,1,1,1],4);
-          uvs.push(rect.u0,rect.v0, rect.u1,rect.v0, rect.u0,rect.v1, rect.u1,rect.v1);
-          texturedBlockCount++;texturedSurfaceTypes.add(rect.type||surface.type);
-        }else{
-          appendColor32(colors32,surface.color,4);
-          uvs.push(0,0, 1,0, 0,1, 1,1);
-          colorFallbackBlockCount++;fallbackSurfaceTypes.add(surface.type);
-        }
-        indices.push(base,base+2,base+1, base+1,base+2,base+3);
+    const localSamples=new Map();
+    let minHeight=Infinity,maxHeight=-Infinity,minElevation=Infinity,maxElevation=-Infinity;
+    const sampleVertex=(wx,wz)=>{
+      const key=String(wx)+","+String(wz);
+      if(localSamples.has(key))return localSamples.get(key);
+      const sample=terrainHeightVertex(seed,wx,wz);
+      localSamples.set(key,sample);
+      return sample;
+    };
+    for(let gz=0;gz<=segments;gz++){
+      for(let gx=0;gx<=segments;gx++){
+        const tileX=gx*step,tileZ=gz*step;
+        const wx=baseX+BigInt(tileX),wz=baseZ+BigInt(tileZ);
+        const sample=sampleVertex(wx,wz);
+        const left=sampleVertex(wx-BigInt(step),wz).height;
+        const right=sampleVertex(wx+BigInt(step),wz).height;
+        const up=sampleVertex(wx,wz-BigInt(step)).height;
+        const down=sampleVertex(wx,wz+BigInt(step)).height;
+        const dx=(right-left)/(2*step*metersPerTile),dz=(down-up)/(2*step*metersPerTile);
+        const nx=-dx,ny=1,nz=-dz,normLen=Math.hypot(nx,ny,nz)||1;
+        positions.push(tileX*metersPerTile-half,sample.height,tileZ*metersPerTile-half);
+        normals.push(nx/normLen,ny/normLen,nz/normLen);
+        appendColor32(colors32,sample.color,1);
+        // The shared detail texture repeats independently from terrain-family color,
+        // so indexed border vertices keep one UV and remain seam-safe.
+        uvs.push(Number(wx)*0.25,Number(wz)*0.25);
+        minHeight=Math.min(minHeight,sample.height);maxHeight=Math.max(maxHeight,sample.height);
+        minElevation=Math.min(minElevation,sample.elevationMeters);maxElevation=Math.max(maxElevation,sample.elevationMeters);
+        if(detailReady)texturedSurfaceTypes.add(sample.type);else fallbackSurfaceTypes.add(sample.type);
       }
     }
+    const stride=segments+1;
+    for(let gz=0;gz<segments;gz++){
+      for(let gx=0;gx<segments;gx++){
+        const i0=gz*stride+gx,i1=i0+1,i2=i0+stride,i3=i2+1;
+        indices.push(i0,i2,i1, i1,i2,i3);
+      }
+    }
+    const borderHeights=Object.freeze({
+      north:Object.freeze(Array.from({length:stride},(_,i)=>positions[i*3+1])),
+      south:Object.freeze(Array.from({length:stride},(_,i)=>positions[((segments*stride)+i)*3+1])),
+      west:Object.freeze(Array.from({length:stride},(_,i)=>positions[(i*stride)*3+1])),
+      east:Object.freeze(Array.from({length:stride},(_,i)=>positions[(i*stride+segments)*3+1]))
+    });
 
     const mesh=new pc.Mesh(device);
     mesh.setPositions(positions);
@@ -570,8 +673,19 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       entity,mesh,meshInstance,staticBatches,instancedGroups,
       x:Number(spec.x),y:Number(spec.y),chunkSize:size,signature:String(spec.signature||""),
       segments,
+      heightfieldGridResolution:segments+1,
+      heightfieldStepTiles:step,
+      indexedSharedVertices:true,
       vertexCount:positions.length/3,
       triangleCount:indices.length/3,
+      minConditionedHeight:Number(minHeight.toFixed(4)),
+      maxConditionedHeight:Number(maxHeight.toFixed(4)),
+      minSourceElevationMeters:Number(minElevation.toFixed(1)),
+      maxSourceElevationMeters:Number(maxElevation.toFixed(1)),
+      borderHeights,
+      terrainGroundSampler:"indexed-triangle-exact",
+      terrainHeightPreparedOnly:true,
+      visibleFrameTerrainRebuildCount:0,
       meshInstanceCount:1,
       materialCount:1,
       texturedBlockCount,colorFallbackBlockCount,
@@ -579,6 +693,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       fallbackSurfaceTypes:Object.freeze([...fallbackSurfaceTypes].sort()),
       terrainTextureAtlasReady:Boolean(activeAtlas?.stats?.()?.ready),
       terrainTextureAtlasSignature:String(activeAtlas?.stats?.()?.signature||""),
+      terrainSurfaceDetailTextureReady:detailReady,
+      terrainSurfaceMode:"shared-detail-texture+semantic-vertex-color",
       presentationMeshInstanceCount,
       presentationEntityCount,
       sourcePresentationEntityCount,
@@ -685,12 +801,24 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       hardwareInstancing:true,
       frustumCulling:true,
       completeChunkMesh:true,
+      heightfield:true,
+      heightfieldGridResolutionDefault:9,
+      heightfieldVerticalScale:HEIGHTFIELD_VERTICAL_SCALE,
+      heightfieldWaterY:HEIGHTFIELD_WATER_Y,
+      heightVertexSampleCalls,
+      heightVertexCacheHits,
+      heightVertexCacheEntries:heightVertexCache.size,
+      heightVertexCacheLimit:HEIGHT_VERTEX_CACHE_LIMIT,
+      heightGroundSampleCalls,
       seedDerivedPresentation:true,
       hardCodedSampleGeometry:false,
       simulationAuthorityPreserved:true
     });
   }
-  return Object.freeze({build,reposition,destroy,stats});
+  function heightAtTile(x,y,chunkSize=16,offsetX=0,offsetY=0){
+    return terrainHeightAtTile(String(seedProvider()||""),x,y,chunkSize,offsetX,offsetY);
+  }
+  return Object.freeze({build,reposition,destroy,stats,heightAtTile});
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});

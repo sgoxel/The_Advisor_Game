@@ -89,6 +89,7 @@ SCENARIOS = {
     "wp-s003-006-004",
     "wp-s003-006-005",
     "wp-s003-006-006",
+    "wp-s003-006-007",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s004-001",
@@ -150,6 +151,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-004": 9,
     "wp-s003-006-005": 7,
     "wp-s003-006-006": 7,
+    "wp-s003-006-007": 10,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s004-001": 3,
@@ -1249,12 +1251,14 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
                 )
-            if scenario == "wp-s003-006-006":
+            if scenario in {"wp-s003-006-006", "wp-s003-006-007"}:
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
                 )
+            if scenario == "wp-s003-006-007":
+                _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1294,6 +1298,19 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               atlas.ready === true &&
                               atlas.sharedAtlas === true &&
                               Number(atlas.gpuTextureCount || 0) === 1 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-006-007' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              chunks.heightfieldPass === true &&
+                              chunks.indexedSharedVertices === true &&
+                              Number(chunks.heightfieldGridResolution || 0) === 9 &&
+                              Number(chunks.heightfieldStepTiles || 0) === 2 &&
+                              chunks.sharedBorderEquality === true &&
+                              chunks.terrainDetailTextureReady === true &&
                               Number(renderer?.terrainPreload?.queueDepth || 0) === 0
                             );
                           })()) &&
@@ -3948,6 +3965,60 @@ def _render_quality_step(
     )
 
 
+def _focus_heightfield_target(driver, kind: str) -> str:
+    result = driver.execute_script(
+        r"""
+        const kind=arguments[0];
+        const seed=window.SeedSystem?.getCampaign?.()?.seed;
+        if(!seed||!window.GeographyFoundation?.environment||!window.TerrainFoundation?.getTile){
+          return {ok:false,reason:'terrain-foundation-unavailable'};
+        }
+        const elevation=(x,y)=>Number(window.GeographyFoundation.environment(seed,String(x),String(y))?.elevationMeters||0);
+        const terrain=(x,y)=>String(window.TerrainFoundation.getTile(seed,String(x),String(y))?.type||'');
+        let best=null;
+        const consider=(x,y,score,extra={})=>{
+          if(!best||score>best.score)best={ok:true,x,y,score,...extra};
+        };
+        if(kind==='highland'){
+          for(let y=-512;y<=512;y+=16)for(let x=-512;x<=512;x+=16){
+            const e=elevation(x,y);consider(x,y,e,{elevationMeters:e,type:terrain(x,y)});
+          }
+        }else if(kind==='rolling'){
+          for(let y=-320;y<=320;y+=16)for(let x=-320;x<=320;x+=16){
+            const e=elevation(x,y);
+            const variation=Math.max(
+              Math.abs(elevation(x+16,y)-e),Math.abs(elevation(x-16,y)-e),
+              Math.abs(elevation(x,y+16)-e),Math.abs(elevation(x,y-16)-e)
+            );
+            const type=terrain(x,y);
+            if(type!=='water')consider(x,y,variation,{elevationMeters:e,type,variation});
+          }
+        }else if(kind==='water'){
+          for(let y=-144;y<=144;y+=2)for(let x=-144;x<=144;x+=2){
+            if(terrain(x,y)!=='water')continue;
+            let land=0;
+            for(const [dx,dy] of [[-2,0],[2,0],[0,-2],[0,2]])if(terrain(x+dx,y+dy)!=='water')land++;
+            consider(x,y,land,{elevationMeters:elevation(x,y),type:'water',landNeighbors:land});
+          }
+        }else if(kind==='road'){
+          for(let y=-144;y<=144;y+=1)for(let x=-144;x<=144;x+=1){
+            const type=terrain(x,y);
+            if(type!=='road'&&type!=='path'&&type!=='square')continue;
+            const e=elevation(x,y);
+            const slope=Math.max(Math.abs(elevation(x+4,y)-e),Math.abs(elevation(x,y+4)-e));
+            consider(x,y,slope,{elevationMeters:e,type,slope});
+          }
+        }
+        return best||{ok:false,reason:'target-not-found',kind};
+        """,
+        kind,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Heightfield target {kind!r} not found: {result}")
+    action = _set_camera_center_and_render(driver, int(result["x"]), int(result["y"]))
+    return f"heightfield-target:{kind}:{result.get('type')}:{result.get('elevationMeters')}+" + action
+
+
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-007-001":
         if frame_index == 0:
@@ -4067,6 +4138,28 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 5:
             return _set_camera_center_and_render(driver, 0, 0)
         return _set_camera_zoom_and_render(driver, 0.75)
+    if scenario == "wp-s003-006-007":
+        if frame_index == 0:
+            return "heightfield:origin-wide+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 1:
+            return "heightfield:origin-standard+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 2:
+            return _focus_heightfield_target(driver, "rolling") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 3:
+            return _focus_heightfield_target(driver, "highland") + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 4:
+            return _focus_heightfield_target(driver, "water") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 5:
+            return _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 6:
+            return "heightfield:chunk-border+" + _set_camera_center_and_render(driver, 16, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 7:
+            return "heightfield:origin-close+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 2.00)
+        if frame_index == 8:
+            driver.set_window_size(390, 844)
+            return "heightfield:phone-portrait+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        driver.set_window_size(844, 390)
+        return "heightfield:phone-landscape+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
     if scenario == "wp-s003-006-006":
         if frame_index == 0:
             return "tree-planes:origin+" + _set_camera_zoom_and_render(driver, 0.50)
@@ -4497,6 +4590,65 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-007":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-006-007 requires ten heightfield evidence frames")
+        expected_zooms=("0.50×","1.00×","1.00×","0.50×","1.00×","1.00×","1.00×","2.00×","0.50×","0.50×")
+        protagonist_locations=[]
+        saw_relief=False
+        for index,frame in enumerate(frames[:10]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            preload=gpu.get("terrainPreload") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Heightfield zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Heightfield changed Simulation authority in frame {index+1}: {gpu}")
+            resources=int(chunks.get("meshResourceCount") or 0)
+            if resources<=0 or int(chunks.get("heightfieldResourceCount") or 0)!=resources:
+                raise RuntimeError(f"Not every chunk is a heightfield in frame {index+1}: {chunks}")
+            if chunks.get("heightfieldPass") is not True or chunks.get("indexedSharedVertices") is not True:
+                raise RuntimeError(f"Shared indexed heightfield contract failed in frame {index+1}: {chunks}")
+            if int(chunks.get("heightfieldGridResolution") or 0)!=9 or int(chunks.get("heightfieldStepTiles") or 0)!=2:
+                raise RuntimeError(f"Standard 16x16 chunk is not 9x9 / 2-tile step in frame {index+1}: {chunks}")
+            if int(chunks.get("vertices") or 0)!=resources*81 or int(chunks.get("triangles") or 0)!=resources*128:
+                raise RuntimeError(f"Heightfield topology is not 81 vertices / 128 triangles per chunk in frame {index+1}: {chunks}")
+            if chunks.get("sharedBorderEquality") is not True or float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
+                raise RuntimeError(f"Adjacent chunk border mismatch in frame {index+1}: {chunks}")
+            if chunks.get("terrainGroundSampler")!="indexed-triangle-exact":
+                raise RuntimeError(f"Shared grounding sampler missing in frame {index+1}: {chunks}")
+            if int(chunks.get("visibleFrameTerrainRebuildCount") or 0)!=0:
+                raise RuntimeError(f"Visible-frame terrain rebuild detected in frame {index+1}: {chunks}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Visible-frame terrain source work detected in frame {index+1}: {preload}")
+            if chunks.get("terrainDetailTextureReady") is not True:
+                raise RuntimeError(f"Shared terrain detail texture missing in frame {index+1}: {chunks}")
+            lo=chunks.get("minConditionedHeight")
+            hi=chunks.get("maxConditionedHeight")
+            if lo is not None and hi is not None and float(hi)-float(lo)>=0.08:
+                saw_relief=True
+            protagonist_locations.append(build.get("protagonistLocation"))
+        if not saw_relief:
+            raise RuntimeError("Heightfield evidence never showed measurable conditioned relief")
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Heightfield camera traversal changed authoritative protagonist location: {protagonist_locations}")
+        for index in (0,1,7,8,9):
+            chars=(frames[index].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer",{}).get("characterPresentation") or {}).get("instances") or []
+            protagonist=next((item for item in chars if item.get("id")=="protagonist"),None)
+            if not protagonist or protagonist.get("terrainGrounded") is not True or protagonist.get("groundSampler")!="indexed-triangle-exact":
+                raise RuntimeError(f"Protagonist is not shared-height grounded in frame {index+1}: {protagonist}")
+        actions=[str(frame.get("action") or "") for frame in frames[:10]]
+        for required in ("heightfield-target:rolling","heightfield-target:highland","heightfield-target:water","heightfield-target:road","heightfield:chunk-border"):
+            if not any(required in action for action in actions):
+                raise RuntimeError(f"Required heightfield scene {required} missing: {actions}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:10]]
+        if int(viewports[8].get("height") or 0)<=int(viewports[8].get("width") or 0):
+            raise RuntimeError(f"Phone portrait heightfield evidence missing: {viewports[8]}")
+        if int(viewports[9].get("width") or 0)<=int(viewports[9].get("height") or 0):
+            raise RuntimeError(f"Phone landscape heightfield evidence missing: {viewports[9]}")
+        return
+
     if scenario == "wp-s003-006-006":
         if len(frames) < 7:
             raise RuntimeError("wp-s003-006-006 requires seven tree-plane evidence frames")

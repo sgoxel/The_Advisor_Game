@@ -711,12 +711,14 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const state=await terrainTextureAtlas.prepare();
     const mat=material("terrain-chunk-surface",1,1,1);
     const texture=terrainTextureAtlas.texture?.()||null;
+    const detailTexture=terrainTextureAtlas.detailTexture?.()||null;
     mat.vertexColors=true;
-    mat.diffuseVertexColor=!Boolean(state?.ready&&texture);
-    mat.diffuseMap=state?.ready?texture:null;
+    mat.diffuseVertexColor=true;
+    mat.diffuseMap=state?.ready?detailTexture:null;
     mat.gloss=0.06;
     mat.metalness=0;
     if(texture)applyTextureSampling(texture,textureQualitySnapshot());
+    if(detailTexture)applyTextureSampling(detailTexture,textureQualitySnapshot());
     mat.update();
     return state;
   }
@@ -724,7 +726,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // Chunk resources contain deterministic geometry plus references to shared
     // materials. Framebuffer scale and material-quality changes do not alter
     // geometry, so they must not invalidate prepared chunk meshes/entities.
-    return "geometry=seed-chunk-v1";
+    return "geometry=heightfield-v2";
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -740,7 +742,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   function positionTerrainChunk(resource){
     if(!resource?.entity)return;
     const p=terrainChunkPosition(resource.x,resource.y,resource.chunkSize);
-    resource.entity.setLocalPosition(p.x,-0.095,p.z);
+    resource.entity.setLocalPosition(p.x,0,p.z);
     terrainChunkMeshFactory?.reposition?.(resource,p.x,p.z);
   }
   function initTerrainChunkMeshFactory(){
@@ -804,6 +806,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let texturedBlockCount=0,colorFallbackBlockCount=0;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
     let seedDerivedPresentation=true,hardCodedSampleGeometry=false;
+    let heightfieldResourceCount=0,indexedHeightfieldResourceCount=0;
+    let minConditionedHeight=Infinity,maxConditionedHeight=-Infinity;
+    let minSourceElevationMeters=Infinity,maxSourceElevationMeters=-Infinity;
+    let heightfieldGridResolution=0,heightfieldStepTiles=0,visibleFrameTerrainRebuildCount=0;
+    const heightfieldResources=new Map();
     const materialNames=new Set();
     terrainPreloadManager?.forEachResource?.((resource,entry)=>{
       if(resource?.presentationKind!=="chunk-mesh")return;
@@ -814,6 +821,18 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       meshInstanceCount+=Number(resource.meshInstanceCount||0);
       vertices+=Number(resource.vertexCount||0);
       triangles+=Number(resource.triangleCount||0);
+      if(resource.heightfieldGridResolution){
+        heightfieldResourceCount++;
+        if(resource.indexedSharedVertices===true)indexedHeightfieldResourceCount++;
+        heightfieldGridResolution=Math.max(heightfieldGridResolution,Number(resource.heightfieldGridResolution||0));
+        heightfieldStepTiles=Math.max(heightfieldStepTiles,Number(resource.heightfieldStepTiles||0));
+        minConditionedHeight=Math.min(minConditionedHeight,Number(resource.minConditionedHeight||0));
+        maxConditionedHeight=Math.max(maxConditionedHeight,Number(resource.maxConditionedHeight||0));
+        minSourceElevationMeters=Math.min(minSourceElevationMeters,Number(resource.minSourceElevationMeters||0));
+        maxSourceElevationMeters=Math.max(maxSourceElevationMeters,Number(resource.maxSourceElevationMeters||0));
+        visibleFrameTerrainRebuildCount+=Number(resource.visibleFrameTerrainRebuildCount||0);
+        heightfieldResources.set(Number(resource.x)+","+Number(resource.y),resource);
+      }
       presentationMeshInstanceCount+=Number(resource.presentationMeshInstanceCount||0);
       presentationEntityCount+=Number(resource.presentationEntityCount||0);
       sourcePresentationEntityCount+=Number(resource.sourcePresentationEntityCount||0);
@@ -893,10 +912,35 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const name=resource.meshInstance?.material?.name;
       if(name)materialNames.add(name);
     });
+    let sharedBorderPairCount=0,sharedBorderMaxError=0;
+    const compareBorders=(a,b)=>{
+      if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length)return;
+      sharedBorderPairCount++;
+      for(let i=0;i<a.length;i++)sharedBorderMaxError=Math.max(sharedBorderMaxError,Math.abs(Number(a[i])-Number(b[i])));
+    };
+    for(const resource of heightfieldResources.values()){
+      compareBorders(resource.borderHeights?.east,heightfieldResources.get((Number(resource.x)+1)+","+Number(resource.y))?.borderHeights?.west);
+      compareBorders(resource.borderHeights?.south,heightfieldResources.get(Number(resource.x)+","+(Number(resource.y)+1))?.borderHeights?.north);
+    }
+    const heightfieldPass=heightfieldResourceCount>0&&indexedHeightfieldResourceCount===heightfieldResourceCount&&sharedBorderMaxError<=1e-7;
+
     return Object.freeze({
       resourceKind:"chunk-mesh",
       meshResourceCount,activeMeshCount,preparedMeshCount,cachedMeshCount,
       meshInstanceCount,vertices,triangles,
+      heightfieldResourceCount,indexedHeightfieldResourceCount,
+      heightfieldGridResolution,heightfieldStepTiles,
+      indexedSharedVertices:heightfieldPass,
+      heightfieldPass,
+      minConditionedHeight:Number.isFinite(minConditionedHeight)?Number(minConditionedHeight.toFixed(4)):null,
+      maxConditionedHeight:Number.isFinite(maxConditionedHeight)?Number(maxConditionedHeight.toFixed(4)):null,
+      minSourceElevationMeters:Number.isFinite(minSourceElevationMeters)?Number(minSourceElevationMeters.toFixed(1)):null,
+      maxSourceElevationMeters:Number.isFinite(maxSourceElevationMeters)?Number(maxSourceElevationMeters.toFixed(1)):null,
+      sharedBorderPairCount,
+      sharedBorderMaxError:Number(sharedBorderMaxError.toFixed(8)),
+      sharedBorderEquality:sharedBorderPairCount>0&&sharedBorderMaxError<=1e-7,
+      terrainGroundSampler:"indexed-triangle-exact",
+      visibleFrameTerrainRebuildCount,
       materialCount:materialNames.size,
       presentationMeshInstanceCount,presentationEntityCount,sourcePresentationEntityCount,
       staticBatchCount,staticBatchSourcePrimitiveCount,instancedGroupCount,instancedObjectCount,
@@ -932,6 +976,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       texturedSurfaceTypes:Object.freeze([...texturedSurfaceTypes].sort()),
       fallbackSurfaceTypes:Object.freeze([...fallbackSurfaceTypes].sort()),
       textureAtlas:terrainTextureAtlas?.stats?.()||null,
+      terrainSurfaceMode:String(terrainTextureAtlas?.stats?.()?.heightfieldSurfaceMode||""),
+      terrainDetailTextureReady:terrainTextureAtlas?.stats?.()?.detailTextureReady===true,
       buildingSurfaceAtlas:buildingSurfaceAtlas?.stats?.()||null,
       buildingTexturedMaterialCount:Number(terrainChunkMeshFactory?.stats?.()?.buildingTexturedMaterialCount||0),
       buildingTexturedMaterialNames:terrainChunkMeshFactory?.stats?.()?.buildingTexturedMaterialNames||Object.freeze([]),
@@ -1323,7 +1369,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const entity=record.entity;
       const flipped=Boolean(raw.flipX);
       const elevation=Math.max(0,Number(raw.elevation??CHARACTER_DEFAULT_ELEVATION));
-      const feetY=elevation+CHARACTER_GROUND_LIFT;
+      const groundY=Number(terrainChunkMeshFactory?.heightAtTile?.(
+        point.x,point.y,terrainChunkSize(),
+        Number(raw.presentationOffset?.x||0),Number(raw.presentationOffset?.y||0)
+      )||0);
+      const feetY=groundY+elevation+CHARACTER_GROUND_LIFT;
       const presentation=characterPresentationMetrics(scenePoint,feetY,baseHeight);
       const height=presentation.presentationHeight;
       const width=height*aspect;
@@ -1344,7 +1394,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         world:Object.freeze({x:String(point.x),y:String(point.y)}),
         presentationOffset:Object.freeze({x:Number(raw.presentationOffset?.x||0),y:Number(raw.presentationOffset?.y||0)}),
         scene:Object.freeze({x:scenePoint.x,z:scenePoint.z}),
+        groundY,
         feetY,
+        terrainGrounded:true,
+        groundSampler:"indexed-triangle-exact",
         centerY:feetY+height*0.5,
         baseHeight,
         height,
@@ -1428,6 +1481,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       ensureSceneAnchor(center);
       const dx=safeDeltaTiles(center.x,sceneAnchor?.x??center.x)??0,dy=safeDeltaTiles(center.y,sceneAnchor?.y??center.y)??0;
       const targetX=dx*WORLD_TILE_METERS,targetZ=dy*WORLD_TILE_METERS,zoom=clamp(Number(lastModel?.cameraZoom??window.Camera?.getZoom?.()??1),0.5,2);
+      const targetY=Number(terrainChunkMeshFactory?.heightAtTile?.(center.x,center.y,terrainChunkSize())||0);
       const width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1),aspect=width/height;
       const baseFrameHeight=aspect>3&&height<220?SHORT_LANDSCAPE_ORTHO_HEIGHT:aspect<0.8?PORTRAIT_ORTHO_HEIGHT:aspect>2.2?WIDE_ORTHO_HEIGHT:BASE_ORTHO_HEIGHT;
       camera.camera.orthoHeight=baseFrameHeight/zoom;
@@ -1440,10 +1494,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       camera.camera.farClip=Math.max(200,400*cameraFrameScale);
       camera.setPosition(
         targetX+13.5*cameraDistanceScale,
-        15.5*cameraDistanceScale,
+        targetY+15.5*cameraDistanceScale,
         targetZ+13.5*cameraDistanceScale
       );
-      camera.lookAt(targetX,0,targetZ);
+      camera.lookAt(targetX,targetY,targetZ);
       const cameraPosition=camera.getPosition();
       lastCameraBillboardYawDegrees=Math.atan2(
         Number(cameraPosition.x)-targetX,
@@ -1506,6 +1560,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       chunkMeshDestructions:Number(generator.destroys||0),
       chunkMeshBuildTotalMs:Number(generator.totalBuildMs||0),
       chunkMeshBuildMaxMs:Number(generator.maxBuildMs||0),
+      terrainHeightVertexSampleCalls:Number(generator.heightVertexSampleCalls||0),
+      terrainGroundSampleCalls:Number(generator.heightGroundSampleCalls||0),
+      visibleFrameTerrainRebuildCount:0,
       assetWaits:Number(assetStats.waits||0),
       assetNetworkLoads:Number(assetStats.networkLoads||0),
       assetContainerParses:Number(assetStats.containerParses||0),
