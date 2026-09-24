@@ -64,12 +64,25 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-007` — Low-Poly Chunk Heightfield Terrain + Shared Elevation Anchoring — COMPLETED
 - `WP-S003-006-008` — Low-Cost Terrain Surface Micro-Relief + Material Depth — COMPLETED
 - `WP-S003-006-009` — Raised Road + Path Surface Profiles on Heightfield Terrain — COMPLETED
+- `WP-S003-006-010` — Adaptive Idle Chunk Cache Expansion
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
 - `WP-S003-008-001` — Screen-Space Camera Navigation Mapping for Rotated PlayCanvas View — COMPLETED
 - `WP-S003-008-002` — Colorful Animated Scene Loading Status + Ready Transition — COMPLETED
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
+- `WP-S003-009` — Loading-Screen-Inspired Living World Visual Direction Foundation
+- `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement
+- `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths
+- `WP-S003-009-003` — Terrain/Object Contact Shadows + Grounding
+- `WP-S003-009-004` — Deterministic Material Variation + Effective Ultra Texture Quality
+- `WP-S003-009-005` — Loading-Screen-Inspired Unified Character, Tree + 3D Environment Art Treatment
+- `WP-S003-009-006` — Architectural Entrance Readability + Threshold Dressing
+- `WP-S003-009-007` — Settlement Landmarks + Visual Hierarchy
+- `WP-S003-009-008` — Large-Scale Terrain Variation + Semantic Wear Zones
+- `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation
+- `WP-S003-009-010` — Day/Night Atmospheric Color + Lighting Palette
+- `WP-S003-010` — Continuous Multi-Scale Strategic Zoom + Continent Overview LOD
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
