@@ -7468,6 +7468,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Mini Map frame {index} changed Simulation authority: {item}")
             if not item.get("cameraMarker") or not item.get("protagonistMarker"):
                 raise RuntimeError(f"Mini Map frame {index} is missing camera/protagonist markers: {item}")
+            world_range=item.get("worldRange") or {}
+            if not all(world_range.get(key) is not None for key in ("minX","maxX","minY","maxY")):
+                raise RuntimeError(f"Mini Map frame {index} does not record source world range: {item}")
 
         start_map=maps[0]
         panned_map=maps[1]
@@ -7501,6 +7504,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Mini Map phone portrait evidence missing: {portrait}")
         if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
             raise RuntimeError(f"Mini Map phone landscape evidence missing: {landscape}")
+        landscape_canvas=maps[6].get("canvasVisibility") or {}
+        if float(landscape_canvas.get("visibleHeight") or 0)<20 or float(landscape_canvas.get("visibleWidth") or 0)<120:
+            raise RuntimeError(f"Mini Map canvas is not visibly usable in short phone landscape: {landscape_canvas}")
         return
 
     if scenario == "wp-s003-008-001":

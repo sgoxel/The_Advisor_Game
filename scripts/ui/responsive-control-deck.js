@@ -248,6 +248,36 @@ function drawMiniMap(){
   if(cameraReadout)cameraReadout.textContent=formatPoint(camera);
   if(protagonistReadout)protagonistReadout.textContent=formatPoint(protagonist);
 
+  const worldRange=(()=>{
+    if(!ready||!terrain?.center)return null;
+    try{
+      const cx=BigInt(String(terrain.center.x));
+      const cy=BigInt(String(terrain.center.y));
+      const halfCols=Math.floor(columns/2);
+      const halfRows=Math.floor(rows/2);
+      return Object.freeze({
+        minX:(cx-BigInt(halfCols)).toString(),
+        maxX:(cx+BigInt(columns-halfCols-1)).toString(),
+        minY:(cy-BigInt(halfRows)).toString(),
+        maxY:(cy+BigInt(rows-halfRows-1)).toString()
+      });
+    }catch(_){return null}
+  })();
+  const canvasVisibility=(()=>{
+    const r=miniMap.getBoundingClientRect();
+    const panel=miniMap.closest(".control-panel")?.getBoundingClientRect?.()||null;
+    const left=Math.max(0,r.left,panel?.left??0);
+    const top=Math.max(0,r.top,panel?.top??0);
+    const right=Math.min(innerWidth,r.right,panel?.right??innerWidth);
+    const bottom=Math.min(innerHeight,r.bottom,panel?.bottom??innerHeight);
+    return Object.freeze({
+      width:Number(r.width.toFixed(3)),
+      height:Number(r.height.toFixed(3)),
+      visibleWidth:Number(Math.max(0,right-left).toFixed(3)),
+      visibleHeight:Number(Math.max(0,bottom-top).toFixed(3))
+    });
+  })();
+
   miniMapState=Object.freeze({
     ready,
     source:ready?String(terrain?.source||"renderer-frame"):"none",
@@ -257,6 +287,8 @@ function drawMiniMap(){
     tileCount:cells.length,
     regionKey:terrain?.regionKey||renderer?.regionKey||null,
     center:terrain?.center||null,
+    worldRange,
+    canvasVisibility,
     projection:String(terrain?.projection||"soft-dimetric"),
     projectionBasis:Object.freeze({x:basisX,y:basisY}),
     camera,
