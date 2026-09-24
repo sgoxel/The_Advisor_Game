@@ -1982,6 +1982,12 @@ function renderWorldStateProof(){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.WorldState.renderDebugPanel(seed,document.getElementById("worldStateProof"));
 }
+function renderWorldContextProof(target=null){
+  if(typeof window.WorldContext?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.WorldContext.renderDebugPanel(seed,target,document.getElementById("worldContextProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -2003,6 +2009,7 @@ function renderStatic(){
   renderSettlementArchetypeProof();
   renderSettlementBuildingCatalogProof();
   renderWorldStateProof();
+  renderWorldContextProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2178,6 +2185,8 @@ window.AppUI=Object.freeze({
   settlementBuildingCatalogVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SettlementBuildingCatalog?SettlementBuildingCatalog.proof(campaign.seed):null;},
   refreshWorldState:()=>renderWorldStateProof(),
   worldStateVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.WorldState?WorldState.proof(campaign.seed):null;},
+  refreshWorldContext:(target=null)=>renderWorldContextProof(target),
+  worldContextVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.WorldContext?WorldContext.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{
