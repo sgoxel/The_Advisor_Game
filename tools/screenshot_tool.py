@@ -157,7 +157,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-005": 7,
     "wp-s003-006-006": 7,
     "wp-s003-006-007": 10,
-    "wp-s003-006-008": 10,
+    "wp-s003-006-008": 11,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s004-001": 3,
@@ -4099,6 +4099,33 @@ def _set_material_lifetime_texture_quality(driver, profile: str) -> dict:
     return result
 
 
+def _set_terrain_micro_relief_proof(driver, enabled: bool | None) -> dict:
+    value = None if enabled is None else bool(enabled)
+    result = driver.execute_script(
+        """
+        const value=arguments[0];
+        const api=window.GameRenderer;
+        if(!api?.setTerrainMicroReliefProofState){
+          return {ok:false,error:'micro-relief-proof-api-missing'};
+        }
+        const state=api.setTerrainMicroReliefProofState(value);
+        const snap=api.snapshot?.()||{};
+        const chunks=snap.terrainChunks||{};
+        return {
+          ok:true,
+          override:state?.override??null,
+          enabled:Boolean(chunks.terrainMicroReliefEnabled),
+          qualityAllows:Boolean(chunks.terrainMicroReliefQualityAllows),
+          profile:String(snap.materialTextureQuality?.profile||'')
+        };
+        """,
+        value,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Terrain micro-relief proof toggle failed: {result}")
+    return result
+
+
 def _material_lifetime_telemetry(driver) -> dict:
     result = driver.execute_script(
         """
@@ -4353,21 +4380,28 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return _set_camera_center_and_render(driver, 0, 0)
         return _set_camera_zoom_and_render(driver, 0.75)
     if scenario == "wp-s003-006-008":
-        pairs=(("road","low"),("road","standard"),("dirt","low"),("dirt","standard"),("rock","low"),("rock","standard"),("farmland","low"),("farmland","standard"))
+        pairs=(("road",False),("road",True),("dirt",False),("dirt",True),("rock",False),("rock",True),("farmland",False),("farmland",True))
         if frame_index < len(pairs):
-            kind,profile=pairs[frame_index]
-            quality=_set_material_lifetime_texture_quality(driver, profile)
+            kind,enabled=pairs[frame_index]
+            _set_material_lifetime_texture_quality(driver, "standard")
+            proof=_set_terrain_micro_relief_proof(driver, enabled)
             return (
-                f"micro-relief:{kind}:{profile}:enabled={profile!='low'}+"
+                f"micro-relief:{kind}:standard:{'on' if enabled else 'off'}+"
                 + _focus_heightfield_target(driver, kind)
                 + "+"
                 + _set_camera_zoom_and_render(driver, 1.00)
             )
         if frame_index == 8:
-            quality=_set_material_lifetime_texture_quality(driver, "standard")
+            _set_material_lifetime_texture_quality(driver, "low")
+            proof=_set_terrain_micro_relief_proof(driver, True)
+            return "micro-relief:road:low:quality-gated+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 9:
+            _set_material_lifetime_texture_quality(driver, "standard")
+            proof=_set_terrain_micro_relief_proof(driver, True)
             return "micro-relief:road:standard:close+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 2.00)
         driver.set_window_size(844, 390)
-        quality=_set_material_lifetime_texture_quality(driver, "standard")
+        _set_material_lifetime_texture_quality(driver, "standard")
+        proof=_set_terrain_micro_relief_proof(driver, True)
         return "micro-relief:road:standard:phone-landscape+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 1.00)
     if scenario == "wp-s003-006-007":
         if frame_index == 0:
@@ -4910,13 +4944,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         return
 
     if scenario == "wp-s003-006-008":
-        if len(frames) < 10:
-            raise RuntimeError("wp-s003-006-008 requires ten terrain micro-relief evidence frames")
-        expected_profiles=("low","standard","low","standard","low","standard","low","standard","standard","standard")
-        expected_zooms=("1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","2.00×","1.00×")
+        if len(frames) < 11:
+            raise RuntimeError("wp-s003-006-008 requires eleven terrain micro-relief evidence frames")
+        expected_profiles=("standard","standard","standard","standard","standard","standard","standard","standard","low","standard","standard")
+        expected_enabled=(False,True,False,True,False,True,False,True,False,True,True)
+        expected_zooms=("1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","2.00×","1.00×")
         pair_centers=[]
         pair_topology=[]
-        for index,frame in enumerate(frames[:10]):
+        for index,frame in enumerate(frames[:11]):
             build=frame.get("runtime",{}).get("currentBuild",{})
             gpu=build.get("gpuRenderer") or {}
             chunks=gpu.get("terrainChunks") or {}
@@ -4928,9 +4963,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Micro-relief zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
             if chunks.get("terrainNormalDetailTextureReady") is not True or atlas.get("normalDetailTextureReady") is not True:
                 raise RuntimeError(f"Shared normal-detail texture missing in frame {index+1}: chunks={chunks}, atlas={atlas}")
-            expected_enabled=expected_profiles[index]!="low"
-            if bool(chunks.get("terrainMicroReliefEnabled"))!=expected_enabled:
-                raise RuntimeError(f"Micro-relief quality gate failed in frame {index+1}: {chunks}")
+            if bool(chunks.get("terrainMicroReliefEnabled"))!=expected_enabled[index]:
+                raise RuntimeError(f"Micro-relief OFF/ON gate failed in frame {index+1}: expected {expected_enabled[index]}, chunks={chunks}")
+            if index==8 and chunks.get("terrainMicroReliefQualityAllows") is not False:
+                raise RuntimeError(f"Low quality did not disable auxiliary micro-relief in frame 9: {chunks}")
             if int(chunks.get("terrainMicroReliefGeometryVerticesAdded") or 0)!=0:
                 raise RuntimeError(f"Micro-relief added terrain geometry in frame {index+1}: {chunks}")
             if int(chunks.get("terrainMicroReliefMaterialVariantsAdded") or 0)!=0:
@@ -4949,7 +4985,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"OFF/ON comparison moved camera for pair {a//2+1}: {pair_centers[a]} vs {pair_centers[b]}")
             if pair_topology[a]!=pair_topology[b]:
                 raise RuntimeError(f"Micro-relief changed topology/draw resources within OFF/ON pair {a//2+1}: off={pair_topology[a]}, on={pair_topology[b]}")
-        viewport=frames[9].get("runtime",{}).get("viewport",{})
+        viewport=frames[10].get("runtime",{}).get("viewport",{})
         if int(viewport.get("width") or 0)<=int(viewport.get("height") or 0):
             raise RuntimeError(f"Phone landscape micro-relief evidence missing: {viewport}")
         return
