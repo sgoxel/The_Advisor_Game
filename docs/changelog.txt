@@ -1117,3 +1117,13 @@
 - Seven fresh screenshots were retrieved and directly inspected: baseline, post-stress, 2.00x detail, phone portrait, phone landscape/tree view, High-quality return, and Standard-quality return. Roofs/walls/doors remain textured and tree alpha remains clean with no opaque-black material regression. VISUAL 8.4/10 PASS.
 - The implementation remains bounded and keeps shared-resource retirement/rebind/release outside the visible-frame hot path; chunk eviction, batching, instancing, culling, navigation and Simulation authority remain intact.
 - WP is ready for the required deployment/bookkeeping completion sequence; ROADMAP is not marked COMPLETED by this commit.
+
+
+2026-09-24 16:28 +03:00 | WP-S003-005-006 | Final-head deployment + certification reconciliation
+- Final tested implementation/evidence head d22498888868330de1f84d331b439782579963b2 is deployed successfully through GitHub Pages run 36004679363; generic push Visual Evidence run 36004679930 also passed.
+- Dedicated final-head Visual Evidence run 36004698466 PASSED. Artifact 10809454366 contains seven fresh screenshots plus evidence JSON; digest sha256:e2368dba6031e5cf45e5212840b358d2756f488c77e7e9f2e6e9262cefcb1907.
+- Sustained runtime evidence reached 100.418 seconds and 28 traversals, cycled low/high/standard/high live texture quality, re-entered origin, and recorded 903 chunk evictions/resource destructions during the proof interval. Final standard-quality evidence reached building/tree atlas generation 11 with retired texture count 0 and building stale-binding count 0.
+- All evidence frames reported 0 graphics errors and 0 visible-frame texture decodes/asset loads; protagonist authoritative location remained (0,0). Building/tree shared GPU texture count remained one each.
+- All seven final-head screenshots were directly inspected: baseline, post-100.4s stress, 2.00x detail, phone portrait, phone landscape/tree view, High return, and Standard return. No black building/roof/wall/door/tree regression is visible; tree alpha remains clean. VISUAL 8.2/10 PASS. Minor mobile overlay crowding and soft terrain detail are pre-existing presentation limitations, not lifetime failures.
+- Evidence infrastructure was also hardened so different WP Visual Evidence runs no longer replace each other's pending runs, and the final mobile-to-desktop return uses one combined center+zoom terrain refresh. No gameplay/Simulation authority was relaxed.
+- No repository temporary/test files were introduced by the final evidence run; screenshots remained in the GitHub Actions artifact because publish_to_main=false.
