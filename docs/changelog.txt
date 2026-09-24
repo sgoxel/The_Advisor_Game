@@ -1291,3 +1291,20 @@
 - Verified verification/suggestion documentation head daafe95e3556aa41da07945a9abf89f4aeb0e5e4 through successful GitHub Pages run 36040516414.
 - Marked WP-S007-006 COMPLETED in docs/ROADMAP.md only after the required deployment gates succeeded.
 - Final classification: FUNCTIONAL. VISUAL: N/A. Functional verification score: 9.4/10.
+2026-09-24 21:37:48 +03:00 | WP-S007-007 | NPC Materialization, Dematerialization + Schedule Reconstruction final verification
+- Classification: FUNCTIONAL. VISUAL: N/A — persistent identity, exact-active bounds, fantasy-time reconstruction, sparse NPC deltas and deterministic rematerialization are authoritative Simulation-state requirements rather than visual-quality requirements.
+- Added scripts/world/npc-lifecycle.js with stable per-settlement NPC identity addressing, on-demand foundation records, sparse persistent NPC deltas and a hard 24-NPC exact-active cap.
+- Aggregate settlement population remains the identity address space; identities are generated deterministically on demand rather than materializing a full resident object graph.
+- Exact materialization resolves current fantasy-time activity, authoritative target/area, walkable coordinate, occupancy, interaction metadata and route handoff state without replaying missed path steps.
+- SimulationTiers exact handles now use NPCLifecycle materialization and release exact lifecycle state on demotion; aggregate/local tiers retain identity/history without exact objects.
+- ResidentMovement now consults NPCLifecycle for known Starting Village resident activity so persistent lifecycle exceptions can override ordinary DailyActivity while preserving existing deterministic movement/action execution.
+- Meaningful dematerialization changes are committed through WorldState structural NPC refs; reconstructible movement/schedule detail remains derived and does not create unnecessary deltas.
+- Dedicated browser evidence run 36042118665 succeeded on first tested implementation attempt at head deb885acf1b92dca23a1aa4e2e6d6eb50be1cd7a.
+- PASS: tested settlement exposed 374 persistent identities while exact materialization peaked at 24, leaving 350 dormant identities; exact-active bounds remained enforced.
+- PASS: a dormant NPC rematerialized several fantasy days later into a different schedule-consistent activity with zero replayed missed path steps and a valid walkable placement.
+- PASS: controlled moderate injury was committed during dematerialization as a sparse NPC CampaignDelta, survived dormancy, and overrode the ordinary schedule with recovering-injury activity.
+- PASS: clearing runtime exact state plus WorldState foundation cache and rematerializing from the same authoritative state/time produced identical exact signatures; camera drag and sprite/render state did not alter identity or materialization.
+- Evidence artifact 10828120043, digest sha256:e83ba4c3a88edad52922d013c8ab610d71f60100a10a9efe47e14e67800c91bc.
+- Tested implementation head deb885acf1b92dca23a1aa4e2e6d6eb50be1cd7a deployed successfully through GitHub Pages run 36042096380.
+- Functional verification score: 9.5/10. ROADMAP completion remains pending successful deployment verification of this documentation commit.
+
