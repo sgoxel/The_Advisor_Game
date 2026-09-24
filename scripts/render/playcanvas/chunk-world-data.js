@@ -8,6 +8,7 @@ const STANDARD_TERRAIN=new Set([
 ]);
 
 const cache=new Map();
+const dressingCache=new Map();
 const everGenerated=new Set();
 let cacheHits=0,cacheMisses=0,completeChunkGenerations=0,releases=0,regenerationCount=0;
 let activeGenerations=0,preparedGenerations=0,otherGenerations=0;
@@ -93,7 +94,9 @@ function buildingCatalog(seed){
       entrance:lot.access?Object.freeze({x:String(lot.access.x),y:String(lot.access.y)}):null
     }));
   }
-  return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+  const result=Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+  dressingCache.set(cacheKey,result);
+  return result;
 }
 function roadAdjacent(seed,x,y){
   const bx=BigInt(String(x)),by=BigInt(String(y));
@@ -121,7 +124,8 @@ function dressingCell(seed,x,y,building,semantic,used){
   const local=window.StartingVillage?.local?.(seed,sx,sy)||null;
   if(local&&window.StartingVillage?.isRoadReserved?.(seed,local))return null;
   if((semantic==="garden"||semantic==="pen")&&!["grass","farmland","plot","dirt"].includes(type))return null;
-  const adjacentRoad=roadAdjacent(seed,sx,sy);
+  const needsRoadContext=semantic==="signpost"||semantic==="cart"||semantic==="barrel";
+  const adjacentRoad=needsRoadContext?roadAdjacent(seed,sx,sy):false;
   return Object.freeze({x:sx,y:sy,type,roadAdjacent:adjacentRoad});
 }
 function dressingCandidates(seed,building,semantic,used){
@@ -146,6 +150,8 @@ function dressingCandidates(seed,building,semantic,used){
   return candidates;
 }
 function semanticDressing(seed){
+  const cacheKey=String(seed||"");
+  if(dressingCache.has(cacheKey))return dressingCache.get(cacheKey);
   const used=new Set();
   const out=[];
   for(const building of buildingCatalog(seed)){
@@ -567,6 +573,7 @@ function stats(){
     dressingSemantics:Object.freeze({...dressingSemantics}),
     dressingDeterministic:true,
     dressingRendererOnly:true,
+    dressingPlanCacheEntries:dressingCache.size,
     roadCellCount,waterCellCount,bridgeCellCount,
     cacheHits,cacheMisses,
     completeChunkGenerations,
@@ -591,6 +598,7 @@ function stats(){
 }
 function clear(){
   cache.clear();
+  dressingCache.clear();
   everGenerated.clear();
   regenerationCount=0;
 }
