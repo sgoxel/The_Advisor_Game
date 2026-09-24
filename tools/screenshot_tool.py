@@ -122,6 +122,7 @@ SCENARIOS = {
     "wp-s007-005",
     "wp-s007-006",
     "wp-s007-007",
+    "wp-s007-008",
     "playcanvas-root-cutover",
 }
 
@@ -196,6 +197,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s007-005": 5,
     "wp-s007-006": 6,
     "wp-s007-007": 6,
+    "wp-s007-008": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -495,6 +497,40 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        lazyCatchUp: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.CatchUpSimulation?.proof
+              ? window.CatchUpSimulation.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        lazyCatchUpPanel: (() => {
+          const root=document.querySelector("#lazyCatchUpProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),pass:root.dataset.pass==="true",
+            lastStep:Number(root.dataset.lastStep||0),
+            incompleteObserved:root.dataset.incompleteObserved==="true",
+            blockedWhileIncomplete:root.dataset.blockedWhileIncomplete==="true",
+            resumedComplete:root.dataset.resumedComplete==="true",
+            phaseOrderPass:root.dataset.phaseOrderPass==="true",
+            importantApplied:root.dataset.importantApplied==="true",
+            importantDeltaRevision:Number(root.dataset.importantDeltaRevision||0),
+            eventsProcessed:Number(root.dataset.eventsProcessed||0),
+            batchesProcessed:Number(root.dataset.batchesProcessed||0),
+            spanHours:Number(root.dataset.spanHours||0),
+            offlineFantasyHours:Number(root.dataset.offlineFantasyHours||0),
+            longAbsenceEvents:Number(root.dataset.longAbsenceEvents||0),
+            reloadCursorStable:root.dataset.reloadCursorStable==="true",
+            reloadReady:root.dataset.reloadReady==="true",
+            stableAfterCamera:root.dataset.stableAfterCamera==="true",
+            authoritativeReady:root.dataset.authoritativeReady==="true",
+            checkStates:Array.from(root.querySelectorAll(".check b")).map(node=>node.textContent?.trim()||"")
+          };
         })(),
         npcLifecyclePanel: (() => {
           const root=document.querySelector("#npcLifecycleProof");
@@ -3137,6 +3173,45 @@ def _show_npc_lifecycle_proof(driver, frame_index: int) -> str:
         f"npc-lifecycle:{frame_index}:step={evidence.get('lastStep')}:"
         f"exact={evidence.get('activeExactPeak')}:dormant={evidence.get('dormantIdentityCount')}:"
         f"injury={evidence.get('injuryPersistent')}:reload={evidence.get('reloadDeterministic')}"
+    )
+
+
+def _show_lazy_catchup_proof(driver, frame_index: int) -> str:
+    camera_action = _drag_canvas(driver, 120, 0) if frame_index == 5 else None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const sim=window.CatchUpSimulation;
+        if(!campaign?.seed||!sim||!window.EventScheduler||!window.WorldState||!window.GameTime){
+          return {ok:false,error:'lazy-catchup-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=sim.proof(seed);
+        if(!proof.pass)return {ok:false,error:'lazy-catchup-proof-failed',proof};
+        const step=sim.evidenceStep(seed,index);
+        if(!step?.ok)return {ok:false,error:'lazy-catchup-evidence-step-failed',step};
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#lazyCatchUpProof');
+        if(!section||!root)return {ok:false,error:'lazy-catchup-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=sim.renderDebugPanel(seed,root);
+        root.scrollIntoView({block:'start'});
+        return {ok:Boolean(rendered?.verification?.pass),index,proof,evidence:step.evidence||null,snapshot:step.snapshot||null};
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Lazy catch-up proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    evidence=result.get("evidence") or {}
+    return (
+        prefix+
+        f"lazy-catchup:{frame_index}:step={evidence.get('lastStep')}:"
+        f"incomplete={evidence.get('incompleteObserved')}:complete={evidence.get('resumedComplete')}:"
+        f"important={evidence.get('importantApplied')}:events={evidence.get('eventsProcessed')}"
     )
 
 
@@ -5874,6 +5949,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_regional_settlement_simulation_proof(driver,frame_index)
     if scenario == "wp-s007-007":
         return _show_npc_lifecycle_proof(driver,frame_index)
+    if scenario == "wp-s007-008":
+        return _show_lazy_catchup_proof(driver,frame_index)
     if scenario == "wp-s007-002":
         if frame_index == 5:
             action=_reload_current_build(driver)
@@ -6662,6 +6739,63 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
 
 
 
+
+
+    if scenario == "wp-s007-008":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s007-008 requires six lazy catch-up evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        proofs=[build.get("lazyCatchUp") or {} for build in builds]
+        panels=[build.get("lazyCatchUpPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Lazy catch-up evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Lazy catch-up mutated Protagonist position: {protagonists}")
+        required={
+            "pass":True,"continuousDormantEquivalent":True,"offlineEquivalent":True,
+            "offlineUsesWallClockEntropy":False,"canonicalParentOrder":True,
+            "perSecondReplay":0,"perNpcReplay":0,"boundedByAggregateIntervals":True,
+            "resumableBudget":True,"partialStateInteractable":False,
+            "importantEventsPreserved":True,"persistentExceptionsReconciled":True,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Lazy catch-up proof {key} mismatch in frame {index}: {proof}")
+            if float(proof.get("offlineRealHourFantasyHours") or 0)!=24:
+                raise RuntimeError(f"Offline conversion is not 1 real hour = 24 fantasy hours: {proof}")
+            if int(proof.get("longAbsenceDays") or 0)<180 or int(proof.get("longAbsenceAggregateEvents") or 0)<=0:
+                raise RuntimeError(f"Long absence aggregate bound missing: {proof}")
+
+        partial=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=1),None)
+        if not partial or partial.get("incompleteObserved") is not True or partial.get("blockedWhileIncomplete") is not True:
+            raise RuntimeError(f"Bounded incomplete catch-up did not block authoritative detail: {panels}")
+        resumed=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=2),None)
+        if not resumed or resumed.get("resumedComplete") is not True or resumed.get("phaseOrderPass") is not True:
+            raise RuntimeError(f"Catch-up did not resume to canonical complete state: {panels}")
+        if resumed.get("importantApplied") is not True or int(resumed.get("importantDeltaRevision") or 0)<=0:
+            raise RuntimeError(f"Scheduled important event was lost during catch-up: {resumed}")
+        if int(resumed.get("eventsProcessed") or 0)<=0 or int(resumed.get("batchesProcessed") or 0)<=1:
+            raise RuntimeError(f"Catch-up did not exercise bounded multi-batch work: {resumed}")
+
+        equivalence=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=3),None)
+        if not equivalence or float(equivalence.get("offlineFantasyHours") or 0)!=24 or int(equivalence.get("longAbsenceEvents") or 0)<=0:
+            raise RuntimeError(f"Offline/long-absence evidence missing: {panels}")
+        reload=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=4),None)
+        if not reload or reload.get("reloadCursorStable") is not True or reload.get("reloadReady") is not True:
+            raise RuntimeError(f"Persisted catch-up cursor/scheduler did not restore deterministically: {panels}")
+        final=next((panel for panel in reversed(panels) if int(panel.get("lastStep") or 0)>=5),None)
+        if not final or final.get("stableAfterCamera") is not True or final.get("authoritativeReady") is not True:
+            raise RuntimeError(f"Camera changed catch-up authority or final state is not ready: {panels}")
+        for index,panel in enumerate(panels,start=1):
+            if not panel.get("present") or not panel.get("pass"):
+                raise RuntimeError(f"Lazy catch-up inspector incomplete in frame {index}: {panel}")
+            states=panel.get("checkStates") or []
+            if len(states)!=6 or any(state!="PASS" for state in states):
+                raise RuntimeError(f"Lazy catch-up panel checks did not all pass in frame {index}: {panel}")
+        return
 
     if scenario == "wp-s007-007":
         if len(frames) < 6:

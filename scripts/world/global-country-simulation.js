@@ -222,6 +222,11 @@ function applyCountryEvent(seedValue,event,randomUint32){
   if(!profile)return Object.freeze({ok:false,reason:"country-profile-missing",entityId:event.entityId});
   const current=currentCountryState(seed,profile);
   if(!current.ref)return Object.freeze({ok:false,reason:"country-ref-missing",entityId:event.entityId});
+  const priorLedger=current.state.aggregateLedger||[];
+  if(priorLedger.some(item=>item.eventId===event.id)){
+    scheduleNext(event,COUNTRY_INTERVAL_HOURS);
+    return deepFreeze({ok:true,kind:"country",countryId:profile.countryId,revision:Number(current.state.aggregateRevision||0),duplicate:true,outcome:null,deltaRevision:Number(current.world?.delta?.revision||0)});
+  }
   const signals=relationSignals(seed,profile.countryId,false);
   const outcome=countryOutcome(profile,current.state,signals,event,randomUint32);
   const revision=Math.max(0,Number(current.state.aggregateRevision)||0)+1;
@@ -249,6 +254,10 @@ function applyDiplomacyEvent(seedValue,event,randomUint32){
   if(!current.ref)return Object.freeze({ok:false,reason:"relation-ref-missing",entityId:event.entityId});
   const outcome=diplomacyOutcome(relation,current.current,{...event,seed},randomUint32);
   const previousAggregate=current.current.aggregate||{};
+  if((previousAggregate.ledger||[]).some(item=>item.eventId===event.id)){
+    scheduleNext(event,DIPLOMACY_INTERVAL_HOURS);
+    return deepFreeze({ok:true,kind:"diplomacy",relationId:relation.id,revision:Number(previousAggregate.revision||0),duplicate:true,outcome:null,deltaRevision:Number(current.world?.delta?.revision||0)});
+  }
   const revision=Math.max(0,Number(previousAggregate.revision)||0)+1;
   const ledger=appendLedger(previousAggregate.ledger,{
     revision,eventId:event.id,timestamp:event.fantasyTimestamp,systemKind:event.systemKind,

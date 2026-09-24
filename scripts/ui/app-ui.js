@@ -2364,6 +2364,12 @@ function renderNpcLifecycleProof(){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.NPCLifecycle.renderDebugPanel(seed,document.getElementById("npcLifecycleProof"));
 }
+function renderLazyCatchUpProof(){
+  if(typeof window.CatchUpSimulation?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign?.seed)return null;
+  return window.CatchUpSimulation.renderDebugPanel(campaign.seed,document.getElementById("lazyCatchUpProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -2391,6 +2397,7 @@ function renderStatic(){
   renderGlobalCountrySimulationProof();
   renderRegionalSettlementSimulationProof();
   renderNpcLifecycleProof();
+  renderLazyCatchUpProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2421,10 +2428,15 @@ function renderClock(){
   const aggregateMinuteKey=timestampKey?timestampKey.slice(0,16):null;
   if(campaign?.seed&&aggregateMinuteKey&&aggregateMinuteKey!==lastGlobalAggregateMinuteKey){
     lastGlobalAggregateMinuteKey=aggregateMinuteKey;
-    try{window.GlobalCountrySimulation?.tick?.(campaign.seed,timestampKey,{maxEvents:EventScheduler?.MAX_BATCH||32})}
-    catch(error){console.error("Global aggregate Simulation tick failed.",error)}
-    try{window.RegionalSettlementSimulation?.tick?.(campaign.seed,timestampKey,{maxEvents:EventScheduler?.MAX_BATCH||32})}
-    catch(error){console.error("Regional/settlement aggregate Simulation tick failed.",error)}
+    try{
+      if(window.CatchUpSimulation?.advanceTo){
+        let result=CatchUpSimulation.advanceTo(campaign.seed,timestampKey,{maxBatches:16});
+        for(let i=0;i<3&&!result.complete;i++)result=CatchUpSimulation.advanceTo(campaign.seed,timestampKey,{maxBatches:16});
+      }else{
+        window.GlobalCountrySimulation?.tick?.(campaign.seed,timestampKey,{maxEvents:EventScheduler?.MAX_BATCH||32});
+        window.RegionalSettlementSimulation?.tick?.(campaign.seed,timestampKey,{maxEvents:EventScheduler?.MAX_BATCH||32});
+      }
+    }catch(error){console.error("Lazy catch-up Simulation tick failed.",error)}
   }
   if(residentDateKey(t)!==lastResidentRosterDateKey)renderResidentRosterProof(t);
   if(!residentSchedulePinned&&residentScheduleHourKey(t)!==lastResidentScheduleHourKey){
@@ -2460,6 +2472,7 @@ async function startNewCampaign(){
   GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   RegionalSettlementSimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   NPCLifecycle?.resetRuntime?.(result.seed||SeedSystem.getCampaign()?.seed);
+  CatchUpSimulation?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true,timestamp:GameTime.getTimestampKey()});
   lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
@@ -2503,6 +2516,7 @@ async function restartCampaign(){
   GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   RegionalSettlementSimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   NPCLifecycle?.resetRuntime?.(result.seed||SeedSystem.getCampaign()?.seed);
+  CatchUpSimulation?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true,timestamp:GameTime.getTimestampKey()});
   lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
@@ -2543,6 +2557,11 @@ async function init(){
   const restored=SeedSystem.loadCampaign();
   restoredCampaign=restored.ok;
   WorldState?.bindCampaign?.(restored.ok?(restored.campaign||SeedSystem.getCampaign()):null,{reset:false});
+  if(restored.ok&&window.CatchUpSimulation){
+    CatchUpSimulation.bindCampaign(restored.campaign||SeedSystem.getCampaign(),{reset:false});
+    const catchUpResult=await CatchUpSimulation.resumeTo((restored.campaign||SeedSystem.getCampaign()).seed,GameTime.getTimestampKey(),{maxBatches:16});
+    if(!catchUpResult.complete)throw new Error("Offline world catch-up could not reach an authoritative state within the bounded resume budget.");
+  }
   resetCameraForCampaign();
   if(restored.ok&&window.ResidentMovement)ResidentMovement.reset(restored.seed||SeedSystem.getCampaign()?.seed);
 
@@ -2652,6 +2671,8 @@ window.AppUI=Object.freeze({
   regionalSettlementSimulationVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.RegionalSettlementSimulation?RegionalSettlementSimulation.proof(campaign.seed):null;},
   refreshNpcLifecycle:()=>renderNpcLifecycleProof(),
   npcLifecycleVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.NPCLifecycle?NPCLifecycle.proof(campaign.seed):null;},
+  refreshLazyCatchUp:()=>renderLazyCatchUpProof(),
+  lazyCatchUpVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CatchUpSimulation?CatchUpSimulation.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

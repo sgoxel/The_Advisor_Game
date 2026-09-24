@@ -1275,6 +1275,32 @@
     </div>
   </details>
 
+  <details id="lazyCatchUpProof">
+    <summary>WP-S007-008 Deterministic Lazy Catch-Up + Offline World Progression</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>Authoritative checkpoint</span><strong id="lazyCatchUpCheckpoint">—</strong></div>
+        <div><span>Catch-up cursor</span><strong id="lazyCatchUpCursor">—</strong></div>
+        <div><span>Aggregate catch-up work</span><strong id="lazyCatchUpWork">—</strong></div>
+        <div><span>Last catch-up span</span><strong id="lazyCatchUpSpan">—</strong></div>
+        <div><span>Offline conversion policy</span><strong id="lazyCatchUpOffline">—</strong></div>
+        <div><span>Long-absence bound</span><strong id="lazyCatchUpLong">—</strong></div>
+        <div><span>Important event preservation</span><strong id="lazyCatchUpImportant">—</strong></div>
+        <div><span>Last bounded slice cost</span><strong id="lazyCatchUpCost">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Canonical catch-up phase trace</h4>
+        <ul id="lazyCatchUpTrace" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Continuous, dormant and direct catch-up histories are equivalent at the same final fantasy timestamp</span><b id="vLazyCatchUpEquivalent">WAITING</b></div>
+      <div class="check"><span>Catch-up preserves canonical global/country → regional/settlement dependency order</span><b id="vLazyCatchUpOrder">WAITING</b></div>
+      <div class="check"><span>Scheduled important events survive dormancy and are applied exactly once</span><b id="vLazyCatchUpImportant">WAITING</b></div>
+      <div class="check"><span>One offline real hour converts once to 24 fantasy hours and never becomes Simulation entropy</span><b id="vLazyCatchUpOffline">WAITING</b></div>
+      <div class="check"><span>Long absences are bounded by aggregate events, never per-second or per-NPC replay</span><b id="vLazyCatchUpBounded">WAITING</b></div>
+      <div class="check"><span>Budget-incomplete catch-up blocks detailed authority and resumes deterministically from persisted cursor</span><b id="vLazyCatchUpResume">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1329,6 +1355,7 @@
 <script src="scripts/world/global-country-simulation.js"></script>
 <script src="scripts/world/regional-settlement-simulation.js"></script>
 <script src="scripts/world/npc-lifecycle.js"></script>
+<script src="scripts/world/lazy-catchup.js"></script>
 <script src="scripts/world/character-memory.js"></script>
 <script src="scripts/world/social-state.js"></script>
 <script src="scripts/world/dialogue-context.js"></script>

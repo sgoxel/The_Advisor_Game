@@ -135,6 +135,7 @@ function normalizeSignals(raw){
 }
 function tierRank(tier){return TIERS.indexOf(tier)}
 function materializeRecord(seed,planValue,desired,t,previous){
+  if(window.CatchUpSimulation?.authoritativeReady&&!CatchUpSimulation.authoritativeReady(seed))return previous||null;
   try{
     const timestamp=window.GameTime?.toTimestampKey?.(t);
     if(timestamp)window.RegionalSettlementSimulation?.ensureRelevant?.(seed,planValue,timestamp,{maxEvents:4});

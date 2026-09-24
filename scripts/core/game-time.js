@@ -33,6 +33,19 @@ function fromTimestampMs(fantasyTimestampMs){
 }
 
 function getNow(){return fromTimestampMs(getTimestampMs())}
+function fantasyElapsedFromRealMs(realElapsedMs){
+  const elapsed=Math.max(0,Number(realElapsedMs)||0);
+  return elapsed*GameConfig.gameTimeMultiplier;
+}
+function offlineProgressionPolicy(){
+  return Object.freeze({
+    gameTimeMultiplier:GameConfig.gameTimeMultiplier,
+    realHourMs:3600000,
+    fantasyMsPerRealHour:fantasyElapsedFromRealMs(3600000),
+    fantasyHoursPerRealHour:fantasyElapsedFromRealMs(3600000)/3600000,
+    randomEntropyFromRealTime:false
+  });
+}
 function formatDate(t){return t?`${pad2(t.day)}.${pad2(t.month)}.${padYear(t.year)}`:"—"}
 function formatTime(t){return t?`${pad2(t.hour)}:${pad2(t.minute)}`:"—"}
 function formatTimestamp(t){
@@ -51,6 +64,7 @@ function validateStartYear(){
 
 window.GameTime=Object.freeze({
   getTimestampMs,getTimestampKey,fromTimestampMs,getNow,
+  fantasyElapsedFromRealMs,offlineProgressionPolicy,
   formatDate,formatTime,formatTimestamp,toTimestampKey,validateStartYear
 });
 })();

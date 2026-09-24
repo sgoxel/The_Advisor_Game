@@ -312,6 +312,10 @@ function releaseOtherSettlements(seedValue,settlementId){
 }
 function materializeSettlement(seedValue,planValue,timestampValue,optionsValue){
   const seed=normalizeSeed(seedValue),plan=planValue,timestamp=normalizeTimestamp(timestampValue),options=optionsValue||{};
+  if(window.CatchUpSimulation?.authoritativeReady&&!CatchUpSimulation.authoritativeReady(seed)){
+    const population=settlementPopulation(seed,plan);
+    return deepFreeze({settlementId:plan.id,identityPopulation:population,exactActiveCount:0,dormantIdentityCount:population,maxExactActive:MAX_EXACT_ACTIVE,exactStates:Object.freeze([]),bounded:true,activeTotal:0,replayedPathSteps:0,reason:"catch-up-incomplete"});
+  }
   try{window.RegionalSettlementSimulation?.ensureRelevant?.(seed,plan,timestamp,{maxEvents:4})}catch(_){}
   const population=settlementPopulation(seed,plan),limit=Math.max(0,Math.min(MAX_EXACT_ACTIVE,Math.floor(Number(options.limit??MAX_EXACT_ACTIVE))));
   releaseOtherSettlements(seed,plan.id);

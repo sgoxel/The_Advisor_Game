@@ -248,6 +248,10 @@ function applyRegionEvent(seedValue,event,randomUint32){
   const current=currentRegion(seed,region),context=regionContext(seed,region,event.fantasyTimestamp);
   if(!current.ref||!context)return deepFreeze({ok:false,reason:"region-context-missing",entityId:event.entityId});
   const previous=current.state.aggregate||{};
+  if((previous.ledger||[]).some(item=>item.eventId===event.id)){
+    scheduleNext(seed,event,REGION_INTERVAL_HOURS);
+    return deepFreeze({ok:true,kind:"region",regionId:region.id,revision:Number(previous.revision||0),duplicate:true,outcome:null,deltaRevision:Number(current.world?.delta?.revision||0)});
+  }
   const outcome=regionOutcome(region,context,previous,event,randomUint32);
   const revision=Math.max(0,Number(previous.revision)||0)+1;
   const ledger=appendLedger(previous.ledger,{revision,eventId:event.id,timestamp:event.fantasyTimestamp,outcomeSignature:signature(outcome)});
@@ -273,6 +277,10 @@ function applySettlementEvent(seedValue,event,randomUint32){
   const current=currentSettlement(seed,plan),context=settlementContext(seed,plan,event.fantasyTimestamp);
   if(!current.ref||!context?.settlement)return deepFreeze({ok:false,reason:"settlement-context-missing",entityId:event.entityId});
   const previous=current.state.aggregate||{};
+  if((previous.ledger||[]).some(item=>item.eventId===event.id)){
+    scheduleNext(seed,event,SETTLEMENT_INTERVAL_HOURS);
+    return deepFreeze({ok:true,kind:"settlement",settlementId:plan.id,revision:Number(previous.revision||0),duplicate:true,outcome:null,reconciliation:previous.reconciliation||null,deltaRevision:Number(current.world?.delta?.revision||0)});
+  }
   const outcome=settlementOutcome(plan,context,{
     ...previous,
     population:current.current?.population?.planned,
