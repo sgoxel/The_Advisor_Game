@@ -42,19 +42,26 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
 - `WP-S003-004-001` — Tall 2.5D Building Mass + Local Character Occlusion Cutouts — COMPLETED
 - `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World — COMPLETED
+- `WP-S003-004-003` — Correct Gabled Roof Geometry + Building Contact
+- `WP-S003-004-004` — Camera-Facing Character Billboards + Zoom Readability
 - `WP-S003-005` — PlayCanvas 3D Asset + Material Preparation Pipeline — COMPLETED
 - `WP-S003-005-001` — Adaptive 3D Texture Quality + Mobile GPU Budget — COMPLETED
 - `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard — COMPLETED
+- `WP-S003-005-003` — PlayCanvas Terrain PNG-First + SVG-Fallback Textures
+- `WP-S003-005-004` — Building Surface Textures + SVG Asset Fallback
 - `WP-S003-006` — PlayCanvas 3D Terrain Chunk Mesh + Background Preparation — COMPLETED
 - `WP-S003-006-001` — Adjustable Terrain Chunk Size — COMPLETED
 - `WP-S003-006-002` — Adjustable Terrain Preload + Chunk Cache Budget — COMPLETED
 - `WP-S003-006-003` — Chunk-Native World Data + Complete 3D Background Preparation — COMPLETED
 - `WP-S003-006-004` — Persistent PlayCanvas Scene Graph + Navigation Hot-Path Elimination — COMPLETED
 - `WP-S003-006-005` — 3D Culling, Static Batching + Hardware Instancing — COMPLETED
+- `WP-S003-006-006` — Detailed 2D Tree Plane Presentation + Instancing
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
 - `WP-S003-008-001` — Screen-Space Camera Navigation Mapping for Rotated PlayCanvas View — COMPLETED
+- `WP-S003-008-002` — Colorful Animated Scene Loading Status + Ready Transition
+- `WP-S003-008-003` — Functional Projection-Aware Mini Map
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
