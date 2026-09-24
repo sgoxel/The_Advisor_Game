@@ -1312,3 +1312,22 @@
 - Verified verification/suggestion documentation head cc6e8a196b21c6dd8a0fc2e6b7ccf3c60012522a through successful GitHub Pages run 36042637408.
 - Marked WP-S007-007 COMPLETED in docs/ROADMAP.md only after the required deployment gates succeeded.
 - Final classification: FUNCTIONAL. VISUAL: N/A. Functional verification score: 9.5/10.
+2026-09-24 22:07:58 +03:00 | WP-S007-008 | Deterministic Lazy Catch-Up + Offline World Progression final verification
+- Classification: FUNCTIONAL. VISUAL: N/A — catch-up equivalence, canonical dependency ordering, persisted resume cursors and offline time conversion are authoritative Simulation-state requirements rather than visual-quality requirements.
+- Added scripts/world/lazy-catchup.js with versioned persisted catch-up metadata, authoritative fantasy-time cursor/checkpoint, serialized EventScheduler state, bounded catch-up slices and deterministic resume.
+- Live and offline progression now reuse the same country/diplomacy/region/settlement scheduled aggregate events instead of replaying render frames, seconds or NPC path steps.
+- Catch-up drains each due fantasy timestamp in canonical global/country -> regional/settlement -> important-event phase order before advancing the authoritative cursor.
+- Added exactly-once catch-up important-event application through sparse WorldState structural event deltas; pending scheduler state is persisted with the catch-up checkpoint.
+- Country, diplomacy, region and settlement aggregate handlers now recognize previously recorded event IDs and deterministically reschedule without applying duplicate state if an interrupted batch is replayed.
+- SimulationTiers and NPCLifecycle block new detailed/exact materialization while CatchUpSimulation is budget-incomplete; restored campaigns run bounded catch-up before scene readiness becomes interactable.
+- GameTime now exposes the existing multiplier as an explicit offline conversion policy: 1 real hour -> 24 fantasy hours at the default multiplier, with real time excluded from Simulation randomness.
+- Dedicated browser evidence run 36045595969 succeeded on current descendant head 8c53497356708bb975c80a4fca3c0d0a59f7b6a3, which contains implementation commit 32562c36c33fff5e9f8e366ba59dc76a7b8bf935 unchanged.
+- PASS: a one-batch catch-up intentionally stopped incomplete and non-authoritative; deterministic resume then completed all due work with canonical phase order.
+- PASS: controlled 48-fantasy-hour catch-up processed 195 aggregate/important events across multiple bounded batches and preserved the scheduled important event as a sparse WorldState event delta.
+- PASS: continuous and dormant 180-day histories produced the same addressed-random aggregate history signature; long absence used aggregate intervals only with zero per-second and zero per-NPC replay.
+- PASS: 1 real-world offline hour converted exactly once to 24 fantasy hours, and offline elapsed time was not used as random entropy.
+- PASS: persisted catch-up cursor plus serialized EventScheduler restored ready/complete deterministically; camera drag did not change authoritative catch-up state.
+- Evidence artifact 10828905506, digest sha256:caa236896db9abe2e005924b3fe92fccedd936b328383794e814857b2176f637.
+- Tested descendant head 8c53497356708bb975c80a4fca3c0d0a59f7b6a3 deployed successfully through GitHub Pages run 36045557917.
+- Functional verification score: 9.6/10. ROADMAP completion remains pending successful deployment verification of this documentation commit.
+
