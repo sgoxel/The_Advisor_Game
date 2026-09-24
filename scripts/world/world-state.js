@@ -38,6 +38,21 @@ function hashText(value){
   return (hash>>>0).toString(16).toUpperCase().padStart(8,"0");
 }
 function signature(value){return hashText(stableStringify(value))}
+function utf8ByteLength(value){
+  const text=String(value==null?"":value);
+  let bytes=0;
+  for(let i=0;i<text.length;i++){
+    const code=text.charCodeAt(i);
+    if(code<0x80)bytes+=1;
+    else if(code<0x800)bytes+=2;
+    else if(code>=0xD800&&code<=0xDBFF&&i+1<text.length){
+      const next=text.charCodeAt(i+1);
+      if(next>=0xDC00&&next<=0xDFFF){bytes+=4;i++}
+      else bytes+=3;
+    }else bytes+=3;
+  }
+  return bytes;
+}
 function normalizeSeed(value){return String(value==null?"":value)}
 function campaignKey(campaign){
   if(!campaign||!campaign.seed)return null;
@@ -130,7 +145,7 @@ function deltaSnapshot(seedValue){
     bound:true,schemaVersion:current.version,foundationSchemaVersion:current.foundationSchemaVersion,
     currentWorldSchemaVersion:current.currentWorldSchemaVersion,worldGeneratorVersion:current.worldGeneratorVersion,
     campaignKey:current.campaignKey,seed:current.seed,entryCount:entries.length,sequence:current.sequence,
-    serializedBytes:new TextEncoder().encode(serialized).length,entries:Object.freeze(entries)
+    serializedBytes:utf8ByteLength(serialized),entries:Object.freeze(entries)
   });
 }
 function refBase(kind,id,key){
