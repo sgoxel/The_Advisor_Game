@@ -25,6 +25,12 @@ const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
 const ROAD_PROFILE_OUTER_RADIUS_TILES=2.15;
 const ROAD_PROFILE_SHOULDER_WIDTH_TILES=ROAD_PROFILE_OUTER_RADIUS_TILES-ROAD_PROFILE_CORE_RADIUS_TILES;
+const BUILDING_MATERIAL_VARIANTS=Object.freeze([
+  Object.freeze({roof:Object.freeze([1.00,0.92,0.86]),wall:Object.freeze([1.00,0.97,0.90]),trim:Object.freeze([0.92,0.86,0.76])}),
+  Object.freeze({roof:Object.freeze([0.88,0.96,1.00]),wall:Object.freeze([0.91,0.98,1.00]),trim:Object.freeze([0.86,0.90,0.92])}),
+  Object.freeze({roof:Object.freeze([1.00,0.84,0.76]),wall:Object.freeze([0.96,0.91,0.82]),trim:Object.freeze([0.86,0.78,0.67])}),
+  Object.freeze({roof:Object.freeze([0.82,0.88,0.84]),wall:Object.freeze([0.90,0.93,0.84]),trim:Object.freeze([0.78,0.82,0.74])})
+]);
 const heightReferenceCache=new Map();
 const heightVertexCache=new Map();
 const HEIGHT_VERTEX_CACHE_LIMIT=16384;
@@ -207,21 +213,29 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   let contactShadowMaterialRefreshes=0;
   let routeSurfaceMaterialRebinds=0,routeSurfaceMaterialRefreshes=0;
 
-  function applyBuildingSurfaceMaterial(m,name,r,g,b){
+  function applyBuildingSurfaceMaterial(m,name,r,g,b,tint=[1,1,1]){
     const atlas=buildingSurfaceAtlasProvider?.()||null;
     const state=atlas?.stats?.()||null;
     const knownSurface=Boolean(atlas?.surfaces?.some?.(item=>item?.material===String(name||"")));
     const rect=state?.ready?atlas?.rectForMaterial?.(name):null;
     const texture=state?.ready?atlas?.texture?.():null;
+    const tintValue=[
+      clamp(Number(tint?.[0]??1),0.65,1.08),
+      clamp(Number(tint?.[1]??1),0.65,1.08),
+      clamp(Number(tint?.[2]??1),0.65,1.08)
+    ];
     if(knownSurface){
       m._advisorBuildingSurfaceName=String(name||"");
       m._advisorBuildingFallbackColor=Object.freeze([Number(r),Number(g),Number(b)]);
+      m._advisorBuildingTint=Object.freeze(tintValue.slice());
     }
     if(rect&&texture){
       const previousTexture=m.diffuseMap||null;
       const previousSignature=String(m._advisorBuildingAtlasSignature||"");
       m.diffuseMap=texture;
-      m.diffuse.set(1,1,1);
+      // Diffuse color multiplies the authored atlas, preserving texture detail
+      // while adding bounded deterministic settlement variation.
+      m.diffuse.set(...tintValue);
       if(m.diffuseMapTiling?.set)m.diffuseMapTiling.set(rect.uScale,rect.vScale);
       else m.diffuseMapTiling=new pc.Vec2(rect.uScale,rect.vScale);
       if(m.diffuseMapOffset?.set)m.diffuseMapOffset.set(rect.u0,rect.v0);
@@ -232,7 +246,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       return true;
     }
     m.diffuseMap=null;
-    m.diffuse.set(r,g,b);
+    m.diffuse.set(r*tintValue[0],g*tintValue[1],b*tintValue[2]);
     if(knownSurface)m._advisorBuildingAtlasSignature="";
     return false;
   }
@@ -285,6 +299,26 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       presentationMaterials.set(name,m);
     }
     applyBuildingSurfaceMaterial(m,name,r,g,b);
+    m.update();
+    return m;
+  }
+  function buildingVariantIndex(descriptor){
+    const identity=String(descriptor?.id||descriptor?.entrance?.x||"building")+"|"+String(descriptor?.source||"normal");
+    return hash32(String(seedProvider()||"")+"|building-material|"+identity)%BUILDING_MATERIAL_VARIANTS.length;
+  }
+  function buildingVariantMaterial(baseName,variantIndex,r,g,b,gloss,tint){
+    const index=Math.max(0,Math.min(BUILDING_MATERIAL_VARIANTS.length-1,Math.trunc(Number(variantIndex)||0)));
+    const key=String(baseName)+"-v"+index;
+    let m=presentationMaterials.get(key)||null;
+    if(!m){
+      m=new pc.StandardMaterial();
+      m.name="chunk-"+key;
+      m.gloss=gloss;
+      m.metalness=0;
+      m._advisorBuildingVariantIndex=index;
+      presentationMaterials.set(key,m);
+    }
+    applyBuildingSurfaceMaterial(m,baseName,r,g,b,tint);
     m.update();
     return m;
   }
@@ -480,7 +514,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const name=String(material?._advisorBuildingSurfaceName||"");
       if(!name)continue;
       const fallback=material._advisorBuildingFallbackColor||[1,1,1];
-      if(applyBuildingSurfaceMaterial(material,name,fallback[0],fallback[1],fallback[2])){
+      const tint=material._advisorBuildingTint||[1,1,1];
+      if(applyBuildingSurfaceMaterial(material,name,fallback[0],fallback[1],fallback[2],tint)){
         material.update();
         refreshed++;
       }
@@ -942,18 +977,29 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     return Object.freeze({left,right,profile});
   }
 
-  function buildBuilding(root,worldData,descriptor,index,batches,roofProfiles){
+  function buildBuilding(root,worldData,descriptor,index,batches,roofProfiles,buildingMaterialVariants){
     const b=localBounds(worldData,descriptor.bounds||{});
     const special=descriptor.source==="special";
     const height=special?2.25:1.75;
     const anchor=descriptor.entrance||descriptor.bounds||{};
     const groundY=terrainHeightAtTile(String(seedProvider()||""),anchor.x??descriptor.bounds?.minX??"0",anchor.y??descriptor.bounds?.minY??"0",worldData?.chunkSize||16);
     const wallTopY=groundY+height;
+    const variantIndex=buildingVariantIndex(descriptor);
+    const variant=BUILDING_MATERIAL_VARIANTS[variantIndex];
+    const wallBase=special?"building-special-wall":"building-house-wall";
     const wall=special
-      ?presentationMaterial("building-special-wall",0.53,0.45,0.31,0.10)
-      :presentationMaterial("building-house-wall",0.61,0.52,0.36,0.10);
-    const roof=presentationMaterial("building-roof",0.33,0.15,0.10,0.08);
-    const door=presentationMaterial("building-door",0.20,0.11,0.06,0.06);
+      ?buildingVariantMaterial(wallBase,variantIndex,0.53,0.45,0.31,0.10,variant.wall)
+      :buildingVariantMaterial(wallBase,variantIndex,0.61,0.52,0.36,0.10,variant.wall);
+    const roof=buildingVariantMaterial("building-roof",variantIndex,0.33,0.15,0.10,0.08,variant.roof);
+    const door=buildingVariantMaterial("building-door",variantIndex,0.20,0.11,0.06,0.06,variant.trim);
+    buildingMaterialVariants.push(Object.freeze({
+      buildingId:String(descriptor.id||index),source:String(descriptor.source||"normal"),
+      variantIndex,
+      wallSurface:wallBase,
+      wallTint:Object.freeze(variant.wall.slice()),
+      roofTint:Object.freeze(variant.roof.slice()),
+      trimTint:Object.freeze(variant.trim.slice())
+    }));
     const contact=contactShadowMaterial("foundation");
     const rootName="ChunkBuilding_"+String(descriptor.id||index).replace(/[^a-z0-9_-]+/gi,"-");
     const outerW=b.width*0.90,outerD=b.depth*0.90,thickness=0.22;
@@ -1247,8 +1293,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const connectorDescriptors=Array.isArray(presentation.connectorDescriptors)?presentation.connectorDescriptors:[];
     const batches=staticBatchCollector();
     const roofProfiles=[];
+    const buildingMaterialVariants=[];
     let sourcePresentationPrimitiveCount=0;
-    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles);
+    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles,buildingMaterialVariants);
     for(let i=0;i<interiorObjects.length;i++)sourcePresentationPrimitiveCount+=buildInteriorObject(spec.worldData,interiorObjects[i],batches);
     const routePresentation=buildRoutePresentation(spec.worldData,connectorDescriptors,batches);
     sourcePresentationPrimitiveCount+=routePresentation.sourcePrimitiveCount;
@@ -1429,6 +1476,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       savedDrawCalls,
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       buildingPresentationCount:buildings.length,
+      buildingMaterialVariationDeterministic:true,
+      buildingMaterialVariantPaletteSize:BUILDING_MATERIAL_VARIANTS.length,
+      buildingMaterialVariantCount:new Set(buildingMaterialVariants.map(item=>item.variantIndex)).size,
+      buildingMaterialVariantMaterialBudget:16,
+      buildingMaterialVariantMaterialCount:[...presentationMaterials.keys()].filter(name=>/^building-(?:house-wall|special-wall|roof|door)-v\d+$/.test(String(name))).length,
+      buildingMaterialVariantSamples:Object.freeze(buildingMaterialVariants.slice(0,24)),
       buildingTexturedMaterialCount:surfaceBoundMaterials.size,
       buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
       buildingSurfaceMaterialRebinds,buildingSurfaceMaterialRefreshes,
