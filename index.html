@@ -1066,6 +1066,38 @@
     </div>
   </details>
 
+  <details id="worldStateProof">
+    <summary>WP-S007-001 Immutable SEED Foundation + Campaign Delta State Model</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>World generator</span><strong id="worldStateGenerator">—</strong></div>
+        <div><span>Schema versions</span><strong id="worldStateSchemas">—</strong></div>
+        <div><span>Campaign binding</span><strong id="worldStateCampaign">—</strong></div>
+        <div><span>Focused stable entity</span><strong id="worldStateFocus">—</strong></div>
+        <div><span>Foundation signature</span><strong id="worldStateFoundation">—</strong></div>
+        <div><span>Campaign delta</span><strong id="worldStateDelta">—</strong></div>
+        <div><span>CurrentWorld signature</span><strong id="worldStateCurrent">—</strong></div>
+        <div><span>Sparse save payload</span><strong id="worldStateStorage">—</strong></div>
+        <div><span>Lazy materialization cache</span><strong id="worldStateCache">—</strong></div>
+        <div><span>Controlled evidence state</span><strong id="worldStateStatus">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>SeedFoundation + CampaignStateDelta → CurrentWorld</h4>
+        <ul id="worldStateLayers" class="region-profile-comparison"></ul>
+      </section>
+      <section class="region-profile-section">
+        <h4>Stable structural references</h4>
+        <ul id="worldStateRepresentatives" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Same SEED + generator version regenerates identical immutable foundation identities and stable IDs</span><b id="vWorldStateDeterministic">WAITING</b></div>
+      <div class="check"><span>Campaign deltas merge into CurrentWorld without mutating SeedFoundation</span><b id="vWorldStateMerge">WAITING</b></div>
+      <div class="check"><span>Untouched distant queries create no save entry; only sparse changed-entity deltas are serialized</span><b id="vWorldStateSparse">WAITING</b></div>
+      <div class="check"><span>Eviction/re-materialization and campaign reload preserve changed CurrentWorld state</span><b id="vWorldStateReload">WAITING</b></div>
+      <div class="check"><span>Versioned stable references cover terrain/country/region/settlement and deterministic building/NPC structural IDs where generated</span><b id="vWorldStateIdentity">WAITING</b></div>
+      <div class="check"><span>Renderer, camera, asset loading, device speed and lazy foundation cache have zero authoritative state ownership</span><b id="vWorldStateAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1104,6 +1136,7 @@
 <script src="scripts/world/special-lots.js"></script>
 <script src="scripts/world/settlement-building-catalog.js"></script>
 <script src="scripts/world/daily-activity.js"></script>
+<script src="scripts/world/world-state.js"></script>
 <script src="scripts/world/terrain.js"></script>
 <script src="scripts/world/walkability.js"></script>
 <script src="scripts/world/route-planner.js"></script>
