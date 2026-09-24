@@ -1964,6 +1964,12 @@ function renderCountryRelationsProof(relationIndex=0){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.CountryRelations.renderDebugPanel(seed,relationIndex,document.getElementById("countryRelationsProof"));
 }
+function renderSettlementArchetypeProof(planIndex=0){
+  if(typeof window.SettlementArchetypes?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.SettlementArchetypes.renderDebugPanel(seed,planIndex,document.getElementById("settlementArchetypeProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1982,6 +1988,7 @@ function renderStatic(){
   renderCountryProfileProof();
   renderRegionProfileProof();
   renderCountryRelationsProof();
+  renderSettlementArchetypeProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2148,6 +2155,8 @@ window.AppUI=Object.freeze({
   regionProfileVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.RegionProfile?RegionProfile.proof(campaign.seed):null;},
   refreshCountryRelations:(relationIndex=0)=>renderCountryRelationsProof(relationIndex),
   countryRelationsVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CountryRelations?CountryRelations.proof(campaign.seed):null;},
+  refreshSettlementArchetypes:(planIndex=0)=>renderSettlementArchetypeProof(planIndex),
+  settlementArchetypesVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SettlementArchetypes?SettlementArchetypes.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{
