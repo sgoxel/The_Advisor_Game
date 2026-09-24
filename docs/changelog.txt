@@ -848,3 +848,16 @@
 - Inspected borders included forest/water/grass contexts with measured geography shifts of 358.2, 156.9, 138.9 and 70.0 tiles; reload reproduced the first border exactly.
 - All 5 fresh screenshots were directly inspected. The political border panel is clear and stable with no major clipping, overlap or broken layout. VISUAL 8.7/10 PASS.
 - Generic regression Visual Evidence run 35946432954 passed; GitHub Pages run 35946432409 successfully deployed the tested head.
+2026-09-24 05:50 +03:00 | WP-S006-002 | Country Profile: Wealth, Governance + Strategic Orientation
+- Added immutable deterministic CountryProfile foundation records keyed by authoritative WP-S006-001 country IDs and national capitals.
+- Added normalized wealth/prosperity, governance style, administrative capacity and taxation capacity for every generated country.
+- Added independent weighted tendencies for trade openness, military emphasis, agriculture, craft/production, maritime activity, mining/resource extraction, infrastructure investment and fortification; countries are not reduced to one exclusive archetype.
+- Added fixed geography/resource context sampling from each country's own territory, including water access, agricultural suitability, timber availability, mineral potential, route access, defensibility, elevation and moisture.
+- Maritime tendency is constrained by sampled water access; landlocked countries are capped at negligible maritime emphasis. Mining tendency is constrained by fixed mineral/terrain potential.
+- Added reusable cultural and architectural tendency keys plus primary material, roof, settlement-pattern and civic-style keys for later settlement/building systems.
+- Added immutable foundation metadata and explicit future dynamic-overlay compatibility without creating mutable campaign policy/economy state in this WP.
+- Added a Development Mode Country Profile inspector with weighted bars, geography/resource context, governance/wealth data, cultural/architecture keys and a five-profile comparison table.
+- Dedicated Visual Evidence run 35948620926 passed on exact head 828cfce8445c7307fd8c5fc337c93c945b74fabc. Runtime proof sampled 25 profiles with 3 wealth bands, 24 distinct wealth values, 24 strategic mixes and 7 geography-context groups; deterministic replay/time independence, numeric bounds, capital linkage, maritime/mining plausibility and foundation isolation all passed.
+- Fresh screenshots showed landlocked Northfall at 0% maritime, prosperous Highford with strong trade/agriculture, coastal Oakvale with 45.7% water access and 43.8% maritime emphasis, and Blackwick with higher mineral potential/mining; reload reproduced Northfall revision CPF-3C1CF58E.
+- All 5 fresh screenshots were directly inspected. The profile inspector remains readable with no major clipping, overlap or broken layout. VISUAL 8.8/10 PASS.
+- Generic regression Visual Evidence run 35948606107 passed; GitHub Pages run 35948605770 successfully deployed the tested head.
