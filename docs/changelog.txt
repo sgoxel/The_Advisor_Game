@@ -1158,3 +1158,12 @@
 - Recorded chunk build telemetry during evidence: average build time peaked at 61.914 ms and observed max build time at 188.7 ms while the test retained/cached up to 377 chunk resources; no visible-frame rebuild/preparation work was introduced.
 - All eleven final screenshots were retrieved and directly inspected. Raised roads/paths remain restrained but visibly differentiated through grass/dirt/village terrain with smooth shoulders; no deep curbs, cracks, z-fighting, buried segments, floating characters, chunk seams or major responsive/projection defects were visible. VISUAL 8.1/10 PASS.
 - Tested head 44e9476ccbc482d1a9c7b7d5623aae95a64aff80 deployed successfully through GitHub Pages run 36011942268. Evidence artifacts remained off main.
+
+2026-09-24 17:34 +03:00 | WP-S004-004-001 | NPC building approach/occlusion/separation implementation
+- Restricted enterable Starting Village house and special-building entrances to the camera-visible S/E faces while preserving deterministic reachable road access.
+- Added deterministic resident-only route step penalties around ordinary exterior walls, with door/approach exemptions so NPCs prefer one-tile clearance instead of hugging walls when an alternative exists.
+- Normal NPC presentation now uses current navigation occupancy only: future home/work target building IDs no longer hide outdoor residents early; a resident disappears only when the authoritative position reaches the real exterior-door/building footprint and remains fully hidden indoors.
+- Added close orthographic building-footprint occlusion so an outdoor NPC genuinely behind an opaque building is fully suppressed instead of protruding above the roof.
+- Removed resident-movement-driven roof cutaway and added bounded deterministic screen-space NPC billboard separation without changing Simulation coordinates.
+- Added a dedicated six-frame visual evidence scenario covering door approach, doorway disappearance, indoor hiding, rear/front building occlusion, visible-face door policy, wall-clearance routing and same-coordinate NPC separation.
+- Validation and fresh screenshot inspection pending.
