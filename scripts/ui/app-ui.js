@@ -1051,7 +1051,6 @@ async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom()){
   let descriptor;
   if(isPlayCanvasRenderer()){
     const base=terrainViewGeometryDescriptor(center,zoom);
-    if(startupLoading)setSceneLoadingPhase("assets");
     const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
       seed,
       center,
@@ -1123,6 +1122,7 @@ async function renderTerrain(){
        readiness. Always run the renderer preparation gate for the region that is
        about to become visible, including revisits whose terrain data is already
        cached. This keeps world assets/materials pinned and ready before render. */
+    if(startupLoading)setSceneLoadingPhase("assets");
     const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
       seed:campaign.seed,
       center,
