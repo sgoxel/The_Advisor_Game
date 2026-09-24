@@ -1084,6 +1084,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     terrainPreloadManager=window.TerrainChunkPreload.createManager({
       chunkSize:terrainChunkSize(),
       signatureProvider:terrainChunkSignature,
+      performanceProvider:()=>renderQualitySnapshot(),
       prepareChunk:prepareTerrainMeshChunk,
       activateChunk:activateTerrainChunk,
       deactivateChunk:deactivateTerrainChunk,
