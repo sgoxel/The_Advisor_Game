@@ -747,7 +747,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let meshResourceCount=0,activeMeshCount=0,preparedMeshCount=0,cachedMeshCount=0;
     let meshInstanceCount=0,vertices=0,triangles=0;
     let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,interiorObjectPresentationCount=0,propPresentationCount=0;
-    let roofProfileCount=0,roofProfilePass=true,roofCenterRidgeHigher=true,roofEaveContactPass=true,roofFootprintDriven=true;
+    let roofProfileCount=0,roofNormalProfileCount=0,roofSpecialProfileCount=0,roofProfilePass=true,roofCenterRidgeHigher=true,roofEaveContactPass=true,roofFootprintDriven=true;
     const roofProfileSamples=[];
     let staticBatchCount=0,staticBatchSourcePrimitiveCount=0,instancedGroupCount=0,instancedObjectCount=0;
     let optimizedPresentationDrawCalls=0,unoptimizedPresentationDrawCalls=0,savedDrawCalls=0;
@@ -793,6 +793,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       }
       buildingPresentationCount+=Number(resource.buildingPresentationCount||0);
       roofProfileCount+=Number(resource.roofProfileCount||0);
+      roofNormalProfileCount+=Number(resource.roofNormalProfileCount||0);
+      roofSpecialProfileCount+=Number(resource.roofSpecialProfileCount||0);
       roofProfilePass=roofProfilePass&&resource.roofProfilePass!==false;
       roofCenterRidgeHigher=roofCenterRidgeHigher&&resource.roofCenterRidgeHigher!==false;
       roofEaveContactPass=roofEaveContactPass&&resource.roofEaveContactPass!==false;
@@ -826,7 +828,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       frustumCulledResourceCount,hardwareInstancedResourceCount,batchedResourceCount,
       renderMeshInstanceCount,visibleMeshInstanceCount,culledMeshInstanceCount,cullEnabledMeshInstanceCount,
       buildingPresentationCount,
-      roofProfileCount,
+      roofProfileCount,roofNormalProfileCount,roofSpecialProfileCount,
       roofProfilePass:Boolean(roofProfileCount>0&&roofProfilePass&&roofCenterRidgeHigher&&roofEaveContactPass&&roofFootprintDriven),
       roofCenterRidgeHigher:Boolean(roofProfileCount>0&&roofCenterRidgeHigher),
       roofEaveContactPass:Boolean(roofProfileCount>0&&roofEaveContactPass),
