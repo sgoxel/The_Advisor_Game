@@ -1145,3 +1145,11 @@
 - Explicit Ultra survived Graphics Quality Low and High, survived reload while Graphics Quality remained Low, and live downshift restored Standard resources. Campaign SEED, protagonist position and camera position remained unchanged; Simulation authority stayed preserved.
 - Seven fresh screenshots were retrieved and directly inspected at Standard/High/Ultra 1.00x and 2.00x plus Ultra phone portrait. High/Ultra show sharper terrain/surface detail than Standard; no black/missing material, projection failure or major responsive-layout defect is visible. VISUAL 8.5/10 PASS.
 - Tested head dc066a336d9835d4c760eb4fd5b942dd9366c741 deployed successfully through GitHub Pages run 36008452734. No temporary runtime evidence files were published to main.
+
+2026-09-24 17:34 +03:00 | WP-S004-004-001 | NPC building approach/occlusion/separation implementation
+- Restricted enterable Starting Village house and special-building entrances to the camera-visible S/E faces while preserving deterministic reachable road access.
+- Added deterministic resident-only route step penalties around ordinary exterior walls, with door/approach exemptions so NPCs prefer one-tile clearance instead of hugging walls when an alternative exists.
+- Normal NPC presentation now uses current navigation occupancy only: future home/work target building IDs no longer hide outdoor residents early; a resident disappears only when the authoritative position reaches the real exterior-door/building footprint and remains fully hidden indoors.
+- Added close orthographic building-footprint occlusion so an outdoor NPC genuinely behind an opaque building is fully suppressed instead of protruding above the roof.
+- Removed resident-movement-driven roof cutaway and added bounded deterministic screen-space NPC billboard separation without changing Simulation coordinates.
+- Validation and fresh screenshot inspection pending.
