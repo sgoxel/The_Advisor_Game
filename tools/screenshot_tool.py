@@ -339,6 +339,43 @@ return (() => {
             return {error:String(error)};
           }
         })(),
+        roadProfileCharacterProximity: (() => {
+          try {
+            const seed=window.SeedSystem?.getCampaign?.()?.seed;
+            if(!seed||!window.TerrainFoundation?.getTile)return null;
+            const instances=renderer?.characterPresentation?.instances || [];
+            const roadlike=type=>['road','path','square'].includes(String(type||''));
+            const nearestRoad=world=>{
+              if(!world)return null;
+              let wx,wy;
+              try{wx=BigInt(String(world.x));wy=BigInt(String(world.y));}catch(_){return null;}
+              let best=null;
+              for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){
+                const tx=wx+BigInt(dx),ty=wy+BigInt(dy);
+                const type=String(window.TerrainFoundation.getTile(seed,String(tx),String(ty))?.type||'');
+                if(!roadlike(type))continue;
+                const distance=Math.hypot(dx,dy);
+                if(!best||distance<best.distanceTiles)best={distanceTiles:Number(distance.toFixed(3)),type,x:String(tx),y:String(ty)};
+              }
+              return best;
+            };
+            const rows=instances.map(item=>({
+              id:String(item?.id||''),
+              world:item?.world||null,
+              nearestRoad:nearestRoad(item?.world||null)
+            }));
+            const protagonist=rows.find(item=>item.id==='protagonist')||null;
+            const npcs=rows.filter(item=>item.id&&item.id!=='protagonist'&&item.nearestRoad);
+            npcs.sort((a,b)=>Number(a.nearestRoad?.distanceTiles??99)-Number(b.nearestRoad?.distanceTiles??99)||a.id.localeCompare(b.id));
+            return {
+              visibleCharacterCount:rows.length,
+              protagonist,
+              nearestNpc:npcs[0]||null
+            };
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
         terrainPreloadControls: {
           preloadRadius: document.querySelector('#terrainPreloadRadiusSelect')?.value || null,
           maxCachedChunks: document.querySelector('#terrainCacheCapacitySelect')?.value || null,
