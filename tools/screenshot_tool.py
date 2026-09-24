@@ -4059,6 +4059,229 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "wp-s003-004-003":
         return _show_gabled_roof_proof(driver, frame_index)
     if scenario == "wp-s003-004-004":
+        return _show_character_billboard_readability_proof(driver, frame_index)
+    if scenario == "building-presentation":
+        states = ("outside", "entering", "inside", "behind", "leaving")
+        # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
+        # characters and interior depth are large enough for honest inspection.
+        return _set_building_proof_state(driver, states[min(frame_index, len(states) - 1)])
+    if scenario == "building-occlusion":
+        states = ("front", "behind", "behind", "clear", "inside", "restored")
+        if frame_index == 0:
+            _wheel_canvas(driver, 500)
+        if frame_index == 2:
+            _wheel_canvas(driver, 500)
+        return _set_building_occlusion_proof_state(
+            driver, states[min(frame_index, len(states) - 1)]
+        )
+    if scenario == "static" or (
+        frame_index == 0 and
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002"}
+    ):
+        return "initial"
+    if scenario == "save-load":
+        if frame_index == 1:
+            return _reload_current_build(driver)
+        return "post-reload-observe"
+    if scenario == "wp-s001-001":
+        if frame_index == 1:
+            return _reload_current_build(driver)
+        if frame_index == 2:
+            driver.set_window_size(1080, 1920)
+            return "resize:1080x1920"
+        if frame_index == 3:
+            driver.set_window_size(1920, 1080)
+            return "resize:1920x1080"
+        if frame_index == 4:
+            return _open_settings_popup(driver)
+        return "wp-s001-001:no-op"
+    if scenario == "panel-cycle":
+        return _cycle_details(driver, frame_index)
+    if scenario == "camera-pan":
+        return _drag_canvas(driver, 120 if frame_index % 2 else -120, 0)
+    if scenario == "camera-zoom":
+        actions = (
+            lambda: _wheel_canvas(driver, -500),
+            lambda: _wheel_canvas(driver, 500),
+            lambda: _pinch_gameplay(driver, 1.5),
+            lambda: _pinch_gameplay(driver, 2.0 / 3.0),
+        )
+        return actions[(frame_index - 1) % len(actions)]()
+    if scenario == "camera-pan-zoom":
+        actions = (
+            lambda: _drag_canvas(driver, 120, 0),
+            lambda: _wheel_canvas(driver, -500),
+            lambda: _wheel_canvas(driver, 500),
+        )
+        return actions[(frame_index - 1) % len(actions)]()
+    if scenario == "terrain-natural":
+        for _ in range(5):
+            _wheel_canvas(driver, 500)
+        return "zoom-out-naturalness:0.5x"
+    if scenario == "main-road":
+        for _ in range(5):
+            _wheel_canvas(driver, 500)
+        return "zoom-out-main-road:0.5x"
+    if scenario == "starting-village":
+        if frame_index == 1:
+            for _ in range(5):
+                _wheel_canvas(driver, 500)
+            return "zoom-out-starting-village:0.5x"
+        return _focus_starting_village_gateway(driver)
+    if scenario == "responsive-cycle":
+        if frame_index == 1:
+            driver.set_window_size(1080, 1920)
+            driver.execute_script("window.scrollTo(0, 0)")
+            return "portrait:gameplay-top"
+        if frame_index == 2:
+            driver.execute_script("""
+                const button=document.querySelector('#controlsDownButton');
+                if(!button)throw new Error('controlsDownButton missing');
+                button.dispatchEvent(new PointerEvent('pointerdown',{pointerId:201,pointerType:'touch',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:1}));
+                button.dispatchEvent(new PointerEvent('pointerup',{pointerId:201,pointerType:'touch',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:0}));
+                button.click();
+            """)
+            return "touch:navigate-controls"
+        if frame_index == 3:
+            driver.execute_script("""
+                const button=document.querySelector('#characterInfoToggle');
+                if(!button)throw new Error('characterInfoToggle missing');
+                button.dispatchEvent(new PointerEvent('pointerdown',{pointerId:301,pointerType:'mouse',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:1}));
+                button.dispatchEvent(new PointerEvent('pointerup',{pointerId:301,pointerType:'mouse',isPrimary:true,bubbles:true,cancelable:true,button:0,buttons:0}));
+                button.click();
+            """)
+            return "mouse:toggle-character-info"
+        if frame_index == 4:
+            driver.set_window_size(1920, 1080)
+            driver.execute_script("""
+                window.scrollTo(0,0);
+                document.dispatchEvent(new KeyboardEvent('keydown',{key:'x',code:'KeyX',bubbles:true,cancelable:true}));
+            """)
+            return "landscape:keyboard-interactions"
+        return "responsive:no-op"
+    if scenario == "wp-s004-001":
+        if frame_index == 0:
+            return _show_resident_roster_proof(driver, "top")
+        if frame_index == 1:
+            return _show_resident_roster_proof(driver, "bottom")
+        return _show_resident_roster_proof(driver, "top")
+    if scenario == "wp-s004-002":
+        if frame_index == 0:
+            return _show_resident_assignment_proof(driver, "top")
+        if frame_index == 1:
+            return _show_resident_assignment_proof(driver, "middle")
+        return _show_resident_assignment_proof(driver, "bottom")
+    if scenario == "wp-s004-003":
+        samples=((2,30),(7,30),(12,30),(19,30))
+        hour,minute=samples[min(frame_index,len(samples)-1)]
+        return _show_resident_schedule_proof(driver,hour,minute)
+    if scenario == "wp-s004-004":
+        return _show_resident_movement_proof(driver,frame_index)
+    if scenario == "wp-s004-005":
+        return _show_resident_action_proof(driver,frame_index)
+    if scenario == "wp-s005-001":
+        if frame_index == 3:
+            action=_reload_current_build(driver)
+            driver.execute_script("""
+                const toggle=document.querySelector('#characterInteractionsToggle');
+                if(toggle?.getAttribute('aria-expanded')==='false')toggle.click();
+                const body=document.querySelector('#characterInteractionsBody');
+                if(body)body.scrollTop=body.scrollHeight;
+            """)
+            return action+"+advisor-history-scroll"
+        return _show_advisor_channel_proof(driver,frame_index)
+    if scenario == "wp-s005-002":
+        if frame_index == 3:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_character_memory_proof(driver,frame_index)
+        return _show_character_memory_proof(driver,frame_index)
+    if scenario == "wp-s005-003":
+        return _show_dialogue_context_proof(driver,frame_index)
+    if scenario == "wp-s005-004":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_advice_resolution_proof(driver,frame_index)
+        return _show_advice_resolution_proof(driver,frame_index)
+    if scenario == "wp-s005-005":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_social_state_proof(driver,frame_index)
+        return _show_social_state_proof(driver,frame_index)
+    if scenario == "wp-s006-001":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_political_geography_proof(driver,frame_index)
+        return _show_political_geography_proof(driver,frame_index)
+    if scenario == "wp-s006-002":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_country_profile_proof(driver,frame_index)
+        return _show_country_profile_proof(driver,frame_index)
+    if scenario == "wp-s006-003":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_region_profile_proof(driver,frame_index)
+        return _show_region_profile_proof(driver,frame_index)
+    if scenario == "wp-s006-004":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_country_relations_proof(driver,frame_index)
+        return _show_country_relations_proof(driver,frame_index)
+    if scenario == "wp-s006-005":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_settlement_archetype_proof(driver,frame_index)
+        return _show_settlement_archetype_proof(driver,frame_index)
+    if scenario == "wp-s006-006":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_settlement_building_catalog_proof(driver,frame_index)
+        return _show_settlement_building_catalog_proof(driver,frame_index)
+    if scenario == "wp-s007-001":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_world_state_proof(driver,frame_index)
+        return _show_world_state_proof(driver,frame_index)
+    if scenario == "wp-s007-002":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_world_context_proof(driver,frame_index)
+        return _show_world_context_proof(driver,frame_index)
+    if scenario == "wp-s003-008-001":
+        actions = {
+            1: lambda: _drag_canvas(driver, -120, 0),
+            2: lambda: _drag_canvas(driver, 120, 0),
+            3: lambda: _drag_canvas(driver, 0, -120),
+            4: lambda: _drag_canvas(driver, 0, 120),
+            5: lambda: _keyboard_camera(driver, "arrowleft"),
+            6: lambda: _keyboard_camera(driver, "arrowright"),
+            7: lambda: _keyboard_camera(driver, "arrowup"),
+            8: lambda: _keyboard_camera(driver, "arrowdown"),
+            9: lambda: _keyboard_camera(driver, "a"),
+            10: lambda: _keyboard_camera(driver, "d"),
+            11: lambda: _keyboard_camera(driver, "w"),
+            12: lambda: _keyboard_camera(driver, "s"),
+            13: lambda: _keyboard_camera(driver, "arrowup", "arrowleft"),
+            14: lambda: _keyboard_camera(driver, "s", "d"),
+            15: lambda: _touch_drag_canvas(driver, -120, 0),
+        }
+        action = actions.get(frame_index)
+        return action() if action else "screen-navigation:initial"
+    if scenario == "motion-sequence":
+        return _drag_canvas(driver, 72 if frame_index % 2 else -72, 0)
+    if scenario == "time-of-day":
+        actions = ("time-night", "time-dawn")
+        return _legacy_control(driver, actions[(frame_index - 1) % len(actions)])
+    if scenario in {"village-reference", "region-transition", "npc-conversation-state"}:
+        return f"scenario-compatible-placeholder:{scenario}"
+    if scenario == "npc-edge-crossing":
+        drags = (480, 140, -140, -480)
+        return _drag_canvas(driver, drags[(frame_index - 1) % len(drags)], 0)
+    return "no-op"
+
+
+def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-004-004":
         if len(frames) < 11:
             raise RuntimeError("wp-s003-004-004 requires eleven character-billboard evidence frames")
         builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:11]]
@@ -4105,7 +4328,6 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             if yaws and max(yaws)-min(yaws)>0.01:
                 raise RuntimeError(f"Orthographic billboards do not share camera view direction in frame {index+1}: {yaws}")
 
-            # Protagonist-centered evidence occupies frames 1-9 (indices 0-8).
             if index<=8:
                 protagonist=next((item for item in instances if item.get("id")=="protagonist"),None)
                 if not protagonist:
@@ -4123,10 +4345,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if len(set(protagonist_feet))!=1:
             raise RuntimeError(f"Presentation scaling moved authoritative protagonist feet: {protagonist_feet}")
 
-        # Dedicated NPC frames pan presentation camera to an actual simulated resident.
-        npc_frames=(presentations[9],presentations[10])
         npc_instances=[]
-        for offset,presentation in enumerate(npc_frames,start=10):
+        for offset,presentation in enumerate((presentations[9],presentations[10]),start=10):
             npc=next((item for item in presentation.get("instances") or [] if item.get("id")!="protagonist"),None)
             if not npc:
                 raise RuntimeError(f"NPC billboard missing from dedicated NPC frame {offset}: {presentation}")
@@ -4138,7 +4358,6 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if npc_instances[0].get("id")!=npc_instances[1].get("id") or npc_instances[0].get("world")!=npc_instances[1].get("world"):
             raise RuntimeError(f"NPC 0.50x/1.00x frames did not inspect the same authoritative resident: {npc_instances}")
 
-        # Phone portrait must retain the 32px target; short landscape may use its explicit bounded 26px fallback.
         phone_portrait=presentations[7]
         phone_landscape=presentations[8]
         pp=next(item for item in phone_portrait.get("instances") or [] if item.get("id")=="protagonist")
