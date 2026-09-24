@@ -9,6 +9,7 @@ const SURFACES=Object.freeze([
 ]);
 const COLUMNS=2;
 const PAD=2;
+const QUALITY_RESOLUTION=Object.freeze({low:64,standard:128,high:256,ultra:512});
 
 function loadImage(url){
   return new Promise((resolve,reject)=>{
@@ -31,9 +32,16 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
     frameDecodeCount:0,frameRasterizeCount:0,simulationAuthorityPreserved:true
   });
 
+  function qualityProfile(){
+    const signature=String(qualitySignatureProvider?.()||"").toLowerCase();
+    const match=/pc-material-quality@([a-z]+)/.exec(signature);
+    return QUALITY_RESOLUTION[match?.[1]]?match[1]:null;
+  }
   function resolution(){
+    const profile=qualityProfile();
+    if(profile)return QUALITY_RESOLUTION[profile];
     const value=Math.round(Number(resolutionProvider?.()||128));
-    return Math.max(64,Math.min(128,value));
+    return Math.max(64,Math.min(512,value));
   }
   function slotFor(materialName){
     const index=Math.max(0,SURFACES.findIndex(item=>item.material===String(materialName||"")));
