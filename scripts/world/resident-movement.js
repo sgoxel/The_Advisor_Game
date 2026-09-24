@@ -4,11 +4,15 @@
 const LEVEL=0;
 const FIXED_STEP_SECONDS=0.1;
 const MAX_ADVANCE_STEPS=240;
+const WALL_CLEARANCE_PENALTY_SECONDS=20;
 let seedKey="";
 let residentById=new Map();
 let states=new Map();
 let accumulator=0;
 let proofContext=null;
+let wallClearanceSeed="";
+let wallClearancePenaltyCells=new Set();
+let wallClearanceExemptCells=new Set();
 const proofCache=new Map();
 
 function point(value){
@@ -18,6 +22,42 @@ function point(value){
 }
 function samePoint(a,b){return !!a&&!!b&&a.x===b.x&&a.y===b.y}
 function key(value){return value?value.x+","+value.y:""}
+function ensureWallClearance(seed){
+  const requested=String(seed==null?"":seed);
+  if(wallClearanceSeed===requested)return;
+  wallClearanceSeed=requested;
+  wallClearancePenaltyCells=new Set();
+  wallClearanceExemptCells=new Set();
+  if(!requested||!window.BuildingInteriors?.build)return;
+  const directions=[["0","-1"],["1","0"],["0","1"],["-1","0"]];
+  for(const interior of BuildingInteriors.build(requested)){
+    for(const wall of interior.exteriorWallCells||[]){
+      for(const [dx,dy] of directions){
+        const neighbor=WorldCoordinates.add(wall,dx,dy);
+        wallClearancePenaltyCells.add(key(neighbor));
+      }
+    }
+    const doorwayPoints=[
+      interior.entrance?.door,
+      interior.entrance?.immediateOutside,
+      interior.entrance?.outdoorAccess
+    ].filter(Boolean);
+    for(const doorway of doorwayPoints){
+      wallClearanceExemptCells.add(key(doorway));
+      for(const [dx,dy] of directions)wallClearanceExemptCells.add(key(WorldCoordinates.add(doorway,dx,dy)));
+    }
+  }
+}
+function wallClearancePenalty(seed,context){
+  ensureWallClearance(seed);
+  const nav=context?.state;
+  const pointValue=context?.point;
+  if(!pointValue||!nav?.walkable)return 0;
+  if(nav.buildingId||nav.category===Walkability.CATEGORY.ENTRANCE||nav.category===Walkability.CATEGORY.INTERIOR)return 0;
+  const pointKey=key(pointValue);
+  if(wallClearanceExemptCells.has(pointKey))return 0;
+  return wallClearancePenaltyCells.has(pointKey)?WALL_CLEARANCE_PENALTY_SECONDS:0;
+}
 function manhattan(a,b){
   if(!a||!b)return Infinity;
   const dx=BigInt(a.x)-BigInt(b.x),dy=BigInt(a.y)-BigInt(b.y);
@@ -73,6 +113,7 @@ function ensure(seed){
   if(!nextSeed)return false;
   if(seedKey===nextSeed&&states.size===12)return true;
   seedKey=nextSeed;
+  ensureWallClearance(nextSeed);
   residentById=new Map((DailyActivity.build(nextSeed)||[]).map(resident=>[resident.id,resident]));
   states=new Map();
   for(const resident of residentById.values())states.set(resident.id,residentState(resident,resident.homeTarget));
@@ -86,6 +127,9 @@ function reset(seed){
   states=new Map();
   accumulator=0;
   proofContext=null;
+  wallClearanceSeed="";
+  wallClearancePenaltyCells=new Set();
+  wallClearanceExemptCells=new Set();
   window.ActionExecutor?.clearKind?.("resident");
   return ensure(seed);
 }
@@ -110,7 +154,9 @@ function plan(seed,state,activity,reason){
     state.lastReason=reason||"already-at-target";
     return true;
   }
-  const route=RoutePlanner.findRoute(seed,state.position,state.target);
+  const route=RoutePlanner.findRoute(seed,state.position,state.target,{
+    stepPenaltySeconds:context=>wallClearancePenalty(seed,context)
+  });
   state.routeRequests++;
   if(reason==="target-change"||reason==="initial-target")state.targetPlans++;
   if(reason==="invalid-next-segment")state.invalidSegmentReplans++;
@@ -246,7 +292,11 @@ function stateSnapshot(state){
     intendedAction:state.activity?.action||null,
     actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null,
     buildingId:nav?.buildingId||null,
+    occupiesBuilding:Boolean(nav?.buildingId),
     navigationCategory:nav?.category||null,
+    doorwayKind:nav?.doorwayKind||null,
+    nextPosition:next?point(next):null,
+    nextDoorwayKind:navNext?.doorwayKind||null,
     routeIndex:state.routeIndex,
     routeSteps:state.route?.found?state.route.stepCount:0,
     routeRequests:state.routeRequests,
@@ -271,6 +321,9 @@ function snapshot(){
     movementOnly:true,
     actionExecution:false,
     routePlanningPerFrame:false,
+    wallClearancePolicy:"prefer-one-tile",
+    wallClearancePenaltySeconds:WALL_CLEARANCE_PENALTY_SECONDS,
+    wallClearancePenaltyCellCount:wallClearancePenaltyCells.size,
     proofActive:Boolean(proofContext?.active),
     residents:Object.freeze([...states.values()].map(stateSnapshot))
   });
@@ -335,6 +388,10 @@ function proofResult(seed,state,ctx){
   const outbound=ctx.outboundHistory;
   const insideNav=navigation(seed,ctx.insideTarget);
   const finalNav=navigation(seed,state.position);
+  const wallClearanceViolationCount=allHistory.reduce((count,item)=>{
+    const nav=navigation(seed,item);
+    return count+(wallClearancePenalty(seed,{point:item,state:nav})>0?1:0);
+  },0);
   return Object.freeze({
     residentId:ctx.residentId,residentName:ctx.residentName,homeId:ctx.homeId,stage:ctx.phase,leg:ctx.leg,
     position:point(state.position),presentationOffset:state.presentationOffset,target:point(state.target),status:state.status,
@@ -349,7 +406,9 @@ function proofResult(seed,state,ctx){
     adjacencyPass:allHistory.slice(1).every((item,index)=>manhattan(allHistory[index],item)===1),
     interiorTargetPass:Boolean(insideNav?.walkable&&insideNav.category===Walkability.CATEGORY.INTERIOR),
     finalTargetPass:Boolean(ctx.outsideArrival&&samePoint(ctx.outsideArrival,ctx.outsideTarget)&&finalNav?.walkable),
-    roadSpeedPass:roadSpeedPass(state),physicalSpeedIndependent:true,routePlanningPerFrame:false,noTeleport:true,
+    roadSpeedPass:roadSpeedPass(state),wallClearancePass:wallClearanceViolationCount===0,
+    wallClearanceViolationCount,wallClearancePenaltySeconds:WALL_CLEARANCE_PENALTY_SECONDS,
+    physicalSpeedIndependent:true,routePlanningPerFrame:false,noTeleport:true,
     noDirectPlayerControl:true,cameraIndependencePass:Boolean(ctx.cameraIndependencePass),
     offscreenSimulationPass:Boolean(ctx.offscreenSimulationPass),rendererCullingPass:Boolean(ctx.rendererCullingPass),
     actionExecutionIntroduced:false,dialogueEconomyCombatIntroduced:false,
@@ -384,7 +443,7 @@ function runProof(seed){
   const pass=
     first.insideArrivalPass&&first.outsideArrivalPass&&first.inboundDoorPass&&first.outboundDoorPass&&
     first.walkabilityPass&&first.adjacencyPass&&first.interiorTargetPass&&first.finalTargetPass&&first.roadSpeedPass&&
-    first.blockedTraversals===0&&first.invalidSegmentReplans===0&&first.routeRequests===2&&deterministic;
+    first.wallClearancePass&&first.blockedTraversals===0&&first.invalidSegmentReplans===0&&first.routeRequests===2&&deterministic;
   return Object.freeze({...first,deterministic,pass});
 }
 function verify(seed){
@@ -466,7 +525,7 @@ function proofSnapshot(){
   const pass=
     proofContext.phase==="outside-arrived"&&result.insideArrivalPass&&result.outsideArrivalPass&&
     result.inboundDoorPass&&result.outboundDoorPass&&result.walkabilityPass&&result.adjacencyPass&&
-    result.interiorTargetPass&&result.finalTargetPass&&result.roadSpeedPass&&result.blockedTraversals===0&&
+    result.interiorTargetPass&&result.finalTargetPass&&result.roadSpeedPass&&result.wallClearancePass&&result.blockedTraversals===0&&
     result.invalidSegmentReplans===0&&result.routeRequests===2&&result.cameraIndependencePass&&
     result.offscreenSimulationPass&&result.rendererCullingPass&&verified?.pass===true;
   return Object.freeze({...result,deterministic:Boolean(verified?.deterministic),verifiedPass:Boolean(verified?.pass),pass});
@@ -474,7 +533,7 @@ function proofSnapshot(){
 function endProof(){proofContext=null;return snapshot()}
 
 window.ResidentMovement=Object.freeze({
-  FIXED_STEP_SECONDS,ensure,reset,advance,snapshot,get,position,presentation,verify,
+  FIXED_STEP_SECONDS,WALL_CLEARANCE_PENALTY_SECONDS,ensure,reset,advance,snapshot,get,position,presentation,verify,
   beginProof,proofAdvanceToDoor,proofAdvanceToTarget,proofBeginOutbound,proofAdvanceSeconds,
   recordEvidence,proofSnapshot,endProof
 });
