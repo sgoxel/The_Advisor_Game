@@ -811,3 +811,14 @@
 - Corrected Visual Evidence run 35937675154 passed on exact head 124c0bb6fd474abb187963194add9dd11df2ddee. All five runtime frames passed identity/context, social normalization, meaningful activity framing, deterministic tone sequence, memory grounding and world-authority isolation.
 - All 5 fresh screenshots were directly inspected: friendly tavern, guarded home, formal work, urgent travel and private sleep frames are readable with no major clipping/overlap/broken layout. VISUAL 8.7/10 PASS.
 - GitHub Pages run 35937660792 successfully deployed the tested head.
+2026-09-24 03:57 +03:00 | WP-S005-004 | Advice Acceptance, Rejection + Influence Resolution
+- Added persistent deterministic AdviceResolution state keyed to stable AdvisorChannel advice IDs, with explicit accepted, rejected, deferred and modified protagonist decisions.
+- Extended AdvisorChannel with a traceable modified status and legal transition path while preserving existing delivered/considered/accepted/rejected/deferred/forgotten history semantics.
+- Added protagonist-facing decision records containing summary, recommendation, reasoning, fantasy timestamp, input context, original/final Simulation validation, execution eligibility and memory influence metadata.
+- Integrated WP-S005-002 CharacterMemory so every decision writes a stable advice-linked Protagonist memory entry; accepted/modified advice is reinforced, deferred advice retained, and rejected advice discounted/uncertain through confidence/relevance rather than an authority shortcut.
+- Reused ActionExecutor.compatible as a non-mutating Simulation gate. Advice resolution never calls action execution: accepted/modified choices become only eligible for later execution when the final intent is compatible, while rejected/deferred choices remain non-executable.
+- Added Development Mode decision inspection with a four-event log, reasoning, Simulation result, memory ID, execution boundary and explicit player-advice/protagonist-choice/Simulation-authority separation.
+- First dedicated evidence run 35940373527 failed because the proof fixture incorrectly assumed tavern tables reject work; the real Simulation correctly allows that action. The fixture was corrected to an actually incompatible sleep-at-table intent in 2798af023ed6bcb034c2c7f949840d2ecb844a12.
+- Corrected Visual Evidence run 35940569274 passed on exact head 2798af023ed6bcb034c2c7f949840d2ecb844a12. Accepted/deferred/rejected/modified coverage, Advisor+memory synchronization, confidence effects, deterministic replay/IDs, storage/reload persistence, Simulation gating and world-position isolation all passed.
+- All 5 fresh screenshots were directly inspected. Decision framing, event log, reasoning, Simulation validation and memory linkage are readable with no major clipping, overlap or broken layout. VISUAL 8.6/10 PASS.
+- GitHub Pages run 35940559873 successfully deployed the tested head.
