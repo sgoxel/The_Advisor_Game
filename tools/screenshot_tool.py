@@ -1785,7 +1785,7 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
           const validIntent={position:{x:activity.target.x,y:activity.target.y},activity};
           const invalidActivity={
             ...activity,
-            action:'work',intendedAction:'work',
+            action:'sleep',intendedAction:'sleep',
             supportedActions:['eat']
           };
           const invalidIntent={position:{x:activity.target.x,y:activity.target.y},activity:invalidActivity};
