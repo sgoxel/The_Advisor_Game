@@ -96,6 +96,7 @@ SCENARIOS = {
     "wp-s003-006-009",
     "wp-s003-007-001",
     "wp-s003-008-001",
+    "wp-s003-008-002",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -163,6 +164,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-009": 11,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
+    "wp-s003-008-002": 9,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -308,6 +310,7 @@ return (() => {
       assetStandardProof: window.WP_S003_005_002_EVIDENCE || null,
       currentBuild: {
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
+        sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
         campaignSeed: window.SeedSystem?.getCampaign?.()?.seed || null,
         campaignRealStartMs: Number(window.SeedSystem?.getCampaign?.()?.realStartMs || 0) || null,
         campaignFantasyStart: window.SeedSystem?.getCampaign?.()?.fantasyStart || null,
