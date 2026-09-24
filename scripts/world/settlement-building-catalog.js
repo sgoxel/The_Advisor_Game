@@ -286,9 +286,7 @@ function samplePlans(seed){
 }
 function representativePlans(seed){
   const plans=[...samplePlans(seed)];
-  const origin=PoliticalGeography.countryAt(seed,"0","0");
-  const starting=plans.find(plan=>plan.countryId===origin.id&&plan.role==="starting-village");
-  const village=[...plans].filter(plan=>plan.classId==="village"&&plan.id!==starting?.id)
+  const village=[...plans].filter(plan=>plan.classId==="village")
     .sort((a,b)=>b.subtypes.weights.agricultural-a.subtypes.weights.agricultural||a.id.localeCompare(b.id))[0];
   const town=[...plans].filter(plan=>plan.classId==="town")
     .sort((a,b)=>b.tradeMarketTendency-a.tradeMarketTendency||a.id.localeCompare(b.id))[0];
@@ -296,12 +294,19 @@ function representativePlans(seed){
     .sort((a,b)=>b.population.planned-a.population.planned||a.id.localeCompare(b.id))[0];
   const capital=[...plans].filter(plan=>plan.classId==="national-capital")
     .sort((a,b)=>b.population.planned-a.population.planned||a.id.localeCompare(b.id))[0];
+  const used=new Set([village?.id,town?.id,city?.id,capital?.id].filter(Boolean));
+  const specialist=[...plans].filter(plan=>!used.has(plan.id))
+    .sort((a,b)=>{
+      const sa=Math.max(a.subtypes.weights.mining,a.subtypes.weights.forest,a.subtypes.weights.frontier,a.subtypes.weights.port);
+      const sb=Math.max(b.subtypes.weights.mining,b.subtypes.weights.forest,b.subtypes.weights.frontier,b.subtypes.weights.port);
+      return sb-sa||a.id.localeCompare(b.id);
+    })[0];
   return Object.freeze([
-    Object.freeze({reason:"starting-village",plan:starting}),
     Object.freeze({reason:"agricultural-village",plan:village}),
     Object.freeze({reason:"trade-town",plan:town}),
     Object.freeze({reason:"city",plan:city}),
-    Object.freeze({reason:"national-capital",plan:capital})
+    Object.freeze({reason:"national-capital",plan:capital}),
+    Object.freeze({reason:"resource-specialist",plan:specialist})
   ].filter(item=>item.plan));
 }
 function representatives(seedValue){
