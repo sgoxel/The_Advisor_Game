@@ -3848,7 +3848,7 @@ def _move_camera_relative_active(driver, dx: int, dy: int) -> str:
     return f"camera-relative-active:{dx},{dy}+"+action
 
 
-def _set_camera_zoom_and_render(driver, zoom: float) -> str:
+def _set_camera_zoom_and_render(driver, zoom: float, timeout: float = 15.0) -> str:
     result = driver.execute_async_script(
         """
         const done=arguments[arguments.length-1];
@@ -3870,7 +3870,7 @@ def _set_camera_zoom_and_render(driver, zoom: float) -> str:
     if not isinstance(result, dict) or not result.get("ok"):
         raise RuntimeError(f"Failed to set camera zoom and render: {result}")
     from selenium.webdriver.support.ui import WebDriverWait
-    WebDriverWait(driver, 15).until(
+    WebDriverWait(driver, timeout).until(
         lambda d: d.execute_script(
             """
             const z=Number(window.Camera?.getZoom?.()||0);
@@ -4195,7 +4195,7 @@ def _exercise_material_lifetime(driver) -> str:
         switched["high2"] = True
     _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0)
     visited.append({"x": 0, "y": 0, "elapsed": round(time.monotonic() - start, 3)})
-    _set_camera_zoom_and_render(driver, 1.00)
+    _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
     final = _material_lifetime_telemetry(driver)
     elapsed = time.monotonic() - start
 
@@ -4240,27 +4240,28 @@ def _exercise_material_lifetime(driver) -> str:
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-005-006":
         if frame_index == 0:
+            driver.set_script_timeout(60.0)
             driver.set_window_size(1920, 1080)
             _set_terrain_preload_settings(driver, radius=1, cache=16, directional=True, background=True)
             quality=_set_material_lifetime_texture_quality(driver, "standard")
             driver.execute_script("window.__WP_S003_005_006_PROOF=null")
-            return "material-lifetime:baseline+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
+            return "material-lifetime:baseline+" + _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0) + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
         if frame_index == 1:
             return _exercise_material_lifetime(driver)
         if frame_index == 2:
-            return "material-lifetime:post-close+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 2.00)
+            return "material-lifetime:post-close+" + _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0) + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
         if frame_index == 3:
             driver.set_window_size(390, 844)
-            return "material-lifetime:phone-portrait+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+            return "material-lifetime:phone-portrait+" + _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0) + "+" + _set_camera_zoom_and_render(driver, 0.50, timeout=30.0)
         if frame_index == 4:
             driver.set_window_size(844, 390)
-            return "material-lifetime:phone-landscape+" + _focus_tree_sample_chunk(driver) + "+" + _set_camera_zoom_and_render(driver, 0.50)
+            return "material-lifetime:phone-landscape+" + _focus_tree_sample_chunk(driver) + "+" + _set_camera_zoom_and_render(driver, 0.50, timeout=30.0)
         if frame_index == 5:
             driver.set_window_size(1920, 1080)
-            return "material-lifetime:return-high+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
+            return "material-lifetime:return-high+" + _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0) + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
         driver.set_window_size(1920, 1080)
         quality=_set_material_lifetime_texture_quality(driver, "standard")
-        return "material-lifetime:return-standard+" + _set_camera_center_and_render_active(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
+        return "material-lifetime:return-standard+" + _set_camera_center_and_render_active(driver, 0, 0, timeout=20.0) + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
     if scenario == "wp-s003-007-001":
         if frame_index == 0:
             return _render_quality_step(driver, mode="low", viewport=(1920, 1080))
