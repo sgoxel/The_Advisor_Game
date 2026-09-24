@@ -996,3 +996,9 @@
 - Final artifact visual-evidence-wp-s003-005-003-35975614109: 5,743,671 bytes, SHA-256 314a983f72a8ecc71ebc89ce1a2d4455aa68c4c61e6f9cde220bbeb78461db.
 - All 7 fresh screenshots were directly inspected: desktop 0.50x and 1.00x, two chunk-boundary positions, phone portrait, phone landscape, and return-to-origin. Terrain artwork is visibly present for grass/forest/road/path/dirt/farmland/water families with no major chunk seam, black surface, projection defect, clipping, or overlap problem.
 - VISUAL 8.4/10 PASS. Classification: MIXED.
+2026-09-24 11:42 +03:00 | WP-S003-005-003 | PlayCanvas Terrain PNG-First + SVG-Fallback Textures — VALIDATED
+- Added one shared PlayCanvas terrain texture atlas fed by the existing logical texture pipeline, preserving PNG-first lookup and SVG fallback without per-frame rasterization/decoding or one-texture-per-tile churn.
+- Terrain chunk meshes now emit deterministic UVs per authoritative surface family while retaining one chunk mesh path, shared material state, chunk caching, culling/batching/instancing compatibility, and Simulation-neutral presentation.
+- Dedicated Visual Evidence run 35975614109 passed on main head c878488e0eb8df6f16f81637d5658a8c35fde8f4 after correcting the WP harness to disable background preload for a deterministic zero-queue readiness gate.
+- All 7 fresh screenshots were directly inspected across desktop 0.50x/1.00x, chunk crossings, phone portrait, phone landscape, and return-to-origin views. No obvious missing-texture holes, chunk seams, UV bleed, projection failures, or major responsive clipping were visible. VISUAL 8.3/10 PASS.
+- Evidence reported 13 core terrain keys resolved through PNG-first policy to SVG fallback where PNG files are absent, one shared GPU atlas, zero color-fallback keys, zero visible-frame asset loads/texture decodes, and 3,136–15,936 textured blocks across the tested views.
