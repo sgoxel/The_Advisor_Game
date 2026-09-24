@@ -736,7 +736,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     materialQualityOrigins.set(mat,{...origin,normalMap:state?.ready?normalDetailTexture:null});
     const microReliefEnabled=Boolean(state?.ready)&&terrainMicroReliefEffective(q);
     mat.normalMap=microReliefEnabled?normalDetailTexture:null;
-    mat.bumpiness=microReliefEnabled?0.28:0;
+    mat.bumpiness=microReliefEnabled?0.65:0;
     mat.gloss=0.06;
     mat.metalness=0;
     if(texture)applyTextureSampling(texture,q);
@@ -1681,7 +1681,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const origin=rememberMaterialOrigin(mat)||{};
       materialQualityOrigins.set(mat,{...origin,normalMap:normal});
       mat.normalMap=enabled?normal:null;
-      mat.bumpiness=enabled?0.28:0;
+      mat.bumpiness=enabled?0.65:0;
       try{mat.update?.()}catch(_){}
     }
     lastSnapshot=baseSnapshot();
