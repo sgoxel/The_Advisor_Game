@@ -168,9 +168,10 @@ function transitionAuto(direction,reason){
 }
 function recordFrame(frameMs){
   const ms=Number(frameMs);
-  if(mode!=="auto"||!Number.isFinite(ms)||ms<=0||document.hidden)return snapshot();
+  if(!Number.isFinite(ms)||ms<=0||document.hidden)return snapshot();
   lastFrameMs=ms;
   sampleCount++;
+  if(mode!=="auto")return snapshot();
   const currentClass=deviceClass();
   if(currentClass!==lastDeviceClass){
     lastDeviceClass=currentClass;
