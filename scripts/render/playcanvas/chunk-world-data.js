@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.5.0";
+const VERSION="1.5.1";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
