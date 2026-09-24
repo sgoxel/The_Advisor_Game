@@ -51,7 +51,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-005-003` — PlayCanvas Terrain PNG-First + SVG-Fallback Textures — COMPLETED
 - `WP-S003-005-004` — Building Surface Textures + SVG Asset Fallback — COMPLETED
 - `WP-S003-005-005` — Fix Terrain Atlas UV Row Orientation + Black Surface Regression — COMPLETED
-- `WP-S003-005-006` — Runtime Building + Tree Material/Texture Lifetime Stability — IN PROGRESS (final functional + visual validation passed; completion pending deployment bookkeeping)
+- `WP-S003-005-006` — Runtime Building + Tree Material/Texture Lifetime Stability — COMPLETED
 - `WP-S003-005-007` — Live Texture Quality Rebuild + Ultra Resolution Application
 - `WP-S003-006` — PlayCanvas 3D Terrain Chunk Mesh + Background Preparation — COMPLETED
 - `WP-S003-006-001` — Adjustable Terrain Chunk Size — COMPLETED
