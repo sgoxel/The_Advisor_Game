@@ -16,12 +16,15 @@ const FALLBACK=Object.freeze({
 function create({pc,device}={}){
   if(!pc||!device)throw new Error("PlayCanvasTerrainTextureAtlas requires pc/device");
   let texture=null,detailTexture=null,normalDetailTexture=null,signature="",prepareCalls=0,atlasBuilds=0,cacheReuses=0;
+  let textureGeneration=0,textureDestructions=0;
+  const retiredTextures=[];
   let lastStats=Object.freeze({
     ready:false,preparationOnly:true,gpuTextureCount:0,sharedAtlas:true,
     detailGpuTextureCount:0,normalDetailGpuTextureCount:0,totalGpuTextureCount:0,
     detailTextureReady:false,detailTextureShared:true,detailTextureSourceKey:null,
     normalDetailTextureReady:false,normalDetailTextureShared:true,normalDetailStrength:1.25,
     frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
+    textureGeneration:0,textureDestructions:0,retiredTextureCount:0,
     simulationAuthorityPreserved:true
   });
 
@@ -200,10 +203,12 @@ function create({pc,device}={}){
     });
     next.setSource(canvas);
     const previous=texture,previousDetail=detailTexture,previousNormalDetail=normalDetailTexture;
-    texture=next;detailTexture=nextDetail;normalDetailTexture=nextNormalDetail;signature=nextSignature;atlasBuilds++;
-    if(previous&&previous!==next)try{previous.destroy()}catch(_){}
-    if(previousDetail&&previousDetail!==nextDetail)try{previousDetail.destroy()}catch(_){}
-    if(previousNormalDetail&&previousNormalDetail!==nextNormalDetail)try{previousNormalDetail.destroy()}catch(_){}
+    texture=next;detailTexture=nextDetail;normalDetailTexture=nextNormalDetail;signature=nextSignature;atlasBuilds++;textureGeneration++;
+    // Do not destroy a superseded shared terrain texture until the caller has
+    // rebound the long-lived terrain material to the new generation.
+    for(const retired of [previous,previousDetail,previousNormalDetail]){
+      if(retired&&retired!==next&&retired!==nextDetail&&retired!==nextNormalDetail)retiredTextures.push(retired);
+    }
 
     const stats=sourceStats();
     lastStats=Object.freeze({
@@ -229,6 +234,7 @@ function create({pc,device}={}){
       microReliefMode:"shared-normal-map",microReliefGeometryVerticesAdded:0,microReliefMaterialVariantsAdded:0,
       heightfieldSurfaceMode:"shared-neutral-detail+shared-normal-detail+semantic-vertex-color",
       frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
+      textureGeneration,textureDestructions,retiredTextureCount:retiredTextures.length,
       simulationAuthorityPreserved:true
     });
     return lastStats;
@@ -237,14 +243,25 @@ function create({pc,device}={}){
   function getDetailTexture(){return detailTexture}
   function getNormalDetailTexture(){return normalDetailTexture}
   function stats(){return lastStats}
-  function destroy(){
-    if(texture)try{texture.destroy()}catch(_){}
-    if(detailTexture)try{detailTexture.destroy()}catch(_){}
-    if(normalDetailTexture)try{normalDetailTexture.destroy()}catch(_){}
-    texture=null;detailTexture=null;normalDetailTexture=null;signature="";
-    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0,detailGpuTextureCount:0,normalDetailGpuTextureCount:0,totalGpuTextureCount:0,detailTextureReady:false,normalDetailTextureReady:false});
+  function releaseRetiredTextures(){
+    let released=0;
+    while(retiredTextures.length){
+      const retired=retiredTextures.shift();
+      try{retired?.destroy?.()}catch(_){}
+      released++;textureDestructions++;
+    }
+    lastStats=Object.freeze({...lastStats,textureDestructions,retiredTextureCount:retiredTextures.length});
+    return released;
   }
-  return Object.freeze({prepare,uvRect,texture:getTexture,detailTexture:getDetailTexture,normalDetailTexture:getNormalDetailTexture,stats,destroy,coreTypes:CORE_TYPES});
+  function destroy(){
+    releaseRetiredTextures();
+    for(const current of [texture,detailTexture,normalDetailTexture]){
+      if(current){try{current.destroy()}catch(_){}textureDestructions++;}
+    }
+    texture=null;detailTexture=null;normalDetailTexture=null;signature="";
+    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0,detailGpuTextureCount:0,normalDetailGpuTextureCount:0,totalGpuTextureCount:0,detailTextureReady:false,normalDetailTextureReady:false,textureDestructions,retiredTextureCount:0});
+  }
+  return Object.freeze({prepare,uvRect,texture:getTexture,detailTexture:getDetailTexture,normalDetailTexture:getNormalDetailTexture,stats,releaseRetiredTextures,destroy,coreTypes:CORE_TYPES});
 }
 window.PlayCanvasTerrainTextureAtlas=Object.freeze({create,coreTypes:CORE_TYPES});
 })();
