@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.6.0";
+const VERSION="1.7.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -9,10 +9,11 @@ const STANDARD_TERRAIN=new Set([
 
 const cache=new Map();
 const dressingCache=new Map();
+const connectorCache=new Map();
 const everGenerated=new Set();
 let cacheHits=0,cacheMisses=0,completeChunkGenerations=0,releases=0,regenerationCount=0;
 let activeGenerations=0,preparedGenerations=0,otherGenerations=0;
-let terrainFoundationCalls=0,walkabilityClassifications=0;
+let terrainFoundationCalls=0,walkabilityClassifications=0,connectorTerrainChecks=0;
 let totalGenerationMs=0,maxGenerationMs=0;
 let viewTileHits=0,viewTileMisses=0,lastViewTileHits=0,lastViewTileMisses=0;
 let lastGeneratedIds=Object.freeze([]);
@@ -73,11 +74,17 @@ function buildingCatalog(seed){
       id:String(plan.id),
       kind:String(plan.kind||"house"),
       source:"house",
+      enterable:true,
       bounds:Object.freeze({
         minX:String(plan.bounds.minX),minY:String(plan.bounds.minY),
         maxX:String(plan.bounds.maxX),maxY:String(plan.bounds.maxY)
       }),
-      entrance:plan.entrance?Object.freeze({x:String(plan.entrance.x),y:String(plan.entrance.y)}):null
+      entrance:plan.entrance?Object.freeze({
+        x:String(plan.entrance.x),y:String(plan.entrance.y),
+        side:String(plan.entrance.side||""),
+        target:plan.entrance.target?Object.freeze({x:String(plan.entrance.target.x),y:String(plan.entrance.target.y)}):null,
+        accessLengthTiles:Number(plan.entrance.accessLengthTiles||0)
+      }):null
     }));
   }
   for(const lot of SpecialLots.build(seed)){
@@ -91,11 +98,159 @@ function buildingCatalog(seed){
         minX:String(lot.bounds.minX),minY:String(lot.bounds.minY),
         maxX:String(lot.bounds.maxX),maxY:String(lot.bounds.maxY)
       }),
-      entrance:lot.access?Object.freeze({x:String(lot.access.x),y:String(lot.access.y)}):null
+      entrance:lot.access?Object.freeze({
+        x:String(lot.access.x),y:String(lot.access.y),
+        side:String(lot.access.side||""),
+        target:lot.access.target?Object.freeze({x:String(lot.access.target.x),y:String(lot.access.target.y)}):null,
+        accessLengthTiles:Number(lot.access.accessLengthTiles||0)
+      }):null
     }));
   }
   return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
 }
+const CONNECTOR_BLOCKED_TERRAIN=new Set(["water","wall","floor","door","building"]);
+const CONNECTOR_ROUTE_TERRAIN=new Set(["road","path","square","bridge"]);
+function connectorKey(x,y){return String(x)+","+String(y)}
+function connectorOutward(entrance){
+  const x=BigInt(String(entrance?.x||"0")),y=BigInt(String(entrance?.y||"0"));
+  switch(String(entrance?.side||"")){
+    case "N":return Object.freeze({x:String(x),y:String(y-1n)});
+    case "W":return Object.freeze({x:String(x-1n),y:String(y)});
+    case "E":return Object.freeze({x:String(x+1n),y:String(y)});
+    default:return Object.freeze({x:String(x),y:String(y+1n)});
+  }
+}
+function connectorOrientation(previous,current,next){
+  const cx=BigInt(String(current.x)),cy=BigInt(String(current.y));
+  const points=[previous,next].filter(Boolean).map(point=>({
+    dx:Number(BigInt(String(point.x))-cx),
+    dy:Number(BigInt(String(point.y))-cy)
+  }));
+  const horizontal=points.some(point=>point.dx!==0);
+  const vertical=points.some(point=>point.dy!==0);
+  if(horizontal&&vertical)return "corner";
+  if(horizontal)return "horizontal";
+  if(vertical)return "vertical";
+  return "terminal";
+}
+function connectorTile(seed,x,y){
+  connectorTerrainChecks++;
+  return TerrainFoundation.getTile(seed,String(x),String(y));
+}
+function connectorPassable(seed,x,y,targetKey){
+  const key=connectorKey(x,y);
+  if(key===targetKey)return true;
+  const tile=connectorTile(seed,x,y);
+  const type=String(tile?.type||"");
+  if(!tile||tile.buildingId||CONNECTOR_BLOCKED_TERRAIN.has(type))return false;
+  return true;
+}
+function findConnectorPath(seed,building){
+  const entrance=building?.entrance||null,target=entrance?.target||null;
+  if(!entrance||!target)return null;
+  const start=connectorOutward(entrance);
+  const targetKey=connectorKey(target.x,target.y);
+  if(connectorKey(start.x,start.y)===targetKey)return Object.freeze([start]);
+  const sx=BigInt(start.x),sy=BigInt(start.y),tx=BigInt(String(target.x)),ty=BigInt(String(target.y));
+  const minX=(sx<tx?sx:tx)-3n,maxX=(sx>tx?sx:tx)+3n;
+  const minY=(sy<ty?sy:ty)-3n,maxY=(sy>ty?sy:ty)+3n;
+  const queue=[{x:sx,y:sy,path:[Object.freeze({x:String(sx),y:String(sy)})]}];
+  const visited=new Set([connectorKey(sx,sy)]);
+  while(queue.length){
+    const current=queue.shift();
+    const key=connectorKey(current.x,current.y);
+    if(key===targetKey)return Object.freeze(current.path);
+    const neighbors=[
+      {x:current.x+1n,y:current.y},{x:current.x-1n,y:current.y},
+      {x:current.x,y:current.y+1n},{x:current.x,y:current.y-1n}
+    ].filter(point=>point.x>=minX&&point.x<=maxX&&point.y>=minY&&point.y<=maxY);
+    neighbors.sort((a,b)=>{
+      const da=(a.x>tx?a.x-tx:tx-a.x)+(a.y>ty?a.y-ty:ty-a.y);
+      const db=(b.x>tx?b.x-tx:tx-b.x)+(b.y>ty?b.y-ty:ty-b.y);
+      if(da!==db)return da<db?-1:1;
+      const ah=presentationHash32(seed,String(a.x),String(a.y),"connector:"+building.id);
+      const bh=presentationHash32(seed,String(b.x),String(b.y),"connector:"+building.id);
+      return bh-ah;
+    });
+    for(const next of neighbors){
+      const nextKey=connectorKey(next.x,next.y);
+      if(visited.has(nextKey)||!connectorPassable(seed,next.x,next.y,targetKey))continue;
+      visited.add(nextKey);
+      queue.push({
+        x:next.x,y:next.y,
+        path:[...current.path,Object.freeze({x:String(next.x),y:String(next.y)})]
+      });
+      if(visited.size>160)break;
+    }
+    if(visited.size>160)break;
+  }
+  return null;
+}
+function routeConnectorPlan(seed){
+  const cacheKey=String(seed||"");
+  if(connectorCache.has(cacheKey))return connectorCache.get(cacheKey);
+  const cells=[],routes=[],occupied=new Set();
+  for(const building of buildingCatalog(seed)){
+    if(building.enterable===false||!building.entrance?.target)continue;
+    const path=findConnectorPath(seed,building);
+    const target=building.entrance.target;
+    const connected=Boolean(path?.length);
+    const renderedCells=[];
+    if(path){
+      for(let i=0;i<path.length;i++){
+        const point=path[i],key=connectorKey(point.x,point.y);
+        const tile=connectorTile(seed,point.x,point.y);
+        const type=String(tile?.type||"");
+        if(CONNECTOR_ROUTE_TERRAIN.has(type))continue;
+        const previous=i===0?{x:building.entrance.x,y:building.entrance.y}:path[i-1];
+        const next=i+1<path.length?path[i+1]:target;
+        if(occupied.has(key))continue;
+        occupied.add(key);
+        const descriptor=Object.freeze({
+          id:"connector:"+building.id+":"+String(i).padStart(2,"0"),
+          routeId:"connector:"+building.id,
+          type:"door-connector",
+          semantic:"connector-path",
+          buildingId:String(building.id),
+          buildingKind:String(building.kind||""),
+          x:String(point.x),y:String(point.y),
+          door:Object.freeze({x:String(building.entrance.x),y:String(building.entrance.y),side:String(building.entrance.side||"")}),
+          target:Object.freeze({x:String(target.x),y:String(target.y)}),
+          orientation:connectorOrientation(previous,point,next),
+          sourceTerrain:type,
+          routeSafe:Boolean(tile&&!tile.buildingId&&!CONNECTOR_BLOCKED_TERRAIN.has(type)),
+          rendererOnly:true
+        });
+        cells.push(descriptor);
+        renderedCells.push(descriptor.id);
+      }
+    }
+    routes.push(Object.freeze({
+      id:"connector:"+building.id,
+      buildingId:String(building.id),
+      buildingKind:String(building.kind||""),
+      source:String(building.source||""),
+      door:Object.freeze({x:String(building.entrance.x),y:String(building.entrance.y),side:String(building.entrance.side||"")}),
+      target:Object.freeze({x:String(target.x),y:String(target.y)}),
+      targetTerrain:String(connectorTile(seed,target.x,target.y)?.type||""),
+      accessLengthTiles:Number(building.entrance.accessLengthTiles||0),
+      connected,
+      renderedCellCount:renderedCells.length,
+      renderedCells:Object.freeze(renderedCells)
+    }));
+  }
+  const result=Object.freeze({
+    cells:Object.freeze(cells.sort((a,b)=>a.id.localeCompare(b.id))),
+    routes:Object.freeze(routes.sort((a,b)=>a.id.localeCompare(b.id))),
+    cellKeys:occupied,
+    deterministic:true,
+    rendererOnly:true,
+    simulationAuthorityPreserved:true
+  });
+  connectorCache.set(cacheKey,result);
+  return result;
+}
+
 function roadAdjacent(seed,x,y){
   const bx=BigInt(String(x)),by=BigInt(String(y));
   for(const [dx,dy] of [[1n,0n],[-1n,0n],[0n,1n],[0n,-1n]]){
@@ -121,6 +276,7 @@ function dressingCell(seed,x,y,building,semantic,used){
   if(!tile||tile.buildingId||DRESSING_BLOCKED_TERRAIN.has(type)||!DRESSING_ALLOWED_TERRAIN.has(type))return null;
   const local=window.StartingVillage?.local?.(seed,sx,sy)||null;
   if(local&&window.StartingVillage?.isRoadReserved?.(seed,local))return null;
+  if(routeConnectorPlan(seed).cellKeys.has(key))return null;
   if((semantic==="garden"||semantic==="pen")&&!["grass","farmland","plot","dirt"].includes(type))return null;
   const needsRoadContext=semantic==="signpost"||semantic==="cart"||semantic==="barrel";
   const adjacentRoad=needsRoadContext?roadAdjacent(seed,sx,sy):false;
@@ -348,6 +504,8 @@ function generate(spec){
 
   const buildings=buildingReferences(seed,bounds);
   for(const building of buildings)buildingIds.add(building.id);
+  const routeNetworkPlan=routeConnectorPlan(seed);
+  const connectorDescriptors=routeNetworkPlan.cells.filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
   const dressing=semanticDressing(seed).filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
   for(const item of dressing)staticObjects.push(item);
   const ownedBuildings=buildings.filter(building=>{
@@ -405,6 +563,17 @@ function generate(spec){
         roadAdjacent:Boolean(item.roadAdjacent),routeSafe:item.routeSafe!==false,
         rotation:Number(item.rotation||0),variant:Number(item.variant||0)
       }))),
+      connectorDescriptors:Object.freeze(connectorDescriptors),
+      routeNetwork:Object.freeze({
+        connectorCellCount:connectorDescriptors.length,
+        connectorRouteIds:Object.freeze([...new Set(connectorDescriptors.map(item=>item.routeId))].sort()),
+        connectedRouteCount:routeNetworkPlan.routes.filter(item=>item.connected).length,
+        totalRouteCount:routeNetworkPlan.routes.length,
+        routeSafetyPass:connectorDescriptors.every(item=>item.routeSafe===true),
+        deterministic:true,
+        rendererOnly:true,
+        simulationAuthorityPreserved:true
+      }),
       dressing:Object.freeze({
         count:dressing.length,
         routeSafeCount:dressing.filter(item=>item.routeSafe!==false).length,
@@ -541,8 +710,8 @@ function collectView({seed,center,columns,rows,chunkSize,signature}){
 }
 function stats(){
   let surfaceCellCount=0,buildingReferenceCount=0,staticObjectReferenceCount=0,completeEntryCount=0;
-  let presentationBuildingCount=0,presentationPropCount=0,presentationInteriorObjectCount=0,presentationDressingCount=0,dressingRouteSafeCount=0,roadCellCount=0,waterCellCount=0,bridgeCellCount=0;
-  const dressingContexts={},dressingSemantics={};
+  let presentationBuildingCount=0,presentationPropCount=0,presentationInteriorObjectCount=0,presentationDressingCount=0,dressingRouteSafeCount=0,presentationConnectorCount=0,connectorRouteSafeCount=0,roadCellCount=0,waterCellCount=0,bridgeCellCount=0;
+  const dressingContexts={},dressingSemantics={},connectorRouteIds=new Set();
   for(const entry of cache.values()){
     const snapshot=entry.snapshot;
     surfaceCellCount+=Number(snapshot?.cells?.length||0);
@@ -553,6 +722,9 @@ function stats(){
     presentationInteriorObjectCount+=Number(snapshot?.presentation?.interiorObjectDescriptors?.length||0);
     presentationDressingCount+=Number(snapshot?.presentation?.dressing?.count||0);
     dressingRouteSafeCount+=Number(snapshot?.presentation?.dressing?.routeSafeCount||0);
+    presentationConnectorCount+=Number(snapshot?.presentation?.routeNetwork?.connectorCellCount||0);
+    connectorRouteSafeCount+=Number(snapshot?.presentation?.connectorDescriptors?.filter?.(item=>item?.routeSafe!==false)?.length||0);
+    for(const id of snapshot?.presentation?.routeNetwork?.connectorRouteIds||[])connectorRouteIds.add(String(id));
     for(const [key,value] of Object.entries(snapshot?.presentation?.dressing?.contexts||{}))dressingContexts[key]=(dressingContexts[key]||0)+Number(value||0);
     for(const [key,value] of Object.entries(snapshot?.presentation?.dressing?.semantics||{}))dressingSemantics[key]=(dressingSemantics[key]||0)+Number(value||0);
     roadCellCount+=Number(snapshot?.terrain?.surfaceCounts?.road||0)+Number(snapshot?.terrain?.surfaceCounts?.path||0)+Number(snapshot?.terrain?.surfaceCounts?.square||0);
@@ -569,6 +741,14 @@ function stats(){
     staticObjectReferenceCount,
     presentationBuildingCount,presentationPropCount,presentationInteriorObjectCount,
     presentationDressingCount,dressingRouteSafeCount,
+    presentationConnectorCount,connectorRouteSafeCount,
+    connectorRouteCount:connectorRouteIds.size,
+    connectorRouteIds:Object.freeze([...connectorRouteIds].sort()),
+    connectorRouteSafetyPass:presentationConnectorCount===connectorRouteSafeCount,
+    connectorPlanCacheEntries:connectorCache.size,
+    connectorTerrainChecks,
+    connectorDeterministic:true,
+    connectorRendererOnly:true,
     dressingContexts:Object.freeze({...dressingContexts}),
     dressingSemantics:Object.freeze({...dressingSemantics}),
     dressingDeterministic:true,
@@ -599,6 +779,7 @@ function stats(){
 function clear(){
   cache.clear();
   dressingCache.clear();
+  connectorCache.clear();
   everGenerated.clear();
   regenerationCount=0;
 }
