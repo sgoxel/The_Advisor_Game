@@ -78,6 +78,7 @@ SCENARIOS = {
     "wp-s003-003",
     "wp-s003-004-002",
     "wp-s003-004-003",
+    "wp-s003-004-004",
     "wp-s003-005-002",
     "wp-s003-006-002",
     "wp-s003-006-001",
@@ -135,6 +136,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-003": 3,
     "wp-s003-004-002": 8,
     "wp-s003-004-003": 6,
+    "wp-s003-004-004": 10,
     "wp-s003-005-002": 4,
     "wp-s003-006-002": 8,
     "wp-s003-006-001": 14,
@@ -3142,6 +3144,85 @@ def _legacy_control(driver, action: str) -> str:
     return f"legacy-skipped:{action}:{reason}"
 
 
+def _show_character_billboard_readability_proof(driver, frame_index: int) -> str:
+    configs = {
+        1: (1920, 1080, 1.00, "open", "desktop-1.00x"),
+        2: (1920, 1080, 2.00, "open", "desktop-2.00x"),
+        3: (1920, 1080, 0.50, "front", "front-0.50x"),
+        4: (1920, 1080, 0.50, "behind", "behind-0.50x"),
+        5: (1920, 1080, 1.00, "entering", "entering-1.00x"),
+        6: (1920, 1080, 1.00, "inside", "inside-1.00x"),
+        7: (430, 932, 0.50, "open", "phone-portrait-0.50x"),
+        8: (932, 430, 0.50, "open", "phone-landscape-0.50x"),
+        9: (1920, 1080, 1.00, "open", "desktop-repeat-1.00x"),
+    }
+    width, height, zoom, state, label = configs.get(frame_index, configs[9])
+    driver.set_window_size(width, height)
+    result = driver.execute_async_script(
+        """
+        const zoom=Number(arguments[0]);
+        const state=String(arguments[1]);
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const camera=window.Camera;
+            const renderer=window.GameRenderer;
+            if(!camera?.setZoom||!renderer?.setCharacterProofState||!window.AppUI?.refreshTerrain){
+              done({ok:false,error:'character-billboard-proof-api-missing'});
+              return;
+            }
+            camera.setZoom(zoom);
+            await window.AppUI.refreshTerrain();
+            renderer.setCharacterProofState(state);
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            const snapshot=renderer.snapshot?.()||{};
+            const presentation=snapshot.characterPresentation||{};
+            const proof=snapshot.characterProof||{};
+            const instances=Array.isArray(presentation.instances)?presentation.instances:[];
+            const protagonist=instances.find(item=>item.id==='protagonist')||null;
+            const npc=instances.find(item=>item.id!=='protagonist')||null;
+            done({
+              ok:Boolean(
+                protagonist &&
+                protagonist.upright===true &&
+                protagonist.cameraFacing===true &&
+                protagonist.verticalInverted===false &&
+                protagonist.imageUpAxis==='+Y' &&
+                presentation.billboardMode==='camera-facing-upright'
+              ),
+              zoom:Number(camera.getZoom?.()||zoom),
+              state,label,
+              protagonist,npc,
+              active:Number(presentation.activeCharacterCount||0),
+              simulated:Number(presentation.simulatedCharacterCount||0),
+              suppressed:Number(presentation.suppressedCharacterCount||0),
+              prepared:Number(presentation.preparedCharacterCount||0),
+              sharedTextures:Number(presentation.sharedTextureCount||0),
+              sharedMaterials:Number(presentation.sharedMaterialCount||0),
+              minScreenPixelHeight:Number(presentation.minScreenPixelHeight||0),
+              shortViewportFallbackPixelHeight:Number(presentation.shortViewportFallbackPixelHeight||0),
+              proof,
+              cutaway:snapshot.buildingPresentation||null,
+              simulationAuthorityPreserved:Boolean(snapshot.simulationAuthorityPreserved)
+            });
+          }catch(error){done({ok:false,error:String(error)})}
+        })();
+        """,
+        zoom,
+        state,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Character billboard readability proof failed: {result}")
+    driver.execute_script("window.scrollTo(0,0)")
+    protagonist=result.get("protagonist") or {}
+    return (
+        f"character-billboard:{label}:zoom={zoom:.2f}:state={state}:"
+        f"px={float(protagonist.get('renderedPixelHeight') or 0):.2f}:"
+        f"scale={float(protagonist.get('presentationScale') or 0):.2f}:"
+        f"active={result.get('active')}:sim={result.get('simulated')}"
+    )
+
+
 def _show_gabled_roof_proof(driver, frame_index: int) -> str:
     configs = (
         (1920, 1080, 0.50, "outside", "desktop-0.50x"),
@@ -3939,6 +4020,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return proof_off + "+" + action + "+" + ready + "+" + proof_on
     if scenario == "wp-s003-004-003":
         return _show_gabled_roof_proof(driver, frame_index)
+    if scenario == "wp-s003-004-004":
+        return _show_character_billboard_readability_proof(driver, frame_index)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
@@ -4160,6 +4243,102 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-004-004":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-004-004 requires ten character-billboard evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:10]]
+        gpus=[build.get("gpuRenderer") or {} for build in builds]
+        presentations=[gpu.get("characterPresentation") or {} for gpu in gpus]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Billboard presentation changed/missed protagonist authority: {protagonists}")
+
+        expected_zooms=("0.50×","1.00×","2.00×","0.50×","0.50×","1.00×","1.00×","0.50×","0.50×","1.00×")
+        expected_states=(None,"open","open","front","behind","entering","inside","open","open","open")
+        feet_values=[]
+        yaw_sets=[]
+        for index,(build,gpu,presentation) in enumerate(zip(builds,gpus,presentations)):
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Character billboard zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if presentation.get("billboardMode")!="camera-facing-upright":
+                raise RuntimeError(f"Character billboard mode mismatch in frame {index+1}: {presentation}")
+            if presentation.get("feetAnchored") is not True or presentation.get("depthTest") is not True or presentation.get("depthWrite") is not True:
+                raise RuntimeError(f"Character anchoring/depth contract failed in frame {index+1}: {presentation}")
+            if int(presentation.get("activeCharacterCount") or 0)<1:
+                raise RuntimeError(f"No active character billboard in frame {index+1}: {presentation}")
+            if int(presentation.get("activeCharacterCount") or 0)>int(presentation.get("simulatedCharacterCount") or 0):
+                raise RuntimeError(f"Active billboards exceed Simulation population in frame {index+1}: {presentation}")
+            if int(presentation.get("sharedTextureCount") or 0)<1 or int(presentation.get("sharedMaterialCount") or 0)<1:
+                raise RuntimeError(f"Shared character texture/material reuse missing in frame {index+1}: {presentation}")
+            if gpu.get("simulationAuthorityPreserved") is not True or presentation.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Character presentation changed Simulation authority in frame {index+1}: {gpu}")
+
+            instances=presentation.get("instances") or []
+            protagonist=next((item for item in instances if item.get("id")=="protagonist"),None)
+            if not protagonist:
+                raise RuntimeError(f"Protagonist telemetry missing in frame {index+1}: {presentation}")
+            world=protagonist.get("world") or {}
+            if f"({world.get('x')},{world.get('y')})"!=protagonists[index]:
+                raise RuntimeError(f"Billboard world coordinate diverged in frame {index+1}: {protagonist} vs {protagonists[index]}")
+            if protagonist.get("upright") is not True or protagonist.get("verticalInverted") is not False or protagonist.get("imageUpAxis")!="+Y":
+                raise RuntimeError(f"Character artwork is not explicitly upright in frame {index+1}: {protagonist}")
+            if protagonist.get("cameraFacing") is not True or protagonist.get("billboardBasis")!="yaw(+Y)*plane(+90X)":
+                raise RuntimeError(f"Character is not using explicit camera-facing basis in frame {index+1}: {protagonist}")
+            if abs(float(protagonist.get("aspectRatio") or 0)-float(protagonist.get("width") or 0)/max(1e-9,float(protagonist.get("height") or 0)))>0.002:
+                raise RuntimeError(f"Character image aspect ratio was stretched in frame {index+1}: {protagonist}")
+            rendered=float(protagonist.get("renderedPixelHeight") or 0)
+            target=float(protagonist.get("targetPixelHeight") or 0)
+            if rendered+0.6<target:
+                raise RuntimeError(f"Character screen-size target not met in frame {index+1}: rendered={rendered}, target={target}, data={protagonist}")
+            if float(protagonist.get("presentationScale") or 0)<1 or float(protagonist.get("presentationScale") or 0)>5.001:
+                raise RuntimeError(f"Character screen-space scaling escaped bounded range in frame {index+1}: {protagonist}")
+            feet_values.append(round(float(protagonist.get("feetY") or 0),4))
+            yaws=[round(float(item.get("cameraFacingYawDegrees") or 0),3) for item in instances]
+            if yaws and max(yaws)-min(yaws)>0.01:
+                raise RuntimeError(f"Orthographic billboards do not share camera view direction in frame {index+1}: {yaws}")
+            yaw_sets.append(tuple(yaws))
+
+            expected=expected_states[index]
+            proof=gpu.get("characterProof") or {}
+            if expected is not None and proof.get("state")!=expected:
+                raise RuntimeError(f"Character proof state mismatch in frame {index+1}: expected {expected}, got {proof}")
+        if len(set(feet_values))!=1:
+            raise RuntimeError(f"Presentation scaling moved authoritative character feet: {feet_values}")
+
+        # NPCs must remain readable at both requested 0.50x and 1.00x desktop views.
+        for index in (0,1):
+            instances=presentations[index].get("instances") or []
+            npc=next((item for item in instances if item.get("id")!="protagonist"),None)
+            if not npc:
+                raise RuntimeError(f"NPC billboard missing from requested zoom frame {index+1}: {presentations[index]}")
+            if npc.get("upright") is not True or npc.get("cameraFacing") is not True or npc.get("verticalInverted") is not False:
+                raise RuntimeError(f"NPC billboard orientation failed in frame {index+1}: {npc}")
+            if float(npc.get("renderedPixelHeight") or 0)+0.6<float(npc.get("targetPixelHeight") or 0):
+                raise RuntimeError(f"NPC billboard readability target failed in frame {index+1}: {npc}")
+
+        # Phone portrait must retain the 32px target; short landscape may use its explicit bounded 26px fallback.
+        phone_portrait=presentations[7]
+        phone_landscape=presentations[8]
+        pp=next(item for item in phone_portrait.get("instances") or [] if item.get("id")=="protagonist")
+        pl=next(item for item in phone_landscape.get("instances") or [] if item.get("id")=="protagonist")
+        if float(pp.get("targetPixelHeight") or 0)<32 or float(pp.get("renderedPixelHeight") or 0)<31.4:
+            raise RuntimeError(f"Phone portrait protagonist is below 32px readability target: {pp}")
+        if float(pl.get("targetPixelHeight") or 0)<26 or float(pl.get("renderedPixelHeight") or 0)<25.4:
+            raise RuntimeError(f"Phone landscape protagonist is below bounded fallback target: {pl}")
+
+        front=gpus[3].get("characterProof") or {}
+        behind=gpus[4].get("characterProof") or {}
+        entering=gpus[5].get("characterProof") or {}
+        inside=gpus[6].get("characterProof") or {}
+        if front.get("occlusionExpected")!="in-front" or behind.get("occlusionExpected")!="occluded":
+            raise RuntimeError(f"Character front/behind depth proof failed: front={front}, behind={behind}")
+        if entering.get("state")!="entering" or inside.get("state")!="inside" or inside.get("cutawayActive") is not True:
+            raise RuntimeError(f"Character interior/cutaway proof failed: entering={entering}, inside={inside}")
+
+        if not any(int(p.get("simulatedCharacterCount") or 0)>int(p.get("activeCharacterCount") or 0) for p in presentations):
+            raise RuntimeError("Character activation never demonstrated bounded active entities below Simulation population")
+        return
+
     if scenario == "wp-s003-004-003":
         if len(frames) < 6:
             raise RuntimeError("wp-s003-004-003 requires six gabled-roof evidence frames")
