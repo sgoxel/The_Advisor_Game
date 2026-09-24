@@ -101,6 +101,7 @@ SCENARIOS = {
     "wp-s006-003",
     "wp-s006-004",
     "wp-s006-005",
+    "wp-s006-006",
     "playcanvas-root-cutover",
 }
 
@@ -154,6 +155,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s006-003": 5,
     "wp-s006-004": 5,
     "wp-s006-005": 6,
+    "wp-s006-006": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -364,6 +366,40 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        settlementBuildingCatalog: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.SettlementBuildingCatalog?.proof
+              ? window.SettlementBuildingCatalog.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        settlementBuildingCatalogPanel: (() => {
+          const root=document.querySelector("#settlementBuildingCatalogProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            compositionIndex:Number(root.dataset.compositionIndex||0),
+            compositionId:root.dataset.compositionId||null,
+            revision:root.dataset.revision||null,
+            reason:root.dataset.reason||null,
+            classId:root.dataset.classId||null,
+            planId:root.dataset.planId||null,
+            signature:root.dataset.signature||null,
+            functionCount:Number(root.dataset.functionCount||0),
+            buildingCount:Number(root.dataset.buildingCount||0),
+            capitalFunctions:root.dataset.capitalFunctions==="true",
+            villageMapped:root.dataset.villageMapped==="true",
+            name:root.querySelector("#settlementBuildingName")?.textContent?.trim()||null,
+            population:root.querySelector("#settlementBuildingPopulation")?.textContent?.trim()||null,
+            context:root.querySelector("#settlementBuildingContext")?.textContent?.trim()||null,
+            functionRows:root.querySelectorAll("#settlementBuildingFunctions li").length,
+            comparisonRows:root.querySelectorAll("#settlementBuildingComparison li").length,
+            villageMapRows:root.querySelectorAll("#settlementBuildingVillageMap .diplomacy-agreement").length,
+          };
         })(),
         settlementArchetype: (() => {
           try {
@@ -2103,6 +2139,53 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_settlement_building_catalog_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const catalog=window.SettlementBuildingCatalog;
+        if(!campaign?.seed||!catalog||!window.SettlementArchetypes||!window.SpecialLots){
+          return {ok:false,error:'settlement-building-catalog-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=catalog.proof(seed);
+        if(!proof.pass)return {ok:false,error:'settlement-building-catalog-proof-failed',proof};
+        const count=proof.representatives?.length||0;
+        if(count!==5)return {ok:false,error:'settlement-building-representatives-missing',count};
+        const requested=index===5?0:index%count;
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#settlementBuildingCatalogProof');
+        if(!section||!root)return {ok:false,error:'settlement-building-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=catalog.renderDebugPanel(seed,requested,root);
+        root.scrollIntoView({block:'start'});
+        const p=rendered?.plan;
+        const c=rendered?.composition;
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,requested,count,
+          planId:p?.id||null,compositionId:c?.id||null,revision:c?.revision||null,
+          reason:rendered?.selected?.reason||null,classId:p?.classId||null,
+          functionCount:c?.selected?.length||0,buildingCount:c?.totalPlannedBuildings||0,
+          signature:root.dataset.signature||null,
+          selectedIds:c?.selected?.map(item=>item.id)||[],
+          villageMapped:Boolean(rendered?.verification?.startingVillageMapped),
+          capitalFunctions:Boolean(rendered?.verification?.capitalFunctions)
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Settlement building catalog proof frame failed: {result}")
+    return (
+        f"settlement-buildings:{frame_index}:{result.get('reason')}:{result.get('classId')}:"
+        f"functions={result.get('functionCount')}:buildings={result.get('buildingCount')}"
+    )
+
+
 def _show_settlement_archetype_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -3529,7 +3612,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3685,6 +3768,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_settlement_archetype_proof(driver,frame_index)
         return _show_settlement_archetype_proof(driver,frame_index)
+    if scenario == "wp-s006-006":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_settlement_building_catalog_proof(driver,frame_index)
+        return _show_settlement_building_catalog_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3719,6 +3807,61 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s006-006":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s006-006 requires six settlement-building evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        proofs=[build.get("settlementBuildingCatalog") or {} for build in builds]
+        panels=[build.get("settlementBuildingCatalogPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Settlement-building evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Settlement building planning mutated Protagonist world position: {protagonists}")
+        required={
+            "pass":True,"deterministic":True,"timeIndependent":True,"catalogCoverage":True,
+            "metadataComplete":True,"contextualValidity":True,"portConstraint":True,
+            "agricultureConstraint":True,"miningConstraint":True,"scaleLeakagePrevented":True,
+            "capitalFunctions":True,"startingVillageMapped":True,"classCoverage":True,
+            "contextualDiversity":True,"classDifferences":True,"selectedHasReasons":True,
+            "logicalAssetOnly":True,"noTemplateClone":True,"authorityPreserved":True,
+            "physicalLayoutCreated":False,"terrainMutation":False,"resourceMutation":False,
+            "npcStateCreated":False,"finalArtRequired":False,"renderDependency":False,
+            "fullWorldMaterialized":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Settlement-building proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("catalogCount") or 0)<30 or int(proof.get("categoryCount") or 0)<9:
+                raise RuntimeError(f"Settlement-building catalog coverage too small in frame {index}: {proof}")
+            if int(proof.get("planCount") or 0)<12 or int(proof.get("representativeCount") or 0)!=5:
+                raise RuntimeError(f"Settlement-building proof sample set insufficient in frame {index}: {proof}")
+
+        expected=["starting-village","agricultural-village","trade-town","city","national-capital"]
+        if [panel.get("reason") for panel in panels[:5]]!=expected:
+            raise RuntimeError(f"Settlement-building representative order mismatch: {panels[:5]}")
+        classes=[panel.get("classId") for panel in panels[:5]]
+        if classes[0]!="village" or classes[1]!="village" or classes[2]!="town" or classes[3]!="city" or classes[4]!="national-capital":
+            raise RuntimeError(f"Village/town/city/capital evidence incomplete: {classes}")
+        if len({panel.get("signature") for panel in panels[:5]})<4:
+            raise RuntimeError(f"Settlement-building compositions are too template-like: {panels[:5]}")
+        for panel in panels:
+            if not panel.get("open") or int(panel.get("comparisonRows") or 0)!=5:
+                raise RuntimeError(f"Settlement-building panel/comparison incomplete: {panel}")
+            if int(panel.get("functionRows") or 0)<4 or int(panel.get("villageMapRows") or 0)!=7:
+                raise RuntimeError(f"Settlement-building function/mapping evidence incomplete: {panel}")
+            if not panel.get("villageMapped") or not panel.get("capitalFunctions"):
+                raise RuntimeError(f"Settlement-building village/capital proof missing: {panel}")
+        if panels[4].get("functionCount",0)<=panels[0].get("functionCount",0):
+            raise RuntimeError(f"Capital composition is not richer than Starting Village: {panels[:5]}")
+        if panels[0].get("compositionId")!=panels[5].get("compositionId") or panels[0].get("revision")!=panels[5].get("revision"):
+            raise RuntimeError("Settlement-building composition changed after reload")
+        if json.dumps(proofs[0],sort_keys=True)!=json.dumps(proofs[5],sort_keys=True):
+            raise RuntimeError("Settlement-building foundation changed after reload")
+        return
+
     if scenario == "wp-s006-005":
         if len(frames) < 6:
             raise RuntimeError("wp-s006-005 requires six settlement-archetype evidence frames")
@@ -6525,12 +6668,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
