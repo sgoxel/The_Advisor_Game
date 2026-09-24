@@ -5,14 +5,11 @@ const planCache=new Map();
 
 function entranceCandidates(bounds){
   const out=[];
-  for(let x=bounds.minX+1;x<=bounds.maxX-1;x++){
-    out.push({x,y:bounds.minY,side:"N"});
-    out.push({x,y:bounds.maxY,side:"S"});
-  }
-  for(let y=bounds.minY+1;y<=bounds.maxY-1;y++){
-    out.push({x:bounds.minX,y,side:"W"});
-    out.push({x:bounds.maxX,y,side:"E"});
-  }
+  // The fixed PlayCanvas camera looks toward the world from +X/+Y, so S/E are
+  // the two exterior faces readable to the player. Keep real entrances on
+  // those faces instead of sending residents through a hidden N/W wall.
+  for(let x=bounds.minX+1;x<=bounds.maxX-1;x++)out.push({x,y:bounds.maxY,side:"S"});
+  for(let y=bounds.minY+1;y<=bounds.maxY-1;y++)out.push({x:bounds.maxX,y,side:"E"});
   return out;
 }
 
@@ -219,6 +216,7 @@ function proof(seed){
   let outerWallsPass=true;
   let interiorWallsPass=true;
   let entrancesPass=true;
+  let visibleEntranceSidesPass=true;
   let minimumRoomTiles=Infinity;
 
   for(const plan of first){
@@ -237,6 +235,7 @@ function proof(seed){
     }
 
     if(!plan.entrance||plan.entrance.accessLengthTiles>5)entrancesPass=false;
+    if(!plan.entrance||!["S","E"].includes(plan.entrance.side))visibleEntranceSidesPass=false;
 
     const b=plan.bounds;
     for(let y=b.minY;y<=b.maxY;y++){
@@ -259,7 +258,8 @@ function proof(seed){
     roomsPass&&
     outerWallsPass&&
     interiorWallsPass&&
-    entrancesPass;
+    entrancesPass&&
+    visibleEntranceSidesPass;
 
   return Object.freeze({
     deterministic,
@@ -271,6 +271,7 @@ function proof(seed){
     outerWallsPass,
     interiorWallsPass,
     entrancesPass,
+    visibleEntranceSidesPass,
     pass
   });
 }
