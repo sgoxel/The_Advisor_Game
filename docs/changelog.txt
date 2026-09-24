@@ -1205,3 +1205,18 @@
 - Functional proof remains PASS: ResidentMovement deterministic=true, wallClearancePass=true, wallClearanceViolationCount=0; house/special-building visible entrance-side checks pass; presentation hiding/separation preserves Simulation authority.
 - VISUAL 8.3/10 PASS with no major clipping, roof-protrusion, projection, overlap, or readability defect in the inspected evidence.
 - Tested head efe3fbcbe125180fc6e73605531059e6b350d7a3 was already deployed successfully through GitHub Pages run 36021529820. Completion bookkeeping remains pending its own deployment verification before Issue closure.
+
+2026-09-24 19:17:02 +03:00 | WP-S003-008-003 | Functional Projection-Aware Mini Map final verification
+- Classification: MIXED.
+- Repaired the control-deck Mini Map to consume the current PlayCanvas renderer frame's already-prepared local terrain instead of obsolete legacy snapshot cells/grid fields; Mini Map drawing performs no separate world generation.
+- Camera and Protagonist markers now use authoritative renderer/Simulation coordinates directly and remain presentation-only. The Mini Map uses the same soft-dimetric orientation convention as gameplay and refreshes from renderer-frame revision inputs after camera/zoom/local-terrain changes.
+- Added explicit Mini Map evidence telemetry for prepared source dimensions, world coordinate range, region/revision, marker coordinates, projection basis, source provenance, Simulation-authority preservation, and visible canvas geometry.
+- Added compact short-phone-landscape presentation within the existing fixed 25vh landscape control deck so the Mini Map canvas remains visibly usable rather than being clipped below its panel title.
+- Attempt 1 / run 36024395184 failed before capture because the new scenario dispatcher block was accidentally placed in startup preparation; corrected without weakening game-side checks.
+- Attempt 2 / run 36024515696 passed functional validation, but direct screenshot inspection found the 844x390 short-landscape Mini Map canvas clipped out; the layout and validator were strengthened.
+- Attempt 3 / final run 36025476486 succeeded on exact head 07da2e218285b9c37db7719f14f61388a49bab2d. Artifact 10818039642, digest sha256:d9d989e54b1f99b45445eae8d427f4f4c5f7a0364c7ce02a30940de06ce4a4b2.
+- Final telemetry PASS: renderer-frame source only; generatedForMiniMap=false; Simulation authority preserved; Protagonist remained (0,0) through all frames; camera/protagonist markers coincide at start and separate after camera pan; chunk-size 16 boundary crossing was exercised at camera (18,0); 0.50x source 41x31 range [-20..20,-15..15]; desktop 1.00x source 23x19; phone source 11x11; short-landscape visible Mini Map canvas measured 263.344x27.75 px.
+- All eight final fresh screenshots were retrieved and individually inspected. Desktop/pan/chunk/zoom/portrait frames are clear; short landscape keeps the required 25vh deck and now visibly renders the compact map without panel overlap. VISUAL 8.1/10 PASS with no major clipping, projection, marker, or readability defect.
+- Exact tested implementation head 07da2e218285b9c37db7719f14f61388a49bab2d deployed successfully through GitHub Pages run 36025463011.
+- Automatic generic push Visual Evidence run 36025463448 separately timed out in Selenium during the generic starting-village scenario before producing screenshots; the dedicated WP-specific run on the same head completed successfully and is the acceptance evidence for this WP.
+- ROADMAP completion remains pending deployment verification of this documentation commit.
