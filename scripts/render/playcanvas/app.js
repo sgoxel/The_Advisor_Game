@@ -722,8 +722,14 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       resolutionProvider:()=>Math.max(64,Math.min(128,Math.floor(textureQualitySnapshot().maxMaterialTextureResolution/4)))
     });
     const state=await buildingSurfaceAtlas.prepare();
-    const texture=buildingSurfaceAtlas.texture?.()||null;
-    if(texture)applyTextureSampling(texture,textureQualitySnapshot());
+    const textures=buildingSurfaceAtlas.textures?.()||[];
+    if(textures.length){
+      const q=textureQualitySnapshot();
+      for(const texture of textures)if(texture)applyTextureSampling(texture,q);
+    }else{
+      const texture=buildingSurfaceAtlas.texture?.()||null;
+      if(texture)applyTextureSampling(texture,textureQualitySnapshot());
+    }
     const materialRefreshCount=Number(terrainChunkMeshFactory?.refreshBuildingMaterials?.()||0);
     // Keep the superseded atlas alive while PlayCanvas applies the updated
     // material/sampler state to GPU draw bindings. Two rAF boundaries are
