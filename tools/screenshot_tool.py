@@ -80,6 +80,7 @@ SCENARIOS = {
     "wp-s003-004-003",
     "wp-s003-004-004",
     "wp-s003-005-002",
+    "wp-s003-005-003",
     "wp-s003-006-002",
     "wp-s003-006-001",
     "wp-s003-006",
@@ -138,6 +139,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-004-003": 6,
     "wp-s003-004-004": 11,
     "wp-s003-005-002": 4,
+    "wp-s003-005-003": 7,
     "wp-s003-006-002": 8,
     "wp-s003-006-001": 14,
     "wp-s003-006": 7,
@@ -1240,7 +1242,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     driver, radius=1, cache=256, directional=True, background=True
                 )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1257,6 +1259,19 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                             renderer?.sceneBaseline === true &&
                             renderer?.scene?.projection === 'orthographic'
                           )) &&
+                          (arguments[0] !== 'wp-s003-005-003' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            const atlas=chunks?.textureAtlas || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              Number(chunks.visibleChunkCount || 0) > 0 &&
+                              atlas.ready === true &&
+                              atlas.sharedAtlas === true &&
+                              Number(atlas.gpuTextureCount || 0) === 1 &&
+                              Number(chunks.texturedBlockCount || 0) > 0 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
                           (arguments[0] !== 'wp-s003-006-002' || (
                             renderer?.terrainPreload &&
                             Number(renderer.terrainPreload.Active || 0) > 0 &&
@@ -4122,6 +4137,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_gabled_roof_proof(driver, frame_index)
     if scenario == "wp-s003-004-004":
         return _show_character_billboard_readability_proof(driver, frame_index)
+    if scenario == "wp-s003-005-003":
+        if frame_index == 0:
+            return _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 1:
+            return _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 2:
+            return _set_camera_center_and_render_active(driver, 16, 0)
+        if frame_index == 3:
+            moved = _set_camera_center_and_render_active(driver, 32, 16)
+            return moved + "+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 4:
+            driver.set_window_size(390, 844)
+            return "phone-portrait+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 5:
+            driver.set_window_size(844, 390)
+            return "phone-landscape+" + _set_camera_zoom_and_render(driver, 0.50)
+        driver.set_window_size(1280, 800)
+        returned = _set_camera_center_and_render_active(driver, 0, 0)
+        return returned + "+" + _set_camera_zoom_and_render(driver, 1.00)
     if scenario == "building-presentation":
         states = ("outside", "entering", "inside", "behind", "leaving")
         # Keep the canonical 1.0x PlayCanvas view so roofs, cutaway transitions,
@@ -4343,6 +4377,51 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-005-003":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-005-003 requires seven terrain-texture evidence frames")
+        expected_zooms=("0.50×","1.00×","1.00×","0.50×","0.50×","0.50×","1.00×")
+        locations=[]
+        for index,frame in enumerate(frames[:7]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            atlas=chunks.get("textureAtlas") or {}
+            cache=gpu.get("textureCache") or {}
+            preload=gpu.get("terrainPreload") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Terrain texture zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True or atlas.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Terrain texture presentation changed Simulation authority in frame {index+1}: {gpu}")
+            if atlas.get("ready") is not True or atlas.get("sharedAtlas") is not True or int(atlas.get("gpuTextureCount") or 0)!=1:
+                raise RuntimeError(f"Shared terrain atlas is not ready in frame {index+1}: {atlas}")
+            if atlas.get("preparationOnly") is not True or int(atlas.get("frameDecodeCount") or 0)!=0 or int(atlas.get("frameRasterizeCount") or 0)!=0:
+                raise RuntimeError(f"Terrain texture preparation leaked into frame path in frame {index+1}: {atlas}")
+            if atlas.get("pngFirstPolicy") is not True or int(atlas.get("pngAttemptCount") or 0)<10:
+                raise RuntimeError(f"PNG-first terrain policy not exercised in frame {index+1}: {atlas}")
+            if int(atlas.get("svgFallbackCount") or 0)<10 or len(atlas.get("svgFallbackKeys") or [])<10:
+                raise RuntimeError(f"SVG fallback terrain sources not proven in frame {index+1}: {atlas}")
+            if atlas.get("colorFallbackKeys"):
+                raise RuntimeError(f"Required core terrain asset fell through to color fallback in frame {index+1}: {atlas.get('colorFallbackKeys')}")
+            if int(chunks.get("texturedBlockCount") or 0)<=0:
+                raise RuntimeError(f"No textured PlayCanvas terrain blocks in frame {index+1}: {chunks}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Visible-frame terrain asset work detected in frame {index+1}: {preload}")
+            if cache.get("pngFirstTerrainPolicyPass") is not True:
+                raise RuntimeError(f"Texture source cache PNG-first policy failed in frame {index+1}: {cache}")
+            locations.append(build.get("protagonistLocation"))
+        if len(set(locations))!=1 or not locations[0]:
+            raise RuntimeError(f"Terrain texture evidence changed protagonist authority: {locations}")
+        actions=[str(frame.get("action") or "") for frame in frames[:7]]
+        if "camera-center-active:16,0" not in actions[2] or "camera-center-active:32,16" not in actions[3]:
+            raise RuntimeError(f"Terrain texture evidence did not cross prepared chunk boundaries: {actions}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:7]]
+        if int(viewports[4].get("height") or 0)<=int(viewports[4].get("width") or 0):
+            raise RuntimeError(f"Phone portrait terrain-texture evidence missing: {viewports[4]}")
+        if int(viewports[5].get("width") or 0)<=int(viewports[5].get("height") or 0):
+            raise RuntimeError(f"Phone landscape terrain-texture evidence missing: {viewports[5]}")
+        return
+
     if scenario == "wp-s003-004-004":
         if len(frames) < 11:
             raise RuntimeError("wp-s003-004-004 requires eleven character-billboard evidence frames")

@@ -16,7 +16,7 @@ function signed01(seed,x,z,salt){
 }
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 
-function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>{}}={}){
+function create({pc,device,parent,material,textureAtlasProvider=()=>null,seedProvider=()=>"",registerRoof=()=>{}}={}){
   if(!pc||!device||!parent||!material)throw new Error("PlayCanvasTerrainChunkMesh requires pc/device/parent/material");
   material.vertexColors=true;
   material.diffuseVertexColor=true;
@@ -101,9 +101,9 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     if(t==="forest")return 40;
     return 10;
   }
-  function blockColor(worldData,startX,startZ,endX,endZ,fallback){
+  function blockSurface(worldData,startX,startZ,endX,endZ,fallback){
     const size=Number(worldData?.chunkSize||0);
-    if(!worldData?.cells||!size)return fallback;
+    if(!worldData?.cells||!size)return {type:"grass",color:fallback};
     let chosenType=null,chosenPriority=-1;
     const counts=new Map();
     for(let z=startZ;z<endZ;z++){
@@ -129,8 +129,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
         r+=color[0];g+=color[1];b+=color[2];n++;
       }
     }
-    if(!n)return fallback;
-    return [r/n,g/n,b/n,1];
+    return {type:chosenType||"grass",color:n?[r/n,g/n,b/n,1]:fallback};
   }
   function localTileCenter(worldData,x,y){
     const size=Number(worldData?.chunkSize||0);
@@ -388,7 +387,10 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     const seed=String(seedProvider()||"");
     const baseX=BigInt(Math.trunc(Number(spec.x)||0))*BigInt(size);
     const baseZ=BigInt(Math.trunc(Number(spec.y)||0))*BigInt(size);
-    const positions=[],normals=[],colors32=[],indices=[];
+    const positions=[],normals=[],colors32=[],uvs=[],indices=[];
+    const activeAtlas=textureAtlasProvider?.()||null;
+    let texturedBlockCount=0,colorFallbackBlockCount=0;
+    const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
 
     for(let bz=0;bz<segments;bz++){
       for(let bx=0;bx<segments;bx++){
@@ -397,13 +399,22 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
         const worldX=baseX+BigInt(startX);
         const worldZ=baseZ+BigInt(startZ);
         const fallback=sampleColor(seed,Number(worldX),Number(worldZ));
-        const color=blockColor(spec.worldData,startX,startZ,endX,endZ,fallback);
+        const surface=blockSurface(spec.worldData,startX,startZ,endX,endZ,fallback);
+        const rect=activeAtlas?.stats?.()?.ready?activeAtlas.uvRect?.(surface.type):null;
         const x0=startX*metersPerTile-half,x1=endX*metersPerTile-half;
         const z0=startZ*metersPerTile-half,z1=endZ*metersPerTile-half;
         const base=positions.length/3;
         positions.push(x0,0.05,z0, x1,0.05,z0, x0,0.05,z1, x1,0.05,z1);
         normals.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
-        appendColor32(colors32,color,4);
+        if(rect){
+          appendColor32(colors32,[1,1,1,1],4);
+          uvs.push(rect.u0,rect.v0, rect.u1,rect.v0, rect.u0,rect.v1, rect.u1,rect.v1);
+          texturedBlockCount++;texturedSurfaceTypes.add(rect.type||surface.type);
+        }else{
+          appendColor32(colors32,surface.color,4);
+          uvs.push(0,0, 1,0, 0,1, 1,1);
+          colorFallbackBlockCount++;fallbackSurfaceTypes.add(surface.type);
+        }
         indices.push(base,base+2,base+1, base+1,base+2,base+3);
       }
     }
@@ -412,6 +423,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     mesh.setPositions(positions);
     mesh.setNormals(normals);
     mesh.setColors32(colors32);
+    mesh.setUvs(0,uvs);
     mesh.setIndices(indices);
     mesh.update();
     const entity=new pc.Entity("TerrainChunkMesh_"+spec.x+"_"+spec.y);
@@ -465,6 +477,11 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       triangleCount:indices.length/3,
       meshInstanceCount:1,
       materialCount:1,
+      texturedBlockCount,colorFallbackBlockCount,
+      texturedSurfaceTypes:Object.freeze([...texturedSurfaceTypes].sort()),
+      fallbackSurfaceTypes:Object.freeze([...fallbackSurfaceTypes].sort()),
+      terrainTextureAtlasReady:Boolean(activeAtlas?.stats?.()?.ready),
+      terrainTextureAtlasSignature:String(activeAtlas?.stats?.()?.signature||""),
       presentationMeshInstanceCount,
       presentationEntityCount,
       sourcePresentationEntityCount,
@@ -534,6 +551,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       oneEntityPerChunk:true,
       oneEntityPerTile:false,
       sharedMaterial:true,
+      terrainTextureAtlas:textureAtlasProvider?.()?.stats?.()||null,
       chunkLocalStaticBatching:true,
       hardwareInstancing:true,
       frustumCulling:true,
