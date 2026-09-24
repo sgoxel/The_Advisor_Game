@@ -171,7 +171,7 @@ function create({pc,device,resolutionProvider=()=>128,qualitySignatureProvider=(
       failedKeys:Object.freeze(failedKeys.slice()),
       resolvedSources:Object.freeze({...resolvedSources}),
       surfacePixelStats:Object.freeze({...surfacePixelStats}),
-      prepareCalls,textureSetBuilds,cacheReuses,
+      prepareCalls,textureSetBuilds,atlasBuilds:textureSetBuilds,cacheReuses,
       textureGeneration,textureDestructions,retiredTextureCount:retiredTextures.length,
       sharedAtlas:false,sharedSurfaceTextures:true,gpuTextureCount:SURFACES.length,preparationOnly:true,
       mipmaps:true,samplingPolicy:"profile-controlled-standalone",
