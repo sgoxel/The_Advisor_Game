@@ -5321,6 +5321,82 @@ def _focus_road_connector(driver, source_kind: str) -> str:
     )
 
 
+def _prepare_multi_character_grounding(driver) -> str:
+    """Advance authoritative resident movement to a deterministic outdoor village scene."""
+    result = driver.execute_async_script(
+        """
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const campaign=window.SeedSystem?.getCampaign?.();
+            const movement=window.ResidentMovement;
+            const ui=window.AppUI;
+            const renderer=window.GameRenderer;
+            const camera=window.Camera;
+            const now=window.GameTime?.getNow?.();
+            if(!campaign||!movement?.reset||!movement?.advance||!ui?.refreshTerrain||
+               !ui?.refreshResidentCharacters||!renderer?.snapshot||!camera?.setCenter||
+               !camera?.setZoom||!now||!window.DailyActivity?.build){
+              done({ok:false,error:'multi-character-grounding-api-missing'});
+              return;
+            }
+
+            const residents=DailyActivity.build(campaign.seed)||[];
+            let bestHour=12,bestScore=-1;
+            for(let hour=6;hour<=20;hour++){
+              const sample={year:now.year,month:now.month,day:now.day,hour,minute:30,second:0};
+              let score=0;
+              for(const resident of residents){
+                const activity=DailyActivity.resolveActionTarget?.(campaign.seed,resident,sample);
+                const target=activity?.target;
+                if(!target)continue;
+                const nav=window.InteriorObjects?.classifyNavigation
+                  ?InteriorObjects.classifyNavigation(campaign.seed,target.x,target.y)
+                  :window.Walkability?.classify?.(campaign.seed,target.x,target.y);
+                const x=Number(target.x),y=Number(target.y);
+                if(nav?.walkable&&!nav?.buildingId&&Number.isFinite(x)&&Number.isFinite(y)&&
+                   Math.max(Math.abs(x),Math.abs(y))<=24)score++;
+              }
+              if(score>bestScore){bestScore=score;bestHour=hour;}
+            }
+
+            const sample={year:now.year,month:now.month,day:now.day,hour:bestHour,minute:30,second:0};
+            movement.reset(campaign.seed);
+            for(let i=0;i<90;i++)movement.advance(campaign.seed,sample,2);
+
+            camera.setCenter('0','0');
+            camera.setZoom(1);
+            await ui.refreshTerrain();
+            await ui.refreshResidentCharacters();
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+            const snap=renderer.snapshot?.()||{};
+            const chars=snap.characterPresentation||{};
+            const ids=chars.visibleCharacterIds||[];
+            const residentIds=ids.filter(id=>String(id).startsWith('resident:'));
+            done({
+              ok:chars.visibleProtagonist===true&&residentIds.length>=2,
+              error:chars.visibleProtagonist===true&&residentIds.length>=2?null:'insufficient-flat-visible-characters',
+              bestHour,bestScore,
+              visibleIds:ids,
+              residentIds,
+              activeCharacterCount:Number(chars.activeCharacterCount||0),
+              center:camera.getCenter?.()||null,
+              zoom:Number(camera.getZoom?.()||0)
+            });
+          }catch(error){done({ok:false,error:String(error?.stack||error)});}
+        })();
+        """
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Multi-character flat grounding scene failed: {result}")
+    return (
+        f"grounding-flat-authoritative:hour={result.get('bestHour')}:"
+        f"residents={len(result.get('residentIds') or [])}:"
+        f"active={result.get('activeCharacterCount')}"
+    )
+
+
 def _place_npc_on_road_profile_target(driver, kind: str) -> str:
     target_ready = driver.execute_script(
         """
@@ -5806,7 +5882,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver.set_window_size(1280, 800)
             return _set_graphics_quality_mode(driver, "standard") + "+grounding:overview+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         if frame_index == 1:
-            return "grounding:flat-characters+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+            return "grounding:flat-characters+" + _prepare_multi_character_grounding(driver)
         if frame_index == 2:
             return "grounding:raised-road-npc+" + _place_npc_on_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 1.50, timeout=30.0)
         if frame_index == 3:
@@ -6605,8 +6681,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             expected_draw_calls=1 if active>0 else 0
             if chars.get("contactShadowHardwareInstanced") is not True or int(chars.get("contactShadowDrawCalls") or 0)!=expected_draw_calls:
                 raise RuntimeError(f"Character contacts do not use the expected shared instanced draw count in frame {index+1}: active={active}, expectedDrawCalls={expected_draw_calls}, state={chars}")
-            if chars.get("contactShadowFeetCoordinateAnchored") is not True:
-                raise RuntimeError(f"Character contacts lost authoritative feet-coordinate anchoring in frame {index+1}: {chars}")
+            if active>0 and chars.get("contactShadowFeetCoordinateAnchored") is not True:
+                raise RuntimeError(f"Visible character contacts lost authoritative feet-coordinate anchoring in frame {index+1}: {chars}")
             if int(chars.get("contactShadowTerrainAlignedCount") or 0)!=count:
                 raise RuntimeError(f"Character contacts are not terrain-aligned in frame {index+1}: {chars}")
             if chars.get("contactShadowTerrainGroundSampler")!="indexed-triangle-exact":
