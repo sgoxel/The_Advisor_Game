@@ -1922,6 +1922,12 @@ function renderCharacterMemoryProof(actorKind="protagonist",actorId="protagonist
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.CharacterMemory.renderDebugPanel(seed,{kind:actorKind,id:actorId},undefined,document.getElementById("memoryProof"));
 }
+function renderDialogueContextProof(residentId="R03",caseId="public-friendly"){
+  if(typeof window.DialogueContext?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.DialogueContext.renderDebugPanel(seed,residentId,caseId,document.getElementById("dialogueProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1933,6 +1939,7 @@ function renderStatic(){
   setCheck(e.vPersist,!!campaign&&restoredCampaign,campaign?"RELOAD PAGE TO VERIFY":"WAITING");
   renderAdviceLog();
   renderCharacterMemoryProof();
+  renderDialogueContextProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2084,6 +2091,8 @@ window.AppUI=Object.freeze({
   refreshCharacterMemory:(actorKind="protagonist",actorId="protagonist")=>renderCharacterMemoryProof(actorKind,actorId),
   characterMemorySnapshot:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CharacterMemory?CharacterMemory.snapshot(campaign.seed):null;},
   characterMemoryVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.CharacterMemory?CharacterMemory.verify(campaign.seed):null;},
+  refreshDialogueContext:(residentId="R03",caseId="public-friendly")=>renderDialogueContextProof(residentId,caseId),
+  dialogueContextVerify:(residentId="R03")=>{const campaign=SeedSystem.getCampaign();return campaign&&window.DialogueContext?DialogueContext.proof(campaign.seed,residentId):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

@@ -93,6 +93,7 @@ SCENARIOS = {
     "wp-s004-005",
     "wp-s005-001",
     "wp-s005-002",
+    "wp-s005-003",
     "playcanvas-root-cutover",
 }
 
@@ -138,6 +139,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s004-005": 5,
     "wp-s005-001": 4,
     "wp-s005-002": 4,
+    "wp-s005-003": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -348,6 +350,34 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        dialogueContext: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.DialogueContext?.proof
+              ? window.DialogueContext.proof(campaign.seed,"R03")
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        dialoguePanel: (() => {
+          const root=document.querySelector("#dialogueProof");
+          if(!root)return null;
+          return {
+            present:true,
+            open:Boolean(root.open),
+            caseId:root.dataset.caseId||null,
+            dialogueId:root.dataset.dialogueId||null,
+            tone:root.dataset.tone||null,
+            activity:root.dataset.activity||null,
+            location:root.dataset.location||null,
+            speaker:root.querySelector("#dialogueSpeaker")?.textContent?.trim()||null,
+            listener:root.querySelector("#dialogueListener")?.textContent?.trim()||null,
+            response:root.querySelector("#dialogueResponse")?.textContent?.trim()||null,
+            grounding:root.querySelector("#dialogueGrounding")?.textContent?.trim()||null,
+            socialMetrics:Array.from(root.querySelectorAll("#dialogueSocialMetrics span")).map(node=>node.textContent.trim()),
+          };
         })(),
         memoryPanel: (() => {
           const root=document.querySelector("#memoryProof");
@@ -1638,6 +1668,67 @@ def _show_character_memory_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_dialogue_context_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const memory=window.CharacterMemory;
+        const dialogue=window.DialogueContext;
+        if(!campaign?.seed||!memory||!dialogue)return {ok:false,error:'dialogue-context-unavailable'};
+        const seed=campaign.seed;
+        const resident={kind:'resident',id:'R03'};
+        if(index===0){
+          memory.clear(seed);
+          memory.recordFact(seed,resident,{
+            category:'places',
+            summary:'The mill is closed today.',
+            timestamp:'1200-06-12 07:45:00',
+            source:{type:'simulation',id:'mill-state:1200-06-12',label:'Mill operating state'},
+            confidence:1,relevance:0.98,reliability:'verified',
+            fact:{subject:'mill',predicate:'open',value:false}
+          });
+          memory.recordMemory(seed,resident,{
+            category:'rumors',
+            summary:'Someone said the miller may leave early tomorrow.',
+            timestamp:'1200-06-12 07:50:00',
+            source:{type:'rumor',id:'rumor:miller-leave',label:'Unverified village rumor'},
+            confidence:0.4,relevance:0.42,reliability:'uncertain'
+          });
+        }
+        const section=document.querySelector('#developmentDetails');
+        const proof=document.querySelector('#dialogueProof');
+        if(!section||!proof)return {ok:false,error:'dialogue-proof-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        proof.open=true;
+        const caseIds=['public-friendly','home-guarded','work-formal','travel-urgent','sleep-private'];
+        const caseId=caseIds[Math.min(index,caseIds.length-1)];
+        const rendered=dialogue.renderDebugPanel(seed,'R03',caseId,proof);
+        proof.scrollIntoView({block:'start'});
+        const verify=dialogue.proof(seed,'R03');
+        return {
+          ok:Boolean(verify.pass),
+          index,caseId,
+          tone:rendered?.result?.tone||null,
+          activity:rendered?.result?.activity?.kind||null,
+          location:rendered?.result?.location?.kind||null,
+          speaker:rendered?.result?.speaker?.id||null,
+          listener:rendered?.result?.listener?.id||null,
+          knowledgeId:rendered?.result?.knowledge?.memoryId||null,
+          dialogueId:rendered?.result?.id||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Dialogue context proof frame failed: {result}")
+    return (
+        f"dialogue-context:{frame_index}:{result.get('caseId')}:"
+        f"{result.get('tone')}:{result.get('activity')}:{result.get('location')}"
+    )
+
+
 def _show_advisor_channel_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -2641,7 +2732,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -2760,6 +2851,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_character_memory_proof(driver,frame_index)
         return _show_character_memory_proof(driver,frame_index)
+    if scenario == "wp-s005-003":
+        return _show_dialogue_context_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -2794,6 +2887,54 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s005-003":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s005-003 requires five dialogue context evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("dialogueContext") or {} for build in builds]
+        panels=[build.get("dialoguePanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Dialogue evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Dialogue context mutated Protagonist world position: {protagonists}")
+        for index,proof in enumerate(proofs,start=1):
+            required={
+                "pass":True,
+                "identitiesPresent":True,
+                "contextComplete":True,
+                "socialComplete":True,
+                "tonesExpected":True,
+                "statesMeaningful":True,
+                "deterministic":True,
+                "knowledgeGrounded":True,
+                "noInventedFacts":True,
+                "relationshipPersistenceIntroduced":False,
+                "worldMutationApi":False,
+                "factsCreatedByDialogue":False,
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Dialogue context proof {key} mismatch in frame {index}: {proof}")
+        expected_cases=["public-friendly","home-guarded","work-formal","travel-urgent","sleep-private"]
+        expected_tones=["friendly","guarded","formal","urgent","private"]
+        expected_activities=["speaking","eating","working","traveling","sleeping"]
+        if [panel.get("caseId") for panel in panels]!=expected_cases:
+            raise RuntimeError(f"Dialogue case sequence mismatch: {panels}")
+        if [panel.get("tone") for panel in panels]!=expected_tones:
+            raise RuntimeError(f"Dialogue tone sequence mismatch: {panels}")
+        if [panel.get("activity") for panel in panels]!=expected_activities:
+            raise RuntimeError(f"Dialogue activity sequence mismatch: {panels}")
+        if not all((panel.get("speaker") or "").endswith("(R03)") and panel.get("listener")=="Protagonist" for panel in panels):
+            raise RuntimeError(f"Dialogue identity presentation mismatch: {panels}")
+        if not all("Grounded memory:" in (panel.get("grounding") or "") and "MEM-R03-" in (panel.get("grounding") or "") for panel in panels):
+            raise RuntimeError(f"Dialogue response grounding missing: {panels}")
+        ids=[panel.get("dialogueId") for panel in panels]
+        if len(set(ids))!=len(ids) or any(not value for value in ids):
+            raise RuntimeError(f"Dialogue context IDs are not stable/distinct: {ids}")
+        return
+
     if scenario == "wp-s005-002":
         if len(frames) < 4:
             raise RuntimeError("wp-s005-002 requires four memory evidence frames")
@@ -5131,7 +5272,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []

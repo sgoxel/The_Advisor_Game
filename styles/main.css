@@ -188,6 +188,28 @@ input:focus{border-color:#92ad83}
 .memory-entry>small{color:#778272;font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .memory-empty{margin:0;color:#9ba694}
 
+.dialogue-proof-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+.dialogue-proof-toolbar label{color:#aab5a3;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.dialogue-proof-toolbar select{min-width:min(360px,58vw);border:1px solid #465040;border-radius:7px;background:#141914;color:#e8eee3;padding:7px 9px;font:inherit;font-size:12px}
+.dialogue-context-grid strong{white-space:normal}
+.dialogue-tone{display:inline-flex!important;align-items:center;width:max-content;border-radius:999px;padding:3px 8px;text-transform:uppercase;letter-spacing:.05em;font-size:10px!important}
+.dialogue-tone.friendly{background:rgba(89,133,83,.22);color:#d7f0d2}
+.dialogue-tone.guarded{background:rgba(147,123,68,.22);color:#ead9a6}
+.dialogue-tone.formal{background:rgba(78,110,132,.22);color:#cfdfeb}
+.dialogue-tone.urgent{background:rgba(150,99,59,.24);color:#f1cfaa}
+.dialogue-tone.private{background:rgba(107,88,128,.24);color:#dfd1eb}
+.dialogue-tone.hostile{background:rgba(140,72,72,.25);color:#efc3c3}
+.dialogue-tone.neutral{background:rgba(106,112,101,.2);color:#d4d9d0}
+.dialogue-social-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin:10px 0}
+.dialogue-social-metrics span{display:grid;gap:3px;border:1px solid #343c31;border-radius:7px;background:#141914;padding:6px;color:#a8b2a2;font-size:9px;text-align:center}
+.dialogue-social-metrics b{color:#dce4d7;text-transform:uppercase;letter-spacing:.04em;font-size:8px}
+.dialogue-response-card{display:grid;gap:7px;margin:10px 0 12px;border:1px solid #3b4637;border-left:3px solid #718667;border-radius:9px;background:#171c16;padding:11px 12px}
+.dialogue-response-card>span{color:#8f9a89;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.dialogue-response-card>strong{color:#eef2ea;font-size:14px;line-height:1.45}
+.dialogue-response-card>small{display:block;color:#9eaa98;font-size:9px;line-height:1.4;overflow-wrap:anywhere}
+.dialogue-response-card>small b{color:#c5cfbd}
+@media (max-width:900px){.dialogue-social-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
 /* FULL-SCREEN POPUPS */
 .fullscreen-popup{position:fixed;inset:0;z-index:1000;display:grid;grid-template-rows:auto minmax(0,1fr);background:#151713}
 .fullscreen-popup[hidden]{display:none}

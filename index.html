@@ -726,6 +726,37 @@
     </div>
   </details>
 
+  <details id="dialogueProof">
+    <summary>WP-S005-003 Local Dialogue, Social Context + Trust Framing</summary>
+    <div class="accordion-content technical-info">
+      <div class="dialogue-proof-toolbar">
+        <label for="dialogueCaseSelect">Context scenario</label>
+        <select id="dialogueCaseSelect" aria-label="Dialogue context proof scenario"></select>
+      </div>
+      <div class="detail-grid dialogue-context-grid">
+        <div><span>Speaker</span><strong id="dialogueSpeaker">—</strong></div>
+        <div><span>Listener</span><strong id="dialogueListener">—</strong></div>
+        <div><span>Location</span><strong id="dialogueLocation">—</strong></div>
+        <div><span>Activity</span><strong id="dialogueActivity">—</strong></div>
+        <div><span>Tone</span><strong id="dialogueTone" class="dialogue-tone">—</strong></div>
+        <div><span>Fantasy Time</span><strong id="dialogueTime">—</strong></div>
+      </div>
+      <div id="dialogueSocialMetrics" class="dialogue-social-metrics" aria-label="Relationship context snapshot"></div>
+      <article class="dialogue-response-card">
+        <span>Context-framed response</span>
+        <strong id="dialogueResponse">—</strong>
+        <small id="dialogueGrounding">—</small>
+        <small id="dialogueAuthority">—</small>
+      </article>
+      <div class="check"><span>Dialogue includes stable speaker/listener identity plus location and activity context</span><b id="vDialogueContext">WAITING</b></div>
+      <div class="check"><span>Trust, suspicion, respect, fear, loyalty and resentment change tone framing without changing facts</span><b id="vDialogueSocial">WAITING</b></div>
+      <div class="check"><span>Working, traveling and sleeping produce meaningfully different conversation context</span><b id="vDialogueActivity">WAITING</b></div>
+      <div class="check"><span>Responses cite remembered knowledge or explicitly refuse to invent unsupported facts</span><b id="vDialogueGrounding">WAITING</b></div>
+      <div class="check"><span>Same world/context input reproduces the same dialogue frame and response</span><b id="vDialogueDeterministic">WAITING</b></div>
+      <div class="check"><span>Dialogue is presentation-only; it creates no relationship persistence, authority, resources or world truth</span><b id="vDialogueAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -765,6 +796,7 @@
 <script src="scripts/world/building-interiors.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/world/character-memory.js"></script>
+<script src="scripts/world/dialogue-context.js"></script>
 <script src="scripts/ui/app-ui.js"></script>
 <script src="scripts/ui/responsive-control-deck.js"></script>
 <script src="scripts/main.js"></script>
