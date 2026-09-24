@@ -3824,7 +3824,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             "metadataComplete":True,"contextualValidity":True,"portConstraint":True,
             "agricultureConstraint":True,"miningConstraint":True,"scaleLeakagePrevented":True,
             "capitalFunctions":True,"startingVillageMapped":True,"classCoverage":True,
-            "contextualDiversity":True,"classDifferences":True,"selectedHasReasons":True,
+            "contextualDiversity":True,"classDifferences":True,"requiredSignalsSatisfied":True,"selectedHasReasons":True,
             "logicalAssetOnly":True,"noTemplateClone":True,"authorityPreserved":True,
             "physicalLayoutCreated":False,"terrainMutation":False,"resourceMutation":False,
             "npcStateCreated":False,"finalArtRequired":False,"renderDependency":False,
