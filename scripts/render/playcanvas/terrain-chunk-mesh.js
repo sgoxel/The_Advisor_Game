@@ -1654,6 +1654,33 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           .map(item=>String(item._advisorBuildingAtlasSignature||""))
           .sort()
       ),
+      buildingSurfaceVariantBindings:Object.freeze(
+        [...presentationMaterials.values()]
+          .filter(item=>item?._advisorBuildingSurfaceName)
+          .map(item=>Object.freeze({
+            materialName:String(item.name||""),
+            surfaceName:String(item._advisorBuildingSurfaceName||""),
+            variantIndex:Number(item._advisorBuildingVariantIndex??-1),
+            atlasSignature:String(item._advisorBuildingAtlasSignature||""),
+            textureName:String(item._advisorBuildingTextureName||item.diffuseMap?.name||""),
+            textureWidth:Number(item.diffuseMap?.width||0),
+            textureHeight:Number(item.diffuseMap?.height||0),
+            uvScale:Object.freeze([
+              Number(item.diffuseMapTiling?.x??1),
+              Number(item.diffuseMapTiling?.y??1)
+            ]),
+            uvOffset:Object.freeze([
+              Number(item.diffuseMapOffset?.x??0),
+              Number(item.diffuseMapOffset?.y??0)
+            ]),
+            tint:Object.freeze([
+              Number(item.diffuse?.r??1),
+              Number(item.diffuse?.g??1),
+              Number(item.diffuse?.b??1)
+            ])
+          }))
+          .sort((a,b)=>a.materialName.localeCompare(b.materialName))
+      ),
       buildingSurfaceStaleBindingCount:(()=>{
         const current=String(buildingSurfaceAtlasProvider?.()?.stats?.()?.signature||"");
         return [...presentationMaterials.values()].filter(item=>
