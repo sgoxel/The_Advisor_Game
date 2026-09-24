@@ -525,6 +525,35 @@ function proofPlaceAt(value,phase="proof-position"){
   proofContext.phase=String(phase||"proof-position");
   return proofSnapshot();
 }
+function proofPlaceResidentsAt(values,phase="proof-multi-position"){
+  if(!proofContext?.active||!Array.isArray(values)||!values.length)return null;
+  const prepared=[];
+  for(const item of values){
+    const residentId=String(item?.residentId||"");
+    const state=states.get(residentId);
+    if(!state||!item?.position)return null;
+    const candidate=point(item.position);
+    const nav=navigation(seedKey,candidate);
+    if(!nav?.walkable||nav.buildingId)return null;
+    prepared.push({residentId,state,candidate});
+  }
+  for(const item of prepared){
+    item.state.position=item.candidate;
+    item.state.route=null;
+    item.state.routeIndex=0;
+    item.state.segmentElapsed=0;
+    item.state.presentationOffset=Object.freeze({x:0,y:0});
+    item.state.status="idle";
+    item.state.lastReason="proof-multi-position";
+  }
+  proofContext.phase=String(phase||"proof-multi-position");
+  return Object.freeze({
+    phase:proofContext.phase,
+    residentIds:Object.freeze(prepared.map(item=>item.residentId)),
+    positions:Object.freeze(prepared.map(item=>point(item.candidate))),
+    simulationAuthorityPreserved:true
+  });
+}
 function recordEvidence(values){
   if(!proofContext)return null;
   if(values&&"cameraIndependencePass" in values)proofContext.cameraIndependencePass=Boolean(values.cameraIndependencePass);
@@ -553,7 +582,7 @@ function endProof(){proofContext=null;return snapshot()}
 
 window.ResidentMovement=Object.freeze({
   FIXED_STEP_SECONDS,WALL_CLEARANCE_PENALTY_SECONDS,ensure,reset,advance,snapshot,get,position,presentation,verify,
-  beginProof,proofAdvanceToDoor,proofAdvanceToTarget,proofBeginOutbound,proofAdvanceSeconds,proofPlaceAt,
+  beginProof,proofAdvanceToDoor,proofAdvanceToTarget,proofBeginOutbound,proofAdvanceSeconds,proofPlaceAt,proofPlaceResidentsAt,
   recordEvidence,proofSnapshot,endProof
 });
 })();
