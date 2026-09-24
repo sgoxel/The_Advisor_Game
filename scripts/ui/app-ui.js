@@ -2352,6 +2352,12 @@ function renderGlobalCountrySimulationProof(){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.GlobalCountrySimulation.renderDebugPanel(seed,document.getElementById("globalCountrySimulationProof"));
 }
+function renderRegionalSettlementSimulationProof(){
+  if(typeof window.RegionalSettlementSimulation?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.RegionalSettlementSimulation.renderDebugPanel(seed,document.getElementById("regionalSettlementSimulationProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -2377,6 +2383,7 @@ function renderStatic(){
   renderSimulationTiersProof();
   renderEventSchedulerProof();
   renderGlobalCountrySimulationProof();
+  renderRegionalSettlementSimulationProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2409,6 +2416,8 @@ function renderClock(){
     lastGlobalAggregateMinuteKey=aggregateMinuteKey;
     try{window.GlobalCountrySimulation?.tick?.(campaign.seed,timestampKey,{maxEvents:EventScheduler?.MAX_BATCH||32})}
     catch(error){console.error("Global aggregate Simulation tick failed.",error)}
+    try{window.RegionalSettlementSimulation?.tick?.(campaign.seed,timestampKey,{maxEvents:EventScheduler?.MAX_BATCH||32})}
+    catch(error){console.error("Regional/settlement aggregate Simulation tick failed.",error)}
   }
   if(residentDateKey(t)!==lastResidentRosterDateKey)renderResidentRosterProof(t);
   if(!residentSchedulePinned&&residentScheduleHourKey(t)!==lastResidentScheduleHourKey){
@@ -2442,6 +2451,7 @@ async function startNewCampaign(){
   WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
   EventScheduler?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  RegionalSettlementSimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
@@ -2483,6 +2493,7 @@ async function restartCampaign(){
   WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
   EventScheduler?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  RegionalSettlementSimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
@@ -2628,6 +2639,8 @@ window.AppUI=Object.freeze({
   eventSchedulerVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.EventScheduler?EventScheduler.proof(campaign.seed):null;},
   refreshGlobalCountrySimulation:()=>renderGlobalCountrySimulationProof(),
   globalCountrySimulationVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.GlobalCountrySimulation?GlobalCountrySimulation.proof(campaign.seed):null;},
+  refreshRegionalSettlementSimulation:()=>renderRegionalSettlementSimulationProof(),
+  regionalSettlementSimulationVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.RegionalSettlementSimulation?RegionalSettlementSimulation.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

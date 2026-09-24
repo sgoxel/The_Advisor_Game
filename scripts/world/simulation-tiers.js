@@ -127,6 +127,10 @@ function normalizeSignals(raw){
 }
 function tierRank(tier){return TIERS.indexOf(tier)}
 function materializeRecord(seed,planValue,desired,t,previous){
+  try{
+    const timestamp=window.GameTime?.toTimestampKey?.(t);
+    if(timestamp)window.RegionalSettlementSimulation?.ensureRelevant?.(seed,planValue,timestamp,{maxEvents:4});
+  }catch(_){}
   const ctx=WorldContext.resolve(seed,planValue,t);
   if(!ctx)return null;
   const aggregate=compactAggregate(ctx);

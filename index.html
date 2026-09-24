@@ -1223,6 +1223,32 @@
     </div>
   </details>
 
+  <details id="regionalSettlementSimulationProof">
+    <summary>WP-S007-006 Regional + Settlement Aggregate Simulation with Lazy Revision Propagation</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>Tracked aggregate scope</span><strong id="regionalSettlementScope">—</strong></div>
+        <div><span>Fantasy-time cadence</span><strong id="regionalSettlementCadence">—</strong></div>
+        <div><span>Processed due events</span><strong id="regionalSettlementEvents">—</strong></div>
+        <div><span>Last bounded update cost</span><strong id="regionalSettlementCost">—</strong></div>
+        <div><span>Agricultural / mining evidence</span><strong id="regionalSettlementPair">—</strong></div>
+        <div><span>Food / production response</span><strong id="regionalSettlementResources">—</strong></div>
+        <div><span>Lazy parent revision</span><strong id="regionalSettlementLazy">—</strong></div>
+        <div><span>Dormant history</span><strong id="regionalSettlementHistory">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Recent regional / settlement aggregate ledger</h4>
+        <ul id="regionalSettlementLedger" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Same aggregate inputs/history/timestamps reproduce deterministic regional and settlement outcomes</span><b id="vRegionalSettlementDeterministic">WAITING</b></div>
+      <div class="check"><span>Agricultural and mining settlements respond differently while obeying fixed local resource constraints</span><b id="vRegionalSettlementResources">WAITING</b></div>
+      <div class="check"><span>Parent country/region revisions are consumed lazily without immediate settlement fan-out</span><b id="vRegionalSettlementLazy">WAITING</b></div>
+      <div class="check"><span>Dormant settlements accumulate compact prosperity/food/security/history without resident Simulation</span><b id="vRegionalSettlementDormant">WAITING</b></div>
+      <div class="check"><span>Aggregate state exposes population/capacity and reconciliation totals for later exact materialization</span><b id="vRegionalSettlementReconcile">WAITING</b></div>
+      <div class="check"><span>Tracked scope and runtime cost remain bounded and camera/render state has no Simulation authority</span><b id="vRegionalSettlementBounded">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1275,6 +1301,7 @@
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/core/event-scheduler.js"></script>
 <script src="scripts/world/global-country-simulation.js"></script>
+<script src="scripts/world/regional-settlement-simulation.js"></script>
 <script src="scripts/world/character-memory.js"></script>
 <script src="scripts/world/social-state.js"></script>
 <script src="scripts/world/dialogue-context.js"></script>

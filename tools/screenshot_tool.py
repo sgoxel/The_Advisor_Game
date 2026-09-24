@@ -120,6 +120,7 @@ SCENARIOS = {
     "wp-s007-003",
     "wp-s007-004",
     "wp-s007-005",
+    "wp-s007-006",
     "playcanvas-root-cutover",
 }
 
@@ -192,6 +193,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s007-003": 7,
     "wp-s007-004": 2,
     "wp-s007-005": 5,
+    "wp-s007-006": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -471,6 +473,47 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        regionalSettlementSimulation: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.RegionalSettlementSimulation?.proof
+              ? window.RegionalSettlementSimulation.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        regionalSettlementSimulationPanel: (() => {
+          const root=document.querySelector("#regionalSettlementSimulationProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),pass:root.dataset.pass==="true",
+            lastStep:Number(root.dataset.lastStep||0),
+            trackedRegions:Number(root.dataset.trackedRegions||0),
+            trackedSettlements:Number(root.dataset.trackedSettlements||0),
+            processedRegionEvents:Number(root.dataset.processedRegionEvents||0),
+            processedSettlementEvents:Number(root.dataset.processedSettlementEvents||0),
+            agriculturalRevision:Number(root.dataset.agriculturalRevision||0),
+            miningRevision:Number(root.dataset.miningRevision||0),
+            agriculturalFood:Number(root.dataset.agriculturalFood||0),
+            miningFood:Number(root.dataset.miningFood||0),
+            agriculturalProduction:Number(root.dataset.agriculturalProduction||0),
+            miningProduction:Number(root.dataset.miningProduction||0),
+            parentCountryDeltaRevision:Number(root.dataset.parentCountryDeltaRevision||0),
+            settlementRevisionBeforeParent:Number(root.dataset.settlementRevisionBeforeParent||0),
+            settlementRevisionAfterParent:Number(root.dataset.settlementRevisionAfterParent||0),
+            parentCountryRevisionSeenAfter:root.dataset.parentCountryRevisionSeenAfter||null,
+            lazyNoFanOut:root.dataset.lazyNoFanOut==="true",
+            lazyConsumed:root.dataset.lazyConsumed==="true",
+            longAbsenceRevisionBefore:Number(root.dataset.longAbsenceRevisionBefore||0),
+            longAbsenceRevisionAfter:Number(root.dataset.longAbsenceRevisionAfter||0),
+            longAbsenceAccumulated:root.dataset.longAbsenceAccumulated==="true",
+            reconciliationReady:root.dataset.reconciliationReady==="true",
+            noNpcDelta:root.dataset.noNpcDelta==="true",
+            stableAfterCamera:root.dataset.stableAfterCamera==="true",
+            checkStates:Array.from(root.querySelectorAll(".check b")).map(node=>node.textContent?.trim()||"")
+          };
         })(),
         globalCountrySimulationPanel: (() => {
           const root=document.querySelector("#globalCountrySimulationProof");
@@ -2973,6 +3016,49 @@ def _show_global_country_simulation_proof(driver, frame_index: int) -> str:
         f"global-country:{frame_index}:step={evidence.get('lastStep')}:"
         f"country={evidence.get('countryARevision')}/{evidence.get('countryBRevision')}:"
         f"relation={evidence.get('relationRevision')}:restricted={evidence.get('relationRestricted')}"
+    )
+
+
+def _show_regional_settlement_simulation_proof(driver, frame_index: int) -> str:
+    camera_action = _drag_canvas(driver, 120, 0) if frame_index == 5 else None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const sim=window.RegionalSettlementSimulation;
+        if(!campaign?.seed||!sim||!window.EventScheduler||!window.WorldState||!window.WorldContext){
+          return {ok:false,error:'regional-settlement-simulation-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=sim.proof(seed);
+        if(!proof.pass)return {ok:false,error:'regional-settlement-proof-failed',proof};
+        const step=sim.evidenceStep(seed,index);
+        if(!step?.ok)return {ok:false,error:'regional-settlement-evidence-step-failed',step};
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#regionalSettlementSimulationProof');
+        if(!section||!root)return {ok:false,error:'regional-settlement-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=sim.renderDebugPanel(seed,root);
+        root.scrollIntoView({block:'start'});
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,proof,evidence:step.evidence||null,
+          snapshot:step.snapshot||null,delta:step.delta||null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Regional/settlement Simulation proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    evidence=result.get("evidence") or {}
+    return (
+        prefix+
+        f"regional-settlement:{frame_index}:step={evidence.get('lastStep')}:"
+        f"settlement={evidence.get('agriculturalRevision')}/{evidence.get('miningRevision')}:"
+        f"lazy={evidence.get('lazyConsumed')}:long={evidence.get('longAbsenceRevisionAfter')}"
     )
 
 
@@ -5706,6 +5792,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_event_scheduler_proof(driver,frame_index)
     if scenario == "wp-s007-005":
         return _show_global_country_simulation_proof(driver,frame_index)
+    if scenario == "wp-s007-006":
+        return _show_regional_settlement_simulation_proof(driver,frame_index)
     if scenario == "wp-s007-002":
         if frame_index == 5:
             action=_reload_current_build(driver)
@@ -6492,6 +6580,75 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         return
 
 
+
+
+    if scenario == "wp-s007-006":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s007-006 requires six regional/settlement aggregate evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        proofs=[build.get("regionalSettlementSimulation") or {} for build in builds]
+        panels=[build.get("regionalSettlementSimulationPanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Regional aggregate evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Regional aggregate Simulation mutated Protagonist position: {protagonists}")
+        required={
+            "pass":True,"deterministic":True,"differentiated":True,"resourceConstrained":True,
+            "eventDriven":True,"lazyParentRevisionChecks":True,"noImmediateCountryFanOut":True,
+            "noResidentSimulation":True,"persistentAggregateHistory":True,"reconciliationData":True,
+            "renderIndependent":True,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Regional aggregate proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("renderInputs") or 0)!=0 or int(proof.get("perResidentIterations") or 0)!=0:
+                raise RuntimeError(f"Regional aggregate proof gained render/resident iteration in frame {index}: {proof}")
+            if int(proof.get("maxRegions") or 0)>16 or int(proof.get("maxSettlements") or 0)>24:
+                raise RuntimeError(f"Regional aggregate scope exceeds bounded catalogs: {proof}")
+
+        diff=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=1),None)
+        if not diff or int(diff.get("agriculturalRevision") or 0)<=0 or int(diff.get("miningRevision") or 0)<=0:
+            raise RuntimeError(f"Agricultural/mining settlement aggregates were not both updated: {panels}")
+        if abs(float(diff.get("agriculturalFood") or 0)-float(diff.get("miningFood") or 0))<=0.005 and \
+           abs(float(diff.get("agriculturalProduction") or 0)-float(diff.get("miningProduction") or 0))<=0.005:
+            raise RuntimeError(f"Agricultural/mining evidence did not diverge: {diff}")
+
+        parent=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=2),None)
+        if not parent or int(parent.get("parentCountryDeltaRevision") or 0)<=0 or parent.get("lazyNoFanOut") is not True:
+            raise RuntimeError(f"Parent country revision did not remain lazy: {panels}")
+        if int(parent.get("settlementRevisionAfterParent") or 0)!=int(parent.get("settlementRevisionBeforeParent") or 0):
+            raise RuntimeError(f"Country change immediately fanned out to settlement delta: {parent}")
+
+        lazy=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=3),None)
+        if not lazy or lazy.get("lazyConsumed") is not True:
+            raise RuntimeError(f"Relevant settlement did not consume stale parent revision lazily: {panels}")
+        if int(lazy.get("settlementRevisionAfterParent") or 0)<=int(lazy.get("settlementRevisionBeforeParent") or 0):
+            raise RuntimeError(f"Lazy relevant refresh did not advance settlement revision: {lazy}")
+        if not lazy.get("parentCountryRevisionSeenAfter"):
+            raise RuntimeError(f"Lazy refresh did not record consumed parent revision: {lazy}")
+
+        dormant=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=4),None)
+        if not dormant or dormant.get("longAbsenceAccumulated") is not True:
+            raise RuntimeError(f"Dormant settlement did not retain accumulated history: {panels}")
+        if int(dormant.get("longAbsenceRevisionAfter") or 0)<=int(dormant.get("longAbsenceRevisionBefore") or 0):
+            raise RuntimeError(f"Dormant aggregate revision did not advance: {dormant}")
+        if dormant.get("reconciliationReady") is not True or dormant.get("noNpcDelta") is not True:
+            raise RuntimeError(f"Dormant aggregate required resident Simulation or lacked reconciliation data: {dormant}")
+
+        final=next((panel for panel in reversed(panels) if int(panel.get("lastStep") or 0)>=5),None)
+        if not final or final.get("stableAfterCamera") is not True:
+            raise RuntimeError(f"Camera movement changed regional/settlement authoritative state: {panels}")
+
+        for index,panel in enumerate(panels,start=1):
+            if not panel.get("present") or not panel.get("pass"):
+                raise RuntimeError(f"Regional/settlement aggregate inspector incomplete in frame {index}: {panel}")
+            states=panel.get("checkStates") or []
+            if len(states)!=6 or any(state!="PASS" for state in states):
+                raise RuntimeError(f"Regional/settlement aggregate panel checks did not all pass in frame {index}: {panel}")
+        return
 
     if scenario == "wp-s007-005":
         if len(frames) < 5:
