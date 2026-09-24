@@ -861,9 +861,19 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       treeVariant1Count+=Number(resource.treeVariant1Count||0);
       treeInstancedGroupCount+=Number(resource.treeInstancedGroupCount||0);
       treeCylinderSpherePlaceholderCount+=Number(resource.treeCylinderSpherePlaceholderCount||0);
-      if(Number(resource.treePresentationCount||0)>0)treeSampleChunks.push(Object.freeze({
-        chunkX:Number(resource.x),chunkY:Number(resource.y),count:Number(resource.treePresentationCount||0),state:String(entry?.state||"")
-      }));
+      if(Number(resource.treePresentationCount||0)>0){
+        const firstTreeSample=Array.isArray(resource.treeVariationSamples)&&resource.treeVariationSamples.length
+          ?resource.treeVariationSamples[0]
+          :null;
+        treeSampleChunks.push(Object.freeze({
+          chunkX:Number(resource.x),chunkY:Number(resource.y),count:Number(resource.treePresentationCount||0),state:String(entry?.state||""),
+          sample:firstTreeSample?Object.freeze({
+            x:String(firstTreeSample.x),y:String(firstTreeSample.y),
+            variant:Number(firstTreeSample.variant||0),flipX:Boolean(firstTreeSample.flipX),
+            scaleChoice:Number(firstTreeSample.scaleChoice||1)
+          }):null
+        }));
+      }
       if(treeVariationSamples.length<24){
         for(const item of resource.treeVariationSamples||[]){
           if(treeVariationSamples.length>=24)break;

@@ -3776,19 +3776,25 @@ def _focus_tree_sample_chunk(driver) -> str:
         if(!list.length)return null;
         const best=list.slice().sort((a,b)=>Number(b.count||0)-Number(a.count||0))[0];
         const size=Number(chunks.chunkSize||16);
+        const sample=best?.sample || null;
+        const sampleX=Number(sample?.x),sampleY=Number(sample?.y);
+        const hasSample=Number.isFinite(sampleX)&&Number.isFinite(sampleY);
         return {
           chunkX:Number(best.chunkX||0),
           chunkY:Number(best.chunkY||0),
           count:Number(best.count||0),
-          centerX:Number(best.chunkX||0)*size+Math.floor(size/2),
-          centerY:Number(best.chunkY||0)*size+Math.floor(size/2)
+          centerX:hasSample?sampleX:Number(best.chunkX||0)*size+Math.floor(size/2),
+          centerY:hasSample?sampleY:Number(best.chunkY||0)*size+Math.floor(size/2),
+          treeX:hasSample?sampleX:null,
+          treeY:hasSample?sampleY:null
         };
         """
     )
     if not isinstance(sample, dict) or int(sample.get("count") or 0) <= 0:
         raise RuntimeError(f"No prepared tree-bearing chunk available: {sample}")
     action=_set_camera_center_and_render_active(driver, int(sample["centerX"]), int(sample["centerY"]))
-    return f"tree-focus:{sample['chunkX']},{sample['chunkY']}:trees={sample['count']}+"+action
+    point = f":tree={sample.get('treeX')},{sample.get('treeY')}" if sample.get("treeX") is not None else ""
+    return f"tree-focus:{sample['chunkX']},{sample['chunkY']}:trees={sample['count']}{point}+"+action
 
 
 def _move_camera_relative_active(driver, dx: int, dy: int) -> str:
