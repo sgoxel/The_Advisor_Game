@@ -100,6 +100,7 @@ SCENARIOS = {
     "wp-s004-002",
     "wp-s004-003",
     "wp-s004-004",
+    "wp-s004-004-001",
     "wp-s004-005",
     "wp-s005-001",
     "wp-s005-002",
@@ -166,6 +167,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s004-002": 3,
     "wp-s004-003": 4,
     "wp-s004-004": 5,
+    "wp-s004-004-001": 6,
     "wp-s004-005": 5,
     "wp-s005-001": 4,
     "wp-s005-002": 4,
@@ -852,6 +854,18 @@ return (() => {
         residentSchedules: window.AppUI?.residentScheduleSnapshot?.() || null,
         residentMovement: window.AppUI?.residentMovementProofSnapshot?.() || window.ResidentMovement?.proofSnapshot?.() || null,
         residentMovementLive: window.AppUI?.residentMovementSnapshot?.() || null,
+        residentMovementVerify: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.ResidentMovement?.verify
+              ? window.ResidentMovement.verify(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        npcVisibility: window.AppUI?.npcVisibilitySnapshot?.() || null,
+        npcBuildingCoherence: window.__npcBuildingCoherenceEvidence || null,
         residentAction: window.AppUI?.residentActionProofSnapshot?.() || window.ActionExecutor?.proofSnapshot?.() || null,
         residentActionLive: window.AppUI?.residentActionSnapshot?.() || window.ActionExecutor?.snapshot?.() || null,
         residentActionVerify: window.AppUI?.residentActionVerify?.() || null,
@@ -1917,6 +1931,188 @@ def _show_resident_movement_proof(driver, frame_index: int) -> str:
         f"resident-movement:{frame_index}:{result.get('stage')}:"
         f"{result.get('residentId')}@{result.get('position')}:simulated={result.get('simulated')}"
     )
+
+
+def _show_npc_building_coherence_proof(driver, frame_index: int) -> str:
+    result = driver.execute_async_script(
+        """
+        const index=Number(arguments[0]);
+        const done=arguments[arguments.length-1];
+        (async()=>{
+          try{
+            const campaign=window.SeedSystem?.getCampaign?.();
+            const movement=window.ResidentMovement;
+            const ui=window.AppUI;
+            const renderer=window.GameRenderer;
+            if(!campaign||!movement?.beginProof||!movement?.proofPlaceAt||!ui?.refreshTerrain||!renderer?.snapshot){
+              done({ok:false,error:'npc-building-coherence-proof-api-missing'});
+              return;
+            }
+            const seed=campaign.seed;
+            const idFor=proof=>'resident:'+String(proof?.residentId||'');
+            const manhattan=(a,b)=>{
+              if(!a||!b)return null;
+              const dx=BigInt(String(a.x))-BigInt(String(b.x));
+              const dy=BigInt(String(a.y))-BigInt(String(b.y));
+              return Number((dx<0n?-dx:dx)+(dy<0n?-dy:dy));
+            };
+            const refreshAt=async(point)=>{
+              if(point)window.Camera?.setCenter?.(point.x,point.y);
+              window.Camera?.setZoom?.(1);
+              await ui.refreshTerrain();
+              await ui.refreshResidentCharacters();
+              ui.refreshResidentMovementProof?.();
+              await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+              window.scrollTo(0,0);
+            };
+            const visibilityFor=id=>{
+              const v=ui.npcVisibilitySnapshot?.()||{};
+              const p=renderer.snapshot?.()?.characterPresentation||{};
+              return {
+                visible:Boolean((p.visibleCharacterIds||[]).includes(id)),
+                hiddenIndoor:Boolean((v.hiddenIndoorIds||[]).includes(id)),
+                hiddenOccluded:Boolean((v.hiddenOccludedIds||[]).includes(id)),
+                visibility:v,
+                presentation:p
+              };
+            };
+            const outsideCandidates=(interior,front)=>{
+              const b=interior.bounds;
+              const result=[];
+              if(front){
+                for(let x=b.minX;x<=b.maxX;x++)result.push({x:String(x),y:String(b.maxY+1)});
+                for(let y=b.minY;y<=b.maxY;y++)result.push({x:String(b.maxX+1),y:String(y)});
+                result.push({x:String(b.maxX+1),y:String(b.maxY+1)});
+              }else{
+                for(let x=b.minX;x<=b.maxX;x++)result.push({x:String(x),y:String(b.minY-1)});
+                for(let y=b.minY;y<=b.maxY;y++)result.push({x:String(b.minX-1),y:String(y)});
+                result.push({x:String(b.minX-1),y:String(b.minY-1)});
+              }
+              return result;
+            };
+            const placeForVisibility=async(proof,interior,wantVisible)=>{
+              const id=idFor(proof);
+              for(const candidate of outsideCandidates(interior,wantVisible)){
+                const nav=window.InteriorObjects?.classifyNavigation?.(seed,candidate.x,candidate.y)
+                  ||window.Walkability?.classify?.(seed,candidate.x,candidate.y);
+                if(!nav?.walkable||nav.buildingId)continue;
+                const placed=movement.proofPlaceAt(candidate,wantVisible?'front-proof':'behind-proof');
+                if(!placed)continue;
+                await refreshAt(candidate);
+                const state=visibilityFor(id);
+                if(wantVisible?state.visible:state.hiddenOccluded)return {candidate,state,proof:placed};
+              }
+              return null;
+            };
+
+            let proof=movement.proofSnapshot?.()||null;
+            if(index===0){
+              proof=movement.beginProof(seed);
+              if(!proof)throw new Error('npc coherence beginProof failed');
+              for(let step=0;step<400;step++){
+                const state=movement.get(proof.residentId);
+                if(state?.nextDoorwayKind==='exterior-door')break;
+                movement.proofAdvanceSeconds(0.1);
+              }
+              proof=movement.proofSnapshot();
+              const state=movement.get(proof.residentId);
+              await refreshAt(state.position);
+              const interior=window.BuildingInteriors?.get?.(seed,proof.homeId);
+              const visibility=visibilityFor(idFor(proof));
+              window.__npcBuildingCoherenceEvidence={
+                stage:'approach',
+                residentId:proof.residentId,
+                position:state.position,
+                door:interior?.entrance?.door||null,
+                doorSide:interior?.entrance?.side||null,
+                distanceToDoor:manhattan(state.position,interior?.entrance?.door),
+                currentBuildingId:state.buildingId||null,
+                nextDoorwayKind:state.nextDoorwayKind||null,
+                ...visibility
+              };
+            }else if(index===1){
+              if(!proof)throw new Error('npc coherence proof missing before door');
+              proof=movement.proofAdvanceToDoor();
+              const state=movement.get(proof.residentId);
+              await refreshAt(state.position);
+              window.__npcBuildingCoherenceEvidence={
+                stage:'door',
+                residentId:proof.residentId,
+                position:state.position,
+                currentBuildingId:state.buildingId||null,
+                doorwayKind:state.doorwayKind||null,
+                ...visibilityFor(idFor(proof))
+              };
+            }else if(index===2){
+              if(!proof)throw new Error('npc coherence proof missing before inside');
+              proof=movement.proofAdvanceToTarget();
+              const state=movement.get(proof.residentId);
+              await refreshAt(state.position);
+              const snap=renderer.snapshot?.()||{};
+              window.__npcBuildingCoherenceEvidence={
+                stage:'inside',
+                residentId:proof.residentId,
+                position:state.position,
+                currentBuildingId:state.buildingId||null,
+                cutawayActive:Boolean(snap.buildingPresentation?.cutawayActive),
+                hiddenRoofCount:Number(snap.buildingPresentation?.hiddenRoofCount||0),
+                ...visibilityFor(idFor(proof))
+              };
+            }else if(index===3||index===4){
+              if(!proof)throw new Error('npc coherence proof missing before occlusion probe');
+              const interior=window.BuildingInteriors?.get?.(seed,proof.homeId);
+              if(!interior)throw new Error('npc coherence home interior missing');
+              const wantVisible=index===4;
+              const placed=await placeForVisibility(proof,interior,wantVisible);
+              if(!placed)throw new Error(wantVisible?'front visibility candidate unavailable':'behind occlusion candidate unavailable');
+              const state=movement.get(proof.residentId);
+              window.__npcBuildingCoherenceEvidence={
+                stage:wantVisible?'front':'behind',
+                residentId:proof.residentId,
+                position:state.position,
+                currentBuildingId:state.buildingId||null,
+                ...placed.state
+              };
+              window.__npcBuildingCoherenceFront=wantVisible?placed.candidate:(window.__npcBuildingCoherenceFront||null);
+            }else{
+              const base=window.__npcBuildingCoherenceFront;
+              if(!base)throw new Error('npc overlap proof missing front anchor');
+              window.Camera?.setCenter?.(base.x,base.y);
+              window.Camera?.setZoom?.(1);
+              await ui.refreshTerrain();
+              const pair=[
+                {id:'resident:overlap-a',role:'resident',textureUrl:'assets/characters/npc_farmer_male_01.png',point:{x:base.x,y:base.y},height:1.74,elevation:0.03,flipX:false,frameIndex:0},
+                {id:'resident:overlap-b',role:'resident',textureUrl:'assets/characters/npc_guard_male_01.png',point:{x:base.x,y:base.y},height:1.74,elevation:0.03,flipX:true,frameIndex:0}
+              ];
+              await renderer.updateCharacters(pair,13);
+              await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+              const snap=renderer.snapshot?.()||{};
+              const instances=(snap.characterPresentation?.instances||[]).filter(item=>String(item.id).startsWith('resident:overlap-'));
+              window.__npcBuildingCoherenceEvidence={
+                stage:'overlap',
+                pairCount:instances.length,
+                sameAuthoritativeWorld:instances.length===2&&
+                  JSON.stringify(instances[0].world)===JSON.stringify(instances[1].world),
+                separated:instances.length===2&&(
+                  Math.abs(Number(instances[0].scene?.x||0)-Number(instances[1].scene?.x||0))>0.05||
+                  Math.abs(Number(instances[0].scene?.z||0)-Number(instances[1].scene?.z||0))>0.05
+                ),
+                instances
+              };
+              window.scrollTo(0,0);
+            }
+            done({ok:true,evidence:window.__npcBuildingCoherenceEvidence});
+          }catch(error){
+            done({ok:false,error:String(error),stack:error?.stack||null});
+          }
+        })();
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"NPC building coherence proof frame failed: {result}")
+    evidence=result.get("evidence") or {}
+    return f"npc-building-coherence:{frame_index}:{evidence.get('stage','unknown')}"
 
 
 def _show_resident_action_proof(driver, frame_index: int) -> str:
@@ -4999,6 +5195,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_resident_schedule_proof(driver,hour,minute)
     if scenario == "wp-s004-004":
         return _show_resident_movement_proof(driver,frame_index)
+    if scenario == "wp-s004-004-001":
+        return _show_npc_building_coherence_proof(driver,frame_index)
     if scenario == "wp-s004-005":
         return _show_resident_action_proof(driver,frame_index)
     if scenario == "wp-s005-001":
@@ -6673,6 +6871,76 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             live=build.get("residentActionLive") or {}
             if live.get("rendererDependency") is not False or live.get("presentationAuthority") is not False:
                 raise RuntimeError(f"Action authority leaked into presentation in frame {index}: {live}")
+        return
+
+    if scenario == "wp-s004-004-001":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s004-004-001 requires six NPC/building coherence evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        evidence=[build.get("npcBuildingCoherence") or {} for build in builds]
+        expected=["approach","door","inside","behind","front","overlap"]
+        stages=[item.get("stage") for item in evidence]
+        if stages!=expected:
+            raise RuntimeError(f"NPC building coherence stage mismatch: expected {expected}, got {stages}")
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"NPC building coherence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"NPC building coherence changed Protagonist authority: {protagonists}")
+
+        approach=evidence[0]
+        if approach.get("visible") is not True or approach.get("hiddenIndoor") or approach.get("hiddenOccluded"):
+            raise RuntimeError(f"NPC is not visible immediately before the real door: {approach}")
+        if approach.get("currentBuildingId") is not None or approach.get("nextDoorwayKind")!="exterior-door":
+            raise RuntimeError(f"NPC approach did not stop one legal step before exterior door: {approach}")
+        if int(approach.get("distanceToDoor") or 0)!=1:
+            raise RuntimeError(f"NPC approach is not adjacent to door: {approach}")
+        if approach.get("doorSide") not in ("S","E"):
+            raise RuntimeError(f"NPC home door is on a hidden camera face: {approach}")
+
+        door=evidence[1]
+        if door.get("visible") is not False or door.get("hiddenIndoor") is not True:
+            raise RuntimeError(f"NPC did not disappear at exterior doorway: {door}")
+        if not door.get("currentBuildingId") or door.get("doorwayKind")!="exterior-door":
+            raise RuntimeError(f"Door disappearance is not tied to real exterior-door occupancy: {door}")
+
+        inside=evidence[2]
+        if inside.get("visible") is not False or inside.get("hiddenIndoor") is not True:
+            raise RuntimeError(f"Indoor NPC remained visibly rendered: {inside}")
+        if not inside.get("currentBuildingId"):
+            raise RuntimeError(f"Indoor NPC lacks authoritative building occupancy: {inside}")
+        if inside.get("cutawayActive") is not False or int(inside.get("hiddenRoofCount") or 0)!=0:
+            raise RuntimeError(f"NPC movement incorrectly cut away the building roof: {inside}")
+
+        behind=evidence[3]
+        if behind.get("visible") is not False or behind.get("hiddenOccluded") is not True or behind.get("hiddenIndoor"):
+            raise RuntimeError(f"Outdoor NPC behind building was not fully occluded: {behind}")
+        front=evidence[4]
+        if front.get("visible") is not True or front.get("hiddenOccluded") or front.get("hiddenIndoor"):
+            raise RuntimeError(f"Outdoor NPC on camera-facing building side was not visible: {front}")
+
+        overlap=evidence[5]
+        if int(overlap.get("pairCount") or 0)!=2 or overlap.get("sameAuthoritativeWorld") is not True or overlap.get("separated") is not True:
+            raise RuntimeError(f"NPC billboard separation proof failed: {overlap}")
+        separated_instances=overlap.get("instances") or []
+        if not any(item.get("separationApplied") is True for item in separated_instances):
+            raise RuntimeError(f"NPC separation telemetry did not record a presentation-only shift: {separated_instances}")
+
+        for index,build in enumerate(builds,start=1):
+            if (build.get("gpuRenderer") or {}).get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"NPC building coherence changed Simulation authority in frame {index}")
+            houses=build.get("housePlans") or {}
+            lots=build.get("specialLots") or {}
+            if houses.get("visibleEntranceSidesPass") is not True:
+                raise RuntimeError(f"House entrance visible-face policy failed in frame {index}: {houses}")
+            if lots.get("visibleEntranceSidesPass") is not True:
+                raise RuntimeError(f"Special-building entrance visible-face policy failed in frame {index}: {lots}")
+            movement_verify=build.get("residentMovementVerify") or {}
+            if movement_verify.get("pass") is not True or movement_verify.get("wallClearancePass") is not True:
+                raise RuntimeError(f"Resident wall-clearance/deterministic movement proof failed in frame {index}: {movement_verify}")
+            if int(movement_verify.get("wallClearanceViolationCount") or 0)!=0:
+                raise RuntimeError(f"Resident route still hugs ordinary exterior walls in frame {index}: {movement_verify}")
         return
 
     if scenario == "wp-s004-004":
