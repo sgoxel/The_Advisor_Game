@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.4.0";
+const VERSION="1.5.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -26,14 +26,23 @@ function chunkCoordinate(value,size){return floorDiv(value,size);}
 function ownsCoordinate(x,y,chunkX,chunkY,size){
   return chunkCoordinate(x,size)===BigInt(chunkX)&&chunkCoordinate(y,size)===BigInt(chunkY);
 }
+function presentationHash32(seed,x,y,salt){
+  const text=[String(seed||""),String(x),String(y),String(salt||"")].join("|");
+  let h=2166136261>>>0;
+  for(let i=0;i<text.length;i++){
+    h^=text.charCodeAt(i);
+    h=Math.imul(h,16777619)>>>0;
+  }
+  h^=h>>>13;h=Math.imul(h,0x5bd1e995)>>>0;h^=h>>>15;
+  return h>>>0;
+}
 function sparseStaticKind(cell){
   const type=String(cell?.type||"");
-  if(type!=="forest"&&type!=="rock")return null;
+  if(type!=="rock")return null;
   try{
     const x=BigInt(cell.x),y=BigInt(cell.y);
     const hash=((x*73856093n)^(y*19349663n))&0xffffffffn;
-    if(type==="forest"&&hash%19n===0n)return "tree";
-    if(type==="rock"&&hash%13n===0n)return "rock";
+    if(hash%13n===0n)return "rock";
   }catch(_){}
   return null;
 }
@@ -147,6 +156,7 @@ function generate(spec){
   const surfaceCounts={};
   const textureKeys=new Set(),overlayTextureKeys=new Set(),buildingIds=new Set();
   const staticObjects=[];
+  const treeCandidates=[];
   let treePresentationCount=0,rockPresentationCount=0,otherPresentationCount=0;
   let walkableCount=0,blockedCount=0;
 
@@ -166,19 +176,22 @@ function generate(spec){
       if(cell.textureKey)textureKeys.add(cell.textureKey);
       if(cell.overlayTextureKey)overlayTextureKeys.add(cell.overlayTextureKey);
       if(cell.buildingId)buildingIds.add(cell.buildingId);
+      if(cell.type==="forest"){
+        treeCandidates.push(Object.freeze({
+          cell,
+          score:presentationHash32(seed,cell.x,cell.y,"tree-placement")
+        }));
+      }
       const sparseKind=sparseStaticKind(cell);
-      const allowSparse=sparseKind==="tree"
-        ?treePresentationCount<3
-        :sparseKind==="rock"
-          ?rockPresentationCount<2
-          :Boolean(sparseKind&&otherPresentationCount<2);
+      const allowSparse=sparseKind==="rock"
+        ?rockPresentationCount<2
+        :Boolean(sparseKind&&otherPresentationCount<2);
       if(sparseKind&&allowSparse){
         staticObjects.push(Object.freeze({
           id:"static:"+cell.x+":"+cell.y+":"+sparseKind,
           type:sparseKind,x:cell.x,y:cell.y,sourceTerrain:cell.type
         }));
-        if(sparseKind==="tree")treePresentationCount++;
-        else if(sparseKind==="rock")rockPresentationCount++;
+        if(sparseKind==="rock")rockPresentationCount++;
         else otherPresentationCount++;
       }else if(!STANDARD_TERRAIN.has(cell.type)&&!cell.buildingId&&otherPresentationCount<2){
         staticObjects.push(Object.freeze({
@@ -188,6 +201,39 @@ function generate(spec){
         otherPresentationCount++;
       }
     }
+  }
+
+  // Tree descriptors are renderer-only presentation data. Choose a small,
+  // deterministic, well-spaced subset from all forest cells instead of taking
+  // the first row-major hash hits; this avoids diagonal/grid bands across
+  // adjacent chunks while preserving bounded density and Simulation authority.
+  const forestCellCount=treeCandidates.length;
+  const treeTarget=forestCellCount<24?0:Math.min(3,1+Math.floor((forestCellCount-24)/72));
+  const rankedTrees=treeCandidates.slice().sort((a,b)=>b.score-a.score||a.cell.localY-b.cell.localY||a.cell.localX-b.cell.localX);
+  const selectedTrees=[];
+  const minTreeSeparationSq=20;
+  for(const candidate of rankedTrees){
+    if(selectedTrees.length>=treeTarget)break;
+    const separated=selectedTrees.every(other=>{
+      const dx=candidate.cell.localX-other.cell.localX,dy=candidate.cell.localY-other.cell.localY;
+      return dx*dx+dy*dy>=minTreeSeparationSq;
+    });
+    if(separated)selectedTrees.push(candidate);
+  }
+  if(selectedTrees.length<treeTarget){
+    for(const candidate of rankedTrees){
+      if(selectedTrees.length>=treeTarget)break;
+      if(!selectedTrees.includes(candidate))selectedTrees.push(candidate);
+    }
+  }
+  for(const candidate of selectedTrees){
+    const cell=candidate.cell;
+    staticObjects.push(Object.freeze({
+      id:"static:"+cell.x+":"+cell.y+":tree",
+      type:"tree",x:cell.x,y:cell.y,sourceTerrain:cell.type,
+      presentationScore:candidate.score
+    }));
+    treePresentationCount++;
   }
 
   const buildings=buildingReferences(seed,bounds);

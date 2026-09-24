@@ -450,12 +450,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const seed=String(seedProvider()||"");
       const h=hash32(seed+"|"+String(descriptor.x)+"|"+String(descriptor.y)+"|tree-sprite");
       const variant=h&1,scaleIndex=(h>>>1)%3,flipX=Boolean((h>>>3)&1);
-      const scaleChoices=[0.92,1.0,1.08],scaleChoice=scaleChoices[scaleIndex];
+      const scaleChoices=[0.88,1.0,1.12],scaleChoice=scaleChoices[scaleIndex];
       const baseHeight=variant===0?5.35:5.75,height=baseHeight*scaleChoice;
       const width=height*(variant===0?0.70:0.64);
+      const jitterX=((((h>>>8)&255)/255)-0.5)*1.0;
+      const jitterZ=((((h>>>16)&255)/255)-0.5)*1.0;
       const yaw=Number(treeYawProvider?.()??45);
       const item={
-        position:[p.x,0.055,p.z],
+        position:[p.x+jitterX,0.055,p.z+jitterZ],
         scale:[(flipX?-1:1)*width,height,1],
         euler:[0,yaw,0],
         anchorBottom:true,
@@ -465,6 +467,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeVariants[variant].push(item);
       if(treeVariationSamples.length<12)treeVariationSamples.push(Object.freeze({
         x:item.sourceX,y:item.sourceY,variant,flipX,scaleChoice:Number(scaleChoice.toFixed(2)),
+        offsetX:Number(jitterX.toFixed(3)),offsetZ:Number(jitterZ.toFixed(3)),
         width:Number(width.toFixed(3)),height:Number(height.toFixed(3)),yawDegrees:Number(yaw.toFixed(3))
       }));
       return 1;
@@ -597,6 +600,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeCylinderSpherePlaceholderCount:0,
       treeCameraFacingYawDegrees:Number((Number(treeYawProvider?.()??45)).toFixed(3)),
       treeDeterministicVariation:true,
+      treePlacementJitter:true,
+      treePlacementJitterMaxMeters:0.5,
       treeVariationSamples:Object.freeze(treeVariationSamples.slice()),
       treeSpriteAtlas:treeSpriteAtlasProvider?.()?.stats?.()||null,
       treeSharedTextureCount:Number(treeSpriteAtlasProvider?.()?.stats?.()?.gpuTextureCount||0),
