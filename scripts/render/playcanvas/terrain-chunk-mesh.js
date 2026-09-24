@@ -710,7 +710,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let minHeight=Infinity,maxHeight=-Infinity,minElevation=Infinity,maxElevation=-Infinity;
     let roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
-    let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity;
+    let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreDelta=Infinity,maxRoadCoreDelta=-Infinity;
     const sampleVertex=(wx,wz)=>{
       const key=String(wx)+","+String(wz);
       if(localSamples.has(key))return localSamples.get(key);
@@ -741,8 +741,13 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           const profile=sample.roadProfile;
           roadProfileVertexCount++;
           if(profile.core)roadProfileCoreVertexCount++;else roadProfileShoulderVertexCount++;
-          if(profile.primaryType==="road")roadProfileRoadVertexCount++;
-          else if(profile.primaryType==="path")roadProfilePathVertexCount++;
+          if(profile.primaryType==="road"){
+            roadProfileRoadVertexCount++;
+            if(profile.core){
+              minRoadCoreDelta=Math.min(minRoadCoreDelta,Number(profile.delta||0));
+              maxRoadCoreDelta=Math.max(maxRoadCoreDelta,Number(profile.delta||0));
+            }
+          }else if(profile.primaryType==="path")roadProfilePathVertexCount++;
           else if(profile.primaryType==="square")roadProfileSquareVertexCount++;
           minRoadProfileDelta=Math.min(minRoadProfileDelta,Number(profile.delta||0));
           maxRoadProfileDelta=Math.max(maxRoadProfileDelta,Number(profile.delta||0));
@@ -849,6 +854,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       roadProfileSquareVertexCount,
       minRoadProfileDelta:Number.isFinite(minRoadProfileDelta)?Number(minRoadProfileDelta.toFixed(6)):0,
       maxRoadProfileDelta:Number.isFinite(maxRoadProfileDelta)?Number(maxRoadProfileDelta.toFixed(6)):0,
+      minRoadCoreHeightDelta:Number.isFinite(minRoadCoreDelta)?Number(minRoadCoreDelta.toFixed(6)):0,
+      maxRoadCoreHeightDelta:Number.isFinite(maxRoadCoreDelta)?Number(maxRoadCoreDelta.toFixed(6)):0,
       roadProfileGroundingShared:true,
       visibleFrameTerrainRebuildCount:0,
       meshInstanceCount:1,
