@@ -1109,3 +1109,11 @@
 - All seven fresh screenshots were directly inspected: baseline, post-99.7s stress, 2.00x close view, phone portrait, phone landscape tree view, high-quality return, and standard-quality return. Roofs/walls remained textured and tree planes retained clean alpha with no opaque-black regression.
 - VISUAL 8.3/10 PASS with no obvious major WP-specific defect. Deductions are for existing low-detail terrain presentation and tight mobile overlay space, not material/texture lifetime failure.
 - The reusable evidence harness was hardened only for deterministic readiness/viewport-transition waits; runtime gameplay/rendering logic was not relaxed. Latest main deployment before bookkeeping was confirmed through GitHub Pages run 36005210035.
+
+2026-09-24 16:20 +03:00 | WP-S003-005-006 | Runtime Building + Tree Material/Texture Lifetime Stability — FINAL VALIDATION PASS
+- Classified MIXED. Fresh Visual Evidence run 36004459086 completed successfully on main head a9e99ea5bc0ffdfdc5473cda4e568d60a610fe69; artifact 10809482578, digest sha256:2ff230f74d98bd61213d92f5e263ed5a5981ae7b3eb49d26950b26aa4c131895.
+- Functional stress evidence exercised 99.748 real seconds, 28 camera traversals, re-entered the origin, processed 916 chunk evictions/resource destructions during the sustained interval, and cycled Standard -> Low -> High -> Standard -> High material-quality states.
+- Final proof reported building/tree atlas generation 9 during the sustained interval, 0 graphics errors, 0 building stale-binding detections, 0 visible-frame texture decodes, 0 visible-frame rasterization, shared building/tree GPU texture counts of 1 each, and Simulation authority preserved.
+- Seven fresh screenshots were retrieved and directly inspected: baseline, post-stress, 2.00x detail, phone portrait, phone landscape/tree view, High-quality return, and Standard-quality return. Roofs/walls/doors remain textured and tree alpha remains clean with no opaque-black material regression. VISUAL 8.4/10 PASS.
+- The implementation remains bounded and keeps shared-resource retirement/rebind/release outside the visible-frame hot path; chunk eviction, batching, instancing, culling, navigation and Simulation authority remain intact.
+- WP is ready for the required deployment/bookkeeping completion sequence; ROADMAP is not marked COMPLETED by this commit.
