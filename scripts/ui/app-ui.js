@@ -88,6 +88,75 @@ const sceneLoadingState={
   cycles:[],
   proofOverride:null
 };
+const applicationStartupGate={
+  state:"idle",
+  startedAtMs:null,
+  readyAtMs:null,
+  failedAtMs:null,
+  error:null,
+  queuedCampaignStarts:0,
+  lastQueuedAtMs:null,
+  lastReleasedAtMs:null,
+  lastQueueDelayMs:0,
+  waiters:[]
+};
+function applicationStartupSnapshot(){
+  return Object.freeze({
+    state:applicationStartupGate.state,
+    startedAtMs:applicationStartupGate.startedAtMs,
+    readyAtMs:applicationStartupGate.readyAtMs,
+    failedAtMs:applicationStartupGate.failedAtMs,
+    error:applicationStartupGate.error,
+    queuedCampaignStarts:applicationStartupGate.queuedCampaignStarts,
+    pendingWaiterCount:applicationStartupGate.waiters.length,
+    lastQueuedAtMs:applicationStartupGate.lastQueuedAtMs,
+    lastReleasedAtMs:applicationStartupGate.lastReleasedAtMs,
+    lastQueueDelayMs:Number(applicationStartupGate.lastQueueDelayMs||0),
+    simulationAuthorityPreserved:true
+  });
+}
+function beginApplicationStartupGate(){
+  applicationStartupGate.state="pending";
+  applicationStartupGate.startedAtMs=Date.now();
+  applicationStartupGate.readyAtMs=null;
+  applicationStartupGate.failedAtMs=null;
+  applicationStartupGate.error=null;
+  applicationStartupGate.lastReleasedAtMs=null;
+  applicationStartupGate.lastQueueDelayMs=0;
+}
+function resolveApplicationStartupGate(){
+  if(applicationStartupGate.state==="ready")return applicationStartupSnapshot();
+  applicationStartupGate.state="ready";
+  applicationStartupGate.readyAtMs=Date.now();
+  applicationStartupGate.error=null;
+  const waiters=applicationStartupGate.waiters.splice(0);
+  for(const waiter of waiters){
+    const releasedAtMs=Date.now();
+    applicationStartupGate.lastReleasedAtMs=releasedAtMs;
+    applicationStartupGate.lastQueueDelayMs=Math.max(0,releasedAtMs-Number(waiter.queuedAtMs||releasedAtMs));
+    waiter.resolve(applicationStartupSnapshot());
+  }
+  return applicationStartupSnapshot();
+}
+function failApplicationStartupGate(error){
+  applicationStartupGate.state="failed";
+  applicationStartupGate.failedAtMs=Date.now();
+  applicationStartupGate.error=String(error?.message||error||"Application startup failed");
+  const waiters=applicationStartupGate.waiters.splice(0);
+  for(const waiter of waiters)waiter.reject(new Error(applicationStartupGate.error));
+  return applicationStartupSnapshot();
+}
+function waitForApplicationStartup(){
+  if(applicationStartupGate.state==="ready")return Promise.resolve(applicationStartupSnapshot());
+  if(applicationStartupGate.state==="failed"){
+    return Promise.reject(new Error(applicationStartupGate.error||"Application startup failed"));
+  }
+  applicationStartupGate.queuedCampaignStarts++;
+  applicationStartupGate.lastQueuedAtMs=Date.now();
+  return new Promise((resolve,reject)=>{
+    applicationStartupGate.waiters.push({resolve,reject,queuedAtMs:applicationStartupGate.lastQueuedAtMs});
+  });
+}
 function loadingReducedMotion(){
   try{return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)}
   catch(_){return false}
@@ -257,6 +326,7 @@ function sceneLoadingSnapshot(){
     current:currentSceneLoadingCycle(),
     cycles:Object.freeze([...sceneLoadingState.cycles,currentSceneLoadingCycle()]),
     proofOverride:sceneLoadingState.proofOverride,
+    startupGate:applicationStartupSnapshot(),
     reducedMotionPreferred:loadingReducedMotion(),
     overlay:Object.freeze({
       present:Boolean(overlay),
@@ -2320,6 +2390,13 @@ function startClock(){
   clockTimer=setInterval(renderClock,250);
 }
 async function startNewCampaign(){
+  try{
+    await waitForApplicationStartup();
+  }catch(error){
+    e.statusMessage.textContent="Renderer startup failed: "+String(error);
+    failSceneLoading(error);
+    return;
+  }
   beginSceneLoading("new-campaign","world");
   const result=SeedSystem.startNewCampaign();
   restoredCampaign=false;
@@ -2352,6 +2429,13 @@ async function startNewCampaign(){
   }
 }
 async function restartCampaign(){
+  try{
+    await waitForApplicationStartup();
+  }catch(error){
+    e.statusMessage.textContent="Renderer startup failed: "+String(error);
+    failSceneLoading(error);
+    return;
+  }
   beginSceneLoading("restart-campaign","world");
   const result=SeedSystem.restartCampaign();
   residentSchedulePinned=false;
@@ -2392,6 +2476,7 @@ function saveSettings(){
 }
 async function init(){
   cache();
+  beginApplicationStartupGate();
   beginSceneLoading("application-start","renderer");
   e.sceneLoadingRetry.onclick=()=>window.location.reload();
 
@@ -2447,16 +2532,19 @@ async function init(){
     if(!finishSceneLoading(restored.ok?"restored-ready":"menu-ready",rendered)){
       throw new Error("Initial scene readiness gate did not pass.");
     }
+    resolveApplicationStartupGate();
   }catch(error){
     console.error(error);
     e.statusMessage.textContent="Renderer startup failed: "+String(error);
     failSceneLoading(error);
+    failApplicationStartupGate(error);
     throw error;
   }
 }
 window.AppUI=Object.freeze({
   init,
   sceneLoadingSnapshot,
+  applicationStartupSnapshot,
   setSceneLoadingProof,
   clearSceneLoadingProof,
   refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
