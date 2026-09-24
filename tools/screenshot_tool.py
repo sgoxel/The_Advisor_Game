@@ -88,6 +88,7 @@ SCENARIOS = {
     "wp-s003-006-003",
     "wp-s003-006-004",
     "wp-s003-006-005",
+    "wp-s003-006-006",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s004-001",
@@ -148,6 +149,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-003": 7,
     "wp-s003-006-004": 9,
     "wp-s003-006-005": 7,
+    "wp-s003-006-006": 7,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s004-001": 3,
@@ -1247,8 +1249,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
                 )
+            if scenario == "wp-s003-006-006":
+                _set_terrain_preload_settings(
+                    driver, radius=2, cache=256, directional=True, background=False
+                )
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1287,6 +1293,21 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               Number(chunks.buildingPresentationCount || 0) > 0 &&
                               atlas.ready === true &&
                               atlas.sharedAtlas === true &&
+                              Number(atlas.gpuTextureCount || 0) === 1 &&
+                              Number(renderer?.terrainPreload?.queueDepth || 0) === 0
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-006-006' || (() => {
+                            const chunks=renderer?.terrainChunks || {};
+                            const atlas=chunks?.treeSpriteAtlas || {};
+                            return Boolean(
+                              chunks.resourceKind === 'chunk-mesh' &&
+                              Number(chunks.visibleChunkCount || 0) > 0 &&
+                              Number(chunks.treePresentationCount || 0) > 0 &&
+                              chunks.treePlanePresentation === true &&
+                              Number(chunks.treeCylinderSpherePlaceholderCount || 0) === 0 &&
+                              atlas.ready === true &&
+                              atlas.sharedTexture === true &&
                               Number(atlas.gpuTextureCount || 0) === 1 &&
                               Number(renderer?.terrainPreload?.queueDepth || 0) === 0
                             );
@@ -3747,6 +3768,30 @@ def _set_camera_center_and_render_active(driver, x: int, y: int) -> str:
     return f"camera-center-active:{x},{y}"
 
 
+def _focus_tree_sample_chunk(driver) -> str:
+    sample = driver.execute_script(
+        """
+        const snap=window.GameRenderer?.snapshot?.();
+        const chunks=snap?.terrainChunks || {};
+        const list=Array.isArray(chunks.treeSampleChunks)?chunks.treeSampleChunks:[];
+        if(!list.length)return null;
+        const best=list.slice().sort((a,b)=>Number(b.count||0)-Number(a.count||0))[0];
+        const size=Number(chunks.chunkSize||16);
+        return {
+          chunkX:Number(best.chunkX||0),
+          chunkY:Number(best.chunkY||0),
+          count:Number(best.count||0),
+          centerX:Number(best.chunkX||0)*size+Math.floor(size/2),
+          centerY:Number(best.chunkY||0)*size+Math.floor(size/2)
+        };
+        """
+    )
+    if not isinstance(sample, dict) or int(sample.get("count") or 0) <= 0:
+        raise RuntimeError(f"No prepared tree-bearing chunk available: {sample}")
+    action=_set_camera_center_and_render_active(driver, int(sample["centerX"]), int(sample["centerY"]))
+    return f"tree-focus:{sample['chunkX']},{sample['chunkY']}:trees={sample['count']}+"+action
+
+
 def _set_camera_zoom_and_render(driver, zoom: float) -> str:
     result = driver.execute_async_script(
         """
@@ -4007,6 +4052,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 5:
             return _set_camera_center_and_render(driver, 0, 0)
         return _set_camera_zoom_and_render(driver, 0.75)
+    if scenario == "wp-s003-006-006":
+        if frame_index == 0:
+            return "tree-planes:origin+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 1:
+            focused=_focus_tree_sample_chunk(driver)
+            return focused+"+"+_set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 2:
+            return "tree-planes:near-far+" + _set_camera_zoom_and_render(driver, 0.50)
+        if frame_index == 3:
+            return _keyboard_pan_tiles(driver, 16, 0) + "+" + _set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 4:
+            focused=_focus_tree_sample_chunk(driver)
+            return "tree-planes:return+"+focused+"+"+_set_camera_zoom_and_render(driver, 1.00)
+        if frame_index == 5:
+            driver.set_window_size(390, 844)
+            focused=_focus_tree_sample_chunk(driver)
+            return "tree-planes:phone-portrait+"+focused+"+"+_set_camera_zoom_and_render(driver, 0.50)
+        driver.set_window_size(844, 390)
+        focused=_focus_tree_sample_chunk(driver)
+        return "tree-planes:phone-landscape+"+focused+"+"+_set_camera_zoom_and_render(driver, 0.50)
     if scenario == "wp-s003-006":
         if frame_index == 0:
             _set_terrain_preload_settings(driver, radius=2, cache=256, directional=True, background=True)
@@ -4417,6 +4482,66 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-006":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-006-006 requires seven tree-plane evidence frames")
+        expected_zooms=("0.50×","1.00×","0.50×","1.00×","1.00×","0.50×","0.50×")
+        protagonist_locations=[]
+        max_trees=0
+        variant0=0
+        variant1=0
+        centers=[]
+        for index,frame in enumerate(frames[:7]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            atlas=chunks.get("treeSpriteAtlas") or {}
+            preload=gpu.get("terrainPreload") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Tree evidence zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True or atlas.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Tree presentation changed Simulation authority in frame {index+1}: {gpu}")
+            if atlas.get("ready") is not True or atlas.get("sharedTexture") is not True or int(atlas.get("gpuTextureCount") or 0)!=1:
+                raise RuntimeError(f"Shared tree sprite texture is not ready in frame {index+1}: {atlas}")
+            if atlas.get("pngFirstPolicy") is not True or int(atlas.get("pngAttemptCount") or 0)!=1:
+                raise RuntimeError(f"Tree PNG-first policy not exercised in frame {index+1}: {atlas}")
+            if int(atlas.get("svgFallbackCount") or 0)!=1 or atlas.get("sourceKind")!="svg-fallback":
+                raise RuntimeError(f"Tree SVG fallback source not proven in frame {index+1}: {atlas}")
+            if atlas.get("transparentSource") is not True or atlas.get("alphaTested") is not True:
+                raise RuntimeError(f"Tree alpha presentation contract missing in frame {index+1}: {atlas}")
+            if atlas.get("preparationOnly") is not True or int(atlas.get("frameDecodeCount") or 0)!=0 or int(atlas.get("frameRasterizeCount") or 0)!=0:
+                raise RuntimeError(f"Tree source work leaked into visible frame path in frame {index+1}: {atlas}")
+            if chunks.get("treePlanePresentation") is not True or int(chunks.get("treeCylinderSpherePlaceholderCount") or 0)!=0:
+                raise RuntimeError(f"Cylinder/sphere tree placeholders remain in frame {index+1}: {chunks}")
+            if int(chunks.get("treeInstancedGroupCount") or 0)<=0 or chunks.get("hardwareInstancing") is not True or chunks.get("frustumCulling") is not True:
+                raise RuntimeError(f"Tree instancing/culling contract missing in frame {index+1}: {chunks}")
+            if int(chunks.get("treeSharedTextureCount") or 0)!=1 or int(chunks.get("treeSharedMaterialCount") or 0)>2:
+                raise RuntimeError(f"Tree resource reuse is not bounded in frame {index+1}: {chunks}")
+            if chunks.get("treeDeterministicVariation") is not True:
+                raise RuntimeError(f"Tree deterministic variation flag missing in frame {index+1}: {chunks}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Visible-frame tree asset work detected in frame {index+1}: {preload}")
+            max_trees=max(max_trees,int(chunks.get("treePresentationCount") or 0))
+            variant0=max(variant0,int(chunks.get("treeVariant0Count") or 0))
+            variant1=max(variant1,int(chunks.get("treeVariant1Count") or 0))
+            center=(gpu.get("frame") or {}).get("center")
+            centers.append((str(center.get("x")),str(center.get("y"))) if isinstance(center,dict) else None)
+            protagonist_locations.append(build.get("protagonistLocation"))
+        if max_trees < 3:
+            raise RuntimeError(f"Tree evidence never showed a sufficiently populated prepared forest area: max tree count {max_trees}")
+        if variant0<=0 or variant1<=0:
+            raise RuntimeError(f"Both deterministic tree artwork variants were not exercised: variant0={variant0}, variant1={variant1}")
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Tree presentation changed protagonist authority: {protagonist_locations}")
+        if centers[1] == centers[3]:
+            raise RuntimeError(f"Tree evidence did not traverse a chunk boundary: {centers}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:7]]
+        if int(viewports[5].get("height") or 0)<=int(viewports[5].get("width") or 0):
+            raise RuntimeError(f"Phone portrait tree evidence missing: {viewports[5]}")
+        if int(viewports[6].get("width") or 0)<=int(viewports[6].get("height") or 0):
+            raise RuntimeError(f"Phone landscape tree evidence missing: {viewports[6]}")
+        return
+
     if scenario == "wp-s003-005-004":
         if len(frames) < 7:
             raise RuntimeError("wp-s003-005-004 requires seven building-surface evidence frames")

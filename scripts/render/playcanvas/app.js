@@ -31,7 +31,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   let pc=null,app=null,device=null,host=null,canvas=null,resizeObserver=null,lastModel=null,proofState=null,occlusionProofState=null,beforeInit=null,afterInit=null,sceneAnchor=null,quality=null;
   let sceneAnchorRevision=0,lastPositionedAnchorRevision=0,lastResizeSignature="",lastCameraBillboardYawDegrees=45;
   let cameraRoot=null,camera=null,worldRoot=null,terrainPreloadRoot=null,terrainRoot=null,terrainBaseEntity=null,structuresRoot=null,propsRoot=null,charactersRoot=null,lightingRoot=null,interiorProofRoot=null,characterProofRoot=null,assetPreparationProofRoot=null;
-  let characterPreparation=null,worldPreparation=null,terrainPreloadManager=null,terrainChunkMeshFactory=null,terrainTextureAtlas=null,buildingSurfaceAtlas=null,lastPreparedTerrainKey="",interiorProofState=null,interiorProofPanel=null,characterProofState=null,characterProofPanel=null,lastRawSeed=null,assetPreparationProofState=false,qualityChangeHandler=null,renderQualityChangeHandler=null,renderQualityFrameHandler=null;
+  let characterPreparation=null,worldPreparation=null,terrainPreloadManager=null,terrainChunkMeshFactory=null,terrainTextureAtlas=null,buildingSurfaceAtlas=null,treeSpriteAtlas=null,lastPreparedTerrainKey="",interiorProofState=null,interiorProofPanel=null,characterProofState=null,characterProofPanel=null,lastRawSeed=null,assetPreparationProofState=false,qualityChangeHandler=null,renderQualityChangeHandler=null,renderQualityFrameHandler=null;
   let lastWorldPreparation=Object.freeze({ready:false,regionCount:0,keyCount:0,regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),simulationAuthorityPreserved:true});
   let lastMaterialQuality=Object.freeze({profile:"standard",cacheSignature:"pc-material-quality@standard",materialCount:0,textureCount:0,materialVariantCount:0,worldAssetCacheLimit:48,textureBudgetMB:48,anisotropy:2,auxiliaryMaps:true,detailMaps:false,simulationAuthorityPreserved:true});
   let lastAssetPreparationProof=Object.freeze({active:false,logicalKey:null,entityCount:0,meshInstanceCount:0,materialCount:0,networkLoads:0,containerParses:0,simulationAuthorityPreserved:true});
@@ -93,8 +93,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   }
   function material(name,r,g,b){if(materials.has(name))return materials.get(name);const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.gloss=0.18;m.metalness=0;m.update();materials.set(name,m);return m;}
   function primitive(parent,name,type,position,scale,mat,euler=null){const entity=new pc.Entity(name);entity.addComponent("render",{type,material:mat});entity.setLocalPosition(...position);entity.setLocalScale(...scale);if(euler)entity.setLocalEulerAngles(...euler);parent.addChild(entity);return entity;}
-  function makeTree(x,z,index){const trunk=primitive(propsRoot,"TreeTrunk_"+index,"cylinder",[x,1,z],[0.42,2,0.42],material("tree-trunk",0.30,0.20,0.12));primitive(propsRoot,"TreeCanopy_"+index,"sphere",[x,2.55,z],[1.55,1.45,1.55],material("tree-canopy",0.22,0.39,0.18));return trunk;}
-  // Normal-world houses are generated only by PlayCanvasTerrainChunkMesh from
+  // Normal-world houses and trees are generated only by PlayCanvasTerrainChunkMesh from
   // authoritative building footprints. The old hard-coded demo house path was
   // retired so no second roof constructor can reintroduce an inverted pitch.
   function proofMaterial(name,r,g,b,emissive=0){
@@ -682,6 +681,18 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   function terrainTextureProfile(){
     return textureQualitySnapshot().cacheSignature;
   }
+  async function prepareTreeSpriteAtlas(){
+    if(!window.PlayCanvasTreeSpriteAtlas)throw new Error("PlayCanvas tree sprite atlas is unavailable");
+    if(!treeSpriteAtlas)treeSpriteAtlas=window.PlayCanvasTreeSpriteAtlas.create({
+      pc,device,
+      qualitySignatureProvider:()=>textureQualitySnapshot().cacheSignature,
+      resolutionProvider:()=>Math.max(192,Math.min(384,Math.floor(textureQualitySnapshot().maxMaterialTextureResolution/2)))
+    });
+    const state=await treeSpriteAtlas.prepare();
+    const texture=treeSpriteAtlas.texture?.()||null;
+    if(texture)applyTextureSampling(texture,textureQualitySnapshot());
+    return state;
+  }
   async function prepareBuildingSurfaceAtlas(){
     if(!window.PlayCanvasBuildingSurfaceAtlas)throw new Error("PlayCanvas building surface atlas is unavailable");
     if(!buildingSurfaceAtlas)buildingSurfaceAtlas=window.PlayCanvasBuildingSurfaceAtlas.create({
@@ -742,6 +753,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       material:material("terrain-chunk-surface",1,1,1),
       textureAtlasProvider:()=>terrainTextureAtlas,
       buildingSurfaceAtlasProvider:()=>buildingSurfaceAtlas,
+      treeSpriteAtlasProvider:()=>treeSpriteAtlas,
+      treeYawProvider:()=>lastCameraBillboardYawDegrees,
       seedProvider:()=>lastRawSeed||"",
       registerRoof:(roof,descriptor)=>{if(roof){if(descriptor?.id)roof._advisorBuildingId=String(descriptor.id);roofEntities.push(roof);}}
     });
@@ -780,8 +793,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let meshResourceCount=0,activeMeshCount=0,preparedMeshCount=0,cachedMeshCount=0;
     let meshInstanceCount=0,vertices=0,triangles=0;
     let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,interiorObjectPresentationCount=0,propPresentationCount=0;
+    let treePresentationCount=0,treeVariant0Count=0,treeVariant1Count=0,treeInstancedGroupCount=0,treeCylinderSpherePlaceholderCount=0;
     let roofProfileCount=0,roofNormalProfileCount=0,roofSpecialProfileCount=0,roofProfilePass=true,roofCenterRidgeHigher=true,roofEaveContactPass=true,roofFootprintDriven=true;
-    const roofProfileSamples=[];
+    const roofProfileSamples=[],treeVariationSamples=[],treeSampleChunks=[];
     let staticBatchCount=0,staticBatchSourcePrimitiveCount=0,instancedGroupCount=0,instancedObjectCount=0;
     let optimizedPresentationDrawCalls=0,unoptimizedPresentationDrawCalls=0,savedDrawCalls=0;
     let frustumCulledResourceCount=0,hardwareInstancedResourceCount=0,batchedResourceCount=0;
@@ -842,6 +856,20 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       }
       interiorObjectPresentationCount+=Number(resource.interiorObjectPresentationCount||0);
       propPresentationCount+=Number(resource.propPresentationCount||0);
+      treePresentationCount+=Number(resource.treePresentationCount||0);
+      treeVariant0Count+=Number(resource.treeVariant0Count||0);
+      treeVariant1Count+=Number(resource.treeVariant1Count||0);
+      treeInstancedGroupCount+=Number(resource.treeInstancedGroupCount||0);
+      treeCylinderSpherePlaceholderCount+=Number(resource.treeCylinderSpherePlaceholderCount||0);
+      if(Number(resource.treePresentationCount||0)>0&&treeSampleChunks.length<24)treeSampleChunks.push(Object.freeze({
+        chunkX:Number(resource.x),chunkY:Number(resource.y),count:Number(resource.treePresentationCount||0),state:String(entry?.state||"")
+      }));
+      if(treeVariationSamples.length<24){
+        for(const item of resource.treeVariationSamples||[]){
+          if(treeVariationSamples.length>=24)break;
+          treeVariationSamples.push(item);
+        }
+      }
       roadCellCount+=Number(resource.roadCellCount||0);
       waterCellCount+=Number(resource.waterCellCount||0);
       bridgeCellCount+=Number(resource.bridgeCellCount||0);
@@ -875,6 +903,15 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       roofProfileSamples:Object.freeze(roofProfileSamples.slice()),
       roofGeometryAuthority:"renderer-only building footprints",
       interiorObjectPresentationCount,propPresentationCount,
+      treePresentationCount,treeVariant0Count,treeVariant1Count,treeInstancedGroupCount,
+      treeCylinderSpherePlaceholderCount,
+      treePlanePresentation:treePresentationCount>0&&treeCylinderSpherePlaceholderCount===0,
+      treeDeterministicVariation:true,
+      treeVariationSamples:Object.freeze(treeVariationSamples.slice()),
+      treeSampleChunks:Object.freeze(treeSampleChunks.sort((a,b)=>b.count-a.count||a.chunkY-b.chunkY||a.chunkX-b.chunkX)),
+      treeSpriteAtlas:treeSpriteAtlas?.stats?.()||null,
+      treeSharedTextureCount:Number(treeSpriteAtlas?.stats?.()?.gpuTextureCount||0),
+      treeSharedMaterialCount:Number(terrainChunkMeshFactory?.stats?.()?.treeSpriteMaterialCount||0),
       roadCellCount,waterCellCount,bridgeCellCount,terrainTypeCount,
       texturedBlockCount,colorFallbackBlockCount,
       texturedSurfaceTypes:Object.freeze([...texturedSurfaceTypes].sort()),
@@ -1479,6 +1516,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     resize();
     const terrainTextures=await prepareTerrainTextureAtlas();
     const buildingTextures=await prepareBuildingSurfaceAtlas();
+    const treeSprites=await prepareTreeSpriteAtlas();
     const preload=updateTerrainPreload(frame.center);
     const worldAssets=await prepareWorldAssets();
     if(!worldAssets.ready){
@@ -1497,6 +1535,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       worldAssets,
       terrainTextures,
       buildingTextures,
+      treeSprites,
       mesh:terrainMeshMetrics(),
       worldData:window.PlayCanvasChunkWorldData?.stats?.()||null,
       simulationAuthorityPreserved:true
@@ -1506,7 +1545,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   function setBuildingOcclusionProofState(state){occlusionProofState=(state===null||state===undefined||state==="off")?null:String(state);lastSnapshot=baseSnapshot();return lastSnapshot;}
   function clear(){assetPreparationProofState=false;assetPreparationProofRoot&&clearEntityChildren(assetPreparationProofRoot);if(assetPreparationProofRoot)assetPreparationProofRoot.enabled=false;lastAssetPreparationProof=Object.freeze({active:false,logicalKey:null,entityCount:0,meshInstanceCount:0,materialCount:0,networkLoads:0,containerParses:0,simulationAuthorityPreserved:true});lastModel=null;lastRawSeed=null;lastPreparedTerrainKey="";worldPreparation?.invalidate?.();lastWorldPreparation=Object.freeze({ready:false,regionCount:0,keyCount:0,regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),simulationAuthorityPreserved:true});lastRawInteriorObjects=[];lastRawBuildingInteriors=[];setInteriorObjectProofState(null);setCharacterProofState(null);clearCharacterBillboards();if(host)host.hidden=true;lastSnapshot=baseSnapshot({ready:Boolean(app&&device)});}
   function snapshot(){if(app&&device)lastSnapshot=baseSnapshot();return lastSnapshot;}
-  function destroy(){resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);if(qualityChangeHandler)window.removeEventListener?.("advisor:texture-quality-change",qualityChangeHandler);qualityChangeHandler=null;if(renderQualityChangeHandler)window.removeEventListener?.("advisor:render-quality-change",renderQualityChangeHandler);renderQualityChangeHandler=null;if(renderQualityFrameHandler)app?.off?.("update",renderQualityFrameHandler);renderQualityFrameHandler=null;terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;terrainTextureAtlas?.destroy?.();terrainTextureAtlas=null;buildingSurfaceAtlas?.destroy?.();buildingSurfaceAtlas=null;lastPreparedTerrainKey="";window.PlayCanvasChunkWorldData?.clear?.();app?.destroy?.();app=null;device=null;lastResizeSignature="";sceneAnchorRevision=0;lastPositionedAnchorRevision=0;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;assetPreparationProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;lastCutawayState=Object.freeze({active:false,local:true,targetBuildingId:null,hiddenRoofCount:0,totalRoofCount:0});materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation?.invalidate?.();worldPreparation?.invalidate?.();characterPreparation=null;worldPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});}
+  function destroy(){resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);if(qualityChangeHandler)window.removeEventListener?.("advisor:texture-quality-change",qualityChangeHandler);qualityChangeHandler=null;if(renderQualityChangeHandler)window.removeEventListener?.("advisor:render-quality-change",renderQualityChangeHandler);renderQualityChangeHandler=null;if(renderQualityFrameHandler)app?.off?.("update",renderQualityFrameHandler);renderQualityFrameHandler=null;terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;terrainTextureAtlas?.destroy?.();terrainTextureAtlas=null;buildingSurfaceAtlas?.destroy?.();buildingSurfaceAtlas=null;treeSpriteAtlas?.destroy?.();treeSpriteAtlas=null;lastPreparedTerrainKey="";window.PlayCanvasChunkWorldData?.clear?.();app?.destroy?.();app=null;device=null;lastResizeSignature="";sceneAnchorRevision=0;lastPositionedAnchorRevision=0;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;assetPreparationProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;lastCutawayState=Object.freeze({active:false,local:true,targetBuildingId:null,hiddenRoofCount:0,totalRoofCount:0});materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation?.invalidate?.();worldPreparation?.invalidate?.();characterPreparation=null;worldPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});}
   return Object.freeze({init,render,prepareTerrain,getPreparedTerrainView,prepareCharacters,updateCharacters,clear,snapshot,destroy,setAssetPreparationProofState,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,screenToCameraDelta,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
 }
 window.PlayCanvasRendererFactory=Object.freeze({engineVersion:ENGINE_VERSION,engineUrl:ENGINE_URL,loadEngine,create});

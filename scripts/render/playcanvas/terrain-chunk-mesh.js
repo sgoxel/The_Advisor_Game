@@ -16,7 +16,7 @@ function signed01(seed,x,z,salt){
 }
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 
-function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildingSurfaceAtlasProvider=()=>null,seedProvider=()=>"",registerRoof=()=>{}}={}){
+function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildingSurfaceAtlasProvider=()=>null,treeSpriteAtlasProvider=()=>null,treeYawProvider=()=>45,seedProvider=()=>"",registerRoof=()=>{}}={}){
   if(!pc||!device||!parent||!material)throw new Error("PlayCanvasTerrainChunkMesh requires pc/device/parent/material");
   material.vertexColors=true;
   material.diffuseVertexColor=true;
@@ -26,6 +26,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   material.update();
 
   const presentationMaterials=new Map();
+  const treeSpriteMaterials=new Map();
   const surfaceBoundMaterials=new Set();
   const primitiveMeshes=new Map();
   const baseBox=new pc.BoxGeometry();
@@ -80,12 +81,51 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   }
   function primitiveMesh(kind){
     if(primitiveMeshes.has(kind))return primitiveMeshes.get(kind);
-    let geometry;
-    if(kind==="tree-trunk")geometry=new pc.CylinderGeometry({radius:0.5,height:1,heightSegments:1,capSegments:8});
-    else geometry=new pc.SphereGeometry({radius:0.5,latitudeBands:8,longitudeBands:8});
-    const mesh=pc.Mesh.fromGeometry(device,geometry);
+    let mesh;
+    if(kind==="tree-plane"){
+      mesh=new pc.Mesh(device);
+      mesh.setPositions([-0.5,0,0, 0.5,0,0, -0.5,1,0, 0.5,1,0]);
+      mesh.setNormals([0,0,1, 0,0,1, 0,0,1, 0,0,1]);
+      mesh.setUvs(0,[0,0, 1,0, 0,1, 1,1]);
+      mesh.setIndices([0,1,2, 1,3,2]);
+      mesh.update();
+    }else{
+      const geometry=new pc.SphereGeometry({radius:0.5,latitudeBands:8,longitudeBands:8});
+      mesh=pc.Mesh.fromGeometry(device,geometry);
+    }
     primitiveMeshes.set(kind,mesh);
     return mesh;
+  }
+  function setMapRect(material,prefix,rect){
+    const tiling=material[prefix+"MapTiling"],offset=material[prefix+"MapOffset"];
+    if(tiling?.set)tiling.set(rect.uScale,rect.vScale);else material[prefix+"MapTiling"]=new pc.Vec2(rect.uScale,rect.vScale);
+    if(offset?.set)offset.set(rect.u0,rect.v0);else material[prefix+"MapOffset"]=new pc.Vec2(rect.u0,rect.v0);
+  }
+  function treeSpriteMaterial(variant){
+    const index=Math.max(0,Math.min(1,Math.trunc(Number(variant)||0)));
+    if(treeSpriteMaterials.has(index))return treeSpriteMaterials.get(index);
+    const atlas=treeSpriteAtlasProvider?.()||null,state=atlas?.stats?.()||null;
+    const texture=state?.ready?atlas?.texture?.():null,rect=atlas?.rect?.(index)||{u0:index*0.5,v0:0,uScale:0.5,vScale:1};
+    if(!texture)return presentationMaterial("tree-fallback",0.20,0.42,0.18,0.02);
+    const m=new pc.StandardMaterial();
+    m.name="chunk-tree-sprite-"+index;
+    m.diffuse.set(1,1,1);
+    m.diffuseMap=texture;
+    m.opacityMap=texture;
+    m.opacityMapChannel="a";
+    setMapRect(m,"diffuse",rect);
+    setMapRect(m,"opacity",rect);
+    m.alphaTest=0.10;
+    m.blendType=pc.BLEND_NONE;
+    m.depthWrite=true;
+    m.depthTest=true;
+    m.cull=pc.CULLFACE_NONE;
+    m.useLighting=false;
+    m.gloss=0;
+    m.metalness=0;
+    m.update();
+    treeSpriteMaterials.set(index,m);
+    return m;
   }
   function sampleColor(seed,x,z){
     const n=signed01(seed,x,z,"color");
@@ -247,7 +287,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const hx=Math.abs(item.scale[0])*0.6,hy=Math.abs(item.scale[1])*0.6,hz=Math.abs(item.scale[2])*0.6;
       const x=Number(worldX)+item.position[0],y=item.position[1],z=Number(worldZ)+item.position[2];
       minX=Math.min(minX,x-hx);maxX=Math.max(maxX,x+hx);
-      minY=Math.min(minY,y-hy);maxY=Math.max(maxY,y+hy);
+      if(item.anchorBottom){minY=Math.min(minY,y);maxY=Math.max(maxY,y+Math.abs(item.scale[1]));}
+      else{minY=Math.min(minY,y-hy);maxY=Math.max(maxY,y+hy);}
       minZ=Math.min(minZ,z-hz);maxZ=Math.max(maxZ,z+hz);
     }
     return new pc.BoundingBox(
@@ -399,13 +440,31 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     appendBoxBatch(batchFor(batches,mat.name,mat),[p.x,spec.y,p.z],spec.scale,0);
     return 1;
   }
-  function collectPropInstances(worldData,descriptor,treeTrunks,treeCanopies,rocks){
+  function collectPropInstances(worldData,descriptor,treeVariants,rocks,treeVariationSamples){
     const p=localTileCenter(worldData,descriptor.x,descriptor.y);
     const type=String(descriptor.type||"");
     if(type==="tree"){
-      treeTrunks.push({position:[p.x,0.72,p.z],scale:[0.30,1.35,0.30],euler:[0,0,0]});
-      treeCanopies.push({position:[p.x,1.75,p.z],scale:[1.05,0.95,1.05],euler:[0,0,0]});
-      return 2;
+      const seed=String(seedProvider()||"");
+      const h=hash32(seed+"|"+String(descriptor.x)+"|"+String(descriptor.y)+"|tree-sprite");
+      const variant=h&1,scaleIndex=(h>>>1)%3,flipX=Boolean((h>>>3)&1);
+      const scaleChoices=[0.92,1.0,1.08],scaleChoice=scaleChoices[scaleIndex];
+      const baseHeight=variant===0?3.75:4.05,height=baseHeight*scaleChoice;
+      const width=height*(variant===0?0.73:0.66);
+      const yaw=Number(treeYawProvider?.()??45);
+      const item={
+        position:[p.x,0.055,p.z],
+        scale:[(flipX?-1:1)*width,height,1],
+        euler:[0,yaw,0],
+        anchorBottom:true,
+        variant,flipX,scaleChoice,
+        sourceX:String(descriptor.x),sourceY:String(descriptor.y)
+      };
+      treeVariants[variant].push(item);
+      if(treeVariationSamples.length<12)treeVariationSamples.push(Object.freeze({
+        x:item.sourceX,y:item.sourceY,variant,flipX,scaleChoice:Number(scaleChoice.toFixed(2)),
+        width:Number(width.toFixed(3)),height:Number(height.toFixed(3)),yawDegrees:Number(yaw.toFixed(3))
+      }));
+      return 1;
     }
     rocks.push({position:[p.x,0.34,p.z],scale:[0.70,0.48,0.62],euler:[0,0,0]});
     return 1;
@@ -481,12 +540,15 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
 
     const staticBatches=finalizeStaticBatches(entity,batches);
 
-    const treeTrunks=[],treeCanopies=[],rocks=[];
-    for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeTrunks,treeCanopies,rocks);
+    const treeVariants=[[],[]],rocks=[],treeVariationSamples=[];
+    for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeVariants,rocks,treeVariationSamples);
     const worldX=Number(spec.worldX||0),worldZ=Number(spec.worldZ||0);
+    const treeGroups=[
+      createInstancedGroup(entity,"ChunkTrees_Variant0",primitiveMesh("tree-plane"),treeSpriteMaterial(0),treeVariants[0],worldX,worldZ),
+      createInstancedGroup(entity,"ChunkTrees_Variant1",primitiveMesh("tree-plane"),treeSpriteMaterial(1),treeVariants[1],worldX,worldZ)
+    ].filter(Boolean);
     const instancedGroups=[
-      createInstancedGroup(entity,"ChunkTrees_Trunks",primitiveMesh("tree-trunk"),presentationMaterial("tree-trunk",0.28,0.18,0.10),treeTrunks,worldX,worldZ),
-      createInstancedGroup(entity,"ChunkTrees_Canopies",primitiveMesh("tree-canopy"),presentationMaterial("tree-canopy",0.18,0.38,0.16),treeCanopies,worldX,worldZ),
+      ...treeGroups,
       createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks,worldX,worldZ)
     ].filter(Boolean);
 
@@ -523,7 +585,19 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       staticBatchCount,
       staticBatchSourcePrimitiveCount:staticBatches.reduce((sum,item)=>sum+item.sourcePrimitiveCount,0),
       instancedGroupCount,
-      instancedObjectCount:treeTrunks.length+treeCanopies.length+rocks.length,
+      instancedObjectCount:treeVariants[0].length+treeVariants[1].length+rocks.length,
+      treePresentationCount:treeVariants[0].length+treeVariants[1].length,
+      treeVariant0Count:treeVariants[0].length,
+      treeVariant1Count:treeVariants[1].length,
+      treeInstancedGroupCount:treeGroups.length,
+      treePlanePresentation:true,
+      treeCylinderSpherePlaceholderCount:0,
+      treeCameraFacingYawDegrees:Number((Number(treeYawProvider?.()??45)).toFixed(3)),
+      treeDeterministicVariation:true,
+      treeVariationSamples:Object.freeze(treeVariationSamples.slice()),
+      treeSpriteAtlas:treeSpriteAtlasProvider?.()?.stats?.()||null,
+      treeSharedTextureCount:Number(treeSpriteAtlasProvider?.()?.stats?.()?.gpuTextureCount||0),
+      treeSharedMaterialCount:treeSpriteMaterials.size,
       hardwareInstancing:instancedGroupCount>0,
       chunkLocalStaticBatching:staticBatchCount>0,
       frustumCulling:true,
@@ -586,6 +660,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       instancedGroupCreations,instancedObjectCount,instancingBufferUpdates,
       frustumCulledMeshInstances,
       sharedPresentationMaterialCount:presentationMaterials.size,
+      treeSpriteMaterialCount:treeSpriteMaterials.size,
+      treeSpriteAtlas:treeSpriteAtlasProvider?.()?.stats?.()||null,
+      treePlaneMeshPrepared:primitiveMeshes.has("tree-plane"),
+      treeCylinderSpherePlaceholders:false,
       buildingTexturedMaterialCount:surfaceBoundMaterials.size,
       buildingTexturedMaterialNames:Object.freeze([...surfaceBoundMaterials].sort()),
       buildingSurfaceAtlas:buildingSurfaceAtlasProvider?.()?.stats?.()||null,
