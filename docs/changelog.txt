@@ -1196,3 +1196,12 @@
 - All nine final screenshots were retrieved and directly inspected. Desktop world/assets/finalizing states are centered and readable; ready gameplay removes the overlay cleanly; startup error/Retry is clear; 390 px portrait and 844 px short-landscape layouts have no major clipping or overlap; the 1280x657 reduced-motion state remains readable and correctly composed. VISUAL 8.7/10 PASS.
 - The exact tested head 18efaf843b708a6587cfd59f72490d34217ed6fe deployed successfully through GitHub Pages run 36020027170. Push-triggered generic visual run 36020029537 also succeeded on the same head. Evidence artifacts were not published to main.
 - The dedicated run's red status is retained honestly as a stale evidence-validator false-negative; the captured screenshots plus recorded lifecycle/serialization telemetry satisfy the WP acceptance criteria. The stale synthetic frame-1 expectation is left for future harness cleanup because the three allowed attempts for this continuation are exhausted.
+
+2026-09-24 18:50:43 +03:00 | WP-S004-004-001 | Final verification
+- Classification: MIXED.
+- Fresh dedicated Visual Evidence run 36022336893 completed successfully on exact main head efe3fbcbe125180fc6e73605531059e6b350d7a3; artifact 10818320086, digest sha256:2ba44d9020cd1cefab871d599c6d932eef7db2e893c93e928dca8fb63f147903.
+- All six fresh screenshots were retrieved and directly inspected: the resident remains visible one tile before the real E-side exterior door, is fully hidden on the doorway/interior frames, is fully suppressed behind the house, remains visible on the camera-facing side, and two same-coordinate residents receive deterministic visible separation.
+- The previous Startup interrupted obstruction is gone; scene-loading overlay state is hidden in all six frames.
+- Functional proof remains PASS: ResidentMovement deterministic=true, wallClearancePass=true, wallClearanceViolationCount=0; house/special-building visible entrance-side checks pass; presentation hiding/separation preserves Simulation authority.
+- VISUAL 8.3/10 PASS with no major clipping, roof-protrusion, projection, overlap, or readability defect in the inspected evidence.
+- Tested head efe3fbcbe125180fc6e73605531059e6b350d7a3 was already deployed successfully through GitHub Pages run 36021529820. Completion bookkeeping remains pending its own deployment verification before Issue closure.
