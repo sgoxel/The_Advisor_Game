@@ -1252,3 +1252,19 @@
 - Verified final verification/suggestion documentation head 2f97018e364bc0f0645563493597722cb0040bfc through successful GitHub Pages deployment run 36034652865.
 - Marked WP-S007-004 COMPLETED in docs/ROADMAP.md only after the required deployment gates succeeded.
 - Final classification: FUNCTIONAL. VISUAL: N/A. Functional verification score: 9.4/10.
+2026-09-24 20:51:34 +03:00 | WP-S007-005 | Global Country/Diplomacy Aggregate Simulation final verification
+- Classification: FUNCTIONAL. VISUAL: N/A — country/diplomacy determinism, sparse revision propagation, due-only processing and off-screen authority are not meaningfully judged from rendered screenshots.
+- Added scripts/world/global-country-simulation.js with deterministic 24-fantasy-hour country aggregate updates and 12-fantasy-hour bilateral diplomacy updates driven only by EventScheduler due timestamps.
+- Country CampaignDelta overlays now carry live wealth/prosperity, stability, trade condition, agriculture/production condition, military readiness, war pressure, treasury pressure, aggregate revision and a bounded event/state ledger while immutable CountryProfile remains foundation authority.
+- Bilateral CampaignDelta overlays now carry current relation score/state, trade access/restriction, military tension, border openness, war hook state, agreement activity, aggregate revision and bounded event/state ledger.
+- Global scheduling is bounded to at most 25 sampled country aggregates and 20 relevant bilateral relations, with zero per-citizen global iteration and zero render/camera authority.
+- EventScheduler processDue now supports system-kind filtering so a subsystem can process its due work without consuming unrelated queued events.
+- WorldContext observes country/diplomacy delta revisions lazily; global updates do not iterate or write settlement/NPC deltas.
+- Attempt 1 / run 36036092930 exposed certification contamination from live-clock 1126-era aggregate events between fixed 1200 evidence frames. Country divergence passed, but those older due events filled the controlled batch before the diplomacy event.
+- Controlled evidence was isolated from live-clock aggregate ticks only while the test sequence is active; production scheduling remains unchanged.
+- Attempt 2 / dedicated run 36036460645 succeeded on head 357f2b5e414011e8db66cb25dc1bdddd9f1d322e. Artifact 10824573795, digest sha256:08fdcd8def268b06ac309fce76b85e6b1ca04132e9068255b653d566bb82a82e.
+- PASS: two profile/geography-distinct countries both advanced to aggregate revision 1 with different outcome signatures; bilateral relation advanced to revision 1 with deterministic trade restriction; future work remained unprocessed before due time; camera drag left authoritative aggregate state unchanged.
+- PASS: lower settlement context refreshed only after the relevant relation revision, downstream trade decreased under the restriction, and settlement CampaignDelta fan-out remained zero.
+- Tested implementation head 357f2b5e414011e8db66cb25dc1bdddd9f1d322e deployed successfully through GitHub Pages run 36036440636.
+- Functional verification score: 9.3/10. ROADMAP completion remains pending successful deployment verification of this documentation commit.
+
