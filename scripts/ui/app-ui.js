@@ -1051,6 +1051,7 @@ async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom()){
   let descriptor;
   if(isPlayCanvasRenderer()){
     const base=terrainViewGeometryDescriptor(center,zoom);
+    if(startupLoading)setSceneLoadingPhase("assets");
     const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
       seed,
       center,
@@ -1110,6 +1111,9 @@ async function renderTerrain(){
     setCheck(e.vTileRepeat,false,"WAITING");
     return;
   }
+
+  const startupLoading=sceneLoadingState.state==="loading"&&!sceneLoadingState.proofOverride;
+  if(startupLoading)setSceneLoadingPhase("world");
 
   let view;
   let cachedTerrain=null;
@@ -1178,6 +1182,7 @@ async function renderTerrain(){
   if(!TextureAssets.isRegionPrepared(regionKey,requiredKeys)&&!rendererWasReady){
     e.terrainGrid.hidden=true;
   }
+  if(startupLoading)setSceneLoadingPhase("assets");
   const prepared=await TextureAssets.prepareRegion(regionKey,requiredKeys);
   if(currentSerial!==terrainRenderSerial||!prepared.ready||prepared.stale||!TextureAssets.isRegionPrepared(regionKey,requiredKeys)){
     return false;
@@ -2258,50 +2263,67 @@ function startClock(){
   clockTimer=setInterval(renderClock,250);
 }
 async function startNewCampaign(){
+  beginSceneLoading("new-campaign","world");
   const result=SeedSystem.startNewCampaign();
   restoredCampaign=false;
   residentSchedulePinned=false;
   lastResidentScheduleProof=null;
-  if(result.ok){
-    WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
-    resetCameraForCampaign();
-    ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
-  }
   e.menuMessage.textContent=result.message;
-  if(result.ok){
-    try{
-      await renderTerrain();
-    }catch(error){
-      console.error(error);
-      e.statusMessage.textContent="Renderer startup failed: "+String(error);
-      return;
-    }
+  if(!result.ok){
+    e.statusMessage.textContent=result.message;
+    failSceneLoading(result.message);
+    return;
   }
-  e.statusMessage.textContent="Campaign running. Game time advances 24× real time.";
-  renderStatic();startClock();startResidentMovement();closePopup("mainMenuPopup");
+  WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
+  resetCameraForCampaign();
+  ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  closePopup("mainMenuPopup");
+  e.statusMessage.textContent=SCENE_LOADING_PHASES.world.message;
+  try{
+    const rendered=await renderTerrain();
+    if(rendered!==true)throw new Error("Initial campaign scene did not reach playable terrain readiness.");
+    setSceneLoadingPhase("finalizing");
+    renderStatic();startClock();startResidentMovement();
+    e.statusMessage.textContent="Campaign running. Game time advances 24× real time.";
+    if(!finishSceneLoading("campaign-ready",true)){
+      throw new Error("Initial campaign scene readiness gate did not pass.");
+    }
+  }catch(error){
+    console.error(error);
+    e.statusMessage.textContent="Renderer startup failed: "+String(error);
+    failSceneLoading(error);
+  }
 }
 async function restartCampaign(){
+  beginSceneLoading("restart-campaign","world");
   const result=SeedSystem.restartCampaign();
   residentSchedulePinned=false;
   lastResidentScheduleProof=null;
-  if(result.ok){
-    WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
-    resetCameraForCampaign();
-    ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
-  }
   e.menuMessage.textContent=result.message;
-  if(result.ok){
-    try{
-      await renderTerrain();
-    }catch(error){
-      console.error(error);
-      e.statusMessage.textContent="Renderer startup failed: "+String(error);
-      return;
-    }
+  if(!result.ok){
+    e.statusMessage.textContent=result.message;
+    failSceneLoading(result.message);
+    return;
   }
-  e.statusMessage.textContent=result.ok?"Campaign restarted with the same SEED.":result.message;
-  renderStatic();startClock();startResidentMovement();
-  if(result.ok)closePopup("mainMenuPopup");
+  WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
+  resetCameraForCampaign();
+  ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  closePopup("mainMenuPopup");
+  e.statusMessage.textContent=SCENE_LOADING_PHASES.world.message;
+  try{
+    const rendered=await renderTerrain();
+    if(rendered!==true)throw new Error("Restarted campaign scene did not reach playable terrain readiness.");
+    setSceneLoadingPhase("finalizing");
+    renderStatic();startClock();startResidentMovement();
+    e.statusMessage.textContent="Campaign restarted with the same SEED.";
+    if(!finishSceneLoading("restart-ready",true)){
+      throw new Error("Restarted campaign scene readiness gate did not pass.");
+    }
+  }catch(error){
+    console.error(error);
+    e.statusMessage.textContent="Renderer startup failed: "+String(error);
+    failSceneLoading(error);
+  }
 }
 function saveSettings(){
   const result=SeedSystem.setSettingsSeed(e.seedInput.value);
@@ -2313,6 +2335,9 @@ function saveSettings(){
 }
 async function init(){
   cache();
+  beginSceneLoading("application-start","renderer");
+  e.sceneLoadingRetry.onclick=()=>window.location.reload();
+
   SeedSystem.loadSettings();
   e.seedInput.value=SeedSystem.getSettings().seed;
   applyDevelopmentMode(readDevelopmentMode());
@@ -2343,25 +2368,40 @@ async function init(){
   document.querySelectorAll("[data-close-popup]").forEach(btn=>btn.onclick=()=>closePopup(btn.dataset.closePopup));
   document.addEventListener("keydown",event=>{if(event.key==="Escape")closeAll()});
 
-  if(restored.ok)e.statusMessage.textContent="Campaign restored. Game time continued while the page was closed.";
-  else e.statusMessage.textContent="Open Main Menu to start a campaign.";
-
   renderTerrainLegend();
   installCameraControls();
-  e.statusMessage.textContent="Loading GPU renderer and draft textures…";
+  e.statusMessage.textContent=SCENE_LOADING_PHASES.renderer.message;
   try{
     await GameRenderer.init(e.terrainGrid);
-    await renderTerrain();
+    let rendered=true;
+    if(restored.ok){
+      setSceneLoadingPhase("world");
+      rendered=await renderTerrain();
+      if(rendered!==true)throw new Error("Restored campaign scene did not reach playable terrain readiness.");
+    }else{
+      await renderTerrain();
+    }
+    setSceneLoadingPhase("finalizing");
+    renderStatic();startClock();startResidentMovement();
+    observeTerrainViewport();
+    e.statusMessage.textContent=restored.ok
+      ?"Campaign restored. Game time continued while the page was closed."
+      :"Open Main Menu to start a campaign.";
+    if(!finishSceneLoading(restored.ok?"restored-ready":"menu-ready",rendered)){
+      throw new Error("Initial scene readiness gate did not pass.");
+    }
   }catch(error){
     console.error(error);
     e.statusMessage.textContent="Renderer startup failed: "+String(error);
+    failSceneLoading(error);
     throw error;
   }
-  renderStatic();startClock();startResidentMovement();
-  observeTerrainViewport();
 }
 window.AppUI=Object.freeze({
   init,
+  sceneLoadingSnapshot,
+  setSceneLoadingProof,
+  clearSceneLoadingProof,
   refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot()),
   refreshResidentRoster:()=>renderResidentRosterProof(),
