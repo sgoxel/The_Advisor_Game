@@ -33,7 +33,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   let creations=0,destroys=0,totalBuildMs=0,maxBuildMs=0;
   let presentationEntityCreations=0,presentationEntityDestroys=0,presentationMeshInstanceCreations=0;
   let staticBatchMeshCreations=0,staticBatchSourcePrimitiveCount=0,instancedGroupCreations=0,instancedObjectCount=0;
-  let instancingBufferUpdates=0,frustumCulledMeshInstances=0;
+  let instancingBufferUpdates=0,instancingParentRepositions=0,frustumCulledMeshInstances=0;
 
   function applyBuildingSurfaceMaterial(m,name,r,g,b){
     const atlas=buildingSurfaceAtlasProvider?.()||null;
@@ -270,12 +270,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     }
     return meshes;
   }
-  function matrixDataFor(instances,worldX,worldZ){
+  function matrixDataFor(instances){
     const data=new Float32Array(instances.length*16);
     const matrix=new pc.Mat4(),pos=new pc.Vec3(),rot=new pc.Quat(),scale=new pc.Vec3();
     for(let i=0;i<instances.length;i++){
       const item=instances[i];
-      pos.set(Number(worldX)+item.position[0],item.position[1],Number(worldZ)+item.position[2]);
+      // Instance transforms are chunk-local. The parent chunk Entity owns the
+      // scene-anchor/world translation exactly once.
+      pos.set(item.position[0],item.position[1],item.position[2]);
       rot.setFromEulerAngles(...(item.euler||[0,0,0]));
       scale.set(...item.scale);
       matrix.setTRS(pos,rot,scale);
@@ -283,12 +285,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     }
     return data;
   }
-  function instanceAabb(instances,worldX,worldZ){
-    if(!instances.length)return new pc.BoundingBox(new pc.Vec3(worldX,0,worldZ),new pc.Vec3(1,1,1));
+  function instanceAabb(instances){
+    if(!instances.length)return new pc.BoundingBox(new pc.Vec3(0,0,0),new pc.Vec3(1,1,1));
     let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
     for(const item of instances){
       const hx=Math.abs(item.scale[0])*0.6,hy=Math.abs(item.scale[1])*0.6,hz=Math.abs(item.scale[2])*0.6;
-      const x=Number(worldX)+item.position[0],y=item.position[1],z=Number(worldZ)+item.position[2];
+      const x=item.position[0],y=item.position[1],z=item.position[2];
       minX=Math.min(minX,x-hx);maxX=Math.max(maxX,x+hx);
       if(item.anchorBottom){minY=Math.min(minY,y);maxY=Math.max(maxY,y+Math.abs(item.scale[1]));}
       else{minY=Math.min(minY,y-hy);maxY=Math.max(maxY,y+hy);}
@@ -299,15 +301,15 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       new pc.Vec3((maxX-minX)/2,(maxY-minY)/2,(maxZ-minZ)/2)
     );
   }
-  function createInstancedGroup(root,name,mesh,mat,instances,worldX=0,worldZ=0){
+  function createInstancedGroup(root,name,mesh,mat,instances){
     if(!instances.length)return null;
     const entity=new pc.Entity(name);
     const mi=new pc.MeshInstance(mesh,mat,entity);
     const format=pc.VertexFormat.getDefaultInstancingFormat(device);
-    const vb=new pc.VertexBuffer(device,format,instances.length,{data:matrixDataFor(instances,worldX,worldZ)});
+    const vb=new pc.VertexBuffer(device,format,instances.length,{data:matrixDataFor(instances)});
     mi.setInstancing(vb,true);
-    mi.aabb=instanceAabb(instances,worldX,worldZ);
     entity.addComponent("render",{meshInstances:[mi],castShadows:false,receiveShadows:false});
+    entity.render.customAabb=instanceAabb(instances);
     root.addChild(entity);
     presentationEntityCreations++;
     presentationMeshInstanceCreations++;
@@ -315,12 +317,6 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     instancedObjectCount+=instances.length;
     frustumCulledMeshInstances++;
     return {entity,meshInstance:mi,vertexBuffer:vb,instances};
-  }
-  function updateInstancingGroup(group,worldX,worldZ){
-    if(!group)return;
-    group.vertexBuffer.setData(matrixDataFor(group.instances,worldX,worldZ));
-    group.meshInstance.aabb=instanceAabb(group.instances,worldX,worldZ);
-    instancingBufferUpdates++;
   }
 
   function buildGabledRoof(root,descriptor,rootName,b,height,outerW,outerD,roof,roofProfiles){
@@ -548,14 +544,13 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
 
     const treeVariants=[[],[]],rocks=[],treeVariationSamples=[];
     for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeVariants,rocks,treeVariationSamples);
-    const worldX=Number(spec.worldX||0),worldZ=Number(spec.worldZ||0);
     const treeGroups=[
-      createInstancedGroup(entity,"ChunkTrees_Variant0",primitiveMesh("tree-plane"),treeSpriteMaterial(0),treeVariants[0],worldX,worldZ),
-      createInstancedGroup(entity,"ChunkTrees_Variant1",primitiveMesh("tree-plane"),treeSpriteMaterial(1),treeVariants[1],worldX,worldZ)
+      createInstancedGroup(entity,"ChunkTrees_Variant0",primitiveMesh("tree-plane"),treeSpriteMaterial(0),treeVariants[0]),
+      createInstancedGroup(entity,"ChunkTrees_Variant1",primitiveMesh("tree-plane"),treeSpriteMaterial(1),treeVariants[1])
     ].filter(Boolean);
     const instancedGroups=[
       ...treeGroups,
-      createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks,worldX,worldZ)
+      createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks)
     ].filter(Boolean);
 
     const roofPrimitiveCount=buildings.length*2;
@@ -600,6 +595,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeCylinderSpherePlaceholderCount:0,
       treeCameraFacingYawDegrees:Number((Number(treeYawProvider?.()??45)).toFixed(3)),
       treeDeterministicVariation:true,
+      instancingCoordinateSpace:"chunk-local",
+      instancingParentTranslationAppliedOnce:true,
+      instancingRepositionViaParent:true,
       treePlacementJitter:true,
       treePlacementJitterMaxMeters:0.5,
       treeVariationSamples:Object.freeze(treeVariationSamples.slice()),
@@ -641,9 +639,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       complete:true
     };
   }
-  function reposition(resource,worldX,worldZ){
+  function reposition(resource){
     if(!resource)return;
-    for(const group of resource.instancedGroups||[])updateInstancingGroup(group,Number(worldX||0),Number(worldZ||0));
+    // The chunk Entity is repositioned by app.js. Instance matrices remain
+    // chunk-local, so scene-anchor changes require no GPU buffer rewrite.
+    instancingParentRepositions+=Number(resource.instancedGroups?.length||0);
   }
   function destroy(resource){
     if(!resource)return;
@@ -665,7 +665,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       entityCreations:creations+presentationEntityCreations,
       entityDestroys:destroys+presentationEntityDestroys,
       staticBatchMeshCreations,staticBatchSourcePrimitiveCount,
-      instancedGroupCreations,instancedObjectCount,instancingBufferUpdates,
+      instancedGroupCreations,instancedObjectCount,instancingBufferUpdates,instancingParentRepositions,
+      instancingCoordinateSpace:"chunk-local",
+      instancingParentTranslationAppliedOnce:true,
       frustumCulledMeshInstances,
       sharedPresentationMaterialCount:presentationMaterials.size,
       treeSpriteMaterialCount:treeSpriteMaterials.size,

@@ -4534,6 +4534,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Tree resource reuse is not bounded in frame {index+1}: {chunks}")
             if chunks.get("treeDeterministicVariation") is not True:
                 raise RuntimeError(f"Tree deterministic variation flag missing in frame {index+1}: {chunks}")
+            if chunks.get("instancingCoordinateSpace")!="chunk-local" or chunks.get("instancingParentTranslationAppliedOnce") is not True:
+                raise RuntimeError(f"Tree instancing is not chunk-local / single-translation in frame {index+1}: {chunks}")
             if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
                 raise RuntimeError(f"Visible-frame tree asset work detected in frame {index+1}: {preload}")
             max_trees=max(max_trees,int(chunks.get("treePresentationCount") or 0))
