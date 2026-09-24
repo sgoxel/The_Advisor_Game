@@ -1934,6 +1934,12 @@ function renderAdviceResolutionProof(adviceId=""){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.AdviceResolution.renderDebugPanel(seed,adviceId,document.getElementById("adviceResolutionProof"));
 }
+function renderSocialStateProof(residentId=""){
+  if(typeof window.SocialState?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.SocialState.renderDebugPanel(seed,residentId,document.getElementById("socialStateProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1947,6 +1953,7 @@ function renderStatic(){
   renderCharacterMemoryProof();
   renderDialogueContextProof();
   renderAdviceResolutionProof();
+  renderSocialStateProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2102,6 +2109,9 @@ window.AppUI=Object.freeze({
   dialogueContextVerify:(residentId="R03")=>{const campaign=SeedSystem.getCampaign();return campaign&&window.DialogueContext?DialogueContext.proof(campaign.seed,residentId):null;},
   refreshAdviceResolution:(adviceId="")=>renderAdviceResolutionProof(adviceId),
   adviceResolutionVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.AdviceResolution?AdviceResolution.proof(campaign.seed):null;},
+  refreshSocialState:(residentId="")=>renderSocialStateProof(residentId),
+  socialStateSnapshot:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SocialState?SocialState.snapshot(campaign.seed):null;},
+  socialStateVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SocialState?SocialState.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

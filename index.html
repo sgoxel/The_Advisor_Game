@@ -787,6 +787,45 @@
     </div>
   </details>
 
+  <details id="socialStateProof">
+    <summary>WP-S005-005 Relationship, Reputation + Duty State Foundation</summary>
+    <div class="accordion-content technical-info">
+      <div class="social-state-toolbar">
+        <label for="socialResidentSelect">Inspect resident social state</label>
+        <select id="socialResidentSelect" aria-label="Social-state resident"></select>
+      </div>
+      <div class="detail-grid social-state-grid">
+        <div><span>Relationship</span><strong id="socialRelationshipPair">—</strong></div>
+        <div><span>Resident role</span><strong id="socialResidentRole">—</strong></div>
+        <div><span>Advice influence</span><strong id="socialAdviceInfluence">—</strong></div>
+        <div><span>Dialogue influence</span><strong id="socialDialogueInfluence">—</strong></div>
+        <div><span>Active duty</span><strong id="socialActiveDuty">—</strong></div>
+        <div><span>Authority</span><strong>Simulation-backed social state</strong></div>
+      </div>
+      <div id="socialRelationshipMetrics" class="social-relationship-metrics" aria-label="Relationship fields"></div>
+      <div class="social-columns">
+        <section>
+          <h4>Reputation scopes</h4>
+          <ul id="socialReputationList" class="social-reputation-list"></ul>
+        </section>
+        <section>
+          <h4>Duties & obligations</h4>
+          <ul id="socialDutyList" class="social-duty-list"></ul>
+        </section>
+      </div>
+      <section class="social-events-section">
+        <h4>Social event history</h4>
+        <ul id="socialEventList" class="social-event-list"></ul>
+      </section>
+      <div class="check"><span>Same social event history deterministically replays to the same persistent state after reload</span><b id="vSocialDeterministic">WAITING</b></div>
+      <div class="check"><span>Trust, fear, respect, suspicion, loyalty and resentment persist as directional relationship state</span><b id="vSocialRelationship">WAITING</b></div>
+      <div class="check"><span>Role, house, guild, family and settlement reputation scopes are inspectable and persistent</span><b id="vSocialReputation">WAITING</b></div>
+      <div class="check"><span>Family/work/oath/service/debt/public-office/promise duties support reviewable active/fulfilled/breached state</span><b id="vSocialDuty">WAITING</b></div>
+      <div class="check"><span>Persistent social state feeds DialogueContext tone and AdviceResolution social acceptability</span><b id="vSocialInfluence">WAITING</b></div>
+      <div class="check"><span>No ally/enemy shortcut, resource creation or world authority is manufactured by social state</span><b id="vSocialAuthority">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -826,6 +865,7 @@
 <script src="scripts/world/building-interiors.js"></script>
 <script src="scripts/core/game-time.js"></script>
 <script src="scripts/world/character-memory.js"></script>
+<script src="scripts/world/social-state.js"></script>
 <script src="scripts/world/dialogue-context.js"></script>
 <script src="scripts/world/advice-resolution.js"></script>
 <script src="scripts/ui/app-ui.js"></script>

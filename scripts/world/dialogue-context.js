@@ -145,7 +145,9 @@ function resolve(seedValue,configValue){
   if(!activityRaw)throw new Error("Dialogue activity context unavailable");
   const location=locationContext(seed,speaker,activityRaw);
   const activity=activityContext(activityRaw);
-  const social=normalizeSocial(config.social);
+  const persistentSocial=config.social==null?scope().SocialState?.dialogueContext?.(seed,residentId):null;
+  const social=normalizeSocial(config.social??persistentSocial?.values);
+  const socialSource=config.social!=null?"provided-context-snapshot":persistentSocial?.source||"default-context";
   const urgency=clamp01(config.urgency,0);
   const tone=chooseTone(location,activity,social,urgency);
   const topic=String(config.topic||"the current situation").trim()||"the current situation";
@@ -167,7 +169,11 @@ function resolve(seedValue,configValue){
     location,
     activity,
     social,
-    socialSource:"provided-context-snapshot",
+    socialSource,
+    socialContext:persistentSocial?Object.freeze({
+      reputationAverage:persistentSocial.reputationAverage,
+      activeDutyPriority:persistentSocial.activeDutyPriority
+    }):null,
     urgency,
     tone,
     response,

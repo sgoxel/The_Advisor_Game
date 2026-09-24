@@ -78,6 +78,19 @@ function normalizeInput(configValue){
     modification:String(config.modification||"").trim()
   });
 }
+function resolveSocialAcceptability(seed,config){
+  if(config.socialAcceptability!=null){
+    return Object.freeze({value:clamp01(config.socialAcceptability,0.5),source:"provided-context",targetId:null,dutyConflict:Boolean(config.dutyConflict)});
+  }
+  const targetId=String(config.socialTargetId||"").trim();
+  if(targetId&&scope().SocialState?.adviceAcceptability){
+    return Object.freeze({
+      value:scope().SocialState.adviceAcceptability(seed,targetId,{dutyConflict:Boolean(config.dutyConflict)}),
+      source:"persistent-social-ledger",targetId,dutyConflict:Boolean(config.dutyConflict)
+    });
+  }
+  return Object.freeze({value:0.5,source:"default-context",targetId:targetId||null,dutyConflict:Boolean(config.dutyConflict)});
+}
 function chooseDecision(input){
   if(input.socialAcceptability<0.35||input.value<0.45)return "rejected";
   if(input.modifiedIntent&&input.value>=0.65&&input.socialAcceptability>=0.5)return "modified";
@@ -123,7 +136,8 @@ function previewDecision(seedValue,configValue){
   const adviceId=String(config.adviceId||"");
   const advice=scope().AdvisorChannel?.resolve?.(seed,adviceId,"protagonist")||null;
   if(!advice)return null;
-  const input=normalizeInput(config);
+  const socialContext=resolveSocialAcceptability(seed,config);
+  const input=normalizeInput({...config,socialAcceptability:socialContext.value});
   const decision=chooseDecision(input);
   const originalValidation=simulationCheck(seed,input.intent);
   const finalIntent=decision==="modified"?input.modifiedIntent:input.intent;
@@ -143,6 +157,7 @@ function previewDecision(seedValue,configValue){
     finalValidation,
     executionAllowed,
     influence,
+    socialContext,
     authority:"protagonist-choice + simulation-validation",
     actionExecuted:false
   });

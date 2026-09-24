@@ -95,6 +95,7 @@ SCENARIOS = {
     "wp-s005-002",
     "wp-s005-003",
     "wp-s005-004",
+    "wp-s005-005",
     "playcanvas-root-cutover",
 }
 
@@ -142,6 +143,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s005-002": 4,
     "wp-s005-003": 5,
     "wp-s005-004": 5,
+    "wp-s005-005": 5,
     "playcanvas-root-cutover": 3,
 }
 
@@ -352,6 +354,36 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        socialState: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.SocialState?.proof
+              ? window.SocialState.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        socialStatePanel: (() => {
+          const root=document.querySelector("#socialStateProof");
+          if(!root)return null;
+          return {
+            present:true,
+            open:Boolean(root.open),
+            residentId:root.dataset.residentId||null,
+            profession:root.dataset.profession||null,
+            trust:Number(root.dataset.trust||0),
+            suspicion:Number(root.dataset.suspicion||0),
+            reputationAverage:Number(root.dataset.reputationAverage||0),
+            adviceDecision:root.dataset.adviceDecision||null,
+            dialogueTone:root.dataset.dialogueTone||null,
+            eventCount:Number(root.dataset.eventCount||0),
+            dutyCount:Number(root.dataset.dutyCount||0),
+            dutyStatuses:Array.from(root.querySelectorAll("#socialDutyList .social-duty-status")).map(node=>node.textContent.trim().toLowerCase()),
+            reputationScopes:Array.from(root.querySelectorAll("#socialReputationList li > span")).map(node=>node.textContent.trim().toLowerCase()),
+            eventTypes:Array.from(root.querySelectorAll("#socialEventList li strong")).map(node=>node.textContent.trim().toLowerCase()),
+          };
         })(),
         adviceResolution: (() => {
           try {
@@ -1891,6 +1923,157 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_social_state_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const social=window.SocialState;
+        const memory=window.CharacterMemory;
+        const channel=window.AdvisorChannel;
+        if(!campaign?.seed||!social||!memory||!channel||!window.DialogueContext||!window.AdviceResolution||!window.DailyActivity){
+          return {ok:false,error:'social-state-unavailable'};
+        }
+        const seed=campaign.seed;
+        const protagonist={kind:'protagonist',id:'protagonist',label:'Protagonist'};
+        const residents=DailyActivity.roster(seed);
+        const smith=residents.find(item=>item.profession==='smith')||residents[0];
+        if(!smith)return {ok:false,error:'proof-resident-missing'};
+        const residentActor={kind:'resident',id:smith.id,label:smith.name};
+        const relationship={observer:residentActor,subject:protagonist};
+        const reputationTargets=social.residentReputationTargets(seed,smith.id);
+
+        if(index===0){
+          social.clear(seed);
+          memory.clear(seed);
+          localStorage.removeItem(channel.storageKey(seed,'protagonist'));
+          if(window.AdviceResolution?.clear)AdviceResolution.clear(seed);
+
+          memory.recordFact(seed,residentActor,{
+            category:'places',
+            summary:'The mill is closed today.',
+            timestamp:'1200-06-12 07:40:00',
+            source:{type:'simulation',id:'mill-state:1200-06-12',label:'Mill operating state'},
+            confidence:1,relevance:0.9,reliability:'verified',
+            fact:{subject:'mill',predicate:'open',value:false}
+          });
+
+          const advice=channel.recordAdvice(seed,{
+            topic:'Ask the smith for help with the mill problem.',
+            target:{kind:'person',id:smith.id,label:smith.name},
+            timestamp:'1200-06-12 08:00:00'
+          },'protagonist');
+
+          const household=social.createDuty(seed,{
+            type:'family',title:'Protect the household',
+            actor:protagonist,beneficiary:residentActor,
+            scopeTarget:{scope:'family',id:'family-'+smith.homePlanId,label:smith.homeLabel+' household',subjectActor:protagonist},
+            priority:0.92,timestamp:'1200-06-12 08:02:00',
+            externalRef:{type:'proof',id:'protect-household'}
+          });
+          const delivery=social.createDuty(seed,{
+            type:'service',title:'Deliver the promised goods',
+            actor:protagonist,beneficiary:residentActor,
+            scopeTarget:{scope:'guild',id:smith.workFunction+'-guild',label:smith.profession+' guild scope',subjectActor:protagonist},
+            priority:0.82,timestamp:'1200-06-12 08:03:00',
+            externalRef:{type:'proof',id:'deliver-goods'}
+          });
+          const tools=social.createDuty(seed,{
+            type:'debt',title:'Return the borrowed tools',
+            actor:protagonist,beneficiary:residentActor,
+            scopeTarget:{scope:'role',id:smith.profession,label:smith.profession+' role',subjectActor:protagonist},
+            priority:0.74,timestamp:'1200-06-12 08:04:00',
+            externalRef:{type:'proof',id:'return-tools'}
+          });
+          window.__socialProof={smithId:smith.id,adviceId:advice.id,householdId:household.id,deliveryId:delivery.id,toolsId:tools.id};
+        }
+
+        let proofState=window.__socialProof;
+        if(!proofState){
+          const duties=social.listDuties(seed,{kind:'protagonist',id:'protagonist'});
+          const advice=channel.list(seed,'protagonist')[0];
+          proofState={
+            smithId:smith.id,
+            adviceId:advice?.id||null,
+            householdId:duties.find(d=>d.title==='Protect the household')?.id||null,
+            deliveryId:duties.find(d=>d.title==='Deliver the promised goods')?.id||null,
+            toolsId:duties.find(d=>d.title==='Return the borrowed tools')?.id||null
+          };
+          window.__socialProof=proofState;
+        }
+
+        if(index===1){
+          social.recordEvent(seed,{
+            type:'truthful-advice',timestamp:'1200-06-12 09:00:00',
+            actor:protagonist,relationship,reputationTargets,
+            externalRef:{type:'advice',id:proofState.adviceId},
+            summary:'The recommendation proved truthful and useful.'
+          });
+          social.recordEvent(seed,{
+            type:'observed-help',timestamp:'1200-06-12 09:05:00',
+            actor:protagonist,relationship,reputationTargets,
+            externalRef:{type:'observation',id:'help-smith-001'},
+            summary:'The smith observed the protagonist helping with the mill problem.'
+          });
+          social.transitionDuty(seed,proofState.deliveryId,'fulfilled',{
+            timestamp:'1200-06-12 09:10:00',actor:protagonist,relationship,reputationTargets,
+            externalRef:{type:'duty',id:proofState.deliveryId},
+            summary:'The promised goods were delivered.'
+          });
+        }else if(index===2){
+          social.recordEvent(seed,{
+            type:'promise-broken',timestamp:'1200-06-12 10:00:00',
+            actor:protagonist,relationship,reputationTargets,
+            externalRef:{type:'promise',id:'smith-promise-broken-001'},
+            summary:'A clear promise to the smith was broken.'
+          });
+          social.transitionDuty(seed,proofState.toolsId,'breached',{
+            timestamp:'1200-06-12 10:05:00',actor:protagonist,relationship,reputationTargets,
+            externalRef:{type:'duty',id:proofState.toolsId},
+            summary:'The borrowed tools were not returned as promised.'
+          });
+        }
+
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#socialStateProof');
+        if(!section||!root)return {ok:false,error:'social-proof-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=social.renderDebugPanel(seed,smith.id,root);
+        root.scrollIntoView({block:'start'});
+
+        const integration=rendered?.integration||{};
+        const verify=social.proof(seed);
+        return {
+          ok:Boolean(verify.pass),
+          index,
+          smithId:smith.id,
+          profession:smith.profession,
+          trust:rendered?.relationship?.values?.trust??null,
+          suspicion:rendered?.relationship?.values?.suspicion??null,
+          reputationAverage:rendered?.verification?social.dialogueContext(seed,smith.id).reputationAverage:null,
+          dialogueTone:integration.dialogueTone||null,
+          dialogueSource:integration.dialogueSource||null,
+          adviceDecision:integration.adviceDecision||null,
+          adviceSource:integration.adviceSource||null,
+          adviceAcceptability:integration.acceptability??null,
+          dutyConflictAcceptability:integration.dutyConflictAcceptability??null,
+          dutyStatuses:rendered?.duties?.map(d=>d.status)||[],
+          eventCount:verify.eventCount,
+          dutyCount:verify.dutyCount
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Social state proof frame failed: {result}")
+    return (
+        f"social-state:{frame_index}:{result.get('profession')}:{result.get('trust')}:"
+        f"{result.get('dialogueTone')}:{result.get('adviceDecision')}"
+    )
+
+
 def _show_advisor_channel_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -2894,7 +3077,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3020,6 +3203,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_advice_resolution_proof(driver,frame_index)
         return _show_advice_resolution_proof(driver,frame_index)
+    if scenario == "wp-s005-005":
+        if frame_index == 4:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_social_state_proof(driver,frame_index)
+        return _show_social_state_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3054,6 +3242,70 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s005-005":
+        if len(frames) < 5:
+            raise RuntimeError("wp-s005-005 requires five social-state evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:5]]
+        proofs=[build.get("socialState") or {} for build in builds]
+        panels=[build.get("socialStatePanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Social-state evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Social state mutated Protagonist world position: {protagonists}")
+        for index,proof in enumerate(proofs,start=1):
+            required={
+                "pass":True,
+                "relationshipsValid":True,
+                "reputationsValid":True,
+                "dutiesValid":True,
+                "deterministicEvents":True,
+                "replayStable":True,
+                "storageRoundTrip":True,
+                "reputationScopeCoverage":True,
+                "dutyStatusCoverage":True,
+                "eventResponseCoverage":True,
+                "simulationBacked":True,
+                "directAllianceEnemyState":False,
+                "worldAuthorityCreated":False,
+                "resourcesCreated":False,
+            }
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Social-state proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("relationshipCount") or 0)<1 or int(proof.get("reputationCount") or 0)<5 or int(proof.get("dutyCount") or 0)<3:
+                raise RuntimeError(f"Social-state proof is incomplete in frame {index}: {proof}")
+
+        if any(panel.get("profession")!="smith" for panel in panels):
+            raise RuntimeError(f"Social proof did not target the deterministic smith resident: {panels}")
+        required_scopes=sorted(["role","house","guild","family","settlement"])
+        for panel in panels:
+            if sorted(panel.get("reputationScopes") or [])!=required_scopes:
+                raise RuntimeError(f"Social reputation scopes are incomplete: {panel}")
+            statuses=panel.get("dutyStatuses") or []
+            if not all(state in statuses for state in ["active","fulfilled","breached"]):
+                raise RuntimeError(f"Social duty states are not simultaneously inspectable: {panel}")
+
+        trusts=[float(panel.get("trust") or 0) for panel in panels]
+        suspicions=[float(panel.get("suspicion") or 0) for panel in panels]
+        if not (trusts[1]>trusts[0] and trusts[2]<trusts[1]):
+            raise RuntimeError(f"Trust did not rise after truthful/helpful history then fall after broken obligations: {trusts}")
+        if not suspicions[2]>suspicions[1]:
+            raise RuntimeError(f"Suspicion did not increase after broken promise/duty: {suspicions}")
+        if panels[1].get("dialogueTone")!="friendly" or panels[2].get("dialogueTone") not in {"guarded","hostile"}:
+            raise RuntimeError(f"Persistent relationship/reputation did not affect dialogue tone as expected: {panels}")
+        if panels[1].get("adviceDecision")!="accepted" or panels[2].get("adviceDecision")!="rejected":
+            raise RuntimeError(f"Persistent social state did not affect advice outcome as expected: {panels}")
+        if not all(panel.get("eventCount",0)>=8 for panel in panels[2:]):
+            raise RuntimeError(f"Social event history lost records: {panels}")
+
+        before=proofs[3].get("snapshot") or {}
+        after=proofs[4].get("snapshot") or {}
+        if json.dumps(before,sort_keys=True)!=json.dumps(after,sort_keys=True):
+            raise RuntimeError("Social state changed after page reload")
+        return
+
     if scenario == "wp-s005-004":
         if len(frames) < 5:
             raise RuntimeError("wp-s005-004 requires five advice resolution evidence frames")
@@ -5505,12 +5757,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
