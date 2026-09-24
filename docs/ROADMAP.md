@@ -56,6 +56,8 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-004` — Persistent PlayCanvas Scene Graph + Navigation Hot-Path Elimination — COMPLETED
 - `WP-S003-006-005` — 3D Culling, Static Batching + Hardware Instancing — COMPLETED
 - `WP-S003-006-006` — Detailed 2D Tree Plane Presentation + Instancing
+- `WP-S003-006-007` — Low-Poly Chunk Heightfield Terrain + Shared Elevation Anchoring
+- `WP-S003-006-008` — Low-Cost Terrain Surface Micro-Relief + Material Depth
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
