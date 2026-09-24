@@ -100,6 +100,7 @@ SCENARIOS = {
     "wp-s006-002",
     "wp-s006-003",
     "wp-s006-004",
+    "wp-s006-005",
     "playcanvas-root-cutover",
 }
 
@@ -152,6 +153,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s006-002": 5,
     "wp-s006-003": 5,
     "wp-s006-004": 5,
+    "wp-s006-005": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -362,6 +364,42 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        settlementArchetype: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.SettlementArchetypes?.proof
+              ? window.SettlementArchetypes.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        settlementArchetypePanel: (() => {
+          const root=document.querySelector("#settlementArchetypeProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),
+            planIndex:Number(root.dataset.planIndex||0),
+            planId:root.dataset.planId||null,
+            revision:root.dataset.revision||null,
+            reason:root.dataset.reason||null,
+            classId:root.dataset.classId||null,
+            countryId:root.dataset.countryId||null,
+            regionId:root.dataset.regionId||null,
+            context:root.dataset.context||null,
+            planning:root.dataset.planning||null,
+            market:Number(root.dataset.market||0),
+            defense:Number(root.dataset.defense||0),
+            port:Number(root.dataset.port||0),
+            coastal:root.dataset.coastal==="true",
+            name:root.querySelector("#settlementArchetypeName")?.textContent?.trim()||null,
+            population:root.querySelector("#settlementArchetypePopulation")?.textContent?.trim()||null,
+            contextText:root.querySelector("#settlementArchetypeContext")?.textContent?.trim()||null,
+            tagCount:root.querySelectorAll("#settlementArchetypeTags .diplomacy-agreement").length,
+            weightCount:root.querySelectorAll("#settlementArchetypeWeights .region-profile-bar").length,
+            comparisonRows:root.querySelectorAll("#settlementArchetypeComparison li").length,
+          };
         })(),
         countryRelations: (() => {
           try {
@@ -2065,6 +2103,51 @@ def _show_advice_resolution_proof(driver, frame_index: int) -> str:
     )
 
 
+def _show_settlement_archetype_proof(driver, frame_index: int) -> str:
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const settlements=window.SettlementArchetypes;
+        if(!campaign?.seed||!settlements||!window.CountryProfile||!window.RegionProfile||!window.PoliticalGeography||!window.GeographyFoundation){
+          return {ok:false,error:'settlement-archetypes-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=settlements.proof(seed);
+        if(!proof.pass)return {ok:false,error:'settlement-archetypes-proof-failed',proof};
+        const count=proof.representatives?.length||0;
+        if(count!==5)return {ok:false,error:'settlement-archetypes-representatives-missing',count};
+        const requested=index===5?0:index%count;
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#settlementArchetypeProof');
+        if(!section||!root)return {ok:false,error:'settlement-archetypes-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=settlements.renderDebugPanel(seed,requested,root);
+        root.scrollIntoView({block:'start'});
+        const p=rendered?.plan;
+        return {
+          ok:Boolean(rendered?.verification?.pass),
+          index,requested,count,
+          planId:p?.id||null,revision:p?.revision||null,reason:rendered?.selected?.reason||null,
+          classId:p?.classId||null,countryId:p?.countryId||null,regionId:p?.regionId||null,
+          context:root.dataset.context||null,planning:root.dataset.planning||null,
+          market:p?.tradeMarketTendency??null,defense:p?.defenseTendency??null,
+          port:p?.subtypes?.weights?.port??null,coastal:p?.inputs?.local?.coastalAccess??null,
+          tags:p?.subtypes?.tags||[],population:p?.population?.planned??null
+        };
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Settlement archetype proof frame failed: {result}")
+    return (
+        f"settlement-archetype:{frame_index}:{result.get('reason')}:{result.get('classId')}:"
+        f"market={result.get('market')}:defense={result.get('defense')}"
+    )
+
+
 def _show_country_relations_proof(driver, frame_index: int) -> str:
     result = driver.execute_script(
         """
@@ -3446,7 +3529,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -3597,6 +3680,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_country_relations_proof(driver,frame_index)
         return _show_country_relations_proof(driver,frame_index)
+    if scenario == "wp-s006-005":
+        if frame_index == 5:
+            action=_reload_current_build(driver)
+            return action+"+"+_show_settlement_archetype_proof(driver,frame_index)
+        return _show_settlement_archetype_proof(driver,frame_index)
     if scenario == "wp-s003-008-001":
         actions = {
             1: lambda: _drag_canvas(driver, -120, 0),
@@ -3631,6 +3719,62 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s006-005":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s006-005 requires six settlement-archetype evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        proofs=[build.get("settlementArchetype") or {} for build in builds]
+        panels=[build.get("settlementArchetypePanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"Settlement evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"Settlement planner mutated Protagonist world position: {protagonists}")
+        required={
+            "pass":True,"deterministic":True,"timeIndependent":True,"numericValid":True,
+            "geographyValid":True,"physicalConstraints":True,"classSupport":True,"capitalScale":True,
+            "contextComplete":True,"countryRegionTerrainInfluence":True,"cloneAvoidance":True,
+            "genericPlanner":True,"lazyQueryable":True,"authorityPreserved":True,"representativeCoverage":True,
+            "terrainMutation":False,"resourceMutation":False,"npcPopulationCreated":False,
+            "physicalLayoutCreated":False,"liveEconomyCreated":False,"renderDependency":False,"fullWorldMaterialized":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"Settlement-archetype proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("planCount") or 0)<12 or int(proof.get("representativeCount") or 0)!=5:
+                raise RuntimeError(f"Settlement plan sample set insufficient in frame {index}: {proof}")
+            if int(proof.get("classCount") or 0)<3 or int(proof.get("subtypeCount") or 0)<4:
+                raise RuntimeError(f"Settlement class/subtype diversity insufficient in frame {index}: {proof}")
+
+        expected=["agricultural","mining","trade","frontier-fortified","capital"]
+        if [panel.get("reason") for panel in panels[:5]]!=expected:
+            raise RuntimeError(f"Settlement evidence roles are incomplete: {panels[:5]}")
+        first_five=panels[:5]
+        if len({panel.get("planId") for panel in first_five})!=5:
+            raise RuntimeError(f"Settlement evidence did not inspect five distinct examples: {first_five}")
+        if len({panel.get("context") for panel in first_five})<4 or len({panel.get("planning") for panel in first_five})<4:
+            raise RuntimeError(f"Settlement contexts/planning outputs did not visibly diverge: {first_five}")
+        if panels[4].get("classId")!="national-capital":
+            raise RuntimeError(f"Capital evidence is not national-capital scale: {panels[4]}")
+        if panels[0].get("classId") not in {"hamlet","village"}:
+            raise RuntimeError(f"Agricultural evidence is not village-scale: {panels[0]}")
+        if panels[2].get("classId") not in {"town","city"}:
+            raise RuntimeError(f"Trade evidence is not town/city scale: {panels[2]}")
+        for panel in panels:
+            if not panel.get("open") or int(panel.get("comparisonRows") or 0)!=5:
+                raise RuntimeError(f"Settlement panel/comparison incomplete: {panel}")
+            if int(panel.get("tagCount") or 0)<1 or int(panel.get("weightCount") or 0)!=7:
+                raise RuntimeError(f"Settlement tags/weights incomplete: {panel}")
+            if panel.get("port",0)>0 and not panel.get("coastal"):
+                raise RuntimeError(f"Settlement port weighting violated physical coastal constraint: {panel}")
+        if panels[0].get("planId")!=panels[5].get("planId") or panels[0].get("revision")!=panels[5].get("revision"):
+            raise RuntimeError("Settlement archetype changed after reload")
+        if json.dumps(proofs[0],sort_keys=True)!=json.dumps(proofs[5],sort_keys=True):
+            raise RuntimeError("Settlement-archetype foundation changed after reload")
+        return
+
     if scenario == "wp-s006-004":
         if len(frames) < 5:
             raise RuntimeError("wp-s006-004 requires five country-relations evidence frames")
@@ -6381,12 +6525,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
