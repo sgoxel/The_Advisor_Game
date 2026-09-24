@@ -20,7 +20,7 @@ function create({pc,device}={}){
     ready:false,preparationOnly:true,gpuTextureCount:0,sharedAtlas:true,
     detailGpuTextureCount:0,normalDetailGpuTextureCount:0,totalGpuTextureCount:0,
     detailTextureReady:false,detailTextureShared:true,detailTextureSourceKey:null,
-    normalDetailTextureReady:false,normalDetailTextureShared:true,normalDetailStrength:0.32,
+    normalDetailTextureReady:false,normalDetailTextureShared:true,normalDetailStrength:1.25,
     frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
     simulationAuthorityPreserved:true
   });
@@ -159,7 +159,7 @@ function create({pc,device}={}){
         const xx=(x+size)%size,yy=(y+size)%size,i=(yy*size+xx)*4;
         return (data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114)/255;
       };
-      const strength=0.32;
+      const strength=1.25;
       for(let y=0;y<size;y++)for(let x=0;x<size;x++){
         const dx=(heightAt(x+1,y)-heightAt(x-1,y))*strength;
         const dy=(heightAt(x,y+1)-heightAt(x,y-1))*strength;
@@ -225,7 +225,7 @@ function create({pc,device}={}){
       gpuTextureCount:1,sharedAtlas:true,preparationOnly:true,
       detailGpuTextureCount:1,normalDetailGpuTextureCount:1,totalGpuTextureCount:3,
       detailTextureReady:true,detailTextureShared:true,detailTextureSourceKey:detailSourceKey,
-      normalDetailTextureReady:true,normalDetailTextureShared:true,normalDetailStrength:0.32,
+      normalDetailTextureReady:true,normalDetailTextureShared:true,normalDetailStrength:1.25,
       microReliefMode:"shared-normal-map",microReliefGeometryVerticesAdded:0,microReliefMaterialVariantsAdded:0,
       heightfieldSurfaceMode:"shared-neutral-detail+shared-normal-detail+semantic-vertex-color",
       frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
