@@ -13,6 +13,7 @@ const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
 const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","developmentModeToggle","developmentDetails","gameDate","gameTime","campaignState","statusMessage",
+  "sceneLoadingOverlay","sceneLoadingTitle","sceneLoadingPhase","sceneLoadingRetry",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
   "rendererEngine","rendererEngineVersion","rendererBackend","rendererRequestedBackend","rendererWebgpuAvailable","rendererCanvasCount","rendererProjection","rendererEntityCount","rendererDrawCalls","rendererFrameTime","rendererRenderScale","rendererPixelRatio","rendererCanvasSize","rendererTextureCount","rendererSourceMode",
