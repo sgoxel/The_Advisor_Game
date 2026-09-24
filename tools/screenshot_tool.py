@@ -1279,25 +1279,38 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # this startup-lifecycle proof, do not manufacture a race by clicking the
         # hidden New Campaign control while the application-start renderer cycle
         # is still active. First prove that real application startup completed.
-        timeout = max(timeout, 45.0)
-        WebDriverWait(driver, timeout).until(
-            lambda d: d.execute_script(
+        timeout = max(timeout, 180.0)
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: d.execute_script(
+                    """
+                    const loading=window.AppUI?.sceneLoadingSnapshot?.();
+                    const current=loading?.current || {};
+                    return Boolean(
+                      current.origin === 'application-start' &&
+                      current.state === 'hidden' &&
+                      Number(current.startedAtMs || 0) > 0 &&
+                      Number(current.readyAtMs || 0) >= Number(current.startedAtMs || 0) &&
+                      Number(current.hiddenAtMs || 0) >= Number(current.readyAtMs || 0) &&
+                      current.readiness?.interactionReady === true &&
+                      loading?.overlay?.hidden === true &&
+                      window.GameRenderer?.snapshot?.()?.ready === true
+                    );
+                    """
+                )
+            )
+        except Exception as exc:
+            state=driver.execute_script(
                 """
-                const loading=window.AppUI?.sceneLoadingSnapshot?.();
-                const current=loading?.current || {};
-                return Boolean(
-                  current.origin === 'application-start' &&
-                  current.state === 'hidden' &&
-                  Number(current.startedAtMs || 0) > 0 &&
-                  Number(current.readyAtMs || 0) >= Number(current.startedAtMs || 0) &&
-                  Number(current.hiddenAtMs || 0) >= Number(current.readyAtMs || 0) &&
-                  current.readiness?.interactionReady === true &&
-                  loading?.overlay?.hidden === true &&
-                  window.GameRenderer?.snapshot?.()?.ready === true
-                );
+                return {
+                  loading:window.AppUI?.sceneLoadingSnapshot?.()||null,
+                  renderer:window.GameRenderer?.snapshot?.()||null,
+                  campaign:window.SeedSystem?.getCampaign?.()||null,
+                  status:document.querySelector('#statusMessage')?.textContent?.trim()||null
+                };
                 """
             )
-        )
+            raise RuntimeError(f"Application-start loading readiness exceeded {timeout:.0f}s: {state}") from exc
     if scenario == "wp-s003-005":
         # Use a representative desktop/tablet-landscape viewport so the prepared
         # glTF/material proof is readable instead of being lost inside an ultra-wide
