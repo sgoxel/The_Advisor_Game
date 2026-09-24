@@ -15,11 +15,12 @@ const FALLBACK=Object.freeze({
 
 function create({pc,device}={}){
   if(!pc||!device)throw new Error("PlayCanvasTerrainTextureAtlas requires pc/device");
-  let texture=null,detailTexture=null,signature="",prepareCalls=0,atlasBuilds=0,cacheReuses=0;
+  let texture=null,detailTexture=null,normalDetailTexture=null,signature="",prepareCalls=0,atlasBuilds=0,cacheReuses=0;
   let lastStats=Object.freeze({
     ready:false,preparationOnly:true,gpuTextureCount:0,sharedAtlas:true,
-    detailGpuTextureCount:0,totalGpuTextureCount:0,
+    detailGpuTextureCount:0,normalDetailGpuTextureCount:0,totalGpuTextureCount:0,
     detailTextureReady:false,detailTextureShared:true,detailTextureSourceKey:null,
+    normalDetailTextureReady:false,normalDetailTextureShared:true,normalDetailStrength:0.32,
     frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
     simulationAuthorityPreserved:true
   });
@@ -145,6 +146,35 @@ function create({pc,device}={}){
       }
       detailCtx.putImageData(image,0,0);
     }catch(_){}
+    // Derive one shared tangent-space normal texture from the already-prepared
+    // neutral terrain detail. This is preparation-time work only: no per-frame
+    // decode/rasterization, no extra geometry, and no per-tile material variants.
+    const normalCanvas=document.createElement("canvas");
+    normalCanvas.width=size;normalCanvas.height=size;
+    const normalCtx=normalCanvas.getContext("2d",{alpha:false});
+    if(!normalCtx)throw new Error("Terrain normal-detail canvas context unavailable");
+    try{
+      const source=detailCtx.getImageData(0,0,size,size),out=normalCtx.createImageData(size,size);
+      const data=source.data,dst=out.data,heightAt=(x,y)=>{
+        const xx=(x+size)%size,yy=(y+size)%size,i=(yy*size+xx)*4;
+        return (data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114)/255;
+      };
+      const strength=0.32;
+      for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+        const dx=(heightAt(x+1,y)-heightAt(x-1,y))*strength;
+        const dy=(heightAt(x,y+1)-heightAt(x,y-1))*strength;
+        const inv=1/Math.hypot(dx,dy,1),i=(y*size+x)*4;
+        dst[i]=Math.round(((-dx*inv)*0.5+0.5)*255);
+        dst[i+1]=Math.round(((dy*inv)*0.5+0.5)*255);
+        dst[i+2]=Math.round(((1*inv)*0.5+0.5)*255);
+        dst[i+3]=255;
+      }
+      normalCtx.putImageData(out,0,0);
+    }catch(_){
+      normalCtx.fillStyle="rgb(128,128,255)";
+      normalCtx.fillRect(0,0,size,size);
+    }
+
     const nextDetail=new pc.Texture(device,{
       name:"terrain-shared-detail-"+nextSignature,
       width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,
@@ -152,6 +182,13 @@ function create({pc,device}={}){
       addressU:pc.ADDRESS_REPEAT,addressV:pc.ADDRESS_REPEAT
     });
     nextDetail.setSource(detailCanvas);
+    const nextNormalDetail=new pc.Texture(device,{
+      name:"terrain-shared-normal-detail-"+nextSignature,
+      width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,
+      mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,
+      addressU:pc.ADDRESS_REPEAT,addressV:pc.ADDRESS_REPEAT
+    });
+    nextNormalDetail.setSource(normalCanvas);
 
     const next=new pc.Texture(device,{
       name:"terrain-surface-atlas-"+nextSignature,
@@ -162,10 +199,11 @@ function create({pc,device}={}){
       addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE
     });
     next.setSource(canvas);
-    const previous=texture,previousDetail=detailTexture;
-    texture=next;detailTexture=nextDetail;signature=nextSignature;atlasBuilds++;
+    const previous=texture,previousDetail=detailTexture,previousNormalDetail=normalDetailTexture;
+    texture=next;detailTexture=nextDetail;normalDetailTexture=nextNormalDetail;signature=nextSignature;atlasBuilds++;
     if(previous&&previous!==next)try{previous.destroy()}catch(_){}
     if(previousDetail&&previousDetail!==nextDetail)try{previousDetail.destroy()}catch(_){}
+    if(previousNormalDetail&&previousNormalDetail!==nextNormalDetail)try{previousNormalDetail.destroy()}catch(_){}
 
     const stats=sourceStats();
     lastStats=Object.freeze({
@@ -185,9 +223,11 @@ function create({pc,device}={}){
       svgFallbackCount:Number(stats.terrainSvgFallbackCount||0),
       prepareCalls,atlasBuilds,cacheReuses,
       gpuTextureCount:1,sharedAtlas:true,preparationOnly:true,
-      detailGpuTextureCount:1,totalGpuTextureCount:2,
+      detailGpuTextureCount:1,normalDetailGpuTextureCount:1,totalGpuTextureCount:3,
       detailTextureReady:true,detailTextureShared:true,detailTextureSourceKey:detailSourceKey,
-      heightfieldSurfaceMode:"shared-neutral-detail+semantic-vertex-color",
+      normalDetailTextureReady:true,normalDetailTextureShared:true,normalDetailStrength:0.32,
+      microReliefMode:"shared-normal-map",microReliefGeometryVerticesAdded:0,microReliefMaterialVariantsAdded:0,
+      heightfieldSurfaceMode:"shared-neutral-detail+shared-normal-detail+semantic-vertex-color",
       frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
       simulationAuthorityPreserved:true
     });
@@ -195,14 +235,16 @@ function create({pc,device}={}){
   }
   function getTexture(){return texture}
   function getDetailTexture(){return detailTexture}
+  function getNormalDetailTexture(){return normalDetailTexture}
   function stats(){return lastStats}
   function destroy(){
     if(texture)try{texture.destroy()}catch(_){}
     if(detailTexture)try{detailTexture.destroy()}catch(_){}
-    texture=null;detailTexture=null;signature="";
-    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0,detailGpuTextureCount:0,totalGpuTextureCount:0,detailTextureReady:false});
+    if(normalDetailTexture)try{normalDetailTexture.destroy()}catch(_){}
+    texture=null;detailTexture=null;normalDetailTexture=null;signature="";
+    lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0,detailGpuTextureCount:0,normalDetailGpuTextureCount:0,totalGpuTextureCount:0,detailTextureReady:false,normalDetailTextureReady:false});
   }
-  return Object.freeze({prepare,uvRect,texture:getTexture,detailTexture:getDetailTexture,stats,destroy,coreTypes:CORE_TYPES});
+  return Object.freeze({prepare,uvRect,texture:getTexture,detailTexture:getDetailTexture,normalDetailTexture:getNormalDetailTexture,stats,destroy,coreTypes:CORE_TYPES});
 }
 window.PlayCanvasTerrainTextureAtlas=Object.freeze({create,coreTypes:CORE_TYPES});
 })();
