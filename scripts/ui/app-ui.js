@@ -2358,6 +2358,12 @@ function renderRegionalSettlementSimulationProof(){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.RegionalSettlementSimulation.renderDebugPanel(seed,document.getElementById("regionalSettlementSimulationProof"));
 }
+function renderNpcLifecycleProof(){
+  if(typeof window.NPCLifecycle?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.NPCLifecycle.renderDebugPanel(seed,document.getElementById("npcLifecycleProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -2384,6 +2390,7 @@ function renderStatic(){
   renderEventSchedulerProof();
   renderGlobalCountrySimulationProof();
   renderRegionalSettlementSimulationProof();
+  renderNpcLifecycleProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2452,6 +2459,7 @@ async function startNewCampaign(){
   EventScheduler?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   RegionalSettlementSimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  NPCLifecycle?.resetRuntime?.(result.seed||SeedSystem.getCampaign()?.seed);
   lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
@@ -2494,6 +2502,7 @@ async function restartCampaign(){
   EventScheduler?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   GlobalCountrySimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   RegionalSettlementSimulation?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
+  NPCLifecycle?.resetRuntime?.(result.seed||SeedSystem.getCampaign()?.seed);
   lastGlobalAggregateMinuteKey=null;
   resetCameraForCampaign();
   ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
@@ -2641,6 +2650,8 @@ window.AppUI=Object.freeze({
   globalCountrySimulationVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.GlobalCountrySimulation?GlobalCountrySimulation.proof(campaign.seed):null;},
   refreshRegionalSettlementSimulation:()=>renderRegionalSettlementSimulationProof(),
   regionalSettlementSimulationVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.RegionalSettlementSimulation?RegionalSettlementSimulation.proof(campaign.seed):null;},
+  refreshNpcLifecycle:()=>renderNpcLifecycleProof(),
+  npcLifecycleVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.NPCLifecycle?NPCLifecycle.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{

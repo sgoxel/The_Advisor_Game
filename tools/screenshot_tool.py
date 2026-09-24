@@ -121,6 +121,7 @@ SCENARIOS = {
     "wp-s007-004",
     "wp-s007-005",
     "wp-s007-006",
+    "wp-s007-007",
     "playcanvas-root-cutover",
 }
 
@@ -194,6 +195,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s007-004": 2,
     "wp-s007-005": 5,
     "wp-s007-006": 6,
+    "wp-s007-007": 6,
     "playcanvas-root-cutover": 3,
 }
 
@@ -483,6 +485,43 @@ return (() => {
           } catch (error) {
             return {error:String(error)};
           }
+        })(),
+        npcLifecycle: (() => {
+          try {
+            const campaign=window.SeedSystem?.getCampaign?.();
+            return campaign&&window.NPCLifecycle?.proof
+              ? window.NPCLifecycle.proof(campaign.seed)
+              : null;
+          } catch (error) {
+            return {error:String(error)};
+          }
+        })(),
+        npcLifecyclePanel: (() => {
+          const root=document.querySelector("#npcLifecycleProof");
+          if(!root)return null;
+          return {
+            present:true,open:Boolean(root.open),pass:root.dataset.pass==="true",
+            lastStep:Number(root.dataset.lastStep||0),
+            identityPopulation:Number(root.dataset.identityPopulation||0),
+            activeExactPeak:Number(root.dataset.activeExactPeak||0),
+            dormantIdentityCount:Number(root.dataset.dormantIdentityCount||0),
+            boundedExact:root.dataset.boundedExact==="true",
+            firstActivity:root.dataset.firstActivity||null,
+            laterActivity:root.dataset.laterActivity||null,
+            scheduleChanged:root.dataset.scheduleChanged==="true",
+            replayedPathSteps:Number(root.dataset.replayedPathSteps||0),
+            injuryCommitted:root.dataset.injuryCommitted==="true",
+            injuryPersistent:root.dataset.injuryPersistent==="true",
+            injuryActivity:root.dataset.injuryActivity||null,
+            persistentRevision:Number(root.dataset.persistentRevision||0),
+            reloadSignatureBefore:root.dataset.reloadSignatureBefore||null,
+            reloadSignatureAfter:root.dataset.reloadSignatureAfter||null,
+            reloadDeterministic:root.dataset.reloadDeterministic==="true",
+            stableAfterCamera:root.dataset.stableAfterCamera==="true",
+            noSpriteDependency:root.dataset.noSpriteDependency==="true",
+            npcDeltaCount:Number(root.dataset.npcDeltaCount||0),
+            checkStates:Array.from(root.querySelectorAll(".check b")).map(node=>node.textContent?.trim()||"")
+          };
         })(),
         regionalSettlementSimulationPanel: (() => {
           const root=document.querySelector("#regionalSettlementSimulationProof");
@@ -3059,6 +3098,45 @@ def _show_regional_settlement_simulation_proof(driver, frame_index: int) -> str:
         f"regional-settlement:{frame_index}:step={evidence.get('lastStep')}:"
         f"settlement={evidence.get('agriculturalRevision')}/{evidence.get('miningRevision')}:"
         f"lazy={evidence.get('lazyConsumed')}:long={evidence.get('longAbsenceRevisionAfter')}"
+    )
+
+
+def _show_npc_lifecycle_proof(driver, frame_index: int) -> str:
+    camera_action = _drag_canvas(driver, 120, 0) if frame_index == 5 else None
+    result = driver.execute_script(
+        """
+        const index=Number(arguments[0]);
+        const campaign=window.SeedSystem?.getCampaign?.();
+        const lifecycle=window.NPCLifecycle;
+        if(!campaign?.seed||!lifecycle||!window.WorldState||!window.WorldContext||!window.DailyActivity){
+          return {ok:false,error:'npc-lifecycle-unavailable'};
+        }
+        const seed=campaign.seed;
+        const proof=lifecycle.proof(seed);
+        if(!proof.pass)return {ok:false,error:'npc-lifecycle-proof-failed',proof};
+        const step=lifecycle.evidenceStep(seed,index);
+        if(!step?.ok)return {ok:false,error:'npc-lifecycle-evidence-step-failed',step};
+        const section=document.querySelector('#developmentDetails');
+        const root=document.querySelector('#npcLifecycleProof');
+        if(!section||!root)return {ok:false,error:'npc-lifecycle-ui-missing'};
+        section.hidden=false;
+        document.body.classList.add('development-mode');
+        root.open=true;
+        const rendered=lifecycle.renderDebugPanel(seed,root);
+        root.scrollIntoView({block:'start'});
+        return {ok:Boolean(rendered?.verification?.pass),index,proof,evidence:step.evidence||null,snapshot:step.snapshot||null};
+        """,
+        frame_index,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"NPC lifecycle proof frame failed: {result}")
+    prefix = f"{camera_action}+" if camera_action else ""
+    evidence=result.get("evidence") or {}
+    return (
+        prefix+
+        f"npc-lifecycle:{frame_index}:step={evidence.get('lastStep')}:"
+        f"exact={evidence.get('activeExactPeak')}:dormant={evidence.get('dormantIdentityCount')}:"
+        f"injury={evidence.get('injuryPersistent')}:reload={evidence.get('reloadDeterministic')}"
     )
 
 
@@ -5794,6 +5872,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _show_global_country_simulation_proof(driver,frame_index)
     if scenario == "wp-s007-006":
         return _show_regional_settlement_simulation_proof(driver,frame_index)
+    if scenario == "wp-s007-007":
+        return _show_npc_lifecycle_proof(driver,frame_index)
     if scenario == "wp-s007-002":
         if frame_index == 5:
             action=_reload_current_build(driver)
@@ -6581,6 +6661,77 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
 
 
 
+
+
+    if scenario == "wp-s007-007":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s007-007 requires six NPC lifecycle evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        proofs=[build.get("npcLifecycle") or {} for build in builds]
+        panels=[build.get("npcLifecyclePanel") or {} for build in builds]
+        seeds=[build.get("campaignSeed") for build in builds]
+        protagonists=[build.get("protagonistLocation") for build in builds]
+        if len(set(seeds))!=1 or not seeds[0]:
+            raise RuntimeError(f"NPC lifecycle evidence changed/missed Campaign SEED: {seeds}")
+        if len(set(protagonists))!=1 or not protagonists[0]:
+            raise RuntimeError(f"NPC lifecycle mutated Protagonist position: {protagonists}")
+        required={
+            "pass":True,"manyPersistentIdentities":True,"deterministicMaterialization":True,
+            "validPlacement":True,"stableIdentityRef":True,"scheduleReconstruction":True,
+            "missedPathReplay":False,"persistentExceptionalState":True,
+            "meaningfulDematerializationCommit":True,"reconciliationAware":True,
+            "exactCountBounded":True,"identityIndependentOfSprite":True,
+            "rendererDependency":False,"spriteDependency":False,"wallClockDependency":False,
+            "unrelatedRandomStreamConsumption":False,
+        }
+        for index,proof in enumerate(proofs,start=1):
+            for key,value in required.items():
+                if proof.get(key)!=value:
+                    raise RuntimeError(f"NPC lifecycle proof {key} mismatch in frame {index}: {proof}")
+            if int(proof.get("maxExactActive") or 0)>24:
+                raise RuntimeError(f"NPC lifecycle exact cap exceeds 24: {proof}")
+            if int(proof.get("identityPopulation") or 0)<=int(proof.get("maxExactActive") or 0):
+                raise RuntimeError(f"NPC lifecycle did not demonstrate dormant identity population: {proof}")
+
+        bounded=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=1),None)
+        if not bounded or bounded.get("boundedExact") is not True:
+            raise RuntimeError(f"Exact NPC set was not bounded: {panels}")
+        if int(bounded.get("activeExactPeak") or 0)<=0 or int(bounded.get("activeExactPeak") or 0)>24:
+            raise RuntimeError(f"Exact NPC peak invalid: {bounded}")
+        if int(bounded.get("dormantIdentityCount") or 0)<=0:
+            raise RuntimeError(f"No dormant persistent identities remained: {bounded}")
+
+        dormant=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=2),None)
+        if not dormant or dormant.get("scheduleChanged") is not True or int(dormant.get("replayedPathSteps") or 0)!=0:
+            raise RuntimeError(f"Dormant schedule reconstruction failed or replayed path steps: {panels}")
+        if not dormant.get("firstActivity") or not dormant.get("laterActivity") or dormant.get("firstActivity")==dormant.get("laterActivity"):
+            raise RuntimeError(f"Dormant NPC did not reappear in a different schedule-consistent activity: {dormant}")
+
+        injury=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=3),None)
+        if not injury or injury.get("injuryCommitted") is not True or injury.get("injuryPersistent") is not True:
+            raise RuntimeError(f"Persistent injury did not survive dormancy: {panels}")
+        if injury.get("injuryActivity")!="recovering-injury" or int(injury.get("persistentRevision") or 0)<=0:
+            raise RuntimeError(f"Exceptional injury did not override default schedule: {injury}")
+
+        reload=next((panel for panel in panels if int(panel.get("lastStep") or 0)>=4),None)
+        if not reload or reload.get("reloadDeterministic") is not True:
+            raise RuntimeError(f"Same WorldState/time did not rematerialize identically after runtime reload: {panels}")
+        if not reload.get("reloadSignatureBefore") or reload.get("reloadSignatureBefore")!=reload.get("reloadSignatureAfter"):
+            raise RuntimeError(f"Reload materialization signatures differ: {reload}")
+        if int(reload.get("npcDeltaCount") or 0)<1:
+            raise RuntimeError(f"Persistent NPC state was not represented by sparse NPC CampaignDelta: {reload}")
+
+        final=next((panel for panel in reversed(panels) if int(panel.get("lastStep") or 0)>=5),None)
+        if not final or final.get("stableAfterCamera") is not True or final.get("noSpriteDependency") is not True:
+            raise RuntimeError(f"Camera/sprite state influenced NPC identity or materialization: {panels}")
+
+        for index,panel in enumerate(panels,start=1):
+            if not panel.get("present") or not panel.get("pass"):
+                raise RuntimeError(f"NPC lifecycle inspector incomplete in frame {index}: {panel}")
+            states=panel.get("checkStates") or []
+            if len(states)!=6 or any(state!="PASS" for state in states):
+                raise RuntimeError(f"NPC lifecycle panel checks did not all pass in frame {index}: {panel}")
+        return
 
     if scenario == "wp-s007-006":
         if len(frames) < 6:

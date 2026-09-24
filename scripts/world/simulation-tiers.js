@@ -92,7 +92,17 @@ function compactAggregate(ctx){
     contextRevision:ctx.revision,contextSignature:ctx.signature
   });
 }
-function exactHandles(seed,planValue,ctx){
+function exactHandles(seed,planValue,ctx,t){
+  const timestamp=window.GameTime?.toTimestampKey?.(t)||null;
+  if(timestamp&&window.NPCLifecycle?.materializeSettlement){
+    const materialized=NPCLifecycle.materializeSettlement(seed,planValue,timestamp,{limit:BUDGETS.exactNpcHandles});
+    return Object.freeze(materialized.exactStates.map(item=>Object.freeze({
+      id:item.id,identityId:item.identityId,x:item.position.x,y:item.position.y,
+      activitySlot:item.activityState,routeIntent:item.routeIntent,occupancy:item.occupancy,
+      buildingId:item.buildingId,persistentRevision:item.persistentRevision,
+      reconstructed:item.reconstructed,replayedPathSteps:item.replayedPathSteps
+    })));
+  }
   const count=Math.min(BUDGETS.exactNpcHandles,Math.max(0,Number(ctx.settlement?.population||0)));
   const handles=[];
   for(let i=0;i<count;i++){
@@ -101,9 +111,7 @@ function exactHandles(seed,planValue,ctx){
     const p=WorldCoordinates.add(planValue.center,String(ox),String(oy));
     handles.push(Object.freeze({
       id:"EXACT|"+planValue.id+"|"+String(i).padStart(3,"0"),
-      x:p.x,y:p.y,
-      activitySlot:(h>>>8)%8,
-      routeIntent:["hold","work","home","market"][(h>>>12)%4],
+      x:p.x,y:p.y,activitySlot:(h>>>8)%8,routeIntent:["hold","work","home","market"][(h>>>12)%4],
       occupancy:(h>>>16)%3===0?"interior":"outdoor"
     }));
   }
@@ -133,6 +141,9 @@ function materializeRecord(seed,planValue,desired,t,previous){
   }catch(_){}
   const ctx=WorldContext.resolve(seed,planValue,t);
   if(!ctx)return null;
+  if(previous?.tier==="exact"&&desired.tier!=="exact"){
+    try{window.NPCLifecycle?.releaseSettlement?.(seed,planValue.id)}catch(_){}
+  }
   const aggregate=compactAggregate(ctx);
   let local=null,exact=null;
   if(tierRank(desired.tier)>=tierRank("local")){
@@ -145,7 +156,7 @@ function materializeRecord(seed,planValue,desired,t,previous){
     });
   }
   if(desired.tier==="exact")exact=deepFreeze({
-    npcHandles:exactHandles(seed,planValue,ctx),
+    npcHandles:exactHandles(seed,planValue,ctx,t),
     contextSignature:ctx.signature,
     authoritativeSource:"WorldState + WorldContext"
   });

@@ -1249,6 +1249,32 @@
     </div>
   </details>
 
+  <details id="npcLifecycleProof">
+    <summary>WP-S007-007 NPC Materialization, Dematerialization + Schedule Reconstruction</summary>
+    <div class="accordion-content technical-info">
+      <div class="detail-grid region-profile-grid">
+        <div><span>Persistent identity population</span><strong id="npcLifecyclePopulation">—</strong></div>
+        <div><span>Peak exact active</span><strong id="npcLifecycleExact">—</strong></div>
+        <div><span>Dormant identities</span><strong id="npcLifecycleDormant">—</strong></div>
+        <div><span>Evidence NPC</span><strong id="npcLifecycleSubject">—</strong></div>
+        <div><span>Dormancy schedule reconstruction</span><strong id="npcLifecycleSchedule">—</strong></div>
+        <div><span>Persistent exceptional state</span><strong id="npcLifecycleException">—</strong></div>
+        <div><span>Reload materialization signature</span><strong id="npcLifecycleReload">—</strong></div>
+        <div><span>Simulation authority</span><strong id="npcLifecycleAuthority">—</strong></div>
+      </div>
+      <section class="region-profile-section">
+        <h4>Current exact materializations</h4>
+        <ul id="npcLifecycleActiveRows" class="region-profile-comparison"></ul>
+      </section>
+      <div class="check"><span>Many stable NPC identities coexist with a hard-bounded exact active set</span><b id="vNpcLifecycleBounded">WAITING</b></div>
+      <div class="check"><span>Dormant NPCs reconstruct schedule state from fantasy time without replaying missed path steps</span><b id="vNpcLifecycleSchedule">WAITING</b></div>
+      <div class="check"><span>Meaningful exceptional state survives dematerialization and overrides ordinary schedule reconstruction</span><b id="vNpcLifecyclePersistent">WAITING</b></div>
+      <div class="check"><span>Same authoritative WorldState/time rematerializes the same exact NPC state after runtime reload</span><b id="vNpcLifecycleReload">WAITING</b></div>
+      <div class="check"><span>Materialized coordinates are walkable and reconciliation-aware for aggregate-to-exact handoff</span><b id="vNpcLifecyclePlacement">WAITING</b></div>
+      <div class="check"><span>NPC identity/existence is independent of sprites, camera and renderer state</span><b id="vNpcLifecycleRender">WAITING</b></div>
+    </div>
+  </details>
+
   <details>
     <summary>Development / Technical Information</summary>
     <div class="accordion-content technical-info">
@@ -1302,6 +1328,7 @@
 <script src="scripts/core/event-scheduler.js"></script>
 <script src="scripts/world/global-country-simulation.js"></script>
 <script src="scripts/world/regional-settlement-simulation.js"></script>
+<script src="scripts/world/npc-lifecycle.js"></script>
 <script src="scripts/world/character-memory.js"></script>
 <script src="scripts/world/social-state.js"></script>
 <script src="scripts/world/dialogue-context.js"></script>

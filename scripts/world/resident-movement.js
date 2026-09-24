@@ -170,6 +170,9 @@ function activeActivity(seed,state,when){
   if(proofContext?.active&&proofContext.residentId===state.residentId&&proofContext.sampleTime){
     return DailyActivity.resolveActionTarget(seed,residentById.get(state.residentId),proofContext.sampleTime);
   }
+  if(window.NPCLifecycle?.activityForResident){
+    try{return NPCLifecycle.activityForResident(seed,state.residentId,when)}catch(_){}
+  }
   return DailyActivity.resolveActionTarget(seed,residentById.get(state.residentId),when);
 }
 function ensureTarget(seed,state,activity){
