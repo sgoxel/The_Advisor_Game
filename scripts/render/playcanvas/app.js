@@ -1379,14 +1379,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const radii=terrainActiveRadii();
     const x=characterChunkCoordinate(point.x,size),y=characterChunkCoordinate(point.y,size);
     if(x<center.x-radii.x||x>center.x+radii.x||y<center.y-radii.y||y>center.y+radii.y)return false;
-    /* The current PlayCanvas stage presents authored village structures only near
-       the camera center. Keep normal NPC billboards in that same visual context
-       instead of drawing isolated sprites over otherwise empty prepared chunks.
-       This is presentation-only; Simulation coordinates are never changed. */
-    const cameraCenter=lastModel?.center;
-    if(!cameraCenter)return true;
-    const dx=safeDeltaTiles(point.x,cameraCenter.x),dy=safeDeltaTiles(point.y,cameraCenter.y);
-    return dx!==null&&dy!==null&&Math.abs(dx)<=8&&Math.abs(dy)<=8;
+    /* Active terrain already bounds character presentation to the prepared
+       gameplay area. Do not apply a smaller camera-center box here: the
+       PlayCanvas frustum/render path can cull genuinely off-screen billboards
+       without making on-screen NPCs pop near viewport edges. */
+    return true;
   }
   function syncCharacterBillboards(characters){
     if(!charactersRoot)return Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:characterTextures.size,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,suppressedCharacterCount:0,suppressedCharacterIds:Object.freeze([]),instances:Object.freeze([])});
