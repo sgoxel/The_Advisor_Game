@@ -861,3 +861,15 @@
 - Fresh screenshots showed landlocked Northfall at 0% maritime, prosperous Highford with strong trade/agriculture, coastal Oakvale with 45.7% water access and 43.8% maritime emphasis, and Blackwick with higher mineral potential/mining; reload reproduced Northfall revision CPF-3C1CF58E.
 - All 5 fresh screenshots were directly inspected. The profile inspector remains readable with no major clipping, overlap or broken layout. VISUAL 8.8/10 PASS.
 - Generic regression Visual Evidence run 35948606107 passed; GitHub Pages run 35948605770 successfully deployed the tested head.
+2026-09-24 06:16 +03:00 | WP-S006-003 | Region/Province Profiles + Terrain/Resource Identity
+- Replaced the previous region-name-only hierarchy label with an authoritative lazy RegionProfile entity while keeping PoliticalGeography as country ownership authority and GeographyFoundation tile terrain as the final local geographic authority.
+- Added stable region IDs/names, authoritative parent-country IDs, deterministic administrative seats, regional foundation revisions and fixed same-country CountryProfile revision linkage.
+- Added sampled terrain/biome mix, climate/elevation/moisture summary, agricultural suitability, timber availability, mineral potential, water access, transport accessibility, defensibility and flood/drought/rugged hazard tendencies.
+- Added regional prosperity modifier and seven geography-constrained specialization weights: agriculture, forestry, mining, trade, maritime, defense and craft.
+- Region specialization inherits the same CountryProfile strategic orientation but local geography/resources redirect the result; country, region and tile-terrain data remain independently queryable.
+- Region lookup remains lazy over stable 8,192-tile cells clipped by authoritative country ownership; regions do not create duplicate political ownership, mutate terrain/resources or start live regional economic simulation.
+- Added a Development Mode Region Profile inspector with region/country/seat metadata, terrain mix, resource context, regional specialization bars and same-country comparison.
+- Dedicated Visual Evidence run 35950391519 passed on exact head 76cc4b9344efa2067cb36b6a57c57f4f21f899e4. Runtime proof resolved 11 regions in Realm of Reddale under one CountryProfile revision, with 6 distinct terrain/resource identity signatures, 6 distinct specialization mixes and maximum regional divergence 1.0042; deterministic/time-independent replay, parent ownership, hierarchy integration and authority isolation all passed.
+- Fresh evidence compared Oakford, Greendale, Riverheath and Westmarch under the same country orientation; agriculture, timber, mineral, water and specialization values differ materially, and reload reproduced Oakford revision RPF-10824EED exactly.
+- All 5 fresh screenshots were directly inspected. The region inspector is readable with no major clipping, overlap or broken layout. VISUAL 8.7/10 PASS.
+- Generic regression Visual Evidence run 35950378089 passed; GitHub Pages run 35950377442 successfully deployed the tested head.
