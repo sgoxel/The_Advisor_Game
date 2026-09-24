@@ -4329,101 +4329,6 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return proof_off + "+" + action + "+" + ready + "+" + proof_on
     if scenario == "wp-s003-004-003":
         return _show_gabled_roof_proof(driver, frame_index)
-    if scenario == "wp-s003-004-005":
-        if len(frames) < 11:
-            raise RuntimeError("wp-s003-004-005 requires eleven doubled-character evidence frames")
-        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:11]]
-        gpus=[build.get("gpuRenderer") or {} for build in builds]
-        presentations=[gpu.get("characterPresentation") or {} for gpu in gpus]
-        protagonist_locations=[build.get("protagonistLocation") for build in builds]
-        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
-            raise RuntimeError(f"2x character presentation changed/missed protagonist authority: {protagonist_locations}")
-
-        expected_zooms=("0.50×","1.00×","2.00×","0.50×","0.50×","1.00×","1.00×","0.50×","0.50×","1.00×","2.00×")
-        expected_states=(None,"open","open","front","behind","entering","inside","open","open","open","open")
-        protagonist_feet=[]
-        for index,(build,gpu,presentation) in enumerate(zip(builds,gpus,presentations)):
-            if build.get("cameraZoom")!=expected_zooms[index]:
-                raise RuntimeError(f"2x character zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
-            if abs(float(presentation.get("presentationMultiplier") or 0)-2.0)>0.001:
-                raise RuntimeError(f"Shared 2x character multiplier missing in frame {index+1}: {presentation}")
-            if abs(float(presentation.get("baselineMaxPresentationScale") or 0)-5.0)>0.001 or abs(float(presentation.get("maxPresentationScale") or 0)-10.0)>0.001:
-                raise RuntimeError(f"Character baseline/final caps are not 5x/10x in frame {index+1}: {presentation}")
-            if presentation.get("billboardMode")!="camera-facing-upright" or presentation.get("feetAnchored") is not True:
-                raise RuntimeError(f"Character billboard/feet contract failed in frame {index+1}: {presentation}")
-            if presentation.get("depthTest") is not True or presentation.get("depthWrite") is not True:
-                raise RuntimeError(f"Character depth contract failed in frame {index+1}: {presentation}")
-            if gpu.get("simulationAuthorityPreserved") is not True or presentation.get("simulationAuthorityPreserved") is not True:
-                raise RuntimeError(f"2x presentation changed Simulation authority in frame {index+1}: {gpu}")
-
-            instances=presentation.get("instances") or []
-            if not instances:
-                raise RuntimeError(f"No active character instance in frame {index+1}: {presentation}")
-            for instance in instances:
-                baseline_h=float(instance.get("baselinePresentationHeight") or 0)
-                final_h=float(instance.get("height") or 0)
-                baseline_px=float(instance.get("baselineRenderedPixelHeight") or 0)
-                final_px=float(instance.get("renderedPixelHeight") or 0)
-                effective=float(instance.get("effectivePresentationMultiplier") or 0)
-                if baseline_h<=0 or abs(final_h-baseline_h*2)>0.003 or abs(effective-2.0)>0.003:
-                    raise RuntimeError(f"Character is not exactly doubled from prior visible height in frame {index+1}: {instance}")
-                if baseline_px>1 and abs(final_px-baseline_px*2)>1.2:
-                    raise RuntimeError(f"Character rendered pixel height is not approximately doubled in frame {index+1}: {instance}")
-                if abs(float(instance.get("baselineFeetY") or 0)-float(instance.get("feetY") or 0))>0.0001:
-                    raise RuntimeError(f"2x scale moved character feet in frame {index+1}: {instance}")
-                if instance.get("upright") is not True or instance.get("cameraFacing") is not True or instance.get("verticalInverted") is not False:
-                    raise RuntimeError(f"2x character orientation failed in frame {index+1}: {instance}")
-                aspect=float(instance.get("aspectRatio") or 0)
-                if abs(aspect-float(instance.get("width") or 0)/max(1e-9,final_h))>0.002:
-                    raise RuntimeError(f"2x character aspect ratio stretched in frame {index+1}: {instance}")
-                if float(instance.get("presentationScale") or 0)>10.001:
-                    raise RuntimeError(f"2x character escaped bounded 10x cap in frame {index+1}: {instance}")
-
-            if index<=8:
-                protagonist=next((item for item in instances if item.get("id")=="protagonist"),None)
-                if not protagonist:
-                    raise RuntimeError(f"Protagonist telemetry missing in 2x frame {index+1}: {presentation}")
-                world=protagonist.get("world") or {}
-                if f"({world.get('x')},{world.get('y')})"!=protagonist_locations[index]:
-                    raise RuntimeError(f"2x billboard world coordinate diverged in frame {index+1}: {protagonist} vs {protagonist_locations[index]}")
-                protagonist_feet.append(round(float(protagonist.get("feetY") or 0),4))
-
-            expected=expected_states[index]
-            proof=gpu.get("characterProof") or {}
-            if expected is not None and index<=8 and proof.get("state")!=expected:
-                raise RuntimeError(f"2x character proof state mismatch in frame {index+1}: expected {expected}, got {proof}")
-
-        if len(set(protagonist_feet))!=1:
-            raise RuntimeError(f"2x presentation moved protagonist feet across proof states: {protagonist_feet}")
-
-        npc_instances=[]
-        for offset,(frame,presentation) in enumerate(zip(frames[9:11],presentations[9:11]),start=10):
-            npc=next((item for item in presentation.get("instances") or [] if item.get("id")!="protagonist"),None)
-            if not npc:
-                raise RuntimeError(f"NPC billboard missing from doubled-scale frame {offset}: {presentation}")
-            action=str(frame.get("action") or "")
-            if "focus=npc" not in action or "movementBuilding=none" not in action:
-                raise RuntimeError(f"NPC doubled-scale evidence is not an outdoor active resident in frame {offset}: {action}")
-            npc_instances.append(npc)
-        if npc_instances[0].get("id")!=npc_instances[1].get("id") or npc_instances[0].get("world")!=npc_instances[1].get("world"):
-            raise RuntimeError(f"NPC 1.00x/2.00x frames did not inspect the same resident/coordinate: {npc_instances}")
-
-        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:11]]
-        if int(viewports[7].get("height") or 0)<=int(viewports[7].get("width") or 0):
-            raise RuntimeError(f"Phone portrait doubled-character evidence missing: {viewports[7]}")
-        if int(viewports[8].get("width") or 0)<=int(viewports[8].get("height") or 0):
-            raise RuntimeError(f"Phone landscape doubled-character evidence missing: {viewports[8]}")
-
-        front=gpus[3].get("characterProof") or {}
-        behind=gpus[4].get("characterProof") or {}
-        entering=gpus[5].get("characterProof") or {}
-        inside=gpus[6].get("characterProof") or {}
-        if front.get("occlusionExpected")!="in-front" or behind.get("occlusionExpected")!="occluded":
-            raise RuntimeError(f"2x character front/behind depth proof failed: front={front}, behind={behind}")
-        if entering.get("state")!="entering" or inside.get("state")!="inside" or inside.get("cutawayActive") is not True:
-            raise RuntimeError(f"2x character interior/cutaway proof failed: entering={entering}, inside={inside}")
-        return
-
     if scenario == "wp-s003-004-004":
         return _show_character_billboard_readability_proof(driver, frame_index)
     if scenario == "wp-s003-004-005":
@@ -4899,6 +4804,101 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait terrain-texture evidence missing: {viewports[4]}")
         if int(viewports[5].get("width") or 0)<=int(viewports[5].get("height") or 0):
             raise RuntimeError(f"Phone landscape terrain-texture evidence missing: {viewports[5]}")
+        return
+
+    if scenario == "wp-s003-004-005":
+        if len(frames) < 11:
+            raise RuntimeError("wp-s003-004-005 requires eleven doubled-character evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:11]]
+        gpus=[build.get("gpuRenderer") or {} for build in builds]
+        presentations=[gpu.get("characterPresentation") or {} for gpu in gpus]
+        protagonist_locations=[build.get("protagonistLocation") for build in builds]
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"2x character presentation changed/missed protagonist authority: {protagonist_locations}")
+
+        expected_zooms=("0.50×","1.00×","2.00×","0.50×","0.50×","1.00×","1.00×","0.50×","0.50×","1.00×","2.00×")
+        expected_states=(None,"open","open","front","behind","entering","inside","open","open","open","open")
+        protagonist_feet=[]
+        for index,(build,gpu,presentation) in enumerate(zip(builds,gpus,presentations)):
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"2x character zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if abs(float(presentation.get("presentationMultiplier") or 0)-2.0)>0.001:
+                raise RuntimeError(f"Shared 2x character multiplier missing in frame {index+1}: {presentation}")
+            if abs(float(presentation.get("baselineMaxPresentationScale") or 0)-5.0)>0.001 or abs(float(presentation.get("maxPresentationScale") or 0)-10.0)>0.001:
+                raise RuntimeError(f"Character baseline/final caps are not 5x/10x in frame {index+1}: {presentation}")
+            if presentation.get("billboardMode")!="camera-facing-upright" or presentation.get("feetAnchored") is not True:
+                raise RuntimeError(f"Character billboard/feet contract failed in frame {index+1}: {presentation}")
+            if presentation.get("depthTest") is not True or presentation.get("depthWrite") is not True:
+                raise RuntimeError(f"Character depth contract failed in frame {index+1}: {presentation}")
+            if gpu.get("simulationAuthorityPreserved") is not True or presentation.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"2x presentation changed Simulation authority in frame {index+1}: {gpu}")
+
+            instances=presentation.get("instances") or []
+            if not instances:
+                raise RuntimeError(f"No active character instance in frame {index+1}: {presentation}")
+            for instance in instances:
+                baseline_h=float(instance.get("baselinePresentationHeight") or 0)
+                final_h=float(instance.get("height") or 0)
+                baseline_px=float(instance.get("baselineRenderedPixelHeight") or 0)
+                final_px=float(instance.get("renderedPixelHeight") or 0)
+                effective=float(instance.get("effectivePresentationMultiplier") or 0)
+                if baseline_h<=0 or abs(final_h-baseline_h*2)>0.003 or abs(effective-2.0)>0.003:
+                    raise RuntimeError(f"Character is not exactly doubled from prior visible height in frame {index+1}: {instance}")
+                if baseline_px>1 and abs(final_px-baseline_px*2)>1.2:
+                    raise RuntimeError(f"Character rendered pixel height is not approximately doubled in frame {index+1}: {instance}")
+                if abs(float(instance.get("baselineFeetY") or 0)-float(instance.get("feetY") or 0))>0.0001:
+                    raise RuntimeError(f"2x scale moved character feet in frame {index+1}: {instance}")
+                if instance.get("upright") is not True or instance.get("cameraFacing") is not True or instance.get("verticalInverted") is not False:
+                    raise RuntimeError(f"2x character orientation failed in frame {index+1}: {instance}")
+                aspect=float(instance.get("aspectRatio") or 0)
+                if abs(aspect-float(instance.get("width") or 0)/max(1e-9,final_h))>0.002:
+                    raise RuntimeError(f"2x character aspect ratio stretched in frame {index+1}: {instance}")
+                if float(instance.get("presentationScale") or 0)>10.001:
+                    raise RuntimeError(f"2x character escaped bounded 10x cap in frame {index+1}: {instance}")
+
+            if index<=8:
+                protagonist=next((item for item in instances if item.get("id")=="protagonist"),None)
+                if not protagonist:
+                    raise RuntimeError(f"Protagonist telemetry missing in 2x frame {index+1}: {presentation}")
+                world=protagonist.get("world") or {}
+                if f"({world.get('x')},{world.get('y')})"!=protagonist_locations[index]:
+                    raise RuntimeError(f"2x billboard world coordinate diverged in frame {index+1}: {protagonist} vs {protagonist_locations[index]}")
+                protagonist_feet.append(round(float(protagonist.get("feetY") or 0),4))
+
+            expected=expected_states[index]
+            proof=gpu.get("characterProof") or {}
+            if expected is not None and index<=8 and proof.get("state")!=expected:
+                raise RuntimeError(f"2x character proof state mismatch in frame {index+1}: expected {expected}, got {proof}")
+
+        if len(set(protagonist_feet))!=1:
+            raise RuntimeError(f"2x presentation moved protagonist feet across proof states: {protagonist_feet}")
+
+        npc_instances=[]
+        for offset,(frame,presentation) in enumerate(zip(frames[9:11],presentations[9:11]),start=10):
+            npc=next((item for item in presentation.get("instances") or [] if item.get("id")!="protagonist"),None)
+            if not npc:
+                raise RuntimeError(f"NPC billboard missing from doubled-scale frame {offset}: {presentation}")
+            action=str(frame.get("action") or "")
+            if "focus=npc" not in action or "movementBuilding=none" not in action:
+                raise RuntimeError(f"NPC doubled-scale evidence is not an outdoor active resident in frame {offset}: {action}")
+            npc_instances.append(npc)
+        if npc_instances[0].get("id")!=npc_instances[1].get("id") or npc_instances[0].get("world")!=npc_instances[1].get("world"):
+            raise RuntimeError(f"NPC 1.00x/2.00x frames did not inspect the same resident/coordinate: {npc_instances}")
+
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:11]]
+        if int(viewports[7].get("height") or 0)<=int(viewports[7].get("width") or 0):
+            raise RuntimeError(f"Phone portrait doubled-character evidence missing: {viewports[7]}")
+        if int(viewports[8].get("width") or 0)<=int(viewports[8].get("height") or 0):
+            raise RuntimeError(f"Phone landscape doubled-character evidence missing: {viewports[8]}")
+
+        front=gpus[3].get("characterProof") or {}
+        behind=gpus[4].get("characterProof") or {}
+        entering=gpus[5].get("characterProof") or {}
+        inside=gpus[6].get("characterProof") or {}
+        if front.get("occlusionExpected")!="in-front" or behind.get("occlusionExpected")!="occluded":
+            raise RuntimeError(f"2x character front/behind depth proof failed: front={front}, behind={behind}")
+        if entering.get("state")!="entering" or inside.get("state")!="inside" or inside.get("cutawayActive") is not True:
+            raise RuntimeError(f"2x character interior/cutaway proof failed: entering={entering}, inside={inside}")
         return
 
     if scenario == "wp-s003-004-004":
