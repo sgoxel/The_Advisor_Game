@@ -1376,6 +1376,11 @@ async function renderTerrain(){
 }
 
 function scheduleTerrainRender(){
+  /* Campaign start/restart owns a blocking readiness render while the loading
+     cycle is active. A ResizeObserver render must not supersede that awaited
+     render via terrainRenderSerial, otherwise a healthy campaign can be
+     reported as "not playable" even though the later observer render succeeds. */
+  if(sceneLoadingState.state==="loading"&&!sceneLoadingState.proofOverride)return;
   if(terrainRenderFrame)cancelAnimationFrame(terrainRenderFrame);
   terrainRenderFrame=requestAnimationFrame(()=>{
     terrainRenderFrame=0;
