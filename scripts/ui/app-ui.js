@@ -61,6 +61,217 @@ function openPopup(id){document.getElementById(id).hidden=false;document.body.st
 function closePopup(id){document.getElementById(id).hidden=true;document.body.style.overflow=""}
 function closeAll(){document.querySelectorAll(".fullscreen-popup").forEach(p=>p.hidden=true);document.body.style.overflow=""}
 function setCheck(node,pass,waiting){node.textContent=pass?"PASS":waiting;node.classList.toggle("pass",pass)}
+
+const SCENE_LOADING_PHASES=Object.freeze({
+  boot:Object.freeze({title:"Waking the world",message:"Starting renderer…"}),
+  renderer:Object.freeze({title:"Lighting the scene",message:"Initializing the PlayCanvas renderer…"}),
+  world:Object.freeze({title:"Shaping the world",message:"Preparing deterministic terrain and local world state…"}),
+  assets:Object.freeze({title:"Gathering the details",message:"Preparing scene materials, assets and nearby chunks…"}),
+  finalizing:Object.freeze({title:"Almost there",message:"Finalizing the first playable scene…"}),
+  ready:Object.freeze({title:"Scene ready",message:"Entering the world…"}),
+  error:Object.freeze({title:"Startup interrupted",message:"The scene could not finish preparing."})
+});
+let sceneLoadingHideTimer=null;
+const sceneLoadingState={
+  cycleId:0,
+  origin:null,
+  state:"loading",
+  phase:"boot",
+  startedAtMs:null,
+  readyAtMs:null,
+  hiddenAtMs:null,
+  failedAtMs:null,
+  error:null,
+  renderSucceeded:false,
+  readiness:null,
+  phaseEvents:[],
+  cycles:[],
+  proofOverride:null
+};
+function loadingReducedMotion(){
+  try{return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)}
+  catch(_){return false}
+}
+function sceneLoadingReadiness(renderSucceeded=sceneLoadingState.renderSucceeded){
+  const snapshot=window.GameRenderer?.snapshot?.()||{};
+  const campaign=window.SeedSystem?.getCampaign?.()||null;
+  const rendererReady=Boolean(snapshot.ready);
+  const regionReady=Boolean(snapshot.regionKey);
+  const terrainVisible=Boolean(e.terrainGrid&&!e.terrainGrid.hidden);
+  const worldAssetsReady=!campaign||snapshot.worldAssetPreparation?.ready===true;
+  const simulationAuthorityPreserved=snapshot.simulationAuthorityPreserved!==false;
+  const gameplayReady=Boolean(
+    campaign&&rendererReady&&renderSucceeded===true&&regionReady&&terrainVisible&&
+    worldAssetsReady&&simulationAuthorityPreserved
+  );
+  return Object.freeze({
+    campaignActive:Boolean(campaign),
+    rendererReady,
+    regionReady,
+    terrainVisible,
+    worldAssetsReady,
+    simulationAuthorityPreserved,
+    playableReady:gameplayReady,
+    interactionReady:Boolean(rendererReady&&(!campaign||gameplayReady)),
+    regionKey:snapshot.regionKey||null
+  });
+}
+function currentSceneLoadingCycle(){
+  return Object.freeze({
+    cycleId:sceneLoadingState.cycleId,
+    origin:sceneLoadingState.origin,
+    state:sceneLoadingState.state,
+    phase:sceneLoadingState.phase,
+    startedAtMs:sceneLoadingState.startedAtMs,
+    readyAtMs:sceneLoadingState.readyAtMs,
+    hiddenAtMs:sceneLoadingState.hiddenAtMs,
+    failedAtMs:sceneLoadingState.failedAtMs,
+    error:sceneLoadingState.error,
+    renderSucceeded:Boolean(sceneLoadingState.renderSucceeded),
+    readiness:sceneLoadingState.readiness,
+    phaseEvents:Object.freeze(sceneLoadingState.phaseEvents.map(item=>Object.freeze({...item})))
+  });
+}
+function archiveSceneLoadingCycle(){
+  if(sceneLoadingState.cycleId<=0||sceneLoadingState.startedAtMs===null)return;
+  sceneLoadingState.cycles.push(currentSceneLoadingCycle());
+  if(sceneLoadingState.cycles.length>6)sceneLoadingState.cycles.splice(0,sceneLoadingState.cycles.length-6);
+}
+function applySceneLoadingPresentation(){
+  if(!e.sceneLoadingOverlay)return;
+  const proof=sceneLoadingState.proofOverride;
+  const effectivePhase=String(proof?.phase||sceneLoadingState.phase||"boot");
+  const info=SCENE_LOADING_PHASES[effectivePhase]||SCENE_LOADING_PHASES.boot;
+  const effectiveState=proof
+    ?(effectivePhase==="error"?"error":"loading")
+    :sceneLoadingState.state;
+  const hidden=effectiveState==="hidden";
+  e.sceneLoadingOverlay.hidden=hidden;
+  e.sceneLoadingOverlay.dataset.state=effectiveState;
+  e.sceneLoadingOverlay.dataset.phase=effectivePhase;
+  e.sceneLoadingOverlay.classList.toggle("is-ready",effectiveState==="ready");
+  e.sceneLoadingOverlay.classList.toggle("scene-loading-proof-reduced",Boolean(proof?.reducedMotion));
+  e.sceneLoadingTitle.textContent=String(proof?.title||info.title);
+  e.sceneLoadingPhase.textContent=String(
+    proof?.message||
+    (effectiveState==="error"&&sceneLoadingState.error
+      ?"The scene could not finish preparing. "+sceneLoadingState.error
+      :info.message)
+  );
+  e.sceneLoadingRetry.hidden=effectiveState!=="error";
+}
+function recordSceneLoadingEvent(phase,state){
+  const readiness=sceneLoadingReadiness();
+  sceneLoadingState.phaseEvents.push(Object.freeze({
+    phase:String(phase),
+    state:String(state),
+    atMs:Date.now(),
+    readiness
+  }));
+  sceneLoadingState.readiness=readiness;
+}
+function beginSceneLoading(origin,phase="renderer"){
+  if(sceneLoadingHideTimer){clearTimeout(sceneLoadingHideTimer);sceneLoadingHideTimer=null}
+  archiveSceneLoadingCycle();
+  sceneLoadingState.cycleId++;
+  sceneLoadingState.origin=String(origin||"startup");
+  sceneLoadingState.state="loading";
+  sceneLoadingState.phase=String(phase||"renderer");
+  sceneLoadingState.startedAtMs=Date.now();
+  sceneLoadingState.readyAtMs=null;
+  sceneLoadingState.hiddenAtMs=null;
+  sceneLoadingState.failedAtMs=null;
+  sceneLoadingState.error=null;
+  sceneLoadingState.renderSucceeded=false;
+  sceneLoadingState.readiness=sceneLoadingReadiness(false);
+  sceneLoadingState.phaseEvents=[];
+  sceneLoadingState.proofOverride=null;
+  recordSceneLoadingEvent(sceneLoadingState.phase,"loading");
+  applySceneLoadingPresentation();
+  return sceneLoadingSnapshot();
+}
+function setSceneLoadingPhase(phase){
+  if(sceneLoadingState.state!=="loading")return sceneLoadingSnapshot();
+  const next=String(phase||"boot");
+  if(sceneLoadingState.phase===next)return sceneLoadingSnapshot();
+  sceneLoadingState.phase=next;
+  recordSceneLoadingEvent(next,"loading");
+  applySceneLoadingPresentation();
+  return sceneLoadingSnapshot();
+}
+function finishSceneLoading(reason,renderSucceeded){
+  sceneLoadingState.renderSucceeded=Boolean(renderSucceeded);
+  const readiness=sceneLoadingReadiness(sceneLoadingState.renderSucceeded);
+  const campaignActive=readiness.campaignActive;
+  if(!readiness.interactionReady||(campaignActive&&!readiness.playableReady))return false;
+  sceneLoadingState.state="ready";
+  sceneLoadingState.phase="ready";
+  sceneLoadingState.readyAtMs=Date.now();
+  sceneLoadingState.readiness=readiness;
+  sceneLoadingState.error=null;
+  recordSceneLoadingEvent("ready","ready");
+  applySceneLoadingPresentation();
+  const hide=()=>{
+    if(sceneLoadingState.state!=="ready")return;
+    sceneLoadingState.state="hidden";
+    sceneLoadingState.hiddenAtMs=Date.now();
+    sceneLoadingState.readiness=sceneLoadingReadiness(sceneLoadingState.renderSucceeded);
+    applySceneLoadingPresentation();
+  };
+  if(loadingReducedMotion())hide();
+  else sceneLoadingHideTimer=setTimeout(hide,300);
+  return true;
+}
+function failSceneLoading(error){
+  if(sceneLoadingHideTimer){clearTimeout(sceneLoadingHideTimer);sceneLoadingHideTimer=null}
+  sceneLoadingState.state="error";
+  sceneLoadingState.phase="error";
+  sceneLoadingState.failedAtMs=Date.now();
+  sceneLoadingState.error=String(error?.message||error||"Unknown startup error");
+  sceneLoadingState.readiness=sceneLoadingReadiness(sceneLoadingState.renderSucceeded);
+  recordSceneLoadingEvent("error","error");
+  applySceneLoadingPresentation();
+  return sceneLoadingSnapshot();
+}
+function setSceneLoadingProof(phase,options={}){
+  const key=SCENE_LOADING_PHASES[String(phase)]?String(phase):"world";
+  sceneLoadingState.proofOverride=Object.freeze({
+    phase:key,
+    title:options?.title?String(options.title):null,
+    message:options?.message?String(options.message):null,
+    reducedMotion:Boolean(options?.reducedMotion),
+    atMs:Date.now()
+  });
+  applySceneLoadingPresentation();
+  return sceneLoadingSnapshot();
+}
+function clearSceneLoadingProof(){
+  sceneLoadingState.proofOverride=null;
+  applySceneLoadingPresentation();
+  return sceneLoadingSnapshot();
+}
+function sceneLoadingSnapshot(){
+  const overlay=e.sceneLoadingOverlay||document.getElementById("sceneLoadingOverlay");
+  const effectivePhase=String(sceneLoadingState.proofOverride?.phase||sceneLoadingState.phase||"boot");
+  return Object.freeze({
+    current:currentSceneLoadingCycle(),
+    cycles:Object.freeze([...sceneLoadingState.cycles,currentSceneLoadingCycle()]),
+    proofOverride:sceneLoadingState.proofOverride,
+    reducedMotionPreferred:loadingReducedMotion(),
+    overlay:Object.freeze({
+      present:Boolean(overlay),
+      hidden:Boolean(overlay?.hidden),
+      state:overlay?.dataset?.state||null,
+      phase:overlay?.dataset?.phase||effectivePhase,
+      reducedMotionProof:Boolean(overlay?.classList?.contains("scene-loading-proof-reduced")),
+      retryVisible:Boolean(e.sceneLoadingRetry&&!e.sceneLoadingRetry.hidden),
+      title:e.sceneLoadingTitle?.textContent?.trim()||null,
+      message:e.sceneLoadingPhase?.textContent?.trim()||null
+    }),
+    simulationAuthorityPreserved:true
+  });
+}
+
 function readDevelopmentMode(){
   try{return localStorage.getItem(DEVELOPMENT_MODE_KEY)==="true"}
   catch(_){return false}
@@ -113,10 +324,6 @@ function npcOccludedByBuilding(seed,point,presentationOffset){
     const px=rx+ox,py=ry+oy;
     const maxX=Number(b.maxX-b.minX),maxY=Number(b.maxY-b.minY);
     if(px>=0&&px<=maxX&&py>=0&&py<=maxY)return true;
-    // Orthographic camera is fixed at +X/+Y looking toward the village. Trace a
-    // short parallel ground ray from the NPC toward the camera; if it enters an
-    // opaque building footprint within the close-occlusion distance, suppress
-    // the whole billboard instead of showing a head/torso above the roof.
     const enter=Math.max(0,-px,-py);
     const exit=Math.min(maxX-px,maxY-py);
     if(exit+1e-9>=enter&&enter<=NPC_BUILDING_OCCLUSION_MAX_RAY_TILES)return true;
@@ -161,8 +368,6 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     const presentation=window.ResidentMovement?.presentation?.(resident.id)||null;
     const presentationOffset=presentation?.offset||Object.freeze({x:0,y:0});
     const id=`resident:${resident.id}`;
-    // Current navigation occupancy is authoritative. A future home/work target
-    // must never make a still-outdoor resident disappear early.
     if(movement?.buildingId){
       hiddenIndoorIds.push(id);
       continue;
