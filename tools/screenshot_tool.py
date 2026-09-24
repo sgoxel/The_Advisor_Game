@@ -1305,25 +1305,6 @@ def _queue_campaign_start_during_application_start(driver, timeout: float = 20.0
 
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
     queued_start_action = None
-    if scenario == "wp-s003-008-003":
-        if frame_index == 0:
-            return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
-        if frame_index == 1:
-            return _set_minimap_view(driver, 6, 4, 1.00)
-        if frame_index == 2:
-            chunk_size = int(driver.execute_script(
-                "return Number(window.TerrainChunkSizeSettings?.get?.()?.chunkSize||16)"
-            ))
-            return _set_minimap_view(driver, chunk_size + 2, 0, 1.00)
-        if frame_index == 3:
-            return _set_minimap_view(driver, 0, 0, 0.50)
-        if frame_index == 4:
-            return _set_minimap_view(driver, 0, 0, 1.00)
-        if frame_index == 5:
-            return _set_minimap_view(driver, 6, 4, 1.00, viewport=(390, 844), focus_map=True)
-        if frame_index == 6:
-            return _set_minimap_view(driver, 6, 4, 1.00, viewport=(844, 390))
-        return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
     if scenario == "wp-s003-008-002":
         timeout = max(timeout, 180.0)
         queued_start_action = _queue_campaign_start_during_application_start(driver, min(timeout, 30.0))
@@ -5447,6 +5428,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             action=_reload_current_build(driver)
             return action+"+"+_show_world_context_proof(driver,frame_index)
         return _show_world_context_proof(driver,frame_index)
+    if scenario == "wp-s003-008-003":
+        if frame_index == 0:
+            return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
+        if frame_index == 1:
+            return _set_minimap_view(driver, 6, 4, 1.00)
+        if frame_index == 2:
+            chunk_size = int(driver.execute_script(
+                "return Number(window.TerrainChunkSizeSettings?.get?.()?.chunkSize||16)"
+            ))
+            return _set_minimap_view(driver, chunk_size + 2, 0, 1.00)
+        if frame_index == 3:
+            return _set_minimap_view(driver, 0, 0, 0.50)
+        if frame_index == 4:
+            return _set_minimap_view(driver, 0, 0, 1.00)
+        if frame_index == 5:
+            return _set_minimap_view(driver, 6, 4, 1.00, viewport=(390, 844), focus_map=True)
+        if frame_index == 6:
+            return _set_minimap_view(driver, 6, 4, 1.00, viewport=(844, 390))
+        return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
     if scenario == "wp-s003-008-002":
         if frame_index == 0:
             driver.set_window_size(1440, 900)
