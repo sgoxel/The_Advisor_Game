@@ -238,7 +238,7 @@ function countryById(seed,idValue){
   const candidate=parseCountryId(seed,idValue);
   return candidate?countryFromCandidate(seed,candidate,Object.freeze({score:0,geographyPenalty:0})):null;
 }
-function nearbyCountries(seed,countryValue){
+function surroundingCountries(seed,countryValue){
   const country=typeof countryValue==="string"?countryById(seed,countryValue):countryValue;
   if(!country)return Object.freeze([]);
   const center=country.politicalCenter;
@@ -328,12 +328,12 @@ function borderForPair(seed,countryA,countryB){
 function borderEvidence(seed,countryValue){
   const country=typeof countryValue==="string"?countryById(seed,countryValue):countryValue;
   if(!country)return Object.freeze([]);
-  const neighbors=nearbyCountries(seed,country);
+  const surrounding=surroundingCountries(seed,country);
   const borders=[];
-  for(const neighborRef of neighbors){
+  for(const neighborRef of surrounding){
     const neighbor=countryById(seed,neighborRef.id);
     const border=borderForPair(seed,country,neighbor);
-    if(border)borders.push(border);
+    if(border&&border.sideSamplesPass)borders.push(border);
   }
   borders.sort((a,b)=>
     Number(b.naturalFeatureInfluenced)-Number(a.naturalFeatureInfluenced)||
@@ -341,6 +341,18 @@ function borderEvidence(seed,countryValue){
     a.id.localeCompare(b.id)
   );
   return Object.freeze(borders);
+}
+function nearbyCountries(seed,countryValue){
+  const country=typeof countryValue==="string"?countryById(seed,countryValue):countryValue;
+  if(!country)return Object.freeze([]);
+  return Object.freeze(borderEvidence(seed,country).map(border=>{
+    const other=border.countryA.id===country.id?border.countryB:border.countryA;
+    const full=countryById(seed,other.id);
+    return Object.freeze({
+      id:other.id,name:other.name,cellX:full?.cellX||null,cellY:full?.cellY||null,
+      borderId:border.id
+    });
+  }));
 }
 function proof(seedValue){
   const seed=String(seedValue==null?"":seedValue);
@@ -353,7 +365,7 @@ function proof(seedValue){
   const capitalInside=sampleCountries.every(country=>ownerAt(seed,country.capital.x,country.capital.y).id===country.id);
   const neighborIds=neighbors.map(item=>item.id);
   const neighborIdsRepeat=nearbyCountries(seed,origin).map(item=>item.id);
-  const borderSamplePass=borders.length>0&&borders.every(border=>border.sideSamplesPass);
+  const borderSamplePass=borders.length>0&&borders.every(border=>border.sideSamplesPass)&&neighbors.length===borders.length;
   const naturalFeatureInfluence=borders.some(border=>border.naturalFeatureInfluenced);
   const nonRectangular=borders.some(border=>border.nonMacroRectangular)&&borders.some(border=>border.geometryShiftTiles>=1);
   const terrainAfter=GeographyFoundation.getTerrainType(seed,"0","0");
