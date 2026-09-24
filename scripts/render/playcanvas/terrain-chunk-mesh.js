@@ -132,6 +132,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   let presentationEntityCreations=0,presentationEntityDestroys=0,presentationMeshInstanceCreations=0;
   let staticBatchMeshCreations=0,staticBatchSourcePrimitiveCount=0,instancedGroupCreations=0,instancedObjectCount=0;
   let instancingBufferUpdates=0,instancingParentRepositions=0,frustumCulledMeshInstances=0;
+  let treeSpriteMaterialRebinds=0,treeSpriteMaterialRefreshes=0;
 
   function applyBuildingSurfaceMaterial(m,name,r,g,b){
     const atlas=buildingSurfaceAtlasProvider?.()||null;
@@ -202,14 +203,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     if(tiling?.set)tiling.set(rect.uScale,rect.vScale);else material[prefix+"MapTiling"]=new pc.Vec2(rect.uScale,rect.vScale);
     if(offset?.set)offset.set(rect.u0,rect.v0);else material[prefix+"MapOffset"]=new pc.Vec2(rect.u0,rect.v0);
   }
-  function treeSpriteMaterial(variant){
-    const index=Math.max(0,Math.min(1,Math.trunc(Number(variant)||0)));
-    if(treeSpriteMaterials.has(index))return treeSpriteMaterials.get(index);
+  function bindTreeSpriteMaterial(m,index){
     const atlas=treeSpriteAtlasProvider?.()||null,state=atlas?.stats?.()||null;
-    const texture=state?.ready?atlas?.texture?.():null,rect=atlas?.rect?.(index)||{u0:index*0.5,v0:0,uScale:0.5,vScale:1};
-    if(!texture)return presentationMaterial("tree-fallback",0.20,0.42,0.18,0.02);
-    const m=new pc.StandardMaterial();
-    m.name="chunk-tree-sprite-"+index;
+    const texture=state?.ready?atlas?.texture?.():null;
+    if(!texture)return false;
+    const rect=atlas?.rect?.(index)||{u0:index*0.5,v0:0,uScale:0.5,vScale:1};
     m.diffuse.set(1,1,1);
     m.emissive.set(1,1,1);
     m.diffuseMap=texture;
@@ -227,9 +225,30 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     m.useLighting=false;
     m.gloss=0;
     m.metalness=0;
+    m._advisorTreeAtlasSignature=String(state?.signature||"");
     m.update();
-    treeSpriteMaterials.set(index,m);
-    return m;
+    treeSpriteMaterialRebinds++;
+    return true;
+  }
+  function treeSpriteMaterial(variant){
+    const index=Math.max(0,Math.min(1,Math.trunc(Number(variant)||0)));
+    let m=treeSpriteMaterials.get(index)||null;
+    if(!m){
+      m=new pc.StandardMaterial();
+      m.name="chunk-tree-sprite-"+index;
+      treeSpriteMaterials.set(index,m);
+    }
+    if(bindTreeSpriteMaterial(m,index))return m;
+    treeSpriteMaterials.delete(index);
+    return presentationMaterial("tree-fallback",0.20,0.42,0.18,0.02);
+  }
+  function refreshTreeMaterials(){
+    let refreshed=0;
+    for(const [index,m] of treeSpriteMaterials){
+      if(bindTreeSpriteMaterial(m,index))refreshed++;
+    }
+    if(refreshed)treeSpriteMaterialRefreshes++;
+    return refreshed;
   }
   function sampleColor(seed,x,z){
     const n=signed01(seed,x,z,"color");
@@ -809,6 +828,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       frustumCulledMeshInstances,
       sharedPresentationMaterialCount:presentationMaterials.size,
       treeSpriteMaterialCount:treeSpriteMaterials.size,
+      treeSpriteMaterialRebinds,treeSpriteMaterialRefreshes,
+      treeSpriteMaterialAtlasSignatures:Object.freeze([...treeSpriteMaterials.values()].map(m=>String(m._advisorTreeAtlasSignature||"")).sort()),
       treeSpriteAtlas:treeSpriteAtlasProvider?.()?.stats?.()||null,
       treePlaneMeshPrepared:primitiveMeshes.has("tree-plane"),
       treeSpriteUnlitEmissive:true,
@@ -842,7 +863,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function heightAtTile(x,y,chunkSize=16,offsetX=0,offsetY=0){
     return terrainHeightAtTile(String(seedProvider()||""),x,y,chunkSize,offsetX,offsetY);
   }
-  return Object.freeze({build,reposition,destroy,stats,heightAtTile});
+  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials});
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});

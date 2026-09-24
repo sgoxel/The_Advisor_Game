@@ -691,7 +691,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const state=await treeSpriteAtlas.prepare();
     const texture=treeSpriteAtlas.texture?.()||null;
     if(texture)applyTextureSampling(texture,textureQualitySnapshot());
-    return state;
+    const materialRefreshCount=Number(terrainChunkMeshFactory?.refreshTreeMaterials?.()||0);
+    return Object.freeze({...state,materialRefreshCount});
   }
   async function prepareBuildingSurfaceAtlas(){
     if(!window.PlayCanvasBuildingSurfaceAtlas)throw new Error("PlayCanvas building surface atlas is unavailable");
