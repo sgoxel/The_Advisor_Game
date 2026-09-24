@@ -5168,6 +5168,105 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone landscape sustained-runtime evidence missing: {viewports[4]}")
         return
 
+    if scenario == "wp-s003-006-009":
+        if len(frames) < 11:
+            raise RuntimeError("wp-s003-006-009 requires eleven raised-road evidence frames")
+        expected_zooms=("0.50×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","2.00×","1.00×","0.50×","0.50×")
+        protagonist_locations=[]
+        saw_path=False
+        saw_square=False
+        saw_bridge=False
+        saw_core_delta=False
+        protagonist_near_road=False
+        npc_near_road=False
+        for index,frame in enumerate(frames[:11]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            preload=gpu.get("terrainPreload") or {}
+            proximity=build.get("roadProfileCharacterProximity") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Raised-road zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Raised-road presentation changed Simulation authority in frame {index+1}: {gpu}")
+            resources=int(chunks.get("meshResourceCount") or 0)
+            if resources<=0 or int(chunks.get("heightfieldResourceCount") or 0)!=resources:
+                raise RuntimeError(f"Raised-road evidence lost heightfield resources in frame {index+1}: {chunks}")
+            if chunks.get("heightfieldPass") is not True or chunks.get("indexedSharedVertices") is not True:
+                raise RuntimeError(f"Raised-road shared heightfield contract failed in frame {index+1}: {chunks}")
+            if int(chunks.get("heightfieldGridResolution") or 0)!=9 or int(chunks.get("heightfieldStepTiles") or 0)!=2:
+                raise RuntimeError(f"Raised-road topology changed from 9x9 / 2-tile step in frame {index+1}: {chunks}")
+            if int(chunks.get("vertices") or 0)!=resources*81 or int(chunks.get("triangles") or 0)!=resources*128:
+                raise RuntimeError(f"Raised-road profile added geometry in frame {index+1}: {chunks}")
+            if int(chunks.get("meshInstanceCount") or 0)!=resources:
+                raise RuntimeError(f"Raised-road profile added terrain mesh instances in frame {index+1}: {chunks}")
+            if chunks.get("sharedBorderEquality") is not True or float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
+                raise RuntimeError(f"Raised-road chunk border mismatch in frame {index+1}: {chunks}")
+            if chunks.get("roadProfileEnabled") is not True or chunks.get("roadProfileGroundingShared") is not True:
+                raise RuntimeError(f"Raised-road shared-grounding profile missing in frame {index+1}: {chunks}")
+            road_lift=float(chunks.get("roadLiftWorldUnits") or 0)
+            path_lift=float(chunks.get("pathLiftWorldUnits") or 0)
+            square_lift=float(chunks.get("squareLiftWorldUnits") or 0)
+            shoulder_tiles=float(chunks.get("roadShoulderBlendWidthTiles") or 0)
+            shoulder_world=float(chunks.get("roadShoulderBlendWidthWorldUnits") or 0)
+            bridge_clearance=float(chunks.get("bridgeClearanceWorldUnits") or 0)
+            if abs(road_lift-0.12)>1e-6 or abs(path_lift-0.08)>1e-6 or abs(square_lift-0.055)>1e-6:
+                raise RuntimeError(f"Raised-road configured lift mismatch in frame {index+1}: {chunks}")
+            if shoulder_tiles<=0 or shoulder_tiles>1.5 or shoulder_world<=0 or shoulder_world>3.0:
+                raise RuntimeError(f"Raised-road shoulder width is not restrained in frame {index+1}: {chunks}")
+            if bridge_clearance<=road_lift:
+                raise RuntimeError(f"Bridge clearance is not distinct from ordinary road lift in frame {index+1}: {chunks}")
+            if int(chunks.get("roadProfileResourceCount") or 0)!=resources or int(chunks.get("roadProfileVertexCount") or 0)<=0:
+                raise RuntimeError(f"Raised-road profile is not prepared across retained chunks in frame {index+1}: {chunks}")
+            if int(chunks.get("visibleFrameTerrainRebuildCount") or 0)!=0:
+                raise RuntimeError(f"Raised-road visible-frame terrain rebuild detected in frame {index+1}: {chunks}")
+            if int(preload.get("visibleTextureDecodes") or 0)!=0 or int(preload.get("visibleAssetLoads") or 0)!=0:
+                raise RuntimeError(f"Raised-road visible-frame asset work detected in frame {index+1}: {preload}")
+            if chunks.get("oneEntityPerTile") is not False:
+                raise RuntimeError(f"Raised-road profile introduced per-tile entities in frame {index+1}: {chunks}")
+            if int(chunks.get("roadProfilePathVertexCount") or 0)>0:saw_path=True
+            if int(chunks.get("roadProfileSquareVertexCount") or 0)>0:saw_square=True
+            if int(chunks.get("bridgeCellCount") or 0)>0:saw_bridge=True
+            if int(chunks.get("roadProfileRoadVertexCount") or 0)>0 and int(chunks.get("roadProfileCoreVertexCount") or 0)>0:
+                lo=float(chunks.get("minRoadCoreHeightDelta") or 0)
+                hi=float(chunks.get("maxRoadCoreHeightDelta") or 0)
+                if lo>0 and hi>=lo:
+                    saw_core_delta=True
+                    if lo<0.045 or hi>0.24:
+                        raise RuntimeError(f"Raised-road height delta is not subtle/bounded in frame {index+1}: min={lo}, max={hi}, chunks={chunks}")
+            protagonist_locations.append(build.get("protagonistLocation"))
+            protagonist=(proximity.get("protagonist") or {}).get("nearestRoad") or {}
+            npc=(proximity.get("nearestNpc") or {}).get("nearestRoad") or {}
+            if protagonist and float(protagonist.get("distanceTiles") or 99)<=3.0:protagonist_near_road=True
+            if npc and float(npc.get("distanceTiles") or 99)<=3.0:npc_near_road=True
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Raised-road camera evidence changed authoritative protagonist location: {protagonist_locations}")
+        if not saw_path or not saw_square:
+            raise RuntimeError(f"Raised-road evidence did not exercise path/square profiles: path={saw_path}, square={saw_square}")
+        if not saw_bridge:
+            raise RuntimeError("Raised-road evidence did not keep a bridge scene in the retained chunk set")
+        if not saw_core_delta:
+            raise RuntimeError("Raised-road evidence did not report a positive bounded road-core height delta")
+        if not protagonist_near_road or not npc_near_road:
+            raise RuntimeError(f"Raised-road character grounding evidence incomplete: protagonistNear={protagonist_near_road}, npcNear={npc_near_road}")
+        actions=[str(frame.get("action") or "") for frame in frames[:11]]
+        for required in (
+            "road-profile-target:grass",
+            "road-profile-target:dirt-mud",
+            "road-profile-target:water",
+            "road-profile-target:rolling",
+            "road-profile-target:square",
+            "road-profile-target:chunk-boundary",
+        ):
+            if not any(required in action for action in actions):
+                raise RuntimeError(f"Required raised-road scene {required} missing: {actions}")
+        viewports=[frame.get("runtime",{}).get("viewport",{}) for frame in frames[:11]]
+        if int(viewports[9].get("height") or 0)<=int(viewports[9].get("width") or 0):
+            raise RuntimeError(f"Phone portrait raised-road evidence missing: {viewports[9]}")
+        if int(viewports[10].get("width") or 0)<=int(viewports[10].get("height") or 0):
+            raise RuntimeError(f"Phone landscape raised-road evidence missing: {viewports[10]}")
+        return
+
     if scenario == "wp-s003-006-008":
         if len(frames) < 11:
             raise RuntimeError("wp-s003-006-008 requires eleven terrain micro-relief evidence frames")
