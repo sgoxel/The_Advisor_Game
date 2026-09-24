@@ -1976,6 +1976,12 @@ function renderSettlementBuildingCatalogProof(index=0){
   const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
   return window.SettlementBuildingCatalog.renderDebugPanel(seed,index,document.getElementById("settlementBuildingCatalogProof"));
 }
+function renderWorldStateProof(){
+  if(typeof window.WorldState?.renderDebugPanel!=="function")return null;
+  const campaign=SeedSystem.getCampaign();
+  const seed=campaign?campaign.seed:SeedSystem.getSettings().seed;
+  return window.WorldState.renderDebugPanel(seed,document.getElementById("worldStateProof"));
+}
 
 function renderStatic(){
   const campaign=SeedSystem.getCampaign();
@@ -1996,6 +2002,7 @@ function renderStatic(){
   renderCountryRelationsProof();
   renderSettlementArchetypeProof();
   renderSettlementBuildingCatalogProof();
+  renderWorldStateProof();
   renderWorldCoordinates();
   renderGeography();
   renderStartingVillage();
@@ -2037,6 +2044,7 @@ async function startNewCampaign(){
   residentSchedulePinned=false;
   lastResidentScheduleProof=null;
   if(result.ok){
+    WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
     resetCameraForCampaign();
     ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   }
@@ -2058,6 +2066,7 @@ async function restartCampaign(){
   residentSchedulePinned=false;
   lastResidentScheduleProof=null;
   if(result.ok){
+    WorldState?.bindCampaign?.(result.campaign||SeedSystem.getCampaign(),{reset:true});
     resetCameraForCampaign();
     ResidentMovement?.reset?.(result.seed||SeedSystem.getCampaign()?.seed);
   }
@@ -2090,6 +2099,7 @@ async function init(){
   applyDevelopmentMode(readDevelopmentMode());
   const restored=SeedSystem.loadCampaign();
   restoredCampaign=restored.ok;
+  WorldState?.bindCampaign?.(restored.ok?(restored.campaign||SeedSystem.getCampaign()):null,{reset:false});
   resetCameraForCampaign();
   if(restored.ok&&window.ResidentMovement)ResidentMovement.reset(restored.seed||SeedSystem.getCampaign()?.seed);
 
@@ -2166,6 +2176,8 @@ window.AppUI=Object.freeze({
   settlementArchetypesVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SettlementArchetypes?SettlementArchetypes.proof(campaign.seed):null;},
   refreshSettlementBuildingCatalog:(index=0)=>renderSettlementBuildingCatalogProof(index),
   settlementBuildingCatalogVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.SettlementBuildingCatalog?SettlementBuildingCatalog.proof(campaign.seed):null;},
+  refreshWorldState:()=>renderWorldStateProof(),
+  worldStateVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.WorldState?WorldState.proof(campaign.seed):null;},
   residentActionSnapshot:()=>window.ActionExecutor?.snapshot?.()||null,
   residentActionProofSnapshot:()=>window.ActionExecutor?.proofSnapshot?.()||null,
   residentActionVerify:()=>{
