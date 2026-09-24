@@ -19,6 +19,9 @@ const CHARACTER_BASELINE_MAX_PRESENTATION_SCALE=5.0;
 const CHARACTER_PRESENTATION_MULTIPLIER=2.0;
 const CHARACTER_MAX_PRESENTATION_SCALE=10.0;
 const CHARACTER_BILLBOARD_PITCH_DEGREES=90;
+const NPC_SEPARATION_STEP_TILES=0.22;
+const NPC_SEPARATION_MAX_STEPS=4;
+const NPC_SEPARATION_SCREEN_PADDING_PX=4;
 let enginePromise=null;
 
 function loadEngine(){
@@ -578,7 +581,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return stage==="door-entering"||stage==="inside-arrived"||stage==="door-leaving";
   }
   function cutawayRequested(){
-    return proofState==="inside"||proofState==="entering"||proofState==="behind"||movementProofCutawayRequested();
+    // Normal resident movement never reveals roofs/walls. NPCs entering a
+    // building are hidden instead; cutaway remains available only to explicit
+    // building/protagonist proof presentation.
+    return proofState==="inside"||proofState==="entering"||proofState==="behind";
   }
   function activeRoofGroups(){
     const groups=new Map();
@@ -1367,6 +1373,14 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       return Math.hypot(Number(top.x)-Number(bottom.x),Number(top.y)-Number(bottom.y));
     }catch(_){return 0}
   }
+  function projectedScreenPoint(scenePoint,worldY){
+    const component=camera?.camera;
+    if(!component?.worldToScreen||!pc)return null;
+    try{
+      const screen=component.worldToScreen(new pc.Vec3(scenePoint.x,worldY,scenePoint.z),new pc.Vec3());
+      return Object.freeze({x:Number(screen.x),y:Number(screen.y)});
+    }catch(_){return null}
+  }
   function characterPresentationMetrics(scenePoint,feetY,baseHeight){
     const shortViewport=Math.max(1,Number(host?.clientHeight||1))<260;
     const targetPixelHeight=shortViewport?CHARACTER_SHORT_VIEW_FALLBACK_PX:CHARACTER_MIN_SCREEN_PX;
@@ -1439,6 +1453,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const visibleIds=[];
     const suppressedIds=[];
     const instances=[];
+    const placedResidents=[];
     for(const raw of characters||[]){
       const url=characterAssetKey(raw);
       const point=raw?.point;
@@ -1458,18 +1473,60 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         record=Object.freeze({entity,url});
         characterEntities.set(id,record);
       }
-      const scenePoint=characterScenePoint(point,raw.presentationOffset);
       const entity=record.entity;
+      const role=String(raw.role||"resident");
       const flipped=Boolean(raw.flipX);
       const elevation=Math.max(0,Number(raw.elevation??CHARACTER_DEFAULT_ELEVATION));
-      const groundY=Number(terrainChunkMeshFactory?.heightAtTile?.(
-        point.x,point.y,terrainChunkSize(),
-        Number(raw.presentationOffset?.x||0),Number(raw.presentationOffset?.y||0)
-      )||0);
-      const feetY=groundY+elevation+CHARACTER_GROUND_LIFT;
-      const presentation=characterPresentationMetrics(scenePoint,feetY,baseHeight);
-      const height=presentation.presentationHeight;
-      const width=height*aspect;
+      const baseOffset=Object.freeze({
+        x:Number(raw.presentationOffset?.x||0),
+        y:Number(raw.presentationOffset?.y||0)
+      });
+      const shifts=role==="resident"
+        ?[0,...Array.from({length:NPC_SEPARATION_MAX_STEPS},(_,index)=>{
+            const step=(index+1)*NPC_SEPARATION_STEP_TILES;
+            return [step,-step];
+          }).flat()]
+        :[0];
+      let selected=null;
+      for(const separationShift of shifts){
+        const finalOffset=Object.freeze({
+          x:baseOffset.x+separationShift,
+          y:baseOffset.y-separationShift
+        });
+        const candidateScenePoint=characterScenePoint(point,finalOffset);
+        const candidateGroundY=Number(terrainChunkMeshFactory?.heightAtTile?.(
+          point.x,point.y,terrainChunkSize(),finalOffset.x,finalOffset.y
+        )||0);
+        const candidateFeetY=candidateGroundY+elevation+CHARACTER_GROUND_LIFT;
+        const candidatePresentation=characterPresentationMetrics(candidateScenePoint,candidateFeetY,baseHeight);
+        const candidateHeight=candidatePresentation.presentationHeight;
+        const candidateWidth=candidateHeight*aspect;
+        const screen=projectedScreenPoint(candidateScenePoint,candidateFeetY+candidateHeight*0.5);
+        const renderedHeight=Math.max(
+          8,
+          Number(candidatePresentation.renderedPixelHeight||0),
+          Number(candidatePresentation.targetPixelHeight||CHARACTER_MIN_SCREEN_PX)*CHARACTER_PRESENTATION_MULTIPLIER
+        );
+        const rect=screen?Object.freeze({
+          x:screen.x,
+          y:screen.y,
+          halfWidth:renderedHeight*aspect*0.5,
+          halfHeight:renderedHeight*0.5
+        }):null;
+        const overlaps=role==="resident"&&rect&&placedResidents.some(other=>
+          Math.abs(rect.x-other.x)<rect.halfWidth+other.halfWidth+NPC_SEPARATION_SCREEN_PADDING_PX&&
+          Math.abs(rect.y-other.y)<rect.halfHeight+other.halfHeight+NPC_SEPARATION_SCREEN_PADDING_PX
+        );
+        selected={finalOffset,separationShift,scenePoint:candidateScenePoint,groundY:candidateGroundY,feetY:candidateFeetY,presentation:candidatePresentation,height:candidateHeight,width:candidateWidth,rect};
+        if(!overlaps)break;
+      }
+      const scenePoint=selected.scenePoint;
+      const groundY=selected.groundY;
+      const feetY=selected.feetY;
+      const presentation=selected.presentation;
+      const height=selected.height;
+      const width=selected.width;
+      if(role==="resident"&&selected.rect)placedResidents.push(selected.rect);
       const yaw=cameraFacingYaw;
       entity.enabled=true;
       /* Primitive planes lie on local XZ. Compose one explicit transform:
@@ -1483,9 +1540,12 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       visibleIds.push(id);
       instances.push(Object.freeze({
         id,
-        role:String(raw.role||"resident"),
+        role,
         world:Object.freeze({x:String(point.x),y:String(point.y)}),
-        presentationOffset:Object.freeze({x:Number(raw.presentationOffset?.x||0),y:Number(raw.presentationOffset?.y||0)}),
+        simulationPresentationOffset:baseOffset,
+        separationOffset:Object.freeze({x:Number(selected.separationShift||0),y:Number(-(selected.separationShift||0))}),
+        separationApplied:Math.abs(Number(selected.separationShift||0))>1e-9,
+        presentationOffset:selected.finalOffset,
         scene:Object.freeze({x:scenePoint.x,z:scenePoint.z}),
         groundY,
         baselineFeetY:feetY,

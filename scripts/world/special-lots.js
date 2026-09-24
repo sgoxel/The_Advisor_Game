@@ -29,14 +29,14 @@ function boundsOverlap(a,b,padding){
   );
 }
 
-function perimeterCandidates(bounds){
+function perimeterCandidates(bounds,visibleFacesOnly=false){
   const out=[];
   for(let x=bounds.minX+1;x<=bounds.maxX-1;x++){
-    out.push({x,y:bounds.minY,side:"N"});
+    if(!visibleFacesOnly)out.push({x,y:bounds.minY,side:"N"});
     out.push({x,y:bounds.maxY,side:"S"});
   }
   for(let y=bounds.minY+1;y<=bounds.maxY-1;y++){
-    out.push({x:bounds.minX,y,side:"W"});
+    if(!visibleFacesOnly)out.push({x:bounds.minX,y,side:"W"});
     out.push({x:bounds.maxX,y,side:"E"});
   }
   return out;
@@ -55,10 +55,10 @@ function roadTargets(seed,bounds){
   return out;
 }
 
-function chooseAccess(seed,kind,bounds){
+function chooseAccess(seed,kind,bounds,visibleFacesOnly=false){
   let best=null;
   const targets=roadTargets(seed,bounds);
-  for(const edge of perimeterCandidates(bounds)){
+  for(const edge of perimeterCandidates(bounds,visibleFacesOnly)){
     for(const target of targets){
       const distance=Math.abs(edge.x-target.x)+Math.abs(edge.y-target.y);
       if(distance>6)continue;
@@ -136,7 +136,7 @@ function build(seed){
       const h=rotate?definition.w:definition.h;
       const bounds=boundsFor(candidate.x,candidate.y,w,h);
       if(!candidateValid(seed,bounds,accepted))continue;
-      const access=chooseAccess(seed,definition.kind,bounds);
+      const access=chooseAccess(seed,definition.kind,bounds,definition.enterable);
       if(!access)continue;
 
       selected=Object.freeze({
@@ -256,10 +256,12 @@ function proof(seed){
   let houseOverlapCount=0;
   let lotOverlapCount=0;
   let entrancesPass=true;
+  let visibleEntranceSidesPass=true;
 
   for(let i=0;i<first.length;i++){
     const lot=first[i];
     if(!lot.access||lot.access.accessLengthTiles>6)entrancesPass=false;
+    if(lot.enterable&&(!lot.access||!["S","E"].includes(lot.access.side)))visibleEntranceSidesPass=false;
     const accessLocal=StartingVillage.local(seed,String(lot.access.target.x),String(lot.access.target.y));
     if(!accessLocal||!StartingVillage.isRoadReserved(seed,accessLocal))entrancesPass=false;
 
@@ -296,6 +298,7 @@ function proof(seed){
     enterableCount===6&&
     outdoorCount===1&&
     entrancesPass&&
+    visibleEntranceSidesPass&&
     overlapPass;
 
   return Object.freeze({
@@ -306,6 +309,7 @@ function proof(seed){
     kinds:Object.freeze([...kinds].sort()),
     typeCoveragePass,
     entrancesPass,
+    visibleEntranceSidesPass,
     overlapPass,
     roadOverlapCount,
     waterOverlapCount,

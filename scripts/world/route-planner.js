@@ -226,7 +226,18 @@ function findRoute(seed,startValue,destinationValue,options){
         continue;
       }
 
-      const tentative=current.g+state.secondsPerTile;
+      let penaltySeconds=0;
+      if(typeof opts.stepPenaltySeconds==="function"){
+        const rawPenalty=Number(opts.stepPenaltySeconds(Object.freeze({
+          point:next,
+          state,
+          from:current.point,
+          start,
+          destination
+        })));
+        if(Number.isFinite(rawPenalty)&&rawPenalty>0)penaltySeconds=rawPenalty;
+      }
+      const tentative=current.g+state.secondsPerTile+penaltySeconds;
       const previous=gScore.get(nextKey);
       if(previous!=null&&tentative>=previous-1e-9)continue;
 
