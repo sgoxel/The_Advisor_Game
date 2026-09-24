@@ -92,6 +92,7 @@ SCENARIOS = {
     "wp-s003-006-005",
     "wp-s003-006-006",
     "wp-s003-006-007",
+    "wp-s003-006-008",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s004-001",
@@ -156,6 +157,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-005": 7,
     "wp-s003-006-006": 7,
     "wp-s003-006-007": 10,
+    "wp-s003-006-008": 10,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s004-001": 3,
@@ -1256,14 +1258,14 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
                 )
-            if scenario in {"wp-s003-006-006", "wp-s003-006-007"}:
+            if scenario in {"wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008"}:
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
                 )
             if scenario == "wp-s003-006-007":
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-007-001", "wp-s004-003", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -4013,6 +4015,16 @@ def _focus_heightfield_target(driver, kind: str) -> str:
             const slope=Math.max(Math.abs(elevation(x+4,y)-e),Math.abs(elevation(x,y+4)-e));
             consider(x,y,slope,{elevationMeters:e,type,slope});
           }
+        }else if(['dirt','rock','farmland'].includes(kind)){
+          for(let y=-256;y<=256;y+=2)for(let x=-256;x<=256;x+=2){
+            const type=terrain(x,y);
+            if(type!==kind)continue;
+            let same=0;
+            for(const [dx,dy] of [[-2,0],[2,0],[0,-2],[0,2],[-2,-2],[2,-2],[-2,2],[2,2]]){
+              if(terrain(x+dx,y+dy)===kind)same++;
+            }
+            consider(x,y,same,{elevationMeters:elevation(x,y),type,sameTypeNeighbors:same});
+          }
         }
         return best||{ok:false,reason:'target-not-found',kind};
         """,
@@ -4318,6 +4330,23 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 5:
             return _set_camera_center_and_render(driver, 0, 0)
         return _set_camera_zoom_and_render(driver, 0.75)
+    if scenario == "wp-s003-006-008":
+        pairs=(("road","low"),("road","standard"),("dirt","low"),("dirt","standard"),("rock","low"),("rock","standard"),("farmland","low"),("farmland","standard"))
+        if frame_index < len(pairs):
+            kind,profile=pairs[frame_index]
+            quality=_set_material_lifetime_texture_quality(driver, profile)
+            return (
+                f"micro-relief:{kind}:{profile}:enabled={profile!='low'}+"
+                + _focus_heightfield_target(driver, kind)
+                + "+"
+                + _set_camera_zoom_and_render(driver, 1.00)
+            )
+        if frame_index == 8:
+            quality=_set_material_lifetime_texture_quality(driver, "standard")
+            return "micro-relief:road:standard:close+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 2.00)
+        driver.set_window_size(844, 390)
+        quality=_set_material_lifetime_texture_quality(driver, "standard")
+        return "micro-relief:road:standard:phone-landscape+" + _focus_heightfield_target(driver, "road") + "+" + _set_camera_zoom_and_render(driver, 1.00)
     if scenario == "wp-s003-006-007":
         if frame_index == 0:
             return "heightfield:origin-wide+" + _set_camera_center_and_render(driver, 0, 0) + "+" + _set_camera_zoom_and_render(driver, 0.50)
@@ -4856,6 +4885,52 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait sustained-runtime evidence missing: {viewports[3]}")
         if int(viewports[4].get("width") or 0)<=int(viewports[4].get("height") or 0):
             raise RuntimeError(f"Phone landscape sustained-runtime evidence missing: {viewports[4]}")
+        return
+
+    if scenario == "wp-s003-006-008":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-006-008 requires ten terrain micro-relief evidence frames")
+        expected_profiles=("low","standard","low","standard","low","standard","low","standard","standard","standard")
+        expected_zooms=("1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","1.00×","2.00×","1.00×")
+        pair_centers=[]
+        baseline_topology=None
+        for index,frame in enumerate(frames[:10]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            atlas=chunks.get("textureAtlas") or {}
+            quality=gpu.get("materialTextureQuality") or {}
+            if str(quality.get("profile") or "")!=expected_profiles[index]:
+                raise RuntimeError(f"Micro-relief quality mismatch in frame {index+1}: expected {expected_profiles[index]}, got {quality}")
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Micro-relief zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if chunks.get("terrainNormalDetailTextureReady") is not True or atlas.get("normalDetailTextureReady") is not True:
+                raise RuntimeError(f"Shared normal-detail texture missing in frame {index+1}: chunks={chunks}, atlas={atlas}")
+            expected_enabled=expected_profiles[index]!="low"
+            if bool(chunks.get("terrainMicroReliefEnabled"))!=expected_enabled:
+                raise RuntimeError(f"Micro-relief quality gate failed in frame {index+1}: {chunks}")
+            if int(chunks.get("terrainMicroReliefGeometryVerticesAdded") or 0)!=0:
+                raise RuntimeError(f"Micro-relief added terrain geometry in frame {index+1}: {chunks}")
+            if int(chunks.get("terrainMicroReliefMaterialVariantsAdded") or 0)!=0:
+                raise RuntimeError(f"Micro-relief added material variants in frame {index+1}: {chunks}")
+            if int(atlas.get("totalGpuTextureCount") or 0)!=3:
+                raise RuntimeError(f"Terrain texture set is not bounded to atlas+detail+normal in frame {index+1}: {atlas}")
+            topology=(int(chunks.get("vertices") or 0),int(chunks.get("triangles") or 0),int(chunks.get("presentationMeshInstanceCount") or 0))
+            if baseline_topology is None:
+                baseline_topology=topology
+            elif topology!=baseline_topology:
+                raise RuntimeError(f"Micro-relief changed terrain topology/draw resources: baseline={baseline_topology}, frame{index+1}={topology}")
+            if gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Micro-relief changed Simulation authority in frame {index+1}: {gpu}")
+            if int(atlas.get("frameDecodeCount") or 0)!=0 or int(atlas.get("frameRasterizeCount") or 0)!=0 or int(atlas.get("frameAtlasBuildCount") or 0)!=0:
+                raise RuntimeError(f"Micro-relief preparation leaked into visible frame path in frame {index+1}: {atlas}")
+            pair_centers.append(str(build.get("cameraCenter") or build.get("cameraLocation") or ""))
+        for a,b in ((0,1),(2,3),(4,5),(6,7)):
+            if pair_centers[a]!=pair_centers[b]:
+                raise RuntimeError(f"OFF/ON comparison moved camera for pair {a//2+1}: {pair_centers[a]} vs {pair_centers[b]}")
+        viewport=frames[9].get("runtime",{}).get("viewport",{})
+        if int(viewport.get("width") or 0)<=int(viewport.get("height") or 0):
+            raise RuntimeError(f"Phone landscape micro-relief evidence missing: {viewport}")
         return
 
     if scenario == "wp-s003-006-007":
