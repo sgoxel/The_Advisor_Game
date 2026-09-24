@@ -29,6 +29,17 @@
   <!-- ROW 2: GAMEPLAY AREA -->
   <main id="gameplayArea" class="gameplay-area" aria-label="Gameplay Area">
     <div id="terrainGrid" class="terrain-grid" hidden aria-label="GPU-rendered gameplay terrain"></div>
+    <section id="sceneLoadingOverlay" class="scene-loading-overlay" data-state="loading" data-phase="boot" aria-live="polite" aria-atomic="true">
+      <div class="scene-loading-card">
+        <div class="scene-loading-emblem" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <strong id="sceneLoadingTitle" class="scene-loading-title">Waking the world</strong>
+        <span id="sceneLoadingPhase" class="scene-loading-phase">Starting renderer…</span>
+        <div class="scene-loading-trail" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <button id="sceneLoadingRetry" class="scene-loading-retry" type="button" hidden>Retry startup</button>
+      </div>
+    </section>
     <div id="cameraHud" class="camera-hud" hidden>
       <strong>Camera <code id="cameraCoordinate">(0,0)</code></strong>
       <strong>Zoom <code id="cameraZoom">1.00×</code></strong>
