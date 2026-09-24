@@ -873,3 +873,18 @@
 - Fresh evidence compared Oakford, Greendale, Riverheath and Westmarch under the same country orientation; agriculture, timber, mineral, water and specialization values differ materially, and reload reproduced Oakford revision RPF-10824EED exactly.
 - All 5 fresh screenshots were directly inspected. The region inspector is readable with no major clipping, overlap or broken layout. VISUAL 8.7/10 PASS.
 - Generic regression Visual Evidence run 35950378089 passed; GitHub Pages run 35950377442 successfully deployed the tested head.
+2026-09-24 06:50 +03:00 | WP-S006-004 | Country Relations + Diplomacy Baseline
+- Added immutable deterministic CountryRelations foundation records keyed by canonical stable country pairs.
+- Added shared bilateral relationship score/state, trade access, military tension, border openness, cooperation, rivalry and explicit war-state=false baseline.
+- Added non-aggression, trade, alliance and tributary agreement slots; shared agreement facts are canonical/symmetric while tributary payer/receiver fields remain explicit when applicable.
+- Added directional trade reliance, dependency and leverage keyed by source country so shared diplomacy can coexist with asymmetric economic/political dependence.
+- Added fixed diplomatic context from direct shared borders, border terrain/elevation/moisture, route access, resource complementarity/competition, wealth differences and CountryProfile strategic orientation.
+- CountryProfile orientation remains separate from diplomacy: mercantile countries are not automatically friendly with every neighbor, and high military emphasis does not imply automatic war.
+- Relation lookup is lazy and bounded to relevant direct-border pairs; no full-world diplomacy table, live declaration, treaty negotiation or mutable campaign diplomacy is created in this WP.
+- Added a Development Mode bilateral diplomacy inspector with shared metrics, agreement slots, directional reliance cards, internal-profile context and representative pair comparison.
+- Initial dedicated run 35952465630 exposed both excessive repeated neighbor scans and zero trade-friendly pairs under the first economic calibration. Commit fb013b268e09d26d393599b48db3e7c6b8f3a780 bounded/cached immutable proof relation scans; run 35952638374 still correctly failed the unchanged trade-friendly requirement.
+- Commit 6cb7862f4d71d1ba375fc01631bee2300b9b4136 recalibrated trade access so favorable relations between trade-oriented connected neighbors can cross the same >=60% evidence threshold; no acceptance criterion was lowered.
+- Final Visual Evidence run 35952785766 passed on exact head 6cb7862f4d71d1ba375fc01631bee2300b9b4136. Runtime proof sampled 21 relevant relations, 6 relationship states, 21 distinct scores, 1 trade-friendly pair and 4 tense/rival pairs; determinism, reverse-pair symmetry, time independence, directional asymmetry, orientation separation, context attachment and authority isolation all passed.
+- Fresh screenshots demonstrated trade-friendly Riverfield↔Reddale (+70, 62% trade), hostile Reddale↔Oakvale (-57, 70% tension), directional-dependency Silverbrook↔Silverstead, neutral Ashenbrook↔Silverstead, and exact reload stability of revision DRF-CDD84B12.
+- All 5 fresh screenshots were directly inspected. The diplomacy inspector is readable and stable with no major clipping, overlap or broken layout. VISUAL 8.8/10 PASS.
+- Generic regression Visual Evidence run 35952773343 passed; GitHub Pages run 35952772635 successfully deployed the tested head.
