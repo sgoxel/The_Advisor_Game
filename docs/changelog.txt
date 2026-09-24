@@ -1130,3 +1130,8 @@
 2026-09-24 16:33:27 +03:00 | WP-S003-004-006 | NPC viewport-edge visibility implementation
 - Removed the obsolete fixed ±8-tile camera-center gate from PlayCanvas character billboard activation. Character presentation remains bounded by the existing active terrain/chunk set, while PlayCanvas frustum/render culling handles genuinely off-screen billboards.
 - Preserved NPC Simulation authority, world coordinates, terrain grounding, depth/occlusion, billboard orientation and existing active-terrain limits. Fresh visual validation is pending.
+
+2026-09-24 16:37:38 +03:00 | WP-S003-004-006 | NPC viewport-edge visibility — MIXED PASS
+- Dedicated npc-edge-crossing Visual Evidence run 36006708443 succeeded on implementation head 4785e83bd387e1f91634e3302c02bc4fc9e80c60; the normal push Visual Evidence run 36006672629 and GitHub Pages deployment run 36006671658 also succeeded on the same head.
+- Five fresh screenshots were retrieved and directly inspected. NPCs remained visible across camera pans throughout the rendered world, including residents beyond the removed legacy ±8-tile camera-center gate while surrounding terrain, houses and trees remained visible. No obvious NPC popping, clipping, projection failure or layout defect was observed. VISUAL 8.7/10 PASS.
+- Runtime evidence remained bounded to the existing active terrain/chunk presentation: simulated resident count stayed 13, active billboard count varied with the view, and the legacy camera-center suppression gate is absent. Simulation authority, resident movement state, terrain grounding, depth/occlusion and billboard orientation were not changed by the fix.
