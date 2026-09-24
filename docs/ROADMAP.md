@@ -76,7 +76,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 - `WP-S006-001` — Deterministic Country Territories + Political Centers — COMPLETED
 - `WP-S006-002` — Country Profile: Wealth, Governance + Strategic Orientation — COMPLETED
-- `WP-S006-003` — Region/Province Profiles + Terrain/Resource Identity
+- `WP-S006-003` — Region/Province Profiles + Terrain/Resource Identity — COMPLETED
 - `WP-S006-004` — Country Relations + Diplomacy Baseline
 - `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance
 - `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules
