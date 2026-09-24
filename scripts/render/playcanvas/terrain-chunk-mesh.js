@@ -255,7 +255,75 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     instancingBufferUpdates++;
   }
 
-  function buildBuilding(root,worldData,descriptor,index,batches){
+  function buildGabledRoof(root,descriptor,rootName,b,height,outerW,outerD,roof,roofProfiles){
+    const pitchDegrees=28;
+    const pitchRadians=pitchDegrees*Math.PI/180;
+    const panelThickness=0.16;
+    const overhang=clamp(Math.min(outerW,outerD)*0.07,0.16,0.42);
+    const slopeAcrossX=outerW<=outerD;
+    const wallSpan=slopeAcrossX?outerW:outerD;
+    const ridgeLength=(slopeAcrossX?outerD:outerW)+overhang*2;
+    const eaveSpan=wallSpan+overhang*2;
+    const halfSpan=eaveSpan*0.5;
+    const rise=halfSpan*Math.tan(pitchRadians);
+    const panelLength=halfSpan/Math.cos(pitchRadians);
+    const eaveBottomY=height-0.04;
+    const centerY=eaveBottomY+rise*0.5+(panelThickness*0.5*Math.cos(pitchRadians));
+    const ridgeBottomY=eaveBottomY+rise;
+    const ridgeTopY=ridgeBottomY+panelThickness*Math.cos(pitchRadians);
+    let left,right;
+    if(slopeAcrossX){
+      left=primitive(
+        root,rootName+"_RoofL","box",
+        [b.x-halfSpan*0.5,centerY,b.z],
+        [panelLength,panelThickness,ridgeLength],roof,[0,0,pitchDegrees]
+      );
+      right=primitive(
+        root,rootName+"_RoofR","box",
+        [b.x+halfSpan*0.5,centerY,b.z],
+        [panelLength,panelThickness,ridgeLength],roof,[0,0,-pitchDegrees]
+      );
+    }else{
+      left=primitive(
+        root,rootName+"_RoofL","box",
+        [b.x,centerY,b.z-halfSpan*0.5],
+        [ridgeLength,panelThickness,panelLength],roof,[-pitchDegrees,0,0]
+      );
+      right=primitive(
+        root,rootName+"_RoofR","box",
+        [b.x,centerY,b.z+halfSpan*0.5],
+        [ridgeLength,panelThickness,panelLength],roof,[pitchDegrees,0,0]
+      );
+    }
+    left._advisorBuildingId=String(descriptor.id||"");
+    right._advisorBuildingId=String(descriptor.id||"");
+    registerRoof(left,descriptor);registerRoof(right,descriptor);
+    const profile=Object.freeze({
+      buildingId:String(descriptor.id||""),
+      source:String(descriptor.source||"normal"),
+      footprintWidth:Number(b.width.toFixed(3)),
+      footprintDepth:Number(b.depth.toFixed(3)),
+      wallWidth:Number(outerW.toFixed(3)),
+      wallDepth:Number(outerD.toFixed(3)),
+      ridgeAxis:slopeAcrossX?"z":"x",
+      slopeAxis:slopeAcrossX?"x":"z",
+      pitchDegrees,
+      overhang:Number(overhang.toFixed(3)),
+      wallTopY:Number(height.toFixed(3)),
+      eaveBottomY:Number(eaveBottomY.toFixed(3)),
+      ridgeBottomY:Number(ridgeBottomY.toFixed(3)),
+      ridgeTopY:Number(ridgeTopY.toFixed(3)),
+      centerRidgeHigher:ridgeBottomY>eaveBottomY+0.2,
+      eaveContact:Math.abs(height-eaveBottomY)<=0.08,
+      restrainedOverhang:overhang>=0.16&&overhang<=0.42,
+      footprintDriven:true,
+      twoPlane:true
+    });
+    roofProfiles.push(profile);
+    return Object.freeze({left,right,profile});
+  }
+
+  function buildBuilding(root,worldData,descriptor,index,batches,roofProfiles){
     const b=localBounds(worldData,descriptor.bounds||{});
     const special=descriptor.source==="special";
     const height=special?2.25:1.75;
@@ -271,12 +339,7 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     appendBoxBatch(wallBatch,[b.x,height*0.5,b.z+outerD*0.5],[outerW,height,thickness],0);
     appendBoxBatch(wallBatch,[b.x-outerW*0.5,height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
     appendBoxBatch(wallBatch,[b.x+outerW*0.5,height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
-    const roofLift=height+0.34;
-    const left=primitive(root,rootName+"_RoofL","box",[b.x-b.width*0.21,roofLift,b.z],[b.width*0.58,0.16,b.depth*0.98],roof,[0,0,-25]);
-    const right=primitive(root,rootName+"_RoofR","box",[b.x+b.width*0.21,roofLift,b.z],[b.width*0.58,0.16,b.depth*0.98],roof,[0,0,25]);
-    left._advisorBuildingId=String(descriptor.id||"");
-    right._advisorBuildingId=String(descriptor.id||"");
-    registerRoof(left,descriptor);registerRoof(right,descriptor);
+    buildGabledRoof(root,descriptor,rootName,b,height,outerW,outerD,roof,roofProfiles);
     let count=6;
     if(descriptor.entrance){
       const p=localTileCenter(worldData,descriptor.entrance.x,descriptor.entrance.y);
@@ -365,8 +428,9 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
     const props=Array.isArray(presentation.propDescriptors)?presentation.propDescriptors:[];
     const interiorObjects=Array.isArray(presentation.interiorObjectDescriptors)?presentation.interiorObjectDescriptors:[];
     const batches=staticBatchCollector();
+    const roofProfiles=[];
     let sourcePresentationPrimitiveCount=0;
-    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches);
+    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles);
     for(let i=0;i<interiorObjects.length;i++)sourcePresentationPrimitiveCount+=buildInteriorObject(spec.worldData,interiorObjects[i],batches);
 
     const staticBatches=finalizeStaticBatches(entity,batches);
@@ -417,6 +481,12 @@ function create({pc,device,parent,material,seedProvider=()=>"",registerRoof=()=>
       savedDrawCalls,
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       buildingPresentationCount:buildings.length,
+      roofProfileCount:roofProfiles.length,
+      roofProfilePass:roofProfiles.length===buildings.length&&roofProfiles.every(item=>item.centerRidgeHigher&&item.eaveContact&&item.restrainedOverhang&&item.footprintDriven),
+      roofCenterRidgeHigher:roofProfiles.every(item=>item.centerRidgeHigher),
+      roofEaveContactPass:roofProfiles.every(item=>item.eaveContact),
+      roofFootprintDriven:roofProfiles.every(item=>item.footprintDriven),
+      roofProfiles:Object.freeze(roofProfiles.slice()),
       interiorObjectPresentationCount:interiorObjects.length,
       propPresentationCount:props.length,
       roadCellCount:Number(surfaceCounts.road||0)+Number(surfaceCounts.path||0)+Number(surfaceCounts.square||0),
