@@ -47,7 +47,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-005` — PlayCanvas 3D Asset + Material Preparation Pipeline — COMPLETED
 - `WP-S003-005-001` — Adaptive 3D Texture Quality + Mobile GPU Budget — COMPLETED
 - `WP-S003-005-002` — GLB Mesh, Material, LOD + Instancing Asset Standard — COMPLETED
-- `WP-S003-005-003` — PlayCanvas Terrain PNG-First + SVG-Fallback Textures
+- `WP-S003-005-003` — PlayCanvas Terrain PNG-First + SVG-Fallback Textures — COMPLETED
 - `WP-S003-005-004` — Building Surface Textures + SVG Asset Fallback
 - `WP-S003-006` — PlayCanvas 3D Terrain Chunk Mesh + Background Preparation — COMPLETED
 - `WP-S003-006-001` — Adjustable Terrain Chunk Size — COMPLETED
