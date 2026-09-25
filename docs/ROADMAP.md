@@ -74,6 +74,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-008-002-001` — Real First-Playable Loading Progress + Animated Phase Feedback
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
 - `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention
+- `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup
 - `WP-S003-009` — Loading-Screen-Inspired Living World Visual Direction Foundation — COMPLETED
 - `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — COMPLETED
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
@@ -114,7 +115,9 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S006-003` — Region/Province Profiles + Terrain/Resource Identity — COMPLETED
 - `WP-S006-004` — Country Relations + Diplomacy Baseline — COMPLETED
 - `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance — COMPLETED
+- `WP-S006-005-001` — Population-Scaled Settlement Footprints + Realistic Urban Morphology
 - `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
+- `WP-S006-007` — Deterministic World Destinations + Points-of-Interest Foundation
 
 # Stage 7 — Hierarchical Lazy World Simulation + Deterministic Persistence
 
