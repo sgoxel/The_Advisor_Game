@@ -12,6 +12,7 @@ function point(x,y){
 }
 
 function manhattan(a,b){
+  if(!a||!b)return Infinity;
   return Number((BigInt(a.x)>BigInt(b.x)?BigInt(a.x)-BigInt(b.x):BigInt(b.x)-BigInt(a.x))+
     (BigInt(a.y)>BigInt(b.y)?BigInt(a.y)-BigInt(b.y):BigInt(b.y)-BigInt(a.y)));
 }
