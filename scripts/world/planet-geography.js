@@ -7,7 +7,7 @@ const STORAGE_KEY="advisor.planet.seed.v1";
 const CONTINENT_COUNT=5;
 const CONTINENT_LOBES_PER=6;
 const ISLAND_CHAIN_COUNT=4;
-const ISLANDS_PER_CHAIN=5;
+const ISLANDS_PER_CHAIN=7;
 const ISOLATED_ISLAND_COUNT=8;
 const MOUNTAIN_NODES_PER_CONTINENT=9;
 
@@ -217,8 +217,11 @@ function create(seedValue){
     const nodes=[];
     for(let i=0;i<ISLANDS_PER_CHAIN;i++){
       const centered=i-(ISLANDS_PER_CHAIN-1)/2;
-      const center=offsetOnSphere(origin,Math.abs(centered)*0.115,bearing+(centered<0?Math.PI:0)+(rng()-0.5)*0.25);
-      nodes.push(lobe(center,0.045+rng()*0.047,0.20,0.86));
+      const chainOffset=Math.abs(centered)*(0.072+rng()*0.022);
+      const sideBend=Math.sin(centered*0.92)*(0.16+rng()*0.16);
+      const center=offsetOnSphere(origin,chainOffset,bearing+(centered<0?Math.PI:0)+sideBend+(rng()-0.5)*0.22);
+      const radius=(0.034+rng()*0.042)*(1-Math.min(0.28,Math.abs(centered)*0.045));
+      nodes.push(lobe(center,radius,0.18,0.80+rng()*0.12));
     }
     islandChains.push(...nodes);
   }
@@ -261,9 +264,10 @@ function create(seedValue){
     const continent=maxInfluence(warped,continentLobes);
     const island=maxInfluence(warped,islandLobes);
     const coastNoise=(fbm3(bases.coast,warped,2.7,4)-0.5)*0.44+(fbm3(bases.detail,warped,9.5,3)-0.5)*0.12;
-    const islandRough=(fbm3(bases.detail,warped,18.5,3)-0.5)*0.36;
+    const islandRough=(fbm3(bases.detail,warped,18.5,3)-0.5)*0.44;
+    const islandCut=(ridged3(bases.coast,warped,31.0,2)-0.5)*0.18;
     const continentSignal=continent+coastNoise;
-    const islandSignal=island*1.08+coastNoise*0.34+islandRough*clamp(island*1.45);
+    const islandSignal=island*1.03+coastNoise*0.42+islandRough*clamp(island*1.65)-islandCut*clamp(1-island);
     const landSignal=Math.max(continentSignal,islandSignal)-0.33;
     const land=landSignal>0;
     const interior=land?clamp(landSignal/0.56):0;
