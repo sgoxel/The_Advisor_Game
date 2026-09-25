@@ -1612,3 +1612,11 @@
 - Direct inspection of fresh screenshots: centered desktop card, readable 100% Ready state, portrait layout and compact landscape failure state have no major clipping/overlap/readability defects. VISUAL: 8.7/10 — PASS.
 - Functional evidence PASS: actual first-playable telemetry reaches exactly 100% with gameplay-ready timestamp; proof progression is bounded 0/15/52/68/84/100 and failure remains at 68%; planet authority remains ready, deterministic and free of per-frame generation.
 - GitHub Pages deployment run 36198312053 for exact head e6741de7ddecc02b9fc9a9f035396f70c77681c3 completed successfully.
+
+2026-09-26 01:52:00 +03:00 | WP-S003-006-014 | Seeded Planetary Oceans, Continents, Islands + Macro Height Relief — IMPLEMENTATION + VISUAL/FUNCTIONAL PASS
+- Classification: MIXED. Continued the planet-first deterministic spherical geography implementation from the prior 7.8/10 visual state.
+- Reworked archipelagos into overlapping curved multi-node chains, added deterministic multi-lobed isolated islands and finer coastline breakup, while preserving sphere-space authority, physical elevation/depth, smooth visual sea surface and same-SEED determinism.
+- Increased ambient/fill readability and corrected compact phone-landscape framing without adding another canvas or activating local gameplay systems.
+- Final fresh evidence run 36198901066 on exact head 90fc8e71c3bd75fc0246936e796358e3cc9eae03 completed successfully. Artifact 10891137085 / sha256:abacde9a681b1552f396179a8bd34c6106c1e2fb0292c3be188aec93fddcf02c contains six required globe/rotation/mobile views.
+- Direct inspection of fresh screenshots: varied island silhouettes replace bead-like chains, oceans/continents remain clearly readable, mountain relief is visible, and compact landscape fills available height without clipping. VISUAL: 8.2/10 — PASS.
+- Functional evidence PASS: deterministic same-SEED geography, different-SEED divergence, longitude seam/pole continuity, physical elevation metadata, one active canvas, inactive protagonist/NPC/tile/local-terrain systems and no per-frame planet regeneration.
