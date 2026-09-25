@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -333,6 +334,7 @@ return (() => {
       currentBuild: {
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
         sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
+        worldVisualStyle: window.AdvisorWorldVisualStyle?.snapshot?.() || null,
         sceneLoadingEarlyClick: window.__WP_S003_008_002_EARLY_CLICK || null,
         campaignSeed: window.SeedSystem?.getCampaign?.()?.seed || null,
         campaignRealStartMs: Number(window.SeedSystem?.getCampaign?.()?.realStartMs || 0) || null,
@@ -11213,6 +11215,9 @@ def take_screenshots(
 
     try:
         browser_url = normalize_target(target)
+        evidence_revision = os.environ.get("GITHUB_SHA", "").strip()
+        if evidence_revision and browser_url.startswith(("https://", "http://")):
+            browser_url += ("&" if "?" in browser_url else "?") + "evidence_revision=" + quote(evidence_revision[:16])
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
         if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-008-002"}:
