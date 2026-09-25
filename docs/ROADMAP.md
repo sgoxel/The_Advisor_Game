@@ -75,7 +75,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — COMPLETED
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
 - `WP-S003-009-003` — Terrain/Object Contact Shadows + Grounding — COMPLETED
-- `WP-S003-009-004` — Deterministic Material Variation + Effective Ultra Texture Quality
+- `WP-S003-009-004` — Deterministic Material Variation + Effective Ultra Texture Quality — COMPLETED
 - `WP-S003-009-004-001` — Terrain Surface Identity + Blend Weight, UV + Material Binding Correction
 - `WP-S003-009-004-002` — Tile-Authoritative Smooth Terrain Contours + Rounded Surface Boundaries
 - `WP-S003-009-005` — Loading-Screen-Inspired Unified Character, Tree + 3D Environment Art Treatment
