@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planetary-geography-v1";
+const VERSION="planetary-geography-v2";
 const DEFAULT_SEED="The_Advisor_Game_Planet_001";
 const STORAGE_KEY="advisor.planet.seed.v1";
 const CONTINENT_COUNT=5;
@@ -271,7 +271,7 @@ function create(seedValue){
       const exceptional=Math.pow(mountainInfluence,3.2)*(500+1200*peakNoise);
       elevationMeters=clamp(base+mountains+exceptional,5,7000);
     }else{
-      const deep=clamp((-landSignal)/0.78);
+      const deep=clamp((-landSignal+0.04)/0.42);
       const oceanNoise=fbm3(bases.ocean,d,3.2,3);
       elevationMeters=-clamp(120+deep*(1350+3900*oceanNoise),80,5500);
     }
