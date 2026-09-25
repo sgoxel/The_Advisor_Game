@@ -1482,3 +1482,12 @@
 - Dedicated Visual Evidence run 36101152268 passed on implementation commit 6ae39b9ba31f191155197e8a780aba1846e77851; inspected 8 fresh screenshots and assigned VISUAL 8.4/10 PASS.
 - Evidence observed 3 ambient categories, 202 -> 487 shared-instance buffer updates across the first two time-separated frames, <=2.0 ms maximum per-resource ambient CPU update, and 8 added ambient draw calls across 81-194 prepared resources.
 - GitHub Pages deployment run 36101140463 successfully deployed the implementation commit.
+
+2026-09-25 13:17:50 +03:00 | WP-S003-006-011 | Responsive Long-Distance Chunk Streaming + Area Loading Gate — PASS
+- Classification: MIXED. Added destination-first runtime streaming with a real area-loading gate, latest-target coalescing, stale worker cancellation, off-main-thread deterministic terrain classification, sparse visible+halo world preparation, sparse minimum PlayCanvas meshes, and cached-destination gate bypass.
+- Gate-critical meshes now emit only prepared sparse cells rather than expanding each destination chunk back to all 256 cells. Renderer readiness telemetry recognizes streaming-minimum meshes, allowing safe visible-frame confirmation before handoff.
+- Dedicated Visual Evidence Attempt 2 run 36122569377 on exact implementation head 6d067ac1e2067549546e39b35ea3835d6dc973a9 passed all automated checks. Artifact 10857378939 contains eight fresh screenshots; all eight were directly inspected. FINAL VISUAL 8/10 PASS.
+- Fresh evidence covers prepared short navigation, distant LOAD_GATE near (262,-192), destination READY, rapid latest-target coalescing to (320,-240), cached origin return, cached distant revisit at Standard quality, cached High-quality return, and phone-landscape LOAD_GATE. No blank/broken chunks or major layout/projection defects were observed.
+- Runtime evidence records 0 terrain-worker errors, 10 worker completions / 747 classified cells by the phone gate, sparse minimum meshes (8 resources / 578 prepared cells before the phone step), destination max slice 38.1 ms, zero >200 ms destination slices, continuous paint heartbeats, and unchanged protagonist/Simulation authority.
+- Cached return/revisit paths no longer flash LOAD_GATE when all required destination chunks already exist in retained Active/Prepared/Cached storage.
+- Exact tested implementation head 6d067ac1e2067549546e39b35ea3835d6dc973a9 deployed successfully via GitHub Pages run 36122557902.
