@@ -2140,6 +2140,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreDelta=Infinity,maxRoadCoreDelta=-Infinity;
     let hydrologyWaterCellCount=0,hydrologyBridgeCellCount=0;
     let hydrologyBridgeWaterUnderlayCellCount=0,hydrologyBridgeDeckTriangleCount=0;
+    let hydrologyBankFaceCount=0,hydrologyBankFaceTriangleCount=0;
     let hydrologyWaterSurfaceMin=Infinity,hydrologyWaterSurfaceMax=-Infinity;
     let hydrologyBedMin=Infinity,hydrologyBedMax=-Infinity;
     let hydrologyBankMin=Infinity,hydrologyBankMax=-Infinity;
@@ -2500,6 +2501,63 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           uvs.push(0,0,1,0,0,1,1,1);
         }
         indices.push(base,base+2,base+1, base+1,base+2,base+3);
+
+        // Close only the exposed shoreline cut between the conditioned bank and
+        // the depressed water surface. These restrained side faces stay in the
+        // existing chunk mesh/material, so the basin reads as recessed terrain
+        // without clear-color cracks or a second shoreline draw call.
+        if(baseVisualType==="water"){
+          const bankRect=semanticAtlasReady?(activeAtlas?.meshUvRect?.("dirt")||activeAtlas?.uvRect?.("dirt")):null;
+          const bankEdges=[
+            Object.freeze({dx:0,dz:-1,a:0,b:1,normal:[0,0,-1],flip:false}),
+            Object.freeze({dx:1,dz:0,a:1,b:3,normal:[1,0,0],flip:false}),
+            Object.freeze({dx:0,dz:1,a:2,b:3,normal:[0,0,1],flip:true}),
+            Object.freeze({dx:-1,dz:0,a:0,b:2,normal:[-1,0,0],flip:true})
+          ];
+          for(const edge of bankEdges){
+            const nx=cellWorldX+BigInt(edge.dx),nz=cellWorldZ+BigInt(edge.dz);
+            const neighborType=terrainTypeAt(seed,nx,nz);
+            if(hydrologyWaterReference(seed,nx,nz,neighborType))continue;
+            const topA=rawCorners[edge.a].position,topB=rawCorners[edge.b].position;
+            const bottomA=corners[edge.a].position,bottomB=corners[edge.b].position;
+            const topAY=Math.max(Number(topA[1]),Number(bottomA[1])+0.006);
+            const topBY=Math.max(Number(topB[1]),Number(bottomB[1])+0.006);
+            const exposure=Math.max(topAY-Number(bottomA[1]),topBY-Number(bottomB[1]));
+            if(exposure<=0.008)continue;
+            const bankBase=positions.length/3;
+            positions.push(
+              Number(topA[0]),topAY,Number(topA[2]),
+              Number(topB[0]),topBY,Number(topB[2]),
+              Number(bottomA[0]),Number(bottomA[1]),Number(bottomA[2]),
+              Number(bottomB[0]),Number(bottomB[1]),Number(bottomB[2])
+            );
+            for(let i=0;i<4;i++)normals.push(...edge.normal);
+            const bankTint=terrainVariationAtVertex(cellWorldX,cellWorldZ,"dirt").tint;
+            if(bankRect){
+              for(let i=0;i<4;i++)appendColor32(colors32,bankTint,1);
+              uvs.push(
+                Number(bankRect.u0),Number(bankRect.v0),
+                Number(bankRect.u1),Number(bankRect.v0),
+                Number(bankRect.u0),Number(bankRect.v1),
+                Number(bankRect.u1),Number(bankRect.v1)
+              );
+              texturedSurfaceTypes.add("dirt");
+            }else{
+              const earth=heightfieldColor(seed,cellWorldX,cellWorldZ,"#70533b","dirt");
+              for(let i=0;i<4;i++)appendColor32(colors32,earth,1);
+              uvs.push(0,0,1,0,0,1,1,1);
+              fallbackSurfaceTypes.add("dirt");
+            }
+            for(let i=0;i<4;i++)detailUvs.push(Number(cellWorldX)*0.25,Number(cellWorldZ)*0.25);
+            if(edge.flip){
+              indices.push(bankBase,bankBase+2,bankBase+1, bankBase+1,bankBase+2,bankBase+3);
+            }else{
+              indices.push(bankBase,bankBase+1,bankBase+2, bankBase+1,bankBase+3,bankBase+2);
+            }
+            hydrologyBankFaceCount++;
+            hydrologyBankFaceTriangleCount+=2;
+          }
+        }
 
         // A bridge over authoritative underlying water keeps the water surface
         // visible inside the tile and adds a narrower raised deck on top. Both
@@ -2893,6 +2951,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       hydrologyBridgeCellCount,
       hydrologyBridgeWaterUnderlayCellCount,
       hydrologyBridgeDeckTriangleCount,
+      hydrologyBankFaceCount,
+      hydrologyBankFaceTriangleCount,
+      hydrologyBankFaceDrawCallsAdded:0,
+      hydrologyBankFacesPrepared:hydrologyWaterCellCount===0||hydrologyBankFaceCount>0,
       hydrologyBridgeWaterUnderlayPass:Boolean(
         hydrologyBridgeCellCount===0||hydrologyBridgeWaterUnderlayCellCount===hydrologyBridgeCellCount
       ),
