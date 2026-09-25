@@ -1566,6 +1566,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-006-011":
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
+        # Apply the controlled streaming profile before campaign startup so the
+        # startup render cannot enqueue unrelated full-quality background chunks.
+        _set_terrain_preload_settings(
+            driver, radius=2, cache=256, directional=True, background=False
+        )
+        _set_terrain_chunk_size(driver, 16)
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
@@ -1629,14 +1635,9 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     driver, radius=1, cache=256, directional=True, background=True
                 )
             if scenario == "wp-s003-006-011":
-                # Keep the stress proof focused on explicit destination-priority
-                # streaming. Normal background generation is intentionally disabled
-                # so cold software-WebGL CI does not spend the evidence window
-                # composing unrelated full-quality neighbor chunks.
-                _set_terrain_preload_settings(
-                    driver, radius=2, cache=256, directional=True, background=False
-                )
-                _set_terrain_chunk_size(driver, 16)
+                # Already configured before campaign start; do not mutate the queue
+                # again while startup readiness is settling.
+                pass
             if scenario in {"wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009"}:
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
@@ -10319,6 +10320,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
         gpus=[b.get("gpuRenderer") or {} for b in builds]
         areas=[b.get("runtimeAreaLoading") or {} for b in builds]
+        if any(b.get("campaignState")!="ACTIVE" for b in builds):
+            raise RuntimeError(f"Streaming evidence did not use a real ACTIVE campaign: {[b.get('campaignState') for b in builds]}")
+        if any((b.get("sceneLoading",{}).get("overlay",{}) or {}).get("title")=="Startup interrupted" for b in builds):
+            raise RuntimeError("Streaming evidence retained a Startup interrupted overlay")
 
         if areas[0].get("state")!="READY" or areas[0].get("gateShownAtMs") is not None:
             raise RuntimeError(f"Short prepared navigation unnecessarily showed LOAD_GATE: {areas[0]}")
@@ -10329,6 +10334,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
 
         if areas[2].get("state")!="READY":
             raise RuntimeError(f"Destination did not recover to READY: {areas[2]}")
+        required_count=int((gpus[2].get("terrainPreload") or {}).get("destinationRequiredCount") or 0)
+        if required_count<=0 or required_count>6:
+            raise RuntimeError(f"Destination planner prepared too many chunks for the bounded viewport: {required_count}")
         if builds[2].get("cameraCoordinate")!="(262,-192)":
             raise RuntimeError(f"Destination camera mismatch: {builds[2].get('cameraCoordinate')}")
         chunks2=gpus[2].get("terrainChunks") or {}
