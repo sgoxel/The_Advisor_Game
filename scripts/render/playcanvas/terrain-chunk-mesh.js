@@ -51,10 +51,9 @@ function floorDivBig(value,divisor){
   return q;
 }
 function heightfieldSegments(size){
-  // The semantic terrain mesh samples every authoritative logical tile.
-  // Grounding queries must use the identical one-tile grid so characters,
-  // props and route overlays stay on the exact rendered height surface.
-  return Math.max(1,Math.trunc(Number(size)||16));
+  const bounded=Math.max(1,Math.trunc(Number(size)||16));
+  for(let candidate=Math.min(8,bounded);candidate>=1;candidate--)if(bounded%candidate===0)return candidate;
+  return 1;
 }
 function heightfieldStep(size){return Math.max(1,Math.trunc(Number(size)||16)/heightfieldSegments(size));}
 function referenceElevation(seed){
@@ -1267,9 +1266,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function build(spec){
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
-    // Surface identity is logical-tile authoritative. One prepared terrain quad
-    // per logical tile keeps semantic atlas UVs exact while remaining one mesh /
-    // one shared material per chunk (never one Entity/material per tile).
+    // Surface identity is logical-tile authoritative, while elevation keeps the
+    // proven bounded coarse heightfield. Per-tile semantic quads interpolate
+    // that prepared heightfield instead of re-running world generation at every
+    // logical vertex.
+    const heightSegments=heightfieldSegments(size);
+    const heightStep=heightfieldStep(size);
     const segments=size;
     const step=1;
     const metersPerTile=2;
@@ -1297,21 +1299,21 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       localSamples.set(key,sample);
       return sample;
     };
-    const stride=segments+1;
-    const grid=new Array(stride*stride);
-    for(let gz=0;gz<=segments;gz++){
-      for(let gx=0;gx<=segments;gx++){
-        const wx=baseX+BigInt(gx),wz=baseZ+BigInt(gz);
+    const coarseStride=heightSegments+1;
+    const coarseGrid=new Array(coarseStride*coarseStride);
+    for(let gz=0;gz<=heightSegments;gz++){
+      for(let gx=0;gx<=heightSegments;gx++){
+        const wx=baseX+BigInt(gx*heightStep),wz=baseZ+BigInt(gz*heightStep);
         const sample=sampleVertex(wx,wz);
-        const left=sampleVertex(wx-1n,wz).height;
-        const right=sampleVertex(wx+1n,wz).height;
-        const up=sampleVertex(wx,wz-1n).height;
-        const down=sampleVertex(wx,wz+1n).height;
-        const dx=(right-left)/(2*metersPerTile),dz=(down-up)/(2*metersPerTile);
+        const left=sampleVertex(wx-BigInt(heightStep),wz).height;
+        const right=sampleVertex(wx+BigInt(heightStep),wz).height;
+        const up=sampleVertex(wx,wz-BigInt(heightStep)).height;
+        const down=sampleVertex(wx,wz+BigInt(heightStep)).height;
+        const dx=(right-left)/(2*heightStep*metersPerTile),dz=(down-up)/(2*heightStep*metersPerTile);
         const nx=-dx,ny=1,nz=-dz,normLen=Math.hypot(nx,ny,nz)||1;
-        grid[gz*stride+gx]=Object.freeze({
+        coarseGrid[gz*coarseStride+gx]=Object.freeze({
           wx,wz,
-          position:Object.freeze([gx*metersPerTile-half,sample.height,gz*metersPerTile-half]),
+          position:Object.freeze([gx*heightStep*metersPerTile-half,sample.height,gz*heightStep*metersPerTile-half]),
           normal:Object.freeze([nx/normLen,ny/normLen,nz/normLen]),
           sample
         });
@@ -1334,6 +1336,39 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         }
       }
     }
+    const coarseAt=(gx,gz)=>coarseGrid[Math.max(0,Math.min(heightSegments,gz))*coarseStride+Math.max(0,Math.min(heightSegments,gx))];
+    const fineVertex=(tileX,tileZ)=>{
+      const qx=tileX/heightStep,qz=tileZ/heightStep;
+      const x0=Math.min(heightSegments-1,Math.max(0,Math.floor(qx)));
+      const z0=Math.min(heightSegments-1,Math.max(0,Math.floor(qz)));
+      const tx=Math.max(0,Math.min(1,qx-x0)),tz=Math.max(0,Math.min(1,qz-z0));
+      const a=coarseAt(x0,z0),b=coarseAt(x0+1,z0),c=coarseAt(x0,z0+1),d=coarseAt(x0+1,z0+1);
+      let y,nx,ny,nz,elevation;
+      // Match the same two-triangle interpolation used by terrainHeightAtTile.
+      if(tx+tz<=1){
+        y=a.sample.height+tx*(b.sample.height-a.sample.height)+tz*(c.sample.height-a.sample.height);
+        nx=a.normal[0]+tx*(b.normal[0]-a.normal[0])+tz*(c.normal[0]-a.normal[0]);
+        ny=a.normal[1]+tx*(b.normal[1]-a.normal[1])+tz*(c.normal[1]-a.normal[1]);
+        nz=a.normal[2]+tx*(b.normal[2]-a.normal[2])+tz*(c.normal[2]-a.normal[2]);
+        elevation=a.sample.elevationMeters+tx*(b.sample.elevationMeters-a.sample.elevationMeters)+tz*(c.sample.elevationMeters-a.sample.elevationMeters);
+      }else{
+        y=d.sample.height+(1-tz)*(b.sample.height-d.sample.height)+(1-tx)*(c.sample.height-d.sample.height);
+        nx=d.normal[0]+(1-tz)*(b.normal[0]-d.normal[0])+(1-tx)*(c.normal[0]-d.normal[0]);
+        ny=d.normal[1]+(1-tz)*(b.normal[1]-d.normal[1])+(1-tx)*(c.normal[1]-d.normal[1]);
+        nz=d.normal[2]+(1-tz)*(b.normal[2]-d.normal[2])+(1-tx)*(c.normal[2]-d.normal[2]);
+        elevation=d.sample.elevationMeters+(1-tz)*(b.sample.elevationMeters-d.sample.elevationMeters)+(1-tx)*(c.sample.elevationMeters-d.sample.elevationMeters);
+      }
+      const nlen=Math.hypot(nx,ny,nz)||1;
+      return Object.freeze({
+        wx:baseX+BigInt(tileX),wz:baseZ+BigInt(tileZ),
+        position:Object.freeze([tileX*metersPerTile-half,y,tileZ*metersPerTile-half]),
+        normal:Object.freeze([nx/nlen,ny/nlen,nz/nlen]),
+        sample:Object.freeze({height:y,elevationMeters:elevation})
+      });
+    };
+    const stride=segments+1;
+    const grid=new Array(stride*stride);
+    for(let gz=0;gz<=segments;gz++)for(let gx=0;gx<=segments;gx++)grid[gz*stride+gx]=fineVertex(gx,gz);
     const borderHeights=Object.freeze({
       north:Object.freeze(Array.from({length:stride},(_,i)=>grid[i].sample.height)),
       south:Object.freeze(Array.from({length:stride},(_,i)=>grid[segments*stride+i].sample.height)),
@@ -1485,8 +1520,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       entity,mesh,meshInstance,staticBatches,instancedGroups,
       x:Number(spec.x),y:Number(spec.y),chunkSize:size,signature:String(spec.signature||""),
       segments,
-      heightfieldGridResolution:segments+1,
-      heightfieldStepTiles:step,
+      heightfieldGridResolution:heightSegments+1,
+      heightfieldStepTiles:heightStep,
+      semanticGridResolution:segments+1,
+      semanticStepTiles:1,
       indexedSharedVertices:false,
       indexedSemanticQuads:true,
       semanticUvChannel:0,

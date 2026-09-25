@@ -798,7 +798,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // Chunk resources contain deterministic geometry plus references to shared
     // materials. Framebuffer scale and material-quality changes do not alter
     // geometry, so they must not invalidate prepared chunk meshes/entities.
-    return "geometry=heightfield-v5-semantic-surface";
+    return "geometry=heightfield-v6-semantic-uv-coarse-height";
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
