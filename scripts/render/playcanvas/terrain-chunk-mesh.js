@@ -2180,7 +2180,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformConditionOffsetMax:Math.max(...streamingLandforms.map(row=>Number(row.conditionOffset||0))),
       landformSteepFaceTreatment:"shared-terrain-vertex-color",landformDrawCallsAdded:0,landformTrianglesAdded:0,landformMaterialsAdded:0,
       landformDeterministic:true,landformSeamSafeGlobalCoordinates:true,landformChunkPrepared:true,landformPerFrameRegenerationCount:0,
-      landformRendererOnly:true,landformNavigationAuthority:false,landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
+      landformRendererOnly:false,landformNavigationAuthority:false,landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
       segments:size,heightfieldGridResolution:heightSegments+1,heightfieldStepTiles:heightStep,
       semanticGridResolution:size+1,semanticStepTiles:1,indexedSharedVertices:false,indexedSemanticQuads:true,
       streamingSparseMesh:true,streamingSparseMeshCellCount:emittedCellCount,
@@ -2227,10 +2227,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     if(String(spec?.streamingProfile||"")==="minimum")return buildStreamingMinimum(spec);
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
-    // Surface identity is logical-tile authoritative, while elevation keeps the
-    // proven bounded coarse heightfield. Per-tile semantic quads interpolate
-    // that prepared heightfield instead of re-running world generation at every
-    // logical vertex.
+    // Natural terrain is authoritative in continuous world-meter space.
+    // The bounded grid below is renderer tessellation only. Prepared cells may
+    // contribute constructed roads/buildings, never natural terrain truth.
     const heightSegments=heightfieldSegments(size);
     const heightStep=heightfieldStep(size);
     const segments=size;
@@ -3334,7 +3333,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformTrianglesAdded:landformCliffFaceTriangleCount+landformCliffLipTriangleCount,
       landformMaterialsAdded:0,
       landformDeterministic:true,landformSeamSafeGlobalCoordinates:true,landformChunkPrepared:true,
-      landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
+      landformPerFrameRegenerationCount:0,landformRendererOnly:false,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
       hydrologyEnabled:true,
       hydrologyVersion:HYDROLOGY_VERSION,
@@ -3615,7 +3614,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformQueryCalls,landformCacheHits,
       landformCacheHitRate:Number((landformQueryCalls+landformCacheHits?landformCacheHits/(landformQueryCalls+landformCacheHits):0).toFixed(4)),
       landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
-      landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
+      landformPerFrameRegenerationCount:0,landformRendererOnly:false,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
       landformSteepFaceTreatment:"exaggerated-faceted-heightfield+downhill-cliff-cuts",
       landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
