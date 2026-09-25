@@ -1577,6 +1577,14 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
+    if scenario == "wp-s003-006-012":
+        # Dedicated hydrology verification needs the conservative 25-chunk
+        # tilted-camera coverage introduced after the previous visual failure.
+        # Cold software-WebGL CI can legitimately need longer than the generic
+        # 10-second current-build allowance. This changes evidence wait time
+        # only; it does not relax playable/readiness assertions.
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 180.0)
     if scenario == "wp-s003-006-011":
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
