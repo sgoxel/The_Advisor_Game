@@ -11303,7 +11303,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         expected=(0,15,52,68,84,100,68,68)
         modes=("indeterminate","determinate","determinate","determinate","determinate","ready","determinate","failed")
         for index,(stage,value,mode) in enumerate(zip(stages,expected,modes),start=1):
-            progress=stage.get("startupProgress") or {}
+            progress=stage.get("loadingPresentation") or {}
             if progress.get("loadingProofActive") is not True:
                 raise RuntimeError(f"Planet startup progress proof missing in frame {index}: {stage}")
             if progress.get("mode")!=mode:
@@ -11313,6 +11313,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if stage.get("ready") is not True or stage.get("generation",{}).get("perFrameGeneration") is not False:
                 raise RuntimeError(f"Planet authority/readiness regressed in frame {index}: {stage}")
         actual=stages[0].get("startupProgress") or {}
+        if actual.get("mode")!="ready" or float(actual.get("measuredPercent") or 0)!=100 or float(actual.get("completedWeightedWork") or 0)!=float(actual.get("totalWeightedWork") or -1):
+            raise RuntimeError(f"Actual first-playable progress did not finish at 100: {actual}")
         if not actual.get("measured100AtMs") or not actual.get("gameplayReadyAtMs"):
             raise RuntimeError(f"Actual startup completion timestamps missing behind proof: {actual}")
         return
