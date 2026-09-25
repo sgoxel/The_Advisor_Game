@@ -274,7 +274,7 @@ function resize(){
     const horizontalHalfFov=Math.atan(Math.tan(verticalHalfFov)*aspect);
     const limitingHalfFov=Math.max(0.05,Math.min(verticalHalfFov,horizontalHalfFov));
     const maxReliefFactor=1+(7000/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION;
-    const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*1.13;
+    const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*1.08;
     cameraEntity.setLocalPosition(0,0,distance);
     cameraEntity.lookAt(0,0,0);
   }
@@ -321,7 +321,7 @@ function buildScene(){
   geographySignature=geography.signature();
   geographyVerification=window.PlanetGeography.verifyDeterminism(activeSeed);
 
-  app.scene.ambientLight=new pc.Color(0.16,0.18,0.21);
+  app.scene.ambientLight=new pc.Color(0.24,0.26,0.30);
 
   cameraEntity=new pc.Entity("PlanetCamera");
   cameraEntity.addComponent("camera",{
@@ -336,7 +336,7 @@ function buildScene(){
   surfaceMaterial.name="SeededPlanetSurface";
   surfaceMaterial.diffuse.set(1,1,1);
   surfaceMaterial.diffuseMap=makeGeographyTexture();
-  surfaceMaterial.gloss=0.22;
+  surfaceMaterial.gloss=0.16;
   surfaceMaterial.metalness=0;
   surfaceMaterial.specular.set(0.18,0.22,0.25);
   surfaceMaterial.emissive.set(0.002,0.004,0.007);
@@ -352,7 +352,7 @@ function buildScene(){
   keyLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(1.0,0.97,0.90),
-    intensity:1.75,
+    intensity:1.55,
     castShadows:false
   });
   keyLight.setLocalEulerAngles(26,-42,0);
@@ -362,7 +362,7 @@ function buildScene(){
   fillLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(0.30,0.44,0.72),
-    intensity:0.40,
+    intensity:0.62,
     castShadows:false
   });
   fillLight.setLocalEulerAngles(-18,138,0);
