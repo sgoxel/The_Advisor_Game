@@ -1327,6 +1327,16 @@ async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom(),optio
       requiredKeys:collectTerrainPreparationKeysFromTiles(cached.tiles),
       cachedTerrain:cached
     };
+    // PlayCanvas runtime streaming already prepared its shared terrain/building
+    // atlases before the destination queue started. Do not re-enter the legacy
+    // DOM TextureAssets region gate after the destination chunks are ready.
+    if(options?.runtimeStreaming){
+      return Object.freeze({
+        ...descriptor,
+        playCanvasRuntimeStreaming:true,
+        legacyTexturePreparationSkipped:true
+      });
+    }
   }else{
     descriptor=terrainViewDescriptor(seed,center,zoom);
   }
