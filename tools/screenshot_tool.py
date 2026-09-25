@@ -8120,7 +8120,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(cliff_chunks.get("landformCliffFaceCount") or 0)<1 or int(cliff_chunks.get("landformCliffFaceTriangleCount") or 0)<2:
             raise RuntimeError(f"Cliff evidence frame did not prepare any sparse same-mesh cliff face: {cliff_chunks}")
         if int(cliff_chunks.get("landformCliffLipCount") or 0)<1 or int(cliff_chunks.get("landformCliffLipTriangleCount") or 0)<2:
-            raise RuntimeError(f"Cliff evidence frame did not prepare a visible top rock lip: {cliff_chunks}")
+            raise RuntimeError(f"Cliff evidence frame did not prepare a raised same-mesh cliff shelf: {cliff_chunks}")
         return
 
     if scenario == "wp-s003-006-012":
