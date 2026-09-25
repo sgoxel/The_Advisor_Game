@@ -5398,26 +5398,29 @@ def _switch_to_alternate_landmark_seed(driver) -> str:
 
     from selenium.webdriver.support.ui import WebDriverWait
     selected=selection.get("selected") or {}
-    result=driver.execute_async_script(
+    selected_seed=str(selected.get("seed") or "")
+    storage=driver.execute_script(
         """
         const seed=String(arguments[0]||'');
-        const done=arguments[arguments.length-1];
-        (async()=>{try{
-          if(!window.AppUI?.startNewCampaignForEvidence)throw new Error('startNewCampaignForEvidence unavailable');
-          await window.AppUI.startNewCampaignForEvidence(seed);
-          done({
-            ok:true,
-            seed:window.SeedSystem?.getCampaign?.()?.seed||null,
-            loading:window.AppUI?.sceneLoadingSnapshot?.()||null,
-            renderer:window.GameRenderer?.snapshot?.()||null
-          });
-        }catch(error){done({ok:false,error:String(error),stack:error?.stack||null})}})();
+        if(!seed||!window.GameConfig?.settingsStorageKey||!window.GameConfig?.campaignStorageKey){
+          return {ok:false,reason:'campaign-storage-keys-unavailable'};
+        }
+        localStorage.setItem(window.GameConfig.settingsStorageKey,JSON.stringify({seed}));
+        localStorage.removeItem(window.GameConfig.campaignStorageKey);
+        return {ok:true,seed};
         """,
-        str(selected.get("seed") or ""),
+        selected_seed,
     )
-    if not isinstance(result, dict) or not result.get("ok"):
-        raise RuntimeError(f"Alternate landmark campaign switch failed: {result}")
+    if not isinstance(storage, dict) or not storage.get("ok"):
+        raise RuntimeError(f"Alternate landmark clean-state preparation failed: {storage}")
 
+    driver.refresh()
+    WebDriverWait(driver, 30.0).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    clean_start_action=prepare_current_build(
+        driver, timeout=240.0, scenario="wp-s003-009-007"
+    )
     WebDriverWait(driver, 240.0).until(
         lambda d: d.execute_script(
             """
@@ -5447,7 +5450,7 @@ def _switch_to_alternate_landmark_seed(driver) -> str:
     return (
         f"landmark-alt-seed:{selected.get('seed')}:"
         f"tag={actual_plan.get('contextTag')}:treatment={actual_plan.get('treatment')}:"
-        f"switch=in-page-seed-safe"
+        f"switch=clean-campaign-state:{clean_start_action}"
     )
 
 
