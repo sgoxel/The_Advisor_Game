@@ -157,6 +157,7 @@ function createManager({
   let destinationStartedAtMs=null,destinationGateShownAtMs=null,destinationReadyAtMs=null,destinationTarget=null,destinationRequiredIds=Object.freeze([]);
   let destinationLastProgress=Object.freeze({state:"READY",required:0,completed:0,percent:100,target:null});
   let destinationSliceCount=0,destinationLastSliceMs=0,destinationMaxSliceMs=0,destinationTotalSliceMs=0;
+  let destinationDeferredPreparedCount=0;
   let destinationDataSliceCount=0,destinationDataLastMs=0,destinationDataMaxMs=0,destinationDataTotalMs=0;
   let destinationLongTask50=0,destinationLongTask100=0,destinationLongTask200=0,destinationPaintHeartbeats=0;
   const destinationDataPrepared=new Map();
@@ -802,8 +803,17 @@ function createManager({
     const activeCoords=explicit.length
       ?new Map(explicit.map(key=>[key,parseCoord(key)]))
       :new Map([...targets.active].map(key=>[key,parseCoord(key)]));
-    const preparedCoords=new Map([...targets.prepared].map(key=>[key,parseCoord(key)]));
-    for(const [key,point] of activeCoords)preparedCoords.set(key,point);
+    // A gated long-distance commit must expose only the chunks that were
+    // already prepared for the destination viewport. Scheduling the ordinary
+    // preload ring here reintroduced full synchronous chunk generation before
+    // the navigation promise could finish. Defer that noncritical ring until
+    // finishDestination() returns streaming to READY and idle/headroom work
+    // resumes.
+    const preparedCoords=explicit.length
+      ?new Map(activeCoords)
+      :new Map([...targets.prepared].map(key=>[key,parseCoord(key)]));
+    if(!explicit.length)for(const [key,point] of activeCoords)preparedCoords.set(key,point);
+    else destinationDeferredPreparedCount+=Math.max(0,targets.prepared.size);
     const missing=[];
     for(const point of activeCoords.values()){
       if(!entries.has(entryKey(sig,point.x,point.y)))missing.push(coordKey(point.x,point.y));
@@ -838,10 +848,10 @@ function createManager({
         distance:Math.max(Math.abs(dx),Math.abs(dy))
       });
     }
-    schedulePrepared(prepItems);
+    if(prepItems.length)schedulePrepared(prepItems);
     trimCached();
     lastCenterChunk=targets.centerChunk;
-    scheduleIdleCheck();
+    if(!explicit.length)scheduleIdleCheck();
     const s=stats();
     return Object.freeze({...s,ready:s.activeStateComplete===true,committed:true,createdDuringCommit:0});
   }
@@ -955,6 +965,7 @@ function createManager({
       staleDestinationCancelled,destinationDeduplicated,destinationRequiredCount,destinationCompletedCount,
       destinationRequiredIds,destinationTarget,destinationStartedAtMs,destinationGateShownAtMs,destinationReadyAtMs,
       destinationProgress:destinationLastProgress,destinationSliceCount,
+      destinationDeferredPreparedCount,
       destinationLastSliceMs:Number(destinationLastSliceMs.toFixed(3)),
       destinationMaxSliceMs:Number(destinationMaxSliceMs.toFixed(3)),
       destinationAverageSliceMs:Number((destinationSliceCount?destinationTotalSliceMs/destinationSliceCount:0).toFixed(3)),
