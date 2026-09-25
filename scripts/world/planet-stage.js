@@ -392,7 +392,7 @@ async function buildScene(){
   activeSeed=window.PlanetGeography.resolveSeed();
   geography=window.PlanetGeography.create(activeSeed);
   geographySignature=geography.signature();
-  geographyVerification=window.PlanetGeography.verifyDeterminism(activeSeed);
+  geographyVerification=null;
   setStartupProgress("surface","Painting planetary surface and relief…",68);
 
   app.scene.ambientLight=new pc.Color(0.34,0.37,0.43);
@@ -584,7 +584,8 @@ function snapshot(){
 }
 function verify(){
   const stage=snapshot();
-  const check=window.PlanetGeography?.verifyDeterminism?.(activeSeed)||null;
+  const check=geographyVerification||(window.PlanetGeography?.verifyDeterminism?.(activeSeed)||null);
+  geographyVerification=check;
   return Object.freeze({
     pass:Boolean(
       stage.ready&&
