@@ -2437,7 +2437,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     lastSnapshot=baseSnapshot();
     return lastSnapshot;
   }
-  function updateCameraTransform(centerOverride=null){
+  function updateCameraTransform(centerOverride=null,zoomOverride=null){
     if(!camera)return;
     const started=performance.now();
     navigationTelemetry.cameraTransformCalls++;
@@ -2448,7 +2448,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const center=centerOverride||lastModel?.center||window.Camera?.getCenter?.()||{x:"0",y:"0"};
       ensureSceneAnchor(center);
       const dx=safeDeltaTiles(center.x,sceneAnchor?.x??center.x)??0,dy=safeDeltaTiles(center.y,sceneAnchor?.y??center.y)??0;
-      const targetX=dx*WORLD_TILE_METERS,targetZ=dy*WORLD_TILE_METERS,zoom=clamp(Number(lastModel?.cameraZoom??window.Camera?.getZoom?.()??1),0.5,2);
+      const requestedZoom=zoomOverride===null||zoomOverride===undefined
+        ?(lastModel?.cameraZoom??window.Camera?.getZoom?.()??1)
+        :zoomOverride;
+      const targetX=dx*WORLD_TILE_METERS,targetZ=dy*WORLD_TILE_METERS,zoom=clamp(Number(requestedZoom),0.5,2);
       const targetY=Number(terrainChunkMeshFactory?.heightAtTile?.(center.x,center.y,terrainChunkSize())||0);
       const width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1),aspect=width/height;
       const baseFrameHeight=aspect>3&&height<220?SHORT_LANDSCAPE_ORTHO_HEIGHT:aspect<0.8?PORTRAIT_ORTHO_HEIGHT:aspect>2.2?WIDE_ORTHO_HEIGHT:BASE_ORTHO_HEIGHT;
@@ -2477,7 +2480,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     navigationTelemetry.totalCameraTransformMs+=elapsed;
     navigationTelemetry.maxCameraTransformMs=Math.max(navigationTelemetry.maxCameraTransformMs,elapsed);
   }
-  function resize(centerOverride=null){
+  function resize(centerOverride=null,zoomOverride=null){
     if(!app||!host||!device)return;
     const width=Math.max(1,Math.round(host.clientWidth||1)),height=Math.max(1,Math.round(host.clientHeight||1));
     quality=resolveQuality(width,height);
@@ -2491,7 +2494,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       lastResizeSignature=signature;
       navigationTelemetry.canvasResizeCalls++;
     }else navigationTelemetry.canvasResizeSkips++;
-    updateCameraTransform(centerOverride);
+    updateCameraTransform(centerOverride,zoomOverride);
     if(lastModel?.visibleCharacters&&charactersRoot)syncCharacterBillboards(lastModel.visibleCharacters);
   }
   function frameStats(){const stats=app?.stats||{},rawGpu=Number(stats.frame?.gpuTime??stats.frame?.gpuMs);return Object.freeze({frameMs:Number(stats.frame?.ms||0),gpuMs:Number.isFinite(rawGpu)?rawGpu:null,renderMs:Number(stats.frame?.renderTime||0),drawCalls:Number(stats.drawCalls?.total||device?._drawCallsPerFrame||0),triangles:Number(stats.frame?.triangles||device?._primitiveCount||0)});}
@@ -2588,10 +2591,13 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
     const frame=window.RendererContract?.frameFromModel?.(model)||null;
     if(!frame?.center)return Object.freeze({prepared:false,chunkMesh:false,worldAssetsReady:false,regionKey:frame?.regionKey||null,reason:"missing-center"});
     ensureSceneAnchor(frame.center);
-    // During destination handoff lastModel may still describe the previous view.
-    // Drive resize/camera preparation from the requested frame so scene-anchor
-    // rebasing cannot bounce back to stale coordinates before chunk repositioning.
-    resize(frame.center);
+    // During destination handoff lastModel may still describe the previous view,
+    // including its previous zoom. Drive both center and zoom from the current
+    // Camera request before sampling terrainActiveRadii(); otherwise a 2.00x ->
+    // 0.50x transition can keep the small 2.00x active ring for one full render
+    // and expose the finite chunk diamond against the clear background.
+    const requestedZoom=clamp(Number(window.Camera?.getZoom?.()??lastModel?.cameraZoom??1),0.5,2);
+    resize(frame.center,requestedZoom);
     const terrainTextures=await prepareTerrainTextureAtlas();
     const buildingTextures=await prepareBuildingSurfaceAtlas();
     const treeSprites=await prepareTreeSpriteAtlas();
