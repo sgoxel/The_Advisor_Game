@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.8.0";
+const VERSION="1.9.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -18,6 +18,114 @@ let terrainFoundationCalls=0,walkabilityClassifications=0,connectorTerrainChecks
 let totalGenerationMs=0,maxGenerationMs=0;
 let viewTileHits=0,viewTileMisses=0,lastViewTileHits=0,lastViewTileMisses=0;
 let lastGeneratedIds=Object.freeze([]);
+let terrainWorker=null,terrainWorkerSequence=0;
+const terrainWorkerJobs=new Map();
+let terrainWorkerRequests=0,terrainWorkerCompletions=0,terrainWorkerCancellations=0;
+let terrainWorkerErrors=0,terrainWorkerCells=0,terrainWorkerFallbacks=0,totalTerrainWorkerMs=0,maxTerrainWorkerMs=0;
+
+function ensureTerrainWorker(){
+  if(terrainWorker)return terrainWorker;
+  if(typeof Worker!=="function")return null;
+  try{
+    const worker=new Worker("scripts/render/playcanvas/terrain-stream-worker.js");
+    worker.onmessage=event=>{
+      const message=event?.data||{};
+      const id=String(message.id||"");
+      const record=terrainWorkerJobs.get(id);
+      if(!record)return;
+      if(message.type==="complete"){
+        terrainWorkerJobs.delete(id);
+        record.work.workerStatus="ready";
+        record.work.workerTypes=new Map((message.results||[]).map(item=>[Number(item.index),String(item.type||"grass")]));
+        const workerMs=Math.max(0,Number(message.workerMs||0));
+        terrainWorkerCompletions++;
+        terrainWorkerCells+=Math.max(0,Number(message.cells||record.work.workerTypes.size||0));
+        totalTerrainWorkerMs+=workerMs;
+        maxTerrainWorkerMs=Math.max(maxTerrainWorkerMs,workerMs);
+      }else if(message.type==="cancelled"){
+        terrainWorkerJobs.delete(id);
+        record.work.workerStatus="cancelled";
+        terrainWorkerCancellations++;
+      }else if(message.type==="error"){
+        terrainWorkerJobs.delete(id);
+        record.work.workerStatus="fallback";
+        record.work.workerError=String(message.error||"terrain-worker-error");
+        terrainWorkerErrors++;
+        terrainWorkerFallbacks++;
+      }
+    };
+    worker.onerror=()=>{
+      terrainWorkerErrors++;
+      terrainWorkerFallbacks+=terrainWorkerJobs.size;
+      for(const record of terrainWorkerJobs.values()){
+        record.work.workerStatus="fallback";
+        record.work.workerError="terrain-worker-runtime-error";
+      }
+      terrainWorkerJobs.clear();
+      try{worker.terminate();}catch(_){}
+      terrainWorker=null;
+    };
+    terrainWorker=worker;
+    return worker;
+  }catch(_){
+    terrainWorkerErrors++;
+    return null;
+  }
+}
+function absBigInt(value){
+  const v=BigInt(String(value));
+  return v<0n?-v:v;
+}
+function workerEligibleCoordinate(x,y){
+  try{
+    return absBigInt(x)>BigInt(STREAMING_MINIMUM_STARTING_VILLAGE_DETAIL_RADIUS)||
+      absBigInt(y)>BigInt(STREAMING_MINIMUM_STARTING_VILLAGE_DETAIL_RADIUS);
+  }catch(_){
+    return false;
+  }
+}
+function dispatchTerrainWorker(work){
+  const worker=ensureTerrainWorker();
+  if(!worker)return false;
+  const cells=work.indices.map(index=>{
+    const localY=Math.floor(index/work.size),localX=index-localY*work.size;
+    return Object.freeze({
+      index,
+      x:String(work.minX+BigInt(localX)),
+      y:String(work.minY+BigInt(localY))
+    });
+  });
+  if(!cells.length||!cells.every(cell=>workerEligibleCoordinate(cell.x,cell.y)))return false;
+  const id="terrain-"+(++terrainWorkerSequence);
+  work.workerJobId=id;
+  work.workerStatus="pending";
+  terrainWorkerJobs.set(id,{work});
+  terrainWorkerRequests++;
+  try{
+    worker.postMessage({type:"prepare",id,seed:work.seed,cells});
+    return true;
+  }catch(error){
+    terrainWorkerJobs.delete(id);
+    work.workerStatus="fallback";
+    work.workerError=String(error?.message||error||"terrain-worker-post-failed");
+    terrainWorkerErrors++;
+    terrainWorkerFallbacks++;
+    return false;
+  }
+}
+function cancelMinimumPreparation(reason="superseded"){
+  const worker=terrainWorker;
+  let cancelled=0;
+  for(const [id,record] of terrainWorkerJobs){
+    record.work.workerStatus="cancelled";
+    record.work.workerCancelReason=String(reason||"superseded");
+    try{worker?.postMessage?.({type:"cancel",id});}catch(_){}
+    terrainWorkerJobs.delete(id);
+    terrainWorkerCancellations++;
+    cancelled++;
+  }
+  return cancelled;
+}
 
 function floorDiv(value,divisor){
   const v=BigInt(String(value)),d=BigInt(divisor);
@@ -657,6 +765,20 @@ function generate(spec){
   return snapshot;
 }
 const STREAMING_MINIMUM_STARTING_VILLAGE_DETAIL_RADIUS=64;
+function streamingMinimumTileFromType(type,x,y){
+  const palette=TerrainPalette.get(type);
+  return Object.freeze({
+    x:String(x),y:String(y),type:String(type||"grass"),
+    label:String(palette?.label||type||"Terrain"),
+    color:String(palette?.color||"#6f8f45"),
+    texture:TileTextures.asset(type),
+    textureKey:TileTextures.assetKey(type),
+    overlayTexture:null,overlayTextureKey:null,
+    buildingId:null,room:null,specialKind:null,specialLabel:null,
+    streamingMinimumFastPath:true,
+    streamingMinimumWorkerType:true
+  });
+}
 function streamingMinimumTile(seed,x,y){
   const local=window.StartingVillage?.local?.(seed,x,y)||null;
   const canUseFarFastPath=
@@ -708,18 +830,38 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
       minX:BigInt(bounds.minX),minY:BigInt(bounds.minY),
       cursor:0,cells:new Array(fullCellCount),surfaceCounts:{},
       textureKeys:new Set(),overlayTextureKeys:new Set(),buildingIds:new Set(),
-      walkableCount:0,blockedCount:0,startedAt:performance.now()
+      walkableCount:0,blockedCount:0,startedAt:performance.now(),
+      workerStatus:"idle",workerTypes:null,workerJobId:null,workerError:null
     };
+    if(!dispatchTerrainWorker(work)){
+      work.workerStatus="fallback";
+      terrainWorkerFallbacks++;
+    }
   }
-  const slice=Math.max(1,Math.min(16,Number(maxCells)||8));
+  if(work.workerStatus==="cancelled"){
+    return Object.freeze({
+      pending:true,state:work,completed:work.cursor,total,percent:Math.min(99,Math.floor(work.cursor/Math.max(1,total)*100)),
+      sliceMs:0,workerPending:false,workerCancelled:true
+    });
+  }
+  if(work.workerStatus==="pending"){
+    return Object.freeze({
+      pending:true,state:work,completed:work.cursor,total,percent:Math.min(99,Math.floor(work.cursor/Math.max(1,total)*100)),
+      sliceMs:0,workerPending:true,workerJobId:work.workerJobId
+    });
+  }
+  const slice=Math.max(1,Math.min(32,Number(maxCells)||16));
   const sliceStarted=performance.now();
   let processed=0;
   while(work.cursor<total&&processed<slice){
     const index=work.indices[work.cursor];
     const localY=Math.floor(index/size),localX=index-localY*size;
     const x=String(work.minX+BigInt(localX)),y=String(work.minY+BigInt(localY));
-    const tile=streamingMinimumTile(seed,x,y);
-    terrainFoundationCalls++;
+    const workerType=work.workerStatus==="ready"?work.workerTypes?.get(index):null;
+    const tile=workerType
+      ?streamingMinimumTileFromType(workerType,x,y)
+      :streamingMinimumTile(seed,x,y);
+    if(!workerType)terrainFoundationCalls++;
     const movement=Walkability.classifyPrepared
       ?Walkability.classifyPrepared(seed,tile)
       :Walkability.classify(seed,x,y);
@@ -791,6 +933,9 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
     generationMs:Number(elapsed.toFixed(3)),
     generatedTerrainCalls:total,
     generatedWalkabilityClassifications:total,
+    terrainWorkerUsed:work.workerStatus==="ready",
+    terrainWorkerJobId:work.workerJobId,
+    terrainWorkerError:work.workerError,
     simulationAuthorityPreserved:true
   });
   cache.set(key,{snapshot,lastUsed:performance.now(),touches:0});
@@ -978,6 +1123,12 @@ function stats(){
     releases,
     terrainFoundationCalls,
     walkabilityClassifications,
+    terrainWorkerRequests,terrainWorkerCompletions,terrainWorkerCancellations,
+    terrainWorkerErrors,terrainWorkerCells,terrainWorkerFallbacks,
+    terrainWorkerPending:terrainWorkerJobs.size,
+    totalTerrainWorkerMs:Number(totalTerrainWorkerMs.toFixed(3)),
+    maxTerrainWorkerMs:Number(maxTerrainWorkerMs.toFixed(3)),
+    averageTerrainWorkerMs:Number((terrainWorkerCompletions?totalTerrainWorkerMs/terrainWorkerCompletions:0).toFixed(3)),
     viewTileHits,viewTileMisses,lastViewTileHits,lastViewTileMisses,
     totalGenerationMs:Number(totalGenerationMs.toFixed(3)),
     maxGenerationMs:Number(maxGenerationMs.toFixed(3)),
@@ -992,6 +1143,7 @@ function stats(){
   });
 }
 function clear(){
+  cancelMinimumPreparation("clear");
   cache.clear();
   dressingCache.clear();
   connectorCache.clear();
@@ -1001,6 +1153,6 @@ function clear(){
 }
 window.PlayCanvasChunkWorldData=Object.freeze({
   version:VERSION,
-  getOrCreate,prepareMinimumStep,touch,release,collectView,stats,clear,signatureFor,landmarkPlan:settlementLandmarkPlan
+  getOrCreate,prepareMinimumStep,cancelMinimumPreparation,touch,release,collectView,stats,clear,signatureFor,landmarkPlan:settlementLandmarkPlan
 });
 })();
