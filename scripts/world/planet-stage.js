@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planetary-geography-globe-v1";
+const VERSION="planetary-geography-globe-v2";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -16,7 +16,7 @@ const TEXTURE_HEIGHT=320;
 const LATITUDE_SEGMENTS=96;
 const LONGITUDE_SEGMENTS=160;
 const HEIGHT_EXAGGERATION=5.0;
-const OCEAN_VISUAL_DEPTH_FACTOR=0.10;
+const OCEAN_VISUAL_DEPTH_FACTOR=0.0;
 
 let pc=null;
 let app=null;
