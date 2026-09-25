@@ -7095,7 +7095,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             max_tint=max(max_tint,float(chunks.get("terrainVariationMaxTintComponent") or 1))
             for key,value in (chunks.get("terrainVariationCategoryCounts") or {}).items():
                 if int(value or 0)>0:categories.add(str(key))
-            bindings=chunks.get("surfaceIdentityBindings") or {}
+            bindings=chunks.get("surfaceDebugReport") or {}
             for surface in ("grass","dirt","road","square"):
                 binding=bindings.get(surface) or {}
                 if binding.get("textureBound") is not True:
