@@ -25,6 +25,7 @@ const ids=[
   "buildingLayerCount","buildingRoofCount","buildingObjectCount","buildingProofState",
   "vBuildingLayers","vBuildingObjects","vBuildingWallDepth","vBuildingRoofCutaway","vBuildingDepthSort","vBuildingSimulation",
   "cameraHud","cameraCoordinate","cameraZoom","centerCameraButton","resetZoomButton","cameraX","cameraY","cameraProtagonistX","cameraProtagonistY","cameraZoomDetail","cameraTileSize",
+  "objectInteractionPanel","objectInteractionTitle","objectInteractionMeta","objectInteractionMessage","objectInteractionActions","objectInteractionClose",
   "vCameraStart","vCameraIndependent","vCameraWindow","vCameraReturn","vCameraWheelZoom","vCameraPinchZoom",
   "villageWorldScale","startingVillageName","villageGateway","villageCoreDiameter","villagePlotCount","villageMainlandEdge","villageBridgeMax","villageSpacingStandard",
   "vVillageCore","vVillageMainland","vVillageBridge","vVillagePlan","vVillageRepeat",
@@ -1005,6 +1006,8 @@ let cameraReturnProof=null;
 let dragState=null;
 let activePointers=new Map();
 let pinchState=null;
+let lastObjectInteractionContext=null;
+let objectInteractionProofMode=false;
 let wheelZoomUsed=false;
 let terrainRenderSerial=0;
 let terrainPrefetchSerial=0;
@@ -1784,6 +1787,117 @@ function applyCameraZoom(nextZoom,source){
   });
 }
 
+function closeObjectInteractionPanel(){
+  lastObjectInteractionContext=null;
+  objectInteractionProofMode=false;
+  if(e.objectInteractionPanel){
+    e.objectInteractionPanel.hidden=true;
+    e.objectInteractionPanel.dataset.proof="false";
+  }
+  if(e.objectInteractionActions)e.objectInteractionActions.replaceChildren();
+}
+function objectInteractionActorPosition(override=null){
+  const source=override||Protagonist.getPosition();
+  return source?WorldCoordinates.position(String(source.x),String(source.y)):null;
+}
+function renderObjectInteractionPanel(context,actorPosition,{proof=false,message=null}={}){
+  if(!context||!e.objectInteractionPanel)return null;
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign?.seed)return null;
+  lastObjectInteractionContext=context;
+  objectInteractionProofMode=Boolean(proof);
+  e.objectInteractionPanel.hidden=false;
+  e.objectInteractionPanel.dataset.proof=proof?"true":"false";
+  e.objectInteractionTitle.textContent=context.label||context.type||"World Object";
+  const distance=Number(context.distanceTiles);
+  const distanceText=Number.isFinite(distance)?distance+" tile"+(distance===1?"":"s")+" away":"distance unavailable";
+  const place=context.buildingLabel?context.buildingLabel+" · ":"";
+  e.objectInteractionMeta.textContent=place+String(context.type||"object")+" · "+distanceText;
+  e.objectInteractionMessage.textContent=message||(
+    context.actions.some(action=>action.enabled)
+      ?"Choose a context action. Actions that require exact positioning stay disabled until the actor reaches the interaction point."
+      :"This object is outside the protagonist's current interaction range."
+  );
+  e.objectInteractionActions.replaceChildren();
+  for(const action of context.actions){
+    const button=document.createElement("button");
+    button.type="button";
+    button.textContent=action.label;
+    button.disabled=!action.enabled;
+    button.dataset.ready=action.enabled?"true":"false";
+    button.dataset.action=action.id;
+    button.title=action.enabled
+      ?action.label
+      :"Move closer: "+String(action.distanceTiles)+" tile(s), allowed "+String(action.rangeTiles);
+    button.onclick=()=>{
+      const activeActor=objectInteractionActorPosition(actorPosition);
+      const result=ObjectInteractions.attempt(campaign.seed,{
+        actorKind:"protagonist",
+        actorId:proof?"protagonist-evidence":"protagonist",
+        actorPosition:activeActor,
+        objectId:context.id,
+        action:action.id
+      });
+      const refreshed=ObjectInteractions.context(campaign.seed,context.id,activeActor)||context;
+      let text;
+      if(result.ok&&result.message)text=result.message;
+      else if(result.ok&&result.actionState?.label)text=result.actionState.label+" started.";
+      else if(result.ok&&result.reason==="building-entry-ready")text="Entrance is reachable through the existing building route.";
+      else if(result.ok)text=action.label+" accepted.";
+      else if(result.reason==="out-of-range")text="Move closer before using "+action.label+".";
+      else text="Action rejected: "+String(result.reason||"invalid context")+".";
+      renderObjectInteractionPanel(refreshed,activeActor,{proof,message:text});
+    };
+    e.objectInteractionActions.appendChild(button);
+  }
+  return context;
+}
+function showObjectInteractionForEvidence(type="table",index=0){
+  const campaign=SeedSystem.getCampaign();
+  if(!campaign?.seed||!window.ObjectInteractions)return null;
+  const matches=ObjectInteractions.list(campaign.seed).filter(item=>item.type===String(type));
+  const descriptor=matches[Math.max(0,Math.min(matches.length-1,Number(index)||0))]||ObjectInteractions.list(campaign.seed)[0]||null;
+  if(!descriptor)return null;
+  const actorPosition=descriptor.interactionPositions?.[0]||descriptor.coordinate;
+  const context=ObjectInteractions.context(campaign.seed,descriptor.id,actorPosition);
+  renderObjectInteractionPanel(context,actorPosition,{proof:true});
+  return Object.freeze({
+    context,
+    actorPosition,
+    coordinate:descriptor.coordinate,
+    proof:ObjectInteractions.proof(campaign.seed),
+    telemetry:ObjectInteractions.snapshot(campaign.seed)
+  });
+}
+function objectInteractionPanelSnapshot(){
+  return Object.freeze({
+    visible:Boolean(e.objectInteractionPanel&&!e.objectInteractionPanel.hidden),
+    proofMode:objectInteractionProofMode,
+    selectedId:lastObjectInteractionContext?.id||null,
+    selectedType:lastObjectInteractionContext?.type||null,
+    enabledActions:Object.freeze(lastObjectInteractionContext?.actions?.filter(action=>action.enabled).map(action=>action.id)||[]),
+    buttonCount:e.objectInteractionActions?.children?.length||0,
+    minTouchTargetPx:44
+  });
+}
+function openObjectInteractionAtScreen(clientX,clientY){
+  const campaign=SeedSystem.getCampaign();
+  const actorPosition=objectInteractionActorPosition();
+  if(!campaign?.seed||!actorPosition||!window.ObjectInteractions||!GameRenderer?.screenToWorldTile)return null;
+  const rect=e.terrainGrid.getBoundingClientRect();
+  const worldPoint=GameRenderer.screenToWorldTile(Number(clientX)-rect.left,Number(clientY)-rect.top);
+  if(!worldPoint)return null;
+  const context=ObjectInteractions.pick(campaign.seed,worldPoint,actorPosition,{pickRadiusTiles:1.25});
+  if(!context){
+    closeObjectInteractionPanel();
+    e.statusMessage.textContent="No interactable world object at the selected location.";
+    return null;
+  }
+  renderObjectInteractionPanel(context,actorPosition,{proof:false});
+  e.statusMessage.textContent="Selected "+context.label+".";
+  return context;
+}
+
 function pointerDistance(){
   const points=[...activePointers.values()];
   if(points.length<2)return 0;
@@ -1799,14 +1913,14 @@ function installCameraControls(){
   e.resetZoomButton.onclick=()=>applyCameraZoom(Camera.DEFAULT_ZOOM,"button");
 
   area.addEventListener("wheel",event=>{
-    if(!SeedSystem.getCampaign()||event.target.closest(".camera-hud"))return;
+    if(!SeedSystem.getCampaign()||event.target.closest(".camera-hud,.object-interaction-panel"))return;
     event.preventDefault();
     const direction=event.deltaY<0?1:-1;
     applyCameraZoom(Camera.getZoom()+direction*Camera.ZOOM_STEP,"wheel");
   },{passive:false});
 
   area.addEventListener("pointerdown",event=>{
-    if(!SeedSystem.getCampaign()||event.target.closest(".camera-hud"))return;
+    if(!SeedSystem.getCampaign()||event.target.closest(".camera-hud,.object-interaction-panel"))return;
     if(event.pointerType==="mouse"&&event.button!==0)return;
 
     activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
@@ -1817,7 +1931,7 @@ function installCameraControls(){
       area.classList.remove("camera-dragging");
       pinchState={distance:pointerDistance(),zoom:Camera.getZoom()};
     }else{
-      dragState={pointerId:event.pointerId,pointerType:event.pointerType||"pointer",x:event.clientX,y:event.clientY,accX:0,accY:0};
+      dragState={pointerId:event.pointerId,pointerType:event.pointerType||"pointer",x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,accX:0,accY:0,moved:false};
       area.classList.add("camera-dragging");
     }
     event.preventDefault();
@@ -1842,6 +1956,7 @@ function installCameraControls(){
     const dy=event.clientY-dragState.y;
     dragState.x=event.clientX;
     dragState.y=event.clientY;
+    if(Math.hypot(event.clientX-dragState.startX,event.clientY-dragState.startY)>8)dragState.moved=true;
     dragState.accX+=dx;
     dragState.accY+=dy;
     const threshold=60;
@@ -1860,7 +1975,12 @@ function installCameraControls(){
     event.preventDefault();
   });
 
-  const endDrag=event=>{
+  const endDrag=(event,allowTap=false)=>{
+    const wasTap=Boolean(
+      allowTap&&
+      dragState&&dragState.pointerId===event.pointerId&&!dragState.moved&&
+      activePointers.size===1
+    );
     activePointers.delete(event.pointerId);
     if(activePointers.size<2)pinchState=null;
 
@@ -1871,14 +1991,15 @@ function installCameraControls(){
 
     if(activePointers.size===1&&!dragState){
       const [pointerId,point]=activePointers.entries().next().value;
-      dragState={pointerId,pointerType:"pointer",x:point.x,y:point.y,accX:0,accY:0};
+      dragState={pointerId,pointerType:"pointer",x:point.x,y:point.y,startX:point.x,startY:point.y,accX:0,accY:0,moved:false};
       area.classList.add("camera-dragging");
     }
 
     try{area.releasePointerCapture?.(event.pointerId)}catch(_){}
+    if(wasTap)openObjectInteractionAtScreen(event.clientX,event.clientY);
   };
-  area.addEventListener("pointerup",endDrag);
-  area.addEventListener("pointercancel",endDrag);
+  area.addEventListener("pointerup",event=>endDrag(event,true));
+  area.addEventListener("pointercancel",event=>endDrag(event,false));
 
   const cameraKeys=new Set(["arrowleft","a","arrowright","d","arrowup","w","arrowdown","s"]);
   const keyboardScreenDirection=()=>{
@@ -2700,6 +2821,7 @@ async function init(){
   beginApplicationStartupGate();
   beginSceneLoading("application-start","renderer");
   e.sceneLoadingRetry.onclick=()=>window.location.reload();
+  if(e.objectInteractionClose)e.objectInteractionClose.onclick=closeObjectInteractionPanel;
 
   SeedSystem.loadSettings();
   e.seedInput.value=SeedSystem.getSettings().seed;
@@ -2847,6 +2969,11 @@ window.AppUI=Object.freeze({
     simulationAuthorityPreserved:true
   }),
   cameraNavigationSnapshot,
-  resolveCameraScreenDelta:(x,y)=>GameRenderer?.screenToCameraDelta?.(x,y)||null
+  resolveCameraScreenDelta:(x,y)=>GameRenderer?.screenToCameraDelta?.(x,y)||null,
+  showObjectInteractionForEvidence,
+  closeObjectInteractionForEvidence:closeObjectInteractionPanel,
+  objectInteractionPanelSnapshot,
+  objectInteractionVerify:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.ObjectInteractions?ObjectInteractions.proof(campaign.seed):null;},
+  objectInteractionSnapshot:()=>{const campaign=SeedSystem.getCampaign();return campaign&&window.ObjectInteractions?ObjectInteractions.snapshot(campaign.seed):null;}
 });
 })();
