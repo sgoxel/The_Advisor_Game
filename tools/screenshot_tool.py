@@ -6179,7 +6179,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                     if(String(T.getTile(seed,String(row.x+dx),String(row.y+dy))?.type||'')==='water')return true;
                   }
                   return false;
-                }))||valley;
+                })||valley;
                 const boundary=candidates.filter(row=>mod(row.x,chunkSize)===0||mod(row.y,chunkSize)===0)
                   .sort((a,b)=>Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0))[0]||ridge;
                 const selected={valley,ridge,slope,cliff,pass,riverValley,boundary};
