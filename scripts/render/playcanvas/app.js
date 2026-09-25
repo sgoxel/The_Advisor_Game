@@ -894,6 +894,13 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const contourSurfacePairCounts={},contourSharedEdgeKeys=new Set();
     let contourPatchCount=0,contourVertexCount=0,contourAddedTriangleCount=0,contourBuildMs=0;
     let contourSharedEdgeDuplicateCount=0;
+    let terrainVariationResourceCount=0,terrainVariationEvaluatedVertexCount=0,terrainVariationTintedVertexCount=0;
+    let terrainVariationMinTintComponent=Infinity,terrainVariationMaxTintComponent=-Infinity;
+    let terrainVariationDrawCallsAdded=0,terrainVariationMaterialsAdded=0,terrainVariationTexturesAdded=0,terrainVariationTrianglesAdded=0;
+    let terrainVariationDeterministic=true,terrainVariationGlobalCoordinateField=true,terrainVariationChunkBorderContinuous=true;
+    let terrainVariationContourCompatible=true,terrainVariationBaseSurfaceIdentityPreserved=true,terrainVariationRendererOnly=true;
+    let terrainVariationNavigationAuthority=false,terrainVariationCollisionAuthority=false,terrainVariationSimulationAuthorityPreserved=true;
+    const terrainVariationCategoryCounts={},terrainVariationSamples=[],terrainVariationSignatures=new Set();
     let seedDerivedPresentation=true,hardCodedSampleGeometry=false;
     let heightfieldResourceCount=0,indexedHeightfieldResourceCount=0;
     let minConditionedHeight=Infinity,maxConditionedHeight=-Infinity;
@@ -945,6 +952,38 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
           }
         }
         heightfieldResources.set(Number(resource.x)+","+Number(resource.y),resource);
+      }
+      if(resource.terrainVariationEnabled===true){
+        terrainVariationResourceCount++;
+        terrainVariationEvaluatedVertexCount+=Number(resource.terrainVariationEvaluatedVertexCount||0);
+        terrainVariationTintedVertexCount+=Number(resource.terrainVariationTintedVertexCount||0);
+        terrainVariationMinTintComponent=Math.min(terrainVariationMinTintComponent,Number(resource.terrainVariationMinTintComponent??1));
+        terrainVariationMaxTintComponent=Math.max(terrainVariationMaxTintComponent,Number(resource.terrainVariationMaxTintComponent??1));
+        terrainVariationDrawCallsAdded+=Number(resource.terrainVariationDrawCallsAdded||0);
+        terrainVariationMaterialsAdded+=Number(resource.terrainVariationMaterialsAdded||0);
+        terrainVariationTexturesAdded+=Number(resource.terrainVariationTexturesAdded||0);
+        terrainVariationTrianglesAdded+=Number(resource.terrainVariationTrianglesAdded||0);
+        terrainVariationDeterministic=terrainVariationDeterministic&&resource.terrainVariationDeterministic!==false;
+        terrainVariationGlobalCoordinateField=terrainVariationGlobalCoordinateField&&resource.terrainVariationGlobalCoordinateField!==false;
+        terrainVariationChunkBorderContinuous=terrainVariationChunkBorderContinuous&&resource.terrainVariationChunkBorderContinuous!==false;
+        terrainVariationContourCompatible=terrainVariationContourCompatible&&resource.terrainVariationContourCompatible!==false;
+        terrainVariationBaseSurfaceIdentityPreserved=terrainVariationBaseSurfaceIdentityPreserved&&resource.terrainVariationBaseSurfaceIdentityPreserved!==false;
+        terrainVariationRendererOnly=terrainVariationRendererOnly&&resource.terrainVariationRendererOnly!==false;
+        terrainVariationNavigationAuthority=terrainVariationNavigationAuthority||resource.terrainVariationNavigationAuthority===true;
+        terrainVariationCollisionAuthority=terrainVariationCollisionAuthority||resource.terrainVariationCollisionAuthority===true;
+        terrainVariationSimulationAuthorityPreserved=terrainVariationSimulationAuthorityPreserved&&resource.terrainVariationSimulationAuthorityPreserved!==false;
+        for(const [key,value] of Object.entries(resource.terrainVariationCategoryCounts||{})){
+          terrainVariationCategoryCounts[key]=(terrainVariationCategoryCounts[key]||0)+Number(value||0);
+        }
+        if(terrainVariationSamples.length<64){
+          for(const item of resource.terrainVariationSamples||[]){
+            if(terrainVariationSamples.length>=64)break;
+            terrainVariationSamples.push(item);
+          }
+        }
+        const signature=String(resource.signature||"")+"|"+String(resource.terrainVariationTintedVertexCount||0)+"|"+
+          String(resource.terrainVariationMinTintComponent??1)+"|"+String(resource.terrainVariationMaxTintComponent??1);
+        terrainVariationSignatures.add(signature);
       }
       presentationMeshInstanceCount+=Number(resource.presentationMeshInstanceCount||0);
       presentationEntityCount+=Number(resource.presentationEntityCount||0);
@@ -1178,6 +1217,40 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       contourSurfacePairCounts:Object.freeze({...contourSurfacePairCounts}),
       contourTileCentersPreserved:generatorStats.contourTileCentersPreserved===true,
       contourAlphaBlend:generatorStats.contourAlphaBlend===true,
+      terrainVariationEnabled:terrainVariationResourceCount>0&&generatorStats.terrainVariationEnabled===true,
+      terrainVariationStrategy:String(generatorStats.terrainVariationStrategy||""),
+      terrainVariationMacroScaleTiles:Number(generatorStats.terrainVariationMacroScaleTiles||0),
+      terrainVariationContextRadiusTiles:Number(generatorStats.terrainVariationContextRadiusTiles||0),
+      terrainVariationResourceCount,
+      terrainVariationEvaluatedVertexCount,
+      terrainVariationTintedVertexCount,
+      terrainVariationCategoryCounts:Object.freeze({...terrainVariationCategoryCounts}),
+      terrainVariationSamples:Object.freeze(terrainVariationSamples.slice()),
+      terrainVariationResourceSignatureCount:terrainVariationSignatures.size,
+      terrainVariationMinTintComponent:Number.isFinite(terrainVariationMinTintComponent)?Number(terrainVariationMinTintComponent.toFixed(4)):1,
+      terrainVariationMaxTintComponent:Number.isFinite(terrainVariationMaxTintComponent)?Number(terrainVariationMaxTintComponent.toFixed(4)):1,
+      terrainVariationDrawCallsAdded,
+      terrainVariationMaterialsAdded,
+      terrainVariationTexturesAdded,
+      terrainVariationTrianglesAdded,
+      terrainVariationDeterministic:Boolean(terrainVariationDeterministic),
+      terrainVariationGlobalCoordinateField:Boolean(terrainVariationGlobalCoordinateField),
+      terrainVariationChunkBorderContinuous:Boolean(terrainVariationChunkBorderContinuous),
+      terrainVariationContourCompatible:Boolean(terrainVariationContourCompatible),
+      terrainVariationBaseSurfaceIdentityPreserved:Boolean(terrainVariationBaseSurfaceIdentityPreserved),
+      terrainVariationRendererOnly:Boolean(terrainVariationRendererOnly),
+      terrainVariationNavigationAuthority:Boolean(terrainVariationNavigationAuthority),
+      terrainVariationCollisionAuthority:Boolean(terrainVariationCollisionAuthority),
+      terrainVariationSimulationAuthorityPreserved:Boolean(terrainVariationSimulationAuthorityPreserved),
+      terrainVariationPass:Boolean(
+        terrainVariationResourceCount>0&&terrainVariationTintedVertexCount>0&&
+        terrainVariationDeterministic&&terrainVariationGlobalCoordinateField&&terrainVariationChunkBorderContinuous&&
+        terrainVariationContourCompatible&&terrainVariationBaseSurfaceIdentityPreserved&&terrainVariationRendererOnly&&
+        !terrainVariationNavigationAuthority&&!terrainVariationCollisionAuthority&&terrainVariationSimulationAuthorityPreserved&&
+        terrainVariationDrawCallsAdded===0&&terrainVariationMaterialsAdded===0&&terrainVariationTexturesAdded===0&&terrainVariationTrianglesAdded===0&&
+        Number.isFinite(terrainVariationMinTintComponent)&&terrainVariationMinTintComponent>=0.80&&
+        Number.isFinite(terrainVariationMaxTintComponent)&&terrainVariationMaxTintComponent<=1.10
+      ),
       terrainGroundSampler:"indexed-triangle-exact",
       roadProfileEnabled:roadProfileResourceCount>0&&generatorStats.roadProfileEnabled===true,
       roadProfileMode:String(generatorStats.roadProfileMode||""),
