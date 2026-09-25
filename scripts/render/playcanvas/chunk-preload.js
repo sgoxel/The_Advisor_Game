@@ -748,16 +748,15 @@ function createManager({
     destinationStartedAtMs=performance.now();
     destinationGateShownAtMs=null;
     destinationReadyAtMs=null;
-    const previous=lastCenterChunk;
-    const jumpDistance=previous?Math.max(Math.abs(plan.centerChunk.x-previous.x),Math.abs(plan.centerChunk.y-previous.y)):0;
-    const immediateGate=Boolean(forceGate||jumpDistance>Math.max(2,Math.max(Number(request.activeRadiusX||0),Number(request.activeRadiusY||0))+1));
-    streamingState=immediateGate?"LOAD_GATE":"CATCHING_UP";
-    if(immediateGate)destinationGateShownAtMs=performance.now();
     const emit=()=>{
       const p=destinationProgress(plan,streamingState);
       try{onProgress?.(p);}catch(_){}
       return p;
     };
+    // Check retained coverage before applying jump-distance backpressure. A
+    // fully Active/Prepared/Cached destination is already safe to expose and
+    // must not flash LOAD_GATE merely because the camera jump is large.
+    streamingState="CATCHING_UP";
     let progress=emit();
     if(progress.completed>=progress.required){
       streamingState="RECOVERY";
@@ -766,6 +765,12 @@ function createManager({
       destinationCompletions++;
       return Object.freeze({...progress,ready:true,cached:true,elapsedMs:Number((destinationReadyAtMs-destinationStartedAtMs).toFixed(1))});
     }
+    const previous=lastCenterChunk;
+    const jumpDistance=previous?Math.max(Math.abs(plan.centerChunk.x-previous.x),Math.abs(plan.centerChunk.y-previous.y)):0;
+    const immediateGate=Boolean(forceGate||jumpDistance>Math.max(2,Math.max(Number(request.activeRadiusX||0),Number(request.activeRadiusY||0))+1));
+    streamingState=immediateGate?"LOAD_GATE":"CATCHING_UP";
+    if(immediateGate)destinationGateShownAtMs=performance.now();
+    progress=emit();
     const missing=plan.items.filter(item=>!entries.has(entryKey(currentSignature(),item.x,item.y)));
     schedulePrepared(missing);
     while(serial===destinationSerial&&!destroyed){
