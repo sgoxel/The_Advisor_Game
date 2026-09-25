@@ -29,7 +29,9 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-001-005` — Diagonal + Multi-Terrain Junction Smoothing — COMPLETED
 - `WP-S002-002` — Special Buildings + Functional Lots — COMPLETED
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation — COMPLETED
+- `WP-S002-003-001` — Elevation + Slope-Aware Walkability, Climbability + Cliff Blocking
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
+- `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference
 
 # Stage 3 — PlayCanvas 3D World + 2D Character Billboard Foundation
 
@@ -67,6 +69,9 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-009` — Raised Road + Path Surface Profiles on Heightfield Terrain — COMPLETED
 - `WP-S003-006-010` — Adaptive Idle Chunk Cache Expansion — COMPLETED
 - `WP-S003-006-011` — Responsive Long-Distance Chunk Streaming + Area Loading Gate
+- `WP-S003-006-012` — Hydrology-Carved Basins + Depressed Water Surfaces
+- `WP-S003-006-013` — Macro Valleys, Ridges, Cliffs + Mountain Pass Terrain Forms
+- `WP-S003-006-014` — Terrain-Adaptive Roads, Cut/Fill Embankments + Bridge Deck Clearance
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
