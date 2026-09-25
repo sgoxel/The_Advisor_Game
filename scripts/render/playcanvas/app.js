@@ -838,14 +838,21 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return terrainChunkMeshFactory;
   }
   function prepareTerrainChunkData(spec){
-    return window.PlayCanvasChunkWorldData?.getOrCreate?.({
+    const request={
       seed:lastRawSeed||"",
-      x:spec.x,
-      y:spec.y,
-      chunkSize:spec.chunkSize,
-      signature:spec.signature,
-      state:spec.state
-    })||null;
+      x:spec.x,y:spec.y,chunkSize:spec.chunkSize,
+      signature:spec.signature,state:spec.state,
+      streamingProfile:spec.streamingProfile||"full"
+    };
+    if(
+      spec?.source==="destination"&&String(spec?.streamingProfile||"")==="minimum"&&
+      typeof window.PlayCanvasChunkWorldData?.prepareMinimumStep==="function"
+    ){
+      return window.PlayCanvasChunkWorldData.prepareMinimumStep(
+        request,spec.incrementalState||null,Math.max(1,Number(spec.maxCells)||2)
+      );
+    }
+    return window.PlayCanvasChunkWorldData?.getOrCreate?.(request)||null;
   }
   function prepareTerrainMeshChunk(spec){
     const factory=initTerrainChunkMeshFactory();
@@ -1614,6 +1621,25 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       return fallback;
     }
   }
+  function terrainChunkFloor(value,size){
+    const v=BigInt(String(value)),d=BigInt(Math.max(1,Number(size)||1));
+    let q=v/d,r=v%d;
+    if(r<0n)q-=1n;
+    return Number(q);
+  }
+  function terrainDestinationChunkIds(frame){
+    const size=Math.max(1,terrainChunkSize());
+    const columns=Math.max(1,Number(frame?.columns||1)),rows=Math.max(1,Number(frame?.rows||1));
+    const halfCols=Math.floor(columns/2),halfRows=Math.floor(rows/2);
+    const cx=BigInt(String(frame?.center?.x??"0")),cy=BigInt(String(frame?.center?.y??"0"));
+    const minX=cx-BigInt(halfCols),maxX=cx+BigInt(columns-halfCols-1);
+    const minY=cy-BigInt(halfRows),maxY=cy+BigInt(rows-halfRows-1);
+    const minChunkX=terrainChunkFloor(minX,size),maxChunkX=terrainChunkFloor(maxX,size);
+    const minChunkY=terrainChunkFloor(minY,size),maxChunkY=terrainChunkFloor(maxY,size);
+    const ids=[];
+    for(let y=minChunkY;y<=maxChunkY;y++)for(let x=minChunkX;x<=maxChunkX;x++)ids.push(String(x)+","+String(y));
+    return Object.freeze(ids);
+  }
   function terrainDestinationRadii(frame){
     const size=Math.max(1,terrainChunkSize());
     const columns=Math.max(1,Number(frame?.columns||1));
@@ -1658,13 +1684,15 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // from either the old camera transform or the not-yet-committed target.
     // This keeps long-distance work bounded and deterministic.
     const radii=terrainDestinationRadii(frame);
+    const requiredChunkIds=terrainDestinationChunkIds(frame);
     const terrainTextures=await prepareTerrainTextureAtlas();
     const buildingTextures=await prepareBuildingSurfaceAtlas();
     const treeSprites=await prepareTreeSpriteAtlas();
     const result=await manager.prepareDestination({
       center:frame.center,
       activeRadiusX:radii.x,
-      activeRadiusY:radii.y
+      activeRadiusY:radii.y,
+      requiredChunkIds
     },{onProgress,graceMs,forceGate});
     if(!result?.ready)return Object.freeze({...result,terrainTextures,buildingTextures,treeSprites});
     // The streaming-minimum mesh is self-contained (terrain atlas + procedural
@@ -1674,14 +1702,15 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     pendingTerrainDestination=Object.freeze({
       key:preparedTerrainKey(lastRawSeed,frame.center),
       center:Object.freeze({x:String(frame.center.x),y:String(frame.center.y)}),
-      activeRadiusX:radii.x,activeRadiusY:radii.y
+      activeRadiusX:radii.x,activeRadiusY:radii.y,
+      requiredChunkIds
     });
     return Object.freeze({
       ...result,
       worldAssetsReady:true,
       worldAssets,
       terrainTextures,buildingTextures,treeSprites,
-      activeRadiusX:radii.x,activeRadiusY:radii.y,
+      activeRadiusX:radii.x,activeRadiusY:radii.y,requiredChunkIds,
       streamingMinimumResources:Number(manager.stats?.().streamingMinimumResources||0),
       destinationPresentationProfile:"minimum",
       simulationAuthorityPreserved:true
@@ -2429,7 +2458,8 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
       preload=manager?.commitDestination?.({
         center:pending.center,
         activeRadiusX:pending.activeRadiusX,
-        activeRadiusY:pending.activeRadiusY
+        activeRadiusY:pending.activeRadiusY,
+        requiredChunkIds:pending.requiredChunkIds
       })||Object.freeze({ready:false,reason:"destination-commit-unavailable"});
       if(preload?.ready!==true){
         return Object.freeze({prepared:false,chunkMesh:true,chunkWorldData:true,worldAssetsReady:false,regionKey:frame.regionKey||null,preload,reason:"destination-commit-not-ready",simulationAuthorityPreserved:true});
