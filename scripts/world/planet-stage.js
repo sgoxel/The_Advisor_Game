@@ -50,9 +50,10 @@ let generatedTexture=null;
 let startupProgress={mode:"indeterminate",measuredPercent:null,displayedPercent:null,phaseId:"planning",phaseLabel:"Planning startup…",completedWeightedWork:0,totalWeightedWork:100,firstPaintAtMs:Date.now(),determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,optionalPostReadyWorkCount:0};
 let loadingProof=null;
 const STARTUP_SLICE_BUDGET_MS=6;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{}};
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{}};
 let longTaskObserver=null;
 let heartbeatTimer=null;
+let controlledWorkActive=false;
 let lastHeartbeatAt=0;
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
@@ -125,6 +126,12 @@ function beginResponsivenessTelemetry(){
           if(d>50)startupScheduler.longTaskOver50++;
           if(d>100)startupScheduler.longTaskOver100++;
           if(d>200)startupScheduler.longTaskOver200++;
+          if(controlledWorkActive){
+            startupScheduler.controlledLongestLongTaskMs=Math.max(startupScheduler.controlledLongestLongTaskMs,d);
+            if(d>50)startupScheduler.controlledLongTaskOver50++;
+            if(d>100)startupScheduler.controlledLongTaskOver100++;
+            if(d>200)startupScheduler.controlledLongTaskOver200++;
+          }
         }
       });
       longTaskObserver.observe({entryTypes:["longtask"]});
@@ -491,7 +498,9 @@ async function start(){
 
     app=new pc.AppBase(canvas);
     await measuredPhase("appInitMs",async()=>app.init(options));
+    controlledWorkActive=true;
     await measuredPhase("buildSceneMs",()=>buildScene());
+    controlledWorkActive=false;
     await yieldPaint();
     bindInput();
     resize();
@@ -514,6 +523,7 @@ async function start(){
     root.dataset.seed=activeSeed;
     return snapshot();
   }catch(error){
+    controlledWorkActive=false;
     endResponsivenessTelemetry();
     startupError=String(error?.stack||error);
     startupProgress={...startupProgress,mode:"failed",phaseId:"error",phaseLabel:"The planet could not finish preparing."};
