@@ -207,7 +207,11 @@ function create(seedValue){
   for(let i=0;i<ISOLATED_ISLAND_COUNT;i++){
     let center=randomUnit(rng,0.9);
     for(let attempt=0;attempt<30&&maxInfluence(center,continentLobes)>0.26;attempt++)center=randomUnit(rng,0.9);
-    isolatedIslands.push(lobe(center,0.065+rng()*0.085,0.22,0.95));
+    const radius=0.060+rng()*0.070;
+    isolatedIslands.push(lobe(center,radius,0.20,0.90));
+    const satelliteBearing=rng()*Math.PI*2;
+    const satelliteCenter=offsetOnSphere(center,radius*(0.42+rng()*0.22),satelliteBearing);
+    isolatedIslands.push(lobe(satelliteCenter,radius*(0.48+rng()*0.22),0.18,0.76+rng()*0.10));
   }
   const islandChains=[];
   for(let chain=0;chain<ISLAND_CHAIN_COUNT;chain++){
@@ -263,7 +267,7 @@ function create(seedValue){
     const warped=normalize(d.x+wx,d.y+wy,d.z+wz);
     const continent=maxInfluence(warped,continentLobes);
     const island=maxInfluence(warped,islandLobes);
-    const coastNoise=(fbm3(bases.coast,warped,2.7,4)-0.5)*0.44+(fbm3(bases.detail,warped,9.5,3)-0.5)*0.12;
+    const coastNoise=(fbm3(bases.coast,warped,2.7,4)-0.5)*0.44+(fbm3(bases.detail,warped,11.5,4)-0.5)*0.17;
     const islandRough=(fbm3(bases.detail,warped,18.5,3)-0.5)*0.44;
     const islandCut=(ridged3(bases.coast,warped,31.0,2)-0.5)*0.24;
     const continentSignal=continent+coastNoise;
