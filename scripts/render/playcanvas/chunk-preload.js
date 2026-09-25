@@ -547,6 +547,7 @@ function createManager({
           const response=prepareChunkData({
             x:item.x,y:item.y,chunkSize:size,signature:item.signature,
             state:item.state||"Prepared",source:"destination",streamingProfile:"minimum",
+            requiredCellIndices:item.requiredCellIndices||null,
             incrementalState:record?.state||null,maxCells:8
           });
           const dataElapsed=performance.now()-itemStarted;
@@ -637,11 +638,20 @@ function createManager({
       const minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y));
       const activeBounds=Object.freeze({minX,maxX,minY,maxY});
       const requiredIds=points.map(point=>coordKey(point.x,point.y));
-      const items=points.map(point=>({
-        x:point.x,y:point.y,signature:currentSignature(),state:"Prepared",source:"destination",
-        priority:DESTINATION_QUEUE_PRIORITY,
-        distance:Math.max(Math.abs(point.x-centerChunk.x),Math.abs(point.y-centerChunk.y))
-      }));
+      const requiredCellsByChunk=request?.requiredCellsByChunk&&typeof request.requiredCellsByChunk==="object"
+        ?request.requiredCellsByChunk:{};
+      const items=points.map(point=>{
+        const id=coordKey(point.x,point.y);
+        const requiredCellIndices=Array.isArray(requiredCellsByChunk[id])
+          ?Object.freeze(requiredCellsByChunk[id].map(Number).filter(Number.isInteger))
+          :null;
+        return {
+          x:point.x,y:point.y,signature:currentSignature(),state:"Prepared",source:"destination",
+          priority:DESTINATION_QUEUE_PRIORITY,
+          distance:Math.max(Math.abs(point.x-centerChunk.x),Math.abs(point.y-centerChunk.y)),
+          requiredCellIndices
+        };
+      });
       return Object.freeze({center,centerChunk,activeBounds,safetyBounds:activeBounds,items:Object.freeze(items),requiredIds:Object.freeze(requiredIds),exact:true});
     }
     const rx=Math.max(0,Number(request?.activeRadiusX||0)|0),ry=Math.max(0,Number(request?.activeRadiusY||0)|0);
