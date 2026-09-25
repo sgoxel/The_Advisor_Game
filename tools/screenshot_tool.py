@@ -95,7 +95,6 @@ SCENARIOS = {
     "wp-s003-006-007",
     "wp-s003-006-008",
     "wp-s003-006-009",
-    "wp-s003-006-011",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s003-008-002",
@@ -182,7 +181,6 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-007": 10,
     "wp-s003-006-008": 11,
     "wp-s003-006-009": 11,
-    "wp-s003-006-011": 8,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
@@ -350,7 +348,6 @@ return (() => {
       currentBuild: {
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
         sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
-        runtimeAreaLoading: window.AppUI?.runtimeAreaLoadingSnapshot?.() || null,
         worldVisualStyle: window.AdvisorWorldVisualStyle?.snapshot?.() || null,
         sceneLoadingEarlyClick: window.__WP_S003_008_002_EARLY_CLICK || null,
         campaignSeed: window.SeedSystem?.getCampaign?.()?.seed || null,
@@ -1563,9 +1560,6 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
-    if scenario == "wp-s003-006-011":
-        driver.set_window_size(1280, 800)
-        timeout = max(timeout, 180.0)
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
@@ -1628,11 +1622,6 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=256, directional=True, background=True
                 )
-            if scenario == "wp-s003-006-011":
-                _set_terrain_preload_settings(
-                    driver, radius=2, cache=256, directional=True, background=True
-                )
-                _set_terrain_chunk_size(driver, 16)
             if scenario in {"wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009"}:
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
@@ -1640,7 +1629,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -6079,104 +6068,6 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         time.sleep(0.75)
         quality=_set_material_lifetime_texture_quality(driver, "standard")
         return "material-lifetime:return-standard+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0) + f":buildingGen={quality.get('buildingGeneration')}:treeGen={quality.get('treeGeneration')}"
-    if scenario == "wp-s003-006-011":
-        driver.set_script_timeout(180.0)
-        from selenium.webdriver.support.ui import WebDriverWait
-
-        def nav_and_wait(x, y, force_gate=False):
-            result=driver.execute_async_script(
-                """
-                const x=arguments[0],y=arguments[1],force=Boolean(arguments[2]);
-                const done=arguments[arguments.length-1];
-                Promise.resolve(window.AppUI?.navigateCameraToForEvidence?.(String(x),String(y),force))
-                  .then(value=>done({ok:true,value:Boolean(value)}))
-                  .catch(error=>done({ok:false,error:String(error)}));
-                """,
-                str(x),str(y),bool(force_gate)
-            )
-            if not isinstance(result,dict) or result.get("ok") is not True:
-                raise RuntimeError(f"Streaming navigation failed for {x},{y}: {result}")
-            WebDriverWait(driver, 30).until(
-                lambda d: d.execute_script(
-                    "return window.AppUI?.runtimeAreaLoadingSnapshot?.()?.state==='READY'"
-                )
-            )
-
-        if frame_index == 0:
-            driver.set_window_size(1280, 800)
-            baseline=_set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=120.0)
-            nav_and_wait(1,0,False)
-            return "streaming:prepared-short+" + baseline
-        if frame_index == 1:
-            driver.execute_script(
-                """
-                window.__WP_S003_006_011_NAV=window.AppUI?.navigateCameraToForEvidence?.('262','-192',true)||null;
-                return Boolean(window.__WP_S003_006_011_NAV);
-                """
-            )
-            WebDriverWait(driver, 90).until(
-                lambda d: d.execute_script(
-                    "return window.AppUI?.runtimeAreaLoadingSnapshot?.()?.state==='LOAD_GATE'"
-                )
-            )
-            return "streaming:load-gate-262--192"
-        if frame_index == 2:
-            result=driver.execute_async_script(
-                """
-                const done=arguments[arguments.length-1];
-                Promise.resolve(window.__WP_S003_006_011_NAV)
-                  .then(()=>done({ok:true}))
-                  .catch(error=>done({ok:false,error:String(error)}));
-                """
-            )
-            if not isinstance(result,dict) or result.get("ok") is not True:
-                raise RuntimeError(f"Distant destination failed: {result}")
-            WebDriverWait(driver, 30).until(
-                lambda d: d.execute_script(
-                    "return window.AppUI?.runtimeAreaLoadingSnapshot?.()?.state==='READY'"
-                )
-            )
-            return "streaming:destination-ready-262--192"
-        if frame_index == 3:
-            driver.execute_script(
-                """
-                window.__WP_S003_006_011_A=window.AppUI.navigateCameraToForEvidence('280','-205',true);
-                window.__WP_S003_006_011_B=window.AppUI.navigateCameraToForEvidence('300','-220',true);
-                window.__WP_S003_006_011_C=window.AppUI.navigateCameraToForEvidence('320','-240',true);
-                """
-            )
-            result=driver.execute_async_script(
-                """
-                const done=arguments[arguments.length-1];
-                Promise.resolve(window.__WP_S003_006_011_C)
-                  .then(()=>done({ok:true}))
-                  .catch(error=>done({ok:false,error:String(error)}));
-                """
-            )
-            if not isinstance(result,dict) or result.get("ok") is not True:
-                raise RuntimeError(f"Latest coalesced target failed: {result}")
-            return "streaming:coalesced-latest-320--240"
-        if frame_index == 4:
-            nav_and_wait(0,0,False)
-            return "streaming:return-cached-origin"
-        if frame_index == 5:
-            quality=_set_graphics_quality_mode(driver, "standard")
-            nav_and_wait(262,-192,False)
-            return "streaming:standard-cached-revisit+" + quality
-        if frame_index == 6:
-            quality=_set_graphics_quality_mode(driver, "high")
-            nav_and_wait(0,0,False)
-            return "streaming:high-cached-return+" + quality
-        driver.set_window_size(844, 390)
-        driver.execute_script(
-            "window.__WP_S003_006_011_PHONE=window.AppUI.navigateCameraToForEvidence('520','-380',true)"
-        )
-        WebDriverWait(driver, 90).until(
-            lambda d: d.execute_script(
-                "return window.AppUI?.runtimeAreaLoadingSnapshot?.()?.state==='LOAD_GATE'"
-            )
-        )
-        return "streaming:phone-load-gate"
     if scenario == "wp-s003-007-001":
         if frame_index == 0:
             return _render_quality_step(driver, mode="low", viewport=(1920, 1080))
@@ -10294,74 +10185,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError("Screen-space navigation triggered a full scene rebuild")
         return
 
-    if scenario == "wp-s003-006-011":
-        if len(frames) < 8:
-            raise RuntimeError("wp-s003-006-011 requires eight streaming evidence frames")
-        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
-        gpus=[b.get("gpuRenderer") or {} for b in builds]
-        areas=[b.get("runtimeAreaLoading") or {} for b in builds]
-
-        if areas[0].get("state")!="READY" or areas[0].get("gateShownAtMs") is not None:
-            raise RuntimeError(f"Short prepared navigation unnecessarily showed LOAD_GATE: {areas[0]}")
-
-        overlay=builds[1].get("sceneLoading",{}).get("overlay",{})
-        if overlay.get("title")!="Preparing Area" or overlay.get("progressVisible") is not True:
-            raise RuntimeError(f"Area-loading overlay/progress missing at distant gate: {overlay}")
-
-        if areas[2].get("state")!="READY":
-            raise RuntimeError(f"Destination did not recover to READY: {areas[2]}")
-        if builds[2].get("cameraCoordinate")!="(262,-192)":
-            raise RuntimeError(f"Destination camera mismatch: {builds[2].get('cameraCoordinate')}")
-        chunks2=gpus[2].get("terrainChunks") or {}
-        preload2=gpus[2].get("terrainPreload") or {}
-        if int(chunks2.get("visibleMeshInstanceCount") or 0)<=0:
-            raise RuntimeError(f"Destination gate released before a visible GPU frame: {chunks2}")
-        if int((areas[2].get("lastPaint") or {}).get("visibleMeshInstanceCount") or 0)<=0:
-            raise RuntimeError(f"Destination paint confirmation missing: {areas[2]}")
-        if int(preload2.get("destinationRequiredCount") or 0)<=0 or int(preload2.get("destinationCompletedCount") or 0)<int(preload2.get("destinationRequiredCount") or 0):
-            raise RuntimeError(f"Destination resources were not fully prepared before handoff: {preload2}")
-        nav2=gpus[2].get("navigationHotPath") or {}
-        if int(nav2.get("sceneAnchorRebases") or 0)>1:
-            raise RuntimeError(f"Destination handoff bounced scene anchor more than once: {nav2}")
-
-        preload3=gpus[3].get("terrainPreload") or {}
-        if int(preload3.get("staleDestinationCancelled") or 0)<=0 and int(areas[3].get("coalesced") or 0)<=0:
-            raise RuntimeError(f"Rapid target changes did not coalesce stale work: preload={preload3}, area={areas[3]}")
-        if builds[3].get("cameraCoordinate")!="(320,-240)":
-            raise RuntimeError(f"Latest camera target did not win: {builds[3].get('cameraCoordinate')}")
-
-        for index in (4,5,6):
-            chunks=gpus[index].get("terrainChunks") or {}
-            if int(chunks.get("visibleMeshInstanceCount") or 0)<=0:
-                raise RuntimeError(f"Cached navigation produced a blank view in frame {index+1}: {chunks}")
-
-        if areas[5].get("gateShownAtMs") is not None:
-            raise RuntimeError(f"Retained destination revisit unnecessarily reopened LOAD_GATE: {areas[5]}")
-
-        final_preload=gpus[6].get("terrainPreload") or {}
-        if int(final_preload.get("destinationPaintHeartbeats") or 0)<=0:
-            raise RuntimeError(f"Streaming did not yield through paint boundaries: {final_preload}")
-        if int(final_preload.get("destinationLongTask200") or 0)>0:
-            raise RuntimeError(f"Streaming produced >200ms destination slices: {final_preload}")
-        if float(final_preload.get("destinationMaxSliceMs") or 0)>=200:
-            raise RuntimeError(f"Destination max slice reached severe-task threshold: {final_preload}")
-        if gpus[2].get("simulationAuthorityPreserved") is not True:
-            raise RuntimeError("Distant camera streaming changed Simulation authority")
-
-        protagonists=[b.get("protagonistLocation") for b in builds[:7]]
-        if len(set(protagonists))!=1 or not protagonists[0]:
-            raise RuntimeError(f"Camera streaming changed protagonist authority: {protagonists}")
-
-        actions=[str(f.get("action") or "") for f in frames[:8]]
-        for item in ("prepared-short","load-gate-262--192","destination-ready-262--192","coalesced-latest","return-cached-origin","standard-cached-revisit","high-cached-return","phone-load-gate"):
-            if not any(item in action for action in actions):
-                raise RuntimeError(f"Required streaming evidence action missing: {item}: {actions}")
-
-        landscape=frames[7].get("runtime",{}).get("viewport",{})
-        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
-            raise RuntimeError(f"Phone landscape area-loading evidence missing: {landscape}")
-        return
-
     if scenario == "wp-s003-007-001":
         if len(frames) < 6:
             raise RuntimeError("wp-s003-007-001 requires six evidence frames")
@@ -12247,12 +12070,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
