@@ -46,6 +46,29 @@ const ROAD_WIDTH_TILES=Object.freeze({
   bridge:4
 });
 
+// Authoritative local movement slope calibration. GeographyFoundation's
+// regional elevation field spans broad macro relief; local movement uses this
+// fixed deterministic vertical scale before deriving a 2 m-tile grade. This is
+// Simulation data and is intentionally independent from PlayCanvas rendering.
+const SLOPE_POLICY=Object.freeze({
+  localVerticalScale:0.05,
+  bandsDegrees:Object.freeze({
+    gentle:7,
+    moderate:14,
+    steep:24,
+    verySteep:35
+  }),
+  movementMultipliers:Object.freeze({
+    gentle:1.00,
+    moderate:1.18,
+    steep:1.55,
+    verySteep:2.30
+  }),
+  engineeredMaxDegrees:33,
+  engineeredPenaltyBlend:0.45,
+  elevationCacheLimit:32768
+});
+
 function tilesToMeters(tiles){return Number(tiles)*TILE_METERS}
 function metersToTiles(meters){return Number(meters)/TILE_METERS}
 function walkMinutes(distanceMeters,speedKmh){
@@ -60,7 +83,7 @@ window.WorldStandards=Object.freeze({
   VILLAGE_CELL_SIZE_TILES,VILLAGE_JITTER_TILES,
   MAX_BRIDGE_WALK_MINUTES,BRIDGE_TIME_LIMIT_METERS,
   PRACTICAL_RURAL_BRIDGE_MAX_METERS,MAX_RURAL_BRIDGE_TILES,
-  ROAD_WIDTH_TILES,
+  ROAD_WIDTH_TILES,SLOPE_POLICY,
   tilesToMeters,metersToTiles,walkMinutes
 });
 })();
