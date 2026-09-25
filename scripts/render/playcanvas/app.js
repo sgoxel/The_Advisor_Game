@@ -800,7 +800,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // SEED in resource identity so a real campaign switch cannot reuse the
     // previous campaign's prepared meshes. Framebuffer/material quality remains
     // excluded because those changes do not alter geometry.
-    return "geometry=heightfield-v10-macro-landforms|seed="+String(lastRawSeed||"none");
+    return "geometry=heightfield-v11-landform-relief-faces|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -942,6 +942,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let landformResourceCount=0,landformGradientMin=Infinity,landformGradientMax=-Infinity;
     let landformReliefMin=Infinity,landformReliefMax=-Infinity,landformConditionOffsetMin=Infinity,landformConditionOffsetMax=-Infinity;
     let landformDrawCallsAdded=0,landformTrianglesAdded=0,landformMaterialsAdded=0,landformPerFrameRegenerationCount=0;
+    let landformCliffFaceCount=0,landformCliffFaceTriangleCount=0,landformTriangleBudget=0;
     let landformDeterministic=true,landformSeamSafeGlobalCoordinates=true,landformChunkPrepared=true,landformRendererOnly=true;
     let landformNavigationAuthority=false,landformCollisionAuthority=false,landformSimulationAuthorityPreserved=true;
     const landformClassCounts={},landformSamples=[];
@@ -1041,6 +1042,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
           landformDrawCallsAdded+=Number(resource.landformDrawCallsAdded||0);
           landformTrianglesAdded+=Number(resource.landformTrianglesAdded||0);
           landformMaterialsAdded+=Number(resource.landformMaterialsAdded||0);
+          landformCliffFaceCount+=Number(resource.landformCliffFaceCount||0);
+          landformCliffFaceTriangleCount+=Number(resource.landformCliffFaceTriangleCount||0);
+          landformTriangleBudget+=Number(resource.landformTriangleBudgetPerChunk||0);
           landformPerFrameRegenerationCount+=Number(resource.landformPerFrameRegenerationCount||0);
           landformDeterministic=landformDeterministic&&resource.landformDeterministic!==false;
           landformSeamSafeGlobalCoordinates=landformSeamSafeGlobalCoordinates&&resource.landformSeamSafeGlobalCoordinates!==false;
@@ -1380,14 +1384,16 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):null,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):null,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):null,
-      landformSteepFaceTreatment:String(generatorStats.landformSteepFaceTreatment||"shared-terrain-vertex-color"),
+      landformSteepFaceTreatment:String(generatorStats.landformSteepFaceTreatment||"world-gradient-vertex-shading+sparse-same-mesh-cliff-skirts"),
+      landformCliffFaceCount,landformCliffFaceTriangleCount,landformTriangleBudget,
       landformDrawCallsAdded,landformTrianglesAdded,landformMaterialsAdded,
       landformDeterministic,landformSeamSafeGlobalCoordinates,landformChunkPrepared,landformPerFrameRegenerationCount,
       landformRendererOnly,landformNavigationAuthority,landformCollisionAuthority,landformSimulationAuthorityPreserved,
       landformPass:Boolean(
         landformResourceCount>0&&landformDeterministic&&landformSeamSafeGlobalCoordinates&&landformChunkPrepared&&
         landformPerFrameRegenerationCount===0&&landformRendererOnly&&!landformNavigationAuthority&&!landformCollisionAuthority&&
-        landformSimulationAuthorityPreserved&&landformDrawCallsAdded===0&&landformTrianglesAdded===0&&landformMaterialsAdded===0
+        landformSimulationAuthorityPreserved&&landformDrawCallsAdded===0&&landformMaterialsAdded===0&&
+        landformTrianglesAdded<=landformTriangleBudget
       ),
       contourAlgorithm:String(generatorStats.contourAlgorithm||""),
       contourPreparationOnly:generatorStats.contourPreparationOnly===true,

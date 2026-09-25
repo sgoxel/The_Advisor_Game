@@ -8106,14 +8106,19 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Macro landform regenerated per frame in frame {index+1}: {chunks}")
             if chunks.get("landformRendererOnly") is not True or chunks.get("landformNavigationAuthority") is True or chunks.get("landformCollisionAuthority") is True:
                 raise RuntimeError(f"Macro landform authority isolation failed in frame {index+1}: {chunks}")
-            if int(chunks.get("landformDrawCallsAdded") or 0)!=0 or int(chunks.get("landformTrianglesAdded") or 0)!=0 or int(chunks.get("landformMaterialsAdded") or 0)!=0:
-                raise RuntimeError(f"Macro landform exceeded zero-extra-resource treatment contract in frame {index+1}: {chunks}")
+            if int(chunks.get("landformDrawCallsAdded") or 0)!=0 or int(chunks.get("landformMaterialsAdded") or 0)!=0:
+                raise RuntimeError(f"Macro landform added an unexpected draw call/material in frame {index+1}: {chunks}")
+            if int(chunks.get("landformTrianglesAdded") or 0)>int(chunks.get("landformTriangleBudget") or 0):
+                raise RuntimeError(f"Macro landform sparse cliff triangles exceeded the prepared budget in frame {index+1}: {chunks}")
             if float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
                 raise RuntimeError(f"Macro landform chunk border mismatch in frame {index+1}: {chunks}")
             for key,value in (chunks.get("landformClassCounts") or {}).items():
                 if int(value or 0)>0: observed.add(str(key))
         if not ({"ridge","valley"} & observed):
             raise RuntimeError(f"Active resources did not expose ridge/valley telemetry: observed={sorted(observed)}")
+        cliff_chunks=((builds[3].get("gpuRenderer") or {}).get("terrainChunks") or {})
+        if int(cliff_chunks.get("landformCliffFaceCount") or 0)<1 or int(cliff_chunks.get("landformCliffFaceTriangleCount") or 0)<2:
+            raise RuntimeError(f"Cliff evidence frame did not prepare any sparse same-mesh cliff face: {cliff_chunks}")
         return
 
     if scenario == "wp-s003-006-012":
