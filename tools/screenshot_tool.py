@@ -8086,7 +8086,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     raise RuntimeError(f"Startup phase timing attribution missing in frame {index}: {scheduler}")
                 if int(scheduler.get("completedFirstPlayableWorkUnits") or 0)!=int(scheduler.get("firstPlayableWorkUnits") or -1):
                     raise RuntimeError(f"First-playable sliced work incomplete in frame {index}: {scheduler}")
-                if int(scheduler.get("optionalPostReadyWorkCount") or -1)!=0:
+                if int(scheduler.get("optionalPostReadyWorkCount", -1))!=0:
                     raise RuntimeError(f"Optional work leaked into planet critical path in frame {index}: {scheduler}")
             systems=stage.get("activeSystems") or {}
             generation=stage.get("generation") or {}
