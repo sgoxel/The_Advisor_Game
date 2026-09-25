@@ -326,7 +326,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       m.gloss=0.02;
       m.metalness=0;
       m.diffuse.set(r,g,b);
-      m.emissive.set(r*0.08,g*0.08,b*0.08);
+      const emissiveScale=key==="ambient-pennant"?0.42:0.08;
+      m.emissive.set(r*emissiveScale,g*emissiveScale,b*emissiveScale);
       m.opacity=clamp(Number(opacity||1),0.05,1);
       m.blendType=m.opacity<0.999?pc.BLEND_NORMAL:pc.BLEND_NONE;
       m.depthWrite=m.opacity>=0.999;
@@ -399,9 +400,17 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       mesh.update();
     }else if(kind==="pennant-plane"){
       mesh=new pc.Mesh(device);
-      mesh.setPositions([-0.025,0,0, 0.025,0,0, -0.025,1.30,0, 0.025,1.30,0, 0.02,1.24,0, 0.82,1.05,0, 0.02,0.82,0]);
-      mesh.setNormals([0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1]);
-      mesh.setIndices([0,1,2, 1,3,2, 4,5,6]);
+      mesh.setPositions([
+        -0.035,0,0, 0.035,0,0, -0.035,1.45,0, 0.035,1.45,0,
+        0.02,1.36,0, 1.00,1.18,0, 0.74,0.90,0, 0.02,0.98,0,
+        0,0,-0.035, 0,0,0.035, 0,1.45,-0.035, 0,1.45,0.035,
+        0,1.36,0.02, 0,1.18,1.00, 0,0.90,0.74, 0,0.98,0.02
+      ]);
+      mesh.setNormals([
+        0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1,
+        1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0
+      ]);
+      mesh.setIndices([0,1,2, 1,3,2, 4,5,6, 4,6,7, 8,9,10, 9,11,10, 12,13,14, 12,14,15]);
       mesh.update();
     }else if(kind==="box"){
       mesh=pc.Mesh.fromGeometry(device,new pc.BoxGeometry());
@@ -1049,7 +1058,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function ambientQuality(levelOverride=null){
     const q=qualityProvider?.()||{};
     const level=String(levelOverride||q.activeLevel||q.mode||"standard").toLowerCase();
-    if(level==="low")return Object.freeze({level:"low",interval:0.25,treeAmplitude:0.45,smoke:false,pennant:false});
+    if(level==="low")return Object.freeze({level:"low",interval:0.25,treeAmplitude:0.35,smoke:false,pennant:false});
     if(level==="high")return Object.freeze({level:"high",interval:0.10,treeAmplitude:1.20,smoke:true,pennant:true});
     return Object.freeze({level:"standard",interval:0.125,treeAmplitude:1.0,smoke:true,pennant:true});
   }
@@ -1111,7 +1120,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       let ex=Number(baseEuler[0]||0),ey=Number(baseEuler[1]||0),ez=Number(baseEuler[2]||0);
       let sx=Number(baseScale[0]),sy=Number(baseScale[1]),sz=Number(baseScale[2]);
       if(kind==="tree"){
-        const wave=Math.sin(timeSeconds*1.35+phase)*4.8*strength*intensity;
+        const wave=Math.sin(timeSeconds*1.35+phase)*6.2*strength*intensity;
         ex+=wave*0.14;ez+=wave;
       }else if(kind==="smoke"){
         const wave=Math.sin(timeSeconds*1.10+phase);
@@ -1137,12 +1146,55 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     ambientBufferUpdates++;
     return 1;
   }
-  function updateAmbientMotion(resource,timeSeconds,{qualityLevel=null,zoom=1,force=false}={}){
+  function updateAmbientMotion(resource,timeSeconds,{qualityLevel=null,zoom=1,force=false,enabled=true}={}){
     if(!resource?.ambientMotionEnabled)return Object.freeze({updated:false,reason:"unavailable"});
     const profile=ambientQuality(qualityLevel);
     const now=Math.max(0,Number(timeSeconds)||0);
     const cameraZoom=Math.max(0.05,Number(zoom)||1);
     const far=cameraZoom<0.62;
+    resource.ambientZoom=Number(cameraZoom.toFixed(3));
+    resource.ambientUpdateIntervalMs=Math.round(profile.interval*1000);
+    resource.ambientProofDisabled=enabled===false;
+    if(enabled===false){
+      resource.ambientTreeActive=false;
+      resource.ambientSmokeActive=false;
+      resource.ambientPennantActive=false;
+      resource.ambientActiveEffectTypeCount=0;
+      resource.ambientQuality="disabled";
+      resource.ambientLodSimplified=true;
+      if(resource.ambientMotionSuppressed===true&&!force){
+        ambientSkippedUpdateCalls++;
+        return Object.freeze({updated:false,reason:"suppressed",quality:"disabled",zoom:cameraZoom});
+      }
+      const started=performance.now();
+      let buffers=0;
+      for(const group of resource.treeGroups||[]){
+        if(group?.entity)group.entity.enabled=true;
+        if(group?.vertexBuffer&&group?.instances?.length){
+          group.vertexBuffer.setData(matrixDataFor(group.instances));
+          instancingBufferUpdates++;
+          ambientBufferUpdates++;
+          buffers++;
+        }
+      }
+      for(const group of resource.ambientGroups||[])if(group?.entity)group.entity.enabled=false;
+      resource.ambientMotionSuppressed=true;
+      resource.ambientLastUpdateTime=now;
+      const elapsed=performance.now()-started;
+      ambientUpdateCalls++;
+      totalAmbientUpdateMs+=elapsed;
+      maxAmbientUpdateMs=Math.max(maxAmbientUpdateMs,elapsed);
+      lastAmbientUpdateMs=elapsed;
+      resource.ambientUpdateCount=Number(resource.ambientUpdateCount||0)+1;
+      resource.ambientBufferUpdateCount=Number(resource.ambientBufferUpdateCount||0)+buffers;
+      resource.ambientLastCpuUpdateMs=Number(elapsed.toFixed(3));
+      resource.ambientMaxCpuUpdateMs=Math.max(Number(resource.ambientMaxCpuUpdateMs||0),elapsed);
+      return Object.freeze({updated:true,buffers,cpuMs:Number(elapsed.toFixed(3)),quality:"disabled",zoom:cameraZoom,lodSimplified:true});
+    }
+    if(resource.ambientMotionSuppressed===true){
+      resource.ambientMotionSuppressed=false;
+      resource.ambientLastUpdateTime=-Infinity;
+    }
     const treeIntensity=far?0.30:profile.treeAmplitude;
     const smokeActive=profile.smoke&&!far;
     const pennantActive=profile.pennant&&!far;
@@ -1151,9 +1203,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     resource.ambientPennantActive=pennantActive&&resource.ambientPennantCount>0;
     resource.ambientActiveEffectTypeCount=(resource.ambientTreeActive?1:0)+(resource.ambientSmokeActive?1:0)+(resource.ambientPennantActive?1:0);
     resource.ambientQuality=profile.level;
-    resource.ambientZoom=Number(cameraZoom.toFixed(3));
     resource.ambientLodSimplified=far||profile.level==="low";
-    resource.ambientUpdateIntervalMs=Math.round(profile.interval*1000);
     const last=Number(resource.ambientLastUpdateTime??-Infinity);
     if(!force&&now-last<profile.interval){
       ambientSkippedUpdateCalls++;
@@ -2130,7 +2180,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     for(const group of treeGroups)group.ambientKind="tree";
     const smokeGroup=createInstancedGroup(entity,"ChunkAmbientSmoke",primitiveMesh("sphere"),ambientMaterial("smoke",0.72,0.72,0.69,0.46),ambientBuildings.smoke);
     if(smokeGroup)smokeGroup.ambientKind="smoke";
-    const pennantGroup=createInstancedGroup(entity,"ChunkAmbientPennants",primitiveMesh("pennant-plane"),ambientMaterial("pennant",0.76,0.27,0.12,1),ambientBuildings.pennants);
+    const pennantGroup=createInstancedGroup(entity,"ChunkAmbientPennants",primitiveMesh("pennant-plane"),ambientMaterial("pennant",0.95,0.42,0.08,1),ambientBuildings.pennants);
     if(pennantGroup)pennantGroup.ambientKind="pennant";
     const ambientGroups=[smokeGroup,pennantGroup].filter(Boolean);
     const dressingInstancedGroups=[

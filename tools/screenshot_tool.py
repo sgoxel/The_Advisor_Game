@@ -195,7 +195,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-006": 8,
     "wp-s003-009-007": 8,
     "wp-s003-009-008": 8,
-    "wp-s003-009-009": 8,
+    "wp-s003-009-009": 10,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -5871,6 +5871,31 @@ def _set_terrain_micro_relief_proof(driver, enabled: bool | None) -> dict:
     return result
 
 
+def _set_ambient_motion_proof(driver, enabled: bool | None) -> dict:
+    value = None if enabled is None else bool(enabled)
+    result = driver.execute_script(
+        """
+        const value=arguments[0];
+        const api=window.GameRenderer;
+        if(!api?.setAmbientMotionProofState){return {ok:false,error:'ambient-motion-proof-api-missing'};}
+        const state=api.setAmbientMotionProofState(value);
+        return {
+          ok:true,
+          override:state?.override??null,
+          enabled:Boolean(state?.enabled),
+          activeResources:Number(state?.activeResources||0),
+          qualityLevel:String(state?.qualityLevel||''),
+          zoom:Number(state?.zoom||0)
+        };
+        """,
+        value,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Ambient motion proof toggle failed: {result}")
+    time.sleep(0.35)
+    return result
+
+
 def _material_lifetime_telemetry(driver) -> dict:
     result = driver.execute_script(
         """
@@ -6185,6 +6210,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 0:
             driver.set_window_size(1280, 800)
             quality=_set_graphics_quality_mode(driver, "standard")
+            _set_ambient_motion_proof(driver, None)
             return "ambient:standard-time-a+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
         if frame_index == 1:
             time.sleep(0.75)
@@ -6202,9 +6228,17 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "ambient:high-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
         if frame_index == 6:
             quality=_set_graphics_quality_mode(driver, "standard")
+            _set_ambient_motion_proof(driver, False)
+            return "ambient:baseline-off+" + quality + "+proof-off+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 7:
+            _set_ambient_motion_proof(driver, None)
+            return "ambient:baseline-on+proof-on+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 8:
+            quality=_set_graphics_quality_mode(driver, "standard")
             return "ambient:far-zoom-lod+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
         driver.set_window_size(844, 390)
         quality=_set_graphics_quality_mode(driver, "standard")
+        _set_ambient_motion_proof(driver, None)
         return "ambient:phone-landscape+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
     if scenario == "wp-s003-009-008":
         _ensure_texture_quality_profile(driver, "standard")
@@ -7093,14 +7127,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         return
 
     if scenario == "wp-s003-009-009":
-        if len(frames) < 8:
-            raise RuntimeError("wp-s003-009-009 requires eight ambient-motion evidence frames")
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-009-009 requires ten ambient-motion evidence frames")
         protagonist_locations=[]
         max_types=max_active_types=max_trees=max_smoke=max_pennants=0
-        max_cpu_ms=0.0
+        max_cpu_ms=max_frame_cpu_ms=0.0
         first_updates=None
         second_updates=None
-        for index,frame in enumerate(frames[:8]):
+        for index,frame in enumerate(frames[:10]):
             build=frame.get("runtime",{}).get("currentBuild",{})
             gpu=build.get("gpuRenderer") or {}
             chunks=gpu.get("terrainChunks") or {}
@@ -7115,51 +7149,77 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if chunks.get("ambientLowProfileReduction") is not True or chunks.get("ambientMobileWebGL2Safe") is not True:
                 raise RuntimeError(f"Ambient quality/mobile contract missing in frame {index+1}: {chunks}")
             if int(chunks.get("ambientParticleEmitterCount") or 0)!=0 or int(chunks.get("ambientAnimatedMaterialShaderCount") or 0)!=0:
-                raise RuntimeError(f"Ambient motion unexpectedly added particle/shader update systems in frame {index+1}: {chunks}")
+                raise RuntimeError(f"Ambient motion unexpectedly added particle/shader systems in frame {index+1}: {chunks}")
             resources=max(1,int(chunks.get("ambientMotionResourceCount") or 0))
             if int(chunks.get("ambientAddedDrawCalls") or 0)>resources*2:
                 raise RuntimeError(f"Ambient draw-call budget exceeded in frame {index+1}: {chunks}")
             if int(chunks.get("ambientSharedMaterialCount") or 0)>2:
-                raise RuntimeError(f"Ambient shared material budget exceeded in frame {index+1}: {chunks}")
+                raise RuntimeError(f"Ambient shared-material budget exceeded in frame {index+1}: {chunks}")
             max_types=max(max_types,int(chunks.get("ambientEffectTypeCount") or 0))
             max_active_types=max(max_active_types,int(chunks.get("ambientActiveEffectTypeCount") or 0))
             max_trees=max(max_trees,int(chunks.get("ambientTreeCount") or 0))
             max_smoke=max(max_smoke,int(chunks.get("ambientSmokeEmitterCount") or 0))
             max_pennants=max(max_pennants,int(chunks.get("ambientPennantCount") or 0))
             max_cpu_ms=max(max_cpu_ms,float(chunks.get("ambientMaxCpuUpdateMs") or 0))
+            max_frame_cpu_ms=max(max_frame_cpu_ms,float(chunks.get("ambientFrameMaxCpuMs") or 0))
             protagonist_locations.append(build.get("protagonistLocation"))
-            if index==0:first_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
-            if index==1:second_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
+            if index==0:
+                first_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
+            if index==1:
+                second_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
         if max_types<3 or max_active_types<3 or max_trees<=0 or max_smoke<=0 or max_pennants<=0:
             raise RuntimeError(f"Ambient evidence lacks tree/smoke/pennant coverage: types={max_types}, active={max_active_types}, trees={max_trees}, smoke={max_smoke}, pennants={max_pennants}")
         if first_updates is None or second_updates is None or second_updates<=first_updates:
-            raise RuntimeError(f"Ambient motion did not advance shared instance buffers over time: {first_updates} -> {second_updates}")
-        if max_cpu_ms>12.0:
-            raise RuntimeError(f"Ambient per-resource CPU update exceeded 12 ms evidence budget: {max_cpu_ms:.3f} ms")
+            raise RuntimeError(f"Ambient motion did not advance shared instance buffers: {first_updates} -> {second_updates}")
+        if max_cpu_ms>12.0 or max_frame_cpu_ms>12.0:
+            raise RuntimeError(f"Ambient CPU budget exceeded: resource={max_cpu_ms:.3f} ms, frame-pass={max_frame_cpu_ms:.3f} ms")
         if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
-            raise RuntimeError(f"Ambient camera/quality evidence changed protagonist authority: {protagonist_locations}")
+            raise RuntimeError(f"Ambient evidence changed protagonist authority: {protagonist_locations}")
         low_chunks=(frames[3].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
         standard_chunks=(frames[4].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
-        far_chunks=(frames[6].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
+        high_chunks=(frames[5].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
+        baseline_gpu=frames[6].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}
+        restored_gpu=frames[7].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}
+        baseline_chunks=baseline_gpu.get("terrainChunks") or {}
+        restored_chunks=restored_gpu.get("terrainChunks") or {}
+        far_chunks=(frames[8].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
         if int(low_chunks.get("ambientActiveEffectTypeCount") or 0)>1 or int(low_chunks.get("ambientLodSimplifiedResourceCount") or 0)<=0:
             raise RuntimeError(f"Low profile did not reduce ambient effects: {low_chunks}")
-        if int(standard_chunks.get("ambientActiveEffectTypeCount") or 0)<2:
-            raise RuntimeError(f"Standard profile did not restore ambient effects: {standard_chunks}")
+        if int(standard_chunks.get("ambientActiveEffectTypeCount") or 0)<2 or int(high_chunks.get("ambientActiveEffectTypeCount") or 0)<2:
+            raise RuntimeError("Standard/High profile did not restore ambient effects")
+        if baseline_chunks.get("ambientMotionProofOverride") is not False or int(baseline_chunks.get("ambientActiveEffectTypeCount") or 0)!=0:
+            raise RuntimeError(f"Same-quality ambient-off baseline failed: {baseline_chunks}")
+        if restored_chunks.get("ambientMotionProofOverride") is not None or int(restored_chunks.get("ambientActiveEffectTypeCount") or 0)<2:
+            raise RuntimeError(f"Same-quality ambient-on restore failed: {restored_chunks}")
+        baseline_perf=baseline_gpu.get("performance") or {}
+        restored_perf=restored_gpu.get("performance") or {}
+        baseline_draws=int(baseline_perf.get("drawCalls") or 0)
+        restored_draws=int(restored_perf.get("drawCalls") or 0)
+        draw_impact=restored_draws-baseline_draws
+        if baseline_draws<=0 or restored_draws<=0 or draw_impact<0 or draw_impact>8:
+            raise RuntimeError(f"Ambient same-quality draw-call impact invalid: baseline={baseline_draws}, restored={restored_draws}, impact={draw_impact}")
+        baseline_frame=float(baseline_perf.get("frameMs") or 0)
+        restored_frame=float(restored_perf.get("frameMs") or 0)
+        if baseline_frame<=0 or restored_frame<=0 or restored_frame-baseline_frame>35.0:
+            raise RuntimeError(f"Ambient same-quality frame-time impact too high/no evidence: baseline={baseline_frame:.3f} ms, restored={restored_frame:.3f} ms")
+        baseline_gpu_ms=baseline_perf.get("gpuMs")
+        restored_gpu_ms=restored_perf.get("gpuMs")
+        if baseline_gpu_ms is not None and restored_gpu_ms is not None and float(restored_gpu_ms)-float(baseline_gpu_ms)>8.0:
+            raise RuntimeError(f"Ambient GPU-time impact exceeded 8 ms: baseline={baseline_gpu_ms}, restored={restored_gpu_ms}")
         if int(far_chunks.get("ambientLodSimplifiedResourceCount") or 0)<=0:
             raise RuntimeError(f"Far zoom did not simplify ambient effects: {far_chunks}")
-        actions=[str(frame.get("action") or "") for frame in frames[:8]]
+        actions=[str(frame.get("action") or "") for frame in frames[:10]]
         for required_action in (
             "ambient:standard-time-a","ambient:standard-time-b","ambient:landmark-close",
             "ambient:low-profile","ambient:standard-profile","ambient:high-profile",
-            "ambient:far-zoom-lod","ambient:phone-landscape",
+            "ambient:baseline-off","ambient:baseline-on","ambient:far-zoom-lod","ambient:phone-landscape",
         ):
             if not any(required_action in action for action in actions):
                 raise RuntimeError(f"Required ambient-motion scene {required_action} missing: {actions}")
-        landscape=frames[7].get("runtime",{}).get("viewport",{})
+        landscape=frames[9].get("runtime",{}).get("viewport",{})
         if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
             raise RuntimeError(f"Phone-landscape ambient-motion evidence missing: {landscape}")
         return
-
     if scenario == "wp-s003-009-008":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-009-008 requires eight terrain-variation evidence frames")
