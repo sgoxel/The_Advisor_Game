@@ -58,7 +58,7 @@ function loadingNodes(){
 function presentStartupProgress(){
   const n=loadingNodes();if(!n.overlay)return;
   const p=loadingProof||startupProgress;
-  n.overlay.hidden=false;n.overlay.dataset.mode=String(p.mode||"determinate");n.overlay.dataset.phase=String(p.phaseId||"planning");
+  n.overlay.hidden=false;n.overlay.dataset.mode=String(p.mode||"determinate");n.overlay.dataset.phase=String(p.phaseId||"planning");n.overlay.dataset.proof=loadingProof?"true":"false";
   if(n.title)n.title.textContent=String(p.title||((p.mode==="ready")?"World ready":(p.mode==="failed")?"Startup interrupted":"Waking the world"));
   if(n.phase)n.phase.textContent=String(p.phaseLabel||"Preparing world…");
   const value=clamp(p.displayedPercent??p.measuredPercent??0,0,100);
