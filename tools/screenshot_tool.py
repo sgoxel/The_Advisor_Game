@@ -7324,7 +7324,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
-     if scenario == "wp-s003-009-009":
+    if scenario == "wp-s003-009-009":
         if len(frames) < 6:
             raise RuntimeError("wp-s003-009-009 requires six planet ambient-motion evidence frames")
         updates=[]
