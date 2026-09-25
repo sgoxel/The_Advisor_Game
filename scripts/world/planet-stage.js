@@ -62,6 +62,7 @@ let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:nu
 let cloudLayer=null;
 let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
 let atmosphere={active:false,authoritativeHour:null,phase:"unbound",source:"none",dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false};
+let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClusters:0,rockClusters:0,ambientFaunaZones:0,rejectedWater:0,drawCalls:0,triangles:0,preparationMs:0,cacheReuse:false,perFrameScatter:false,simulationAuthority:false};
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
 function loadingNodes(){
@@ -331,6 +332,47 @@ function renderDestinationNavigator(){
   panel.appendChild(list);
   const foot=document.createElement("p");foot.className="planet-places-foot";foot.textContent="Camera view only · "+visible.length+" bounded seeded destinations";panel.appendChild(foot);
 }
+function wildernessHash(label){
+  let h=2166136261>>>0;for(const ch of String(activeSeed)+"|wilderness|"+label){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return h>>>0;
+}
+function buildWildernessDescriptors(){
+  const started=performance.now(),vegetation=[],rocks=[],fauna=[];let cells=0,rejectedWater=0;
+  for(let lat=-72;lat<=72;lat+=8)for(let lon=-176;lon<180;lon+=8){
+    cells++;const jLat=((wildernessHash("lat:"+lat+":"+lon)%1000)/999-.5)*3.2,jLon=((wildernessHash("lon:"+lat+":"+lon)%1000)/999-.5)*3.2;
+    const sample=geography.sampleLatLon((lat+jLat)*Math.PI/180,(lon+jLon)*Math.PI/180);
+    if(!sample.land){rejectedWater++;continue;}
+    const descriptor={latitudeRadians:sample.latitudeRadians,longitudeRadians:sample.longitudeRadians,elevationMeters:sample.elevationMeters,surfaceClass:sample.surfaceClass,moisture:sample.moisture};
+    const roll=wildernessHash("kind:"+lat+":"+lon)%100;
+    if(sample.elevationMeters>1450||sample.mountainInfluence>.22){if(roll<72)rocks.push(descriptor);}
+    else if(sample.moisture>.40){if(roll<78)vegetation.push(descriptor);}
+    else if(roll<48)rocks.push(descriptor);else if(roll<82)vegetation.push(descriptor);
+    if(sample.moisture>.46&&sample.elevationMeters<1200&&(wildernessHash("fauna:"+lat+":"+lon)%100)<12)fauna.push(descriptor);
+  }
+  wilderness={generated:true,cellCount:cells,acceptedStaticProps:vegetation.length+rocks.length,vegetationClusters:vegetation.length,rockClusters:rocks.length,ambientFaunaZones:fauna.length,rejectedWater,drawCalls:0,triangles:0,preparationMs:Number((performance.now()-started).toFixed(3)),cacheReuse:false,perFrameScatter:false,simulationAuthority:false};
+  return {vegetation,rocks,fauna};
+}
+function buildWildernessMesh(items,size){
+  const positions=[],normals=[],indices=[];
+  for(const item of items){
+    const d=window.PlanetGeography.directionFromLatLon(item.latitudeRadians,item.longitudeRadians);
+    const radius=DISPLAY_RADIUS_UNITS*(1+(Math.max(40,item.elevationMeters)/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION)+.012;
+    const base={x:d.x*radius,y:d.y*radius,z:d.z*radius};
+    const ref=Math.abs(d.y)<.88?{x:0,y:1,z:0}:{x:1,y:0,z:0};
+    let ux=ref.y*d.z-ref.z*d.y,uy=ref.z*d.x-ref.x*d.z,uz=ref.x*d.y-ref.y*d.x;const ul=Math.hypot(ux,uy,uz)||1;ux/=ul;uy/=ul;uz/=ul;
+    const vx=d.y*uz-d.z*uy,vy=d.z*ux-d.x*uz,vz=d.x*uy-d.y*ux;
+    const start=positions.length/3,half=size*.62;
+    positions.push(base.x+ux*half,base.y+uy*half,base.z+uz*half,base.x-ux*half,base.y-uy*half,base.z-uz*half,base.x+vx*half,base.y+vy*half,base.z+vz*half,base.x+d.x*size,base.y+d.y*size,base.z+d.z*size);
+    for(let i=0;i<4;i++)normals.push(d.x,d.y,d.z);
+    indices.push(start,start+1,start+3,start+1,start+2,start+3,start+2,start,start+3);
+  }
+  if(!positions.length)return null;
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();wilderness.triangles+=indices.length/3;return mesh;
+}
+function buildWildernessPresentation(){
+  const groups=buildWildernessDescriptors();
+  const specs=[[groups.vegetation,.038,[.16,.34,.12],"WildernessVegetation"],[groups.rocks,.032,[.34,.30,.24],"WildernessRock"]];
+  for(const [items,size,color,name] of specs){const mesh=buildWildernessMesh(items,size);if(!mesh)continue;const material=new pc.StandardMaterial();material.name=name+"Material";material.diffuse.set(...color);material.roughness=.92;material.update();const entity=new pc.Entity(name);entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});entity.render.meshInstances=[new pc.MeshInstance(mesh,material,entity)];planet.addChild(entity);wilderness.drawCalls++;}
+}
 function visualElevationMeters(sample){
   if(sample.land)return Math.max(40,Number(sample.elevationMeters)||0);
   return Math.max(-520,(Number(sample.elevationMeters)||0)*OCEAN_VISUAL_DEPTH_FACTOR);
@@ -565,6 +607,7 @@ async function buildScene(){
   planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
   app.root.addChild(planet);
   buildAmbientMotion(mesh);
+  buildWildernessPresentation();
 
   keyLight=new pc.Entity("PlanetKeyLight");
   keyLight.addComponent("light",{
@@ -725,6 +768,7 @@ function snapshot(){
     frameCount,
     ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
     atmosphere:Object.freeze({...atmosphere}),
+    wilderness:Object.freeze({...wilderness}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,fullWorldScan:false,cameraOnly:true}),
     startupError,
     startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
