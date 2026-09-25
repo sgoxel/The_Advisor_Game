@@ -39,6 +39,10 @@ const CONTOUR_ROUND_RADIUS_TILES=0.50;
 const CONTOUR_ARC_SEGMENTS=5;
 const CONTOUR_Y_OFFSET=0.008;
 const CONTOUR_HALO_TILES=1;
+const TERRAIN_VARIATION_MACRO_SCALE_TILES=8n;
+const TERRAIN_VARIATION_CONTEXT_RADIUS_TILES=3;
+const TERRAIN_VARIATION_NATURAL_TYPES=new Set(["grass","forest","dirt","mud","sand","farmland","rock"]);
+const TERRAIN_VARIATION_CONSTRUCTED_TYPES=new Set(["road","path","square","bridge","plot","water"]);
 function semanticSurfaceType(value){
   const type=String(value||"grass");
   if(SEMANTIC_TERRAIN_TYPES.has(type))return type;
@@ -1447,11 +1451,169 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const contourPairCounts={};
     const contourSharedEdgeKeys=[];
     let contourPatchCount=0,contourVertexCount=0,contourTriangleCount=0,contourBuildMs=0;
+    const terrainVariationCategoryCounts={};
+    const terrainVariationSamplesByCategory=new Map();
+    const terrainVariationTileCache=new Map();
+    const terrainVariationContextCache=new Map();
+    const terrainVariationVertexCache=new Map();
+    let terrainVariationEvaluatedVertexCount=0,terrainVariationTintedVertexCount=0;
+    let terrainVariationMinTintComponent=Infinity,terrainVariationMaxTintComponent=-Infinity;
     const localSamples=new Map();
     let minHeight=Infinity,maxHeight=-Infinity,minElevation=Infinity,maxElevation=-Infinity;
     let roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreDelta=Infinity,maxRoadCoreDelta=-Infinity;
+    const variationTileAt=(wx,wz)=>{
+      const key=String(wx)+","+String(wz);
+      if(terrainVariationTileCache.has(key))return terrainVariationTileCache.get(key);
+      let rawType="";
+      if(wx>=baseX&&wx<baseX+BigInt(size)&&wz>=baseZ&&wz<baseZ+BigInt(size)){
+        const lx=Number(wx-baseX),lz=Number(wz-baseZ);
+        rawType=String(spec.worldData?.cells?.[lz*size+lx]?.type||"grass");
+      }else{
+        rawType=String(window.TerrainFoundation?.getTile?.(seed,String(wx),String(wz))?.type||"grass");
+      }
+      const result=Object.freeze({rawType,type:semanticSurfaceType(rawType)});
+      terrainVariationTileCache.set(key,result);
+      return result;
+    };
+    const variationContextAt=(wx,wz)=>{
+      const key=String(wx)+","+String(wz);
+      if(terrainVariationContextCache.has(key))return terrainVariationContextCache.get(key);
+      let routeDistance=Infinity,buildingDistance=Infinity,waterDistance=Infinity,forestDistance=Infinity;
+      const radius=TERRAIN_VARIATION_CONTEXT_RADIUS_TILES;
+      for(let dz=-radius;dz<=radius;dz++){
+        for(let dx=-radius;dx<=radius;dx++){
+          const distance=Math.hypot(dx,dz);
+          if(distance>radius+0.001)continue;
+          const tile=variationTileAt(wx+BigInt(dx),wz+BigInt(dz));
+          const t=String(tile.type||""),raw=String(tile.rawType||"");
+          if(["road","path","square"].includes(t))routeDistance=Math.min(routeDistance,distance);
+          if(t==="plot"||["building","floor","wall","door"].includes(raw))buildingDistance=Math.min(buildingDistance,distance);
+          if(t==="water")waterDistance=Math.min(waterDistance,distance);
+          if(t==="forest")forestDistance=Math.min(forestDistance,distance);
+        }
+      }
+      const influence=distance=>{
+        if(!Number.isFinite(distance))return 0;
+        return smoothstep01(1-clamp((distance-0.25)/(radius+0.25),0,1));
+      };
+      const result=Object.freeze({
+        route:influence(routeDistance),
+        building:influence(buildingDistance),
+        moisture:influence(waterDistance),
+        forest:influence(forestDistance),
+        routeDistance:Number.isFinite(routeDistance)?Number(routeDistance.toFixed(3)):null,
+        buildingDistance:Number.isFinite(buildingDistance)?Number(buildingDistance.toFixed(3)):null,
+        waterDistance:Number.isFinite(waterDistance)?Number(waterDistance.toFixed(3)):null,
+        forestDistance:Number.isFinite(forestDistance)?Number(forestDistance.toFixed(3)):null
+      });
+      terrainVariationContextCache.set(key,result);
+      return result;
+    };
+    const terrainMacroVariationAt=(wx,wz)=>{
+      const scale=TERRAIN_VARIATION_MACRO_SCALE_TILES;
+      const gx=floorDivBig(wx,scale),gz=floorDivBig(wz,scale);
+      const rx=wx-gx*scale,rz=wz-gz*scale;
+      const tx=smoothstep01(Number(rx)/Number(scale)),tz=smoothstep01(Number(rz)/Number(scale));
+      const n00=signed01(seed,gx,gz,"terrain-variation-macro");
+      const n10=signed01(seed,gx+1n,gz,"terrain-variation-macro");
+      const n01=signed01(seed,gx,gz+1n,"terrain-variation-macro");
+      const n11=signed01(seed,gx+1n,gz+1n,"terrain-variation-macro");
+      const nx0=n00+(n10-n00)*tx,nx1=n01+(n11-n01)*tx;
+      return nx0+(nx1-nx0)*tz;
+    };
+    const terrainVariationAtVertex=(wx,wz,surfaceType)=>{
+      const type=semanticSurfaceType(surfaceType);
+      const key=String(wx)+","+String(wz)+"|"+type;
+      if(terrainVariationVertexCache.has(key))return terrainVariationVertexCache.get(key);
+      const macro=terrainMacroVariationAt(wx,wz);
+      const context=variationContextAt(wx,wz);
+      const categories=["broad-macro"];
+      let r=1,g=1,b=1;
+      if(!TERRAIN_VARIATION_CONSTRUCTED_TYPES.has(type)&&TERRAIN_VARIATION_NATURAL_TYPES.has(type)){
+        const macroStrength=(type==="grass"||type==="forest"||type==="farmland")?0.065:
+          (type==="dirt"||type==="mud"||type==="sand")?0.042:0.025;
+        r*=1+macro*macroStrength*0.55;
+        g*=1+macro*macroStrength;
+        b*=1+macro*macroStrength*0.38;
+
+        const routeWear=context.route*(type==="grass"||type==="forest"?1:0.72);
+        if(routeWear>0.08){
+          r*=1+0.075*routeWear;
+          g*=1-0.060*routeWear;
+          b*=1-0.105*routeWear;
+          categories.push("road-shoulder");
+        }
+        const buildingWear=context.building*(type==="grass"||type==="forest"?1:0.65);
+        if(buildingWear>0.08){
+          r*=1+0.070*buildingWear;
+          g*=1-0.055*buildingWear;
+          b*=1-0.100*buildingWear;
+          categories.push("building-wear");
+        }
+        const moisture=context.moisture*(type==="grass"||type==="forest"||type==="mud"?1:0.45);
+        if(moisture>0.08){
+          r*=1-0.060*moisture;
+          g*=1+0.035*moisture;
+          b*=1+0.045*moisture;
+          categories.push("moisture");
+        }
+        const forestContact=context.forest*(type==="grass"||type==="forest"?1:0.35);
+        if(forestContact>0.08){
+          r*=1-0.030*forestContact;
+          g*=1+0.026*forestContact;
+          b*=1-0.018*forestContact;
+          categories.push("forest-contact");
+        }
+        if(context.route<0.05&&context.building<0.05&&context.moisture<0.08&&Math.abs(macro)>0.18){
+          categories.push("quiet-natural");
+        }
+      }
+      const tint=Object.freeze([
+        clamp(r,0.80,1.10),
+        clamp(g,0.80,1.10),
+        clamp(b,0.80,1.10),
+        1
+      ]);
+      const tinted=Math.abs(tint[0]-1)>0.006||Math.abs(tint[1]-1)>0.006||Math.abs(tint[2]-1)>0.006;
+      terrainVariationEvaluatedVertexCount++;
+      if(tinted)terrainVariationTintedVertexCount++;
+      terrainVariationMinTintComponent=Math.min(terrainVariationMinTintComponent,tint[0],tint[1],tint[2]);
+      terrainVariationMaxTintComponent=Math.max(terrainVariationMaxTintComponent,tint[0],tint[1],tint[2]);
+      for(const category of categories){
+        terrainVariationCategoryCounts[category]=(terrainVariationCategoryCounts[category]||0)+1;
+        if(!terrainVariationSamplesByCategory.has(category)){
+          terrainVariationSamplesByCategory.set(category,Object.freeze({
+            category,
+            x:String(wx),y:String(wz),surfaceType:type,
+            macro:Number(macro.toFixed(4)),
+            tint:Object.freeze(tint.slice(0,3).map(value=>Number(value.toFixed(4)))),
+            routeInfluence:Number(context.route.toFixed(4)),
+            buildingInfluence:Number(context.building.toFixed(4)),
+            moistureInfluence:Number(context.moisture.toFixed(4)),
+            forestInfluence:Number(context.forest.toFixed(4))
+          }));
+        }
+      }
+      const result=Object.freeze({tint,macro,context,categories:Object.freeze(categories.slice())});
+      terrainVariationVertexCache.set(key,result);
+      return result;
+    };
+    const terrainVariationTintAtCellPoint=(cellX,cellZ,fx,fz,surfaceType)=>{
+      const x0=baseX+BigInt(cellX),z0=baseZ+BigInt(cellZ);
+      const t00=terrainVariationAtVertex(x0,z0,surfaceType).tint;
+      const t10=terrainVariationAtVertex(x0+1n,z0,surfaceType).tint;
+      const t01=terrainVariationAtVertex(x0,z0+1n,surfaceType).tint;
+      const t11=terrainVariationAtVertex(x0+1n,z0+1n,surfaceType).tint;
+      const out=[];
+      for(let i=0;i<3;i++){
+        const a=t00[i]+(t10[i]-t00[i])*fx;
+        const c=t01[i]+(t11[i]-t01[i])*fx;
+        out.push(a+(c-a)*fz);
+      }
+      return [out[0],out[1],out[2],1];
+    };
     const sampleVertex=(wx,wz)=>{
       const key=String(wx)+","+String(wz);
       if(localSamples.has(key))return localSamples.get(key);
@@ -1553,8 +1715,18 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         for(const corner of corners){
           positions.push(...corner.position);
           normals.push(...corner.normal);
-          if(rect)appendColor32(colors32,[1,1,1,1],1);
-          else appendColor32(colors32,corner.sample.color,1);
+          const variation=terrainVariationAtVertex(corner.wx,corner.wz,surfaceType);
+          if(rect){
+            appendColor32(colors32,variation.tint,1);
+          }else{
+            const fallback=heightfieldColor(seed,corner.wx,corner.wz,sourceCell?.color,surfaceType);
+            appendColor32(colors32,[
+              fallback[0]*variation.tint[0],
+              fallback[1]*variation.tint[1],
+              fallback[2]*variation.tint[2],
+              1
+            ],1);
+          }
           detailUvs.push(Number(corner.wx)*0.25,Number(corner.wz)*0.25);
         }
         if(rect){
@@ -1596,7 +1768,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       contourSemanticCache.set(key,type);
       return type;
     };
-    const appendContourPoint=(cellX,cellZ,pointX,pointZ,rect)=>{
+    const appendContourPoint=(cellX,cellZ,pointX,pointZ,rect,surfaceType)=>{
       const fx=clamp(pointX-cellX,0,1),fz=clamp(pointZ-cellZ,0,1);
       const a=grid[cellZ*stride+cellX],b=grid[cellZ*stride+cellX+1];
       const c=grid[(cellZ+1)*stride+cellX],d=grid[(cellZ+1)*stride+cellX+1];
@@ -1615,7 +1787,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const nlen=Math.hypot(nx,ny,nz)||1;
       positions.push(pointX*metersPerTile-half,y+CONTOUR_Y_OFFSET,pointZ*metersPerTile-half);
       normals.push(nx/nlen,ny/nlen,nz/nlen);
-      appendColor32(colors32,[1,1,1,1],1);
+      appendColor32(colors32,terrainVariationTintAtCellPoint(cellX,cellZ,fx,fz,surfaceType),1);
       uvs.push(
         Number(rect.u0)+(Number(rect.u1)-Number(rect.u0))*fx,
         Number(rect.v0)+(Number(rect.v1)-Number(rect.v0))*fz
@@ -1654,14 +1826,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         if(localCellX<0||localCellX>=size||localCellZ<0||localCellZ>=size)continue;
         const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(majority)||activeAtlas?.uvRect?.(majority)):null;
         if(!rect)continue;
-        const centerIndex=appendContourPoint(localCellX,localCellZ,cornerX,cornerZ,rect);
+        const centerIndex=appendContourPoint(localCellX,localCellZ,cornerX,cornerZ,rect,majority);
         let previous=null;
         for(let segment=0;segment<=CONTOUR_ARC_SEGMENTS;segment++){
           const t=segment/CONTOUR_ARC_SEGMENTS;
           const angle=q.start+(q.end-q.start)*t;
           const px=cornerX+Math.cos(angle)*CONTOUR_ROUND_RADIUS_TILES;
           const pz=cornerZ+Math.sin(angle)*CONTOUR_ROUND_RADIUS_TILES;
-          const current=appendContourPoint(localCellX,localCellZ,px,pz,rect);
+          const current=appendContourPoint(localCellX,localCellZ,px,pz,rect,majority);
           if(previous!==null){
             // Reverse the increasing x/z arc winding so the patch faces +Y.
             indices.push(centerIndex,current,previous);
@@ -1824,6 +1996,29 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       contourTileCentersPreserved:true,
       contourNarrowFeaturesPreserved:true,
       contourAlphaBlend:false,
+      terrainVariationEnabled:true,
+      terrainVariationStrategy:"global-coordinate vertex-color macro field + semantic proximity wear",
+      terrainVariationMacroScaleTiles:Number(TERRAIN_VARIATION_MACRO_SCALE_TILES),
+      terrainVariationContextRadiusTiles:TERRAIN_VARIATION_CONTEXT_RADIUS_TILES,
+      terrainVariationEvaluatedVertexCount,
+      terrainVariationTintedVertexCount,
+      terrainVariationCategoryCounts:Object.freeze({...terrainVariationCategoryCounts}),
+      terrainVariationSamples:Object.freeze([...terrainVariationSamplesByCategory.values()]),
+      terrainVariationMinTintComponent:Number.isFinite(terrainVariationMinTintComponent)?Number(terrainVariationMinTintComponent.toFixed(4)):1,
+      terrainVariationMaxTintComponent:Number.isFinite(terrainVariationMaxTintComponent)?Number(terrainVariationMaxTintComponent.toFixed(4)):1,
+      terrainVariationDrawCallsAdded:0,
+      terrainVariationMaterialsAdded:0,
+      terrainVariationTexturesAdded:0,
+      terrainVariationTrianglesAdded:0,
+      terrainVariationGlobalCoordinateField:true,
+      terrainVariationChunkBorderContinuous:true,
+      terrainVariationContourCompatible:true,
+      terrainVariationBaseSurfaceIdentityPreserved:true,
+      terrainVariationDeterministic:true,
+      terrainVariationRendererOnly:true,
+      terrainVariationNavigationAuthority:false,
+      terrainVariationCollisionAuthority:false,
+      terrainVariationSimulationAuthorityPreserved:true,
       vertexCount:positions.length/3,
       triangleCount:indices.length/3,
       minConditionedHeight:Number(minHeight.toFixed(4)),
@@ -2085,6 +2280,22 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       contourCanonicalCornerOwnership:true,
       contourTileCentersPreserved:true,
       contourAlphaBlend:false,
+      terrainVariationEnabled:true,
+      terrainVariationStrategy:"global-coordinate vertex-color macro field + semantic proximity wear",
+      terrainVariationMacroScaleTiles:Number(TERRAIN_VARIATION_MACRO_SCALE_TILES),
+      terrainVariationContextRadiusTiles:TERRAIN_VARIATION_CONTEXT_RADIUS_TILES,
+      terrainVariationDrawCallsAdded:0,
+      terrainVariationMaterialsAdded:0,
+      terrainVariationTexturesAdded:0,
+      terrainVariationTrianglesAdded:0,
+      terrainVariationGlobalCoordinateField:true,
+      terrainVariationChunkBorderContinuous:true,
+      terrainVariationContourCompatible:true,
+      terrainVariationBaseSurfaceIdentityPreserved:true,
+      terrainVariationRendererOnly:true,
+      terrainVariationNavigationAuthority:false,
+      terrainVariationCollisionAuthority:false,
+      terrainVariationSimulationAuthorityPreserved:true,
       indexedSharedVertices:false,
       indexedSemanticQuads:true,
       semanticTerrainMaterialCount:1,
