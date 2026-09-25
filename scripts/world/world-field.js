@@ -195,7 +195,6 @@ function sample(seedValue,xMetersValue,zMetersValue){
   const climate=climateName(temp,moisture);
   const biome=biomeFor(elevation,moisture,temp,surfaceType);
 
-  const center=sample(seed,x.key,z.key);
   const result=Object.freeze({
     version:VERSION,
     xMeters:x.key,zMeters:z.key,
@@ -264,6 +263,7 @@ function landform(seedValue,xMetersValue,zMetersValue,radiusMetersValue=DEFAULT_
   else if(cliffSignal>=0.22)kind="cliff";
   else if(slopeDegrees>=8)kind="slope";
 
+  const center=sample(seed,x.key,z.key);
   const result=Object.freeze({
     version:VERSION,
     xMeters:x.key,zMeters:z.key,
