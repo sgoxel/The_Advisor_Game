@@ -264,7 +264,7 @@ function applySceneLoadingPresentation(){
   const effectivePhase=String(proof?.phase||sceneLoadingState.phase||"boot");
   const info=SCENE_LOADING_PHASES[effectivePhase]||SCENE_LOADING_PHASES.boot;
   const effectiveState=proof
-    ?(effectivePhase==="error"?"error":"loading")
+    ?(effectivePhase==="error"?"error":effectivePhase==="ready"?"ready":"loading")
     :sceneLoadingState.state;
   const hidden=effectiveState==="hidden";
   e.sceneLoadingOverlay.hidden=hidden;
