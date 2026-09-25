@@ -1750,7 +1750,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       worldVisualStyleSignature:String(worldVisualStyle()?.signature||"legacy"),
       worldVisualStylePaletteRoleCount:Object.keys(worldVisualStyle()?.palette||{}).length,
       terrainSemanticUvPerTile:true,
-      semanticMeshUvOrientation:String(activeAtlas?.stats?.()?.semanticMeshUvOrientation||"source-row-space"),
+      semanticMeshUvOrientation:String(textureAtlasProvider?.()?.stats?.()?.semanticMeshUvOrientation||"source-row-space"),
       indexedSharedVertices:false,
       indexedSemanticQuads:true,
       semanticTerrainMaterialCount:1,
