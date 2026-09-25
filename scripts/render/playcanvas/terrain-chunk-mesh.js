@@ -1672,28 +1672,22 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const surfaceCounts=spec.worldData?.terrain?.surfaceCounts||{};
     let texturedBlockCount=0,colorFallbackBlockCount=0;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
-    const heightSegments=heightfieldSegments(size);
-    const heightStep=heightfieldStep(size);
-    const coarseStride=heightSegments+1;
-    const coarseHeights=new Array(coarseStride*coarseStride);
-    for(let gz=0;gz<=heightSegments;gz++){
-      for(let gx=0;gx<=heightSegments;gx++){
-        const wx=baseX+BigInt(gx*heightStep),wz=baseZ+BigInt(gz*heightStep);
-        coarseHeights[gz*coarseStride+gx]=terrainHeightVertex(seed,String(wx),String(wz)).height;
-      }
-    }
-    const coarseAt=(gx,gz)=>coarseHeights[
-      Math.max(0,Math.min(heightSegments,gz))*coarseStride+
-      Math.max(0,Math.min(heightSegments,gx))
-    ];
+    // Gate-critical destination geometry deliberately avoids the full terrain
+    // height/road-profile sampler. Four macro elevation samples preserve broad
+    // slope continuity while all semantic surface identity still comes from the
+    // authoritative prepared cells. Full relief/road conditioning is restored
+    // by the normal post-gate chunk upgrade.
+    const heightSegments=1;
+    const heightStep=size;
+    const nw=macroHeight(seed,String(baseX),String(baseZ)).macro;
+    const ne=macroHeight(seed,String(baseX+BigInt(size)),String(baseZ)).macro;
+    const sw=macroHeight(seed,String(baseX),String(baseZ+BigInt(size))).macro;
+    const se=macroHeight(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size))).macro;
     const sampleHeight=(tileX,tileZ)=>{
-      const qx=tileX/heightStep,qz=tileZ/heightStep;
-      const x0=Math.min(heightSegments-1,Math.max(0,Math.floor(qx)));
-      const z0=Math.min(heightSegments-1,Math.max(0,Math.floor(qz)));
-      const tx=Math.max(0,Math.min(1,qx-x0)),tz=Math.max(0,Math.min(1,qz-z0));
-      const a=coarseAt(x0,z0),b=coarseAt(x0+1,z0),cc=coarseAt(x0,z0+1),d=coarseAt(x0+1,z0+1);
-      if(tx+tz<=1)return a+tx*(b-a)+tz*(cc-a);
-      return d+(1-tz)*(b-d)+(1-tx)*(cc-d);
+      const tx=clamp(Number(tileX)/size,0,1),tz=clamp(Number(tileZ)/size,0,1);
+      const north=nw+(ne-nw)*tx;
+      const south=sw+(se-sw)*tx;
+      return clamp(north+(south-north)*tz,-3.4,3.4);
     };
     for(let gz=0;gz<size;gz++){
       for(let gx=0;gx<size;gx++){
