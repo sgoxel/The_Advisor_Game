@@ -1645,3 +1645,10 @@
 - Added a dedicated seven-frame evidence path: readiness plus dawn, midday, late-day, night, compact landscape and portrait views.
 - Evidence attempt 3 produced all fresh frames, but the validator rejected valid drawCallImpact=0 due to a falsy-value bug; that validator defect is repaired for the next run.
 - Direct screenshot inspection: VISUAL 6.5/10 — FAIL. Day is readable, but dawn/late-day are too dim and night loses too much terrain readability. Three-attempt run limit reached; WP remains incomplete and ROADMAP is unchanged.
+
+
+2026-09-26 02:44:00 +03:00 | WP-S003-009-011 | Seeded Spherical Wilderness Foundation — PARTIAL IMPLEMENTATION, VISUAL INCOMPLETE
+- Added deterministic spherical wilderness sampling from authoritative planet elevation, moisture and mountain context; land cells resolve to vegetation/rock clusters and bounded fauna-suitability zones without changing Simulation state.
+- Static presentation uses two combined low-cost meshes rather than one entity/material per prop; scatter is prepared once, not regenerated per frame. Telemetry exposes cell/accepted/rejected counts, fauna zones, draw calls, triangles, preparation time and authority flags.
+- Added dedicated fixed-SEED evidence coverage across six globe orientations plus compact landscape/portrait framing. Attempt 1 passed functional evidence but showed needle-like silhouette artifacts; attempt 2 flattened the geometry and removed that defect.
+- Direct screenshot inspection after attempt 2: VISUAL 6.0/10 — FAIL for this WP. At current globe-only scale, local wilderness detail is intentionally too small to prove grassland/forest/wet/rocky scene richness. Props were not falsely enlarged to planetary scale. WP remains incomplete and ROADMAP is unchanged.
