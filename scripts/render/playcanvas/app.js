@@ -896,7 +896,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreHeightDelta=Infinity,maxRoadCoreHeightDelta=-Infinity;
     let routeSurfaceCellCount=0,routeMainRoadCellCount=0,routeLocalPathCellCount=0,routeSquareCellCount=0,routeConnectorCellCount=0;
-    let routeEdgeStripCount=0,routeDiagonalBridgeCount=0,routeSurfaceTriangleCount=0,routeNetworkConnectedRouteCount=0,routeNetworkTotalRouteCount=0;
+    let routeEdgeStripCount=0,routeDiagonalBridgeCount=0,routeDiagonalRibbonOnlyCellCount=0,routeSurfaceTriangleCount=0,routeNetworkConnectedRouteCount=0,routeNetworkTotalRouteCount=0;
     let routeSurfaceRouteSafe=true,routeNetworkRouteSafetyPass=true,routeSurfaceRendererOnly=true,routeNetworkDeterministic=true;
     const routeSurfaceSamples=[];
     const heightfieldResources=new Map();
@@ -981,6 +981,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       routeConnectorCellCount+=Number(resource.routeConnectorCellCount||0);
       routeEdgeStripCount+=Number(resource.routeEdgeStripCount||0);
       routeDiagonalBridgeCount+=Number(resource.routeDiagonalBridgeCount||0);
+      routeDiagonalRibbonOnlyCellCount+=Number(resource.routeDiagonalRibbonOnlyCellCount||0);
       routeSurfaceTriangleCount+=Number(resource.routeSurfaceTriangleCount||0);
       routeNetworkConnectedRouteCount=Math.max(routeNetworkConnectedRouteCount,Number(resource.routeNetworkConnectedRouteCount||0));
       routeNetworkTotalRouteCount=Math.max(routeNetworkTotalRouteCount,Number(resource.routeNetworkTotalRouteCount||0));
@@ -1148,7 +1149,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       bridgeClearanceWorldUnits:Number(generatorStats.bridgeClearanceWorldUnits||0),
       roadProfileGroundingShared:generatorStats.roadProfileGroundingShared===true,
       routeSurfaceCellCount,routeMainRoadCellCount,routeLocalPathCellCount,routeSquareCellCount,routeConnectorCellCount,
-      routeEdgeStripCount,routeDiagonalBridgeCount,routeSurfaceTriangleCount,
+      routeEdgeStripCount,routeDiagonalBridgeCount,routeDiagonalRibbonOnlyCellCount,routeSurfaceTriangleCount,
       routeSurfaceMaterialCount,
       routeSurfaceMaterialNames:generatorStats.routeSurfaceMaterialNames||Object.freeze([]),
       routeSurfaceMaterialRebinds:Number(generatorStats.routeSurfaceMaterialRebinds||0),

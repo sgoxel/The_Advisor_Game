@@ -35,8 +35,8 @@ const BUILDING_MATERIAL_VARIANTS=Object.freeze([
 ]);
 const SEMANTIC_TERRAIN_TYPES=new Set(["grass","forest","dirt","mud","road","bridge","square","path","plot","water","rock","sand","farmland"]);
 const CONTOUR_SMOOTHABLE_TYPES=new Set(["grass","forest","dirt","mud","sand","farmland"]);
-const CONTOUR_ROUND_RADIUS_TILES=0.48;
-const CONTOUR_ARC_SEGMENTS=4;
+const CONTOUR_ROUND_RADIUS_TILES=0.50;
+const CONTOUR_ARC_SEGMENTS=5;
 const CONTOUR_Y_OFFSET=0.008;
 const CONTOUR_HALO_TILES=1;
 function semanticSurfaceType(value){
@@ -834,7 +834,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const seed=String(seedProvider()||"");
     const counts={road:0,path:0,square:0,connector:0};
     const samples=[];
-    let triangleCount=0,edgeStripCount=0,diagonalBridgeCount=0;
+    let triangleCount=0,edgeStripCount=0,diagonalBridgeCount=0,diagonalRibbonOnlyCellCount=0;
     const routeTypes=new Set(["road","path","square"]);
     const edgeMaterial=presentationMaterial("route-edge",0.25,0.18,0.11,0.02);
     const edgeBatch=batchFor(batches,edgeMaterial.name,edgeMaterial);
@@ -860,16 +860,31 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const type=String(cell?.type||"");
       if(!routeTypes.has(type))continue;
       const orientation=routeOrientation(seed,cell);
+      const cardinalTypes=[
+        routeNeighborType(seed,cell.x,cell.y,0,-1),
+        routeNeighborType(seed,cell.x,cell.y,1,0),
+        routeNeighborType(seed,cell.x,cell.y,0,1),
+        routeNeighborType(seed,cell.x,cell.y,-1,0)
+      ];
+      const diagonalRoadDirections=[[-1,-1],[1,-1],[-1,1],[1,1]].filter(
+        ([dx,dy])=>routeNeighborType(seed,cell.x,cell.y,dx,dy)==="road"
+      );
+      const diagonalRibbonOnly=type==="road"&&!cardinalTypes.some(routeLike)&&diagonalRoadDirections.length>0;
       const extents=routeExtents(type,orientation);
       const mat=routeSurfaceMaterial(type);
       const batch=batchFor(batches,mat.name,mat);
-      triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,extents.halfX,extents.halfZ,type==="square"?0.028:0.032);
+      if(!diagonalRibbonOnly){
+        triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,extents.halfX,extents.halfZ,type==="square"?0.028:0.032);
+      }else{
+        diagonalRibbonOnlyCellCount++;
+      }
       counts[type]++;
       if(samples.length<24)samples.push(Object.freeze({
-        x:String(cell.x),y:String(cell.y),type,orientation,
+        x:String(cell.x),y:String(cell.y),type,
+        orientation:diagonalRibbonOnly?"diagonal-ribbon":orientation,
         materialName:mat.name,textureKey:"tile:"+type,
-        halfWidthMeters:Number(extents.halfX.toFixed(3)),
-        halfDepthMeters:Number(extents.halfZ.toFixed(3))
+        halfWidthMeters:Number((diagonalRibbonOnly?0.78:extents.halfX).toFixed(3)),
+        halfDepthMeters:Number((diagonalRibbonOnly?0.78:extents.halfZ).toFixed(3))
       }));
       if(type==="road"){
         // The one-tile gateway centerline may change lateral offset by one tile
@@ -882,11 +897,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           const sideA=routeNeighborType(seed,cell.x,cell.y,dx,0);
           const sideB=routeNeighborType(seed,cell.x,cell.y,0,dy);
           if(routeLike(sideA)||routeLike(sideB))continue;
-          triangleCount+=appendDiagonalRouteBridge(batch,worldData,cell.x,cell.y,dx,dy,0.88,0.033);
+          triangleCount+=appendDiagonalRouteBridge(batch,worldData,cell.x,cell.y,dx,dy,diagonalRibbonOnly?0.78:0.94,0.033);
           diagonalBridgeCount++;
         }
       }
-      if(type==="road"||type==="square"){
+      if((type==="road"||type==="square")&&!diagonalRibbonOnly){
         for(const [side,dx,dy] of [["n",0,-1],["e",1,0],["s",0,1],["w",-1,0]]){
           const neighbor=routeNeighborType(seed,cell.x,cell.y,dx,dy);
           if(!routeLike(neighbor)&&!diagonalRoadAcrossSide(cell,side))appendEdge(cell,side);
@@ -913,8 +928,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       counts:Object.freeze({...counts}),
       surfaceCellCount:counts.road+counts.path+counts.square,
       connectorCellCount:counts.connector,
-      edgeStripCount,diagonalBridgeCount,
-      sourcePrimitiveCount:counts.road+counts.path+counts.square+counts.connector+edgeStripCount+diagonalBridgeCount,
+      edgeStripCount,diagonalBridgeCount,diagonalRibbonOnlyCellCount,
+      sourcePrimitiveCount:counts.road+counts.path+counts.square-diagonalRibbonOnlyCellCount+counts.connector+edgeStripCount+diagonalBridgeCount,
       triangleCount,
       samples:Object.freeze(samples),
       contactShadowMaterialCount:contactShadowMaterials.size,
@@ -1830,6 +1845,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       routeConnectorCellCount:Number(routePresentation.connectorCellCount||0),
       routeEdgeStripCount:Number(routePresentation.edgeStripCount||0),
       routeDiagonalBridgeCount:Number(routePresentation.diagonalBridgeCount||0),
+      routeDiagonalRibbonOnlyCellCount:Number(routePresentation.diagonalRibbonOnlyCellCount||0),
       routeSurfaceTriangleCount:Number(routePresentation.triangleCount||0),
       routeSurfaceMaterialCount:Number(routePresentation.routeSurfaceMaterialCount||0),
       routeSurfaceMaterialNames:routePresentation.routeSurfaceMaterialNames,

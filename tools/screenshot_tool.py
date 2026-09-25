@@ -6748,14 +6748,17 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Contour zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
             if chunks.get("contourAlgorithm")!="categorical-marching-corners-rounded-fan":
                 raise RuntimeError(f"Contour algorithm missing in frame {index+1}: {chunks.get('contourAlgorithm')}")
-            if chunks.get("contourPreparationOnly") is not True or int(chunks.get("contourPerFrameRegenerationCount") or -1)!=0:
+            per_frame_regen=chunks.get("contourPerFrameRegenerationCount")
+            if chunks.get("contourPreparationOnly") is not True or per_frame_regen is None or int(per_frame_regen)!=0:
                 raise RuntimeError(f"Contour preparation contract failed in frame {index+1}: {chunks}")
             radius=float(chunks.get("contourRoundRadiusTiles") or 0)
             deviation=float(chunks.get("contourMaxBoundaryDeviationTiles") or 0)
             band=float(chunks.get("contourTransitionBandWidthTiles") or 0)
             if not (0 < radius <= 0.5 and 0 < deviation <= 0.5 and 0 < band <= 0.5):
                 raise RuntimeError(f"Contour deviation/band is not bounded in frame {index+1}: radius={radius}, deviation={deviation}, band={band}")
-            if int(chunks.get("contourDrawCallsAdded") or -1)!=0 or int(chunks.get("contourMaterialCountAdded") or -1)!=0:
+            added_draw_calls=chunks.get("contourDrawCallsAdded")
+            added_materials=chunks.get("contourMaterialCountAdded")
+            if added_draw_calls is None or added_materials is None or int(added_draw_calls)!=0 or int(added_materials)!=0:
                 raise RuntimeError(f"Contour smoothing added draw calls/materials in frame {index+1}: {chunks}")
             if chunks.get("contourCanonicalCornerOwnership") is not True or chunks.get("contourSharedEdgeEquality") is not True:
                 raise RuntimeError(f"Contour shared-edge continuity failed in frame {index+1}: {chunks}")
