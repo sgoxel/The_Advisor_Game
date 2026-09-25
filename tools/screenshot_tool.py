@@ -1607,7 +1607,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 return Boolean(
                   s?.ready===true &&
                   s?.stage==='seeded-planetary-geography' &&
-                  s?.geographyVersion==='planetary-geography-v2' &&
+                  s?.geographyVersion==='planetary-geography-v3' &&
                   Number(s?.canvasCount||0)===1 &&
                   v?.pass===true
                 );
@@ -8042,7 +8042,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Seeded planet stage not ready in frame {index}: {stage}")
             if stage.get("version") != "planetary-geography-globe-v1":
                 raise RuntimeError(f"Unexpected planet renderer version in frame {index}: {stage}")
-            if stage.get("geographyVersion") != "planetary-geography-v2":
+            if stage.get("geographyVersion") != "planetary-geography-v3":
                 raise RuntimeError(f"Unexpected geography version in frame {index}: {stage}")
             if abs(float(stage.get("worldScaleFraction") or 0)-0.10)>1e-9:
                 raise RuntimeError(f"Planet scale fraction is not 10% in frame {index}: {stage}")
@@ -8055,7 +8055,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if verification.get("sameSeedMatch") is not True or verification.get("differentSeedChanges") is not True:
                 raise RuntimeError(f"Seed determinism/change proof failed in frame {index}: {verification}")
             seam=verification.get("seam") or {}
-            if seam.get("longitudePass") is not True or float(seam.get("northPoleRangeMeters") or 999)>0.001 or float(seam.get("southPoleRangeMeters") or 999)>0.001:
+            north_pole=seam.get("northPoleRangeMeters")
+            south_pole=seam.get("southPoleRangeMeters")
+            if (
+                seam.get("longitudePass") is not True
+                or north_pole is None or float(north_pole)>0.001
+                or south_pole is None or float(south_pole)>0.001
+            ):
                 raise RuntimeError(f"Spherical seam/pole continuity failed in frame {index}: {verification}")
             if int(stats.get("landSamples") or 0)<=0 or int(stats.get("oceanSamples") or 0)<=0:
                 raise RuntimeError(f"Land/ocean generation missing in frame {index}: {stats}")
