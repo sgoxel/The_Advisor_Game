@@ -6075,6 +6075,37 @@ def _set_minimap_view(
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-003-001":
         from selenium.webdriver.support.ui import WebDriverWait
+        if frame_index == 0:
+            startup_state=driver.execute_script(
+                "return window.AppUI?.sceneLoadingSnapshot?.()?.current?.state || null"
+            )
+            if startup_state == "error":
+                # The CI browser can hit a transient first-campaign PlayCanvas
+                # readiness race even though the campaign has already been
+                # persisted. Reload exactly once and require the restored
+                # campaign to reach real playable readiness before visual proof.
+                driver.refresh()
+                WebDriverWait(driver,150).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
+                WebDriverWait(driver,150).until(
+                    lambda d: d.execute_script(
+                        "return window.AppUI?.applicationStartupSnapshot?.()?.state==='ready'"
+                    )
+                )
+                WebDriverWait(driver,150).until(
+                    lambda d: d.execute_script(
+                        """
+                        const state=document.querySelector('#campaignState')?.textContent?.trim();
+                        const loading=window.AppUI?.sceneLoadingSnapshot?.()?.current||{};
+                        return Boolean(
+                          state==='ACTIVE' &&
+                          (loading.state==='ready'||loading.state==='hidden') &&
+                          loading.readiness?.playableReady===true
+                        );
+                        """
+                    )
+                )
         type_by_frame=("table","hearth","door","chair")
         target_type=type_by_frame[min(frame_index,len(type_by_frame)-1)]
         if frame_index == 3:
