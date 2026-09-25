@@ -484,11 +484,10 @@ function makeCloudTexture(){
   const texture=new pc.Texture(device,{width:source.width,height:source.height,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
   texture.name="SeededPlanetClouds";texture.addressU=pc.ADDRESS_REPEAT;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(source);return texture;
 }
-function buildAmbientMotion(){
+function buildAmbientMotion(surfaceMesh){
   const material=new pc.StandardMaterial();const texture=makeCloudTexture();
   material.name="SeededCloudLayer";material.diffuse.set(.95,.98,1);material.diffuseMap=texture;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.52;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
-  const mesh=pc.createSphere(device,{radius:DISPLAY_RADIUS_UNITS*1.018,latitudeBands:40,longitudeBands:64});
-  cloudLayer=new pc.Entity("AmbientCloudLayer");cloudLayer.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});cloudLayer.render.meshInstances=[new pc.MeshInstance(mesh,material,cloudLayer)];planet.addChild(cloudLayer);
+  cloudLayer=new pc.Entity("AmbientCloudLayer");cloudLayer.setLocalScale(1.018,1.018,1.018);cloudLayer.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});cloudLayer.render.meshInstances=[new pc.MeshInstance(surfaceMesh,material,cloudLayer)];planet.addChild(cloudLayer);
   ambientMotion={...ambientMotion,cloudLayerCount:1,animatedEntityCount:1,drawCallEstimate:1};
 }
 function updateAmbientMotion(dt){
@@ -533,7 +532,7 @@ async function buildScene(){
   const mesh=await buildPlanetMesh();
   planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
   app.root.addChild(planet);
-  buildAmbientMotion();
+  buildAmbientMotion(mesh);
 
   const keyLight=new pc.Entity("PlanetKeyLight");
   keyLight.addComponent("light",{
