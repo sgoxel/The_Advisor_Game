@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planetary-geography-v3";
+const VERSION="planetary-geography-v4";
 const DEFAULT_SEED="The_Advisor_Game_Planet_001";
 const STORAGE_KEY="advisor.planet.seed.v1";
 const CONTINENT_COUNT=5;
@@ -261,7 +261,10 @@ function create(seedValue){
     const continent=maxInfluence(warped,continentLobes);
     const island=maxInfluence(warped,islandLobes);
     const coastNoise=(fbm3(bases.coast,warped,2.7,4)-0.5)*0.44+(fbm3(bases.detail,warped,9.5,3)-0.5)*0.12;
-    const landSignal=Math.max(continent,island*1.08)+coastNoise-0.33;
+    const islandRough=(fbm3(bases.detail,warped,18.5,3)-0.5)*0.36;
+    const continentSignal=continent+coastNoise;
+    const islandSignal=island*1.08+coastNoise*0.34+islandRough*clamp(island*1.45);
+    const landSignal=Math.max(continentSignal,islandSignal)-0.33;
     const land=landSignal>0;
     const interior=land?clamp(landSignal/0.56):0;
     const mountainBase=maxInfluence(warped,mountainNodes);
