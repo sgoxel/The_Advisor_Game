@@ -210,6 +210,15 @@ input:focus{border-color:#92ad83}
   transition:width .12s ease-out;
 }
 .scene-loading-progress code{font-size:11px;color:#dce6d6}
+.scene-loading-progress.is-indeterminate .scene-loading-progress-track span{
+  width:38%!important;
+  animation:scene-loading-progress-scan 1.15s ease-in-out infinite;
+}
+@keyframes scene-loading-progress-scan{
+  0%{transform:translateX(-115%)}
+  55%{transform:translateX(105%)}
+  100%{transform:translateX(265%)}
+}
 .scene-loading-trail{display:flex;align-items:center;justify-content:center;gap:7px;height:18px}
 .scene-loading-trail i{
   width:7px;
