@@ -39,6 +39,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-001-003` — Canonical Root PlayCanvas Cutover — COMPLETED
 - `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
 - `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
+- `WP-S003-003-001` — Interactable World Objects + Contextual Use Actions
 - `WP-S003-004` — Layered 2.5D Building Presentation + Interior Visibility — COMPLETED
 - `WP-S003-004-001` — Tall 2.5D Building Mass + Local Character Occlusion Cutouts — COMPLETED
 - `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World — COMPLETED
@@ -90,6 +91,14 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation
 - `WP-S003-009-010` — Day/Night Atmospheric Color + Lighting Palette
 - `WP-S003-009-011` — Biome-Aware Wilderness Dressing + Ambient Fauna
+- `WP-S003-009-012` — Reactive Ambient Wildlife Behavior
+- `WP-S003-009-013` — Contextual Building Activity Indicators
+- `WP-S003-009-014` — Local Environmental Reaction Effects
+- `WP-S003-009-015` — Positional Ambient Soundscape + Activity Audio
+- `WP-S003-009-016` — Regional Weather Presentation + Local Behavior Hooks
+- `WP-S003-009-017` — Seasonal World Presentation + Vegetation State
+- `WP-S003-009-018` — Function-Readable Building Surroundings + Ownership Cues
+- `WP-S003-009-019` — Campaign-State Environmental Wear, Damage + Recovery Projection
 - `WP-S003-010` — Continuous Multi-Scale Strategic Zoom + Continent Overview LOD
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
@@ -100,6 +109,11 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement — COMPLETED
 - `WP-S004-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
 - `WP-S004-005` — Interior Action Execution + Character State Presentation — COMPLETED
+- `WP-S004-006` — Local NPC Social Encounters + Group Activity
+- `WP-S004-007` — Profession-Specific Visible Work Cycles + Workplace Choreography
+- `WP-S004-008` — Contextual NPC Reactions + Local Social Boundaries
+- `WP-S004-009` — Time-of-Day Settlement Activity Rhythm
+- `WP-S004-010` — Density-Scaled Local Crowd Presentation
 
 # Stage 5 — Advisor Interaction + Social Foundation
 
@@ -108,6 +122,8 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S005-003` — Local Dialogue, Social Context + Trust Framing — COMPLETED
 - `WP-S005-004` — Advice Acceptance, Rejection + Influence Resolution — COMPLETED
 - `WP-S005-005` — Relationship, Reputation + Duty State Foundation — COMPLETED
+- `WP-S005-006` — NPC Recognition + Personal Interaction Memory
+- `WP-S005-007` — Local Rumors, Knowledge Exchange + Discoverable Leads
 
 # Stage 6 — Political Geography + Settlement Diversity Foundation
 
@@ -119,6 +135,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S006-005-001` — Population-Scaled Settlement Footprints + Realistic Urban Morphology
 - `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
 - `WP-S006-007` — Deterministic World Destinations + Points-of-Interest Foundation
+- `WP-S006-007-001` — Discoverable Micro-Locations + Wilderness POI Composition
 
 # Stage 7 — Hierarchical Lazy World Simulation + Deterministic Persistence
 
@@ -132,5 +149,8 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S007-008` — Deterministic Lazy Catch-Up + Offline World Progression — COMPLETED
 - `WP-S007-009` — Versioned Save/Load, Deterministic Resume + World Compatibility
 - `WP-S007-010` — World Simulation Budgets, Backpressure + Runtime Telemetry
+- `WP-S007-011` — Local Dynamic Event Vignettes + Reactive Scheduling
+- `WP-S007-012` — Persistent World Consequence Projection + Local Recovery
+- `WP-S007-013` — Rare Traveling Encounters + Surprise Event Stream
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
