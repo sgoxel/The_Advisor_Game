@@ -215,7 +215,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-006": 8,
     "wp-s003-009-007": 8,
     "wp-s003-009-008": 8,
-    "wp-s003-009-009": 10,
+    "wp-s003-009-009": 6,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1601,7 +1601,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"wp-s003-006-014","wp-s003-008-004","wp-s003-008-005"}:
+    if scenario in {"wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7324,41 +7324,28 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
-    if scenario == "wp-s003-009-009":
-        _ensure_texture_quality_profile(driver, "standard")
-        if frame_index == 0:
-            driver.set_window_size(1280, 800)
-            quality=_set_graphics_quality_mode(driver, "standard")
-            _set_ambient_motion_proof(driver, None)
-            return "ambient:standard-time-a+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 1:
-            time.sleep(0.75)
-            return "ambient:standard-time-b+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 2:
-            return "ambient:landmark-close+" + _focus_landmark(driver, 1.50, False)
-        if frame_index == 3:
-            quality=_set_graphics_quality_mode(driver, "low")
-            return "ambient:low-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 4:
-            quality=_set_graphics_quality_mode(driver, "standard")
-            return "ambient:standard-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 5:
-            quality=_set_graphics_quality_mode(driver, "high")
-            return "ambient:high-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 6:
-            quality=_set_graphics_quality_mode(driver, "standard")
-            _set_ambient_motion_proof(driver, False)
-            return "ambient:baseline-off+" + quality + "+proof-off+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 7:
-            _set_ambient_motion_proof(driver, None)
-            return "ambient:baseline-on+proof-on+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 8:
-            quality=_set_graphics_quality_mode(driver, "standard")
-            return "ambient:far-zoom-lod+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
-        driver.set_window_size(844, 390)
-        quality=_set_graphics_quality_mode(driver, "standard")
-        _set_ambient_motion_proof(driver, None)
-        return "ambient:phone-landscape+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+     if scenario == "wp-s003-009-009":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-009-009 requires six planet ambient-motion evidence frames")
+        updates=[]
+        for index,frame in enumerate(frames[:6]):
+            planet=(frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {})
+            ambient=planet.get("ambientMotion") or {}
+            if planet.get("ready") is not True or int(ambient.get("cloudLayerCount") or 0)!=1 or int(ambient.get("animatedEntityCount") or 0)!=1:
+                raise RuntimeError(f"Planet ambient layer missing in frame {index+1}: {ambient}")
+            if ambient.get("presentationOnly") is not True or ambient.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Planet ambient authority isolation failed in frame {index+1}: {ambient}")
+            if int(ambient.get("drawCallEstimate") or 0)>1 or float(ambient.get("maxUpdateMs") or 0)>4.0:
+                raise RuntimeError(f"Planet ambient budget exceeded in frame {index+1}: {ambient}")
+            updates.append(int(ambient.get("updateCount") or 0))
+        if updates[1] <= updates[0]:
+            raise RuntimeError(f"Cloud drift did not advance over time: {updates[:2]}")
+        landscape=frames[4].get("runtime",{}).get("viewport",{})
+        portrait=frames[5].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0) or int(portrait.get("height") or 0)<=int(portrait.get("width") or 0):
+            raise RuntimeError(f"Mobile ambient evidence missing: landscape={landscape}, portrait={portrait}")
+        return
+
     if scenario == "wp-s003-009-008":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
