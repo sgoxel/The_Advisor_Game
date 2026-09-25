@@ -1307,8 +1307,14 @@ async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom(),optio
         onProgress:applyRuntimeAreaProgress
       }))
       :await Promise.resolve(GameRenderer.prepareTerrain?.(prepareModel));
-    if(rendererPrepared&&rendererPrepared.prepared===false){
-      throw new Error("PlayCanvas chunk preparation failed for "+base.regionKey);
+    if(options?.runtimeStreaming&&rendererPrepared?.stale){
+      return Object.freeze({...base,stale:true,playCanvasRuntimeStreaming:true,legacyTexturePreparationSkipped:true});
+    }
+    if(rendererPrepared&&(rendererPrepared.prepared===false||rendererPrepared.ready===false)){
+      throw new Error(
+        "PlayCanvas chunk preparation failed for "+base.regionKey+
+        " reason="+String(rendererPrepared.reason||"not-ready")
+      );
     }
     const cached=GameRenderer.getPreparedTerrainView?.({
       seed,

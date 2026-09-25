@@ -446,11 +446,56 @@ function createManager({
     const [x,y]=key.split(",").map(Number);
     return {x,y};
   }
-  function prepareNow(x,y,state,isVisible,source="normal",preparedData=null){
+  function entryCoversRequiredCells(entry,requiredCellIndices){
+    const required=Array.isArray(requiredCellIndices)?requiredCellIndices:[];
+    if(!required.length)return true;
+    const cells=entry?.resource?.worldData?.cells;
+    return Array.isArray(cells)&&required.every(index=>Boolean(cells[index]));
+  }
+  function preparedDataCoversRequiredCells(preparedData,requiredCellIndices){
+    const required=Array.isArray(requiredCellIndices)?requiredCellIndices:[];
+    if(!required.length)return true;
+    const cells=preparedData?.cells;
+    return Array.isArray(cells)&&required.every(index=>Boolean(cells[index]));
+  }
+  function prepareNow(x,y,state,isVisible,source="normal",preparedData=null,requiredCellIndices=null){
     const sig=currentSignature();
     const key=entryKey(sig,x,y);
     let entry=entries.get(key);
     if(entry){
+      const replaceSparseDestination=
+        source==="destination"&&preparedData&&
+        !entryCoversRequiredCells(entry,requiredCellIndices)&&
+        preparedDataCoversRequiredCells(preparedData,requiredCellIndices);
+      if(replaceSparseDestination){
+        hits++;
+        destinationCacheHits++;
+        const previousResource=entry.resource;
+        const previousState=entry.state;
+        const nextState=previousState==="Active"?"Active":state;
+        if(previousState==="Cached"&&(nextState==="Active"||nextState==="Prepared"))cacheReuses++;
+        if(entry.idleGenerated&&previousState==="Cached")idleCacheHits++;
+        const started=performance.now();
+        const resource=prepareChunk({
+          x,y,chunkSize:size,signature:sig,state:nextState,source,
+          streamingProfile:"minimum",preparedData
+        });
+        const elapsed=performance.now()-started;
+        lastWorkMs=elapsed;maxWorkMs=Math.max(maxWorkMs,elapsed);
+        if(elapsed>settings.frameBudgetMs*1.5)frameBudgetSpikes++;
+        entry.resource=resource;
+        entry.state=nextState;
+        entry.lastUsed=performance.now();
+        entry.idleGenerated=false;
+        entry.streamingProfile="minimum";
+        if(nextState==="Active")activateChunk?.(resource,entry);
+        else deactivateChunk?.(resource,entry);
+        try{destroyChunk?.(previousResource,{...entry,resource:previousResource,state:previousState});}catch(_){}
+        resourceCreations++;
+        resourceDestructions++;
+        compositions++;
+        return entry;
+      }
       hits++;
       if(source==="destination")destinationCacheHits++;
       const promotedIdle=Boolean(entry.idleGenerated&&entry.state==="Cached"&&(state==="Active"||state==="Prepared"));
@@ -493,16 +538,27 @@ function createManager({
       if(entries.has(fullKey)){
         const entry=entries.get(fullKey);
         if(source==="idle")continue;
-        hits++;
-        const promotedIdle=Boolean(entry.idleGenerated&&entry.state==="Cached");
-        if(entry.state==="Cached")cacheReuses++;
-        if(promotedIdle)idleCacheHits++;
-        entry.lastUsed=performance.now();
-        setEntryState(entry,desiredState);
-        continue;
+        const destinationNeedsCoverage=
+          source==="destination"&&!entryCoversRequiredCells(entry,item.requiredCellIndices);
+        if(!destinationNeedsCoverage){
+          hits++;
+          const promotedIdle=Boolean(entry.idleGenerated&&entry.state==="Cached");
+          if(entry.state==="Cached")cacheReuses++;
+          if(promotedIdle)idleCacheHits++;
+          entry.lastUsed=performance.now();
+          setEntryState(entry,desiredState);
+          continue;
+        }
       }
       if(queued.has(fullKey)){
-        if(source==="destination")destinationDeduplicated++;
+        if(source==="destination"){
+          const index=queue.findIndex(queuedItem=>queuedItem.fullKey===fullKey);
+          const queuedItem=index>=0?queue[index]:null;
+          if(queuedItem&&queuedItem.source!=="destination"){
+            queue[index]={...queuedItem,...item,fullKey,source:"destination",state:desiredState};
+            destinationPromotions++;
+          }else destinationDeduplicated++;
+        }
         continue;
       }
       if(source==="destination")destinationPromotions++;
@@ -597,7 +653,7 @@ function createManager({
       }
       const dataRecord=item.source==="destination"?destinationDataPrepared.get(item.fullKey):null;
       const preparedData=dataRecord?.data??dataRecord;
-      prepareNow(item.x,item.y,item.state||"Prepared",false,item.source||"normal",preparedData);
+      prepareNow(item.x,item.y,item.state||"Prepared",false,item.source||"normal",preparedData,item.requiredCellIndices||null);
       const itemElapsed=performance.now()-itemStarted;
       if(item.source==="destination")destinationDataPrepared.delete(item.fullKey);
       if(item.source==="idle"){
@@ -690,10 +746,13 @@ function createManager({
   function destinationProgress(plan,state=streamingState){
     const sig=currentSignature();
     let completed=0,partial=0,partialCellsCompleted=0,partialCellsTotal=0;
-    for(const id of plan.requiredIds){
+    for(let index=0;index<plan.requiredIds.length;index++){
+      const id=plan.requiredIds[index];
       const point=parseCoord(id);
       const fullKey=entryKey(sig,point.x,point.y);
-      if(entries.has(fullKey)){completed++;continue;}
+      const entry=entries.get(fullKey)||null;
+      const item=plan.items[index]||null;
+      if(entry&&entryCoversRequiredCells(entry,item?.requiredCellIndices)){completed++;continue;}
       const record=destinationDataPrepared.get(fullKey);
       const done=Math.max(0,Number(record?.completed||0));
       const total=Math.max(0,Number(record?.total||0));
@@ -771,7 +830,10 @@ function createManager({
     streamingState=immediateGate?"LOAD_GATE":"CATCHING_UP";
     if(immediateGate)destinationGateShownAtMs=performance.now();
     progress=emit();
-    const missing=plan.items.filter(item=>!entries.has(entryKey(currentSignature(),item.x,item.y)));
+    const missing=plan.items.filter(item=>{
+      const entry=entries.get(entryKey(currentSignature(),item.x,item.y))||null;
+      return !entry||!entryCoversRequiredCells(entry,item.requiredCellIndices);
+    });
     schedulePrepared(missing);
     while(serial===destinationSerial&&!destroyed){
       progress=emit();

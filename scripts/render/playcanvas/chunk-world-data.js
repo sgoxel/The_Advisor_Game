@@ -817,27 +817,37 @@ function streamingMinimumTile(seed,x,y){
 function prepareMinimumStep(spec,state=null,maxCells=8){
   const key=signatureFor(spec);
   const existing=cache.get(key);
-  if(existing?.snapshot?.complete){
-    cacheHits++;existing.touches++;existing.lastUsed=performance.now();
-    const prepared=Number(existing.snapshot.streamingMinimumPreparedCellCount||existing.snapshot.cells?.filter?.(Boolean)?.length||existing.snapshot.cells?.length||0);
-    return Object.freeze({pending:false,data:existing.snapshot,completed:prepared,total:prepared,percent:100,cached:true});
-  }
   const seed=String(spec.seed||"");
   const size=Math.max(1,Number(spec.chunkSize)||16);
   const fullCellCount=size*size;
   const requestedIndices=[...new Set((Array.isArray(spec?.requiredCellIndices)?spec.requiredCellIndices:[])
     .map(Number).filter(index=>Number.isInteger(index)&&index>=0&&index<fullCellCount))].sort((a,b)=>a-b);
-  const indices=requestedIndices.length?requestedIndices:Array.from({length:fullCellCount},(_,index)=>index);
-  const total=indices.length;
+  const requested=requestedIndices.length?requestedIndices:Array.from({length:fullCellCount},(_,index)=>index);
+  const existingSnapshot=existing?.snapshot?.complete?existing.snapshot:null;
+  const missingIndices=existingSnapshot
+    ?requested.filter(index=>!existingSnapshot.cells?.[index])
+    :requested;
+  if(existingSnapshot&&missingIndices.length===0){
+    cacheHits++;existing.touches++;existing.lastUsed=performance.now();
+    const prepared=Number(existingSnapshot.streamingMinimumPreparedCellCount||existingSnapshot.cells?.filter?.(Boolean)?.length||existingSnapshot.cells?.length||0);
+    return Object.freeze({pending:false,data:existingSnapshot,completed:requested.length,total:requested.length,percent:100,cached:true,prepared});
+  }
   let work=state;
   if(!work||work.key!==key){
     const bounds=boundsFor(spec.x,spec.y,size);
+    const cells=existingSnapshot?Array.from(existingSnapshot.cells||[]):new Array(fullCellCount);
+    cells.length=fullCellCount;
     work={
-      key,seed,size,bounds,indices:Object.freeze(indices.slice()),
+      key,seed,size,bounds,indices:Object.freeze(missingIndices.slice()),
       minX:BigInt(bounds.minX),minY:BigInt(bounds.minY),
-      cursor:0,cells:new Array(fullCellCount),surfaceCounts:{},
-      textureKeys:new Set(),overlayTextureKeys:new Set(),buildingIds:new Set(),
-      walkableCount:0,blockedCount:0,startedAt:performance.now(),
+      cursor:0,cells,
+      surfaceCounts:{...(existingSnapshot?.terrain?.surfaceCounts||{})},
+      textureKeys:new Set(existingSnapshot?.terrain?.textureKeys||[]),
+      overlayTextureKeys:new Set(existingSnapshot?.terrain?.overlayTextureKeys||[]),
+      buildingIds:new Set(existingSnapshot?.buildingIds||[]),
+      walkableCount:Number(existingSnapshot?.terrain?.walkableCount||0),
+      blockedCount:Number(existingSnapshot?.terrain?.blockedCount||0),
+      startedAt:performance.now(),
       workerStatus:"idle",workerTypes:null,workerJobId:null,workerError:null
     };
     if(!dispatchTerrainWorker(work)){
@@ -845,6 +855,7 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
       terrainWorkerFallbacks++;
     }
   }
+  const total=work.indices.length;
   if(work.workerStatus==="cancelled"){
     return Object.freeze({
       pending:true,state:work,completed:work.cursor,total,percent:Math.min(99,Math.floor(work.cursor/Math.max(1,total)*100)),
@@ -902,12 +913,13 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
   else otherGenerations++;
 
   const emptyList=Object.freeze([]);
+  const preparedCellCount=work.cells.reduce((count,cell)=>count+(cell?1:0),0);
   const snapshot=Object.freeze({
     key,version:VERSION,seed,
     chunkX:Number(spec.x),chunkY:Number(spec.y),chunkSize:size,
     bounds:work.bounds,complete:true,streamingMinimum:true,
-    streamingMinimumSparse:total<fullCellCount,
-    streamingMinimumPreparedCellCount:total,
+    streamingMinimumSparse:preparedCellCount<fullCellCount,
+    streamingMinimumPreparedCellCount:preparedCellCount,
     cells:Object.freeze(work.cells),
     terrain:Object.freeze({
       surfaceCounts:Object.freeze({...work.surfaceCounts}),
@@ -977,8 +989,15 @@ function touch(key){
   cacheHits++;entry.touches++;entry.lastUsed=performance.now();
   return true;
 }
-function release(key){
-  if(!cache.delete(String(key||"")))return false;
+function release(key,expectedSnapshot=null){
+  const id=String(key||"");
+  const entry=cache.get(id);
+  if(!entry)return false;
+  // A sparse resource can be replaced while a newer expanded snapshot already
+  // owns the same logical key. Never let destruction of the old mesh evict the
+  // newer cache record.
+  if(expectedSnapshot&&entry.snapshot!==expectedSnapshot)return false;
+  cache.delete(id);
   releases++;
   return true;
 }

@@ -873,7 +873,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   }
   function deactivateTerrainChunk(resource){if(resource?.entity)resource.entity.enabled=false;}
   function destroyTerrainChunk(resource){
-    if(resource?.worldDataKey)window.PlayCanvasChunkWorldData?.release?.(resource.worldDataKey);
+    if(resource?.worldDataKey)window.PlayCanvasChunkWorldData?.release?.(resource.worldDataKey,resource.worldData||null);
     if(terrainChunkMeshFactory)terrainChunkMeshFactory.destroy(resource);
     else resource?.entity?.destroy?.();
   }
