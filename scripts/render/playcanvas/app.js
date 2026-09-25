@@ -1376,8 +1376,13 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         hydrologyRendererOnly&&!hydrologyNavigationAuthority&&!hydrologyCollisionAuthority&&!hydrologyWaterIdentityChanged
       ),
       landformEnabled:landformResourceCount>0&&generatorStats.landformEnabled===true,
-      landformVersion:String(generatorStats.landformVersion||"macro-landform-v7"),
-      landformSampleRadiusTiles:Number(generatorStats.landformSampleRadiusTiles||0),
+      worldFieldVersion:String(generatorStats.worldFieldVersion||window.WorldField?.VERSION||""),
+      naturalTerrainAuthority:String(generatorStats.naturalTerrainAuthority||"WorldField"),
+      continuousWorldMeterField:generatorStats.continuousWorldMeterField===true,
+      logicalTilesAuthoritative:generatorStats.logicalTilesAuthoritative===true,
+      rendererPatchOnly:generatorStats.rendererPatchOnly===true,
+      landformVersion:String(generatorStats.landformVersion||"continuous-world-field-v1"),
+      landformSampleRadiusMeters:Number(generatorStats.landformSampleRadiusMeters||0),
       landformResourceCount,
       landformClassCounts:Object.freeze({...landformClassCounts}),
       landformSamples:Object.freeze(landformSamples.slice()),
@@ -1395,7 +1400,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       landformRendererOnly,landformNavigationAuthority,landformCollisionAuthority,landformSimulationAuthorityPreserved,
       landformPass:Boolean(
         landformResourceCount>0&&landformDeterministic&&landformSeamSafeGlobalCoordinates&&landformChunkPrepared&&
-        landformPerFrameRegenerationCount===0&&landformRendererOnly&&!landformNavigationAuthority&&!landformCollisionAuthority&&
+        landformPerFrameRegenerationCount===0&&!landformRendererOnly&&!landformNavigationAuthority&&!landformCollisionAuthority&&
         landformSimulationAuthorityPreserved&&landformDrawCallsAdded===0&&landformMaterialsAdded===0&&
         landformTrianglesAdded<=landformTriangleBudget
       ),
@@ -2758,7 +2763,7 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
     screenToCameraDelta,screenToWorldTile,
     hydrologyAtTile:(x,y)=>terrainChunkMeshFactory?.hydrologyAtTile?.(x,y)||null,
     waterSurfaceAtVertex:(x,y)=>terrainChunkMeshFactory?.waterSurfaceAtVertex?.(x,y)??null,
-    landformAtTile:(x,y)=>terrainChunkMeshFactory?.landformAtTile?.(x,y)||null,
+    landformAtWorldUnit:(x,y)=>terrainChunkMeshFactory?.landformAtWorldUnit?.(x,y)||null,
     // Conservative logical-view coverage for the tilted orthographic PlayCanvas
     // camera. The previous 1:1 hint under-prepared sparse destination cells at
     // 0.50x and portrait aspect ratios, exposing clear-color holes around roads
