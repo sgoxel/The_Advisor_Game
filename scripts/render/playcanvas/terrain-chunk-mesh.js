@@ -103,6 +103,16 @@ function hydrologyWaterReference(seed,x,y,typeOverride=null){
   const type=String(typeOverride||terrainTypeAt(seed,x,y));
   return type==="water"||(type==="bridge"&&underlyingTerrainTypeAt(seed,x,y)==="water");
 }
+function bridgeDeckOrientation(seed,xValue,yValue){
+  let x,y;
+  try{x=BigInt(String(xValue));y=BigInt(String(yValue));}catch(_){return "horizontal";}
+  const routeLike=type=>["road","path","square","bridge"].includes(String(type||""));
+  const n=routeLike(terrainTypeAt(seed,x,y-1n)),e=routeLike(terrainTypeAt(seed,x+1n,y));
+  const s=routeLike(terrainTypeAt(seed,x,y+1n)),w=routeLike(terrainTypeAt(seed,x-1n,y));
+  const horizontal=(e?1:0)+(w?1:0),vertical=(n?1:0)+(s?1:0);
+  if(vertical>horizontal)return "vertical";
+  return "horizontal";
+}
 function rawPresentationHeight(seed,x,y,typeOverride=null){
   const type=String(typeOverride||terrainTypeAt(seed,x,y));
   const macro=macroHeight(seed,x,y).macro;
@@ -242,7 +252,7 @@ function waterSurfaceAtVertex(seedValue,xValue,yValue){
   const levels=[];
   for(const dy of [-1,0])for(const dx of [-1,0]){
     const tx=bx+BigInt(dx),ty=by+BigInt(dy);
-    if(terrainTypeAt(seed,tx,ty)!=="water")continue;
+    if(!hydrologyWaterReference(seed,tx,ty))continue;
     const h=hydrologyAtTile(seed,String(tx),String(ty)).waterSurfaceHeight;
     if(Number.isFinite(Number(h)))levels.push(Number(h));
   }
@@ -2095,6 +2105,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreDelta=Infinity,maxRoadCoreDelta=-Infinity;
     let hydrologyWaterCellCount=0,hydrologyBridgeCellCount=0;
+    let hydrologyBridgeWaterUnderlayCellCount=0,hydrologyBridgeDeckTriangleCount=0;
     let hydrologyWaterSurfaceMin=Infinity,hydrologyWaterSurfaceMax=-Infinity;
     let hydrologyBedMin=Infinity,hydrologyBedMax=-Infinity;
     let hydrologyBankMin=Infinity,hydrologyBankMax=-Infinity;
@@ -2362,9 +2373,6 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         const sourceCell=spec.worldData?.cells?.[gz*size+gx]||null;
         const surfaceType=semanticSurfaceType(sourceCell?.type||grid[gz*stride+gx].sample.type);
         semanticSurfaceTileCounts[surfaceType]=(semanticSurfaceTileCounts[surfaceType]||0)+1;
-        const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(surfaceType)||activeAtlas?.uvRect?.(surfaceType)):null;
-        if(rect){texturedBlockCount++;texturedSurfaceTypes.add(surfaceType);}
-        else{colorFallbackBlockCount++;fallbackSurfaceTypes.add(surfaceType);}
         const rawCorners=[
           grid[gz*stride+gx],
           grid[gz*stride+gx+1],
@@ -2375,6 +2383,13 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         const cellHydrology=(surfaceType==="water"||surfaceType==="bridge")
           ?hydrologyAtTile(seed,String(cellWorldX),String(cellWorldZ))
           :null;
+        const bridgeOverWater=Boolean(
+          surfaceType==="bridge"&&cellHydrology?.active&&cellHydrology?.bridgeUnderlyingWater===true
+        );
+        const baseVisualType=bridgeOverWater?"water":surfaceType;
+        const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(baseVisualType)||activeAtlas?.uvRect?.(baseVisualType)):null;
+        if(rect){texturedBlockCount++;texturedSurfaceTypes.add(baseVisualType);}
+        else{colorFallbackBlockCount++;fallbackSurfaceTypes.add(baseVisualType);}
         if(surfaceType==="water"&&cellHydrology?.active){
           hydrologyWaterCellCount++;
           const surface=Number(cellHydrology.waterSurfaceHeight),bed=Number(cellHydrology.bedHeight);
@@ -2400,16 +2415,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           hydrologyBridgeClearanceMin=Math.min(hydrologyBridgeClearanceMin,clearance);
           hydrologyBridgeClearanceMax=Math.max(hydrologyBridgeClearanceMax,clearance);
           hydrologyBridgeClearsWater=hydrologyBridgeClearsWater&&clearance>=HEIGHTFIELD_BRIDGE_CLEARANCE-1e-6;
+          if(bridgeOverWater)hydrologyBridgeWaterUnderlayCellCount++;
           if(hydrologySamples.length<24)hydrologySamples.push(Object.freeze({
             x:String(cellWorldX),y:String(cellWorldZ),type:"bridge",
             waterSurfaceHeight:Number(cellHydrology.waterSurfaceHeight),
             bridgeDeckHeight:Number(cellHydrology.bridgeDeckHeight),
-            bridgeClearance:clearance
+            bridgeClearance:clearance,
+            bridgeUnderlyingWater:Boolean(cellHydrology.bridgeUnderlyingWater),
+            waterUnderlayVisible:bridgeOverWater,
+            orientation:bridgeDeckOrientation(seed,cellWorldX,cellWorldZ)
           }));
         }
         const corners=rawCorners.map(corner=>{
           let y=corner.position[1],normal=corner.normal;
-          if(surfaceType==="water"){
+          if(surfaceType==="water"||bridgeOverWater){
             y=waterSurfaceAtVertex(seed,corner.wx,corner.wz);
             normal=Object.freeze([0,1,0]);
           }else if(surfaceType==="bridge"&&cellHydrology?.bridgeDeckHeight!==null){
@@ -2422,11 +2441,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         for(const corner of corners){
           positions.push(...corner.position);
           normals.push(...corner.normal);
-          const variation=terrainVariationAtVertex(corner.wx,corner.wz,surfaceType);
+          const variation=terrainVariationAtVertex(corner.wx,corner.wz,baseVisualType);
           if(rect){
             appendColor32(colors32,variation.tint,1);
           }else{
-            const fallback=heightfieldColor(seed,corner.wx,corner.wz,sourceCell?.color,surfaceType);
+            const fallback=heightfieldColor(seed,corner.wx,corner.wz,sourceCell?.color,baseVisualType);
             appendColor32(colors32,[
               fallback[0]*variation.tint[0],
               fallback[1]*variation.tint[1],
@@ -2447,6 +2466,48 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           uvs.push(0,0,1,0,0,1,1,1);
         }
         indices.push(base,base+2,base+1, base+1,base+2,base+3);
+
+        // A bridge over authoritative underlying water keeps the water surface
+        // visible inside the tile and adds a narrower raised deck on top. Both
+        // surfaces remain in the same chunk mesh/material and add no draw call.
+        if(bridgeOverWater){
+          const bridgeRect=semanticAtlasReady?(activeAtlas?.meshUvRect?.("bridge")||activeAtlas?.uvRect?.("bridge")):null;
+          const deckY=Number(cellHydrology.bridgeDeckHeight);
+          const orientation=bridgeDeckOrientation(seed,cellWorldX,cellWorldZ);
+          const centerX=(gx+0.5)*metersPerTile-half,centerZ=(gz+0.5)*metersPerTile-half;
+          const halfLength=metersPerTile*0.53,halfWidth=metersPerTile*0.31;
+          const minX=centerX-(orientation==="horizontal"?halfLength:halfWidth);
+          const maxX=centerX+(orientation==="horizontal"?halfLength:halfWidth);
+          const minZ=centerZ-(orientation==="vertical"?halfLength:halfWidth);
+          const maxZ=centerZ+(orientation==="vertical"?halfLength:halfWidth);
+          const deckBase=positions.length/3;
+          positions.push(
+            minX,deckY,minZ,
+            maxX,deckY,minZ,
+            minX,deckY,maxZ,
+            maxX,deckY,maxZ
+          );
+          for(let i=0;i<4;i++)normals.push(0,1,0);
+          const deckVariation=terrainVariationAtVertex(cellWorldX,cellWorldZ,"bridge");
+          if(bridgeRect){
+            for(let i=0;i<4;i++)appendColor32(colors32,deckVariation.tint,1);
+            uvs.push(
+              Number(bridgeRect.u0),Number(bridgeRect.v0),
+              Number(bridgeRect.u1),Number(bridgeRect.v0),
+              Number(bridgeRect.u0),Number(bridgeRect.v1),
+              Number(bridgeRect.u1),Number(bridgeRect.v1)
+            );
+            texturedSurfaceTypes.add("bridge");
+          }else{
+            const fallback=heightfieldColor(seed,cellWorldX,cellWorldZ,sourceCell?.color,"bridge");
+            for(let i=0;i<4;i++)appendColor32(colors32,fallback,1);
+            uvs.push(0,0,1,0,0,1,1,1);
+            fallbackSurfaceTypes.add("bridge");
+          }
+          for(let i=0;i<4;i++)detailUvs.push(Number(cellWorldX)*0.25,Number(cellWorldZ)*0.25);
+          indices.push(deckBase,deckBase+2,deckBase+1, deckBase+1,deckBase+2,deckBase+3);
+          hydrologyBridgeDeckTriangleCount+=2;
+        }
       }
     }
 
@@ -2796,6 +2857,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       hydrologyBedDepthWorldUnits:HYDROLOGY_BED_DEPTH,
       hydrologyWaterCellCount,
       hydrologyBridgeCellCount,
+      hydrologyBridgeWaterUnderlayCellCount,
+      hydrologyBridgeDeckTriangleCount,
+      hydrologyBridgeWaterUnderlayPass:Boolean(
+        hydrologyBridgeCellCount===0||hydrologyBridgeWaterUnderlayCellCount===hydrologyBridgeCellCount
+      ),
       hydrologyKindCounts:Object.freeze({...hydrologyKindCounts}),
       hydrologySamples:Object.freeze(hydrologySamples.slice()),
       hydrologyWaterSurfaceMin:Number.isFinite(hydrologyWaterSurfaceMin)?Number(hydrologyWaterSurfaceMin.toFixed(6)):null,
