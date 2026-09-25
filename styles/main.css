@@ -1345,6 +1345,7 @@ body.planet-stage-active{
   outline:1px solid rgba(217,233,242,.28);
   outline-offset:-2px;
 }
+/* WP-S003-008-002-001 — truthful first-playable planet loading progress */
 .planet-stage-loading{
   position:absolute;
   inset:0;
@@ -1355,6 +1356,24 @@ body.planet-stage-active{
   background:#070b12;
   font:600 12px/1.4 Arial,Helvetica,sans-serif;
   letter-spacing:.08em;
-  text-transform:uppercase;
+  text-transform:none;
 }
-.planet-stage-root[data-ready="true"] .planet-stage-loading{display:none}
+.planet-stage-loading-card{width:min(420px,84vw);display:grid;justify-items:center;gap:12px;padding:26px 28px;border:1px solid rgba(137,177,205,.24);border-radius:24px;background:linear-gradient(145deg,rgba(13,24,37,.92),rgba(8,13,23,.88));box-shadow:0 24px 80px rgba(0,0,0,.34);text-align:center}
+.planet-stage-loading-orbit{position:relative;width:64px;height:64px;border-radius:50%;border:1px solid rgba(126,192,225,.22)}
+.planet-stage-loading-orbit span{position:absolute;inset:10px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#c4ebff,#4e9cc9 48%,#18385b 72%);box-shadow:0 0 30px rgba(83,168,215,.28)}
+.planet-stage-loading-orbit i{position:absolute;inset:-5px;border-radius:50%;border:2px solid transparent;border-top-color:#8ad5d0;border-right-color:#c19ae7;animation:planet-loading-orbit 1.5s linear infinite}
+.planet-stage-loading-title{font:700 clamp(24px,4vw,34px)/1.05 Arial,Helvetica,sans-serif;letter-spacing:-.02em;background:linear-gradient(90deg,#a8e2d0,#8dc8ef,#c6a6ee,#f0b08b);background-size:220% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:planet-loading-spectrum 3s linear infinite}
+.planet-stage-loading-phase{max-width:34em;color:#c2d0dc;font:500 13px/1.45 Arial,Helvetica,sans-serif;letter-spacing:.02em}
+.planet-stage-loading-progress{width:100%;height:10px;overflow:hidden;border-radius:999px;border:1px solid rgba(173,210,230,.22);background:rgba(2,7,13,.66)}
+.planet-stage-loading-bar{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7ccbb4,#69b8df,#ad8ce0,#e69b72);transition:width .18s ease-out}
+.planet-stage-loading-percent{color:#e1edf5;font:700 12px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em}
+.planet-stage-loading[data-mode="indeterminate"] .planet-stage-loading-bar{width:38%!important;animation:planet-loading-scan 1.15s ease-in-out infinite}
+.planet-stage-loading[data-mode="ready"] .planet-stage-loading-card{border-color:rgba(130,216,176,.38);box-shadow:0 24px 80px rgba(0,0,0,.34),0 0 34px rgba(94,190,151,.12)}
+.planet-stage-loading[data-mode="failed"] .planet-stage-loading-card{border-color:rgba(225,119,104,.48)}
+@keyframes planet-loading-orbit{to{transform:rotate(360deg)}}
+@keyframes planet-loading-spectrum{to{background-position:220% center}}
+@keyframes planet-loading-scan{0%{transform:translateX(-120%)}55%{transform:translateX(110%)}100%{transform:translateX(270%)}}
+@media (prefers-reduced-motion:reduce){.planet-stage-loading-orbit i,.planet-stage-loading-title,.planet-stage-loading[data-mode="indeterminate"] .planet-stage-loading-bar{animation:none!important}}
+@media (max-width:520px){.planet-stage-loading-card{width:min(360px,88vw);padding:22px 18px;gap:10px}.planet-stage-loading-title{font-size:26px}.planet-stage-loading-phase{font-size:12px}}
+@media (max-height:430px) and (orientation:landscape){.planet-stage-loading-card{width:min(560px,82vw);grid-template-columns:72px 1fr;justify-items:start;text-align:left;padding:14px 18px;gap:7px 14px}.planet-stage-loading-orbit{grid-row:1/5;width:58px;height:58px}.planet-stage-loading-progress{width:100%}.planet-stage-loading-percent{justify-self:end}}
+.planet-stage-root[data-ready="true"] .planet-stage-loading:not([data-proof="true"]){display:none}
