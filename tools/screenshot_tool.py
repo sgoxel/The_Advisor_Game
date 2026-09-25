@@ -1640,7 +1640,32 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario == "wp-s003-006-011":
+                WebDriverWait(driver, timeout).until(
+                    lambda d: d.execute_script(
+                        """
+                        const grid=document.querySelector('#terrainGrid');
+                        const renderer=window.GameRenderer?.snapshot?.() || {};
+                        const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                        const current=loading?.current || {};
+                        return Boolean(
+                          document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
+                          grid && !grid.hidden &&
+                          renderer.ready === true &&
+                          renderer.engine === 'PlayCanvas' &&
+                          Number(renderer.canvasCount || 0) === 1 &&
+                          renderer.simulationAuthorityPreserved !== false &&
+                          renderer.protagonistVisible === true &&
+                          Number(renderer?.terrainChunks?.visibleMeshInstanceCount || 0) > 0 &&
+                          current.state === 'hidden' &&
+                          current.renderSucceeded === true &&
+                          current.readiness?.playableReady === true &&
+                          loading?.overlay?.hidden === true
+                        );
+                        """
+                    )
+                )
+            elif scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
