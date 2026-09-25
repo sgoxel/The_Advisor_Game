@@ -31,7 +31,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation — COMPLETED
 - `WP-S002-003-001` — Elevation + Slope-Aware Walkability, Climbability + Cliff Blocking — COMPLETED
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
-- `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference
+- `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference — COMPLETED
 
 # Stage 3 — PlayCanvas 3D World + 2D Character Billboard Foundation
 
