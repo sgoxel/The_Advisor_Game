@@ -1,13 +1,16 @@
 (function(){
 "use strict";
 
-const VERSION="continuous-world-field-v1";
+const VERSION="continuous-world-field-v2";
 const SEA_LEVEL_METERS=0;
-const SAMPLE_CACHE_LIMIT=8192;
+const ELEVATION_CACHE_LIMIT=32768;
+const SAMPLE_CACHE_LIMIT=16384;
 const LANDFORM_CACHE_LIMIT=4096;
 const DEFAULT_LANDFORM_RADIUS_METERS=96;
+const elevationCache=new Map();
 const sampleCache=new Map();
 const landformCache=new Map();
+let elevationCalls=0,elevationCacheHits=0;
 let sampleCalls=0,sampleCacheHits=0,landformCalls=0,landformCacheHits=0;
 
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
@@ -117,22 +120,18 @@ function biomeFor(elevation,moisture,temp,surface){
   if(surface==="forest")return "Temperate Forest";
   return "Grassland";
 }
-function sample(seedValue,xMetersValue,zMetersValue){
+function elevationFoundation(seedValue,xMetersValue,zMetersValue){
   const seed=String(seedValue??"");
   const x=coordinate(xMetersValue),z=coordinate(zMetersValue);
   const cacheKey=seed+"|"+x.key+"|"+z.key;
-  const cached=sampleCache.get(cacheKey);
-  if(cached){sampleCacheHits++;return cached;}
-  sampleCalls++;
+  const cached=elevationCache.get(cacheKey);
+  if(cached){elevationCacheHits++;return cached;}
+  elevationCalls++;
 
   const continental=fractal(seed,"world:continent",x.key,z.key,[[180000,0.52],[76000,0.30],[31000,0.18]]);
   const regional=fractal(seed,"world:regional",x.key,z.key,[[11000,0.48],[4200,0.32],[1500,0.20]]);
   const ridge=ridged(seed,"world:ridge",x.key,z.key,[[7200,0.52],[2600,0.30],[880,0.18]]);
   const local=fractal(seed,"world:detail",x.key,z.key,[[720,0.48],[260,0.32],[92,0.20]]);
-  const moistureField=fractal(seed,"world:moisture",x.key,z.key,[[24000,0.55],[6200,0.29],[1300,0.16]]);
-  const temperatureField=fractal(seed,"world:temperature",x.key,z.key,[[42000,0.62],[9800,0.25],[2200,0.13]]);
-  const geology=fractal(seed,"world:geology",x.key,z.key,[[15000,0.58],[3600,0.27],[820,0.15]]);
-  const vegetation=fractal(seed,"world:vegetation",x.key,z.key,[[5200,0.50],[1300,0.31],[310,0.19]]);
   const valleyBand=Math.abs(valueNoise(seed,"world:valley-band",x.key,z.key,3300)*2-1);
   const valleyMask=1-smoothstep01((valleyBand-0.035)/0.19);
   const landMask=smoothstep01((continental-0.39)/0.25);
@@ -152,29 +151,65 @@ function sample(seedValue,xMetersValue,zMetersValue){
     elevation=lerp(elevation,target,starter*0.94);
   }
 
-  elevation=clamp(elevation,-620,3350);
-  const moisture=clamp(Math.round(10+88*moistureField+valleyMask*8-landMask*2),4,100);
+  const result=Object.freeze({
+    xMeters:x.key,
+    zMeters:z.key,
+    elevationMeters:Number(clamp(elevation,-620,3350).toFixed(3)),
+    continental,
+    regional,
+    ridge,
+    valleyMask,
+    landMask,
+    mountainMask,
+    originDistance
+  });
+  elevationCache.set(cacheKey,result);
+  if(elevationCache.size>ELEVATION_CACHE_LIMIT){
+    const oldest=elevationCache.keys().next().value;
+    if(oldest!==undefined)elevationCache.delete(oldest);
+  }
+  return result;
+}
+function elevationMeters(seed,x,z){
+  return Number(elevationFoundation(seed,x,z).elevationMeters);
+}
+function sample(seedValue,xMetersValue,zMetersValue){
+  const seed=String(seedValue??"");
+  const x=coordinate(xMetersValue),z=coordinate(zMetersValue);
+  const cacheKey=seed+"|"+x.key+"|"+z.key;
+  const cached=sampleCache.get(cacheKey);
+  if(cached){sampleCacheHits++;return cached;}
+  sampleCalls++;
+
+  const elevationBase=elevationFoundation(seed,x.key,z.key);
+  const elevation=Number(elevationBase.elevationMeters);
+  const moistureField=fractal(seed,"world:moisture",x.key,z.key,[[24000,0.55],[6200,0.29],[1300,0.16]]);
+  const temperatureField=fractal(seed,"world:temperature",x.key,z.key,[[42000,0.62],[9800,0.25],[2200,0.13]]);
+  const geology=fractal(seed,"world:geology",x.key,z.key,[[15000,0.58],[3600,0.27],[820,0.15]]);
+  const vegetation=fractal(seed,"world:vegetation",x.key,z.key,[[5200,0.50],[1300,0.31],[310,0.19]]);
+  const moisture=clamp(Math.round(10+88*moistureField+elevationBase.valleyMask*8-elevationBase.landMask*2),4,100);
   const altitudeCooling=Math.max(0,elevation)/235;
   const temp=clamp(Math.round(4+28*temperatureField-altitudeCooling),-12,33);
-  const riverWater=originDistance>=1800&&valleyMask>=0.80&&moisture>=52&&elevation>SEA_LEVEL_METERS&&elevation<900;
+  const riverWater=elevationBase.originDistance>=1800&&elevationBase.valleyMask>=0.80&&moisture>=52&&elevation>SEA_LEVEL_METERS&&elevation<900;
   const surfaceType=surfaceFor(elevation,moisture,temp,geology,vegetation,riverWater);
   const climate=climateName(temp,moisture);
   const biome=biomeFor(elevation,moisture,temp,surfaceType);
 
+  const center=sample(seed,x.key,z.key);
   const result=Object.freeze({
     version:VERSION,
     xMeters:x.key,zMeters:z.key,
-    elevationMeters:Number(elevation.toFixed(3)),
+    elevationMeters:elevation,
     moisturePercent:moisture,
     temperatureC:temp,
     climate,biome,surfaceType,
     seaLevelMeters:SEA_LEVEL_METERS,
     waterKind:surfaceType==="water"?(riverWater?"river":"ocean"):null,
     foundation:Object.freeze({
-      continental:Number(continental.toFixed(5)),
-      regional:Number(regional.toFixed(5)),
-      ridge:Number(ridge.toFixed(5)),
-      valley:Number(valleyMask.toFixed(5)),
+      continental:Number(elevationBase.continental.toFixed(5)),
+      regional:Number(elevationBase.regional.toFixed(5)),
+      ridge:Number(elevationBase.ridge.toFixed(5)),
+      valley:Number(elevationBase.valleyMask.toFixed(5)),
       geology:Number(geology.toFixed(5)),
       vegetation:Number(vegetation.toFixed(5))
     }),
@@ -190,7 +225,6 @@ function sample(seedValue,xMetersValue,zMetersValue){
   }
   return result;
 }
-function elevationMeters(seed,x,z){return Number(sample(seed,x,z).elevationMeters);}
 function landform(seedValue,xMetersValue,zMetersValue,radiusMetersValue=DEFAULT_LANDFORM_RADIUS_METERS){
   const seed=String(seedValue??"");
   const x=coordinate(xMetersValue),z=coordinate(zMetersValue);
@@ -199,23 +233,23 @@ function landform(seedValue,xMetersValue,zMetersValue,radiusMetersValue=DEFAULT_
   const cached=landformCache.get(cacheKey);
   if(cached){landformCacheHits++;return cached;}
   landformCalls++;
-  const at=(dx,dz)=>sample(seed,offsetCoordinate(x.key,dx),offsetCoordinate(z.key,dz));
-  const center=at(0,0),n=at(0,-radius),e=at(radius,0),s=at(0,radius),w=at(-radius,0);
+  const at=(dx,dz)=>elevationMeters(seed,offsetCoordinate(x.key,dx),offsetCoordinate(z.key,dz));
+  const centerElevation=at(0,0),n=at(0,-radius),e=at(radius,0),s=at(0,radius),w=at(-radius,0);
   const ne=at(radius,-radius),nw=at(-radius,-radius),se=at(radius,radius),sw=at(-radius,radius);
-  const values=[center,n,e,s,w,ne,nw,se,sw].map(v=>Number(v.elevationMeters));
-  const c=values[0];
+  const values=[centerElevation,n,e,s,w,ne,nw,se,sw];
+  const c=centerElevation;
   const relief=Math.max(...values)-Math.min(...values);
-  const gradientX=(Number(e.elevationMeters)-Number(w.elevationMeters))/(2*radius);
-  const gradientZ=(Number(s.elevationMeters)-Number(n.elevationMeters))/(2*radius);
+  const gradientX=(e-w)/(2*radius);
+  const gradientZ=(s-n)/(2*radius);
   const gradient=Math.hypot(gradientX,gradientZ);
-  const curvature=c-(Number(n.elevationMeters)+Number(e.elevationMeters)+Number(s.elevationMeters)+Number(w.elevationMeters))/4;
+  const curvature=c-(n+e+s+w)/4;
   const xSaddle=Math.min(
-    Math.min(Number(e.elevationMeters),Number(w.elevationMeters))-c,
-    c-Math.max(Number(n.elevationMeters),Number(s.elevationMeters))
+    Math.min(e,w)-c,
+    c-Math.max(n,s)
   );
   const zSaddle=Math.min(
-    Math.min(Number(n.elevationMeters),Number(s.elevationMeters))-c,
-    c-Math.max(Number(e.elevationMeters),Number(w.elevationMeters))
+    Math.min(n,s)-c,
+    c-Math.max(e,w)
   );
   const saddleStrength=Math.max(0,xSaddle,zSaddle);
   const slopeDegrees=Math.atan(gradient)*180/Math.PI;
@@ -282,6 +316,7 @@ function proof(seedValue){
 function stats(){
   return Object.freeze({
     version:VERSION,
+    elevationCalls,elevationCacheHits,elevationCacheEntries:elevationCache.size,elevationCacheLimit:ELEVATION_CACHE_LIMIT,
     sampleCalls,sampleCacheHits,sampleCacheEntries:sampleCache.size,sampleCacheLimit:SAMPLE_CACHE_LIMIT,
     landformCalls,landformCacheHits,landformCacheEntries:landformCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
     defaultLandformRadiusMeters:DEFAULT_LANDFORM_RADIUS_METERS,
