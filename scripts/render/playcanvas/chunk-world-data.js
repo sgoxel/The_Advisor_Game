@@ -656,69 +656,34 @@ function generate(spec){
   lastGeneratedIds=Object.freeze([key,...lastGeneratedIds].slice(0,12));
   return snapshot;
 }
-const STREAMING_MINIMUM_STARTING_VILLAGE_DETAIL_RADIUS=64;
-function streamingMinimumTile(seed,x,y){
-  const local=window.StartingVillage?.local?.(seed,x,y)||null;
-  const canUseFarFastPath=
-    local&&Number(local.radius)>STREAMING_MINIMUM_STARTING_VILLAGE_DETAIL_RADIUS&&
-    typeof window.GeographyFoundation?.getTerrainType==="function"&&
-    typeof window.StartingVillage?.infrastructureAt==="function"&&
-    typeof window.StartingVillage?.resolveInfrastructure==="function"&&
-    typeof window.StartingVillage?.resolveTerrain==="function";
-  if(!canUseFarFastPath)return TerrainFoundation.getTile(seed,x,y);
-
-  const underlying=GeographyFoundation.getTerrainType(seed,x,y);
-  const infrastructure=StartingVillage.infrastructureAt(seed,local);
-  const type=infrastructure
-    ?StartingVillage.resolveInfrastructure(seed,local,infrastructure,underlying)
-    :StartingVillage.resolveTerrain(seed,local,underlying);
-  const palette=TerrainPalette.get(type);
-  return Object.freeze({
-    x:String(x),y:String(y),type:String(type||"grass"),
-    label:String(palette?.label||type||"Terrain"),
-    color:String(palette?.color||"#6f8f45"),
-    texture:TileTextures.asset(type),
-    textureKey:TileTextures.assetKey(type),
-    overlayTexture:null,overlayTextureKey:null,
-    buildingId:null,room:null,specialKind:null,specialLabel:null,
-    streamingMinimumFastPath:true
-  });
-}
-
-function prepareMinimumStep(spec,state=null,maxCells=8){
+function prepareMinimumStep(spec,state=null,maxCells=2){
   const key=signatureFor(spec);
   const existing=cache.get(key);
   if(existing?.snapshot?.complete){
     cacheHits++;existing.touches++;existing.lastUsed=performance.now();
-    const prepared=Number(existing.snapshot.streamingMinimumPreparedCellCount||existing.snapshot.cells?.filter?.(Boolean)?.length||existing.snapshot.cells?.length||0);
-    return Object.freeze({pending:false,data:existing.snapshot,completed:prepared,total:prepared,percent:100,cached:true});
+    return Object.freeze({pending:false,data:existing.snapshot,completed:existing.snapshot.cells?.length||0,total:existing.snapshot.cells?.length||0,percent:100,cached:true});
   }
   const seed=String(spec.seed||"");
   const size=Math.max(1,Number(spec.chunkSize)||16);
-  const fullCellCount=size*size;
-  const requestedIndices=[...new Set((Array.isArray(spec?.requiredCellIndices)?spec.requiredCellIndices:[])
-    .map(Number).filter(index=>Number.isInteger(index)&&index>=0&&index<fullCellCount))].sort((a,b)=>a-b);
-  const indices=requestedIndices.length?requestedIndices:Array.from({length:fullCellCount},(_,index)=>index);
-  const total=indices.length;
+  const total=size*size;
   let work=state;
   if(!work||work.key!==key){
     const bounds=boundsFor(spec.x,spec.y,size);
     work={
-      key,seed,size,bounds,indices:Object.freeze(indices.slice()),
+      key,seed,size,bounds,
       minX:BigInt(bounds.minX),minY:BigInt(bounds.minY),
-      cursor:0,cells:new Array(fullCellCount),surfaceCounts:{},
+      cursor:0,cells:new Array(total),surfaceCounts:{},
       textureKeys:new Set(),overlayTextureKeys:new Set(),buildingIds:new Set(),
       walkableCount:0,blockedCount:0,startedAt:performance.now()
     };
   }
-  const slice=Math.max(1,Math.min(16,Number(maxCells)||8));
-  const sliceStarted=performance.now();
+  const slice=Math.max(1,Math.min(8,Number(maxCells)||2));
   let processed=0;
   while(work.cursor<total&&processed<slice){
-    const index=work.indices[work.cursor];
+    const index=work.cursor;
     const localY=Math.floor(index/size),localX=index-localY*size;
     const x=String(work.minX+BigInt(localX)),y=String(work.minY+BigInt(localY));
-    const tile=streamingMinimumTile(seed,x,y);
+    const tile=TerrainFoundation.getTile(seed,x,y);
     terrainFoundationCalls++;
     const movement=Walkability.classifyPrepared
       ?Walkability.classifyPrepared(seed,tile)
@@ -732,16 +697,11 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
     if(cell.overlayTextureKey)work.overlayTextureKeys.add(cell.overlayTextureKey);
     if(cell.buildingId)work.buildingIds.add(cell.buildingId);
     work.cursor++;processed++;
-    // Budget by real elapsed work, not an arbitrary fixed cell count. A single
-    // expensive authoritative cell may exceed the target, but a second one is
-    // never started in the same paint slice after the budget is consumed.
-    if(processed>=1&&performance.now()-sliceStarted>=4)break;
   }
   if(work.cursor<total){
     return Object.freeze({
       pending:true,state:work,completed:work.cursor,total,
-      percent:Math.min(99,Math.floor(work.cursor/total*100)),
-      sliceMs:Number((performance.now()-sliceStarted).toFixed(3))
+      percent:Math.min(99,Math.floor(work.cursor/total*100))
     });
   }
 
@@ -757,8 +717,6 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
     key,version:VERSION,seed,
     chunkX:Number(spec.x),chunkY:Number(spec.y),chunkSize:size,
     bounds:work.bounds,complete:true,streamingMinimum:true,
-    streamingMinimumSparse:total<fullCellCount,
-    streamingMinimumPreparedCellCount:total,
     cells:Object.freeze(work.cells),
     terrain:Object.freeze({
       surfaceCounts:Object.freeze({...work.surfaceCounts}),
@@ -796,7 +754,7 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
   cache.set(key,{snapshot,lastUsed:performance.now(),touches:0});
   everGenerated.add(key);
   lastGeneratedIds=Object.freeze([key,...lastGeneratedIds].slice(0,12));
-  return Object.freeze({pending:false,data:snapshot,completed:total,total,percent:100,cached:false,sliceMs:Number((performance.now()-sliceStarted).toFixed(3))});
+  return Object.freeze({pending:false,data:snapshot,completed:total,total,percent:100,cached:false});
 }
 function getOrCreate(spec){
   const key=signatureFor(spec);
