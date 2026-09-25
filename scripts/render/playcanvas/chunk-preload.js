@@ -11,9 +11,6 @@ const IDLE_CACHE_HARD_CEILING=256;
 const IDLE_QUEUE_PRIORITY=1000;
 const IDLE_HEADROOM_RATIO=0.80;
 const IDLE_HEADROOM_RESERVE_MS=2.5;
-const DESTINATION_GRACE_MS=180;
-const DESTINATION_SAFETY_RING=0;
-const DESTINATION_QUEUE_PRIORITY=-1000;
 const DEFAULTS=Object.freeze({
   preloadRadius:2,
   maxCachedChunks:64,
@@ -117,7 +114,6 @@ function directionUnit(dx,dy){
 function createManager({
   chunkSize=16,
   prepareChunk,
-  prepareChunkData=null,
   activateChunk,
   deactivateChunk,
   destroyChunk,
@@ -150,14 +146,6 @@ function createManager({
   let lastIdleWorkMs=0,totalIdleWorkMs=0,maxIdleWorkMs=0;
   let hits=0,misses=0,compositions=0,evictions=0,visibleWaits=0,cacheReuses=0,frameBudgetSpikes=0,invalidations=0;
   let activations=0,deactivations=0,stateReuses=0,resourceCreations=0,resourceDestructions=0;
-  let streamingState="READY",destinationSerial=0,destinationRequests=0,destinationCompletions=0,destinationCacheHits=0;
-  let destinationPromotions=0,staleDestinationCancelled=0,destinationDeduplicated=0,destinationRequiredCount=0,destinationCompletedCount=0;
-  let destinationStartedAtMs=null,destinationGateShownAtMs=null,destinationReadyAtMs=null,destinationTarget=null,destinationRequiredIds=Object.freeze([]);
-  let destinationLastProgress=Object.freeze({state:"READY",required:0,completed:0,percent:100,target:null});
-  let destinationSliceCount=0,destinationLastSliceMs=0,destinationMaxSliceMs=0,destinationTotalSliceMs=0;
-  let destinationDataSliceCount=0,destinationDataLastMs=0,destinationDataMaxMs=0,destinationDataTotalMs=0;
-  let destinationLongTask50=0,destinationLongTask100=0,destinationLongTask200=0,destinationPaintHeartbeats=0;
-  const destinationDataPrepared=new Set();
   let updateCalls=0,lastUpdateMs=0,maxUpdateMs=0,totalUpdateMs=0,transitionCalls=0,totalTransitionMs=0,maxTransitionMs=0;
   let lastInvalidationReason=null;
   let lastWorkMs=0,maxWorkMs=0,backgroundFrames=0;
@@ -279,23 +267,6 @@ function createManager({
     if(!removed.length)return 0;
     queue=keep;
     for(const item of removed)queued.delete(item.fullKey);
-    lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance,source:item.source||"normal"})));
-    return removed.length;
-  }
-  function clearDestinationQueue(reason="superseded"){
-    if(!queue.length)return 0;
-    const keep=[],removed=[];
-    for(const item of queue){
-      if(item.source==="destination")removed.push(item);
-      else keep.push(item);
-    }
-    if(!removed.length)return 0;
-    queue=keep;
-    for(const item of removed){
-      queued.delete(item.fullKey);
-      destinationDataPrepared.delete(item.fullKey);
-    }
-    staleDestinationCancelled+=removed.length;
     lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance,source:item.source||"normal"})));
     return removed.length;
   }
@@ -442,7 +413,6 @@ function createManager({
     let entry=entries.get(key);
     if(entry){
       hits++;
-      if(source==="destination")destinationCacheHits++;
       const promotedIdle=Boolean(entry.idleGenerated&&entry.state==="Cached"&&(state==="Active"||state==="Prepared"));
       if(entry.state==="Cached"&&(state==="Active"||state==="Prepared"))cacheReuses++;
       if(promotedIdle)idleCacheHits++;
@@ -453,12 +423,11 @@ function createManager({
     misses++;
     if(isVisible)visibleWaits++;
     const started=performance.now();
-    const streamingProfile=source==="destination"?"minimum":"full";
-    const resource=prepareChunk({x,y,chunkSize:size,signature:sig,state,source,streamingProfile});
+    const resource=prepareChunk({x,y,chunkSize:size,signature:sig,state});
     const elapsed=performance.now()-started;
     lastWorkMs=elapsed;maxWorkMs=Math.max(maxWorkMs,elapsed);
     if(elapsed>settings.frameBudgetMs*1.5)frameBudgetSpikes++;
-    entry={key,x,y,state,signature:sig,resource,lastUsed:performance.now(),idleGenerated:source==="idle",streamingProfile};
+    entry={key,x,y,state,signature:sig,resource,lastUsed:performance.now(),idleGenerated:source==="idle"};
     entries.set(key,entry);
     compositions++;
     resourceCreations++;
@@ -478,7 +447,7 @@ function createManager({
     for(const item of items){
       const sig=currentSignature();
       const fullKey=entryKey(sig,item.x,item.y);
-      const source=item.source==="idle"?"idle":item.source==="destination"?"destination":"normal";
+      const source=item.source==="idle"?"idle":"normal";
       const desiredState=item.state||"Prepared";
       if(entries.has(fullKey)){
         const entry=entries.get(fullKey);
@@ -491,11 +460,7 @@ function createManager({
         setEntryState(entry,desiredState);
         continue;
       }
-      if(queued.has(fullKey)){
-        if(source==="destination")destinationDeduplicated++;
-        continue;
-      }
-      if(source==="destination")destinationPromotions++;
+      if(queued.has(fullKey))continue;
       queued.add(fullKey);
       queue.push({...item,fullKey,source,state:desiredState});
     }
@@ -505,14 +470,7 @@ function createManager({
   }
   function processQueue(){
     frameHandle=0;
-    if(destroyed){queue=[];queued.clear();return;}
-    if(!settings.backgroundChunkGeneration){
-      const keep=queue.filter(item=>item.source==="destination");
-      const removed=queue.filter(item=>item.source!=="destination");
-      for(const item of removed)queued.delete(item.fullKey);
-      queue=keep;
-      if(!queue.length)return;
-    }
+    if(destroyed||!settings.backgroundChunkGeneration){queue=[];queued.clear();return;}
     const started=performance.now();
     let processed=0;
     const preparedKeys=[];
@@ -540,25 +498,8 @@ function createManager({
         continue;
       }
       const itemStarted=performance.now();
-      if(item.source==="destination"&&typeof prepareChunkData==="function"&&!destinationDataPrepared.has(item.fullKey)){
-        prepareChunkData({x:item.x,y:item.y,chunkSize:size,signature:item.signature,state:item.state||"Prepared",source:"destination"});
-        const dataElapsed=performance.now()-itemStarted;
-        destinationDataPrepared.add(item.fullKey);
-        destinationDataSliceCount++;
-        destinationDataLastMs=dataElapsed;
-        destinationDataTotalMs+=dataElapsed;
-        destinationDataMaxMs=Math.max(destinationDataMaxMs,dataElapsed);
-        // Requeue the exact same destination chunk so mesh/GPU composition runs
-        // in the next paint-separated task instead of sharing one long task
-        // with deterministic world-data generation.
-        queue.unshift(item);
-        queued.add(item.fullKey);
-        processed++;
-        continue;
-      }
       prepareNow(item.x,item.y,item.state||"Prepared",false,item.source||"normal");
       const itemElapsed=performance.now()-itemStarted;
-      if(item.source==="destination")destinationDataPrepared.delete(item.fullKey);
       if(item.source==="idle"){
         lastIdleWorkMs=itemElapsed;
         totalIdleWorkMs+=itemElapsed;
@@ -568,15 +509,6 @@ function createManager({
       processed++;
     }
     const elapsed=performance.now()-started;
-    if(streamingState==="CATCHING_UP"||streamingState==="LOAD_GATE"){
-      destinationSliceCount++;
-      destinationLastSliceMs=elapsed;
-      destinationTotalSliceMs+=elapsed;
-      destinationMaxSliceMs=Math.max(destinationMaxSliceMs,elapsed);
-      if(elapsed>50)destinationLongTask50++;
-      if(elapsed>100)destinationLongTask100++;
-      if(elapsed>200)destinationLongTask200++;
-    }
     lastWorkMs=elapsed;maxWorkMs=Math.max(maxWorkMs,elapsed);backgroundFrames++;
     if(elapsed>settings.frameBudgetMs*1.5)frameBudgetSpikes++;
     if(preparedKeys.length)lastPreparedOrder=Object.freeze(preparedKeys);
@@ -596,117 +528,6 @@ function createManager({
       evictions++;
     }
   }
-  function destinationPlan(request){
-    const center=Object.freeze({x:String(request?.center?.x??"0"),y:String(request?.center?.y??"0")});
-    const centerChunk=chunkFromCenter(center);
-    const rx=Math.max(0,Number(request?.activeRadiusX||0)|0),ry=Math.max(0,Number(request?.activeRadiusY||0)|0);
-    const activeBounds=makeBounds(centerChunk,rx,ry);
-    const safetyBounds=makeBounds(centerChunk,rx+DESTINATION_SAFETY_RING,ry+DESTINATION_SAFETY_RING);
-    const items=[],requiredIds=[];
-    for(let y=safetyBounds.minY;y<=safetyBounds.maxY;y++){
-      for(let x=safetyBounds.minX;x<=safetyBounds.maxX;x++){
-        const distance=distanceToRect(x,y,activeBounds);
-        const id=coordKey(x,y);
-        requiredIds.push(id);
-        items.push({x,y,signature:currentSignature(),state:"Prepared",source:"destination",priority:DESTINATION_QUEUE_PRIORITY+distance*20,distance});
-      }
-    }
-    return Object.freeze({center,centerChunk,activeBounds,safetyBounds,items:Object.freeze(items),requiredIds:Object.freeze(requiredIds)});
-  }
-  function destinationProgress(plan,state=streamingState){
-    const sig=currentSignature();
-    let completed=0;
-    for(const id of plan.requiredIds){
-      const point=parseCoord(id);
-      if(entries.has(entryKey(sig,point.x,point.y)))completed++;
-    }
-    const required=plan.requiredIds.length;
-    const percent=required?Math.min(100,Math.round(completed/required*100)):100;
-    destinationRequiredCount=required;
-    destinationCompletedCount=completed;
-    destinationRequiredIds=plan.requiredIds;
-    destinationTarget=plan.center;
-    destinationLastProgress=Object.freeze({
-      state:String(state),required,completed,percent,target:Object.freeze({...plan.center}),
-      requiredChunkIds:plan.requiredIds,
-      queueDepth:queue.filter(item=>item.source==="destination").length,
-      cancelledStale:staleDestinationCancelled,deduplicated:destinationDeduplicated,
-      promotions:destinationPromotions,cacheHits:destinationCacheHits
-    });
-    return destinationLastProgress;
-  }
-  function cooperativeDestinationYield(){
-    return new Promise(resolve=>{
-      requestAnimationFrame(()=>{
-        destinationPaintHeartbeats++;
-        setTimeout(resolve,0);
-      });
-    });
-  }
-  function cancelDestination(reason="superseded"){
-    destinationSerial++;
-    clearDestinationQueue(reason);
-    if(streamingState!=="READY")streamingState="READY";
-    destinationLastProgress=Object.freeze({...destinationLastProgress,state:"READY",cancelled:true,reason:String(reason||"superseded")});
-    return destinationLastProgress;
-  }
-  async function prepareDestination(request,{onProgress=null,graceMs=DESTINATION_GRACE_MS,forceGate=false}={}){
-    if(destroyed||!request?.center)return Object.freeze({ready:false,reason:"invalid-destination"});
-    const serial=++destinationSerial;
-    destinationRequests++;
-    clearDestinationQueue("new-destination");
-    stopIdleExpansion("destination-streaming",true);
-    const plan=destinationPlan(request);
-    destinationStartedAtMs=performance.now();
-    destinationGateShownAtMs=null;
-    destinationReadyAtMs=null;
-    const previous=lastCenterChunk;
-    const jumpDistance=previous?Math.max(Math.abs(plan.centerChunk.x-previous.x),Math.abs(plan.centerChunk.y-previous.y)):0;
-    const immediateGate=Boolean(forceGate||jumpDistance>Math.max(2,Math.max(Number(request.activeRadiusX||0),Number(request.activeRadiusY||0))+1));
-    streamingState=immediateGate?"LOAD_GATE":"CATCHING_UP";
-    if(immediateGate)destinationGateShownAtMs=performance.now();
-    const emit=()=>{
-      const p=destinationProgress(plan,streamingState);
-      try{onProgress?.(p);}catch(_){}
-      return p;
-    };
-    let progress=emit();
-    if(progress.completed>=progress.required){
-      streamingState="RECOVERY";
-      progress=emit();
-      destinationReadyAtMs=performance.now();
-      destinationCompletions++;
-      return Object.freeze({...progress,ready:true,cached:true,elapsedMs:Number((destinationReadyAtMs-destinationStartedAtMs).toFixed(1))});
-    }
-    const missing=plan.items.filter(item=>!entries.has(entryKey(currentSignature(),item.x,item.y)));
-    schedulePrepared(missing);
-    while(serial===destinationSerial&&!destroyed){
-      progress=emit();
-      if(progress.completed>=progress.required)break;
-      const elapsed=performance.now()-destinationStartedAtMs;
-      if(streamingState==="CATCHING_UP"&&elapsed>=Math.max(0,Number(graceMs)||0)){
-        streamingState="LOAD_GATE";
-        destinationGateShownAtMs=performance.now();
-        progress=emit();
-      }
-      await cooperativeDestinationYield();
-    }
-    if(serial!==destinationSerial||destroyed){
-      return Object.freeze({...destinationLastProgress,ready:false,stale:true,reason:"superseded"});
-    }
-    streamingState="RECOVERY";
-    progress=emit();
-    destinationReadyAtMs=performance.now();
-    destinationCompletions++;
-    return Object.freeze({...progress,ready:true,cached:false,elapsedMs:Number((destinationReadyAtMs-destinationStartedAtMs).toFixed(1))});
-  }
-  function finishDestination(){
-    if(streamingState==="RECOVERY")streamingState="READY";
-    destinationLastProgress=Object.freeze({...destinationLastProgress,state:streamingState,percent:100});
-    scheduleIdleCheck();
-    return destinationLastProgress;
-  }
-
   function update(request){
     if(destroyed||!request?.center)return stats();
     const updateStarted=performance.now();
@@ -802,21 +623,6 @@ function createManager({
       idleStartMs:IDLE_START_MS,
       idleLevel2Ms:IDLE_LEVEL2_MS,
       idleChunksGenerated,idleCacheHits,idleStarts,idleStops,lastIdleStartReason,lastIdleStopReason,
-      streamingState,destinationRequests,destinationCompletions,destinationCacheHits,destinationPromotions,
-      staleDestinationCancelled,destinationDeduplicated,destinationRequiredCount,destinationCompletedCount,
-      destinationRequiredIds,destinationTarget,destinationStartedAtMs,destinationGateShownAtMs,destinationReadyAtMs,
-      destinationProgress:destinationLastProgress,destinationSliceCount,
-      destinationLastSliceMs:Number(destinationLastSliceMs.toFixed(3)),
-      destinationMaxSliceMs:Number(destinationMaxSliceMs.toFixed(3)),
-      destinationAverageSliceMs:Number((destinationSliceCount?destinationTotalSliceMs/destinationSliceCount:0).toFixed(3)),
-      destinationDataSliceCount,
-      destinationDataLastMs:Number(destinationDataLastMs.toFixed(3)),
-      destinationDataMaxMs:Number(destinationDataMaxMs.toFixed(3)),
-      destinationDataAverageMs:Number((destinationDataSliceCount?destinationDataTotalMs/destinationDataSliceCount:0).toFixed(3)),
-      destinationLongTask50,destinationLongTask100,destinationLongTask200,destinationPaintHeartbeats,
-      destinationQueueDepth:queue.filter(item=>item.source==="destination").length,
-      streamingMinimumResources:[...entries.values()].filter(entry=>entry?.resource?.streamingMinimum===true).length,
-      streamingMinimumActive:[...entries.values()].filter(entry=>entry?.state==="Active"&&entry?.resource?.streamingMinimum===true).length,
       recentFrameTimeMs:lastHeadroom.frameMs,
       recentFrameBudgetMs:lastHeadroom.budgetMs,
       recentFrameHeadroomMs:lastHeadroom.headroomMs,
@@ -861,11 +667,11 @@ function createManager({
     });
   }
   function destroy(){
-    destroyed=true;cancelDestination("destroy");stopIdleExpansion("destroy",true);cancelWork();unsubscribe();
+    destroyed=true;stopIdleExpansion("destroy",true);cancelWork();unsubscribe();
     for(const entry of entries.values())destroyEntry(entry);
     entries.clear();queue=[];queued.clear();
   }
-  return Object.freeze({update,prepareDestination,cancelDestination,finishDestination,stats,proof,setChunkSize,forEachResource,invalidate,destroy});
+  return Object.freeze({update,stats,proof,setChunkSize,forEachResource,invalidate,destroy});
 }
 
 bindControls();
