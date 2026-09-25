@@ -1629,3 +1629,11 @@
 - Final allowed evidence attempt 36200083095 completed successfully on head 1506b5b472494f6a2b4faaf54d222fe7a812f1cf with six frames covering filters, selection, camera navigation, short landscape and portrait.
 - Direct screenshot inspection: desktop filters/list are readable, selected rows are clear, portrait fits without clipping, and short landscape remains usable with bounded scrolling. VISUAL: 8.5/10 — PASS.
 - WP remains incomplete: the current planet-first authority does not yet expose real settlement/city/ruin/hunting/fishing destination descriptors required by the original Issue; these must not be invented for UI completion.
+
+
+2026-09-26 02:24:00 +03:00 | WP-S003-009-009 | Planet-First Ambient Motion Continuation — IMPLEMENTED, EVALUATION INCOMPLETE
+- Adapted the ambient-motion work to the canonical planet-first runtime without reactivating retired village/NPC/local-terrain presentation.
+- Added one deterministic translucent seeded cloud shell above the globe. It reuses the existing planet mesh, adds one animated presentation entity / estimated one draw call, drifts at constant-time cost, pauses while the user drags the globe, and has no Simulation authority.
+- Updated the dedicated screenshot scenario toward six planet views including time-separated motion and mobile framing.
+- Three evidence attempts were consumed by evidence-tool migration faults rather than a valid visual evaluation: attempt 1 used the stale path; attempt 2 exposed validator indentation; attempt 3 exposed scenario/validator block misplacement (frames NameError). The tool placement was repaired after attempt 3 but was not retested because the per-run three-attempt limit was reached.
+- VISUAL: NOT SCORED. No fresh valid planet ambient screenshots were produced, so WP remains incomplete.
