@@ -7867,7 +7867,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Bridge/seam hydrology proof failed: {proof}")
         if float(proof.get("basinLocalWaterRange") or 99)>0.20 or float(proof.get("channelLocalWaterRange") or 99)>0.24:
             raise RuntimeError(f"Water surface smoothness exceeded bound: {proof}")
-        water_frames=(0,1,3,4,5,6)
+        water_frames=(0,1,3,4,5,6,7)
         for index in water_frames:
             chunks=((builds[index].get("gpuRenderer") or {}).get("terrainChunks") or {})
             if chunks.get("hydrologyEnabled") is not True:
@@ -7878,6 +7878,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Hydrology authority isolation failed in frame {index+1}: {chunks}")
             if chunks.get("hydrologyWaterIdentityChanged") is True:
                 raise RuntimeError(f"Hydrology changed water identity in frame {index+1}: {chunks}")
+            if int(chunks.get("hydrologyBankFaceCount") or 0)<1 or int(chunks.get("hydrologyBankFaceTriangleCount") or 0)<2:
+                raise RuntimeError(f"Prepared shoreline crack-closure faces missing in frame {index+1}: {chunks}")
+            if int(chunks.get("hydrologyBankFaceDrawCallsAdded") or 0)!=0:
+                raise RuntimeError(f"Shoreline crack-closure faces added an unexpected draw call in frame {index+1}: {chunks}")
         for index,build in enumerate(builds):
             chunks=((build.get("gpuRenderer") or {}).get("terrainChunks") or {})
             if chunks.get("hydrologyPass") is not True:
