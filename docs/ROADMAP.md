@@ -71,7 +71,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-011` — Responsive Long-Distance Chunk Streaming + Area Loading Gate — COMPLETED
 - `WP-S003-006-012` — Hydrology-Carved Basins + Depressed Water Surfaces — COMPLETED
 - `WP-S003-006-013` — Fantasy Planet Sphere Foundation (10% Earth Scale) — COMPLETED
-- `WP-S003-006-014` — Seeded Planetary Oceans, Continents, Islands + Macro Height Relief
+- `WP-S003-006-014` — Seeded Planetary Oceans, Continents, Islands + Macro Height Relief — COMPLETED
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
