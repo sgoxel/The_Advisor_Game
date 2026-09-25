@@ -47,8 +47,40 @@ let buildTimeMs=0;
 let meshVertexCount=0;
 let meshTriangleCount=0;
 let generatedTexture=null;
+let startupProgress={mode:"indeterminate",measuredPercent:null,displayedPercent:null,phaseId:"planning",phaseLabel:"Planning startup…",completedWeightedWork:0,totalWeightedWork:100,firstPaintAtMs:Date.now(),determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,optionalPostReadyWorkCount:0};
+let loadingProof=null;
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
+function loadingNodes(){
+  const overlay=root?.querySelector?.(".planet-stage-loading");
+  return {overlay,title:overlay?.querySelector?.(".planet-stage-loading-title"),phase:overlay?.querySelector?.(".planet-stage-loading-phase"),bar:overlay?.querySelector?.(".planet-stage-loading-bar"),percent:overlay?.querySelector?.(".planet-stage-loading-percent"),track:overlay?.querySelector?.(".planet-stage-loading-progress")};
+}
+function presentStartupProgress(){
+  const n=loadingNodes();if(!n.overlay)return;
+  const p=loadingProof||startupProgress;
+  n.overlay.hidden=false;n.overlay.dataset.mode=String(p.mode||"determinate");n.overlay.dataset.phase=String(p.phaseId||"planning");
+  if(n.title)n.title.textContent=String(p.title||((p.mode==="ready")?"World ready":(p.mode==="failed")?"Startup interrupted":"Waking the world"));
+  if(n.phase)n.phase.textContent=String(p.phaseLabel||"Preparing world…");
+  const value=clamp(p.displayedPercent??p.measuredPercent??0,0,100);
+  if(n.bar)n.bar.style.width=value.toFixed(1)+"%";
+  if(n.track)n.track.setAttribute("aria-valuenow",String(Math.round(value)));
+  if(n.percent)n.percent.textContent=p.mode==="indeterminate"?"Planning startup…":Math.round(value)+"%";
+}
+function setStartupProgress(phaseId,phaseLabel,percent,mode="determinate"){
+  const value=clamp(percent,0,100);
+  if(startupProgress.mode==="indeterminate"&&mode!=="indeterminate")startupProgress.determinateAtMs=Date.now();
+  const previous=Number(startupProgress.measuredPercent??0);
+  const measured=Math.max(previous,value);
+  startupProgress={...startupProgress,mode,phaseId:String(phaseId),phaseLabel:String(phaseLabel),measuredPercent:measured,displayedPercent:measured,completedWeightedWork:measured};
+  if(measured===100&&!startupProgress.measured100AtMs)startupProgress.measured100AtMs=Date.now();
+  presentStartupProgress();
+}
+function setLoadingProof(mode,phaseId,phaseLabel,percent){
+  loadingProof={mode:String(mode||"determinate"),phaseId:String(phaseId||"proof"),phaseLabel:String(phaseLabel||"Preparing world…"),measuredPercent:Number(percent),displayedPercent:Number(percent)};
+  presentStartupProgress();return snapshot();
+}
+function clearLoadingProof(){loadingProof=null;presentStartupProgress();return snapshot();}
+function yieldPaint(){return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
 function normalizeYaw(value){
   let n=Number(value)||0;
   n%=360;
@@ -315,11 +347,13 @@ function bindInput(){
 }
 function buildScene(){
   const started=performance.now();
+  setStartupProgress("geography","Generating continents, oceans and islands…",52);
   if(!window.PlanetGeography)throw new Error("PlanetGeography is unavailable");
   activeSeed=window.PlanetGeography.resolveSeed();
   geography=window.PlanetGeography.create(activeSeed);
   geographySignature=geography.signature();
   geographyVerification=window.PlanetGeography.verifyDeterminism(activeSeed);
+  setStartupProgress("surface","Painting planetary surface and relief…",68);
 
   app.scene.ambientLight=new pc.Color(0.24,0.26,0.30);
 
@@ -344,6 +378,7 @@ function buildScene(){
 
   planet=new pc.Entity("FantasyPlanet");
   planet.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  setStartupProgress("mesh","Building planetary height mesh…",84);
   const mesh=buildPlanetMesh();
   planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
   app.root.addChild(planet);
@@ -369,6 +404,7 @@ function buildScene(){
   app.root.addChild(fillLight);
 
   applyRotation();
+  setStartupProgress("scene","Finalizing first playable planet…",95);
   buildTimeMs=performance.now()-started;
 }
 async function start(){
@@ -376,14 +412,22 @@ async function start(){
   try{
     root=document.getElementById("planetStageRoot");
     if(!root)throw new Error("Planet stage root is missing");
+    presentStartupProgress();
+    await yieldPaint();
+    setStartupProgress("engine","Loading renderer…",15);
+    await yieldPaint();
     document.body.classList.add("planet-stage-active");
 
     pc=await import(ENGINE_URL);
+    setStartupProgress("renderer","Initializing PlayCanvas…",32);
+    await yieldPaint();
     canvas=document.createElement("canvas");
     canvas.id="planetCanvas";
     canvas.className="planet-stage-canvas";
     canvas.dataset.renderer="playcanvas";
+    const loader=root.querySelector(".planet-stage-loading");
     root.replaceChildren(canvas);
+    if(loader)root.appendChild(loader);
 
     device=await pc.createGraphicsDevice(canvas,{
       deviceTypes:[pc.DEVICETYPE_WEBGL2],
@@ -399,6 +443,7 @@ async function start(){
     app=new pc.AppBase(canvas);
     app.init(options);
     buildScene();
+    await yieldPaint();
     bindInput();
     resize();
     app.on?.("update",()=>{frameCount++;});
@@ -410,11 +455,16 @@ async function start(){
     }else window.addEventListener("resize",resize);
 
     ready=true;
+    setStartupProgress("ready","First playable planet ready",100,"ready");
+    startupProgress.gameplayReadyAtMs=Date.now();
+    await yieldPaint();
     root.dataset.ready="true";
     root.dataset.seed=activeSeed;
     return snapshot();
   }catch(error){
     startupError=String(error?.stack||error);
+    startupProgress={...startupProgress,mode:"failed",phaseId:"error",phaseLabel:"The planet could not finish preparing."};
+    presentStartupProgress();
     if(root){
       root.dataset.ready="false";
       root.dataset.error=startupError;
@@ -481,7 +531,8 @@ function snapshot(){
       physicalElevationMeters:true
     }),
     frameCount,
-    startupError
+    startupError,
+    startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)})
   });
 }
 function verify(){
@@ -512,7 +563,7 @@ function destroy(){
   geography=null;root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,destroy,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
