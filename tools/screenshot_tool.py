@@ -1882,7 +1882,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002"}:
+            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005"}:
                 recovery = driver.execute_script(
                     """
                     const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
@@ -6762,7 +6762,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         for index,frame in enumerate(frames[:8]):
             build=frame.get("runtime",{}).get("currentBuild",{})
             gpu=build.get("gpuRenderer") or {}
-            style=gpu.get("worldVisualStyle") or {}
+            style=build.get("worldVisualStyle") or {}
             treatment=style.get("spriteTreatment") or {}
             character=treatment.get("character") or {}
             tree=treatment.get("tree") or {}
