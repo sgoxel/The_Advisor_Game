@@ -1574,7 +1574,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       simulationAuthorityPreserved:true
     });
   }
-  function terrainActiveRadii(){
+  function terrainActiveRadii(centerOverride=null){
     const meters=Math.max(1,terrainChunkSize()*WORLD_TILE_METERS);
     const width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1);
     const aspect=width/height;
@@ -1586,7 +1586,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     try{
       const component=camera?.camera;
       if(!component?.screenToWorld)return fallback;
-      const center=lastModel?.center?characterScenePoint(lastModel.center):Object.freeze({x:0,z:0});
+      const centerSource=centerOverride||lastModel?.center;\n      const center=centerSource?characterScenePoint(centerSource):Object.freeze({x:0,z:0});
       const groundY=-0.33;
       const near=Math.max(0.01,Number(component.nearClip||0.1));
       const far=Math.max(near+1,Number(component.farClip||200));
@@ -1619,7 +1619,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const started=performance.now();
     navigationTelemetry.preloadUpdateCalls++;
     manager.setChunkSize(terrainChunkSize());
-    const radii=terrainActiveRadii();
+    const radii=terrainActiveRadii(center);
     const result=manager.update({center,activeRadiusX:radii.x,activeRadiusY:radii.y});
     if(lastPositionedAnchorRevision!==sceneAnchorRevision){
       let count=0;
@@ -1641,7 +1641,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const manager=initTerrainPreload();
     if(!manager)return Object.freeze({ready:false,reason:"preload-unavailable"});
     manager.setChunkSize(terrainChunkSize());
-    const radii=terrainActiveRadii();
+    const radii=terrainActiveRadii(frame.center);
     const terrainTextures=await prepareTerrainTextureAtlas();
     const buildingTextures=await prepareBuildingSurfaceAtlas();
     const treeSprites=await prepareTreeSpriteAtlas();
@@ -1658,7 +1658,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       worldAssets,
       terrainTextures,buildingTextures,treeSprites,
       streamingMinimumResources:Number(manager.stats?.().streamingMinimumResources||0),
-      destinationPresentationProfile:"full",
+      destinationPresentationProfile:"minimum",
       simulationAuthorityPreserved:true
     });
   }
