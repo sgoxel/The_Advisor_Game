@@ -105,6 +105,7 @@ SCENARIOS = {
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s003-008-002",
+    "wp-s003-008-002-001",
     "wp-s003-008-003",
     "wp-s003-009-001",
     "wp-s003-009-002",
@@ -198,6 +199,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
+    "wp-s003-008-002-001": 8,
     "wp-s003-008-003": 8,
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
@@ -2200,7 +2202,7 @@ def _safe_click(driver, selector: str) -> str:
     return f"click:{selector}"
 
 
-def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool = False) -> str:
+def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool = False, startup_progress: bool = False, progress: float | None = None) -> str:
     if phase is None:
         result = driver.execute_script(
             """
@@ -2250,11 +2252,13 @@ def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool 
         const reduced=Boolean(arguments[1]);
         const api=window.AppUI;
         if(!api?.setSceneLoadingProof||!api?.sceneLoadingSnapshot)return null;
-        api.setSceneLoadingProof(phase,{reducedMotion:reduced});
+        api.setSceneLoadingProof(phase,{reducedMotion:reduced,startupProgress:Boolean(arguments[2]),progress:arguments[3],progressText:arguments[3]===null?null:(Math.round(Number(arguments[3]))+"%")});
         return api.sceneLoadingSnapshot();
         """,
         phase,
         reduced_motion,
+        startup_progress,
+        progress,
     )
     if not isinstance(result, dict):
         raise RuntimeError(f"Scene-loading proof phase {phase!r} failed: {result}")
@@ -7969,6 +7973,22 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 6:
             return _set_minimap_view(driver, 6, 4, 1.00, viewport=(844, 390))
         return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
+    if scenario == "wp-s003-008-002-001":
+        plan=(
+            ("renderer",0,"Planning startup…",(1440,900)),
+            ("world",18,"18%",(1440,900)),
+            ("assets",42,"42%",(1440,900)),
+            ("assets",64,"64%",(1440,900)),
+            ("finalizing",84,"84%",(1440,900)),
+            ("ready",100,"100%",(1440,900)),
+            ("world",42,"42%",(390,844)),
+            ("error",64,"64%",(844,390)),
+        )
+        phase,value,label,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*viewport)
+        if phase=="ready":
+            return _set_scene_loading_proof(driver,"ready",startup_progress=True,progress=value)
+        return _set_scene_loading_proof(driver,phase,startup_progress=True,progress=value)
     if scenario == "wp-s003-008-002":
         if frame_index == 0:
             driver.set_window_size(1440, 900)
@@ -11261,6 +11281,30 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Same-SEED identity roster changed across evidence frames: {static_rosters}")
         return
 
+    if scenario == "wp-s003-008-002-001":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-008-002-001 requires eight startup-progress evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
+        loadings=[build.get("sceneLoading") or {} for build in builds]
+        actual=loadings[0].get("progress") or {}
+        if actual.get("mode")!="ready" or float(actual.get("measuredPercent") or 0)!=100 or float(actual.get("displayedPercent") or 0)!=100:
+            raise RuntimeError(f"Actual first-playable startup progress did not finish truthfully: {actual}")
+        if float(actual.get("completedWeightedFirstPlayableWork") or 0)!=float(actual.get("totalWeightedFirstPlayableWork") or -1):
+            raise RuntimeError(f"Actual weighted startup plan incomplete: {actual}")
+        if not actual.get("measured100AtMs") or not actual.get("gameplayReadyAtMs"):
+            raise RuntimeError(f"Actual startup progress timestamps missing: {actual}")
+        expected=(0,18,42,64,84,100,42,64)
+        for index,(loading,value) in enumerate(zip(loadings,expected),start=1):
+            overlay=loading.get("overlay") or {}
+            proof=loading.get("proofOverride") or {}
+            if proof.get("startupProgress") is not True or overlay.get("progressVisible") is not True:
+                raise RuntimeError(f"Startup progress presentation missing in frame {index}: {loading}")
+            if value>0 and str(value) not in str(overlay.get("progressText") or ""):
+                raise RuntimeError(f"Startup progress text mismatch in frame {index}: expected {value}, got {overlay}")
+        if (loadings[7].get("overlay") or {}).get("state")!="error":
+            raise RuntimeError(f"Fatal startup proof did not enter error state: {loadings[7]}")
+        return
+
     if scenario == "wp-s003-008-002":
         if len(frames) < 9:
             raise RuntimeError("wp-s003-008-002 requires nine scene-loading evidence frames")
@@ -13481,7 +13525,7 @@ def take_screenshots(
 
             # Deterministic delay. The old utility used a random delay; CI evidence
             # should be reproducible, so use the midpoint of the supplied range.
-            delay = 0.0 if scenario == "wp-s003-008-002" else (wait_min + wait_max) / 2.0
+            delay = 0.0 if scenario in {"wp-s003-008-002","wp-s003-008-002-001"} else (wait_min + wait_max) / 2.0
             print(f"Opening: {browser_url}")
             print(f"Viewport: {width}x{height}")
             print(f"Waiting {delay:.2f}s before capture")
@@ -13492,12 +13536,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
