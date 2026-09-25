@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.7.0";
+const VERSION="1.8.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -10,6 +10,7 @@ const STANDARD_TERRAIN=new Set([
 const cache=new Map();
 const dressingCache=new Map();
 const connectorCache=new Map();
+const landmarkCache=new Map();
 const everGenerated=new Set();
 let cacheHits=0,cacheMisses=0,completeChunkGenerations=0,releases=0,regenerationCount=0;
 let activeGenerations=0,preparedGenerations=0,otherGenerations=0;
@@ -108,6 +109,55 @@ function buildingCatalog(seed){
   }
   return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
 }
+function settlementLandmarkPlan(seed){
+  const cacheKey=String(seed||"");
+  if(landmarkCache.has(cacheKey))return landmarkCache.get(cacheKey);
+  const settlement=window.SettlementArchetypes?.build?.(
+    cacheKey,{x:"0",y:"0"},{classHint:"village",nameHint:"Starting Village"}
+  )||null;
+  const tags=Array.isArray(settlement?.subtypes?.tags)&&settlement.subtypes.tags.length
+    ?settlement.subtypes.tags.map(String)
+    :["mixed"];
+  const primary=tags[0]||"mixed";
+  const choiceByTag=Object.freeze({
+    agricultural:Object.freeze({kind:"barn",treatment:"harvest-cupola",role:"agricultural-anchor"}),
+    forest:Object.freeze({kind:"workshop",treatment:"timber-stack",role:"craft-anchor"}),
+    mining:Object.freeze({kind:"workshop",treatment:"forge-stack",role:"production-anchor"}),
+    trade:Object.freeze({kind:"tavern",treatment:"market-crest",role:"trade-anchor"}),
+    port:Object.freeze({kind:"tavern",treatment:"market-crest",role:"travel-anchor"}),
+    frontier:Object.freeze({kind:"meeting-hall",treatment:"watch-cupola",role:"frontier-anchor"}),
+    fortified:Object.freeze({kind:"meeting-hall",treatment:"watch-cupola",role:"civic-defense-anchor"}),
+    mixed:Object.freeze({kind:"meeting-hall",treatment:"civic-cupola",role:"civic-anchor"})
+  });
+  const choice=choiceByTag[primary]||choiceByTag.mixed;
+  const catalog=buildingCatalog(cacheKey);
+  const selected=
+    catalog.find(item=>item.source==="special"&&item.kind===choice.kind)||
+    catalog.find(item=>item.source==="special"&&item.kind==="meeting-hall")||
+    catalog.find(item=>item.source==="special")||null;
+  const plan=selected?Object.freeze({
+    id:"landmark:"+String(selected.id),
+    buildingId:String(selected.id),
+    buildingKind:String(selected.kind||"special"),
+    treatment:choice.treatment,
+    role:choice.role,
+    contextTag:primary,
+    contextTags:Object.freeze(tags.slice(0,4)),
+    settlementClass:String(settlement?.classId||"village"),
+    settlementRevision:String(settlement?.revision||""),
+    countryId:String(settlement?.countryId||""),
+    regionId:String(settlement?.regionId||""),
+    publicSpaceBand:String(settlement?.publicSpaceScale?.band||""),
+    deterministic:true,
+    rendererOnly:true,
+    navigationAuthority:false,
+    collisionAuthority:false,
+    simulationAuthorityPreserved:true
+  }):null;
+  landmarkCache.set(cacheKey,plan);
+  return plan;
+}
+
 const CONNECTOR_BLOCKED_TERRAIN=new Set(["water","wall","floor","door","building"]);
 const CONNECTOR_ROUTE_TERRAIN=new Set(["road","path","square","bridge"]);
 function connectorKey(x,y){return String(x)+","+String(y)}
@@ -510,6 +560,7 @@ function generate(spec){
 
   const buildings=buildingReferences(seed,bounds);
   for(const building of buildings)buildingIds.add(building.id);
+  const landmarkPlan=settlementLandmarkPlan(seed);
   const routeNetworkPlan=routeConnectorPlan(seed);
   const connectorDescriptors=routeNetworkPlan.cells.filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
   const dressing=semanticDressing(seed).filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
@@ -561,8 +612,13 @@ function generate(spec){
       source:"seed-chunk-world-data",
       buildingDescriptors:Object.freeze(ownedBuildings.map(item=>Object.freeze({
         id:item.id,kind:item.kind,label:item.label||item.kind,source:item.source,
-        bounds:item.bounds,entrance:item.entrance||null
+        bounds:item.bounds,entrance:item.entrance||null,
+        landmark:landmarkPlan&&landmarkPlan.buildingId===item.id?landmarkPlan:null
       }))),
+      landmark:landmarkPlan?Object.freeze({
+        ...landmarkPlan,
+        ownedByChunk:ownedBuildings.some(item=>item.id===landmarkPlan.buildingId)
+      }):null,
       propDescriptors:Object.freeze(staticObjects.map(item=>Object.freeze({
         id:item.id,type:item.type,x:item.x,y:item.y,sourceTerrain:item.sourceTerrain||null,
         semantic:item.semantic||null,context:item.context||null,buildingId:item.buildingId||null,
@@ -760,6 +816,9 @@ function stats(){
     dressingDeterministic:true,
     dressingRendererOnly:true,
     dressingPlanCacheEntries:dressingCache.size,
+    landmarkPlanCacheEntries:landmarkCache.size,
+    landmarkDeterministic:true,
+    landmarkRendererOnly:true,
     roadCellCount,waterCellCount,bridgeCellCount,
     cacheHits,cacheMisses,
     completeChunkGenerations,
@@ -786,11 +845,12 @@ function clear(){
   cache.clear();
   dressingCache.clear();
   connectorCache.clear();
+  landmarkCache.clear();
   everGenerated.clear();
   regenerationCount=0;
 }
 window.PlayCanvasChunkWorldData=Object.freeze({
   version:VERSION,
-  getOrCreate,touch,release,collectView,stats,clear,signatureFor
+  getOrCreate,touch,release,collectView,stats,clear,signatureFor,landmarkPlan:settlementLandmarkPlan
 });
 })();
