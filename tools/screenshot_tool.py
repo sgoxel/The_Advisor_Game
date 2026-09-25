@@ -10378,8 +10378,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if int(chunks.get("visibleMeshInstanceCount") or 0)<=0:
                 raise RuntimeError(f"Cached navigation produced a blank view in frame {index+1}: {chunks}")
 
-        if areas[5].get("gateShownAtMs") is not None:
-            raise RuntimeError(f"Retained destination revisit unnecessarily reopened LOAD_GATE: {areas[5]}")
+        for index in (4,5,6):
+            if areas[index].get("gateShownAtMs") is not None:
+                raise RuntimeError(f"Cached navigation unnecessarily reopened LOAD_GATE in frame {index+1}: {areas[index]}")
 
         final_preload=gpus[6].get("terrainPreload") or {}
         if int(final_preload.get("destinationPaintHeartbeats") or 0)<=0:
