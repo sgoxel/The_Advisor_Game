@@ -398,7 +398,7 @@ async function buildPlanetMesh(){
       uvs.push(u,1-v);normals.push(0,0,0);
     }
   });
-  for(let lat=0;lat<LATITUDE_SEGMENTS;lat++){
+  await runSlicedRange(LATITUDE_SEGMENTS,lat=>{
     for(let lon=0;lon<LONGITUDE_SEGMENTS;lon++){
       const a=lat*stride+lon;
       const b=a+1;
@@ -406,9 +406,10 @@ async function buildPlanetMesh(){
       const d=c+1;
       indices.push(a,c,b,b,c,d);
     }
-  }
-  for(let i=0;i<indices.length;i+=3){
-    const ia=indices[i],ib=indices[i+1],ic=indices[i+2];
+  });
+  const faceCount=indices.length/3;
+  await runSlicedRange(faceCount,face=>{
+    const i=face*3,ia=indices[i],ib=indices[i+1],ic=indices[i+2];
     const ax=positions[ia*3],ay=positions[ia*3+1],az=positions[ia*3+2];
     const bx=positions[ib*3],by=positions[ib*3+1],bz=positions[ib*3+2];
     const cx=positions[ic*3],cy=positions[ic*3+1],cz=positions[ic*3+2];
@@ -417,22 +418,22 @@ async function buildPlanetMesh(){
     const nx=aby*acz-abz*acy;
     const ny=abz*acx-abx*acz;
     const nz=abx*acy-aby*acx;
-    for(const index of [ia,ib,ic]){
-      normals[index*3]+=nx;normals[index*3+1]+=ny;normals[index*3+2]+=nz;
-    }
-  }
-  for(let i=0;i<normals.length;i+=3){
-    const len=Math.hypot(normals[i],normals[i+1],normals[i+2])||1;
+    normals[ia*3]+=nx;normals[ia*3+1]+=ny;normals[ia*3+2]+=nz;
+    normals[ib*3]+=nx;normals[ib*3+1]+=ny;normals[ib*3+2]+=nz;
+    normals[ic*3]+=nx;normals[ic*3+1]+=ny;normals[ic*3+2]+=nz;
+  });
+  await runSlicedRange(normals.length/3,index=>{
+    const i=index*3,len=Math.hypot(normals[i],normals[i+1],normals[i+2])||1;
     normals[i]/=len;normals[i+1]/=len;normals[i+2]/=len;
-  }
-  for(let lat=0;lat<=LATITUDE_SEGMENTS;lat++){
+  });
+  await runSlicedRange(LATITUDE_SEGMENTS+1,lat=>{
     const a=lat*stride,b=a+LONGITUDE_SEGMENTS;
     const nx=normals[a*3]+normals[b*3],ny=normals[a*3+1]+normals[b*3+1],nz=normals[a*3+2]+normals[b*3+2];
     const len=Math.hypot(nx,ny,nz)||1;
     normals[a*3]=normals[b*3]=nx/len;
     normals[a*3+1]=normals[b*3+1]=ny/len;
     normals[a*3+2]=normals[b*3+2]=nz/len;
-  }
+  });
   for(const row of [0,LATITUDE_SEGMENTS]){
     let nx=0,ny=0,nz=0;
     for(let lon=0;lon<=LONGITUDE_SEGMENTS;lon++){
@@ -445,14 +446,20 @@ async function buildPlanetMesh(){
       const index=row*stride+lon;
       normals[index*3]=nx;normals[index*3+1]=ny;normals[index*3+2]=nz;
     }
+    await yieldBrowser();
   }
 
   const mesh=new pc.Mesh(device);
+  const commitStarted=performance.now();
   mesh.setPositions(positions);
   mesh.setNormals(normals);
   mesh.setUvs(0,uvs);
   mesh.setIndices(indices);
+  startupScheduler.phaseTimings.planetMeshBufferStageMs=Number((performance.now()-commitStarted).toFixed(3));
+  await yieldBrowser();
+  const uploadStarted=performance.now();
   mesh.update();
+  startupScheduler.phaseTimings.planetMeshUploadMs=Number((performance.now()-uploadStarted).toFixed(3));
   meshVertexCount=positions.length/3;
   meshTriangleCount=indices.length/3;
   return mesh;
