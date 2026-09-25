@@ -871,6 +871,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let entranceTreatmentCount=0,entranceOrdinaryCount=0,entranceSpecialCount=0,entranceThresholdCount=0,entranceFramePrimitiveCount=0,entranceWearCount=0,entranceAwningCount=0,entranceSignCount=0,entrancePrimitiveCount=0;
     const entranceTreatmentSamples=[];
     let entranceAuthoritativeDoorAnchored=true,entranceRendererOnly=true,entranceNavigationBlocking=false,entranceCollisionBlocking=false;
+    let landmarkPresentationCount=0,landmarkPrimitiveCount=0;
+    const landmarkTreatmentCounts={},landmarkContextCounts={},landmarkSamples=[];
+    let landmarkDeterministic=true,landmarkRendererOnly=true,landmarkNavigationAuthority=false,landmarkCollisionAuthority=false,landmarkSimulationAuthorityPreserved=true;
     let dressingPresentationCount=0,dressingDescriptorCount=0,dressingPrimitiveInstanceCount=0,dressingInstancedGroupCount=0,dressingRouteSafeCount=0;
     const dressingContextCounts={},dressingSemanticCounts={},dressingSamples=[];
     let dressingDeterministic=true,dressingRendererOnly=true;
@@ -986,6 +989,21 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         for(const item of resource.entranceTreatmentSamples||[]){
           if(entranceTreatmentSamples.length>=64)break;
           entranceTreatmentSamples.push(item);
+        }
+      }
+      landmarkPresentationCount+=Number(resource.landmarkPresentationCount||0);
+      landmarkPrimitiveCount+=Number(resource.landmarkPrimitiveCount||0);
+      for(const [key,value] of Object.entries(resource.landmarkTreatmentCounts||{}))landmarkTreatmentCounts[key]=(landmarkTreatmentCounts[key]||0)+Number(value||0);
+      for(const [key,value] of Object.entries(resource.landmarkContextCounts||{}))landmarkContextCounts[key]=(landmarkContextCounts[key]||0)+Number(value||0);
+      landmarkDeterministic=landmarkDeterministic&&resource.landmarkDeterministic!==false;
+      landmarkRendererOnly=landmarkRendererOnly&&resource.landmarkRendererOnly!==false;
+      landmarkNavigationAuthority=landmarkNavigationAuthority||resource.landmarkNavigationAuthority===true;
+      landmarkCollisionAuthority=landmarkCollisionAuthority||resource.landmarkCollisionAuthority===true;
+      landmarkSimulationAuthorityPreserved=landmarkSimulationAuthorityPreserved&&resource.landmarkSimulationAuthorityPreserved!==false;
+      if(landmarkSamples.length<24){
+        for(const item of resource.landmarkSamples||[]){
+          if(landmarkSamples.length>=24)break;
+          landmarkSamples.push(item);
         }
       }
       contactShadowBuildingCount+=Number(resource.contactShadowBuildingCount||0);
@@ -1226,6 +1244,22 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         entranceAuthoritativeDoorAnchored&&entranceRendererOnly&&
         !entranceNavigationBlocking&&!entranceCollisionBlocking&&
         Number(generatorStats.entranceSharedMaterialCount||0)<=5
+      ),
+      landmarkPresentationCount,landmarkPrimitiveCount,
+      landmarkTreatmentCounts:Object.freeze({...landmarkTreatmentCounts}),
+      landmarkContextCounts:Object.freeze({...landmarkContextCounts}),
+      landmarkSamples:Object.freeze(landmarkSamples.slice()),
+      landmarkSharedMaterialCount:Number(generatorStats.landmarkSharedMaterialCount||0),
+      landmarkDeterministic:Boolean(landmarkDeterministic),
+      landmarkRendererOnly:Boolean(landmarkRendererOnly),
+      landmarkNavigationAuthority:Boolean(landmarkNavigationAuthority),
+      landmarkCollisionAuthority:Boolean(landmarkCollisionAuthority),
+      landmarkSimulationAuthorityPreserved:Boolean(landmarkSimulationAuthorityPreserved),
+      landmarkVisualHierarchyPass:Boolean(
+        landmarkPresentationCount===1&&landmarkPrimitiveCount>=3&&
+        Object.keys(landmarkTreatmentCounts).length===1&&Object.keys(landmarkContextCounts).length===1&&
+        landmarkDeterministic&&landmarkRendererOnly&&!landmarkNavigationAuthority&&!landmarkCollisionAuthority&&
+        landmarkSimulationAuthorityPreserved&&Number(generatorStats.landmarkSharedMaterialCount||0)<=3
       ),
       contactShadowTechnique:"batched-foundation-halo+instanced-ground-disc+dynamic-character-disc",
       contactShadowBuildingCount,contactShadowTreeCount,contactShadowPropCount,contactShadowObjectCount,
