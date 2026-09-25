@@ -121,6 +121,7 @@ SCENARIOS = {
     "wp-s003-009-008",
     "wp-s003-009-009",
     "wp-s003-009-010",
+    "wp-s003-009-011",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -218,6 +219,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-008": 8,
     "wp-s003-009-009": 6,
     "wp-s003-009-010": 7,
+    "wp-s003-009-011": 7,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1603,7 +1605,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010"}:
+    if scenario in {"wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7326,6 +7328,22 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-011":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=((0,0,(1280,800)),(58,-12,(1280,800)),(118,8,(1280,800)),(182,-18,(1280,800)),(248,12,(844,390)),(310,-8,(390,844)))
+        yaw,pitch,viewport=plan[min(max(0,frame_index-1),len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        result=driver.execute_script("return window.PlanetStage?.setRotation?.(Number(arguments[0]),Number(arguments[1])) || null",float(yaw),float(pitch))
+        if not isinstance(result,dict):
+            raise RuntimeError(f"Wilderness planet view failed: {result}")
+        wild=result.get("wilderness") or {}
+        if wild.get("generated") is not True or wild.get("perFrameScatter") is not False or wild.get("simulationAuthority") is not False:
+            raise RuntimeError(f"Wilderness authority failed: {wild}")
+        if int(wild.get("acceptedStaticProps") or 0)<20 or int(wild.get("drawCalls") or 0)>2:
+            raise RuntimeError(f"Wilderness density/budget failed: {wild}")
+        WebDriverWait(driver,10.0).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.wilderness?.generated===true"))
+        return f"planet-wilderness:yaw={yaw}:pitch={pitch}:props={wild.get('acceptedStaticProps')}:faunaZones={wild.get('ambientFaunaZones')}:viewport={viewport[0]}x{viewport[1]}"
+
     if scenario == "wp-s003-009-010":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=((5.5,"dawn",(1280,800)),(12.0,"day",(1280,800)),(17.5,"late-day",(1280,800)),(21.0,"night",(1280,800)),(12.0,"day",(844,390)),(21.0,"night",(390,844)))
@@ -8577,6 +8595,21 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-011":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-009-011 requires readiness plus six wilderness evidence frames")
+        signatures=set()
+        for index,frame in enumerate(frames[1:7]):
+            wild=((frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {}).get("wilderness") or {})
+            if wild.get("generated") is not True or wild.get("perFrameScatter") is not False or wild.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Wilderness authority failed in evidence frame {index+1}: {wild}")
+            if int(wild.get("acceptedStaticProps") or 0)<20 or int(wild.get("drawCalls") or 0)>2 or int(wild.get("triangles") or 0)<=0:
+                raise RuntimeError(f"Wilderness budget failed in evidence frame {index+1}: {wild}")
+            signatures.add((wild.get("acceptedStaticProps"),wild.get("vegetationClusters"),wild.get("rockClusters"),wild.get("ambientFaunaZones")))
+        if len(signatures)!=1:
+            raise RuntimeError(f"Wilderness deterministic counts changed across views: {signatures}")
         return
 
     if scenario == "wp-s003-009-010":
@@ -13576,7 +13609,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
