@@ -1594,4 +1594,12 @@
 - Automated final evidence PASS: ACTIVE/playable readiness, hidden startup overlay, READY area loading, macro-landform-v4 deterministic renderer-only authority, exact shared-border error 0, zero landform-added draw calls/materials, and bounded same-mesh triangle usage.
 - All 10 final screenshots plus the full-resolution cliff frame were directly inspected. The 0.50x ridge overview gains some broad relief readability, but valley/ridge/pass scenes still lack convincing 3D silhouettes; cliff lips read mainly as thin diagonal stripe-like marks, and the dedicated cliff frame does not show a convincing exposed cliff/outcrop. FINAL VISUAL: 5.6/10 FAIL.
 - Three attempts are exhausted. No fourth loop was started. WP-S003-006-013 remains incomplete, docs/ROADMAP.md remains unmarked and Issue #136 stays open. The next run must change actual top-surface topology/height communication rather than adding further overlay-like cliff stripes or classifier tuning.
+2026-09-25 19:21:26 +03:00 | WP-S003-006-013 | Fantasy Planet Sphere Foundation (10% Earth Scale) — IMPLEMENTATION + VISUAL PASS
+- Classification: MIXED. User-directed architecture pivot replaced the active local tile/character gameplay entry path with a planet-first Stage 1 runtime.
+- Active index.html now boots only scripts/world/planet-stage.js. Protagonist, NPC, tile-grid, local terrain, settlement, building and world-detail simulation systems are not loaded into the active Stage 1 runtime.
+- Canonical world scale is 10% of Earth's linear dimensions: 637,100 m radius, 1,274,200 m diameter and ~4,003,017.359 m circumference. Renderer units are explicitly non-authoritative presentation scale.
+- Added one PlayCanvas high-resolution sphere with a minimal coordinate grid, directional lighting and mouse/touch/keyboard rotation. Responsive camera fitting keeps the entire planet visible on landscape and portrait viewports.
+- Visual evidence run 36159957670 on exact head 85b61eda30ad765ff8e3c052c54dc63b238cbae6 completed successfully. Artifact 10874963171 / sha256:cf96611ecdb60bcdc90c76676a225c723c5a87c64f8286c3894f4d3ef187b170 contains six fresh rotation/view-size frames.
+- Direct inspection of all six fresh screenshots: sphere is smooth, centered and unclipped on desktop, phone landscape and phone portrait; multiple rotations are visually distinct; no legacy gameplay UI or characters are visible. VISUAL: 8.0/10 — PASS.
+- Pages deployment run 36159958171 for exact head 85b61eda30ad765ff8e3c052c54dc63b238cbae6 completed successfully.
 
