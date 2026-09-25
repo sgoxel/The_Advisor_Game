@@ -107,6 +107,7 @@ SCENARIOS = {
     "wp-s003-009-004-002",
     "wp-s003-009-005",
     "wp-s003-009-006",
+    "wp-s003-009-007",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -190,6 +191,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-004-002": 8,
     "wp-s003-009-005": 8,
     "wp-s003-009-006": 8,
+    "wp-s003-009-007": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1557,7 +1559,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
-    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006"}:
+    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007"}:
         driver.set_window_size(1280, 800)
         # Cold software-WebGL CI can spend well over two minutes preparing the
         # visible semantic terrain set. This is evidence wait time only; runtime
@@ -1623,7 +1625,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -5285,6 +5287,122 @@ def _focus_road_profile_target(driver, kind: str) -> str:
     )
 
 
+def _landmark_context(driver) -> dict:
+    result=driver.execute_script(
+        """
+        const seed=window.SeedSystem?.getCampaign?.()?.seed;
+        const plan=seed?window.PlayCanvasChunkWorldData?.landmarkPlan?.(seed):null;
+        if(!seed||!plan)return {ok:false,seed:seed||null,plan:plan||null};
+        const lot=(window.SpecialLots?.build?.(seed)||[]).find(item=>String(item.id)===String(plan.buildingId))||null;
+        return {
+          ok:Boolean(lot),seed:String(seed),plan,lot:lot?{
+            id:String(lot.id),kind:String(lot.kind),label:String(lot.label||lot.kind),
+            cx:Number(lot.cx),cy:Number(lot.cy),bounds:lot.bounds,access:lot.access||null
+          }:null
+        };
+        """
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Landmark context unavailable: {result}")
+    return result
+
+
+def _focus_landmark(driver, zoom: float = 1.0, scale_resident: bool = False) -> str:
+    context=_landmark_context(driver)
+    lot=context.get("lot") or {}
+    plan=context.get("plan") or {}
+    if scale_resident:
+        placed=driver.execute_script(
+            """
+            const seed=window.SeedSystem?.getCampaign?.()?.seed;
+            const plan=window.PlayCanvasChunkWorldData?.landmarkPlan?.(seed);
+            const lot=(window.SpecialLots?.build?.(seed)||[]).find(item=>String(item.id)===String(plan?.buildingId));
+            const movement=window.ResidentMovement;
+            if(!seed||!lot||!movement?.beginProof||!movement?.proofPlaceAt)return {ok:false,reason:'resident-proof-api-missing'};
+            let proof=movement.proofSnapshot?.()||movement.beginProof(seed);
+            const candidates=[];
+            const a=lot.access;
+            if(a?.target)candidates.push({x:String(a.target.x),y:String(a.target.y)});
+            if(a){
+              const x=BigInt(String(a.x)),y=BigInt(String(a.y));
+              if(String(a.side)==='E'){candidates.push({x:String(x+1n),y:String(y+1n)});candidates.push({x:String(x+1n),y:String(y-1n)});}
+              else {candidates.push({x:String(x+1n),y:String(y+1n)});candidates.push({x:String(x-1n),y:String(y+1n)});}
+            }
+            for(const point of candidates){
+              const nav=window.InteriorObjects?.classifyNavigation?.(seed,point.x,point.y)||window.Walkability?.classify?.(seed,point.x,point.y);
+              if(!nav?.walkable||nav.buildingId)continue;
+              const next=movement.proofPlaceAt(point,'landmark-scale');
+              if(next)return {ok:true,residentId:String(next.residentId||proof?.residentId||''),point};
+            }
+            return {ok:false,reason:'no-walkable-landmark-scale-point',candidates};
+            """
+        )
+        if not isinstance(placed, dict) or not placed.get("ok"):
+            raise RuntimeError(f"Landmark scale resident placement failed: {placed}")
+    action=_set_camera_view_and_render_active(
+        driver,int(lot.get("cx") or 0),int(lot.get("cy") or 0),float(zoom),timeout=45.0
+    )
+    if scale_resident:
+        driver.execute_async_script(
+            """
+            const done=arguments[arguments.length-1];
+            (async()=>{try{
+              await window.AppUI?.refreshResidentCharacters?.();
+              await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+              done({ok:true});
+            }catch(error){done({ok:false,error:String(error)})}})();
+            """
+        )
+    return (
+        f"landmark-focus:seed={context.get('seed')}:tag={plan.get('contextTag')}:"
+        f"treatment={plan.get('treatment')}:building={plan.get('buildingId')}:zoom={zoom:.2f}:"
+        f"scaleResident={str(bool(scale_resident)).lower()}+"+action
+    )
+
+
+def _switch_to_alternate_landmark_seed(driver) -> str:
+    selection=driver.execute_script(
+        """
+        const current=window.SeedSystem?.getCampaign?.()?.seed;
+        const api=window.PlayCanvasChunkWorldData;
+        if(!current||!api?.landmarkPlan||!window.SeedSystem?.startNewCampaign)return {ok:false,reason:'landmark-seed-api-missing'};
+        const before=api.landmarkPlan(current);
+        let selected=null;
+        for(let i=1;i<=48;i++){
+          const candidate='LANDMARK-CONTEXT-'+String(i).padStart(2,'0');
+          const plan=api.landmarkPlan(candidate);
+          if(plan&&before&&String(plan.contextTag)!==String(before.contextTag)){selected={seed:candidate,plan};break;}
+        }
+        if(!selected){
+          for(let i=1;i<=48;i++){
+            const candidate='LANDMARK-CONTEXT-'+String(i).padStart(2,'0');
+            const plan=api.landmarkPlan(candidate);
+            if(plan&&before&&String(plan.treatment)!==String(before.treatment)){selected={seed:candidate,plan};break;}
+          }
+        }
+        if(!selected)return {ok:false,reason:'alternate-context-not-found',before};
+        const started=window.SeedSystem.startNewCampaign(selected.seed);
+        if(!started?.ok)return {ok:false,reason:'alternate-campaign-start-failed',started,selected};
+        return {ok:true,before,selected};
+        """
+    )
+    if not isinstance(selection, dict) or not selection.get("ok"):
+        raise RuntimeError(f"Alternate landmark seed selection failed: {selection}")
+    reload_action=_reload_current_build(driver, timeout=120.0)
+    context=_landmark_context(driver)
+    selected=(selection.get("selected") or {})
+    expected_plan=selected.get("plan") or {}
+    actual_plan=context.get("plan") or {}
+    if str(context.get("seed"))!=str(selected.get("seed")):
+        raise RuntimeError(f"Alternate landmark seed did not persist: selected={selected}, current={context}")
+    if str(actual_plan.get("contextTag"))==str((selection.get("before") or {}).get("contextTag")):
+        raise RuntimeError(f"Alternate landmark context did not differ: {selection} -> {context}")
+    return (
+        f"landmark-alt-seed:{selected.get('seed')}:"
+        f"tag={actual_plan.get('contextTag')}:treatment={actual_plan.get('treatment')}+"+reload_action
+    )
+
+
 def _focus_entrance_door(driver, source_kind: str, zoom: float = 1.5) -> str:
     result = driver.execute_script(
         """
@@ -5975,6 +6093,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-007":
+        _ensure_texture_quality_profile(driver, "standard")
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "landmark:primary-overview+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
+        if frame_index == 1:
+            return "landmark:primary-normal+" + _focus_landmark(driver, 1.00, False)
+        if frame_index == 2:
+            return "landmark:primary-close+" + _focus_landmark(driver, 2.00, False)
+        if frame_index == 3:
+            return "landmark:primary-scale+" + _focus_landmark(driver, 1.25, True)
+        if frame_index == 4:
+            return "landmark:primary-context+" + _focus_landmark(driver, 0.75, False)
+        if frame_index == 5:
+            action=_switch_to_alternate_landmark_seed(driver)
+            return "landmark:alternate-overview+" + action + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
+        if frame_index == 6:
+            return "landmark:alternate-close+" + _focus_landmark(driver, 1.50, False)
+        driver.set_window_size(844, 390)
+        return "landmark:alternate-phone+" + _focus_landmark(driver, 1.00, False)
     if scenario == "wp-s003-009-006":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
@@ -6820,6 +6958,50 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-007":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-009-007 requires eight landmark hierarchy evidence frames")
+        tags=set()
+        treatments=set()
+        seeds=set()
+        max_landmarks=0
+        max_primitives=0
+        saw_scale=False
+        for index,frame in enumerate(frames[:8]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            samples=chunks.get("landmarkSamples") or []
+            max_landmarks=max(max_landmarks,int(chunks.get("landmarkPresentationCount") or 0))
+            max_primitives=max(max_primitives,int(chunks.get("landmarkPrimitiveCount") or 0))
+            if chunks.get("landmarkVisualHierarchyPass") is not True:
+                raise RuntimeError(f"Landmark visual hierarchy contract failed in frame {index+1}: {chunks}")
+            if chunks.get("landmarkRendererOnly") is not True or chunks.get("landmarkNavigationAuthority") is not False or chunks.get("landmarkCollisionAuthority") is not False:
+                raise RuntimeError(f"Landmark authority isolation failed in frame {index+1}: {chunks}")
+            if chunks.get("landmarkSimulationAuthorityPreserved") is not True or gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Landmark changed Simulation authority in frame {index+1}")
+            if int(chunks.get("landmarkSharedMaterialCount") or 0)>3:
+                raise RuntimeError(f"Landmark shared material budget exceeded in frame {index+1}: {chunks.get('landmarkSharedMaterialCount')}")
+            for sample in samples:
+                if sample.get("contextTag"):tags.add(str(sample.get("contextTag")))
+                if sample.get("treatment"):treatments.add(str(sample.get("treatment")))
+            action=str(frame.get("action") or "")
+            if "seed=" in action:
+                seeds.add(action.split("seed=",1)[1].split(":",1)[0])
+            if "scaleResident=true" in action:saw_scale=True
+        if max_landmarks!=1 or max_primitives<3:
+            raise RuntimeError(f"Landmark hierarchy evidence invalid: count={max_landmarks}, primitives={max_primitives}")
+        if len(tags)<2:
+            raise RuntimeError(f"Landmark context variation not demonstrated across two seeds: {sorted(tags)}")
+        if len(seeds)<2:
+            raise RuntimeError(f"Landmark evidence did not capture two campaign seeds: {sorted(seeds)}")
+        if not saw_scale:
+            raise RuntimeError("Landmark scale evidence with resident missing")
+        landscape=frames[7].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
+            raise RuntimeError(f"Phone-landscape landmark evidence missing: {landscape}")
         return
 
     if scenario == "wp-s003-009-006":
