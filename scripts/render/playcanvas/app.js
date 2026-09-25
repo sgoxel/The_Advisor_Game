@@ -1505,6 +1505,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       performanceProvider:()=>renderQualitySnapshot(),
       prepareChunk:prepareTerrainMeshChunk,
       prepareChunkData:prepareTerrainChunkData,
+      cancelChunkData:reason=>window.PlayCanvasChunkWorldData?.cancelMinimumPreparation?.(reason),
       activateChunk:activateTerrainChunk,
       deactivateChunk:deactivateTerrainChunk,
       destroyChunk:destroyTerrainChunk
