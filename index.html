@@ -36,6 +36,12 @@
         </div>
         <strong id="sceneLoadingTitle" class="scene-loading-title">Waking the world</strong>
         <span id="sceneLoadingPhase" class="scene-loading-phase">Starting renderer…</span>
+        <div id="sceneLoadingProgress" class="scene-loading-progress" hidden>
+          <div class="scene-loading-progress-track" role="progressbar" aria-label="Area loading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="sceneLoadingProgressBar"></span>
+          </div>
+          <code id="sceneLoadingProgressText">0%</code>
+        </div>
         <div class="scene-loading-trail" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
         <button id="sceneLoadingRetry" class="scene-loading-retry" type="button" hidden>Retry startup</button>
       </div>
