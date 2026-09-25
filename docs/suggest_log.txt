@@ -265,3 +265,5 @@ Suggestion: when production environment art is refreshed, consider replacing the
 
 
 2026-09-26 02:14:00 +03:00 | WP-S003-008-005 | Phase 1 | Suggestion: once authoritative planet-space settlement/activity POI descriptors exist, plug them into the bounded Places adapter instead of deriving presentation-only substitutes. Add settlements, cities, ruins, hunting/fishing and river/lake destinations with canonical names while preserving camera-only navigation, bounded spatial queries, mobile popup limits and no local chunk materialization merely to populate the list. Do not implement unless explicitly requested.
+
+2026-09-26 02:34:00 +03:00 | WP-S003-009-010 | Phase 1 | Suggestion: brighten dawn/late-day and lift night terrain/shoreline readability while preserving the cool night identity; retest the repaired seven-frame atmosphere scenario before completion. Do not implement unless explicitly requested.
