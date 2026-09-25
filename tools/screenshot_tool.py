@@ -7888,6 +7888,18 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Prepared hydrology aggregate failed in frame {index+1}: {chunks}")
             if float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
                 raise RuntimeError(f"Chunk border height mismatch in frame {index+1}: {chunks}")
+        zoom2_preload=((builds[2].get("gpuRenderer") or {}).get("terrainPreload") or {})
+        zoom05_preload=((builds[3].get("gpuRenderer") or {}).get("terrainPreload") or {})
+        if int(zoom05_preload.get("activeTargetCount") or 0)<=int(zoom2_preload.get("activeTargetCount") or 0):
+            raise RuntimeError(
+                f"0.50x desktop active chunk coverage did not expand beyond 2.00x: "
+                f"zoom05={zoom05_preload} zoom2={zoom2_preload}"
+            )
+        if int(zoom05_preload.get("activeRadiusX") or 0)<=int(zoom2_preload.get("activeRadiusX") or 0):
+            raise RuntimeError(
+                f"0.50x desktop X coverage radius did not expand beyond 2.00x: "
+                f"zoom05={zoom05_preload} zoom2={zoom2_preload}"
+            )
         bridge_chunks=((builds[2].get("gpuRenderer") or {}).get("terrainChunks") or {})
         if bridge_chunks.get("hydrologyBridgeClearsWater") is not True:
             raise RuntimeError(f"Bridge clearance telemetry failed: {bridge_chunks}")
