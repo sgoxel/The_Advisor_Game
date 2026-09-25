@@ -107,6 +107,9 @@ function failure(reason,start,destination,extra){
     evaluatedCount:0,
     expandedCount:0,
     blockedRejectedCount:0,
+    slopeBlockedRejectedCount:0,
+    slopePenaltySeconds:0,
+    maxSlopeAngleDegrees:0,
     searchRadius:0,
     maxNodes:0
   },extra||{}));
@@ -151,6 +154,9 @@ function findRoute(seed,startValue,destinationValue,options){
       evaluatedCount:2,
       expandedCount:0,
       blockedRejectedCount:0,
+      slopeBlockedRejectedCount:0,
+      slopePenaltySeconds:0,
+      maxSlopeAngleDegrees:0,
       searchRadius:0,
       maxNodes
     });
@@ -165,6 +171,9 @@ function findRoute(seed,startValue,destinationValue,options){
   let evaluatedCount=2;
   let expandedCount=0;
   let blockedRejectedCount=0;
+  let slopeBlockedRejectedCount=0;
+  let slopePenaltySeconds=0;
+  let maxSlopeAngleDegrees=0;
   let order=0;
 
   const startKey=key(start);
@@ -199,6 +208,9 @@ function findRoute(seed,startValue,destinationValue,options){
         evaluatedCount,
         expandedCount,
         blockedRejectedCount,
+        slopeBlockedRejectedCount,
+        slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
+        maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4)),
         searchRadius,
         maxNodes
       });
@@ -207,7 +219,10 @@ function findRoute(seed,startValue,destinationValue,options){
     expandedCount++;
     if(expandedCount>maxNodes){
       return failure("search-limit",start,destination,{
-        evaluatedCount,expandedCount,blockedRejectedCount,searchRadius,maxNodes
+        evaluatedCount,expandedCount,blockedRejectedCount,slopeBlockedRejectedCount,
+        slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
+        maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4)),
+        searchRadius,maxNodes
       });
     }
 
@@ -225,6 +240,18 @@ function findRoute(seed,startValue,destinationValue,options){
         blockedRejectedCount++;
         continue;
       }
+      const currentState=stateCache.get(currentKey)||movementState(seed,current.point.x,current.point.y);
+      stateCache.set(currentKey,currentState);
+      const transition=Walkability.transition(seed,current.point,next,{fromState:currentState,toState:state});
+      if(!transition?.allowed||!Number.isFinite(transition.seconds)){
+        blockedRejectedCount++;
+        if(transition?.reason==="cliff"||transition?.reason==="engineered-grade-limit"||
+          transition?.reason==="unsafe-very-steep-terrain"||transition?.reason==="diagonal-cliff-corner"){
+          slopeBlockedRejectedCount++;
+        }
+        continue;
+      }
+      maxSlopeAngleDegrees=Math.max(maxSlopeAngleDegrees,Number(transition.slope?.angleDegrees||0));
 
       let penaltySeconds=0;
       if(typeof opts.stepPenaltySeconds==="function"){
@@ -237,20 +264,25 @@ function findRoute(seed,startValue,destinationValue,options){
         })));
         if(Number.isFinite(rawPenalty)&&rawPenalty>0)penaltySeconds=rawPenalty;
       }
-      const tentative=current.g+state.secondsPerTile+penaltySeconds;
+      const slopePenalty=Math.max(0,Number(transition.seconds)-Number(state.secondsPerTile));
+      const tentative=current.g+Number(transition.seconds)+penaltySeconds;
       const previous=gScore.get(nextKey);
       if(previous!=null&&tentative>=previous-1e-9)continue;
 
       cameFrom.set(nextKey,currentKey);
       points.set(nextKey,next);
       gScore.set(nextKey,tentative);
+      slopePenaltySeconds+=slopePenalty;
       const h=heuristicSeconds(next,destination);
       open.push({point:next,g:tentative,h,f:tentative+h,order:order++});
     }
   }
 
   return failure("unreachable",start,destination,{
-    evaluatedCount,expandedCount,blockedRejectedCount,searchRadius,maxNodes
+    evaluatedCount,expandedCount,blockedRejectedCount,slopeBlockedRejectedCount,
+    slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
+    maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4)),
+    searchRadius,maxNodes
   });
 }
 
@@ -325,7 +357,12 @@ function proof(seed){
   const destinationInterior=destinationState?.category===Walkability.CATEGORY.INTERIOR;
   const blockedDestinationRejected=!!blockedPoint&&!!blocked&&!blocked.found&&blocked.reason==="blocked-destination";
   const costCheck=first.found
-    ?first.path.slice(1).reduce((total,point)=>total+(movementState(seedKey,point.x,point.y)?.secondsPerTile??Infinity),0)
+    ?first.path.slice(1).reduce((total,point,index)=>{
+      const from=first.path[index];
+      const fromState=movementState(seedKey,from.x,from.y);
+      const toState=movementState(seedKey,point.x,point.y);
+      return total+(Walkability.transition(seedKey,from,point,{fromState,toState})?.seconds??Infinity);
+    },0)
     :Infinity;
   const movementCostPass=first.found&&Math.abs(costCheck-first.totalSeconds)<1e-6;
   const localEvaluationPass=
