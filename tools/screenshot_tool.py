@@ -6220,12 +6220,24 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   const mx=mod(row.x,chunkSize),my=mod(row.y,chunkSize);
                   return mx===0||mx===chunkSize-1||my===0||my===chunkSize-1;
                 })||basin;
-                let bridge=null;
-                outer: for(let y=-128;y<=128;y++){
-                  for(let x=-128;x<=128;x++){
-                    if(String(T.getTile(seed,String(x),String(y))?.type||'')==='bridge'){
-                      bridge=summarize(x,y);
-                      if(Number(bridge.hydro?.bridgeClearance||0)>0)break outer;
+                let bridge=null,bridgeVisibleWaterNeighbors=-1;
+                for(let y=-160;y<=160;y++){
+                  for(let x=-160;x<=160;x++){
+                    if(String(T.getTile(seed,String(x),String(y))?.type||'')!=='bridge')continue;
+                    const candidate=summarize(x,y);
+                    if(Number(candidate.hydro?.bridgeClearance||0)<0.319||candidate.hydro?.bridgeUnderlyingWater!==true)continue;
+                    let visibleWaterNeighbors=0;
+                    for(let dy=-5;dy<=5;dy++)for(let dx=-5;dx<=5;dx++){
+                      if(!dx&&!dy)continue;
+                      if(String(T.getTile(seed,String(x+dx),String(y+dy))?.type||'')==='water')visibleWaterNeighbors++;
+                    }
+                    if(
+                      visibleWaterNeighbors>bridgeVisibleWaterNeighbors||
+                      (visibleWaterNeighbors===bridgeVisibleWaterNeighbors&&
+                        (Math.abs(x)+Math.abs(y))<(bridge?Math.abs(bridge.x)+Math.abs(bridge.y):Infinity))
+                    ){
+                      bridge=candidate;
+                      bridgeVisibleWaterNeighbors=visibleWaterNeighbors;
                     }
                   }
                 }
@@ -6259,7 +6271,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 const selected={
                   lake:basin?{x:basin.x,y:basin.y,type:basin.type,bodyKind:basin.hydro?.bodyKind}:null,
                   river:channel?{x:channel.x,y:channel.y,type:channel.type,bodyKind:channel.hydro?.bodyKind}:null,
-                  bridge:bridge?{x:bridge.x,y:bridge.y,type:bridge.type,bodyKind:bridge.hydro?.bodyKind}:null,
+                  bridge:bridge?{x:bridge.x,y:bridge.y,type:bridge.type,bodyKind:bridge.hydro?.bodyKind,visibleWaterNeighbors:bridgeVisibleWaterNeighbors}:null,
                   flat:flat?{x:flat.x,y:flat.y,type:flat.type,bodyKind:flat.hydro?.bodyKind}:null,
                   highland:highland?{x:highland.x,y:highland.y,type:highland.type,bodyKind:highland.hydro?.bodyKind}:null,
                   boundary:boundary?{x:boundary.x,y:boundary.y,type:boundary.type,bodyKind:boundary.hydro?.bodyKind}:null
@@ -6278,6 +6290,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   highland:summarize(highland?.x,highland?.y),
                   boundary:summarize(boundary?.x,boundary?.y),
                   bridge:bridge?bridge:null,
+                  bridgeVisibleWaterNeighbors,
                   ordering,blockedWater,deterministic,bridgePass,seam,
                   basinLocalWaterRange:Number.isFinite(basinRange)?Number(basinRange.toFixed(6)):null,
                   channelLocalWaterRange:Number.isFinite(channelRange)?Number(channelRange.toFixed(6)):null,
@@ -6297,12 +6310,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         plan=(
             ("lake",1.00,(1280,800)),
             ("river",1.00,(1280,800)),
-            ("bridge",2.00,(1280,800)),
+            ("bridge",1.25,(1280,800)),
             ("flat",0.50,(1280,800)),
             ("highland",1.00,(1280,800)),
             ("boundary",2.00,(1280,800)),
             ("lake",0.50,(844,390)),
-            ("bridge",1.00,(390,844)),
+            ("lake",2.00,(390,844)),
         )
         key,zoom,viewport=plan[min(frame_index,len(plan)-1)]
         target=(proof.get("selected") or {}).get(key) or {}
@@ -7857,11 +7870,19 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Hydrology authority isolation failed in frame {index+1}: {chunks}")
             if chunks.get("hydrologyWaterIdentityChanged") is True:
                 raise RuntimeError(f"Hydrology changed water identity in frame {index+1}: {chunks}")
+        for index,build in enumerate(builds):
+            chunks=((build.get("gpuRenderer") or {}).get("terrainChunks") or {})
+            if chunks.get("hydrologyPass") is not True:
+                raise RuntimeError(f"Prepared hydrology aggregate failed in frame {index+1}: {chunks}")
+            if float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
+                raise RuntimeError(f"Chunk border height mismatch in frame {index+1}: {chunks}")
         bridge_chunks=((builds[2].get("gpuRenderer") or {}).get("terrainChunks") or {})
         if bridge_chunks.get("hydrologyBridgeClearsWater") is not True:
             raise RuntimeError(f"Bridge clearance telemetry failed: {bridge_chunks}")
         if int(bridge_chunks.get("hydrologyBridgeCellCount") or 0)<1:
             raise RuntimeError(f"No prepared bridge cell recorded: {bridge_chunks}")
+        if int(proof.get("bridgeVisibleWaterNeighbors") or 0)<1:
+            raise RuntimeError(f"Bridge visual target has no exposed water nearby: {proof.get('bridge')}")
         phone_landscape=frames[6].get("runtime",{}).get("viewport",{})
         phone_portrait=frames[7].get("runtime",{}).get("viewport",{})
         if int(phone_landscape.get("width") or 0)>900 or int(phone_landscape.get("height") or 0)>450:
