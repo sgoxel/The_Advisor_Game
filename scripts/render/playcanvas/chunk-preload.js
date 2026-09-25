@@ -278,7 +278,10 @@ function createManager({
       if(item.source==="idle")removed.push(item);
       else keep.push(item);
     }
-    if(!removed.length)return 0;
+    if(!removed.length){
+      destinationDataPrepared.clear();
+      return 0;
+    }
     queue=keep;
     for(const item of removed)queued.delete(item.fullKey);
     lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance,source:item.source||"normal"})));
@@ -573,8 +576,18 @@ function createManager({
               percent:Number(response?.percent??100),sliceMs:Number(response?.sliceMs||dataElapsed)
             });
           }
-          // Exactly one deterministic data slice per paint. Even completion waits
-          // for the next frame before mesh/GPU composition.
+          // Worker-backed preparation is off-main-thread, so rotate a pending
+          // worker item behind its peers and let this paint dispatch more jobs.
+          // Main-thread hydration still remains bounded and deterministic.
+          if(response?.pending===true&&response?.workerPending===true){
+            queue.push(item);
+            queued.add(item.fullKey);
+            processed++;
+            if(processed<settings.maxChunksPerFrame&&performance.now()-started<settings.frameBudgetMs)continue;
+            break;
+          }
+          // Exactly one deterministic main-thread data slice per paint. Even
+          // completion waits for the next frame before mesh/GPU composition.
           queue.unshift(item);
           queued.add(item.fullKey);
           processed++;
