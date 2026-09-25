@@ -10318,8 +10318,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Destination gate released before a visible GPU frame: {chunks2}")
         if int((areas[2].get("lastPaint") or {}).get("visibleMeshInstanceCount") or 0)<=0:
             raise RuntimeError(f"Destination paint confirmation missing: {areas[2]}")
-        if int(preload2.get("streamingMinimumActive") or 0)<=0:
-            raise RuntimeError(f"Destination did not use minimum streaming presentation: {preload2}")
+        if int(preload2.get("destinationRequiredCount") or 0)<=0 or int(preload2.get("destinationCompletedCount") or 0)<int(preload2.get("destinationRequiredCount") or 0):
+            raise RuntimeError(f"Destination resources were not fully prepared before handoff: {preload2}")
         nav2=gpus[2].get("navigationHotPath") or {}
         if int(nav2.get("sceneAnchorRebases") or 0)>1:
             raise RuntimeError(f"Destination handoff bounced scene anchor more than once: {nav2}")
