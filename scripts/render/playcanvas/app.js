@@ -800,7 +800,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // SEED in resource identity so a real campaign switch cannot reuse the
     // previous campaign's prepared meshes. Framebuffer/material quality remains
     // excluded because those changes do not alter geometry.
-    return "geometry=heightfield-v7-semantic-rounded-contours|seed="+String(lastRawSeed||"none");
+    return "geometry=heightfield-v8-hydrology-basins|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -929,6 +929,14 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let roadProfileResourceCount=0,roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreHeightDelta=Infinity,maxRoadCoreHeightDelta=-Infinity;
+    let hydrologyResourceCount=0,hydrologyWaterCellCount=0,hydrologyBridgeCellCount=0;
+    let hydrologyWaterSurfaceMin=Infinity,hydrologyWaterSurfaceMax=-Infinity;
+    let hydrologyBedMin=Infinity,hydrologyBedMax=-Infinity,hydrologyBankMin=Infinity,hydrologyBankMax=-Infinity;
+    let hydrologyBridgeClearanceMin=Infinity,hydrologyBridgeClearanceMax=-Infinity;
+    let hydrologyWaterBelowBank=true,hydrologyBedBelowWater=true,hydrologyBridgeClearsWater=true;
+    let hydrologySeamSafeGlobalCoordinates=true,hydrologyChunkPrepared=true,hydrologyPerFrameRegenerationCount=0;
+    let hydrologyRendererOnly=true,hydrologyNavigationAuthority=false,hydrologyCollisionAuthority=false,hydrologyWaterIdentityChanged=false;
+    const hydrologyKindCounts={},hydrologySamples=[];
     let routeSurfaceCellCount=0,routeMainRoadCellCount=0,routeLocalPathCellCount=0,routeSquareCellCount=0,routeConnectorCellCount=0;
     let routeEdgeStripCount=0,routeDiagonalBridgeCount=0,routeDiagonalRibbonOnlyCellCount=0,routeSurfaceTriangleCount=0,routeNetworkConnectedRouteCount=0,routeNetworkTotalRouteCount=0;
     let routeSurfaceRouteSafe=true,routeNetworkRouteSafetyPass=true,routeSurfaceRendererOnly=true,routeNetworkDeterministic=true;
@@ -975,6 +983,38 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
           if(Number(resource.roadProfileRoadVertexCount||0)>0&&Number(resource.roadProfileCoreVertexCount||0)>0){
             minRoadCoreHeightDelta=Math.min(minRoadCoreHeightDelta,Number(resource.minRoadCoreHeightDelta||0));
             maxRoadCoreHeightDelta=Math.max(maxRoadCoreHeightDelta,Number(resource.maxRoadCoreHeightDelta||0));
+          }
+        }
+        if(resource.hydrologyEnabled===true){
+          hydrologyResourceCount++;
+          hydrologyWaterCellCount+=Number(resource.hydrologyWaterCellCount||0);
+          hydrologyBridgeCellCount+=Number(resource.hydrologyBridgeCellCount||0);
+          if(Number.isFinite(Number(resource.hydrologyWaterSurfaceMin)))hydrologyWaterSurfaceMin=Math.min(hydrologyWaterSurfaceMin,Number(resource.hydrologyWaterSurfaceMin));
+          if(Number.isFinite(Number(resource.hydrologyWaterSurfaceMax)))hydrologyWaterSurfaceMax=Math.max(hydrologyWaterSurfaceMax,Number(resource.hydrologyWaterSurfaceMax));
+          if(Number.isFinite(Number(resource.hydrologyBedMin)))hydrologyBedMin=Math.min(hydrologyBedMin,Number(resource.hydrologyBedMin));
+          if(Number.isFinite(Number(resource.hydrologyBedMax)))hydrologyBedMax=Math.max(hydrologyBedMax,Number(resource.hydrologyBedMax));
+          if(Number.isFinite(Number(resource.hydrologyBankMin)))hydrologyBankMin=Math.min(hydrologyBankMin,Number(resource.hydrologyBankMin));
+          if(Number.isFinite(Number(resource.hydrologyBankMax)))hydrologyBankMax=Math.max(hydrologyBankMax,Number(resource.hydrologyBankMax));
+          if(Number.isFinite(Number(resource.hydrologyBridgeClearanceMin)))hydrologyBridgeClearanceMin=Math.min(hydrologyBridgeClearanceMin,Number(resource.hydrologyBridgeClearanceMin));
+          if(Number.isFinite(Number(resource.hydrologyBridgeClearanceMax)))hydrologyBridgeClearanceMax=Math.max(hydrologyBridgeClearanceMax,Number(resource.hydrologyBridgeClearanceMax));
+          hydrologyWaterBelowBank=hydrologyWaterBelowBank&&resource.hydrologyWaterBelowBank!==false;
+          hydrologyBedBelowWater=hydrologyBedBelowWater&&resource.hydrologyBedBelowWater!==false;
+          hydrologyBridgeClearsWater=hydrologyBridgeClearsWater&&resource.hydrologyBridgeClearsWater!==false;
+          hydrologySeamSafeGlobalCoordinates=hydrologySeamSafeGlobalCoordinates&&resource.hydrologySeamSafeGlobalCoordinates!==false;
+          hydrologyChunkPrepared=hydrologyChunkPrepared&&resource.hydrologyChunkPrepared!==false;
+          hydrologyPerFrameRegenerationCount+=Number(resource.hydrologyPerFrameRegenerationCount||0);
+          hydrologyRendererOnly=hydrologyRendererOnly&&resource.hydrologyRendererOnly!==false;
+          hydrologyNavigationAuthority=hydrologyNavigationAuthority||resource.hydrologyNavigationAuthority===true;
+          hydrologyCollisionAuthority=hydrologyCollisionAuthority||resource.hydrologyCollisionAuthority===true;
+          hydrologyWaterIdentityChanged=hydrologyWaterIdentityChanged||resource.hydrologyWaterIdentityChanged===true;
+          for(const [key,value] of Object.entries(resource.hydrologyKindCounts||{})){
+            hydrologyKindCounts[key]=(hydrologyKindCounts[key]||0)+Number(value||0);
+          }
+          if(hydrologySamples.length<64){
+            for(const item of resource.hydrologySamples||[]){
+              if(hydrologySamples.length>=64)break;
+              hydrologySamples.push(item);
+            }
           }
         }
         heightfieldResources.set(Number(resource.x)+","+Number(resource.y),resource);
@@ -1250,6 +1290,37 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       sharedBorderPairCount,
       sharedBorderMaxError:Number(sharedBorderMaxError.toFixed(8)),
       sharedBorderEquality:sharedBorderPairCount>0&&sharedBorderMaxError<=1e-7,
+      hydrologyEnabled:hydrologyResourceCount>0,
+      hydrologyVersion:String(generatorStats.hydrologyVersion||"hydrology-basin-v1"),
+      hydrologyResourceCount,
+      hydrologyWaterCellCount,
+      hydrologyBridgeCellCount,
+      hydrologyKindCounts:Object.freeze({...hydrologyKindCounts}),
+      hydrologySamples:Object.freeze(hydrologySamples.slice()),
+      hydrologyWaterSurfaceMin:Number.isFinite(hydrologyWaterSurfaceMin)?Number(hydrologyWaterSurfaceMin.toFixed(6)):null,
+      hydrologyWaterSurfaceMax:Number.isFinite(hydrologyWaterSurfaceMax)?Number(hydrologyWaterSurfaceMax.toFixed(6)):null,
+      hydrologyBedMin:Number.isFinite(hydrologyBedMin)?Number(hydrologyBedMin.toFixed(6)):null,
+      hydrologyBedMax:Number.isFinite(hydrologyBedMax)?Number(hydrologyBedMax.toFixed(6)):null,
+      hydrologyBankMin:Number.isFinite(hydrologyBankMin)?Number(hydrologyBankMin.toFixed(6)):null,
+      hydrologyBankMax:Number.isFinite(hydrologyBankMax)?Number(hydrologyBankMax.toFixed(6)):null,
+      hydrologyBridgeClearanceMin:Number.isFinite(hydrologyBridgeClearanceMin)?Number(hydrologyBridgeClearanceMin.toFixed(6)):null,
+      hydrologyBridgeClearanceMax:Number.isFinite(hydrologyBridgeClearanceMax)?Number(hydrologyBridgeClearanceMax.toFixed(6)):null,
+      hydrologyWaterBelowBank,
+      hydrologyBedBelowWater,
+      hydrologyBridgeClearsWater,
+      hydrologySeamSafeGlobalCoordinates,
+      hydrologyChunkPrepared,
+      hydrologyPerFrameRegenerationCount,
+      hydrologyRendererOnly,
+      hydrologyNavigationAuthority,
+      hydrologyCollisionAuthority,
+      hydrologyWaterIdentityChanged,
+      hydrologyPass:Boolean(
+        hydrologyResourceCount>0&&hydrologyWaterCellCount>0&&
+        hydrologyWaterBelowBank&&hydrologyBedBelowWater&&hydrologyBridgeClearsWater&&
+        hydrologySeamSafeGlobalCoordinates&&hydrologyChunkPrepared&&hydrologyPerFrameRegenerationCount===0&&
+        hydrologyRendererOnly&&!hydrologyNavigationAuthority&&!hydrologyCollisionAuthority&&!hydrologyWaterIdentityChanged
+      ),
       contourAlgorithm:String(generatorStats.contourAlgorithm||""),
       contourPreparationOnly:generatorStats.contourPreparationOnly===true,
       contourHaloTiles:Number(generatorStats.contourHaloTiles||0),
@@ -2596,7 +2667,19 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
   function clear(){pendingTerrainDestination=null;assetPreparationProofState=false;ambientMotionProofOverride=null;assetPreparationProofRoot&&clearEntityChildren(assetPreparationProofRoot);if(assetPreparationProofRoot)assetPreparationProofRoot.enabled=false;lastAssetPreparationProof=Object.freeze({active:false,logicalKey:null,entityCount:0,meshInstanceCount:0,materialCount:0,networkLoads:0,containerParses:0,simulationAuthorityPreserved:true});lastModel=null;lastRawSeed=null;lastPreparedTerrainKey="";worldPreparation?.invalidate?.();lastWorldPreparation=Object.freeze({ready:false,regionCount:0,keyCount:0,regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),simulationAuthorityPreserved:true});lastRawInteriorObjects=[];lastRawBuildingInteriors=[];setInteriorObjectProofState(null);setCharacterProofState(null);clearCharacterBillboards();if(host)host.hidden=true;lastSnapshot=baseSnapshot({ready:Boolean(app&&device)});}
   function snapshot(){if(app&&device)lastSnapshot=baseSnapshot();return lastSnapshot;}
   function destroy(){pendingTerrainDestination=null;resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);if(qualityChangeHandler)window.removeEventListener?.("advisor:texture-quality-change",qualityChangeHandler);qualityChangeHandler=null;if(renderQualityChangeHandler)window.removeEventListener?.("advisor:render-quality-change",renderQualityChangeHandler);renderQualityChangeHandler=null;if(renderQualityFrameHandler)app?.off?.("update",renderQualityFrameHandler);renderQualityFrameHandler=null;if(ambientMotionFrameHandler)app?.off?.("update",ambientMotionFrameHandler);ambientMotionFrameHandler=null;ambientMotionClockSeconds=0;ambientMotionProofOverride=null;ambientFrameTelemetry.calls=0;ambientFrameTelemetry.totalMs=0;ambientFrameTelemetry.lastMs=0;ambientFrameTelemetry.maxMs=0;ambientFrameTelemetry.lastActiveResources=0;terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;terrainTextureAtlas?.destroy?.();terrainTextureAtlas=null;buildingSurfaceAtlas?.destroy?.();buildingSurfaceAtlas=null;treeSpriteAtlas?.destroy?.();treeSpriteAtlas=null;lastPreparedTerrainKey="";window.PlayCanvasChunkWorldData?.clear?.();app?.destroy?.();app=null;device=null;lastResizeSignature="";sceneAnchorRevision=0;lastPositionedAnchorRevision=0;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;characterContactRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;assetPreparationProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;lastCutawayState=Object.freeze({active:false,local:true,targetBuildingId:null,hiddenRoofCount:0,totalRoofCount:0});characterContactBuffer?.destroy?.();characterContactBuffer=null;characterContactCapacity=0;characterContactMesh?.destroy?.();characterContactMesh=null;characterContactEntity=null;characterContactMeshInstance=null;characterContactMaterialRef=null;characterContactBufferUpdates=0;materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation?.invalidate?.();worldPreparation?.invalidate?.();characterPreparation=null;worldPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});lastCharacterContactState=Object.freeze({count:0,drawCalls:0,materialCount:0,hardwareInstanced:true,terrainAlignedCount:0,quality:"standard",opacity:0.145,simulationAuthorityPreserved:true});}
-  return Object.freeze({init,render,prepareTerrain,prepareTerrainDestination,cancelTerrainDestination,finishTerrainDestination,getPreparedTerrainView,prepareCharacters,updateCharacters,clear,snapshot,destroy,setAssetPreparationProofState,setAmbientMotionProofState,setTerrainMicroReliefProofState,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,screenToCameraDelta,screenToWorldTile,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
+  return Object.freeze({
+    init,render,prepareTerrain,prepareTerrainDestination,cancelTerrainDestination,finishTerrainDestination,getPreparedTerrainView,
+    prepareCharacters,updateCharacters,clear,snapshot,destroy,
+    setAssetPreparationProofState,setAmbientMotionProofState,setTerrainMicroReliefProofState,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,
+    screenToCameraDelta,screenToWorldTile,
+    hydrologyAtTile:(x,y)=>terrainChunkMeshFactory?.hydrologyAtTile?.(x,y)||null,
+    waterSurfaceAtVertex:(x,y)=>terrainChunkMeshFactory?.waterSurfaceAtVertex?.(x,y)??null,
+    projectionBasis:Object.freeze({x:1,y:1}),
+    proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),
+    occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),
+    interiorObjectProofStates:Object.freeze(["house","special"]),
+    characterProofStates:Object.freeze(["open","front","behind","entering","inside"])
+  });
 }
 window.PlayCanvasRendererFactory=Object.freeze({engineVersion:ENGINE_VERSION,engineUrl:ENGINE_URL,loadEngine,create});
 })();
