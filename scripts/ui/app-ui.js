@@ -1036,10 +1036,17 @@ function projectedCoverageHalfSpan(width,height,tileSize){
   const basis=window.GameRenderer?.projectionBasis||{x:1,y:1};
   const basisX=Math.max(.01,Number(basis.x)||1);
   const basisY=Math.max(.01,Number(basis.y)||1);
+  const safeWidth=Math.max(1,Number(width)||1),safeHeight=Math.max(1,Number(height)||1);
   const halfSpan=
-    width/(4*tileSize*basisX)+
-    height/(4*tileSize*basisY);
-  return Math.max(1,Math.ceil(halfSpan)+2);
+    safeWidth/(4*tileSize*basisX)+
+    safeHeight/(4*tileSize*basisY);
+  // Very shallow landscape phone viewports expose the long left/right points
+  // of the tilted orthographic footprint beyond the normal inverse-projection
+  // margin. Add a small bounded logical halo only for those extreme aspects;
+  // normal desktop/tablet coverage and Simulation coordinates remain unchanged.
+  const aspect=safeWidth/safeHeight;
+  const shallowLandscapePadding=aspect>=3.2?3:aspect>=2.6?1:0;
+  return Math.max(1,Math.ceil(halfSpan)+2+shallowLandscapePadding);
 }
 
 function terrainGridDimensions(width,height,tileSize){
