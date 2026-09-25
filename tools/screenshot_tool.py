@@ -1905,7 +1905,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008"}:
+            if scenario in {"wp-s003-006-011", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008"}:
                 recovery = driver.execute_script(
                     """
                     const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
@@ -6114,7 +6114,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 1:
             driver.execute_script(
                 """
+                window.__WP_S003_006_011_NAV_STATE={state:'pending',value:null,error:null};
                 window.__WP_S003_006_011_NAV=window.AppUI?.navigateCameraToForEvidence?.('262','-192',true)||null;
+                Promise.resolve(window.__WP_S003_006_011_NAV)
+                  .then(value=>{window.__WP_S003_006_011_NAV_STATE={state:'resolved',value:Boolean(value),error:null};})
+                  .catch(error=>{window.__WP_S003_006_011_NAV_STATE={state:'rejected',value:false,error:String(error)};});
                 return Boolean(window.__WP_S003_006_011_NAV);
                 """
             )
@@ -6125,15 +6129,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             )
             return "streaming:load-gate-262--192"
         if frame_index == 2:
-            result=driver.execute_async_script(
-                """
-                const done=arguments[arguments.length-1];
-                Promise.resolve(window.__WP_S003_006_011_NAV)
-                  .then(()=>done({ok:true}))
-                  .catch(error=>done({ok:false,error:String(error)}));
-                """
-            )
-            if not isinstance(result,dict) or result.get("ok") is not True:
+            try:
+                WebDriverWait(driver, 180).until(
+                    lambda d: d.execute_script(
+                        "return window.__WP_S003_006_011_NAV_STATE?.state!=='pending'"
+                    )
+                )
+            except Exception as exc:
+                diagnostic=driver.execute_script(
+                    """
+                    return {
+                      nav:window.__WP_S003_006_011_NAV_STATE||null,
+                      area:window.AppUI?.runtimeAreaLoadingSnapshot?.()||null,
+                      preload:window.GameRenderer?.snapshot?.()?.terrainPreload||null,
+                      chunks:window.GameRenderer?.snapshot?.()?.terrainChunks||null
+                    };
+                    """
+                )
+                raise RuntimeError(f"Distant destination timed out: {diagnostic}") from exc
+            result=driver.execute_script("return window.__WP_S003_006_011_NAV_STATE")
+            if not isinstance(result,dict) or result.get("state")!="resolved":
                 raise RuntimeError(f"Distant destination failed: {result}")
             WebDriverWait(driver, 30).until(
                 lambda d: d.execute_script(
