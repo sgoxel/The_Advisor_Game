@@ -6185,10 +6185,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 0:
             driver.set_window_size(1280, 800)
             quality=_set_graphics_quality_mode(driver, "standard")
-            return "ambient:standard-time-a+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+            return "ambient:standard-time-a+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
         if frame_index == 1:
             time.sleep(0.75)
-            return "ambient:standard-time-b+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+            return "ambient:standard-time-b+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
         if frame_index == 2:
             return "ambient:landmark-close+" + _focus_landmark(driver, 1.50, False)
         if frame_index == 3:

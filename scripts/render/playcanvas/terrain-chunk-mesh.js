@@ -397,6 +397,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       mesh.setUvs(0,[0,1, 1,1, 0,0, 1,0]);
       mesh.setIndices([0,1,2, 1,3,2]);
       mesh.update();
+    }else if(kind==="pennant-plane"){
+      mesh=new pc.Mesh(device);
+      mesh.setPositions([-0.025,0,0, 0.025,0,0, -0.025,1.30,0, 0.025,1.30,0, 0.02,1.24,0, 0.82,1.05,0, 0.02,0.82,0]);
+      mesh.setNormals([0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1]);
+      mesh.setIndices([0,1,2, 1,3,2, 4,5,6]);
+      mesh.update();
     }else if(kind==="box"){
       mesh=pc.Mesh.fromGeometry(device,new pc.BoxGeometry());
     }else if(kind==="contact-disc"){
@@ -1043,8 +1049,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function ambientQuality(levelOverride=null){
     const q=qualityProvider?.()||{};
     const level=String(levelOverride||q.activeLevel||q.mode||"standard").toLowerCase();
-    if(level==="low")return Object.freeze({level:"low",interval:0.25,treeAmplitude:0.55,smoke:false,pennant:false});
-    if(level==="high")return Object.freeze({level:"high",interval:0.10,treeAmplitude:1.15,smoke:true,pennant:true});
+    if(level==="low")return Object.freeze({level:"low",interval:0.25,treeAmplitude:0.45,smoke:false,pennant:false});
+    if(level==="high")return Object.freeze({level:"high",interval:0.10,treeAmplitude:1.20,smoke:true,pennant:true});
     return Object.freeze({level:"standard",interval:0.125,treeAmplitude:1.0,smoke:true,pennant:true});
   }
   function collectAmbientBuildingInstances(worldData,buildings,roofProfiles){
@@ -1067,21 +1073,21 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         const z=bounds.z-bounds.depth*(contextualStack?0.12:0.16);
         for(let puff=0;puff<3;puff++){
           const phase=(puff/3)*Math.PI*2+((h>>>8)&255)/255;
-          const s=0.28+puff*0.08;
+          const s=0.38+puff*0.12;
           smoke.push({
-            position:[x,ridgeY+0.42+puff*0.48,z],
-            scale:[s,s*0.86,s],
+            position:[x,ridgeY+0.58+puff*0.56,z],
+            scale:[s,s*0.92,s],
             euler:[0,0,0],
             ambientPhase:phase,
-            ambientDrift:0.10+(((h>>>(puff*3))&7)/7)*0.10
+            ambientDrift:0.18+(((h>>>(puff*3))&7)/7)*0.14
           });
         }
       }
       if(descriptor.landmark){
         const phase=((h>>>16)&1023)/1023*Math.PI*2;
         pennants.push({
-          position:[bounds.x,ridgeY+1.30,bounds.z],
-          scale:[0.82,0.16,0.07],
+          position:[bounds.x+bounds.width*0.32,ridgeY+0.06,bounds.z+bounds.depth*0.08],
+          scale:[1,1,1],
           euler:[0,Number((h>>>4)%360),0],
           ambientPhase:phase,
           ambientStrength:0.85+((h>>>10)&15)/60
@@ -1105,8 +1111,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       let ex=Number(baseEuler[0]||0),ey=Number(baseEuler[1]||0),ez=Number(baseEuler[2]||0);
       let sx=Number(baseScale[0]),sy=Number(baseScale[1]),sz=Number(baseScale[2]);
       if(kind==="tree"){
-        const wave=Math.sin(timeSeconds*1.35+phase)*3.0*strength*intensity;
-        ex+=wave*0.16;ez+=wave;
+        const wave=Math.sin(timeSeconds*1.35+phase)*4.8*strength*intensity;
+        ex+=wave*0.14;ez+=wave;
       }else if(kind==="smoke"){
         const wave=Math.sin(timeSeconds*1.10+phase);
         const drift=Number(item.ambientDrift||0.14)*intensity;
@@ -1116,9 +1122,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         const pulse=1+Math.sin(timeSeconds*1.35+phase)*0.10*intensity;
         sx*=pulse;sy*=pulse;sz*=pulse;
       }else if(kind==="pennant"){
-        const wave=Math.sin(timeSeconds*2.0+phase)*7.0*strength*intensity;
+        const wave=Math.sin(timeSeconds*2.0+phase)*9.0*strength*intensity;
         ey+=wave;
-        sx*=1+Math.sin(timeSeconds*2.7+phase)*0.08*intensity;
+        ez+=Math.sin(timeSeconds*2.7+phase)*1.5*intensity;
       }
       ambientPos.set(px,py,pz);
       ambientRot.setFromEulerAngles(ex,ey,ez);
@@ -2122,9 +2128,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       createInstancedGroup(entity,"ChunkTrees_Variant1",primitiveMesh("tree-plane"),treeSpriteMaterial(1),treeVariants[1])
     ].filter(Boolean);
     for(const group of treeGroups)group.ambientKind="tree";
-    const smokeGroup=createInstancedGroup(entity,"ChunkAmbientSmoke",primitiveMesh("sphere"),ambientMaterial("smoke",0.58,0.58,0.56,0.32),ambientBuildings.smoke);
+    const smokeGroup=createInstancedGroup(entity,"ChunkAmbientSmoke",primitiveMesh("sphere"),ambientMaterial("smoke",0.72,0.72,0.69,0.46),ambientBuildings.smoke);
     if(smokeGroup)smokeGroup.ambientKind="smoke";
-    const pennantGroup=createInstancedGroup(entity,"ChunkAmbientPennants",primitiveMesh("box"),ambientMaterial("pennant",0.72,0.30,0.16,0.96),ambientBuildings.pennants);
+    const pennantGroup=createInstancedGroup(entity,"ChunkAmbientPennants",primitiveMesh("pennant-plane"),ambientMaterial("pennant",0.76,0.27,0.12,1),ambientBuildings.pennants);
     if(pennantGroup)pennantGroup.ambientKind="pennant";
     const ambientGroups=[smokeGroup,pennantGroup].filter(Boolean);
     const dressingInstancedGroups=[
