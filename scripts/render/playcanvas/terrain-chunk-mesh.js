@@ -142,7 +142,7 @@ function hydrologyAtTile(seedValue,xValue,yValue){
       }
     }
   }
-  const active=waterSamples.length>0||centerType==="water"||centerType==="bridge";
+  const active=waterSamples.length>0||centerType==="water";
   if(!active){
     const result=Object.freeze({
       active:false,version:HYDROLOGY_VERSION,x,y,type:centerType,
@@ -339,7 +339,7 @@ function terrainHeightVertex(seed,xValue,yValue){
   const hydrology=hydrologyAtTile(seed,x,y);
   let naturalHeight;
   if(type==="water")naturalHeight=Number(hydrology.waterSurfaceHeight);
-  else if(type==="bridge")naturalHeight=Number(hydrology.bridgeDeckHeight??(macro+HEIGHTFIELD_BRIDGE_CLEARANCE));
+  else if(type==="bridge")naturalHeight=Number(hydrology.bridgeDeckHeight??macro);
   else if(hydrology.active)naturalHeight=Number(hydrology.groundHeight);
   else naturalHeight=rawPresentationHeight(seed,x,y,type);
   const roadProfile=roadProfileAtVertex(seed,x,y,naturalHeight,macro,type);
