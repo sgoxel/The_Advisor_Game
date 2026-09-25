@@ -360,8 +360,8 @@ function buildWildernessMesh(items,size){
     const ref=Math.abs(d.y)<.88?{x:0,y:1,z:0}:{x:1,y:0,z:0};
     let ux=ref.y*d.z-ref.z*d.y,uy=ref.z*d.x-ref.x*d.z,uz=ref.x*d.y-ref.y*d.x;const ul=Math.hypot(ux,uy,uz)||1;ux/=ul;uy/=ul;uz/=ul;
     const vx=d.y*uz-d.z*uy,vy=d.z*ux-d.x*uz,vz=d.x*uy-d.y*ux;
-    const start=positions.length/3,half=size*.62;
-    positions.push(base.x+ux*half,base.y+uy*half,base.z+uz*half,base.x-ux*half,base.y-uy*half,base.z-uz*half,base.x+vx*half,base.y+vy*half,base.z+vz*half,base.x+d.x*size,base.y+d.y*size,base.z+d.z*size);
+    const start=positions.length/3,half=size*.90;
+    positions.push(base.x+ux*half,base.y+uy*half,base.z+uz*half,base.x-ux*half,base.y-uy*half,base.z-uz*half,base.x+vx*half,base.y+vy*half,base.z+vz*half,base.x+d.x*size*.28,base.y+d.y*size*.28,base.z+d.z*size*.28);
     for(let i=0;i<4;i++)normals.push(d.x,d.y,d.z);
     indices.push(start,start+1,start+3,start+1,start+2,start+3,start+2,start,start+3);
   }
@@ -370,7 +370,7 @@ function buildWildernessMesh(items,size){
 }
 function buildWildernessPresentation(){
   const groups=buildWildernessDescriptors();
-  const specs=[[groups.vegetation,.038,[.16,.34,.12],"WildernessVegetation"],[groups.rocks,.032,[.34,.30,.24],"WildernessRock"]];
+  const specs=[[groups.vegetation,.028,[.18,.38,.13],"WildernessVegetation"],[groups.rocks,.024,[.38,.33,.25],"WildernessRock"]];
   for(const [items,size,color,name] of specs){const mesh=buildWildernessMesh(items,size);if(!mesh)continue;const material=new pc.StandardMaterial();material.name=name+"Material";material.diffuse.set(...color);material.roughness=.92;material.update();const entity=new pc.Entity(name);entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});entity.render.meshInstances=[new pc.MeshInstance(mesh,material,entity)];planet.addChild(entity);wilderness.drawCalls++;}
 }
 function visualElevationMeters(sample){
