@@ -1603,3 +1603,12 @@
 - Direct inspection of all six fresh screenshots: sphere is smooth, centered and unclipped on desktop, phone landscape and phone portrait; multiple rotations are visually distinct; no legacy gameplay UI or characters are visible. VISUAL: 8.0/10 — PASS.
 - Pages deployment run 36159958171 for exact head 85b61eda30ad765ff8e3c052c54dc63b238cbae6 completed successfully.
 
+
+2026-09-26 01:48:00 +03:00 | WP-S003-008-002-001 | Real First-Playable Loading Progress + Animated Phase Feedback — IMPLEMENTATION + VISUAL/FUNCTIONAL PASS
+- Classification: MIXED. Integrated the progress presentation into the active planet-first PlayCanvas runtime rather than reviving the retired local-world AppUI startup path.
+- Startup begins with truthful indeterminate Planning startup feedback, then advances monotonically through renderer, geography, planetary surface, height-mesh and finalization work. Percentage is weighted work completion, not elapsed-time simulation.
+- Actual startup telemetry records determinate start, measured 100%, gameplay-ready timestamps, completed/total weighted first-playable work and optional post-ready work separately. Fatal presentation freezes in failed state; reduced-motion CSS remains supported.
+- Final fresh evidence run 36198317681 on exact head e6741de7ddecc02b9fc9a9f035396f70c77681c3 completed successfully. Artifact 10891485203 / sha256:d0325e06e480d311158d2606cbe29b6c4d6156bfb5962daec36d61a6ec485aae contains eight fresh states including planning, determinate progress, Ready 100%, portrait and failure.
+- Direct inspection of fresh screenshots: centered desktop card, readable 100% Ready state, portrait layout and compact landscape failure state have no major clipping/overlap/readability defects. VISUAL: 8.7/10 — PASS.
+- Functional evidence PASS: actual first-playable telemetry reaches exactly 100% with gameplay-ready timestamp; proof progression is bounded 0/15/52/68/84/100 and failure remains at 68%; planet authority remains ready, deterministic and free of per-frame generation.
+- GitHub Pages deployment run 36198312053 for exact head e6741de7ddecc02b9fc9a9f035396f70c77681c3 completed successfully.
