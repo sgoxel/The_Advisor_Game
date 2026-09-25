@@ -1886,7 +1886,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005"}:
+            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007"}:
                 recovery = driver.execute_script(
                     """
                     const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
@@ -5388,7 +5388,49 @@ def _switch_to_alternate_landmark_seed(driver) -> str:
     )
     if not isinstance(selection, dict) or not selection.get("ok"):
         raise RuntimeError(f"Alternate landmark seed selection failed: {selection}")
-    reload_action=_reload_current_build(driver, timeout=120.0)
+    from selenium.webdriver.support.ui import WebDriverWait
+    driver.refresh()
+    WebDriverWait(driver, 60.0).until(
+        lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+    # The second deterministic campaign is a real cold scene start. Wait for
+    # either playable readiness or the application's bounded startup error, then
+    # exercise the same real Retry Startup recovery path used by normal evidence.
+    for recovery_attempt in range(2):
+        state=WebDriverWait(driver, 240.0).until(
+            lambda d: d.execute_script(
+                """
+                const loading=window.AppUI?.sceneLoadingSnapshot?.()||{};
+                const renderer=window.GameRenderer?.snapshot?.()||{};
+                const campaign=window.SeedSystem?.getCampaign?.();
+                if(loading?.overlay?.state==='error')return 'error';
+                if(
+                  campaign &&
+                  document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
+                  loading?.overlay?.hidden===true &&
+                  loading?.current?.state==='hidden' &&
+                  loading?.current?.readiness?.playableReady===true &&
+                  renderer?.ready===true &&
+                  renderer?.simulationSnapshot?.campaignActive===true &&
+                  renderer?.regionKey &&
+                  renderer?.protagonistVisible===true &&
+                  Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
+                )return 'ready';
+                return false;
+                """
+            )
+        )
+        if state=="ready":
+            break
+        if recovery_attempt>=1:
+            raise RuntimeError("Alternate landmark campaign remained in startup error after Retry Startup")
+        driver.execute_script("document.querySelector('#sceneLoadingRetry')?.click()")
+        WebDriverWait(driver, 60.0).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+    else:
+        raise RuntimeError("Alternate landmark campaign did not become playable")
+    reload_action="reload:alternate-campaign-playable"
     context=_landmark_context(driver)
     selected=(selection.get("selected") or {})
     expected_plan=selected.get("plan") or {}
