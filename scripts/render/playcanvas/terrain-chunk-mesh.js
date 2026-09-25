@@ -31,10 +31,10 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
-const LANDFORM_VERSION="macro-landform-v7";
-const LANDFORM_SAMPLE_RADIUS_TILES=8;
+const LANDFORM_VERSION="continuous-world-field-v1";
+const LANDFORM_SAMPLE_RADIUS_METERS=96;
 const LANDFORM_CACHE_LIMIT=32768;
-const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=12;
+const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=0;
 const LANDFORM_CLIFF_FACE_MIN_SIGNAL=0.32;
 const LANDFORM_CLIFF_FACE_MIN_RELIEF_METERS=160;
 const LANDFORM_CLIFF_FACE_MIN_HEIGHT=0.72;
@@ -44,7 +44,7 @@ const LANDFORM_CLIFF_FACE_APRON_MAX=1.34;
 const LANDFORM_CLIFF_LIP_INSET=1.08;
 const LANDFORM_CLIFF_BREAK_DEPTH_MIN=0.55;
 const LANDFORM_CLIFF_BREAK_DEPTH_MAX=1.20;
-const WORLD_TILE_METERS=2;
+const WORLD_POSITION_UNIT_METERS=2; // logical coordinate unit converted to physical meters at the WorldField boundary
 const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
 const ROAD_PROFILE_OUTER_RADIUS_TILES=2.15;
@@ -93,81 +93,72 @@ function heightfieldSegments(size){
   return 1;
 }
 function heightfieldStep(size){return Math.max(1,Math.trunc(Number(size)||16)/heightfieldSegments(size));}
+function worldMetersFromUnit(value){
+  const text=String(value??"0").trim();
+  if(/^[+-]?\\d+$/.test(text)){
+    try{return (BigInt(text)*BigInt(WORLD_POSITION_UNIT_METERS)).toString();}catch(_){}
+  }
+  const n=Number(value);
+  return Number.isFinite(n)?n*WORLD_POSITION_UNIT_METERS:0;
+}
+function worldFieldSample(seed,xUnit,zUnit){
+  const field=window.WorldField;
+  if(!field?.sample)throw new Error("WorldField is required for natural terrain authority");
+  return field.sample(String(seed||""),worldMetersFromUnit(xUnit),worldMetersFromUnit(zUnit));
+}
 function referenceElevation(seed){
   const key=String(seed||"");
   if(!key)return 0;
   if(heightReferenceCache.has(key))return heightReferenceCache.get(key);
-  const value=Number(window.GeographyFoundation?.environment?.(key,"0","0")?.elevationMeters||0);
+  const value=Number(window.WorldField?.sample?.(key,"0","0")?.elevationMeters||0);
   heightReferenceCache.set(key,value);
   return value;
 }
 function sourceElevationMeters(seed,x,y){
-  return Number(window.GeographyFoundation?.environment?.(seed,String(x),String(y))?.elevationMeters||referenceElevation(seed));
+  return Number(worldFieldSample(seed,x,y).elevationMeters||referenceElevation(seed));
 }
-function landformAtTile(seedValue,xValue,yValue){
+function landformAtWorldUnit(seedValue,xValue,yValue){
   const seed=String(seedValue||""),x=String(xValue),y=String(yValue);
   const cacheKey=seed+"|"+x+"|"+y;
   const cached=landformProfileCache.get(cacheKey);
   if(cached){landformCacheHits++;return cached;}
   landformQueryCalls++;
-  let bx,by;
-  try{bx=BigInt(x);by=BigInt(y);}catch(_){
-    return Object.freeze({version:LANDFORM_VERSION,x,y,kind:"plain",elevationMeters:referenceElevation(seed),conditionOffset:0,rendererOnly:true,navigationAuthority:false,collisionAuthority:false});
-  }
-  const r=BigInt(LANDFORM_SAMPLE_RADIUS_TILES);
-  const center=sourceElevationMeters(seed,bx,by);
-  const n=sourceElevationMeters(seed,bx,by-r),e=sourceElevationMeters(seed,bx+r,by);
-  const s=sourceElevationMeters(seed,bx,by+r),w=sourceElevationMeters(seed,bx-r,by);
-  const ne=sourceElevationMeters(seed,bx+r,by-r),nw=sourceElevationMeters(seed,bx-r,by-r);
-  const se=sourceElevationMeters(seed,bx+r,by+r),sw=sourceElevationMeters(seed,bx-r,by+r);
-  const values=[center,n,e,s,w,ne,nw,se,sw];
-  const relief=Math.max(...values)-Math.min(...values);
-  const gradientX=(e-w)/(2*LANDFORM_SAMPLE_RADIUS_TILES);
-  const gradientY=(s-n)/(2*LANDFORM_SAMPLE_RADIUS_TILES);
-  const gradient=Math.hypot(gradientX,gradientY);
-  const curvature=center-(n+e+s+w)/4;
-  const xSaddle=Math.min(e,w)-center-Math.max(0,Math.min(n,s)-center);
-  const ySaddle=Math.min(n,s)-center-Math.max(0,Math.min(e,w)-center);
-  const saddleStrength=Math.max(0,xSaddle,ySaddle);
-  // Separate curvature-based ridge/valley identity from genuinely steep faces.
-  // The previous thresholds saturated cliff/pass across most mountainous samples,
-  // which made class labels unhelpful and visually flattened distinct forms.
-  const ridgeSignal=clamp((curvature-8)/72,0,1)*clamp((relief-55)/230,0,1);
-  const valleySignal=clamp((-curvature-8)/72,0,1)*clamp((relief-55)/230,0,1);
-  const cliffSignal=clamp((gradient-7)/16,0,1)*clamp((relief-120)/300,0,1);
-  const passSignal=clamp((saddleStrength-10)/60,0,1)*clamp((relief-95)/260,0,1);
-  let kind="plain";
-  const passDominant=passSignal>=0.24&&passSignal>=Math.max(ridgeSignal,valleySignal)*1.15;
-  if(passDominant)kind="pass";
-  else if(ridgeSignal>=0.16)kind="ridge";
-  else if(valleySignal>=0.16)kind="valley";
-  else if(cliffSignal>=0.22)kind="cliff";
-  else if(gradient>=2.8)kind="slope";
-  const cliffShape=clamp(curvature/90,-1,1);
-  // Presentation-only vertical conditioning exaggerates broad form readability
-  // without changing authoritative elevation, navigation or collision. Values
-  // remain global-coordinate deterministic and therefore seam-safe.
-  const conditionOffset=clamp(
-    ridgeSignal*1.90-valleySignal*1.72-passSignal*1.28+cliffSignal*cliffShape*0.96,
-    -2.60,2.60
+  const source=window.WorldField?.landform?.(
+    seed,
+    worldMetersFromUnit(xValue),
+    worldMetersFromUnit(yValue),
+    LANDFORM_SAMPLE_RADIUS_METERS
   );
+  if(!source){
+    return Object.freeze({
+      version:LANDFORM_VERSION,x,y,kind:"plain",elevationMeters:referenceElevation(seed),
+      conditionOffset:0,continuousMeterField:false,tileAuthority:false,chunkAuthority:false
+    });
+  }
+  const gradientPerMeter=Number(source.gradientMetersPerMeter||0);
   const result=Object.freeze({
-    version:LANDFORM_VERSION,x,y,kind,
-    elevationMeters:center,
-    gradientMetersPerTile:Number(gradient.toFixed(4)),
-    gradientX:Number(gradientX.toFixed(4)),gradientY:Number(gradientY.toFixed(4)),
-    localReliefMeters:Number(relief.toFixed(2)),
-    curvatureMeters:Number(curvature.toFixed(3)),
-    saddleStrengthMeters:Number(saddleStrength.toFixed(3)),
-    ridgeSignal:Number(ridgeSignal.toFixed(4)),
-    valleySignal:Number(valleySignal.toFixed(4)),
-    cliffSignal:Number(cliffSignal.toFixed(4)),
-    passSignal:Number(passSignal.toFixed(4)),
-    conditionOffset:Number(conditionOffset.toFixed(6)),
-    sampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
-    source:"GeographyFoundation.environment.elevationMeters",
+    version:String(source.version||LANDFORM_VERSION),x,y,
+    xMeters:String(source.xMeters??worldMetersFromUnit(xValue)),
+    zMeters:String(source.zMeters??worldMetersFromUnit(yValue)),
+    kind:String(source.kind||"plain"),
+    elevationMeters:Number(source.elevationMeters||0),
+    gradientMetersPerMeter:gradientPerMeter,
+    gradientMetersPerWorldUnit:Number((gradientPerMeter*WORLD_POSITION_UNIT_METERS).toFixed(6)),
+    gradientX:Number(source.gradientX||0),gradientY:Number(source.gradientZ||0),
+    slopeDegrees:Number(source.slopeDegrees||0),
+    localReliefMeters:Number(source.localReliefMeters||0),
+    curvatureMeters:Number(source.curvatureMeters||0),
+    saddleStrengthMeters:Number(source.saddleStrengthMeters||0),
+    ridgeSignal:Number(source.ridgeSignal||0),
+    valleySignal:Number(source.valleySignal||0),
+    cliffSignal:Number(source.cliffSignal||0),
+    passSignal:Number(source.passSignal||0),
+    conditionOffset:0,
+    sampleRadiusMeters:Number(source.sampleRadiusMeters||LANDFORM_SAMPLE_RADIUS_METERS),
+    source:"WorldField.landform",
     deterministic:true,seamSafeGlobalCoordinates:true,chunkPrepared:true,
-    rendererOnly:true,navigationAuthority:false,collisionAuthority:false,
+    continuousMeterField:true,tileAuthority:false,chunkAuthority:false,
+    rendererOnly:false,navigationAuthority:false,collisionAuthority:false,
     simulationAuthorityPreserved:true
   });
   landformProfileCache.set(cacheKey,result);
@@ -178,21 +169,39 @@ function landformAtTile(seedValue,xValue,yValue){
   return result;
 }
 function macroHeight(seed,x,y){
-  const landform=landformAtTile(seed,x,y);
+  const landform=landformAtWorldUnit(seed,x,y);
   const elevation=Number(landform.elevationMeters||referenceElevation(seed));
   const baseMacro=(elevation-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE;
-  return Object.freeze({elevation,baseMacro,macro:baseMacro+Number(landform.conditionOffset||0),landform});
+  return Object.freeze({elevation,baseMacro,macro:baseMacro,landform});
 }
 function smoothstep01(value){
   const t=clamp(Number(value)||0,0,1);
   return t*t*(3-2*t);
 }
 
+const STRUCTURAL_TERRAIN_TYPES=new Set(["road","bridge","square","path","plot","building","floor","wall","door","farmland"]);
+function preparedOverlayType(cell){
+  const raw=String(cell?.type||"");
+  return STRUCTURAL_TERRAIN_TYPES.has(raw)?raw:null;
+}
+function resolvedSurfaceAt(seed,x,y,preparedCell=null){
+  const overlay=preparedOverlayType(preparedCell);
+  if(overlay)return Object.freeze({type:semanticSurfaceType(overlay),rawType:overlay,structural:true,source:"prepared-structural-overlay"});
+  const natural=worldFieldSample(seed,x,y);
+  return Object.freeze({
+    type:semanticSurfaceType(natural.surfaceType||"grass"),
+    rawType:String(natural.surfaceType||"grass"),
+    structural:false,
+    source:"WorldField.surfaceType",
+    field:natural
+  });
+}
 function terrainTypeAt(seed,x,y){
-  return String(window.TerrainFoundation?.getTile?.(String(seed),String(x),String(y))?.type||"grass");
+  const prepared=window.TerrainFoundation?.getTile?.(String(seed),String(x),String(y))||null;
+  return resolvedSurfaceAt(seed,x,y,prepared).type;
 }
 function underlyingTerrainTypeAt(seed,x,y){
-  return String(window.GeographyFoundation?.getTerrainType?.(String(seed),String(x),String(y))||terrainTypeAt(seed,x,y));
+  return semanticSurfaceType(worldFieldSample(seed,x,y).surfaceType||"grass");
 }
 function hydrologyWaterReference(seed,x,y,typeOverride=null){
   const type=String(typeOverride||terrainTypeAt(seed,x,y));
@@ -211,9 +220,8 @@ function bridgeDeckOrientation(seed,xValue,yValue){
 function rawPresentationHeight(seed,x,y,typeOverride=null){
   const type=String(typeOverride||terrainTypeAt(seed,x,y));
   const macro=macroHeight(seed,x,y).macro;
-  if(type==="road"||type==="path"||type==="square"||type==="building"||type==="floor"||type==="door"||type==="wall"||type==="bridge")return macro;
   if(type==="water")return macro-HYDROLOGY_WATER_DEPTH;
-  return macro+signed01(seed,x,y,"heightfield-relief")*HEIGHTFIELD_RELIEF;
+  return macro;
 }
 function hydrologyKindFor(seed,x,y){
   const bx=BigInt(String(x)),by=BigInt(String(y));
@@ -447,8 +455,9 @@ function terrainHeightVertex(seed,xValue,yValue){
   const elevation=Number(macroSample.elevation);
   const macro=Number(macroSample.macro);
   const landform=macroSample.landform;
-  const tile=window.TerrainFoundation?.getTile?.(seed,x,y)||null;
-  const type=String(tile?.type||"grass");
+  const preparedCell=window.TerrainFoundation?.getTile?.(seed,x,y)||null;
+  const resolvedSurface=resolvedSurfaceAt(seed,x,y,preparedCell);
+  const type=resolvedSurface.type;
   const hydrology=hydrologyAtTile(seed,x,y);
   let naturalHeight;
   if(type==="water")naturalHeight=Number(hydrology.waterSurfaceHeight);
@@ -460,7 +469,7 @@ function terrainHeightVertex(seed,xValue,yValue){
   const sample=Object.freeze({
     height:clamp(height,HEIGHTFIELD_MIN_Y,HEIGHTFIELD_MAX_Y),
     type,
-    color:heightfieldColor(seed,x,y,tile?.color,type),
+    color:heightfieldColor(seed,x,y,resolvedSurface.structural?preparedCell?.color:null,type),
     elevationMeters:elevation,
     landform,
     roadProfile,
@@ -1072,10 +1081,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function appendRouteQuad(batch,worldData,xValue,yValue,halfX,halfZ,yOffset=0.024,centerOffsetX=0,centerOffsetZ=0){
     const p=localTileCenter(worldData,xValue,yValue);
     const seed=String(seedProvider()||"");
-    const centerTileOffsetX=Number(centerOffsetX||0)/WORLD_TILE_METERS;
-    const centerTileOffsetZ=Number(centerOffsetZ||0)/WORLD_TILE_METERS;
-    const tileOffsetX=Number(halfX)/WORLD_TILE_METERS;
-    const tileOffsetZ=Number(halfZ)/WORLD_TILE_METERS;
+    const centerTileOffsetX=Number(centerOffsetX||0)/WORLD_POSITION_UNIT_METERS;
+    const centerTileOffsetZ=Number(centerOffsetZ||0)/WORLD_POSITION_UNIT_METERS;
+    const tileOffsetX=Number(halfX)/WORLD_POSITION_UNIT_METERS;
+    const tileOffsetZ=Number(halfZ)/WORLD_POSITION_UNIT_METERS;
     const hNW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,centerTileOffsetX-tileOffsetX,centerTileOffsetZ-tileOffsetZ)+yOffset;
     const hNE=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,centerTileOffsetX+tileOffsetX,centerTileOffsetZ-tileOffsetZ)+yOffset;
     const hSW=terrainHeightAtTile(seed,xValue,yValue,worldData?.chunkSize||16,centerTileOffsetX-tileOffsetX,centerTileOffsetZ+tileOffsetZ)+yOffset;
@@ -1116,7 +1125,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const heights=corners.map(([x,z])=>
       terrainHeightAtTile(
         seed,xValue,yValue,worldData?.chunkSize||16,
-        (x-p0.x)/WORLD_TILE_METERS,(z-p0.z)/WORLD_TILE_METERS
+        (x-p0.x)/WORLD_POSITION_UNIT_METERS,(z-p0.z)/WORLD_POSITION_UNIT_METERS
       )+yOffset
     );
     const base=batch.positions.length/3;
@@ -1973,10 +1982,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const sw=macroHeight(seed,String(baseX),String(baseZ+BigInt(size))).macro;
     const se=macroHeight(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size))).macro;
     const streamingLandforms=[
-      landformAtTile(seed,String(baseX),String(baseZ)),
-      landformAtTile(seed,String(baseX+BigInt(size)),String(baseZ)),
-      landformAtTile(seed,String(baseX),String(baseZ+BigInt(size))),
-      landformAtTile(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size)))
+      landformAtWorldUnit(seed,String(baseX),String(baseZ)),
+      landformAtWorldUnit(seed,String(baseX+BigInt(size)),String(baseZ)),
+      landformAtWorldUnit(seed,String(baseX),String(baseZ+BigInt(size))),
+      landformAtWorldUnit(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size)))
     ];
     const streamingLandformClassCounts={};
     for(const row of streamingLandforms)streamingLandformClassCounts[row.kind]=(streamingLandformClassCounts[row.kind]||0)+1;
@@ -1994,8 +2003,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const gz=Math.floor(index/size),gx=index-gz*size;
       if(gx<0||gz<0||gx>=size||gz>=size)continue;
       emittedCellCount++;
-      const surfaceType=semanticSurfaceType(sourceCell.type||"grass");
       const worldX=baseX+BigInt(gx),worldZ=baseZ+BigInt(gz);
+      const resolvedSurface=resolvedSurfaceAt(seed,worldX,worldZ,sourceCell);
+      const surfaceType=resolvedSurface.type;
       const hydro=surfaceType==="bridge"?hydrologyAtTile(seed,String(worldX),String(worldZ)):null;
       const bridgeOverWater=Boolean(surfaceType==="bridge"&&hydro?.bridgeUnderlyingWater===true);
       const baseVisualType=bridgeOverWater?"water":surfaceType;
@@ -2160,10 +2170,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       ambientRendererOnly:true,ambientNavigationAuthority:false,ambientCollisionAuthority:false,
       ambientSimulationAuthorityPreserved:true,ambientQuality:"minimum",ambientZoom:1,ambientLodSimplified:true,
       ambientUpdateIntervalMs:0,ambientUpdateCount:0,ambientBufferUpdateCount:0,ambientLastCpuUpdateMs:0,ambientMaxCpuUpdateMs:0,
-      landformEnabled:true,landformVersion:LANDFORM_VERSION,landformSampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
+      landformEnabled:true,landformVersion:LANDFORM_VERSION,landformSampleRadiusMeters:LANDFORM_SAMPLE_RADIUS_METERS,
       landformClassCounts:Object.freeze({...streamingLandformClassCounts}),landformSamples:Object.freeze(streamingLandforms.slice()),
-      landformGradientMin:Math.min(...streamingLandforms.map(row=>Number(row.gradientMetersPerTile||0))),
-      landformGradientMax:Math.max(...streamingLandforms.map(row=>Number(row.gradientMetersPerTile||0))),
+      landformGradientMin:Math.min(...streamingLandforms.map(row=>Number(row.gradientMetersPerWorldUnit||0))),
+      landformGradientMax:Math.max(...streamingLandforms.map(row=>Number(row.gradientMetersPerWorldUnit||0))),
       landformReliefMin:Math.min(...streamingLandforms.map(row=>Number(row.localReliefMeters||0))),
       landformReliefMax:Math.max(...streamingLandforms.map(row=>Number(row.localReliefMeters||0))),
       landformConditionOffsetMin:Math.min(...streamingLandforms.map(row=>Number(row.conditionOffset||0))),
@@ -2274,11 +2284,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const key=x+","+z;
       if(terrainVariationTileCache.has(key))return terrainVariationTileCache.get(key);
       const cell=spec.worldData?.cells?.[z*size+x]||null;
-      const rawType=String(cell?.type||"grass");
+      const wx=baseX+BigInt(x),wz=baseZ+BigInt(z);
+      const surface=resolvedSurfaceAt(seed,wx,wz,cell);
       const result=Object.freeze({
-        rawType,
-        type:semanticSurfaceType(rawType),
-        buildingId:cell?.buildingId?String(cell.buildingId):null
+        rawType:surface.rawType,
+        type:surface.type,
+        buildingId:cell?.buildingId?String(cell.buildingId):null,
+        structural:surface.structural,
+        source:surface.source
       });
       terrainVariationTileCache.set(key,result);
       return result;
@@ -2347,7 +2360,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const categories=["broad-macro"];
       let r=1,g=1,b=1;
       if(!TERRAIN_VARIATION_CONSTRUCTED_TYPES.has(type)&&TERRAIN_VARIATION_NATURAL_TYPES.has(type)){
-        const landform=landformAtTile(seed,wx,wz);
+        const landform=landformAtWorldUnit(seed,wx,wz);
         if(landform.kind==="cliff"){
           r*=0.80;g*=0.80;b*=0.80;categories.push("cliff-face");
         }else if(landform.kind==="ridge"){
@@ -2362,7 +2375,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         // Encode broad landform orientation directly into the existing vertex
         // color stream so valleys/ridges remain legible even when top textures
         // dominate. This is deterministic world-space shading, not camera state.
-        const gradient=Number(landform.gradientMetersPerTile||0);
+        const gradient=Number(landform.gradientMetersPerWorldUnit||0);
         const slopeStrength=clamp((gradient-2.0)/18.0,0,1);
         if(slopeStrength>0.02){
           const denom=Math.max(0.001,gradient*Math.SQRT2);
@@ -2506,8 +2519,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         if(sample.landform){
           const lf=sample.landform;
           landformClassCounts[lf.kind]=(landformClassCounts[lf.kind]||0)+1;
-          landformGradientMin=Math.min(landformGradientMin,Number(lf.gradientMetersPerTile||0));
-          landformGradientMax=Math.max(landformGradientMax,Number(lf.gradientMetersPerTile||0));
+          landformGradientMin=Math.min(landformGradientMin,Number(lf.gradientMetersPerWorldUnit||0));
+          landformGradientMax=Math.max(landformGradientMax,Number(lf.gradientMetersPerWorldUnit||0));
           landformReliefMin=Math.min(landformReliefMin,Number(lf.localReliefMeters||0));
           landformReliefMax=Math.max(landformReliefMax,Number(lf.localReliefMeters||0));
           landformConditionOffsetMin=Math.min(landformConditionOffsetMin,Number(lf.conditionOffset||0));
@@ -2573,7 +2586,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     for(let gz=0;gz<segments;gz++){
       for(let gx=0;gx<segments;gx++){
         const sourceCell=spec.worldData?.cells?.[gz*size+gx]||null;
-        const surfaceType=semanticSurfaceType(sourceCell?.type||grid[gz*stride+gx].sample.type);
+        const cellWorldX=baseX+BigInt(gx),cellWorldZ=baseZ+BigInt(gz);
+        const resolvedSurface=resolvedSurfaceAt(seed,cellWorldX,cellWorldZ,sourceCell);
+        const surfaceType=resolvedSurface.type;
         semanticSurfaceTileCounts[surfaceType]=(semanticSurfaceTileCounts[surfaceType]||0)+1;
         const rawCorners=[
           grid[gz*stride+gx],
@@ -2581,7 +2596,6 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           grid[(gz+1)*stride+gx],
           grid[(gz+1)*stride+gx+1]
         ];
-        const cellWorldX=baseX+BigInt(gx),cellWorldZ=baseZ+BigInt(gz);
         const cellHydrology=(surfaceType==="water"||surfaceType==="bridge")
           ?hydrologyAtTile(seed,String(cellWorldX),String(cellWorldZ))
           :null;
@@ -2651,7 +2665,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           surfaceType!=="water" &&
           surfaceType!=="bridge"
         ){
-          const cliff=landformAtTile(seed,cellWorldX,cellWorldZ);
+          const cliff=landformAtWorldUnit(seed,cellWorldX,cellWorldZ);
           if(
             cliff.kind==="cliff" &&
             Number(cliff.cliffSignal||0)>=LANDFORM_CLIFF_FACE_MIN_SIGNAL &&
@@ -3223,11 +3237,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       contourPreparationOnly:true,
       contourHaloTiles:CONTOUR_HALO_TILES,
       contourRoundRadiusTiles:CONTOUR_ROUND_RADIUS_TILES,
-      contourRoundRadiusWorldUnits:Number((CONTOUR_ROUND_RADIUS_TILES*WORLD_TILE_METERS).toFixed(3)),
+      contourRoundRadiusWorldUnits:Number((CONTOUR_ROUND_RADIUS_TILES*WORLD_POSITION_UNIT_METERS).toFixed(3)),
       contourArcSegments:CONTOUR_ARC_SEGMENTS,
       contourTransitionBandWidthTiles:CONTOUR_ROUND_RADIUS_TILES,
       contourMaxBoundaryDeviationTiles:CONTOUR_ROUND_RADIUS_TILES,
-      contourMaxBoundaryDeviationWorldUnits:Number((CONTOUR_ROUND_RADIUS_TILES*WORLD_TILE_METERS).toFixed(3)),
+      contourMaxBoundaryDeviationWorldUnits:Number((CONTOUR_ROUND_RADIUS_TILES*WORLD_POSITION_UNIT_METERS).toFixed(3)),
       contourPatchCount,
       contourVertexCount,
       contourAddedTriangleCount:contourTriangleCount,
@@ -3285,7 +3299,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       squareLiftWorldUnits:ROAD_PROFILE_LIFTS.square,
       roadShoulderCoreRadiusTiles:ROAD_PROFILE_CORE_RADIUS_TILES,
       roadShoulderBlendWidthTiles:ROAD_PROFILE_SHOULDER_WIDTH_TILES,
-      roadShoulderBlendWidthWorldUnits:Number((ROAD_PROFILE_SHOULDER_WIDTH_TILES*WORLD_TILE_METERS).toFixed(3)),
+      roadShoulderBlendWidthWorldUnits:Number((ROAD_PROFILE_SHOULDER_WIDTH_TILES*WORLD_POSITION_UNIT_METERS).toFixed(3)),
       bridgeClearanceWorldUnits:HEIGHTFIELD_BRIDGE_CLEARANCE,
       roadProfileVertexCount,
       roadProfileCoreVertexCount,
@@ -3300,7 +3314,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       roadProfileGroundingShared:true,
       landformEnabled:true,
       landformVersion:LANDFORM_VERSION,
-      landformSampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
+      landformSampleRadiusMeters:LANDFORM_SAMPLE_RADIUS_METERS,
       landformClassCounts:Object.freeze({...landformClassCounts}),
       landformSamples:Object.freeze(landformSamples.slice()),
       landformGradientMin:Number.isFinite(landformGradientMin)?Number(landformGradientMin.toFixed(4)):0,
@@ -3597,7 +3611,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       hydrologyWaterIdentityChanged:false,
       landformEnabled:true,
       landformVersion:LANDFORM_VERSION,
-      landformSampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
+      landformSampleRadiusMeters:LANDFORM_SAMPLE_RADIUS_METERS,
       landformQueryCalls,landformCacheHits,
       landformCacheHitRate:Number((landformQueryCalls+landformCacheHits?landformCacheHits/(landformQueryCalls+landformCacheHits):0).toFixed(4)),
       landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
@@ -3739,6 +3753,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       frustumCulling:true,
       completeChunkMesh:true,
       heightfield:true,
+      worldFieldVersion:String(window.WorldField?.VERSION||LANDFORM_VERSION),
+      naturalTerrainAuthority:"WorldField",
+      continuousWorldMeterField:true,
+      logicalTilesAuthoritative:false,
+      chunkAuthority:false,
+      rendererPatchOnly:true,
       heightfieldGridResolutionDefault:9,
       heightfieldVerticalScale:HEIGHTFIELD_VERTICAL_SCALE,
       heightfieldWaterY:HEIGHTFIELD_WATER_Y,
@@ -3749,7 +3769,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       squareLiftWorldUnits:ROAD_PROFILE_LIFTS.square,
       roadShoulderCoreRadiusTiles:ROAD_PROFILE_CORE_RADIUS_TILES,
       roadShoulderBlendWidthTiles:ROAD_PROFILE_SHOULDER_WIDTH_TILES,
-      roadShoulderBlendWidthWorldUnits:Number((ROAD_PROFILE_SHOULDER_WIDTH_TILES*WORLD_TILE_METERS).toFixed(3)),
+      roadShoulderBlendWidthWorldUnits:Number((ROAD_PROFILE_SHOULDER_WIDTH_TILES*WORLD_POSITION_UNIT_METERS).toFixed(3)),
       bridgeClearanceWorldUnits:HEIGHTFIELD_BRIDGE_CLEARANCE,
       roadProfileGroundingShared:true,
       heightVertexSampleCalls,
@@ -3769,7 +3789,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     build,reposition,destroy,stats,heightAtTile,
     hydrologyAtTile:(x,y)=>hydrologyAtTile(String(seedProvider()||""),x,y),
     waterSurfaceAtVertex:(x,y)=>waterSurfaceAtVertex(String(seedProvider()||""),x,y),
-    landformAtTile:(x,y)=>landformAtTile(String(seedProvider()||""),x,y),
+    landformAtWorldUnit:(x,y)=>landformAtWorldUnit(String(seedProvider()||""),x,y),
     updateAmbientMotion,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials,refreshContactShadowMaterials
   });
 }
