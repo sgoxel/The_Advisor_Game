@@ -532,7 +532,8 @@ function snapshot(){
     }),
     frameCount,
     startupError,
-    startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)})
+    startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
+    loadingPresentation:Object.freeze({...((loadingProof||startupProgress)),loadingProofActive:Boolean(loadingProof)})
   });
 }
 function verify(){
