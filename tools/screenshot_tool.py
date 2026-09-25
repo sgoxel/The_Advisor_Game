@@ -1980,6 +1980,54 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     action += "+cold-start-retry-recovered"
 
         except Exception as exc:
+            if scenario == "wp-s003-006-012":
+                # Hydrology evidence can hit the same cold software-WebGL campaign
+                # readiness race already exercised by other terrain scenarios. The
+                # first wait above may time out before their post-wait recovery path
+                # is reached. Use the real Retry Startup/reload path exactly once,
+                # then require the persisted campaign to become genuinely playable.
+                try:
+                    from selenium.webdriver.support.ui import WebDriverWait
+                    recovery = driver.execute_script(
+                        """
+                        const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                        return {
+                          error: loading?.current?.state === 'error',
+                          retryVisible: Boolean(document.querySelector('#sceneLoadingRetry') && !document.querySelector('#sceneLoadingRetry').hidden),
+                          hasCampaign: Boolean(window.SeedSystem?.getCampaign?.())
+                        };
+                        """
+                    )
+                    if isinstance(recovery, dict) and recovery.get("error") and recovery.get("retryVisible"):
+                        driver.execute_script("document.querySelector('#sceneLoadingRetry')?.click()")
+                        WebDriverWait(driver, max(timeout, 180.0)).until(
+                            lambda d: d.execute_script("return document.readyState") == "complete"
+                        )
+                        WebDriverWait(driver, max(timeout, 180.0)).until(
+                            lambda d: d.execute_script(
+                                """
+                                const state=document.querySelector('#campaignState')?.textContent?.trim();
+                                const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                                const renderer=window.GameRenderer?.snapshot?.() || {};
+                                return Boolean(
+                                  state==='ACTIVE' &&
+                                  loading?.overlay?.hidden===true &&
+                                  loading?.current?.state==='hidden' &&
+                                  loading?.current?.readiness?.playableReady===true &&
+                                  renderer?.ready===true &&
+                                  renderer?.simulationSnapshot?.campaignActive===true &&
+                                  renderer?.regionKey &&
+                                  renderer?.protagonistVisible===true &&
+                                  Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
+                                );
+                                """
+                            )
+                        )
+                        return action + "+cold-start-retry-recovered"
+                except Exception:
+                    # Fall through to the full diagnostic below; never hide or
+                    # convert a failed real recovery into a passing evidence run.
+                    pass
             diagnostic = {}
             try:
                 diagnostic = driver.execute_script(
