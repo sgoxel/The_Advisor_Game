@@ -153,6 +153,7 @@ function model(seed){
   return cache.get(key);
 }
 function get(seed,id){return model(seed).byId.get(String(id))||null}
+function list(seed){return model(seed).descriptors}
 
 function visitLocal(seed,centerValue,radiusValue){
   const center=point(centerValue);
@@ -428,6 +429,6 @@ function proof(seed){
 
 window.ObjectInteractions=Object.freeze({
   VERSION,DEFAULT_QUERY_RADIUS_TILES,DEFAULT_PICK_RADIUS_TILES,MAX_RESULTS,
-  get,context,queryNearby,pick,attempt,snapshot,proof
+  get,list,context,queryNearby,pick,attempt,snapshot,proof
 });
 })();
