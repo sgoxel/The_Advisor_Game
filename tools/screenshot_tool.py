@@ -192,7 +192,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-009": 11,
     "wp-s003-006-011": 8,
     "wp-s003-006-012": 8,
-    "wp-s003-006-013": 10,
+    "wp-s003-006-013": 6,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
@@ -1594,13 +1594,22 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
     if scenario == "wp-s003-006-013":
+        from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
-        timeout = max(timeout, 180.0)
-        # Start evidence from a genuinely playable campaign and avoid unrelated
-        # background cache expansion while cold software-WebGL settles.
-        _set_terrain_preload_settings(
-            driver, radius=2, cache=256, directional=True, background=False
+        timeout = max(timeout, 45.0)
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.();
+                return Boolean(
+                  s?.ready===true &&
+                  s?.stage==='planet-sphere-foundation' &&
+                  Number(s?.canvasCount||0)===1
+                );
+                """
+            )
         )
+        return "planet-stage-ready"
     if scenario == "wp-s003-006-011":
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
@@ -2099,6 +2108,32 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
 
 
 def runtime_snapshot(driver) -> dict:
+    planet = driver.execute_script(
+        """
+        const stage=window.PlanetStage?.snapshot?.() || null;
+        if(!stage)return null;
+        return {
+          ok:true,
+          url:location.href,
+          title:document.title,
+          readyState:document.readyState,
+          viewport:{
+            width:innerWidth,
+            height:innerHeight,
+            devicePixelRatio:window.devicePixelRatio || 1
+          },
+          currentBuild:{
+            planetStage:stage,
+            planetCanvasCount:document.querySelectorAll('#planetCanvas').length,
+            legacyCanvasCount:document.querySelectorAll('#gameCanvas').length,
+            terrainGridPresent:Boolean(document.querySelector('#terrainGrid')),
+            protagonistPresent:Boolean(document.querySelector('#protagonistMarker'))
+          }
+        };
+        """
+    )
+    if isinstance(planet, dict):
+        return planet
     result = driver.execute_script(RUNTIME_SNAPSHOT_SCRIPT)
     if not isinstance(result, dict):
         return {"ok": False, "reason": "unexpected-runtime-snapshot"}
@@ -2108,6 +2143,11 @@ def runtime_snapshot(driver) -> dict:
 def validate_current_build_snapshot(snapshot: dict, *, require_coverage: bool = True) -> None:
     current = snapshot.get("currentBuild") if isinstance(snapshot, dict) else None
     if not isinstance(current, dict):
+        return
+    planet=current.get("planetStage")
+    if isinstance(planet, dict) and planet.get("ready") is True:
+        if int(current.get("planetCanvasCount") or 0) != 1:
+            raise RuntimeError(f"Planet stage canvas count mismatch: {current}")
         return
     grid = current.get("terrainGrid")
     if not isinstance(grid, dict):
@@ -6167,200 +6207,42 @@ def _set_minimap_view(
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-006-013":
         from selenium.webdriver.support.ui import WebDriverWait
-        driver.set_script_timeout(180.0)
-        if frame_index == 0:
-            proof=driver.execute_script(
-                """
-                const seed=window.SeedSystem?.getCampaign?.()?.seed;
-                const G=window.GameRenderer,WF=window.WorldField;
-                if(!seed||!G?.landformAtWorldUnit||!WF?.sample||!WF?.landform||!WF?.proof){
-                  return {pass:false,reason:'continuous-world-field-runtime-api-missing'};
-                }
-                const chunkSize=Number(window.TerrainChunkSizeSettings?.get?.()?.chunkSize||16);
-                const mod=(n,m)=>((n%m)+m)%m;
-                const candidates=[];
-                for(let y=-8000;y<=8000;y+=128){
-                  for(let x=-8000;x<=8000;x+=128){
-                    const profile=G.landformAtWorldUnit(String(x),String(y));
-                    if(!profile)continue;
-                    const field=WF.sample(seed,x*2,y*2);
-                    candidates.push({
-                      x,y,profile,
-                      terrain:String(field?.surfaceType||''),
-                      waterKind:field?.waterKind||null,
-                      elevationMeters:Number(field?.elevationMeters||0),
-                      xMeters:String(field?.xMeters??x*2),
-                      zMeters:String(field?.zMeters??y*2)
-                    });
-                  }
-                }
-                const best=(field,filter=()=>true)=>candidates.filter(filter).sort((a,b)=>
-                  Number(b.profile?.[field]||0)-Number(a.profile?.[field]||0)||
-                  Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0)||
-                  (Math.abs(a.x)+Math.abs(a.y))-(Math.abs(b.x)+Math.abs(b.y))
-                )[0]||null;
-                const valley=best('valleySignal',row=>row.profile?.kind==='valley')||best('valleySignal');
-                const ridge=best('ridgeSignal',row=>row.profile?.kind==='ridge')||best('ridgeSignal');
-                const cliff=best('cliffSignal',row=>row.profile?.kind==='cliff')||best('cliffSignal');
-                const pass=best('passSignal',row=>row.profile?.kind==='pass')||best('passSignal');
-                const slope=candidates.filter(row=>row.profile?.kind==='slope'&&Number(row.profile?.slopeDegrees||0)>=8)
-                  .sort((a,b)=>Math.abs(Number(a.profile?.slopeDegrees||0)-18)-Math.abs(Number(b.profile?.slopeDegrees||0)-18))[0]||cliff;
-                const nearWater=row=>{
-                  if(row.terrain==='water')return true;
-                  for(const d of [[-128,0],[128,0],[0,-128],[0,128],[-256,0],[256,0],[0,-256],[0,256]]){
-                    if(String(WF.sample(seed,(row.x+d[0])*2,(row.y+d[1])*2)?.surfaceType||'')==='water')return true;
-                  }
-                  return false;
-                };
-                const riverValley=best('valleySignal',row=>row.profile?.kind==='valley'&&nearWater(row))
-                  ||best('valleySignal',row=>nearWater(row))
-                  ||valley;
-                const boundary=candidates.filter(row=>mod(row.x,chunkSize)===0||mod(row.y,chunkSize)===0)
-                  .sort((a,b)=>Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0))[0]||ridge;
-                const selected={valley,ridge,slope,cliff,pass,riverValley,boundary};
-                const deterministic=Object.values(selected).filter(Boolean).every(row=>{
-                  const a=G.landformAtWorldUnit(String(row.x),String(row.y));
-                  const b=G.landformAtWorldUnit(String(row.x),String(row.y));
-                  return JSON.stringify(a)===JSON.stringify(b);
-                });
-                const authority=Object.values(selected).filter(Boolean).every(row=>
-                  row.profile?.continuousMeterField===true&&
-                  row.profile?.tileAuthority===false&&row.profile?.chunkAuthority===false&&
-                  row.profile?.source==='WorldField.landform'
-                );
-                const classMatch=Boolean(
-                  valley?.profile?.kind==='valley'&&ridge?.profile?.kind==='ridge'&&
-                  slope?.profile?.kind==='slope'&&cliff?.profile?.kind==='cliff'&&
-                  pass?.profile?.kind==='pass'
-                );
-                const signals={
-                  valley:Number(valley?.profile?.valleySignal||0),
-                  ridge:Number(ridge?.profile?.ridgeSignal||0),
-                  cliff:Number(cliff?.profile?.cliffSignal||0),
-                  pass:Number(pass?.profile?.passSignal||0),
-                  slopeDegrees:Number(slope?.profile?.slopeDegrees||0)
-                };
-                const fieldProof=WF.proof(seed);
-                const passProof=Boolean(
-                  valley&&ridge&&slope&&cliff&&pass&&boundary&&
-                  deterministic&&authority&&classMatch&&
-                  fieldProof?.deterministic===true&&fieldProof?.continuousMeterField===true&&
-                  fieldProof?.tileAuthority===false&&fieldProof?.chunkAuthority===false&&
-                  signals.valley>=0.12&&signals.ridge>=0.14&&signals.cliff>=0.22&&
-                  signals.pass>=0.12&&signals.slopeDegrees>=8
-                );
-                const compact=Object.fromEntries(Object.entries(selected).map(([key,row])=>[
-                  key,row?{
-                    x:row.x,y:row.y,xMeters:row.xMeters,zMeters:row.zMeters,
-                    terrain:row.terrain,waterKind:row.waterKind,elevationMeters:row.elevationMeters,
-                    profile:row.profile
-                  }:null
-                ]));
-                const proof={
-                  pass:passProof,version:String(WF.VERSION||''),
-                  seed,chunkSize,selected:compact,signals,candidateCount:candidates.length,
-                  deterministic,authority,classMatch,fieldProof,
-                  riverValleyAvailable:Boolean(riverValley&&nearWater(riverValley)),
-                  source:'WorldField.sample+landform',
-                  continuousWorldMeterField:true,tileAuthorityDiscarded:true,chunkAuthority:false
-                };
-                window.__WP_S003_006_013_PROOF=proof;
-                return proof;
-                """
-            )
-            if not isinstance(proof,dict) or proof.get("pass") is not True:
-                raise RuntimeError(f"Continuous world-field functional proof failed: {proof}")
-        proof=driver.execute_script("return window.__WP_S003_006_013_PROOF || null")
-        if not isinstance(proof,dict) or proof.get("pass") is not True:
-            raise RuntimeError(f"Continuous world-field proof state missing: {proof}")
         plan=(
-            ("valley",1.00,(1280,800)),
-            ("ridge",1.00,(1280,800)),
-            ("slope",2.00,(1280,800)),
-            ("cliff",2.00,(1280,800)),
-            ("pass",1.00,(1280,800)),
-            ("riverValley",1.00,(1280,800)),
-            ("boundary",2.00,(1280,800)),
-            ("ridge",0.50,(1280,800)),
-            ("valley",0.75,(844,390)),
-            ("pass",1.00,(390,844)),
+            (0,-12,(1280,800)),
+            (70,-8,(1280,800)),
+            (145,18,(1280,800)),
+            (225,-24,(1280,800)),
+            (305,12,(844,390)),
+            (35,20,(390,844)),
         )
-        key,zoom,viewport=plan[min(frame_index,len(plan)-1)]
-        target=(proof.get("selected") or {}).get(key) or {}
-        if not target:
-            raise RuntimeError(f"Continuous world-field visual target missing for {key}: {proof}")
+        yaw,pitch,viewport=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(int(viewport[0]),int(viewport[1]))
-        time.sleep(0.3)
-        action=_set_camera_view_and_render_active(driver,int(target["x"]),int(target["y"]),float(zoom),timeout=120.0)
-        try:
-            WebDriverWait(driver,120.0).until(
-                lambda d: d.execute_script(
-                    """
-                    const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
-                    const current=loading?.current || {};
-                    const area=window.AppUI?.runtimeAreaLoadingSnapshot?.() || {};
-                    const renderer=window.GameRenderer?.snapshot?.() || {};
-                    const camera=window.Camera?.getCenter?.() || null;
-                    const frame=renderer?.frame?.center || null;
-                    return Boolean(
-                      document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
-                      loading?.overlay?.hidden===true &&
-                      current.state==='hidden' &&
-                      current.readiness?.playableReady===true &&
-                      area.state==='READY' &&
-                      renderer?.simulationSnapshot?.campaignActive===true &&
-                      renderer?.regionKey &&
-                      renderer?.terrainChunks?.landformPass===true &&
-                      camera && frame &&
-                      String(camera.x)===String(arguments[0]) &&
-                      String(camera.y)===String(arguments[1]) &&
-                      String(frame.x)===String(arguments[0]) &&
-                      String(frame.y)===String(arguments[1]) &&
-                      Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
-                    );
-                    """,
-                    str(target["x"]),str(target["y"])
-                )
-            )
-        except Exception as exc:
-            diagnostic=driver.execute_script(
-                """
-                const renderer=window.GameRenderer?.snapshot?.() || {};
-                return {
-                  target:{x:String(arguments[0]),y:String(arguments[1])},
-                  campaignState:document.querySelector('#campaignState')?.textContent?.trim()||null,
-                  sceneLoading:window.AppUI?.sceneLoadingSnapshot?.()||null,
-                  runtimeAreaLoading:window.AppUI?.runtimeAreaLoadingSnapshot?.()||null,
-                  camera:window.Camera?.getCenter?.()||null,
-                  frame:renderer?.frame?.center||null,
-                  visibleChunkCount:Number(renderer?.terrainChunks?.visibleChunkCount||0),
-                  landformPass:renderer?.terrainChunks?.landformPass===true,
-                  terrainChunks:renderer?.terrainChunks||null
-                };
-                """,
-                str(target["x"]),str(target["y"])
-            )
-            raise RuntimeError(f"Continuous world-field post-navigation readiness failed for {key}: {diagnostic}") from exc
-        current=driver.execute_script(
+        time.sleep(0.2)
+        result=driver.execute_script(
             """
-            const key=String(arguments[0]);
-            const proof=window.__WP_S003_006_013_PROOF||{};
-            const target=proof.selected?.[key]||null;
-            const landform=target?window.GameRenderer?.landformAtWorldUnit?.(String(target.x),String(target.y)):null;
-            const chunks=window.GameRenderer?.snapshot?.()?.terrainChunks||null;
-            return {target,landform,chunks};
+            const stage=window.PlanetStage;
+            if(!stage?.setRotation)return null;
+            return stage.setRotation(Number(arguments[0]),Number(arguments[1]));
             """,
-            key
+            float(yaw),float(pitch)
         )
-        landform=current.get("landform") if isinstance(current,dict) else None
-        if (
-            not isinstance(landform,dict)
-            or landform.get("continuousMeterField") is not True
-            or landform.get("tileAuthority") is not False
-            or landform.get("chunkAuthority") is not False
-        ):
-            raise RuntimeError(f"Continuous world-field profile missing after navigation for {key}: {current}")
-        return f"continuous-world-field:{key}@{zoom:.2f}:{action}"
+        if not isinstance(result,dict) or result.get("ready") is not True:
+            raise RuntimeError(f"Planet rotation failed: {result}")
+        WebDriverWait(driver,20.0).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.();
+                return Boolean(
+                  s?.ready===true &&
+                  Math.abs(Number(s?.rotation?.yawDegrees)-Number(arguments[0]))<0.01 &&
+                  Math.abs(Number(s?.rotation?.pitchDegrees)-Number(arguments[1]))<0.01 &&
+                  document.querySelectorAll('#planetCanvas').length===1
+                );
+                """,
+                float(yaw),float(pitch)
+            )
+        )
+        return f"planet-sphere:yaw={yaw}:pitch={pitch}:viewport={viewport[0]}x{viewport[1]}"
 
     if scenario == "wp-s003-006-012":
         from selenium.webdriver.support.ui import WebDriverWait
@@ -8081,66 +7963,45 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "wp-s003-006-013":
-        if len(frames) < 10:
-            raise RuntimeError("wp-s003-006-013 requires ten continuous world-field evidence frames")
-        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:10]]
-        proof=builds[0].get("wpS003006013") or {}
-        if proof.get("pass") is not True:
-            raise RuntimeError(f"Continuous world-field proof failed: {proof}")
-        selected=proof.get("selected") or {}
-        for key in ("valley","ridge","slope","cliff","pass","boundary"):
-            if not selected.get(key):
-                raise RuntimeError(f"Continuous world-field visual target missing: {key}; proof={proof}")
-        signals=proof.get("signals") or {}
-        if proof.get("classMatch") is not True:
-            raise RuntimeError(f"Named continuous landforms do not match field classes: {proof}")
-        if float(signals.get("valley") or 0)<0.12 or float(signals.get("ridge") or 0)<0.14:
-            raise RuntimeError(f"Valley/ridge signal is too weak: {proof}")
-        if float(signals.get("cliff") or 0)<0.22 or float(signals.get("pass") or 0)<0.12 or float(signals.get("slopeDegrees") or 0)<8:
-            raise RuntimeError(f"Cliff/pass/slope signal is too weak: {proof}")
-        if proof.get("deterministic") is not True or proof.get("authority") is not True:
-            raise RuntimeError(f"Continuous field determinism/authority failed: {proof}")
-        field_proof=proof.get("fieldProof") or {}
-        if (
-            field_proof.get("continuousMeterField") is not True
-            or field_proof.get("tileAuthority") is not False
-            or field_proof.get("chunkAuthority") is not False
-        ):
-            raise RuntimeError(f"WorldField did not prove tile/chunk authority removal: {proof}")
-        for index,build in enumerate(builds):
-            scene=build.get("sceneLoading") or {}
-            scene_current=scene.get("current") or {}
-            area=build.get("runtimeAreaLoading") or {}
-            if (
-                build.get("campaignState") != "ACTIVE"
-                or (scene.get("overlay") or {}).get("hidden") is not True
-                or scene_current.get("state") != "hidden"
-                or (scene_current.get("readiness") or {}).get("playableReady") is not True
-                or area.get("state") != "READY"
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-006-013 requires six planet-sphere evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        rotations=[]
+        for index,build in enumerate(builds, start=1):
+            stage=build.get("planetStage") or {}
+            systems=stage.get("activeSystems") or {}
+            if stage.get("ready") is not True or stage.get("stage") != "planet-sphere-foundation":
+                raise RuntimeError(f"Planet stage not ready in frame {index}: {stage}")
+            if stage.get("version") != "planet-sphere-foundation-v1":
+                raise RuntimeError(f"Unexpected planet-stage version in frame {index}: {stage}")
+            if abs(float(stage.get("worldScaleFraction") or 0)-0.10)>1e-9:
+                raise RuntimeError(f"Planet scale fraction is not 10% in frame {index}: {stage}")
+            if int(stage.get("worldRadiusMeters") or 0) != 637100:
+                raise RuntimeError(f"Planet radius is not 637100 m in frame {index}: {stage}")
+            if int(stage.get("worldDiameterMeters") or 0) != 1274200:
+                raise RuntimeError(f"Planet diameter is not 1274200 m in frame {index}: {stage}")
+            if int(stage.get("canvasCount") or 0) != 1 or int(build.get("planetCanvasCount") or 0) != 1:
+                raise RuntimeError(f"Planet stage must use exactly one canvas in frame {index}: {build}")
+            if int(build.get("legacyCanvasCount") or 0) != 0:
+                raise RuntimeError(f"Legacy gameplay canvas is active in frame {index}: {build}")
+            if build.get("terrainGridPresent") is True or build.get("protagonistPresent") is True:
+                raise RuntimeError(f"Retired local gameplay DOM is active in frame {index}: {build}")
+            for key in (
+                "protagonistEnabled","npcEnabled","tileSystemActive","localTerrainActive",
+                "settlementGenerationActive","buildingGenerationActive","worldDetailSimulationActive"
             ):
-                raise RuntimeError(
-                    f"Continuous terrain frame {index+1} was captured before genuine playable readiness: "
-                    f"campaign={build.get('campaignState')}, scene={scene}, area={area}"
-                )
-            chunks=((build.get("gpuRenderer") or {}).get("terrainChunks") or {})
-            if chunks.get("landformEnabled") is not True or chunks.get("landformPass") is not True:
-                raise RuntimeError(f"Continuous field telemetry failed in frame {index+1}: {chunks}")
-            if chunks.get("naturalTerrainAuthority") != "WorldField":
-                raise RuntimeError(f"Natural terrain authority is not WorldField in frame {index+1}: {chunks}")
-            if chunks.get("continuousWorldMeterField") is not True or chunks.get("logicalTilesAuthoritative") is not False:
-                raise RuntimeError(f"Tile-authoritative terrain survived in frame {index+1}: {chunks}")
-            if int(chunks.get("landformPerFrameRegenerationCount") or 0)!=0:
-                raise RuntimeError(f"Continuous landform regenerated per frame in frame {index+1}: {chunks}")
-            if chunks.get("landformRendererOnly") is not False:
-                raise RuntimeError(f"WorldField was incorrectly reported as renderer-only in frame {index+1}: {chunks}")
-            if chunks.get("landformNavigationAuthority") is True or chunks.get("landformCollisionAuthority") is True:
-                raise RuntimeError(f"Navigation/collision authority changed unexpectedly in frame {index+1}: {chunks}")
-            if int(chunks.get("landformDrawCallsAdded") or 0)!=0 or int(chunks.get("landformMaterialsAdded") or 0)!=0:
-                raise RuntimeError(f"Continuous field added unexpected draw calls/materials in frame {index+1}: {chunks}")
-            if int(chunks.get("landformTrianglesAdded") or 0)!=0:
-                raise RuntimeError(f"Retired cell-local cliff topology still adds triangles in frame {index+1}: {chunks}")
-            if float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
-                raise RuntimeError(f"Continuous field patch border mismatch in frame {index+1}: {chunks}")
+                if systems.get(key) is not False:
+                    raise RuntimeError(f"Stage 1 unexpectedly enabled {key} in frame {index}: {stage}")
+            rotation=stage.get("rotation") or {}
+            rotations.append((round(float(rotation.get("yawDegrees") or 0),2),round(float(rotation.get("pitchDegrees") or 0),2)))
+        if len(set(rotations)) < 5:
+            raise RuntimeError(f"Planet evidence did not exercise materially different rotations: {rotations}")
+        landscape=frames[4].get("runtime",{}).get("viewport",{})
+        portrait=frames[5].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>450:
+            raise RuntimeError(f"Phone-landscape planet frame has unexpected viewport: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"Phone-portrait planet frame has unexpected viewport: {portrait}")
         return
 
     if scenario == "wp-s003-006-012":
