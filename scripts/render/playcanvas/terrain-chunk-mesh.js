@@ -15,6 +15,8 @@ function signed01(seed,x,z,salt){
   return (h/4294967295)*2-1;
 }
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
+function worldVisualStyle(){return window.AdvisorWorldVisualStyle||null;}
+function styleColor(role,color){const style=worldVisualStyle();return style?.gradeRgb?style.gradeRgb(role,color):color;}
 
 const HEIGHTFIELD_VERTICAL_SCALE=0.0022;
 const HEIGHTFIELD_RELIEF=0.065;
@@ -120,15 +122,15 @@ function heightfieldColor(seed,x,z,value){
   const match=/^#([0-9a-f]{6})$/i.exec(text);
   if(match){
     const n=parseInt(match[1],16);
-    return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255,1];
+    return styleColor("terrain",[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255,1]);
   }
   const noise=signed01(seed,x,z,"color");
-  return [
+  return styleColor("terrain",[
     clamp(0.29+noise*0.018,0.20,0.40),
     clamp(0.42+noise*0.025,0.30,0.55),
     clamp(0.215+noise*0.012,0.14,0.30),
     1
-  ];
+  ]);
 }
 function terrainHeightVertex(seed,xValue,yValue){
   const seedKey=String(seed||"");
@@ -193,7 +195,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   material.vertexColors=true;
   material.diffuseVertexColor=true;
   material.diffuse.set(1,1,1);
-  material.gloss=0.06;
+  material.gloss=Number(worldVisualStyle()?.materials?.terrainGloss??0.06);
   material.metalness=0;
   material.update();
 
@@ -534,12 +536,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   }
   function sampleColor(seed,x,z){
     const n=signed01(seed,x,z,"color");
-    return [
+    return styleColor("terrain",[
       clamp(0.29+n*0.018,0.20,0.40),
       clamp(0.42+n*0.025,0.30,0.55),
       clamp(0.215+n*0.012,0.14,0.30),
       1
-    ];
+    ]);
   }
   function parseHexColor(value){
     const text=String(value||"").trim();
@@ -596,7 +598,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         r+=color[0];g+=color[1];b+=color[2];n++;
       }
     }
-    return {type:chosenType||"grass",color:n?[r/n,g/n,b/n,1]:fallback};
+    return {type:chosenType||"grass",color:n?styleColor("terrain",[r/n,g/n,b/n,1]):fallback};
   }
   function localTileCenter(worldData,x,y){
     const size=Number(worldData?.chunkSize||0);
@@ -1612,6 +1614,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       instancingParentTranslationAppliedOnce:true,
       frustumCulledMeshInstances,
       sharedPresentationMaterialCount:presentationMaterials.size,
+      worldVisualStyleSignature:String(worldVisualStyle()?.signature||"legacy"),
+      worldVisualStylePaletteRoleCount:Object.keys(worldVisualStyle()?.palette||{}).length,
       buildingMaterialVariationDeterministic:true,
       buildingMaterialVariantPaletteSize:BUILDING_MATERIAL_VARIANTS.length,
       buildingMaterialVariantCount:new Set([...buildingMaterialVariantEvidence.values()].map(item=>item.variantIndex)).size,
