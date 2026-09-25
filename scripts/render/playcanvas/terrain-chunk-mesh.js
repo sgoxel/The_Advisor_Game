@@ -1672,14 +1672,28 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const surfaceCounts=spec.worldData?.terrain?.surfaceCounts||{};
     let texturedBlockCount=0,colorFallbackBlockCount=0;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
-    const heightCache=new Map();
-    const sampleHeight=(gx,gz)=>{
-      const key=gx+","+gz;
-      if(heightCache.has(key))return heightCache.get(key);
-      const wx=baseX+BigInt(gx),wz=baseZ+BigInt(gz);
-      const value=terrainHeightVertex(seed,String(wx),String(wz)).height;
-      heightCache.set(key,value);
-      return value;
+    const heightSegments=heightfieldSegments(size);
+    const heightStep=heightfieldStep(size);
+    const coarseStride=heightSegments+1;
+    const coarseHeights=new Array(coarseStride*coarseStride);
+    for(let gz=0;gz<=heightSegments;gz++){
+      for(let gx=0;gx<=heightSegments;gx++){
+        const wx=baseX+BigInt(gx*heightStep),wz=baseZ+BigInt(gz*heightStep);
+        coarseHeights[gz*coarseStride+gx]=terrainHeightVertex(seed,String(wx),String(wz)).height;
+      }
+    }
+    const coarseAt=(gx,gz)=>coarseHeights[
+      Math.max(0,Math.min(heightSegments,gz))*coarseStride+
+      Math.max(0,Math.min(heightSegments,gx))
+    ];
+    const sampleHeight=(tileX,tileZ)=>{
+      const qx=tileX/heightStep,qz=tileZ/heightStep;
+      const x0=Math.min(heightSegments-1,Math.max(0,Math.floor(qx)));
+      const z0=Math.min(heightSegments-1,Math.max(0,Math.floor(qz)));
+      const tx=Math.max(0,Math.min(1,qx-x0)),tz=Math.max(0,Math.min(1,qz-z0));
+      const a=coarseAt(x0,z0),b=coarseAt(x0+1,z0),cc=coarseAt(x0,z0+1),d=coarseAt(x0+1,z0+1);
+      if(tx+tz<=1)return a+tx*(b-a)+tz*(cc-a);
+      return d+(1-tz)*(b-d)+(1-tx)*(cc-d);
     };
     for(let gz=0;gz<size;gz++){
       for(let gx=0;gx<size;gx++){
@@ -1807,7 +1821,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       ambientRendererOnly:true,ambientNavigationAuthority:false,ambientCollisionAuthority:false,
       ambientSimulationAuthorityPreserved:true,ambientQuality:"minimum",ambientZoom:1,ambientLodSimplified:true,
       ambientUpdateIntervalMs:0,ambientUpdateCount:0,ambientBufferUpdateCount:0,ambientLastCpuUpdateMs:0,ambientMaxCpuUpdateMs:0,
-      segments:size,heightfieldGridResolution:size+1,heightfieldStepTiles:1,
+      segments:size,heightfieldGridResolution:heightSegments+1,heightfieldStepTiles:heightStep,
       semanticGridResolution:size+1,semanticStepTiles:1,indexedSharedVertices:false,indexedSemanticQuads:true,
       semanticUvChannel:0,normalDetailUvChannel:1,semanticSurfaceTileCount:size*size,
       semanticSurfaceTileCounts:Object.freeze({...surfaceCounts}),
