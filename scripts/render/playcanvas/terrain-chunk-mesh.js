@@ -1108,7 +1108,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     appendBoxBatch(wallBatch,[b.x,groundY+height*0.5,b.z+outerD*0.5],[outerW,height,thickness],0);
     appendBoxBatch(wallBatch,[b.x-outerW*0.5,groundY+height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
     appendBoxBatch(wallBatch,[b.x+outerW*0.5,groundY+height*0.5,b.z],[thickness,height,Math.max(thickness,outerD-thickness*2)],0);
-    buildGabledRoof(root,descriptor,rootName,b,wallTopY,outerW,outerD,roof,roofProfiles);
+    const roofBuild=buildGabledRoof(root,descriptor,rootName,b,wallTopY,outerW,outerD,roof,roofProfiles);
     let count=7;
     if(descriptor.entrance){
       const p=localTileCenter(worldData,descriptor.entrance.x,descriptor.entrance.y);
@@ -1205,26 +1205,30 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         appendBoxBatch(batchFor(batches,mat.name,mat),position,scale,0);
         primitiveCount++;
       };
-      const roofBaseY=wallTopY+0.48;
+      // Landmark silhouettes must clear the actual gable ridge rather than
+      // intersecting it. Use the prepared roof profile so the accent remains
+      // readable at normal orthographic zoom without excessive height.
+      const ridgeTopY=Number(roofBuild?.profile?.ridgeTopY??(wallTopY+1.0));
+      const roofBaseY=ridgeTopY+0.10;
       if(treatment==="forge-stack"||treatment==="timber-stack"){
         const x=b.x+outerW*0.24,z=b.z-outerD*0.12;
-        add(stone,[x,roofBaseY+0.58,z],[0.52,1.60,0.52]);
-        add(accent,[x,roofBaseY+1.40,z],[0.68,0.14,0.68]);
-        add(timber,[x,roofBaseY+1.57,z],[0.42,0.20,0.42]);
+        add(stone,[x,roofBaseY+0.62,z],[0.58,1.24,0.58]);
+        add(accent,[x,roofBaseY+1.28,z],[0.82,0.16,0.82]);
+        add(timber,[x,roofBaseY+1.52,z],[0.46,0.34,0.46]);
       }else if(treatment==="market-crest"){
-        add(timber,[b.x,roofBaseY+0.68,b.z],[0.18,1.35,0.18]);
-        add(timber,[b.x,roofBaseY+1.18,b.z],[1.15,0.14,0.18]);
-        add(accent,[b.x+0.34,roofBaseY+0.87,b.z],[0.58,0.58,0.10]);
+        add(timber,[b.x,roofBaseY+0.70,b.z],[0.20,1.40,0.20]);
+        add(timber,[b.x,roofBaseY+1.24,b.z],[1.32,0.16,0.20]);
+        add(accent,[b.x+0.40,roofBaseY+0.91,b.z],[0.66,0.62,0.12]);
       }else if(treatment==="harvest-cupola"){
-        add(timber,[b.x,roofBaseY+0.36,b.z],[0.78,0.70,0.78]);
-        add(accent,[b.x,roofBaseY+0.76,b.z],[1.02,0.14,1.02]);
-        add(timber,[b.x,roofBaseY+1.13,b.z],[0.14,0.72,0.14]);
-        add(accent,[b.x,roofBaseY+1.34,b.z],[0.86,0.10,0.14]);
+        add(timber,[b.x,roofBaseY+0.38,b.z],[0.94,0.76,0.94]);
+        add(accent,[b.x,roofBaseY+0.82,b.z],[1.20,0.16,1.20]);
+        add(timber,[b.x,roofBaseY+1.23,b.z],[0.16,0.82,0.16]);
+        add(accent,[b.x,roofBaseY+1.47,b.z],[1.00,0.12,0.16]);
       }else{
         const watch=treatment==="watch-cupola";
-        add(stone,[b.x,roofBaseY+(watch?0.48:0.39),b.z],[watch?0.92:0.78,watch?0.96:0.78,watch?0.92:0.78]);
-        add(accent,[b.x,roofBaseY+(watch?1.01:0.84),b.z],[watch?1.20:1.02,0.16,watch?1.20:1.02]);
-        add(timber,[b.x,roofBaseY+(watch?1.36:1.18),b.z],[0.14,0.62,0.14]);
+        add(stone,[b.x,roofBaseY+(watch?0.54:0.46),b.z],[watch?1.10:0.96,watch?1.08:0.92,watch?1.10:0.96]);
+        add(accent,[b.x,roofBaseY+(watch?1.14:0.98),b.z],[watch?1.42:1.26,0.18,watch?1.42:1.26]);
+        add(timber,[b.x,roofBaseY+(watch?1.52:1.34),b.z],[0.18,0.72,0.18]);
       }
       count+=primitiveCount;
       if(landmarkCounters){
@@ -1243,6 +1247,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           contextTags:Object.freeze([...(landmark.contextTags||[])]),
           settlementClass:String(landmark.settlementClass||"village"),
           settlementRevision:String(landmark.settlementRevision||""),
+          roofRidgeTopY:Number(ridgeTopY.toFixed(3)),
+          landmarkBaseY:Number(roofBaseY.toFixed(3)),
+          clearsRoofRidge:roofBaseY>ridgeTopY,
           primitiveCount,
           rendererOnly:true,
           navigationAuthority:false,
