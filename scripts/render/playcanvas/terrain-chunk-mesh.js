@@ -1689,42 +1689,46 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const south=sw+(se-sw)*tx;
       return clamp(north+(south-north)*tz,-3.4,3.4);
     };
-    for(let gz=0;gz<size;gz++){
-      for(let gx=0;gx<size;gx++){
-        const sourceCell=spec.worldData?.cells?.[gz*size+gx]||null;
-        const surfaceType=semanticSurfaceType(sourceCell?.type||"grass");
-        const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(surfaceType)||activeAtlas?.uvRect?.(surfaceType)):null;
-        const x0=gx*metersPerTile-half,x1=(gx+1)*metersPerTile-half;
-        const z0=gz*metersPerTile-half,z1=(gz+1)*metersPerTile-half;
-        const h00=sampleHeight(gx,gz),h10=sampleHeight(gx+1,gz),h01=sampleHeight(gx,gz+1),h11=sampleHeight(gx+1,gz+1);
-        const base=positions.length/3;
-        positions.push(x0,h00,z0,x1,h10,z0,x0,h01,z1,x1,h11,z1);
-        for(let i=0;i<4;i++)normals.push(0,1,0);
-        if(rect){
-          texturedBlockCount++;
-          texturedSurfaceTypes.add(surfaceType);
-          for(let i=0;i<4;i++)appendColor32(colors32,[1,1,1,1],1);
-          uvs.push(
-            Number(rect.u0),Number(rect.v0),
-            Number(rect.u1),Number(rect.v0),
-            Number(rect.u0),Number(rect.v1),
-            Number(rect.u1),Number(rect.v1)
-          );
-        }else{
-          colorFallbackBlockCount++;
-          fallbackSurfaceTypes.add(surfaceType);
-          const fallback=heightfieldColor(seed,baseX+BigInt(gx),baseZ+BigInt(gz),sourceCell?.color,surfaceType);
-          for(let i=0;i<4;i++)appendColor32(colors32,fallback,1);
-          uvs.push(0,0,1,0,0,1,1,1);
-        }
-        detailUvs.push(
-          Number(baseX+BigInt(gx))*0.25,Number(baseZ+BigInt(gz))*0.25,
-          Number(baseX+BigInt(gx+1))*0.25,Number(baseZ+BigInt(gz))*0.25,
-          Number(baseX+BigInt(gx))*0.25,Number(baseZ+BigInt(gz+1))*0.25,
-          Number(baseX+BigInt(gx+1))*0.25,Number(baseZ+BigInt(gz+1))*0.25
+    let emittedCellCount=0;
+    const preparedCells=Array.isArray(spec.worldData?.cells)?spec.worldData.cells:[];
+    for(let index=0;index<preparedCells.length;index++){
+      const sourceCell=preparedCells[index]||null;
+      if(!sourceCell)continue;
+      const gz=Math.floor(index/size),gx=index-gz*size;
+      if(gx<0||gz<0||gx>=size||gz>=size)continue;
+      emittedCellCount++;
+      const surfaceType=semanticSurfaceType(sourceCell.type||"grass");
+      const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(surfaceType)||activeAtlas?.uvRect?.(surfaceType)):null;
+      const x0=gx*metersPerTile-half,x1=(gx+1)*metersPerTile-half;
+      const z0=gz*metersPerTile-half,z1=(gz+1)*metersPerTile-half;
+      const h00=sampleHeight(gx,gz),h10=sampleHeight(gx+1,gz),h01=sampleHeight(gx,gz+1),h11=sampleHeight(gx+1,gz+1);
+      const base=positions.length/3;
+      positions.push(x0,h00,z0,x1,h10,z0,x0,h01,z1,x1,h11,z1);
+      for(let i=0;i<4;i++)normals.push(0,1,0);
+      if(rect){
+        texturedBlockCount++;
+        texturedSurfaceTypes.add(surfaceType);
+        for(let i=0;i<4;i++)appendColor32(colors32,[1,1,1,1],1);
+        uvs.push(
+          Number(rect.u0),Number(rect.v0),
+          Number(rect.u1),Number(rect.v0),
+          Number(rect.u0),Number(rect.v1),
+          Number(rect.u1),Number(rect.v1)
         );
-        indices.push(base,base+2,base+1,base+1,base+2,base+3);
+      }else{
+        colorFallbackBlockCount++;
+        fallbackSurfaceTypes.add(surfaceType);
+        const fallback=heightfieldColor(seed,baseX+BigInt(gx),baseZ+BigInt(gz),sourceCell.color,surfaceType);
+        for(let i=0;i<4;i++)appendColor32(colors32,fallback,1);
+        uvs.push(0,0,1,0,0,1,1,1);
       }
+      detailUvs.push(
+        Number(baseX+BigInt(gx))*0.25,Number(baseZ+BigInt(gz))*0.25,
+        Number(baseX+BigInt(gx+1))*0.25,Number(baseZ+BigInt(gz))*0.25,
+        Number(baseX+BigInt(gx))*0.25,Number(baseZ+BigInt(gz+1))*0.25,
+        Number(baseX+BigInt(gx+1))*0.25,Number(baseZ+BigInt(gz+1))*0.25
+      );
+      indices.push(base,base+2,base+1,base+1,base+2,base+3);
     }
     const mesh=new pc.Mesh(device);
     mesh.setPositions(positions);
@@ -1817,13 +1821,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       ambientUpdateIntervalMs:0,ambientUpdateCount:0,ambientBufferUpdateCount:0,ambientLastCpuUpdateMs:0,ambientMaxCpuUpdateMs:0,
       segments:size,heightfieldGridResolution:heightSegments+1,heightfieldStepTiles:heightStep,
       semanticGridResolution:size+1,semanticStepTiles:1,indexedSharedVertices:false,indexedSemanticQuads:true,
-      semanticUvChannel:0,normalDetailUvChannel:1,semanticSurfaceTileCount:size*size,
+      streamingSparseMesh:true,streamingSparseMeshCellCount:emittedCellCount,
+      semanticUvChannel:0,normalDetailUvChannel:1,semanticSurfaceTileCount:emittedCellCount,
       semanticSurfaceTileCounts:Object.freeze({...surfaceCounts}),
       contourAlgorithm:"streaming-minimum-none",contourPreparationOnly:true,contourHaloTiles:0,
       contourRoundRadiusTiles:0,contourRoundRadiusWorldUnits:0,contourArcSegments:0,
       contourTransitionBandWidthTiles:0,contourMaxBoundaryDeviationTiles:0,contourMaxBoundaryDeviationWorldUnits:0,
-      contourPatchCount:0,contourVertexCount:0,contourAddedTriangleCount:0,contourBaseTriangleCount:size*size*2,
-      contourBaseVertexCount:size*size*4,contourBuildMs:0,contourDrawCallsAdded:0,contourMaterialCountAdded:0,
+      contourPatchCount:0,contourVertexCount:0,contourAddedTriangleCount:0,contourBaseTriangleCount:emittedCellCount*2,
+      contourBaseVertexCount:emittedCellCount*4,contourBuildMs:0,contourDrawCallsAdded:0,contourMaterialCountAdded:0,
       contourPerFrameRegenerationCount:0,contourCanonicalCornerOwnership:true,contourSharedEdgeKeys:Object.freeze([]),
       contourSurfacePairCounts:Object.freeze({}),contourTileCentersPreserved:true,contourNarrowFeaturesPreserved:true,
       contourAlphaBlend:false,
