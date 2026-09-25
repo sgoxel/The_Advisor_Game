@@ -2674,7 +2674,11 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
     screenToCameraDelta,screenToWorldTile,
     hydrologyAtTile:(x,y)=>terrainChunkMeshFactory?.hydrologyAtTile?.(x,y)||null,
     waterSurfaceAtVertex:(x,y)=>terrainChunkMeshFactory?.waterSurfaceAtVertex?.(x,y)??null,
-    projectionBasis:Object.freeze({x:1,y:1}),
+    // Conservative logical-view coverage for the tilted orthographic PlayCanvas
+    // camera. The previous 1:1 hint under-prepared sparse destination cells at
+    // 0.50x and portrait aspect ratios, exposing clear-color holes around roads
+    // and buildings before full chunks upgraded.
+    projectionBasis:Object.freeze({x:0.66,y:0.50}),
     proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),
     occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),
     interiorObjectProofStates:Object.freeze(["house","special"]),
