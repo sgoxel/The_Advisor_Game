@@ -73,6 +73,7 @@ SCENARIOS = {
     "building-occlusion",
     "wp-s001-001",
     "wp-s001-004",
+    "wp-s002-003-001",
     "wp-s003-005",
     "playcanvas-foundation",
     "playcanvas-scene",
@@ -160,6 +161,7 @@ SCENARIO_MIN_SHOTS = {
     "building-occlusion": 6,
     "wp-s001-001": 5,
     "wp-s001-004": 2,
+    "wp-s002-003-001": 1,
     "wp-s003-005": 3,
     "playcanvas-foundation": 3,
     "playcanvas-scene": 6,
@@ -348,6 +350,7 @@ return (() => {
       },
       assetStandardProof: window.WP_S003_005_002_EVIDENCE || null,
       currentBuild: {
+        wpS002003001: window.__WP_S002_003_001_PROOF || null,
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
         sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
         runtimeAreaLoading: window.AppUI?.runtimeAreaLoadingSnapshot?.() || null,
@@ -6062,6 +6065,145 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s002-003-001":
+        if frame_index != 0:
+            return "slope-walkability:no-op"
+        result=driver.execute_script(
+            """
+            const seed=window.SeedSystem?.getCampaign?.()?.seed;
+            const W=window.Walkability,R=window.RoutePlanner,P=window.PRNG;
+            if(!seed||!W?.transition||!W?.slopeBetween||!R?.proof||!P?.foundationUint32){
+              return {ok:false,reason:'slope-runtime-api-missing'};
+            }
+            W.clearSlopeCache?.();
+            const point=(x,y)=>({x:String(x),y:String(y)});
+            const naturalState=s=>Boolean(
+              s?.walkable &&
+              s?.category!==W.CATEGORY.ROUTE &&
+              s?.category!==W.CATEGORY.INTERIOR &&
+              s?.category!==W.CATEGORY.ENTRANCE &&
+              !s?.buildingId
+            );
+            const describe=(a,b,t)=>({
+              from:a,to:b,
+              fromSourceElevationMeters:Number(t?.slope?.fromSourceElevationMeters||0),
+              toSourceElevationMeters:Number(t?.slope?.toSourceElevationMeters||0),
+              sourceDeltaMeters:Number(t?.slope?.sourceDeltaMeters||0),
+              movementDeltaMeters:Number(t?.slope?.movementDeltaMeters||0),
+              angleDegrees:Number(Number(t?.slope?.angleDegrees||0).toFixed(4)),
+              gradePercent:Number(Number(t?.slope?.gradePercent||0).toFixed(3)),
+              slopeClass:String(t?.slope?.slopeClass||''),
+              allowed:Boolean(t?.allowed),
+              reason:String(t?.reason||''),
+              multiplier:Number.isFinite(Number(t?.multiplier))?Number(Number(t.multiplier).toFixed(4)):null,
+              seconds:Number.isFinite(Number(t?.seconds))?Number(Number(t.seconds).toFixed(6)):null,
+              engineered:Boolean(t?.engineered),
+              gradedPad:Boolean(t?.gradedPad)
+            });
+            const found={flat:null,moderate:null,steep:null,cliff:null,naturalPass:null,chunkBoundary:null,roadManageable:null,roadImpossible:null,diagonalCorner:null};
+            for(let i=0;i<7000;i++){
+              const x=(P.foundationUint32(seed,'wp-s002-003-001:x:'+i)%4096)-2048;
+              const y=(P.foundationUint32(seed,'wp-s002-003-001:y:'+i)%4096)-2048;
+              const horizontal=(i&1)===0;
+              const a=point(x,y),b=point(x+(horizontal?1:0),y+(horizontal?0:1));
+              const slope=W.slopeBetween(seed,a,b);
+              const cls=String(slope?.slopeClass||'');
+              const need=(cls==='gentle'&&!found.flat)||(cls==='moderate'&&!found.moderate)||
+                (cls==='steep'&&!found.steep)||(cls==='cliff'&&!found.cliff);
+              const highlandNeed=!found.naturalPass && Math.min(Number(slope?.fromSourceElevationMeters||0),Number(slope?.toSourceElevationMeters||0))>=1250 &&
+                (cls==='moderate'||cls==='steep'||cls==='very-steep');
+              if(need||highlandNeed){
+                const sa=W.classify(seed,a.x,a.y),sb=W.classify(seed,b.x,b.y);
+                if(naturalState(sa)&&naturalState(sb)){
+                  const t=W.transition(seed,a,b,{fromState:sa,toState:sb});
+                  const row=describe(a,b,t);
+                  if(cls==='gentle'&&t.allowed&&!found.flat)found.flat=row;
+                  if(cls==='moderate'&&t.allowed&&!found.moderate)found.moderate=row;
+                  if(cls==='steep'&&t.allowed&&!found.steep)found.steep=row;
+                  if(cls==='cliff'&&!t.allowed&&!found.cliff)found.cliff=row;
+                  if(highlandNeed&&t.allowed&&!found.naturalPass)found.naturalPass={...row,passKind:'highland-climb-corridor'};
+                }
+              }
+              if(!found.chunkBoundary){
+                const bx=Math.floor(x/16)*16+15;
+                const ca=point(bx,y),cb=point(bx+1,y);
+                const sa=W.classify(seed,ca.x,ca.y),sb=W.classify(seed,cb.x,cb.y);
+                if(naturalState(sa)&&naturalState(sb)){
+                  const t=W.transition(seed,ca,cb,{fromState:sa,toState:sb});
+                  if(t?.slope?.valid)found.chunkBoundary={...describe(ca,cb,t),chunkSize:16};
+                }
+              }
+              if(!found.diagonalCorner){
+                const center=point(x,y),east=point(x+1,y),south=point(x,y+1),diag=point(x+1,y+1);
+                const s0=W.classify(seed,center.x,center.y),se=W.classify(seed,east.x,east.y);
+                const ss=W.classify(seed,south.x,south.y),sd=W.classify(seed,diag.x,diag.y);
+                if(naturalState(s0)&&naturalState(se)&&naturalState(ss)&&naturalState(sd)){
+                  const te=W.transition(seed,center,east,{fromState:s0,toState:se});
+                  const ts=W.transition(seed,center,south,{fromState:s0,toState:ss});
+                  if(!te.allowed&&!ts.allowed){
+                    const td=W.transition(seed,center,diag,{fromState:s0,toState:sd});
+                    if(!td.allowed)found.diagonalCorner={from:center,to:diag,reason:String(td.reason||''),eastReason:String(te.reason||''),southReason:String(ts.reason||'')};
+                  }
+                }
+              }
+              if(found.flat&&found.moderate&&found.steep&&found.cliff&&found.naturalPass&&found.chunkBoundary&&found.diagonalCorner)break;
+            }
+            for(let y=-24;y<=24&&!found.roadManageable;y++){
+              for(let x=-24;x<=24&&!found.roadManageable;x++){
+                for(const [dx,dy] of [[1,0],[0,1]]){
+                  const a=point(x,y),b=point(x+dx,y+dy);
+                  const sa=W.classify(seed,a.x,a.y),sb=W.classify(seed,b.x,b.y);
+                  if(sa?.category!==W.CATEGORY.ROUTE||sb?.category!==W.CATEGORY.ROUTE)continue;
+                  const t=W.transition(seed,a,b,{fromState:sa,toState:sb});
+                  if(t.allowed&&Number(t.slope?.angleDegrees||0)>=7){
+                    found.roadManageable=describe(a,b,t);
+                    break;
+                  }
+                }
+              }
+            }
+            if(found.cliff){
+              const a=found.cliff.from,b=found.cliff.to;
+              const baseA=W.classify(seed,a.x,a.y),baseB=W.classify(seed,b.x,b.y);
+              const roadSpeed=Number(window.WorldStandards?.WALK_SPEED_KMH?.road||3.6);
+              const roadSeconds=window.WorldStandards.TILE_METERS/(roadSpeed*1000/3600);
+              const asRoad=s=>Object.freeze({...s,terrainType:'road',category:W.CATEGORY.ROUTE,walkable:true,blocksMovement:false,speedKmh:roadSpeed,secondsPerTile:roadSeconds,buildingId:null,room:null,specialKind:null,barrierKind:null,doorwayKind:null});
+              const attempt=W.transition(seed,a,b,{fromState:asRoad(baseA),toState:asRoad(baseB)});
+              found.roadImpossible={...describe(a,b,attempt),attempt:'constructed-road-over-real-cliff'};
+            }
+            const routeRegression=R.proof(seed);
+            const deterministicEdge=found.moderate||found.steep||found.flat;
+            let deterministic=false;
+            if(deterministicEdge){
+              const first=W.slopeBetween(seed,deterministicEdge.from,deterministicEdge.to);
+              const second=W.slopeBetween(seed,deterministicEdge.from,deterministicEdge.to);
+              deterministic=JSON.stringify(first)===JSON.stringify(second);
+            }
+            if(found.flat)W.elevationSample(seed,found.flat.from.x,found.flat.from.y);
+            const stats=W.slopeStats();
+            const pass=Boolean(
+              found.flat?.allowed && found.flat?.multiplier===1 &&
+              found.moderate?.allowed && Number(found.moderate.multiplier)>1 &&
+              found.steep?.allowed && Number(found.steep.multiplier)>Number(found.moderate.multiplier) &&
+              found.cliff && found.cliff.allowed===false &&
+              found.naturalPass?.allowed &&
+              found.roadManageable?.allowed && found.roadManageable?.engineered===true &&
+              found.roadImpossible && found.roadImpossible.allowed===false &&
+              found.chunkBoundary &&
+              found.diagonalCorner &&
+              deterministic &&
+              routeRegression?.pass===true &&
+              Number(stats.elevationCacheHits||0)>0 &&
+              stats.rendererIndependent===true
+            );
+            const proof={ok:true,pass,seed,policy:W.SLOPE_POLICY,scenarios:found,deterministic,routeRegression,stats,visual:'N/A - authoritative slope/collision behavior is not meaningfully verified from screenshots'};
+            window.__WP_S002_003_001_PROOF=proof;
+            return proof;
+            """
+        )
+        if not isinstance(result,dict) or result.get("ok") is not True:
+            raise RuntimeError(f"Slope-walkability proof could not run: {result}")
+        return "slope-walkability:functional-proof"
     if scenario == "wp-s003-005-006":
         if frame_index == 0:
             driver.set_script_timeout(60.0)
@@ -7105,6 +7247,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s002-003-001":
+        if len(frames) < 1:
+            raise RuntimeError("wp-s002-003-001 requires one functional evidence frame")
+        build=frames[0].get("runtime",{}).get("currentBuild",{})
+        proof=build.get("wpS002003001") or {}
+        if proof.get("pass") is not True:
+            raise RuntimeError(f"Slope-aware walkability proof failed: {proof}")
+        scenarios=proof.get("scenarios") or {}
+        required=("flat","moderate","steep","cliff","naturalPass","roadManageable","roadImpossible","chunkBoundary","diagonalCorner")
+        missing=[key for key in required if not scenarios.get(key)]
+        if missing:
+            raise RuntimeError(f"Slope evidence scenarios missing: {missing}; proof={proof}")
+        if (proof.get("routeRegression") or {}).get("pass") is not True:
+            raise RuntimeError(f"Existing deterministic local routing regressed: {proof.get('routeRegression')}")
+        stats=proof.get("stats") or {}
+        if stats.get("rendererIndependent") is not True or int(stats.get("elevationCacheHits") or 0)<=0:
+            raise RuntimeError(f"Slope authority/cache telemetry failed: {stats}")
+        return
+
     if scenario == "wp-s003-005-006":
         if len(frames) < 7:
             raise RuntimeError("wp-s003-005-006 requires seven sustained material-lifetime evidence frames")
