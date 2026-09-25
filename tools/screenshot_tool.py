@@ -5365,83 +5365,79 @@ def _switch_to_alternate_landmark_seed(driver) -> str:
         """
         const current=window.SeedSystem?.getCampaign?.()?.seed;
         const api=window.PlayCanvasChunkWorldData;
-        if(!current||!api?.landmarkPlan||!window.SeedSystem?.startNewCampaign)return {ok:false,reason:'landmark-seed-api-missing'};
+        if(!current||!api?.landmarkPlan||!window.AppUI?.startNewCampaignForEvidence)return {ok:false,reason:'landmark-seed-api-missing'};
         const before=api.landmarkPlan(current);
         let selected=null;
-        for(let i=1;i<=48;i++){
+        for(let i=1;i<=64;i++){
           const candidate='LANDMARK-CONTEXT-'+String(i).padStart(2,'0');
           const plan=api.landmarkPlan(candidate);
           if(plan&&before&&String(plan.contextTag)!==String(before.contextTag)){selected={seed:candidate,plan};break;}
         }
         if(!selected){
-          for(let i=1;i<=48;i++){
+          for(let i=1;i<=64;i++){
             const candidate='LANDMARK-CONTEXT-'+String(i).padStart(2,'0');
             const plan=api.landmarkPlan(candidate);
             if(plan&&before&&String(plan.treatment)!==String(before.treatment)){selected={seed:candidate,plan};break;}
           }
         }
-        if(!selected)return {ok:false,reason:'alternate-context-not-found',before};
-        const started=window.SeedSystem.startNewCampaign(selected.seed);
-        if(!started?.ok)return {ok:false,reason:'alternate-campaign-start-failed',started,selected};
-        return {ok:true,before,selected};
+        return selected?{ok:true,before,selected}:{ok:false,reason:'alternate-context-not-found',before};
         """
     )
     if not isinstance(selection, dict) or not selection.get("ok"):
         raise RuntimeError(f"Alternate landmark seed selection failed: {selection}")
+
     from selenium.webdriver.support.ui import WebDriverWait
-    driver.refresh()
-    WebDriverWait(driver, 60.0).until(
-        lambda d: d.execute_script("return document.readyState") == "complete"
+    selected=selection.get("selected") or {}
+    result=driver.execute_async_script(
+        """
+        const seed=String(arguments[0]||'');
+        const done=arguments[arguments.length-1];
+        (async()=>{try{
+          if(!window.AppUI?.startNewCampaignForEvidence)throw new Error('startNewCampaignForEvidence unavailable');
+          await window.AppUI.startNewCampaignForEvidence(seed);
+          done({
+            ok:true,
+            seed:window.SeedSystem?.getCampaign?.()?.seed||null,
+            loading:window.AppUI?.sceneLoadingSnapshot?.()||null,
+            renderer:window.GameRenderer?.snapshot?.()||null
+          });
+        }catch(error){done({ok:false,error:String(error),stack:error?.stack||null})}})();
+        """,
+        str(selected.get("seed") or ""),
     )
-    # The second deterministic campaign is a real cold scene start. Wait for
-    # either playable readiness or the application's bounded startup error, then
-    # exercise the same real Retry Startup recovery path used by normal evidence.
-    for recovery_attempt in range(2):
-        state=WebDriverWait(driver, 240.0).until(
-            lambda d: d.execute_script(
-                """
-                const loading=window.AppUI?.sceneLoadingSnapshot?.()||{};
-                const renderer=window.GameRenderer?.snapshot?.()||{};
-                const campaign=window.SeedSystem?.getCampaign?.();
-                if(loading?.overlay?.state==='error')return 'error';
-                if(
-                  campaign &&
-                  document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
-                  loading?.overlay?.hidden===true &&
-                  loading?.current?.state==='hidden' &&
-                  loading?.current?.readiness?.playableReady===true &&
-                  renderer?.ready===true &&
-                  renderer?.simulationSnapshot?.campaignActive===true &&
-                  renderer?.regionKey &&
-                  renderer?.protagonistVisible===true &&
-                  Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
-                )return 'ready';
-                return false;
-                """
-            )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Alternate landmark campaign switch failed: {result}")
+
+    WebDriverWait(driver, 240.0).until(
+        lambda d: d.execute_script(
+            """
+            const loading=window.AppUI?.sceneLoadingSnapshot?.()||{};
+            const renderer=window.GameRenderer?.snapshot?.()||{};
+            return Boolean(
+              document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
+              loading?.overlay?.hidden===true &&
+              loading?.current?.state==='hidden' &&
+              loading?.current?.readiness?.playableReady===true &&
+              renderer?.ready===true &&
+              renderer?.simulationSnapshot?.campaignActive===true &&
+              renderer?.regionKey &&
+              renderer?.protagonistVisible===true &&
+              Number(renderer?.terrainChunks?.visibleChunkCount||0)>0 &&
+              Number(renderer?.terrainPreload?.queueDepth||0)===0
+            );
+            """
         )
-        if state=="ready":
-            break
-        if recovery_attempt>=1:
-            raise RuntimeError("Alternate landmark campaign remained in startup error after Retry Startup")
-        driver.execute_script("document.querySelector('#sceneLoadingRetry')?.click()")
-        WebDriverWait(driver, 60.0).until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
-        )
-    else:
-        raise RuntimeError("Alternate landmark campaign did not become playable")
-    reload_action="reload:alternate-campaign-playable"
+    )
     context=_landmark_context(driver)
-    selected=(selection.get("selected") or {})
-    expected_plan=selected.get("plan") or {}
     actual_plan=context.get("plan") or {}
     if str(context.get("seed"))!=str(selected.get("seed")):
-        raise RuntimeError(f"Alternate landmark seed did not persist: selected={selected}, current={context}")
+        raise RuntimeError(f"Alternate landmark seed did not activate: selected={selected}, current={context}")
     if str(actual_plan.get("contextTag"))==str((selection.get("before") or {}).get("contextTag")):
         raise RuntimeError(f"Alternate landmark context did not differ: {selection} -> {context}")
     return (
         f"landmark-alt-seed:{selected.get('seed')}:"
-        f"tag={actual_plan.get('contextTag')}:treatment={actual_plan.get('treatment')}+"+reload_action
+        f"tag={actual_plan.get('contextTag')}:treatment={actual_plan.get('treatment')}:"
+        f"switch=in-page-seed-safe"
     )
 
 
@@ -7027,6 +7023,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if int(chunks.get("landmarkSharedMaterialCount") or 0)>3:
                 raise RuntimeError(f"Landmark shared material budget exceeded in frame {index+1}: {chunks.get('landmarkSharedMaterialCount')}")
             for sample in samples:
+                if sample.get("clearsRoofRidge") is not True:
+                    raise RuntimeError(f"Landmark geometry does not clear roof ridge in frame {index+1}: {sample}")
                 if sample.get("contextTag"):tags.add(str(sample.get("contextTag")))
                 if sample.get("treatment"):treatments.add(str(sample.get("treatment")))
             action=str(frame.get("action") or "")
