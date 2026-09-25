@@ -453,7 +453,7 @@ function createManager({
     misses++;
     if(isVisible)visibleWaits++;
     const started=performance.now();
-    const streamingProfile="full";
+    const streamingProfile=source==="destination"?"minimum":"full";
     const resource=prepareChunk({x,y,chunkSize:size,signature:sig,state,source,streamingProfile,preparedData});
     const elapsed=performance.now()-started;
     lastWorkMs=elapsed;maxWorkMs=Math.max(maxWorkMs,elapsed);
