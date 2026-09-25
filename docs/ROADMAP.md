@@ -104,6 +104,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-009-017` — Seasonal World Presentation + Vegetation State
 - `WP-S003-009-018` — Function-Readable Building Surroundings + Ownership Cues
 - `WP-S003-009-019` — Campaign-State Environmental Wear, Damage + Recovery Projection
+- `WP-S003-009-020` — Crossroads Direction Signposts + Named Route Wayfinding
 - `WP-S003-010` — Continuous Multi-Scale Strategic Zoom + Continent Overview LOD
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
@@ -141,6 +142,8 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
 - `WP-S006-007` — Deterministic World Destinations + Points-of-Interest Foundation
 - `WP-S006-007-001` — Discoverable Micro-Locations + Wilderness POI Composition
+- `WP-S006-008` — Deterministic Place Naming + Toponym Hierarchy
+- `WP-S006-009` — Hierarchical Inter-Settlement Road Graph + Geography-Aware Main Routes
 
 # Stage 7 — Hierarchical Lazy World Simulation + Deterministic Persistence
 
