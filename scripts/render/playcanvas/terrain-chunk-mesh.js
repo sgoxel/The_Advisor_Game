@@ -35,7 +35,7 @@ const BUILDING_MATERIAL_VARIANTS=Object.freeze([
 ]);
 const SEMANTIC_TERRAIN_TYPES=new Set(["grass","forest","dirt","mud","road","bridge","square","path","plot","water","rock","sand","farmland"]);
 const CONTOUR_SMOOTHABLE_TYPES=new Set(["grass","forest","dirt","mud","sand","farmland"]);
-const CONTOUR_ROUND_RADIUS_TILES=0.42;
+const CONTOUR_ROUND_RADIUS_TILES=0.48;
 const CONTOUR_ARC_SEGMENTS=4;
 const CONTOUR_Y_OFFSET=0.008;
 const CONTOUR_HALO_TILES=1;
@@ -1429,13 +1429,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const contourStarted=performance.now();
     const baseSemanticVertexCount=positions.length/3;
     const baseSemanticTriangleCount=indices.length/3;
+    const contourSemanticCache=new Map();
     const semanticTypeAtGlobal=(globalX,globalZ)=>{
+      const key=String(globalX)+","+String(globalZ);
+      if(contourSemanticCache.has(key))return contourSemanticCache.get(key);
       const lx=Number(globalX-baseX),lz=Number(globalZ-baseZ);
+      let type;
       if(Number.isInteger(lx)&&Number.isInteger(lz)&&lx>=0&&lx<size&&lz>=0&&lz<size){
         const cell=spec.worldData?.cells?.[lz*size+lx]||null;
-        return semanticSurfaceType(cell?.type||"grass");
+        type=semanticSurfaceType(cell?.type||"grass");
+      }else{
+        type=semanticSurfaceType(window.TerrainFoundation?.getTile?.(seed,String(globalX),String(globalZ))?.type||"grass");
       }
-      return semanticSurfaceType(window.TerrainFoundation?.getTile?.(seed,String(globalX),String(globalZ))?.type||"grass");
+      contourSemanticCache.set(key,type);
+      return type;
     };
     const appendContourPoint=(cellX,cellZ,pointX,pointZ,rect)=>{
       const fx=clamp(pointX-cellX,0,1),fz=clamp(pointZ-cellZ,0,1);
@@ -1471,11 +1478,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       Object.freeze({cellDx:-1,cellDz:0,start:Math.PI*0.5,end:Math.PI}),
       Object.freeze({cellDx:0,cellDz:0,start:0,end:Math.PI*0.5})
     ];
-    const chunkX=BigInt(Math.trunc(Number(spec.x)||0)),chunkZ=BigInt(Math.trunc(Number(spec.y)||0)),chunkSpan=BigInt(size);
-    for(let cornerZ=0;cornerZ<=size;cornerZ++){
-      for(let cornerX=0;cornerX<=size;cornerX++){
+    // Local corners [0,size) are the canonical ownership domain for this
+    // chunk; east/south boundary corners belong to the adjacent chunk.
+    for(let cornerZ=0;cornerZ<size;cornerZ++){
+      for(let cornerX=0;cornerX<size;cornerX++){
         const globalCornerX=baseX+BigInt(cornerX),globalCornerZ=baseZ+BigInt(cornerZ);
-        if(floorDivBig(globalCornerX,chunkSpan)!==chunkX||floorDivBig(globalCornerZ,chunkSpan)!==chunkZ)continue;
         const cells=[
           [globalCornerX-1n,globalCornerZ-1n],
           [globalCornerX,globalCornerZ-1n],

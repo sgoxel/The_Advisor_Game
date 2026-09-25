@@ -5926,13 +5926,13 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 2:
             return "contour:origin-2.00x+" + _set_camera_view_and_render_active(driver, 0, 0, 2.00, timeout=45.0)
         if frame_index == 3:
-            return "contour:road-grass+" + _focus_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+            return "contour:road-grass@" + _set_camera_view_and_render_active(driver, 0, 84, 1.00, timeout=45.0)
         if frame_index == 4:
-            return "contour:road-dirt-mud+" + _focus_road_profile_target(driver, "dirt-mud") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+            return "contour:road-dirt-mud@" + _set_camera_view_and_render_active(driver, 15, -1, 1.00, timeout=45.0)
         if frame_index == 5:
-            return "contour:square-close+" + _focus_road_profile_target(driver, "square") + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
+            return "contour:square-close@" + _set_camera_view_and_render_active(driver, 0, 0, 2.00, timeout=45.0)
         if frame_index == 6:
-            return "contour:chunk-boundary+" + _focus_road_profile_target(driver, "chunk-boundary") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+            return "contour:chunk-boundary@" + _set_camera_view_and_render_active(driver, 16, 0, 1.00, timeout=45.0)
         driver.set_window_size(844, 390)
         return "contour:phone-landscape+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
     if scenario == "wp-s003-009-004-001":
