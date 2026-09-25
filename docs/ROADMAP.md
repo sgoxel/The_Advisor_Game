@@ -70,7 +70,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-010` — Adaptive Idle Chunk Cache Expansion — COMPLETED
 - `WP-S003-006-011` — Responsive Long-Distance Chunk Streaming + Area Loading Gate — COMPLETED
 - `WP-S003-006-012` — Hydrology-Carved Basins + Depressed Water Surfaces — COMPLETED
-- `WP-S003-006-013` — Fantasy Planet Sphere Foundation (10% Earth Scale)
+- `WP-S003-006-013` — Fantasy Planet Sphere Foundation (10% Earth Scale) — COMPLETED
 - `WP-S003-006-014` — Terrain-Adaptive Roads, Cut/Fill Embankments + Bridge Deck Clearance
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
