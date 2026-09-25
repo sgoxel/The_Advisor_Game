@@ -98,8 +98,8 @@ function climateName(temp,moisture){
   else if(moisture<=29)name+=" Dry";
   return name;
 }
-function surfaceFor(elevation,moisture,temp,geology,vegetation){
-  if(elevation<=SEA_LEVEL_METERS)return "water";
+function surfaceFor(elevation,moisture,temp,geology,vegetation,riverWater=false){
+  if(elevation<=SEA_LEVEL_METERS||riverWater)return "water";
   if(elevation>=1750||geology>0.79&&elevation>760)return "rock";
   if(moisture>=82&&elevation<360)return "mud";
   if(moisture<=23&&temp>=17)return geology>0.48?"sand":"dirt";
@@ -156,7 +156,8 @@ function sample(seedValue,xMetersValue,zMetersValue){
   const moisture=clamp(Math.round(10+88*moistureField+valleyMask*8-landMask*2),4,100);
   const altitudeCooling=Math.max(0,elevation)/235;
   const temp=clamp(Math.round(4+28*temperatureField-altitudeCooling),-12,33);
-  const surfaceType=surfaceFor(elevation,moisture,temp,geology,vegetation);
+  const riverWater=originDistance>=1800&&valleyMask>=0.80&&moisture>=52&&elevation>SEA_LEVEL_METERS&&elevation<900;
+  const surfaceType=surfaceFor(elevation,moisture,temp,geology,vegetation,riverWater);
   const climate=climateName(temp,moisture);
   const biome=biomeFor(elevation,moisture,temp,surfaceType);
 
@@ -168,6 +169,7 @@ function sample(seedValue,xMetersValue,zMetersValue){
     temperatureC:temp,
     climate,biome,surfaceType,
     seaLevelMeters:SEA_LEVEL_METERS,
+    waterKind:surfaceType==="water"?(riverWater?"river":"ocean"):null,
     foundation:Object.freeze({
       continental:Number(continental.toFixed(5)),
       regional:Number(regional.toFixed(5)),
@@ -207,16 +209,22 @@ function landform(seedValue,xMetersValue,zMetersValue,radiusMetersValue=DEFAULT_
   const gradientZ=(Number(s.elevationMeters)-Number(n.elevationMeters))/(2*radius);
   const gradient=Math.hypot(gradientX,gradientZ);
   const curvature=c-(Number(n.elevationMeters)+Number(e.elevationMeters)+Number(s.elevationMeters)+Number(w.elevationMeters))/4;
-  const xSaddle=Math.min(Number(e.elevationMeters),Number(w.elevationMeters))-c-Math.max(0,Math.min(Number(n.elevationMeters),Number(s.elevationMeters))-c);
-  const zSaddle=Math.min(Number(n.elevationMeters),Number(s.elevationMeters))-c-Math.max(0,Math.min(Number(e.elevationMeters),Number(w.elevationMeters))-c);
+  const xSaddle=Math.min(
+    Math.min(Number(e.elevationMeters),Number(w.elevationMeters))-c,
+    c-Math.max(Number(n.elevationMeters),Number(s.elevationMeters))
+  );
+  const zSaddle=Math.min(
+    Math.min(Number(n.elevationMeters),Number(s.elevationMeters))-c,
+    c-Math.max(Number(e.elevationMeters),Number(w.elevationMeters))
+  );
   const saddleStrength=Math.max(0,xSaddle,zSaddle);
   const slopeDegrees=Math.atan(gradient)*180/Math.PI;
   const ridgeSignal=clamp((curvature-5)/58,0,1)*clamp((relief-28)/180,0,1);
   const valleySignal=clamp((-curvature-5)/58,0,1)*clamp((relief-28)/180,0,1);
   const cliffSignal=clamp((slopeDegrees-31)/25,0,1)*clamp((relief-72)/220,0,1);
-  const passSignal=clamp((saddleStrength-6)/48,0,1)*clamp((relief-48)/190,0,1);
+  const passSignal=clamp((saddleStrength-2)/24,0,1)*clamp((relief-34)/150,0,1);
   let kind="plain";
-  if(passSignal>=0.20&&passSignal>=Math.max(ridgeSignal,valleySignal)*1.05)kind="pass";
+  if(passSignal>=0.12&&passSignal>=Math.max(ridgeSignal,valleySignal)*0.92)kind="pass";
   else if(ridgeSignal>=0.14)kind="ridge";
   else if(valleySignal>=0.14)kind="valley";
   else if(cliffSignal>=0.22)kind="cliff";
