@@ -1630,6 +1630,39 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     navigationTelemetry.maxPreloadUpdateMs=Math.max(navigationTelemetry.maxPreloadUpdateMs,elapsed);
     return result;
   }
+  async function prepareTerrainDestination(model,{onProgress=null,graceMs=180,forceGate=false}={}){
+    lastRawSeed=model?.seed??lastRawSeed;
+    const frame=window.RendererContract?.frameFromModel?.(model)||null;
+    if(!frame?.center)return Object.freeze({ready:false,reason:"missing-center"});
+    const manager=initTerrainPreload();
+    if(!manager)return Object.freeze({ready:false,reason:"preload-unavailable"});
+    manager.setChunkSize(terrainChunkSize());
+    const radii=terrainActiveRadii();
+    const terrainTextures=await prepareTerrainTextureAtlas();
+    const buildingTextures=await prepareBuildingSurfaceAtlas();
+    const treeSprites=await prepareTreeSpriteAtlas();
+    const result=await manager.prepareDestination({
+      center:frame.center,
+      activeRadiusX:radii.x,
+      activeRadiusY:radii.y
+    },{onProgress,graceMs,forceGate});
+    if(!result?.ready)return Object.freeze({...result,terrainTextures,buildingTextures,treeSprites});
+    const worldAssets=await prepareWorldAssets();
+    return Object.freeze({
+      ...result,
+      worldAssetsReady:Boolean(worldAssets?.ready),
+      worldAssets,
+      terrainTextures,buildingTextures,treeSprites,
+      simulationAuthorityPreserved:true
+    });
+  }
+  function cancelTerrainDestination(reason="superseded"){
+    return terrainPreloadManager?.cancelDestination?.(reason)||null;
+  }
+  function finishTerrainDestination(){
+    return terrainPreloadManager?.finishDestination?.()||null;
+  }
+
   function preparedTerrainKey(seed,center){
     if(!center)return "";
     return [
@@ -2403,7 +2436,7 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
   function clear(){assetPreparationProofState=false;ambientMotionProofOverride=null;assetPreparationProofRoot&&clearEntityChildren(assetPreparationProofRoot);if(assetPreparationProofRoot)assetPreparationProofRoot.enabled=false;lastAssetPreparationProof=Object.freeze({active:false,logicalKey:null,entityCount:0,meshInstanceCount:0,materialCount:0,networkLoads:0,containerParses:0,simulationAuthorityPreserved:true});lastModel=null;lastRawSeed=null;lastPreparedTerrainKey="";worldPreparation?.invalidate?.();lastWorldPreparation=Object.freeze({ready:false,regionCount:0,keyCount:0,regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),simulationAuthorityPreserved:true});lastRawInteriorObjects=[];lastRawBuildingInteriors=[];setInteriorObjectProofState(null);setCharacterProofState(null);clearCharacterBillboards();if(host)host.hidden=true;lastSnapshot=baseSnapshot({ready:Boolean(app&&device)});}
   function snapshot(){if(app&&device)lastSnapshot=baseSnapshot();return lastSnapshot;}
   function destroy(){resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);if(qualityChangeHandler)window.removeEventListener?.("advisor:texture-quality-change",qualityChangeHandler);qualityChangeHandler=null;if(renderQualityChangeHandler)window.removeEventListener?.("advisor:render-quality-change",renderQualityChangeHandler);renderQualityChangeHandler=null;if(renderQualityFrameHandler)app?.off?.("update",renderQualityFrameHandler);renderQualityFrameHandler=null;if(ambientMotionFrameHandler)app?.off?.("update",ambientMotionFrameHandler);ambientMotionFrameHandler=null;ambientMotionClockSeconds=0;ambientMotionProofOverride=null;ambientFrameTelemetry.calls=0;ambientFrameTelemetry.totalMs=0;ambientFrameTelemetry.lastMs=0;ambientFrameTelemetry.maxMs=0;ambientFrameTelemetry.lastActiveResources=0;terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;terrainTextureAtlas?.destroy?.();terrainTextureAtlas=null;buildingSurfaceAtlas?.destroy?.();buildingSurfaceAtlas=null;treeSpriteAtlas?.destroy?.();treeSpriteAtlas=null;lastPreparedTerrainKey="";window.PlayCanvasChunkWorldData?.clear?.();app?.destroy?.();app=null;device=null;lastResizeSignature="";sceneAnchorRevision=0;lastPositionedAnchorRevision=0;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;characterContactRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;assetPreparationProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;lastCutawayState=Object.freeze({active:false,local:true,targetBuildingId:null,hiddenRoofCount:0,totalRoofCount:0});characterContactBuffer?.destroy?.();characterContactBuffer=null;characterContactCapacity=0;characterContactMesh?.destroy?.();characterContactMesh=null;characterContactEntity=null;characterContactMeshInstance=null;characterContactMaterialRef=null;characterContactBufferUpdates=0;materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation?.invalidate?.();worldPreparation?.invalidate?.();characterPreparation=null;worldPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});lastCharacterContactState=Object.freeze({count:0,drawCalls:0,materialCount:0,hardwareInstanced:true,terrainAlignedCount:0,quality:"standard",opacity:0.145,simulationAuthorityPreserved:true});}
-  return Object.freeze({init,render,prepareTerrain,getPreparedTerrainView,prepareCharacters,updateCharacters,clear,snapshot,destroy,setAssetPreparationProofState,setAmbientMotionProofState,setTerrainMicroReliefProofState,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,screenToCameraDelta,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
+  return Object.freeze({init,render,prepareTerrain,prepareTerrainDestination,cancelTerrainDestination,finishTerrainDestination,getPreparedTerrainView,prepareCharacters,updateCharacters,clear,snapshot,destroy,setAssetPreparationProofState,setAmbientMotionProofState,setTerrainMicroReliefProofState,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,screenToCameraDelta,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
 }
 window.PlayCanvasRendererFactory=Object.freeze({engineVersion:ENGINE_VERSION,engineUrl:ENGINE_URL,loadEngine,create});
 })();

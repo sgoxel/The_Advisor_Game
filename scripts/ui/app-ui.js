@@ -14,7 +14,7 @@ const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
 const ids=[
   "mainMenuButton","settingsButton","mainMenuPopup","settingsPopup","resumeButton","newCampaignButton","restartCampaignButton",
   "menuMessage","seedInput","saveSettingsButton","settingsMessage","developmentModeToggle","developmentDetails","gameDate","gameTime","campaignState","statusMessage",
-  "sceneLoadingOverlay","sceneLoadingTitle","sceneLoadingPhase","sceneLoadingRetry",
+  "sceneLoadingOverlay","sceneLoadingTitle","sceneLoadingPhase","sceneLoadingProgress","sceneLoadingProgressBar","sceneLoadingProgressText","sceneLoadingRetry",
   "detailState","detailGameDate","detailGameTime","detailProtagonistX","detailProtagonistY","vDate","vPersist",
   "terrainGrid","terrainLegend","vTerrainDeterministic","vTerrainSolidOnly",
   "rendererEngine","rendererEngineVersion","rendererBackend","rendererRequestedBackend","rendererWebgpuAvailable","rendererCanvasCount","rendererProjection","rendererEntityCount","rendererDrawCalls","rendererFrameTime","rendererRenderScale","rendererPixelRatio","rendererCanvasSize","rendererTextureCount","rendererSourceMode",
@@ -228,6 +228,14 @@ function applySceneLoadingPresentation(){
       ?"The scene could not finish preparing. "+sceneLoadingState.error
       :info.message)
   );
+  const showRuntimeProgress=Boolean(proof?.runtimeArea&&Number.isFinite(proof?.progress));
+  if(e.sceneLoadingProgress)e.sceneLoadingProgress.hidden=!showRuntimeProgress;
+  if(showRuntimeProgress&&e.sceneLoadingProgressBar){
+    const value=Math.max(0,Math.min(100,Number(proof.progress)||0));
+    e.sceneLoadingProgressBar.style.width=value.toFixed(1)+"%";
+    e.sceneLoadingProgressBar.parentElement?.setAttribute("aria-valuenow",String(Math.round(value)));
+    if(e.sceneLoadingProgressText)e.sceneLoadingProgressText.textContent=String(proof.progressText||Math.round(value)+"%");
+  }
   e.sceneLoadingRetry.hidden=effectiveState!=="error";
 }
 function recordSceneLoadingEvent(phase,state){
@@ -310,6 +318,9 @@ function setSceneLoadingProof(phase,options={}){
     title:options?.title?String(options.title):null,
     message:options?.message?String(options.message):null,
     reducedMotion:Boolean(options?.reducedMotion),
+    runtimeArea:Boolean(options?.runtimeArea),
+    progress:Number.isFinite(Number(options?.progress))?Math.max(0,Math.min(100,Number(options.progress))):null,
+    progressText:options?.progressText?String(options.progressText):null,
     atMs:Date.now()
   });
   applySceneLoadingPresentation();
@@ -338,6 +349,9 @@ function sceneLoadingSnapshot(){
       retryVisible:Boolean(e.sceneLoadingRetry&&!e.sceneLoadingRetry.hidden),
       title:e.sceneLoadingTitle?.textContent?.trim()||null,
       message:e.sceneLoadingPhase?.textContent?.trim()||null,
+      progressVisible:Boolean(e.sceneLoadingProgress&&!e.sceneLoadingProgress.hidden),
+      progressText:e.sceneLoadingProgressText?.textContent?.trim()||null,
+      progressWidth:e.sceneLoadingProgressBar?.style?.width||null,
       titleAnimationName:e.sceneLoadingTitle?getComputedStyle(e.sceneLoadingTitle).animationName:null,
       emblemAnimationName:overlay?.querySelector(".scene-loading-emblem span")
         ?getComputedStyle(overlay.querySelector(".scene-loading-emblem span")).animationName:null,
@@ -346,6 +360,89 @@ function sceneLoadingSnapshot(){
     }),
     simulationAuthorityPreserved:true
   });
+}
+
+const runtimeAreaLoadingState={
+  state:"READY",requestedTarget:null,startedAtMs:null,gateShownAtMs:null,readyAtMs:null,hiddenAtMs:null,
+  required:0,completed:0,percent:100,phase:"ready",lastError:null,
+  requests:0,completions:0,coalesced:0,lastProgress:null
+};
+let runtimeAreaIntentSerial=0;
+let pendingCameraTarget=null;
+function runtimeAreaLoadingSnapshot(){
+  const renderer=window.GameRenderer?.snapshot?.()||{};
+  return Object.freeze({
+    ...runtimeAreaLoadingState,
+    rendererStreaming:renderer.terrainPreload||null,
+    simulationAuthorityPreserved:renderer.simulationAuthorityPreserved!==false
+  });
+}
+function applyRuntimeAreaProgress(progress){
+  if(!progress)return runtimeAreaLoadingSnapshot();
+  runtimeAreaLoadingState.state=String(progress.state||runtimeAreaLoadingState.state);
+  runtimeAreaLoadingState.required=Number(progress.required||0);
+  runtimeAreaLoadingState.completed=Number(progress.completed||0);
+  runtimeAreaLoadingState.percent=Number(progress.percent||0);
+  runtimeAreaLoadingState.lastProgress=progress;
+  if(runtimeAreaLoadingState.state==="LOAD_GATE"){
+    if(runtimeAreaLoadingState.gateShownAtMs===null)runtimeAreaLoadingState.gateShownAtMs=Date.now();
+    setSceneLoadingProof("assets",{
+      title:"Preparing Area",
+      message:"Loading destination terrain and nearby presentation…",
+      runtimeArea:true,
+      progress:runtimeAreaLoadingState.percent,
+      progressText:runtimeAreaLoadingState.completed+" / "+runtimeAreaLoadingState.required+" chunks · "+runtimeAreaLoadingState.percent+"%"
+    });
+  }
+  return runtimeAreaLoadingSnapshot();
+}
+function beginRuntimeAreaLoading(target){
+  runtimeAreaLoadingState.state="CATCHING_UP";
+  runtimeAreaLoadingState.requestedTarget=Object.freeze({x:String(target.x),y:String(target.y)});
+  runtimeAreaLoadingState.startedAtMs=Date.now();
+  runtimeAreaLoadingState.gateShownAtMs=null;
+  runtimeAreaLoadingState.readyAtMs=null;
+  runtimeAreaLoadingState.hiddenAtMs=null;
+  runtimeAreaLoadingState.required=0;
+  runtimeAreaLoadingState.completed=0;
+  runtimeAreaLoadingState.percent=0;
+  runtimeAreaLoadingState.phase="destination";
+  runtimeAreaLoadingState.lastError=null;
+  runtimeAreaLoadingState.requests++;
+}
+function failRuntimeAreaLoading(error){
+  runtimeAreaLoadingState.state="ERROR";
+  runtimeAreaLoadingState.lastError=String(error?.message||error||"Area loading failed");
+  setSceneLoadingProof("error",{
+    title:"Area loading interrupted",
+    message:runtimeAreaLoadingState.lastError,
+    runtimeArea:true,
+    progress:runtimeAreaLoadingState.percent,
+    progressText:"Retry the camera move."
+  });
+}
+function completeRuntimeAreaLoading(){
+  const rendererProgress=GameRenderer.finishTerrainDestination?.()||null;
+  runtimeAreaLoadingState.state="READY";
+  runtimeAreaLoadingState.readyAtMs=Date.now();
+  runtimeAreaLoadingState.percent=100;
+  runtimeAreaLoadingState.completions++;
+  if(sceneLoadingState.proofOverride?.runtimeArea){
+    setSceneLoadingProof("ready",{
+      title:"Area Ready",
+      message:"Destination prepared.",
+      runtimeArea:true,
+      progress:100,
+      progressText:"100% · Ready"
+    });
+    setTimeout(()=>{
+      if(sceneLoadingState.proofOverride?.runtimeArea){
+        clearSceneLoadingProof();
+        runtimeAreaLoadingState.hiddenAtMs=Date.now();
+      }
+    },loadingReducedMotion()?0:180);
+  }
+  return rendererProgress;
 }
 
 function readDevelopmentMode(){
@@ -1175,11 +1272,11 @@ function enqueueCameraTransition(work){
   return cameraTransitionQueue;
 }
 
-async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom()){
+async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom(),options={}){
   let descriptor;
   if(isPlayCanvasRenderer()){
     const base=terrainViewGeometryDescriptor(center,zoom);
-    const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
+    const prepareModel={
       seed,
       center,
       width:base.width,
@@ -1188,7 +1285,14 @@ async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom()){
       rows:base.rows,
       tileSize:base.tileSize,
       regionKey:base.regionKey
-    }));
+    };
+    const rendererPrepared=options?.runtimeStreaming&&GameRenderer.prepareTerrainDestination
+      ?await Promise.resolve(GameRenderer.prepareTerrainDestination(prepareModel,{
+        graceMs:180,
+        forceGate:Boolean(options.forceGate),
+        onProgress:applyRuntimeAreaProgress
+      }))
+      :await Promise.resolve(GameRenderer.prepareTerrain?.(prepareModel));
     if(rendererPrepared&&rendererPrepared.prepared===false){
       throw new Error("PlayCanvas chunk preparation failed for "+base.regionKey);
     }
@@ -1551,52 +1655,52 @@ function cameraNavigationSnapshot(){
     mappingSource:"playcanvas-screen-to-ground"
   });
 }
-function panCamera(dx,dy,navigationMeta=null){
+function navigateCameraTo(target,navigationMeta=null,{forceGate=false}={}){
+  const requested=WorldCoordinates.position(String(target.x),String(target.y));
+  pendingCameraTarget=requested;
+  const intent=++runtimeAreaIntentSerial;
+  GameRenderer.cancelTerrainDestination?.("new-camera-intent");
   return enqueueCameraTransition(async()=>{
+    if(intent!==runtimeAreaIntentSerial)return null;
     const campaign=SeedSystem.getCampaign();
     const protagonist=Protagonist.getPosition();
-    if(!campaign||!protagonist)return;
-
+    if(!campaign||!protagonist)return null;
     const centerBefore=Camera.getCenter();
-    if(!cameraReturnProof){
-      cameraReturnProof={
-        center:centerBefore,
-        signature:cameraTerrainSignature(campaign.seed,centerBefore)
-      };
+    beginRuntimeAreaLoading(requested);
+    try{
+      const descriptor=await ensureTerrainViewPrepared(campaign.seed,requested,Camera.getZoom(),{runtimeStreaming:true,forceGate});
+      if(intent!==runtimeAreaIntentSerial||descriptor?.stale)return null;
+      const protagonistBefore=WorldCoordinates.position(protagonist.x,protagonist.y);
+      Camera.setCenter(requested.x,requested.y);
+      cameraMoved=true;
+      lastCameraDirection=normalizeDirection(BigInt(requested.x)-BigInt(centerBefore.x),BigInt(requested.y)-BigInt(centerBefore.y));
+      const protagonistAfter=Protagonist.getPosition();
+      cameraIndependenceProven=sameCoordinate(protagonistBefore,protagonistAfter);
+      await renderTerrain();
+      updateCameraPresentation();
+      rememberCameraNavigation(navigationMeta,centerBefore,Camera.getCenter(),protagonistBefore,protagonistAfter);
+      completeRuntimeAreaLoading();
+      if(intent===runtimeAreaIntentSerial)pendingCameraTarget=null;
+      return descriptor;
+    }catch(error){
+      failRuntimeAreaLoading(error);
+      throw error;
     }
-
-    const target=WorldCoordinates.add(centerBefore,String(dx),String(dy));
-    const direction=normalizeDirection(dx,dy);
-    await ensureTerrainViewPrepared(campaign.seed,target,Camera.getZoom());
-
-    const protagonistBefore=WorldCoordinates.position(protagonist.x,protagonist.y);
-    Camera.setCenter(target.x,target.y);
-    cameraMoved=true;
-    lastCameraDirection=direction;
-    const protagonistAfter=Protagonist.getPosition();
-    cameraIndependenceProven=sameCoordinate(protagonistBefore,protagonistAfter);
-    await renderTerrain();
-    updateCameraPresentation();
-    rememberCameraNavigation(navigationMeta,centerBefore,Camera.getCenter(),protagonistBefore,protagonistAfter);
   });
+}
+function panCamera(dx,dy,navigationMeta=null){
+  const campaign=SeedSystem.getCampaign();
+  const protagonist=Protagonist.getPosition();
+  if(!campaign||!protagonist)return Promise.resolve(null);
+  const base=pendingCameraTarget||Camera.getCenter();
+  const target=WorldCoordinates.add(base,String(dx),String(dy));
+  return navigateCameraTo(target,navigationMeta);
 }
 
 function centerCameraOnProtagonist(){
-  return enqueueCameraTransition(async()=>{
-    const campaign=SeedSystem.getCampaign();
-    const protagonist=Protagonist.getPosition();
-    if(!campaign||!protagonist)return;
-    const centerBefore=Camera.getCenter();
-    const direction=normalizeDirection(
-      BigInt(protagonist.x)-BigInt(centerBefore.x),
-      BigInt(protagonist.y)-BigInt(centerBefore.y)
-    );
-    await ensureTerrainViewPrepared(campaign.seed,protagonist,Camera.getZoom());
-    Camera.centerOn(protagonist);
-    lastCameraDirection=direction;
-    await renderTerrain();
-    updateCameraPresentation();
-  });
+  const protagonist=Protagonist.getPosition();
+  if(!protagonist)return Promise.resolve(null);
+  return navigateCameraTo(protagonist,{source:"center-on-protagonist"});
 }
 
 function resetCameraForCampaign(){
@@ -1610,6 +1714,9 @@ function resetCameraForCampaign(){
   wheelZoomUsed=false;
   lastCameraDirection={dx:0,dy:0};
   terrainPrefetchSerial++;
+  pendingCameraTarget=null;
+  runtimeAreaIntentSerial++;
+  GameRenderer.cancelTerrainDestination?.("campaign-reset");
 }
 
 
@@ -2625,6 +2732,8 @@ async function init(){
 window.AppUI=Object.freeze({
   init,
   sceneLoadingSnapshot,
+  runtimeAreaLoadingSnapshot,
+  navigateCameraToForEvidence:(x,y,forceGate=true)=>navigateCameraTo(WorldCoordinates.position(String(x),String(y)),{source:"evidence-destination"},{forceGate:Boolean(forceGate)}),
   applicationStartupSnapshot,
   setSceneLoadingProof,
   clearSceneLoadingProof,
