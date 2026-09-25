@@ -63,6 +63,7 @@ on:
           - wp-s003-006-006
           - wp-s003-006-007
           - wp-s003-006-009
+          - wp-s003-006-011
           - wp-s003-007-001
           - wp-s003-008-001
           - wp-s003-008-002
@@ -273,7 +274,7 @@ jobs:
           fi
 
           case "$scenario" in
-            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005|playcanvas-foundation|playcanvas-scene|wp-s003-003|wp-s003-004-002|wp-s003-004-003|wp-s003-004-004|wp-s003-004-005|wp-s003-005-002|wp-s003-005-003|wp-s003-005-004|wp-s003-005-006|wp-s003-006-002|wp-s003-006-001|wp-s003-006|wp-s003-006-003|wp-s003-006-004|wp-s003-006-005|wp-s003-006-006|wp-s003-006-007|wp-s003-006-008|wp-s003-006-009|wp-s003-007-001|wp-s003-008-001|wp-s003-008-002|wp-s003-008-003|wp-s003-009-001|wp-s003-009-002|wp-s003-009-003|wp-s003-009-004|wp-s003-009-004-001|wp-s003-009-004-002|wp-s003-009-005|wp-s003-009-006|wp-s003-009-007|wp-s003-009-008|wp-s003-009-009|wp-s004-001|wp-s004-002|wp-s004-003|wp-s004-004|wp-s004-004-001|wp-s004-005|wp-s005-001|wp-s005-002|wp-s005-003|wp-s005-004|wp-s005-005|wp-s006-001|wp-s006-002|wp-s006-003|wp-s006-004|wp-s006-005|wp-s006-006|wp-s007-001|wp-s007-002|wp-s007-003|wp-s007-004|wp-s007-005|wp-s007-006|wp-s007-007|wp-s007-008|playcanvas-root-cutover) ;;
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s003-005|playcanvas-foundation|playcanvas-scene|wp-s003-003|wp-s003-004-002|wp-s003-004-003|wp-s003-004-004|wp-s003-004-005|wp-s003-005-002|wp-s003-005-003|wp-s003-005-004|wp-s003-005-006|wp-s003-006-002|wp-s003-006-001|wp-s003-006|wp-s003-006-003|wp-s003-006-004|wp-s003-006-005|wp-s003-006-006|wp-s003-006-007|wp-s003-006-008|wp-s003-006-009|wp-s003-006-011|wp-s003-007-001|wp-s003-008-001|wp-s003-008-002|wp-s003-008-003|wp-s003-009-001|wp-s003-009-002|wp-s003-009-003|wp-s003-009-004|wp-s003-009-004-001|wp-s003-009-004-002|wp-s003-009-005|wp-s003-009-006|wp-s003-009-007|wp-s003-009-008|wp-s003-009-009|wp-s004-001|wp-s004-002|wp-s004-003|wp-s004-004|wp-s004-004-001|wp-s004-005|wp-s005-001|wp-s005-002|wp-s005-003|wp-s005-004|wp-s005-005|wp-s006-001|wp-s006-002|wp-s006-003|wp-s006-004|wp-s006-005|wp-s006-006|wp-s007-001|wp-s007-002|wp-s007-003|wp-s007-004|wp-s007-005|wp-s007-006|wp-s007-007|wp-s007-008|playcanvas-root-cutover) ;;
             *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
           esac
           case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac
