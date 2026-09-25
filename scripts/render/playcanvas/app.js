@@ -1627,18 +1627,43 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     if(r<0n)q-=1n;
     return Number(q);
   }
-  function terrainDestinationChunkIds(frame){
+  function terrainDestinationRequirements(frame,halo=1){
     const size=Math.max(1,terrainChunkSize());
     const columns=Math.max(1,Number(frame?.columns||1)),rows=Math.max(1,Number(frame?.rows||1));
     const halfCols=Math.floor(columns/2),halfRows=Math.floor(rows/2);
     const cx=BigInt(String(frame?.center?.x??"0")),cy=BigInt(String(frame?.center?.y??"0"));
-    const minX=cx-BigInt(halfCols),maxX=cx+BigInt(columns-halfCols-1);
-    const minY=cy-BigInt(halfRows),maxY=cy+BigInt(rows-halfRows-1);
-    const minChunkX=terrainChunkFloor(minX,size),maxChunkX=terrainChunkFloor(maxX,size);
-    const minChunkY=terrainChunkFloor(minY,size),maxChunkY=terrainChunkFloor(maxY,size);
-    const ids=[];
-    for(let y=minChunkY;y<=maxChunkY;y++)for(let x=minChunkX;x<=maxChunkX;x++)ids.push(String(x)+","+String(y));
-    return Object.freeze(ids);
+    const margin=BigInt(Math.max(1,Number(halo)||1));
+    const minX=cx-BigInt(halfCols)-margin,maxX=cx+BigInt(columns-halfCols-1)+margin;
+    const minY=cy-BigInt(halfRows)-margin,maxY=cy+BigInt(rows-halfRows-1)+margin;
+    const byChunk=new Map();
+    const d=BigInt(size);
+    for(let y=minY;y<=maxY;y++){
+      for(let x=minX;x<=maxX;x++){
+        const chunkX=terrainChunkFloor(x,size),chunkY=terrainChunkFloor(y,size);
+        const id=String(chunkX)+","+String(chunkY);
+        const localX=Number(x-BigInt(chunkX)*d),localY=Number(y-BigInt(chunkY)*d);
+        const index=localY*size+localX;
+        if(!byChunk.has(id))byChunk.set(id,[]);
+        byChunk.get(id).push(index);
+      }
+    }
+    const requiredChunkIds=Object.freeze([...byChunk.keys()].sort((a,b)=>{
+      const [ax,ay]=a.split(",").map(Number),[bx,by]=b.split(",").map(Number);
+      return ay-by||ax-bx;
+    }));
+    const requiredCellsByChunk={};
+    for(const id of requiredChunkIds){
+      requiredCellsByChunk[id]=Object.freeze([...new Set(byChunk.get(id))].sort((a,b)=>a-b));
+    }
+    return Object.freeze({
+      requiredChunkIds,
+      requiredCellsByChunk:Object.freeze(requiredCellsByChunk),
+      requestedCellCount:requiredChunkIds.reduce((sum,id)=>sum+requiredCellsByChunk[id].length,0),
+      haloTiles:Number(margin)
+    });
+  }
+  function terrainDestinationChunkIds(frame){
+    return terrainDestinationRequirements(frame,1).requiredChunkIds;
   }
   function terrainDestinationRadii(frame){
     const size=Math.max(1,terrainChunkSize());
@@ -1684,7 +1709,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // from either the old camera transform or the not-yet-committed target.
     // This keeps long-distance work bounded and deterministic.
     const radii=terrainDestinationRadii(frame);
-    const requiredChunkIds=terrainDestinationChunkIds(frame);
+    const destinationRequirements=terrainDestinationRequirements(frame,1);
+    const requiredChunkIds=destinationRequirements.requiredChunkIds;
+    const requiredCellsByChunk=destinationRequirements.requiredCellsByChunk;
     const terrainTextures=await prepareTerrainTextureAtlas();
     const buildingTextures=await prepareBuildingSurfaceAtlas();
     const treeSprites=await prepareTreeSpriteAtlas();
@@ -1692,7 +1719,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       center:frame.center,
       activeRadiusX:radii.x,
       activeRadiusY:radii.y,
-      requiredChunkIds
+      requiredChunkIds,
+      requiredCellsByChunk
     },{onProgress,graceMs,forceGate});
     if(!result?.ready)return Object.freeze({...result,terrainTextures,buildingTextures,treeSprites});
     // The streaming-minimum mesh is self-contained (terrain atlas + procedural
@@ -1703,7 +1731,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       key:preparedTerrainKey(lastRawSeed,frame.center),
       center:Object.freeze({x:String(frame.center.x),y:String(frame.center.y)}),
       activeRadiusX:radii.x,activeRadiusY:radii.y,
-      requiredChunkIds
+      requiredChunkIds,
+      requiredCellsByChunk,
+      requestedCellCount:destinationRequirements.requestedCellCount
     });
     return Object.freeze({
       ...result,
@@ -1711,6 +1741,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       worldAssets,
       terrainTextures,buildingTextures,treeSprites,
       activeRadiusX:radii.x,activeRadiusY:radii.y,requiredChunkIds,
+      requiredDestinationCellCount:destinationRequirements.requestedCellCount,
       streamingMinimumResources:Number(manager.stats?.().streamingMinimumResources||0),
       destinationPresentationProfile:"minimum",
       simulationAuthorityPreserved:true
