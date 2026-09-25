@@ -18,9 +18,9 @@ function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 function worldVisualStyle(){return window.AdvisorWorldVisualStyle||null;}
 function styleColor(role,color){const style=worldVisualStyle();return style?.gradeRgb?style.gradeRgb(role,color):color;}
 
-const HEIGHTFIELD_VERTICAL_SCALE=0.020;
-const HEIGHTFIELD_MIN_Y=-26;
-const HEIGHTFIELD_MAX_Y=26;
+const HEIGHTFIELD_VERTICAL_SCALE=0.024;
+const HEIGHTFIELD_MIN_Y=-32;
+const HEIGHTFIELD_MAX_Y=32;
 const HEIGHTFIELD_RELIEF=0.085;
 const HEIGHTFIELD_WATER_Y=-0.22;
 const HEIGHTFIELD_BRIDGE_CLEARANCE=0.32;
@@ -31,7 +31,7 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
-const LANDFORM_VERSION="macro-landform-v5";
+const LANDFORM_VERSION="macro-landform-v6";
 const LANDFORM_SAMPLE_RADIUS_TILES=8;
 const LANDFORM_CACHE_LIMIT=32768;
 const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=12;
@@ -42,8 +42,8 @@ const LANDFORM_CLIFF_FACE_MAX_HEIGHT=2.65;
 const LANDFORM_CLIFF_FACE_APRON_MIN=0.68;
 const LANDFORM_CLIFF_FACE_APRON_MAX=1.34;
 const LANDFORM_CLIFF_LIP_INSET=1.08;
-const LANDFORM_CLIFF_BREAK_RISE_MIN=0.46;
-const LANDFORM_CLIFF_BREAK_RISE_MAX=1.18;
+const LANDFORM_CLIFF_BREAK_RISE_MIN=1.10;
+const LANDFORM_CLIFF_BREAK_RISE_MAX=2.40;
 const WORLD_TILE_METERS=2;
 const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
@@ -2639,40 +2639,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           }
           return Object.freeze({...corner,position:Object.freeze([corner.position[0],y,corner.position[2]]),normal});
         });
-        const base=positions.length/3;
-        for(const corner of corners){
-          positions.push(...corner.position);
-          normals.push(...corner.normal);
-          const variation=terrainVariationAtVertex(corner.wx,corner.wz,baseVisualType);
-          if(rect){
-            appendColor32(colors32,variation.tint,1);
-          }else{
-            const fallback=heightfieldColor(seed,corner.wx,corner.wz,sourceCell?.color,baseVisualType);
-            appendColor32(colors32,[
-              fallback[0]*variation.tint[0],
-              fallback[1]*variation.tint[1],
-              fallback[2]*variation.tint[2],
-              1
-            ],1);
-          }
-          detailUvs.push(Number(corner.wx)*0.25,Number(corner.wz)*0.25);
-        }
-        if(rect){
-          uvs.push(
-            Number(rect.u0),Number(rect.v0),
-            Number(rect.u1),Number(rect.v0),
-            Number(rect.u0),Number(rect.v1),
-            Number(rect.u1),Number(rect.v1)
-          );
-        }else{
-          uvs.push(0,0,1,0,0,1,1,1);
-        }
-        indices.push(base,base+2,base+1, base+1,base+2,base+3);
-
-        // Sparse same-mesh cliff skirts give genuinely steep authoritative
-        // landforms a readable vertical face. One dominant downhill face is
-        // allowed per cliff cell, capped per chunk; no object-per-tile entity,
-        // material or draw call is created.
+        // True cliff cells replace the normal continuous top quad with a
+        // deterministic split top surface. The downhill and uphill halves keep
+        // every cell boundary at the shared prepared heightfield; only the
+        // interior break is raised, exposing a real rock face without an
+        // overlay strip or hidden duplicate ground sheet.
+        let splitCliff=null;
         if(
           landformCliffFaceCount<LANDFORM_CLIFF_FACE_MAX_PER_CHUNK &&
           TERRAIN_VARIATION_NATURAL_TYPES.has(surfaceType) &&
@@ -2696,111 +2668,173 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
                 ?{a:0,b:1,ia:2,ib:3,normal:[0,0,-1],flip:false}
                 :{a:2,b:3,ia:0,ib:1,normal:[0,0,1],flip:true};
             }
-            const topA=corners[edge.a].position,topB=corners[edge.b].position;
-            const innerA=corners[edge.ia].position,innerB=corners[edge.ib].position;
-            const lerp=(a,b,t)=>Number(a)+(Number(b)-Number(a))*t;
-            const breakT=clamp(LANDFORM_CLIFF_LIP_INSET/metersPerTile,0.32,0.58);
-            const breakRise=clamp(
-              LANDFORM_CLIFF_BREAK_RISE_MIN+
-              Number(cliff.cliffSignal||0)*0.42+
-              Number(cliff.localReliefMeters||0)/1200,
-              LANDFORM_CLIFF_BREAK_RISE_MIN,
-              LANDFORM_CLIFF_BREAK_RISE_MAX
-            );
-            const breakA=[
-              lerp(topA[0],innerA[0],breakT),
-              lerp(topA[1],innerA[1],breakT)+breakRise,
-              lerp(topA[2],innerA[2],breakT)
-            ];
-            const breakB=[
-              lerp(topB[0],innerB[0],breakT),
-              lerp(topB[1],innerB[1],breakT)+breakRise,
-              lerp(topB[2],innerB[2],breakT)
-            ];
-            const faceHeight=clamp(
-              LANDFORM_CLIFF_FACE_MIN_HEIGHT+
-              Number(cliff.cliffSignal||0)*0.95+
-              Number(cliff.localReliefMeters||0)/520,
-              LANDFORM_CLIFF_FACE_MIN_HEIGHT,
-              LANDFORM_CLIFF_FACE_MAX_HEIGHT
-            );
-            const offset=0.035;
-            const apronDepth=clamp(
-              LANDFORM_CLIFF_FACE_APRON_MIN+
-              Number(cliff.cliffSignal||0)*0.34+
-              Number(cliff.localReliefMeters||0)/1500,
-              LANDFORM_CLIFF_FACE_APRON_MIN,
-              LANDFORM_CLIFF_FACE_APRON_MAX
-            );
-            const topOx=edge.normal[0]*offset,topOz=edge.normal[2]*offset;
-            const bottomOx=edge.normal[0]*apronDepth,bottomOz=edge.normal[2]*apronDepth;
-            const cliffBase=positions.length/3;
-            positions.push(
-              Number(breakA[0])+topOx,Number(breakA[1])+0.018,Number(breakA[2])+topOz,
-              Number(breakB[0])+topOx,Number(breakB[1])+0.018,Number(breakB[2])+topOz,
-              Number(topA[0])+bottomOx,Number(topA[1])-faceHeight*0.45,Number(topA[2])+bottomOz,
-              Number(topB[0])+bottomOx,Number(topB[1])-faceHeight*0.45,Number(topB[2])+bottomOz
-            );
-            const faceNx=edge.normal[0],faceNy=0.34,faceNz=edge.normal[2];
-            const faceNorm=Math.hypot(faceNx,faceNy,faceNz)||1;
-            for(let i=0;i<4;i++)normals.push(faceNx/faceNorm,faceNy/faceNorm,faceNz/faceNorm);
-            const rockRect=semanticAtlasReady?(activeAtlas?.meshUvRect?.("rock")||activeAtlas?.uvRect?.("rock")):null;
-            const rockTint=terrainVariationAtVertex(cellWorldX,cellWorldZ,"rock").tint;
-            const cliffTint=[
-              clamp(rockTint[0]*0.70,0.42,0.78),
-              clamp(rockTint[1]*0.72,0.42,0.78),
-              clamp(rockTint[2]*0.74,0.42,0.78),
-              1
-            ];
-            for(let i=0;i<4;i++)appendColor32(colors32,cliffTint,1);
-            if(rockRect){
-              uvs.push(
-                Number(rockRect.u0),Number(rockRect.v0),
-                Number(rockRect.u1),Number(rockRect.v0),
-                Number(rockRect.u0),Number(rockRect.v1),
-                Number(rockRect.u1),Number(rockRect.v1)
-              );
-              texturedSurfaceTypes.add("rock");
-            }else{
-              uvs.push(0,0,1,0,0,1,1,1);
-              fallbackSurfaceTypes.add("rock");
-            }
-            for(let i=0;i<4;i++)detailUvs.push(Number(cellWorldX)*0.25,Number(cellWorldZ)*0.25);
-            if(edge.flip){
-              indices.push(cliffBase,cliffBase+2,cliffBase+1, cliffBase+1,cliffBase+2,cliffBase+3);
-            }else{
-              indices.push(cliffBase,cliffBase+1,cliffBase+2, cliffBase+1,cliffBase+3,cliffBase+2);
-            }
-
-            // A broad raised rock shelf changes the visible top-surface profile
-            // inside the cliff cell while preserving the authoritative cell
-            // boundaries exactly. The raised inner edge exposes a real face from
-            // the normal gameplay camera instead of drawing a stripe on the sheet.
-            const lipBase=positions.length/3;
-            positions.push(
-              Number(topA[0]),Number(topA[1])+0.036,Number(topA[2]),
-              Number(topB[0]),Number(topB[1])+0.036,Number(topB[2]),
-              Number(breakA[0]),Number(breakA[1])+0.036,Number(breakA[2]),
-              Number(breakB[0]),Number(breakB[1])+0.036,Number(breakB[2])
-            );
-            for(let i=0;i<4;i++)normals.push(0,1,0);
-            for(let i=0;i<4;i++)appendColor32(colors32,cliffTint,1);
-            if(rockRect){
-              uvs.push(
-                Number(rockRect.u0),Number(rockRect.v0),
-                Number(rockRect.u1),Number(rockRect.v0),
-                Number(rockRect.u0),Number(rockRect.v1),
-                Number(rockRect.u1),Number(rockRect.v1)
-              );
-            }else uvs.push(0,0,1,0,0,1,1,1);
-            for(let i=0;i<4;i++)detailUvs.push(Number(cellWorldX)*0.25,Number(cellWorldZ)*0.25);
-            indices.push(lipBase,lipBase+2,lipBase+1, lipBase+1,lipBase+2,lipBase+3);
-
-            landformCliffFaceCount++;
-            landformCliffFaceTriangleCount+=2;
-            landformCliffLipCount++;
-            landformCliffLipTriangleCount+=2;
+            splitCliff={cliff,edge};
           }
+        }
+
+        const emitSurfaceVertex=(position,fx,fz,normal)=>{
+          positions.push(Number(position[0]),Number(position[1]),Number(position[2]));
+          normals.push(Number(normal[0]),Number(normal[1]),Number(normal[2]));
+          const variation=terrainVariationTintAtCellPoint(gx,gz,fx,fz,baseVisualType);
+          if(rect){
+            appendColor32(colors32,variation,1);
+            const u=Number(rect.u0)+(Number(rect.u1)-Number(rect.u0))*fx;
+            const v=Number(rect.v0)+(Number(rect.v1)-Number(rect.v0))*fz;
+            uvs.push(u,v);
+          }else{
+            const fallback=heightfieldColor(seed,cellWorldX,cellWorldZ,sourceCell?.color,baseVisualType);
+            appendColor32(colors32,[
+              fallback[0]*variation[0],
+              fallback[1]*variation[1],
+              fallback[2]*variation[2],
+              1
+            ],1);
+            uvs.push(fx,fz);
+          }
+          detailUvs.push((Number(cellWorldX)+fx)*0.25,(Number(cellWorldZ)+fz)*0.25);
+        };
+        const topNormal=(p0,p1,p2)=>{
+          const ax=Number(p2[0])-Number(p0[0]),ay=Number(p2[1])-Number(p0[1]),az=Number(p2[2])-Number(p0[2]);
+          const bx=Number(p1[0])-Number(p0[0]),by=Number(p1[1])-Number(p0[1]),bz=Number(p1[2])-Number(p0[2]);
+          let nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx;
+          const len=Math.hypot(nx,ny,nz)||1;
+          nx/=len;ny/=len;nz/=len;
+          if(ny<0){nx=-nx;ny=-ny;nz=-nz;}
+          return [nx,ny,nz];
+        };
+        const emitTopQuad=(points,fractions)=>{
+          const base=positions.length/3;
+          const normal=topNormal(points[0],points[1],points[2]);
+          for(let i=0;i<4;i++)emitSurfaceVertex(points[i],fractions[i][0],fractions[i][1],normal);
+          indices.push(base,base+2,base+1, base+1,base+2,base+3);
+        };
+
+        if(!splitCliff){
+          const base=positions.length/3;
+          for(const corner of corners){
+            positions.push(...corner.position);
+            normals.push(...corner.normal);
+            const variation=terrainVariationAtVertex(corner.wx,corner.wz,baseVisualType);
+            if(rect){
+              appendColor32(colors32,variation.tint,1);
+            }else{
+              const fallback=heightfieldColor(seed,corner.wx,corner.wz,sourceCell?.color,baseVisualType);
+              appendColor32(colors32,[
+                fallback[0]*variation.tint[0],
+                fallback[1]*variation.tint[1],
+                fallback[2]*variation.tint[2],
+                1
+              ],1);
+            }
+            detailUvs.push(Number(corner.wx)*0.25,Number(corner.wz)*0.25);
+          }
+          if(rect){
+            uvs.push(
+              Number(rect.u0),Number(rect.v0),
+              Number(rect.u1),Number(rect.v0),
+              Number(rect.u0),Number(rect.v1),
+              Number(rect.u1),Number(rect.v1)
+            );
+          }else{
+            uvs.push(0,0,1,0,0,1,1,1);
+          }
+          indices.push(base,base+2,base+1, base+1,base+2,base+3);
+        }else{
+          const cliff=splitCliff.cliff,edge=splitCliff.edge;
+          const cornerFractions=[[0,0],[1,0],[0,1],[1,1]];
+          const topA=corners[edge.a].position,topB=corners[edge.b].position;
+          const innerA=corners[edge.ia].position,innerB=corners[edge.ib].position;
+          const fracA=cornerFractions[edge.a],fracB=cornerFractions[edge.b];
+          const innerFracA=cornerFractions[edge.ia],innerFracB=cornerFractions[edge.ib];
+          const lerp=(a,b,t)=>Number(a)+(Number(b)-Number(a))*t;
+          const breakT=clamp(LANDFORM_CLIFF_LIP_INSET/metersPerTile,0.32,0.58);
+          const breakRise=clamp(
+            LANDFORM_CLIFF_BREAK_RISE_MIN+
+            Number(cliff.cliffSignal||0)*0.62+
+            Number(cliff.localReliefMeters||0)/920,
+            LANDFORM_CLIFF_BREAK_RISE_MIN,
+            LANDFORM_CLIFF_BREAK_RISE_MAX
+          );
+          const lowA=[
+            lerp(topA[0],innerA[0],breakT),
+            lerp(topA[1],innerA[1],breakT),
+            lerp(topA[2],innerA[2],breakT)
+          ];
+          const lowB=[
+            lerp(topB[0],innerB[0],breakT),
+            lerp(topB[1],innerB[1],breakT),
+            lerp(topB[2],innerB[2],breakT)
+          ];
+          const highA=[lowA[0],lowA[1]+breakRise,lowA[2]];
+          const highB=[lowB[0],lowB[1]+breakRise,lowB[2]];
+          const breakFracA=[
+            lerp(fracA[0],innerFracA[0],breakT),
+            lerp(fracA[1],innerFracA[1],breakT)
+          ];
+          const breakFracB=[
+            lerp(fracB[0],innerFracB[0],breakT),
+            lerp(fracB[1],innerFracB[1],breakT)
+          ];
+
+          // Arrange each top half as NW,NE,SW,SE regardless of downhill side
+          // so the normal terrain winding remains valid.
+          if(edge.a===0&&edge.b===2){
+            emitTopQuad([topA,lowA,topB,lowB],[fracA,breakFracA,fracB,breakFracB]);
+            emitTopQuad([highA,innerA,highB,innerB],[breakFracA,innerFracA,breakFracB,innerFracB]);
+          }else if(edge.a===1&&edge.b===3){
+            emitTopQuad([lowA,topA,lowB,topB],[breakFracA,fracA,breakFracB,fracB]);
+            emitTopQuad([innerA,highA,innerB,highB],[innerFracA,breakFracA,innerFracB,breakFracB]);
+          }else if(edge.a===0&&edge.b===1){
+            emitTopQuad([topA,topB,lowA,lowB],[fracA,fracB,breakFracA,breakFracB]);
+            emitTopQuad([highA,highB,innerA,innerB],[breakFracA,breakFracB,innerFracA,innerFracB]);
+          }else{
+            emitTopQuad([lowA,lowB,topA,topB],[breakFracA,breakFracB,fracA,fracB]);
+            emitTopQuad([innerA,innerB,highA,highB],[innerFracA,innerFracB,breakFracA,breakFracB]);
+          }
+
+          const cliffBase=positions.length/3;
+          positions.push(
+            Number(highA[0]),Number(highA[1]),Number(highA[2]),
+            Number(highB[0]),Number(highB[1]),Number(highB[2]),
+            Number(lowA[0]),Number(lowA[1]),Number(lowA[2]),
+            Number(lowB[0]),Number(lowB[1]),Number(lowB[2])
+          );
+          for(let i=0;i<4;i++)normals.push(...edge.normal);
+          const rockRect=semanticAtlasReady?(activeAtlas?.meshUvRect?.("rock")||activeAtlas?.uvRect?.("rock")):null;
+          const rockTint=terrainVariationAtVertex(cellWorldX,cellWorldZ,"rock").tint;
+          const cliffTint=[
+            clamp(rockTint[0]*0.88,0.56,0.90),
+            clamp(rockTint[1]*0.86,0.54,0.88),
+            clamp(rockTint[2]*0.82,0.50,0.84),
+            1
+          ];
+          for(let i=0;i<4;i++)appendColor32(colors32,cliffTint,1);
+          if(rockRect){
+            uvs.push(
+              Number(rockRect.u0),Number(rockRect.v0),
+              Number(rockRect.u1),Number(rockRect.v0),
+              Number(rockRect.u0),Number(rockRect.v1),
+              Number(rockRect.u1),Number(rockRect.v1)
+            );
+            texturedSurfaceTypes.add("rock");
+          }else{
+            uvs.push(0,0,1,0,0,1,1,1);
+            fallbackSurfaceTypes.add("rock");
+          }
+          for(let i=0;i<4;i++)detailUvs.push(Number(cellWorldX)*0.25,Number(cellWorldZ)*0.25);
+          if(edge.flip){
+            indices.push(cliffBase,cliffBase+2,cliffBase+1, cliffBase+1,cliffBase+2,cliffBase+3);
+          }else{
+            indices.push(cliffBase,cliffBase+1,cliffBase+2, cliffBase+1,cliffBase+3,cliffBase+2);
+          }
+
+          landformCliffFaceCount++;
+          landformCliffFaceTriangleCount+=2;
+          // Replacing one 2-triangle top quad with two 2-triangle top quads
+          // adds exactly two top triangles in addition to the two rock-face
+          // triangles, preserving the existing four-extra-triangle budget.
+          landformCliffLipCount++;
+          landformCliffLipTriangleCount+=2;
         }
 
         // Close only the exposed shoreline cut between the conditioned bank and
@@ -3253,7 +3287,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):0,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):0,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):0,
-      landformSteepFaceTreatment:"exaggerated-heightfield+raised-cliff-breaks",
+      landformSteepFaceTreatment:"exaggerated-heightfield+split-cliff-topology",
       landformCliffFaceCount,landformCliffFaceTriangleCount,
       landformCliffLipCount,landformCliffLipTriangleCount,
       landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
@@ -3547,7 +3581,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
       landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
-      landformSteepFaceTreatment:"exaggerated-heightfield+raised-cliff-breaks",
+      landformSteepFaceTreatment:"exaggerated-heightfield+split-cliff-topology",
       landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
       landformCliffFaceApronMaxWorldUnits:LANDFORM_CLIFF_FACE_APRON_MAX,
       landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
