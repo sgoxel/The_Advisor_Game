@@ -1475,3 +1475,10 @@
 - Direct inspection of Attempt 3 primary-context frames scored 8.2/10: the civic cupola clears the gable roof, reads as a distinct settlement anchor at 0.75x/1.00x/1.25x/2.00x, ordinary homes remain subordinate, and resident/square/road context provides scale without major clipping or z-fighting.
 - WP remains incomplete because the required second deterministic context/seed screenshot set was not captured. The alternate campaign switch failed in existing BuildingInteriors reconstruction with TypeError reading null coordinate x. No fourth visual attempt was launched because the project permits at most three test/improvement attempts per run.
 - docs/ROADMAP.md remains intentionally unmarked; Issue #96 remains open.
+2026-09-25 09:26:45 +03:00
+- WP-S003-009-009 Low-Cost Ambient Life Motion + Environmental Animation tested and successfully deployed.
+- Added deterministic, throttled shared-instance ambient motion for tree sway, context-bound chimney smoke and landmark pennants without changing Simulation, navigation or collision authority.
+- Low graphics quality and far strategic zoom reduce ambient categories to bounded tree sway; Standard/High restore contextual smoke and pennants.
+- Dedicated Visual Evidence run 36101152268 passed on implementation commit 6ae39b9ba31f191155197e8a780aba1846e77851; inspected 8 fresh screenshots and assigned VISUAL 8.4/10 PASS.
+- Evidence observed 3 ambient categories, 202 -> 487 shared-instance buffer updates across the first two time-separated frames, <=2.0 ms maximum per-resource ambient CPU update, and 8 added ambient draw calls across 81-194 prepared resources.
+- GitHub Pages deployment run 36101140463 successfully deployed the implementation commit.
