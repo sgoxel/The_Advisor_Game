@@ -115,7 +115,8 @@ function referenceElevation(seed){
   return value;
 }
 function sourceElevationMeters(seed,x,y){
-  return Number(worldFieldSample(seed,x,y).elevationMeters||referenceElevation(seed));
+  const elevation=Number(worldFieldSample(seed,x,y).elevationMeters);
+  return Number.isFinite(elevation)?elevation:referenceElevation(seed);
 }
 function landformAtWorldUnit(seedValue,xValue,yValue){
   const seed=String(seedValue||""),x=String(xValue),y=String(yValue);
@@ -170,7 +171,8 @@ function landformAtWorldUnit(seedValue,xValue,yValue){
 }
 function macroHeight(seed,x,y){
   const landform=landformAtWorldUnit(seed,x,y);
-  const elevation=Number(landform.elevationMeters||referenceElevation(seed));
+  const sampledElevation=Number(landform.elevationMeters);
+  const elevation=Number.isFinite(sampledElevation)?sampledElevation:referenceElevation(seed);
   const baseMacro=(elevation-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE;
   return Object.freeze({elevation,baseMacro,macro:baseMacro,landform});
 }
