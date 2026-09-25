@@ -51,9 +51,10 @@ function floorDivBig(value,divisor){
   return q;
 }
 function heightfieldSegments(size){
-  const bounded=Math.max(1,Math.trunc(Number(size)||16));
-  for(let candidate=Math.min(8,bounded);candidate>=1;candidate--)if(bounded%candidate===0)return candidate;
-  return 1;
+  // The semantic terrain mesh samples every authoritative logical tile.
+  // Grounding queries must use the identical one-tile grid so characters,
+  // props and route overlays stay on the exact rendered height surface.
+  return Math.max(1,Math.trunc(Number(size)||16));
 }
 function heightfieldStep(size){return Math.max(1,Math.trunc(Number(size)||16)/heightfieldSegments(size));}
 function referenceElevation(seed){
