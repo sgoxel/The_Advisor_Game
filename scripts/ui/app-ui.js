@@ -1046,7 +1046,13 @@ function projectedCoverageHalfSpan(width,height,tileSize){
   // normal desktop/tablet coverage and Simulation coordinates remain unchanged.
   const aspect=safeWidth/safeHeight;
   const shallowLandscapePadding=aspect>=3.2?3:aspect>=2.6?1:0;
-  return Math.max(1,Math.ceil(halfSpan)+2+shallowLandscapePadding);
+  // Maximum zoom-out exposes more of the rotated diamond than normal gameplay
+  // views. Reserve four logical tiles only when the effective tile size is at
+  // the far-zoom floor; use max(), not addition, so ultra-wide phones do not
+  // pay both margins at once.
+  const farZoomPadding=Number(tileSize)<=60?4:0;
+  const coveragePadding=Math.max(shallowLandscapePadding,farZoomPadding);
+  return Math.max(1,Math.ceil(halfSpan)+2+coveragePadding);
 }
 
 function terrainGridDimensions(width,height,tileSize){
