@@ -123,6 +123,21 @@ function reconstruct(cameFrom,points,currentKey){
   const path=keys.map(item=>points.get(item)).filter(Boolean).map(point=>Object.freeze({x:point.x,y:point.y}));
   return {path:Object.freeze(path),pathKeys:Object.freeze(keys.slice())};
 }
+function routeSlopeMetrics(seed,path){
+  let slopePenaltySeconds=0,maxSlopeAngleDegrees=0;
+  for(let i=1;i<path.length;i++){
+    const from=path[i-1],to=path[i];
+    const fromState=movementState(seed,from.x,from.y),toState=movementState(seed,to.x,to.y);
+    const edge=Walkability.transition(seed,from,to,{fromState,toState});
+    if(!edge?.allowed)continue;
+    maxSlopeAngleDegrees=Math.max(maxSlopeAngleDegrees,Number(edge.slope?.angleDegrees||0));
+    slopePenaltySeconds+=Math.max(0,Number(edge.seconds)-Number(toState?.secondsPerTile||0));
+  }
+  return Object.freeze({
+    slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
+    maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4))
+  });
+}
 
 function findRoute(seed,startValue,destinationValue,options){
   const start=normalizePoint(startValue);
@@ -172,8 +187,6 @@ function findRoute(seed,startValue,destinationValue,options){
   let expandedCount=0;
   let blockedRejectedCount=0;
   let slopeBlockedRejectedCount=0;
-  let slopePenaltySeconds=0;
-  let maxSlopeAngleDegrees=0;
   let order=0;
 
   const startKey=key(start);
@@ -197,6 +210,7 @@ function findRoute(seed,startValue,destinationValue,options){
 
     if(currentKey===key(destination)){
       const rebuilt=reconstruct(cameFrom,points,currentKey);
+      const slopeMetrics=routeSlopeMetrics(seed,rebuilt.path);
       return frozenResult({
         found:true,
         reason:"ok",
@@ -209,8 +223,8 @@ function findRoute(seed,startValue,destinationValue,options){
         expandedCount,
         blockedRejectedCount,
         slopeBlockedRejectedCount,
-        slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
-        maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4)),
+        slopePenaltySeconds:slopeMetrics.slopePenaltySeconds,
+        maxSlopeAngleDegrees:slopeMetrics.maxSlopeAngleDegrees,
         searchRadius,
         maxNodes
       });
@@ -220,8 +234,6 @@ function findRoute(seed,startValue,destinationValue,options){
     if(expandedCount>maxNodes){
       return failure("search-limit",start,destination,{
         evaluatedCount,expandedCount,blockedRejectedCount,slopeBlockedRejectedCount,
-        slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
-        maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4)),
         searchRadius,maxNodes
       });
     }
@@ -251,8 +263,6 @@ function findRoute(seed,startValue,destinationValue,options){
         }
         continue;
       }
-      maxSlopeAngleDegrees=Math.max(maxSlopeAngleDegrees,Number(transition.slope?.angleDegrees||0));
-
       let penaltySeconds=0;
       if(typeof opts.stepPenaltySeconds==="function"){
         const rawPenalty=Number(opts.stepPenaltySeconds(Object.freeze({
@@ -264,7 +274,6 @@ function findRoute(seed,startValue,destinationValue,options){
         })));
         if(Number.isFinite(rawPenalty)&&rawPenalty>0)penaltySeconds=rawPenalty;
       }
-      const slopePenalty=Math.max(0,Number(transition.seconds)-Number(state.secondsPerTile));
       const tentative=current.g+Number(transition.seconds)+penaltySeconds;
       const previous=gScore.get(nextKey);
       if(previous!=null&&tentative>=previous-1e-9)continue;
@@ -272,7 +281,6 @@ function findRoute(seed,startValue,destinationValue,options){
       cameFrom.set(nextKey,currentKey);
       points.set(nextKey,next);
       gScore.set(nextKey,tentative);
-      slopePenaltySeconds+=slopePenalty;
       const h=heuristicSeconds(next,destination);
       open.push({point:next,g:tentative,h,f:tentative+h,order:order++});
     }
@@ -280,8 +288,6 @@ function findRoute(seed,startValue,destinationValue,options){
 
   return failure("unreachable",start,destination,{
     evaluatedCount,expandedCount,blockedRejectedCount,slopeBlockedRejectedCount,
-    slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
-    maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4)),
     searchRadius,maxNodes
   });
 }
