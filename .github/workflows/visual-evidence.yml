@@ -64,6 +64,8 @@ on:
           - wp-s003-006-007
           - wp-s003-006-009
           - wp-s003-006-011
+          - wp-s003-006-012
+          - wp-s003-006-013
           - wp-s003-007-001
           - wp-s003-008-001
           - wp-s003-008-002
@@ -124,6 +126,7 @@ on:
       - tools/requirements.txt
       - .github/workflows/visual-evidence.yml
       - index.html
+      - scripts/world/planet-stage.js
       - scripts/world/geography.js
       - scripts/world/political-geography.js
       - scripts/world/country-profile.js
@@ -259,7 +262,7 @@ jobs:
             publish="${INPUT_PUBLISH:-false}"
           elif [ "$EVENT_NAME" = 'push' ]; then
             target='http://127.0.0.1:8000/'
-            scenario='starting-village'
+            scenario='wp-s003-006-013'
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             requested_profile="$(printf '%s' "$COMMENT_BODY" | awk '{print $3}')"
