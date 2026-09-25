@@ -278,10 +278,7 @@ function createManager({
       if(item.source==="idle")removed.push(item);
       else keep.push(item);
     }
-    if(!removed.length){
-      destinationDataPrepared.clear();
-      return 0;
-    }
+    if(!removed.length)return 0;
     queue=keep;
     for(const item of removed)queued.delete(item.fullKey);
     lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance,source:item.source||"normal"})));
@@ -298,7 +295,10 @@ function createManager({
       if(item.source==="destination")removed.push(item);
       else keep.push(item);
     }
-    if(!removed.length)return 0;
+    if(!removed.length){
+      destinationDataPrepared.clear();
+      return 0;
+    }
     queue=keep;
     for(const item of removed){
       queued.delete(item.fullKey);
