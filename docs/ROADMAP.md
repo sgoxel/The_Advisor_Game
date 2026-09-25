@@ -156,6 +156,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S007-007` — NPC Materialization, Dematerialization + Schedule Reconstruction — COMPLETED
 - `WP-S007-008` — Deterministic Lazy Catch-Up + Offline World Progression — COMPLETED
 - `WP-S007-009` — Versioned Save/Load, Deterministic Resume + World Compatibility
+- `WP-S007-009-001` — Persistent Generated-World Cache + Incremental Campaign Resume Store
 - `WP-S007-010` — World Simulation Budgets, Backpressure + Runtime Telemetry
 - `WP-S007-011` — Local Dynamic Event Vignettes + Reactive Scheduling
 - `WP-S007-012` — Persistent World Consequence Projection + Local Recovery
