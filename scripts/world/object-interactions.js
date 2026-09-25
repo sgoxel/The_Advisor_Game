@@ -76,7 +76,11 @@ function nearestInteractionPoint(descriptor,actorPosition){
   const actor=point(actorPosition);
   return interactionPoints(descriptor).slice().sort((a,b)=>{
     const da=actor?manhattan(actor,a):0,db=actor?manhattan(actor,b):0;
-    return da-db||BigInt(a.y)<BigInt(b.y)?-1:BigInt(a.y)>BigInt(b.y)?1:BigInt(a.x)<BigInt(b.x)?-1:1;
+    if(da!==db)return da-db;
+    const ay=BigInt(a.y),by=BigInt(b.y);
+    if(ay!==by)return ay<by?-1:1;
+    const ax=BigInt(a.x),bx=BigInt(b.x);
+    return ax<bx?-1:ax>bx?1:0;
   })[0]||null;
 }
 function descriptorActions(type){
