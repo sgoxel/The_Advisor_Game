@@ -547,7 +547,7 @@ function createManager({
           const response=prepareChunkData({
             x:item.x,y:item.y,chunkSize:size,signature:item.signature,
             state:item.state||"Prepared",source:"destination",streamingProfile:"minimum",
-            incrementalState:record?.state||null,maxCells:2
+            incrementalState:record?.state||null,maxCells:8
           });
           const dataElapsed=performance.now()-itemStarted;
           destinationDataSliceCount++;
@@ -555,9 +555,17 @@ function createManager({
           destinationDataTotalMs+=dataElapsed;
           destinationDataMaxMs=Math.max(destinationDataMaxMs,dataElapsed);
           if(response?.pending===true){
-            destinationDataPrepared.set(item.fullKey,{pending:true,state:response.state});
+            destinationDataPrepared.set(item.fullKey,{
+              pending:true,state:response.state,
+              completed:Number(response.completed||0),total:Number(response.total||0),
+              percent:Number(response.percent||0),sliceMs:Number(response.sliceMs||dataElapsed)
+            });
           }else{
-            destinationDataPrepared.set(item.fullKey,{pending:false,data:response?.data??response});
+            destinationDataPrepared.set(item.fullKey,{
+              pending:false,data:response?.data??response,
+              completed:Number(response?.completed||0),total:Number(response?.total||0),
+              percent:Number(response?.percent??100),sliceMs:Number(response?.sliceMs||dataElapsed)
+            });
           }
           // Exactly one deterministic data slice per paint. Even completion waits
           // for the next frame before mesh/GPU composition.
@@ -652,13 +660,25 @@ function createManager({
   }
   function destinationProgress(plan,state=streamingState){
     const sig=currentSignature();
-    let completed=0;
+    let completed=0,partial=0,partialCellsCompleted=0,partialCellsTotal=0;
     for(const id of plan.requiredIds){
       const point=parseCoord(id);
-      if(entries.has(entryKey(sig,point.x,point.y)))completed++;
+      const fullKey=entryKey(sig,point.x,point.y);
+      if(entries.has(fullKey)){completed++;continue;}
+      const record=destinationDataPrepared.get(fullKey);
+      const done=Math.max(0,Number(record?.completed||0));
+      const total=Math.max(0,Number(record?.total||0));
+      if(total>0){
+        partial+=Math.min(1,done/total);
+        partialCellsCompleted+=Math.min(done,total);
+        partialCellsTotal+=total;
+      }
     }
     const required=plan.requiredIds.length;
-    const percent=required?Math.min(100,Math.round(completed/required*100)):100;
+    const weighted=completed+partial;
+    const percent=required
+      ?Math.min(completed>=required?100:99,Math.max(0,Math.round(weighted/required*100)))
+      :100;
     destinationRequiredCount=required;
     destinationCompletedCount=completed;
     destinationRequiredIds=plan.requiredIds;
@@ -666,6 +686,8 @@ function createManager({
     destinationLastProgress=Object.freeze({
       state:String(state),required,completed,percent,target:Object.freeze({...plan.center}),
       requiredChunkIds:plan.requiredIds,
+      partialChunks:Number((weighted-completed).toFixed(3)),
+      partialCellsCompleted,partialCellsTotal,
       queueDepth:queue.filter(item=>item.source==="destination").length,
       cancelledStale:staleDestinationCancelled,deduplicated:destinationDeduplicated,
       promotions:destinationPromotions,cacheHits:destinationCacheHits
