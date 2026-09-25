@@ -53,6 +53,18 @@
       <button id="resetZoomButton" type="button">Reset Zoom</button>
       <span>Drag / Arrow / WASD · Wheel or pinch to zoom</span>
     </div>
+    <section id="objectInteractionPanel" class="object-interaction-panel" hidden aria-live="polite" aria-label="Contextual world object actions">
+      <header class="object-interaction-header">
+        <div>
+          <span>Context Action</span>
+          <strong id="objectInteractionTitle">World Object</strong>
+        </div>
+        <button id="objectInteractionClose" class="object-interaction-close" type="button" aria-label="Close object actions">×</button>
+      </header>
+      <div id="objectInteractionMeta" class="object-interaction-meta">—</div>
+      <p id="objectInteractionMessage" class="object-interaction-message">Tap an object to inspect available actions.</p>
+      <div id="objectInteractionActions" class="object-interaction-actions" role="group" aria-label="Available object actions"></div>
+    </section>
     <div id="movementProofBadge" class="movement-proof-badge" hidden aria-live="polite">
       <strong id="movementProofBadgeStage">Resident movement proof</strong>
       <span id="movementProofBadgeResident">—</span>
