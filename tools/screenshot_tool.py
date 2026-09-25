@@ -104,6 +104,7 @@ SCENARIOS = {
     "wp-s003-009-003",
     "wp-s003-009-004",
     "wp-s003-009-004-001",
+    "wp-s003-009-004-002",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -184,6 +185,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-003": 9,
     "wp-s003-009-004": 6,
     "wp-s003-009-004-001": 7,
+    "wp-s003-009-004-002": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -5914,6 +5916,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-004-002":
+        _ensure_texture_quality_profile(driver, "standard")
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "contour:overview-0.50x+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
+        if frame_index == 1:
+            return "contour:origin-1.00x+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 2:
+            return "contour:origin-2.00x+" + _set_camera_view_and_render_active(driver, 0, 0, 2.00, timeout=45.0)
+        if frame_index == 3:
+            return "contour:road-grass+" + _focus_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+        if frame_index == 4:
+            return "contour:road-dirt-mud+" + _focus_road_profile_target(driver, "dirt-mud") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+        if frame_index == 5:
+            return "contour:square-close+" + _focus_road_profile_target(driver, "square") + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
+        if frame_index == 6:
+            return "contour:chunk-boundary+" + _focus_road_profile_target(driver, "chunk-boundary") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+        driver.set_window_size(844, 390)
+        return "contour:phone-landscape+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
     if scenario == "wp-s003-009-004-001":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
@@ -6700,6 +6721,50 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-004-002":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-009-004-002 requires eight contour evidence frames")
+        expected_zooms=("0.50×","1.00×","2.00×","1.00×","1.00×","2.00×","1.00×","1.00×")
+        max_patches=0
+        max_triangles=0
+        edge_keys=0
+        for index,frame in enumerate(frames[:8]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Contour zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if chunks.get("contourAlgorithm")!="categorical-marching-corners-rounded-fan":
+                raise RuntimeError(f"Contour algorithm missing in frame {index+1}: {chunks.get('contourAlgorithm')}")
+            if chunks.get("contourPreparationOnly") is not True or int(chunks.get("contourPerFrameRegenerationCount") or -1)!=0:
+                raise RuntimeError(f"Contour preparation contract failed in frame {index+1}: {chunks}")
+            radius=float(chunks.get("contourRoundRadiusTiles") or 0)
+            deviation=float(chunks.get("contourMaxBoundaryDeviationTiles") or 0)
+            band=float(chunks.get("contourTransitionBandWidthTiles") or 0)
+            if not (0 < radius <= 0.5 and 0 < deviation <= 0.5 and 0 < band <= 0.5):
+                raise RuntimeError(f"Contour deviation/band is not bounded in frame {index+1}: radius={radius}, deviation={deviation}, band={band}")
+            if int(chunks.get("contourDrawCallsAdded") or -1)!=0 or int(chunks.get("contourMaterialCountAdded") or -1)!=0:
+                raise RuntimeError(f"Contour smoothing added draw calls/materials in frame {index+1}: {chunks}")
+            if chunks.get("contourCanonicalCornerOwnership") is not True or chunks.get("contourSharedEdgeEquality") is not True:
+                raise RuntimeError(f"Contour shared-edge continuity failed in frame {index+1}: {chunks}")
+            if chunks.get("contourTileCentersPreserved") is not True or chunks.get("contourAlphaBlend") is not False:
+                raise RuntimeError(f"Contour tile-center/alpha contract failed in frame {index+1}: {chunks}")
+            if chunks.get("oneEntityPerTile") is not False or gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Contour smoothing changed bounded rendering or Simulation authority in frame {index+1}")
+            if int(chunks.get("visibleFrameTerrainRebuildCount") or 0)!=0:
+                raise RuntimeError(f"Visible-frame contour/terrain rebuild detected in frame {index+1}: {chunks.get('visibleFrameTerrainRebuildCount')}")
+            max_patches=max(max_patches,int(chunks.get("contourPatchCount") or 0))
+            max_triangles=max(max_triangles,int(chunks.get("contourAddedTriangleCount") or 0))
+            edge_keys=max(edge_keys,int(chunks.get("contourSharedEdgeKeyCount") or 0))
+        if max_patches<=0 or max_triangles<=0:
+            raise RuntimeError(f"No prepared contour geometry was evidenced: patches={max_patches}, triangles={max_triangles}")
+        if edge_keys<=0:
+            raise RuntimeError("No chunk-edge contour ownership evidence was observed")
+        phone=frames[7].get("runtime",{}).get("viewport",{})
+        if int(phone.get("width") or 0)<=int(phone.get("height") or 0):
+            raise RuntimeError(f"Phone-landscape contour evidence missing: {phone}")
         return
 
     if scenario == "wp-s003-009-004-001":

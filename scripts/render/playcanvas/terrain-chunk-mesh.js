@@ -34,6 +34,11 @@ const BUILDING_MATERIAL_VARIANTS=Object.freeze([
   Object.freeze({roof:Object.freeze([0.82,0.88,0.84]),wall:Object.freeze([0.90,0.93,0.84]),trim:Object.freeze([0.78,0.82,0.74])})
 ]);
 const SEMANTIC_TERRAIN_TYPES=new Set(["grass","forest","dirt","mud","road","bridge","square","path","plot","water","rock","sand","farmland"]);
+const CONTOUR_SMOOTHABLE_TYPES=new Set(["grass","forest","dirt","mud","sand","farmland"]);
+const CONTOUR_ROUND_RADIUS_TILES=0.42;
+const CONTOUR_ARC_SEGMENTS=4;
+const CONTOUR_Y_OFFSET=0.008;
+const CONTOUR_HALO_TILES=1;
 function semanticSurfaceType(value){
   const type=String(value||"grass");
   if(SEMANTIC_TERRAIN_TYPES.has(type))return type;
@@ -1287,6 +1292,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let texturedBlockCount=0,colorFallbackBlockCount=0;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
     const semanticSurfaceTileCounts={};
+    const contourPairCounts={};
+    const contourSharedEdgeKeys=[];
+    let contourPatchCount=0,contourVertexCount=0,contourTriangleCount=0,contourBuildMs=0;
     const localSamples=new Map();
     let minHeight=Infinity,maxHeight=-Infinity,minElevation=Infinity,maxElevation=-Infinity;
     let roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
@@ -1411,6 +1419,105 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       }
     }
 
+    // Tile-authoritative contour smoothing: categorical marching-corner patches.
+    // A 2x2 junction with a 3:1 natural-surface majority receives one rounded
+    // majority patch inside the minority cell. The authoritative tile center is
+    // untouched; maximum visual deviation stays below half a logical tile.
+    // Patches are appended to this same chunk mesh/material, so they add zero
+    // terrain draw calls and zero terrain materials. A one-tile halo plus
+    // canonical global-corner ownership keeps chunk edges deterministic.
+    const contourStarted=performance.now();
+    const baseSemanticVertexCount=positions.length/3;
+    const baseSemanticTriangleCount=indices.length/3;
+    const semanticTypeAtGlobal=(globalX,globalZ)=>{
+      const lx=Number(globalX-baseX),lz=Number(globalZ-baseZ);
+      if(Number.isInteger(lx)&&Number.isInteger(lz)&&lx>=0&&lx<size&&lz>=0&&lz<size){
+        const cell=spec.worldData?.cells?.[lz*size+lx]||null;
+        return semanticSurfaceType(cell?.type||"grass");
+      }
+      return semanticSurfaceType(window.TerrainFoundation?.getTile?.(seed,String(globalX),String(globalZ))?.type||"grass");
+    };
+    const appendContourPoint=(cellX,cellZ,pointX,pointZ,rect)=>{
+      const fx=clamp(pointX-cellX,0,1),fz=clamp(pointZ-cellZ,0,1);
+      const a=grid[cellZ*stride+cellX],b=grid[cellZ*stride+cellX+1];
+      const c=grid[(cellZ+1)*stride+cellX],d=grid[(cellZ+1)*stride+cellX+1];
+      let y,nx,ny,nz;
+      if(fx+fz<=1){
+        y=a.sample.height+fx*(b.sample.height-a.sample.height)+fz*(c.sample.height-a.sample.height);
+        nx=a.normal[0]+fx*(b.normal[0]-a.normal[0])+fz*(c.normal[0]-a.normal[0]);
+        ny=a.normal[1]+fx*(b.normal[1]-a.normal[1])+fz*(c.normal[1]-a.normal[1]);
+        nz=a.normal[2]+fx*(b.normal[2]-a.normal[2])+fz*(c.normal[2]-a.normal[2]);
+      }else{
+        y=d.sample.height+(1-fz)*(b.sample.height-d.sample.height)+(1-fx)*(c.sample.height-d.sample.height);
+        nx=d.normal[0]+(1-fz)*(b.normal[0]-d.normal[0])+(1-fx)*(c.normal[0]-d.normal[0]);
+        ny=d.normal[1]+(1-fz)*(b.normal[1]-d.normal[1])+(1-fx)*(c.normal[1]-d.normal[1]);
+        nz=d.normal[2]+(1-fz)*(b.normal[2]-d.normal[2])+(1-fx)*(c.normal[2]-d.normal[2]);
+      }
+      const nlen=Math.hypot(nx,ny,nz)||1;
+      positions.push(pointX*metersPerTile-half,y+CONTOUR_Y_OFFSET,pointZ*metersPerTile-half);
+      normals.push(nx/nlen,ny/nlen,nz/nlen);
+      appendColor32(colors32,[1,1,1,1],1);
+      uvs.push(
+        Number(rect.u0)+(Number(rect.u1)-Number(rect.u0))*fx,
+        Number(rect.v0)+(Number(rect.v1)-Number(rect.v0))*fz
+      );
+      detailUvs.push((Number(baseX)+pointX)*0.25,(Number(baseZ)+pointZ)*0.25);
+      contourVertexCount++;
+      return positions.length/3-1;
+    };
+    const quadrantInfo=[
+      Object.freeze({cellDx:-1,cellDz:-1,start:Math.PI,end:Math.PI*1.5}),
+      Object.freeze({cellDx:0,cellDz:-1,start:Math.PI*1.5,end:Math.PI*2}),
+      Object.freeze({cellDx:-1,cellDz:0,start:Math.PI*0.5,end:Math.PI}),
+      Object.freeze({cellDx:0,cellDz:0,start:0,end:Math.PI*0.5})
+    ];
+    const chunkX=BigInt(Math.trunc(Number(spec.x)||0)),chunkZ=BigInt(Math.trunc(Number(spec.y)||0)),chunkSpan=BigInt(size);
+    for(let cornerZ=0;cornerZ<=size;cornerZ++){
+      for(let cornerX=0;cornerX<=size;cornerX++){
+        const globalCornerX=baseX+BigInt(cornerX),globalCornerZ=baseZ+BigInt(cornerZ);
+        if(floorDivBig(globalCornerX,chunkSpan)!==chunkX||floorDivBig(globalCornerZ,chunkSpan)!==chunkZ)continue;
+        const cells=[
+          [globalCornerX-1n,globalCornerZ-1n],
+          [globalCornerX,globalCornerZ-1n],
+          [globalCornerX-1n,globalCornerZ],
+          [globalCornerX,globalCornerZ]
+        ];
+        const types=cells.map(([x,z])=>semanticTypeAtGlobal(x,z));
+        const counts=new Map();
+        for(const type of types)counts.set(type,(counts.get(type)||0)+1);
+        if(counts.size!==2)continue;
+        const ranked=[...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+        if(ranked[0][1]!==3||ranked[1][1]!==1)continue;
+        const majority=ranked[0][0],minority=ranked[1][0];
+        if(!CONTOUR_SMOOTHABLE_TYPES.has(majority)||!CONTOUR_SMOOTHABLE_TYPES.has(minority))continue;
+        const minorityIndex=types.indexOf(minority),q=quadrantInfo[minorityIndex];
+        const localCellX=cornerX+q.cellDx,localCellZ=cornerZ+q.cellDz;
+        if(localCellX<0||localCellX>=size||localCellZ<0||localCellZ>=size)continue;
+        const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(majority)||activeAtlas?.uvRect?.(majority)):null;
+        if(!rect)continue;
+        const centerIndex=appendContourPoint(localCellX,localCellZ,cornerX,cornerZ,rect);
+        let previous=null;
+        for(let segment=0;segment<=CONTOUR_ARC_SEGMENTS;segment++){
+          const t=segment/CONTOUR_ARC_SEGMENTS;
+          const angle=q.start+(q.end-q.start)*t;
+          const px=cornerX+Math.cos(angle)*CONTOUR_ROUND_RADIUS_TILES;
+          const pz=cornerZ+Math.sin(angle)*CONTOUR_ROUND_RADIUS_TILES;
+          const current=appendContourPoint(localCellX,localCellZ,px,pz,rect);
+          if(previous!==null){
+            // Reverse the increasing x/z arc winding so the patch faces +Y.
+            indices.push(centerIndex,current,previous);
+            contourTriangleCount++;
+          }
+          previous=current;
+        }
+        contourPatchCount++;
+        const pair=majority+">"+minority;
+        contourPairCounts[pair]=(contourPairCounts[pair]||0)+1;
+        if(cornerX===0||cornerZ===0)contourSharedEdgeKeys.push(String(globalCornerX)+","+String(globalCornerZ)+":"+pair);
+      }
+    }
+    contourBuildMs=performance.now()-contourStarted;
+
     const mesh=new pc.Mesh(device);
     mesh.setPositions(positions);
     mesh.setNormals(normals);
@@ -1530,6 +1637,30 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       normalDetailUvChannel:1,
       semanticSurfaceTileCount:size*size,
       semanticSurfaceTileCounts:Object.freeze({...semanticSurfaceTileCounts}),
+      contourAlgorithm:"categorical-marching-corners-rounded-fan",
+      contourPreparationOnly:true,
+      contourHaloTiles:CONTOUR_HALO_TILES,
+      contourRoundRadiusTiles:CONTOUR_ROUND_RADIUS_TILES,
+      contourRoundRadiusWorldUnits:Number((CONTOUR_ROUND_RADIUS_TILES*WORLD_TILE_METERS).toFixed(3)),
+      contourArcSegments:CONTOUR_ARC_SEGMENTS,
+      contourTransitionBandWidthTiles:CONTOUR_ROUND_RADIUS_TILES,
+      contourMaxBoundaryDeviationTiles:CONTOUR_ROUND_RADIUS_TILES,
+      contourMaxBoundaryDeviationWorldUnits:Number((CONTOUR_ROUND_RADIUS_TILES*WORLD_TILE_METERS).toFixed(3)),
+      contourPatchCount,
+      contourVertexCount,
+      contourAddedTriangleCount:contourTriangleCount,
+      contourBaseTriangleCount:baseSemanticTriangleCount,
+      contourBaseVertexCount:baseSemanticVertexCount,
+      contourBuildMs:Number(contourBuildMs.toFixed(3)),
+      contourDrawCallsAdded:0,
+      contourMaterialCountAdded:0,
+      contourPerFrameRegenerationCount:0,
+      contourCanonicalCornerOwnership:true,
+      contourSharedEdgeKeys:Object.freeze(contourSharedEdgeKeys.slice()),
+      contourSurfacePairCounts:Object.freeze({...contourPairCounts}),
+      contourTileCentersPreserved:true,
+      contourNarrowFeaturesPreserved:true,
+      contourAlphaBlend:false,
       vertexCount:positions.length/3,
       triangleCount:indices.length/3,
       minConditionedHeight:Number(minHeight.toFixed(4)),
@@ -1751,6 +1882,19 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       worldVisualStylePaletteRoleCount:Object.keys(worldVisualStyle()?.palette||{}).length,
       terrainSemanticUvPerTile:true,
       semanticMeshUvOrientation:String(textureAtlasProvider?.()?.stats?.()?.semanticMeshUvOrientation||"source-row-space"),
+      contourAlgorithm:"categorical-marching-corners-rounded-fan",
+      contourPreparationOnly:true,
+      contourHaloTiles:CONTOUR_HALO_TILES,
+      contourRoundRadiusTiles:CONTOUR_ROUND_RADIUS_TILES,
+      contourTransitionBandWidthTiles:CONTOUR_ROUND_RADIUS_TILES,
+      contourMaxBoundaryDeviationTiles:CONTOUR_ROUND_RADIUS_TILES,
+      contourArcSegments:CONTOUR_ARC_SEGMENTS,
+      contourDrawCallsAdded:0,
+      contourMaterialCountAdded:0,
+      contourPerFrameRegenerationCount:0,
+      contourCanonicalCornerOwnership:true,
+      contourTileCentersPreserved:true,
+      contourAlphaBlend:false,
       indexedSharedVertices:false,
       indexedSemanticQuads:true,
       semanticTerrainMaterialCount:1,

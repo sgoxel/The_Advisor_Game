@@ -798,7 +798,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // Chunk resources contain deterministic geometry plus references to shared
     // materials. Framebuffer scale and material-quality changes do not alter
     // geometry, so they must not invalidate prepared chunk meshes/entities.
-    return "geometry=heightfield-v6-semantic-uv-coarse-height";
+    return "geometry=heightfield-v7-semantic-rounded-contours";
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -884,6 +884,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let texturedBlockCount=0,colorFallbackBlockCount=0;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
     const semanticSurfaceTileCounts={};
+    const contourSurfacePairCounts={},contourSharedEdgeKeys=new Set();
+    let contourPatchCount=0,contourVertexCount=0,contourAddedTriangleCount=0,contourBuildMs=0;
+    let contourSharedEdgeDuplicateCount=0;
     let seedDerivedPresentation=true,hardCodedSampleGeometry=false;
     let heightfieldResourceCount=0,indexedHeightfieldResourceCount=0;
     let minConditionedHeight=Infinity,maxConditionedHeight=-Infinity;
@@ -1056,6 +1059,17 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       for(const [type,count] of Object.entries(resource.semanticSurfaceTileCounts||{})){
         semanticSurfaceTileCounts[type]=(semanticSurfaceTileCounts[type]||0)+Number(count||0);
       }
+      contourPatchCount+=Number(resource.contourPatchCount||0);
+      contourVertexCount+=Number(resource.contourVertexCount||0);
+      contourAddedTriangleCount+=Number(resource.contourAddedTriangleCount||0);
+      contourBuildMs+=Number(resource.contourBuildMs||0);
+      for(const [pair,count] of Object.entries(resource.contourSurfacePairCounts||{})){
+        contourSurfacePairCounts[pair]=(contourSurfacePairCounts[pair]||0)+Number(count||0);
+      }
+      for(const key of resource.contourSharedEdgeKeys||[]){
+        if(contourSharedEdgeKeys.has(String(key)))contourSharedEdgeDuplicateCount++;
+        contourSharedEdgeKeys.add(String(key));
+      }
       seedDerivedPresentation=seedDerivedPresentation&&resource.seedDerivedPresentation===true;
       hardCodedSampleGeometry=hardCodedSampleGeometry||resource.hardCodedSampleGeometry===true;
       const name=resource.meshInstance?.material?.name;
@@ -1103,6 +1117,25 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       sharedBorderPairCount,
       sharedBorderMaxError:Number(sharedBorderMaxError.toFixed(8)),
       sharedBorderEquality:sharedBorderPairCount>0&&sharedBorderMaxError<=1e-7,
+      contourAlgorithm:String(generatorStats.contourAlgorithm||""),
+      contourPreparationOnly:generatorStats.contourPreparationOnly===true,
+      contourHaloTiles:Number(generatorStats.contourHaloTiles||0),
+      contourRoundRadiusTiles:Number(generatorStats.contourRoundRadiusTiles||0),
+      contourTransitionBandWidthTiles:Number(generatorStats.contourTransitionBandWidthTiles||0),
+      contourMaxBoundaryDeviationTiles:Number(generatorStats.contourMaxBoundaryDeviationTiles||0),
+      contourArcSegments:Number(generatorStats.contourArcSegments||0),
+      contourPatchCount,contourVertexCount,contourAddedTriangleCount,
+      contourBuildMs:Number(contourBuildMs.toFixed(3)),
+      contourDrawCallsAdded:Number(generatorStats.contourDrawCallsAdded||0),
+      contourMaterialCountAdded:Number(generatorStats.contourMaterialCountAdded||0),
+      contourPerFrameRegenerationCount:Number(generatorStats.contourPerFrameRegenerationCount||0),
+      contourCanonicalCornerOwnership:generatorStats.contourCanonicalCornerOwnership===true,
+      contourSharedEdgeKeyCount:contourSharedEdgeKeys.size,
+      contourSharedEdgeDuplicateCount,
+      contourSharedEdgeEquality:contourSharedEdgeDuplicateCount===0,
+      contourSurfacePairCounts:Object.freeze({...contourSurfacePairCounts}),
+      contourTileCentersPreserved:generatorStats.contourTileCentersPreserved===true,
+      contourAlphaBlend:generatorStats.contourAlphaBlend===true,
       terrainGroundSampler:"indexed-triangle-exact",
       roadProfileEnabled:roadProfileResourceCount>0&&generatorStats.roadProfileEnabled===true,
       roadProfileMode:String(generatorStats.roadProfileMode||""),
