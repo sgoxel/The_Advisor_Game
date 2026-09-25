@@ -107,6 +107,7 @@ SCENARIOS = {
     "wp-s003-008-002",
     "wp-s003-008-002-001",
     "wp-s003-008-003",
+    "wp-s003-008-004",
     "wp-s003-009-001",
     "wp-s003-009-002",
     "wp-s003-009-003",
@@ -201,6 +202,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-002": 9,
     "wp-s003-008-002-001": 8,
     "wp-s003-008-003": 8,
+    "wp-s003-008-004": 6,
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
     "wp-s003-009-003": 9,
@@ -1597,7 +1599,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario == "wp-s003-006-014":
+    if scenario in {"wp-s003-006-014","wp-s003-008-004"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -8067,6 +8069,22 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         build_times=[]
         for index,build in enumerate(builds, start=1):
             stage=build.get("planetStage") or {}
+            if scenario=="wp-s003-008-004":
+                scheduler=stage.get("startupScheduler") or {}
+                if scheduler.get("sharedCooperativeScheduler") is not True or scheduler.get("criticalPathOnly") is not True:
+                    raise RuntimeError(f"Startup scheduler contract missing in frame {index}: {scheduler}")
+                if int(scheduler.get("yieldCount") or 0)<2 or int(scheduler.get("sliceCount") or 0)<3:
+                    raise RuntimeError(f"Startup did not cooperatively yield enough in frame {index}: {scheduler}")
+                if float(scheduler.get("maxSliceMs") or 9999)>50:
+                    raise RuntimeError(f"Startup slice exceeded long-task threshold in frame {index}: {scheduler}")
+                if int(scheduler.get("heartbeatCount") or 0)<1 or int(scheduler.get("paintHeartbeatCount") or 0)<3:
+                    raise RuntimeError(f"Startup heartbeat/paint proof missing in frame {index}: {scheduler}")
+                if int(scheduler.get("longTaskOver200") or 0)>0:
+                    raise RuntimeError(f"Severe >200ms startup long task detected in frame {index}: {scheduler}")
+                if int(scheduler.get("completedFirstPlayableWorkUnits") or 0)!=int(scheduler.get("firstPlayableWorkUnits") or -1):
+                    raise RuntimeError(f"First-playable sliced work incomplete in frame {index}: {scheduler}")
+                if int(scheduler.get("optionalPostReadyWorkCount") or -1)!=0:
+                    raise RuntimeError(f"Optional work leaked into planet critical path in frame {index}: {scheduler}")
             systems=stage.get("activeSystems") or {}
             generation=stage.get("generation") or {}
             stats=stage.get("geographyStats") or {}
