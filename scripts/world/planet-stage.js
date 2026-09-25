@@ -306,7 +306,8 @@ function resize(){
     const horizontalHalfFov=Math.atan(Math.tan(verticalHalfFov)*aspect);
     const limitingHalfFov=Math.max(0.05,Math.min(verticalHalfFov,horizontalHalfFov));
     const maxReliefFactor=1+(7000/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION;
-    const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*1.08;
+    const framingMargin=aspect>1.7?1.015:1.055;
+    const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*framingMargin;
     cameraEntity.setLocalPosition(0,0,distance);
     cameraEntity.lookAt(0,0,0);
   }
@@ -355,7 +356,7 @@ function buildScene(){
   geographyVerification=window.PlanetGeography.verifyDeterminism(activeSeed);
   setStartupProgress("surface","Painting planetary surface and relief…",68);
 
-  app.scene.ambientLight=new pc.Color(0.24,0.26,0.30);
+  app.scene.ambientLight=new pc.Color(0.34,0.37,0.43);
 
   cameraEntity=new pc.Entity("PlanetCamera");
   cameraEntity.addComponent("camera",{
@@ -387,7 +388,7 @@ function buildScene(){
   keyLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(1.0,0.97,0.90),
-    intensity:1.55,
+    intensity:1.42,
     castShadows:false
   });
   keyLight.setLocalEulerAngles(26,-42,0);
@@ -397,7 +398,7 @@ function buildScene(){
   fillLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(0.30,0.44,0.72),
-    intensity:0.62,
+    intensity:0.86,
     castShadows:false
   });
   fillLight.setLocalEulerAngles(-18,138,0);
