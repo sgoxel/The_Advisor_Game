@@ -1637,3 +1637,11 @@
 - Updated the dedicated screenshot scenario toward six planet views including time-separated motion and mobile framing.
 - Three evidence attempts were consumed by evidence-tool migration faults rather than a valid visual evaluation: attempt 1 used the stale path; attempt 2 exposed validator indentation; attempt 3 exposed scenario/validator block misplacement (frames NameError). The tool placement was repaired after attempt 3 but was not retested because the per-run three-attempt limit was reached.
 - VISUAL: NOT SCORED. No fresh valid planet ambient screenshots were produced, so WP remains incomplete.
+
+
+2026-09-26 02:34:00 +03:00 | WP-S003-009-010 | Planet Day/Night Atmosphere Adapter — PARTIAL IMPLEMENTATION, VISUAL FAIL
+- Added a presentation-only authoritative fantasy-time adapter for the canonical seeded planet renderer. It interpolates dawn/day/late-day/night key light, fill light, ambient light, background and terrain emissive response without advancing or mutating Simulation time.
+- Reuses the existing two directional lights and one terrain material; recorded added draw-call impact is zero and Simulation authority remains false.
+- Added a dedicated seven-frame evidence path: readiness plus dawn, midday, late-day, night, compact landscape and portrait views.
+- Evidence attempt 3 produced all fresh frames, but the validator rejected valid drawCallImpact=0 due to a falsy-value bug; that validator defect is repaired for the next run.
+- Direct screenshot inspection: VISUAL 6.5/10 — FAIL. Day is readable, but dawn/late-day are too dim and night loses too much terrain readability. Three-attempt run limit reached; WP remains incomplete and ROADMAP is unchanged.
