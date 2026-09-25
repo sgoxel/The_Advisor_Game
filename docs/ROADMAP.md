@@ -65,6 +65,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-008` — Low-Cost Terrain Surface Micro-Relief + Material Depth — COMPLETED
 - `WP-S003-006-009` — Raised Road + Path Surface Profiles on Heightfield Terrain — COMPLETED
 - `WP-S003-006-010` — Adaptive Idle Chunk Cache Expansion — COMPLETED
+- `WP-S003-006-011` — Responsive Long-Distance Chunk Streaming + Area Loading Gate
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
