@@ -25,6 +25,9 @@ let root=null;
 let canvas=null;
 let planet=null;
 let cameraEntity=null;
+let keyLight=null;
+let fillLight=null;
+let surfaceMaterial=null;
 let resizeObserver=null;
 let yawDegrees=-18;
 let pitchDegrees=-10;
@@ -58,6 +61,7 @@ let lastHeartbeatAt=0;
 let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
 let cloudLayer=null;
 let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
+let atmosphere={active:false,authoritativeHour:null,phase:"unbound",source:"none",dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false};
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
 function loadingNodes(){
@@ -495,6 +499,34 @@ function updateAmbientMotion(dt){
   const started=performance.now();ambientMotion.cloudYawDegrees=(ambientMotion.cloudYawDegrees+Math.min(.12,Math.max(0,Number(dt)||0))*.42)%360;
   cloudLayer.setLocalEulerAngles(0,ambientMotion.cloudYawDegrees,0);ambientMotion.updateCount++;ambientMotion.lastUpdateMs=performance.now()-started;ambientMotion.maxUpdateMs=Math.max(ambientMotion.maxUpdateMs,ambientMotion.lastUpdateMs);
 }
+function lerp(a,b,t){return a+(b-a)*t;}
+function mixRgb(a,b,t){return a.map((v,i)=>lerp(v,b[i],t));}
+function fantasyHourFromStamp(stamp){
+  if(stamp&&typeof stamp==="object"&&Number.isFinite(Number(stamp.hour)))return ((Number(stamp.hour)%24)+24)%24+clamp(Number(stamp.minute||0),0,59)/60;
+  const m=/(?:T|\s)(\d{1,2}):(\d{2})/.exec(String(stamp||""));return m?((Number(m[1])%24)+24)%24+clamp(Number(m[2]),0,59)/60:null;
+}
+function paletteForHour(hour){
+  const stops=[
+    {h:0,phase:"night",key:[.34,.43,.72],fill:[.12,.18,.38],ambient:[.075,.09,.18],sky:[.008,.016,.052],keyI:.48,fillI:.48,emissive:.028},
+    {h:5,phase:"dawn",key:[1,.55,.32],fill:[.28,.30,.52],ambient:[.20,.18,.25],sky:[.09,.07,.15],keyI:.78,fillI:.60,emissive:.018},
+    {h:8,phase:"day",key:[1,.93,.72],fill:[.32,.50,.78],ambient:[.36,.40,.48],sky:[.018,.045,.09],keyI:1.30,fillI:.82,emissive:.004},
+    {h:12,phase:"day",key:[1,.97,.90],fill:[.30,.44,.72],ambient:[.34,.37,.43],sky:[.004,.008,.018],keyI:1.42,fillI:.86,emissive:.002},
+    {h:17,phase:"late-day",key:[1,.70,.40],fill:[.36,.32,.56],ambient:[.28,.25,.32],sky:[.07,.045,.10],keyI:1.08,fillI:.68,emissive:.008},
+    {h:20,phase:"night",key:[.48,.52,.82],fill:[.15,.22,.46],ambient:[.11,.13,.24],sky:[.012,.018,.06],keyI:.58,fillI:.52,emissive:.024},
+    {h:24,phase:"night",key:[.34,.43,.72],fill:[.12,.18,.38],ambient:[.075,.09,.18],sky:[.008,.016,.052],keyI:.48,fillI:.48,emissive:.028}
+  ];
+  let a=stops[0],b=stops[1];for(let i=0;i<stops.length-1;i++){if(hour>=stops[i].h&&hour<=stops[i+1].h){a=stops[i];b=stops[i+1];break;}}
+  const t=clamp((hour-a.h)/Math.max(.001,b.h-a.h),0,1),phase=(t<.5?a.phase:b.phase);
+  return {phase,key:mixRgb(a.key,b.key,t),fill:mixRgb(a.fill,b.fill,t),ambient:mixRgb(a.ambient,b.ambient,t),sky:mixRgb(a.sky,b.sky,t),keyI:lerp(a.keyI,b.keyI,t),fillI:lerp(a.fillI,b.fillI,t),emissive:lerp(a.emissive,b.emissive,t)};
+}
+function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"){
+  const hour=fantasyHourFromStamp(stamp);if(hour===null||!keyLight||!fillLight||!surfaceMaterial||!cameraEntity)return snapshot();
+  const p=paletteForHour(hour);
+  keyLight.light.color.set(...p.key);keyLight.light.intensity=p.keyI;fillLight.light.color.set(...p.fill);fillLight.light.intensity=p.fillI;
+  app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);surfaceMaterial.emissive.set(p.emissive,p.emissive*.9,p.emissive*.75);surfaceMaterial.update();
+  atmosphere={active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false,keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3)))};
+  return snapshot();
+}
 async function buildScene(){
   const started=performance.now();
   setStartupProgress("geography","Generating continents, oceans and islands…",52);
@@ -516,7 +548,7 @@ async function buildScene(){
   });
   app.root.addChild(cameraEntity);
 
-  const surfaceMaterial=new pc.StandardMaterial();
+  surfaceMaterial=new pc.StandardMaterial();
   surfaceMaterial.name="SeededPlanetSurface";
   surfaceMaterial.diffuse.set(1,1,1);
   surfaceMaterial.diffuseMap=await makeGeographyTexture();
@@ -534,7 +566,7 @@ async function buildScene(){
   app.root.addChild(planet);
   buildAmbientMotion(mesh);
 
-  const keyLight=new pc.Entity("PlanetKeyLight");
+  keyLight=new pc.Entity("PlanetKeyLight");
   keyLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(1.0,0.97,0.90),
@@ -544,7 +576,7 @@ async function buildScene(){
   keyLight.setLocalEulerAngles(26,-42,0);
   app.root.addChild(keyLight);
 
-  const fillLight=new pc.Entity("PlanetFillLight");
+  fillLight=new pc.Entity("PlanetFillLight");
   fillLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(0.30,0.44,0.72),
@@ -692,6 +724,7 @@ function snapshot(){
     }),
     frameCount,
     ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
+    atmosphere:Object.freeze({...atmosphere}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,fullWorldScan:false,cameraOnly:true}),
     startupError,
     startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
@@ -728,7 +761,7 @@ function destroy(){
   geography=null;root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},setPlacesCategory:(category)=>{destinationNavigator.category=["all","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},setPlacesCategory:(category)=>{destinationNavigator.category=["all","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
