@@ -21,7 +21,14 @@ function styleColor(role,color){const style=worldVisualStyle();return style?.gra
 const HEIGHTFIELD_VERTICAL_SCALE=0.0022;
 const HEIGHTFIELD_RELIEF=0.065;
 const HEIGHTFIELD_WATER_Y=-0.22;
-const HEIGHTFIELD_BRIDGE_CLEARANCE=0.18;
+const HEIGHTFIELD_BRIDGE_CLEARANCE=0.32;
+const HYDROLOGY_VERSION="hydrology-basin-v1";
+const HYDROLOGY_QUERY_RADIUS_TILES=2;
+const HYDROLOGY_BANK_TRANSITION_TILES=1.75;
+const HYDROLOGY_BANK_MIN_RISE=0.12;
+const HYDROLOGY_WATER_DEPTH=0.22;
+const HYDROLOGY_BED_DEPTH=0.18;
+const HYDROLOGY_LEVEL_STEP=0.035;
 const WORLD_TILE_METERS=2;
 const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
@@ -51,8 +58,12 @@ function semanticSurfaceType(value){
 }
 const heightReferenceCache=new Map();
 const heightVertexCache=new Map();
+const hydrologyProfileCache=new Map();
+const hydrologyVertexCache=new Map();
 const HEIGHT_VERTEX_CACHE_LIMIT=16384;
+const HYDROLOGY_CACHE_LIMIT=16384;
 let heightVertexSampleCalls=0,heightVertexCacheHits=0,heightGroundSampleCalls=0;
+let hydrologyQueryCalls=0,hydrologyCacheHits=0;
 
 function floorDivBig(value,divisor){
   let q=value/divisor,r=value%divisor;
@@ -80,6 +91,166 @@ function macroHeight(seed,x,y){
 function smoothstep01(value){
   const t=clamp(Number(value)||0,0,1);
   return t*t*(3-2*t);
+}
+
+function terrainTypeAt(seed,x,y){
+  return String(window.TerrainFoundation?.getTile?.(String(seed),String(x),String(y))?.type||"grass");
+}
+function rawPresentationHeight(seed,x,y,typeOverride=null){
+  const type=String(typeOverride||terrainTypeAt(seed,x,y));
+  const macro=macroHeight(seed,x,y).macro;
+  if(type==="road"||type==="path"||type==="square"||type==="building"||type==="floor"||type==="door"||type==="wall"||type==="bridge")return macro;
+  if(type==="water")return macro-HYDROLOGY_WATER_DEPTH;
+  return macro+signed01(seed,x,y,"heightfield-relief")*HEIGHTFIELD_RELIEF;
+}
+function hydrologyKindFor(seed,x,y){
+  const bx=BigInt(String(x)),by=BigInt(String(y));
+  const water=(dx,dy)=>terrainTypeAt(seed,bx+BigInt(dx),by+BigInt(dy))==="water";
+  const n=water(0,-1),e=water(1,0),s=water(0,1),w=water(-1,0);
+  let ring=0;
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(dx||dy)ring+=water(dx,dy)?1:0;
+  const cardinal=[n,e,s,w].filter(Boolean).length;
+  if(ring>=6||cardinal>=4)return "large-water";
+  const opposite=(n&&s)||(e&&w);
+  if(cardinal<=2&&opposite)return "channel";
+  return "basin";
+}
+function hydrologyAtTile(seedValue,xValue,yValue){
+  const seed=String(seedValue||""),x=String(xValue),y=String(yValue);
+  const cacheKey=seed+"|"+x+"|"+y;
+  const cached=hydrologyProfileCache.get(cacheKey);
+  if(cached){hydrologyCacheHits++;return cached;}
+  hydrologyQueryCalls++;
+  let bx,by;
+  try{bx=BigInt(x);by=BigInt(y);}catch(_){
+    return Object.freeze({active:false,version:HYDROLOGY_VERSION,x,y,type:"grass"});
+  }
+  const centerType=terrainTypeAt(seed,x,y);
+  const waterSamples=[],landSamples=[];
+  let nearestWaterDistance=Infinity;
+  for(let dy=-HYDROLOGY_QUERY_RADIUS_TILES;dy<=HYDROLOGY_QUERY_RADIUS_TILES;dy++){
+    for(let dx=-HYDROLOGY_QUERY_RADIUS_TILES;dx<=HYDROLOGY_QUERY_RADIUS_TILES;dx++){
+      const wx=bx+BigInt(dx),wy=by+BigInt(dy);
+      const type=terrainTypeAt(seed,wx,wy);
+      const distance=Math.hypot(dx,dy);
+      const macro=macroHeight(seed,String(wx),String(wy)).macro;
+      if(type==="water"){
+        waterSamples.push({x:wx,y:wy,macro,distance});
+        nearestWaterDistance=Math.min(nearestWaterDistance,distance);
+      }else if(type!=="bridge"&&type!=="building"&&type!=="wall"){
+        landSamples.push({x:wx,y:wy,height:rawPresentationHeight(seed,String(wx),String(wy),type),distance,type});
+      }
+    }
+  }
+  const active=waterSamples.length>0||centerType==="water"||centerType==="bridge";
+  if(!active){
+    const result=Object.freeze({
+      active:false,version:HYDROLOGY_VERSION,x,y,type:centerType,
+      distanceToWaterTiles:null,waterSurfaceHeight:null,bedHeight:null,
+      bankMinHeight:null,bankMaxHeight:null,bankTransitionWidthTiles:HYDROLOGY_BANK_TRANSITION_TILES,
+      bridgeDeckHeight:null,bridgeClearance:null,bodyKind:null,bodyId:null,
+      groundHeight:rawPresentationHeight(seed,x,y,centerType),
+      rendererOnly:true,navigationAuthority:false,collisionAuthority:false
+    });
+    hydrologyProfileCache.set(cacheKey,result);
+    return result;
+  }
+  if(!waterSamples.length){
+    const macro=macroHeight(seed,x,y).macro;
+    waterSamples.push({x:bx,y:by,macro:macro-HYDROLOGY_WATER_DEPTH,distance:0});
+    nearestWaterDistance=0;
+  }
+  const kind=centerType==="water"?hydrologyKindFor(seed,x,y):"shore";
+  const macros=waterSamples.map(item=>item.macro);
+  const meanMacro=macros.reduce((sum,value)=>sum+value,0)/macros.length;
+  const minMacro=Math.min(...macros);
+  const maxMacro=Math.max(...macros);
+  const depth=kind==="large-water"?0.20:kind==="channel"?0.21:HYDROLOGY_WATER_DEPTH;
+  let waterSurface=(meanMacro*0.68+minMacro*0.32)-depth;
+  if(kind==="basin"||kind==="large-water"){
+    waterSurface=Math.round(waterSurface/HYDROLOGY_LEVEL_STEP)*HYDROLOGY_LEVEL_STEP;
+  }
+  const bankHeights=landSamples.map(item=>item.height).filter(Number.isFinite);
+  const bankMinRaw=bankHeights.length?Math.min(...bankHeights):macroHeight(seed,x,y).macro+HYDROLOGY_BANK_MIN_RISE;
+  const bankMaxRaw=bankHeights.length?Math.max(...bankHeights):bankMinRaw;
+  waterSurface=Math.min(waterSurface,bankMinRaw-HYDROLOGY_BANK_MIN_RISE);
+  waterSurface=clamp(waterSurface,-3.30,3.10);
+  const bedHeight=clamp(waterSurface-HYDROLOGY_BED_DEPTH,-3.40,3.00);
+  const distance=Number.isFinite(nearestWaterDistance)?nearestWaterDistance:null;
+  const influence=distance===null?0:smoothstep01(1-clamp((distance-0.25)/HYDROLOGY_BANK_TRANSITION_TILES,0,1));
+  let groundHeight=rawPresentationHeight(seed,x,y,centerType);
+  if(centerType!=="water"&&centerType!=="bridge"&&distance!==null){
+    const bankTarget=waterSurface+HYDROLOGY_BANK_MIN_RISE+(1-influence)*0.18;
+    groundHeight=Math.max(
+      waterSurface+HYDROLOGY_BANK_MIN_RISE,
+      groundHeight+(bankTarget-groundHeight)*influence*0.72
+    );
+  }
+  const approachSamples=landSamples.filter(item=>["road","path","square"].includes(item.type)&&item.distance<=1.5);
+  const approachHeight=approachSamples.length
+    ?approachSamples.reduce((sum,item)=>sum+item.height,0)/approachSamples.length
+    :macroHeight(seed,x,y).macro;
+  const bridgeDeckHeight=centerType==="bridge"
+    ?Math.max(waterSurface+HEIGHTFIELD_BRIDGE_CLEARANCE,approachHeight+0.055)
+    :null;
+  const bridgeClearance=bridgeDeckHeight===null?null:bridgeDeckHeight-waterSurface;
+  const segmentX=floorDivBig(bx,8n),segmentY=floorDivBig(by,8n);
+  const bodyLevel=Math.round(waterSurface/HYDROLOGY_LEVEL_STEP);
+  const bodyKind=centerType==="water"?kind:(waterSamples.length>=6?"large-water":waterSamples.length>=3?"basin":"channel");
+  const result=Object.freeze({
+    active:true,version:HYDROLOGY_VERSION,x,y,type:centerType,
+    distanceToWaterTiles:distance,
+    waterSampleCount:waterSamples.length,
+    waterSurfaceHeight:Number(waterSurface.toFixed(6)),
+    waterMacroMin:Number(minMacro.toFixed(6)),
+    waterMacroMax:Number(maxMacro.toFixed(6)),
+    bedHeight:Number(bedHeight.toFixed(6)),
+    bankMinHeight:Number(Math.max(bankMinRaw,waterSurface+HYDROLOGY_BANK_MIN_RISE).toFixed(6)),
+    bankMaxHeight:Number(Math.max(bankMaxRaw,waterSurface+HYDROLOGY_BANK_MIN_RISE).toFixed(6)),
+    bankTransitionWidthTiles:HYDROLOGY_BANK_TRANSITION_TILES,
+    bankInfluence:Number(influence.toFixed(6)),
+    groundHeight:Number(groundHeight.toFixed(6)),
+    bridgeDeckHeight:bridgeDeckHeight===null?null:Number(bridgeDeckHeight.toFixed(6)),
+    bridgeClearance:bridgeClearance===null?null:Number(bridgeClearance.toFixed(6)),
+    bodyKind,
+    bodyId:bodyKind+"|level="+bodyLevel+"|segment="+segmentX+","+segmentY,
+    deterministic:true,seamSafeGlobalCoordinates:true,rendererOnly:true,
+    navigationAuthority:false,collisionAuthority:false,waterIdentityChanged:false
+  });
+  hydrologyProfileCache.set(cacheKey,result);
+  if(hydrologyProfileCache.size>HYDROLOGY_CACHE_LIMIT){
+    const oldest=hydrologyProfileCache.keys().next().value;
+    if(oldest!==undefined)hydrologyProfileCache.delete(oldest);
+  }
+  return result;
+}
+function waterSurfaceAtVertex(seedValue,xValue,yValue){
+  const seed=String(seedValue||""),x=String(xValue),y=String(yValue);
+  const key=seed+"|"+x+"|"+y;
+  const cached=hydrologyVertexCache.get(key);
+  if(cached!==undefined)return cached;
+  let bx,by;
+  try{bx=BigInt(x);by=BigInt(y);}catch(_){return HEIGHTFIELD_WATER_Y;}
+  const levels=[];
+  for(const dy of [-1,0])for(const dx of [-1,0]){
+    const tx=bx+BigInt(dx),ty=by+BigInt(dy);
+    if(terrainTypeAt(seed,tx,ty)!=="water")continue;
+    const h=hydrologyAtTile(seed,String(tx),String(ty)).waterSurfaceHeight;
+    if(Number.isFinite(Number(h)))levels.push(Number(h));
+  }
+  let value;
+  if(levels.length)value=levels.reduce((sum,item)=>sum+item,0)/levels.length;
+  else{
+    const profile=hydrologyAtTile(seed,x,y);
+    value=Number.isFinite(Number(profile.waterSurfaceHeight))?Number(profile.waterSurfaceHeight):macroHeight(seed,x,y).macro-HYDROLOGY_WATER_DEPTH;
+  }
+  value=clamp(value,-3.30,3.10);
+  hydrologyVertexCache.set(key,value);
+  if(hydrologyVertexCache.size>HYDROLOGY_CACHE_LIMIT){
+    const oldest=hydrologyVertexCache.keys().next().value;
+    if(oldest!==undefined)hydrologyVertexCache.delete(oldest);
+  }
+  return value;
 }
 function roadProfileAtVertex(seed,xValue,yValue,naturalHeight,macro,type){
   if(type==="water"||type==="bridge")return null;
@@ -165,14 +336,12 @@ function terrainHeightVertex(seed,xValue,yValue){
   const macro=(elevation-reference)*HEIGHTFIELD_VERTICAL_SCALE;
   const tile=window.TerrainFoundation?.getTile?.(seed,x,y)||null;
   const type=String(tile?.type||"grass");
-  let naturalHeight=macro;
-  if(type==="water")naturalHeight=HEIGHTFIELD_WATER_Y;
-  else if(type==="bridge")naturalHeight=Math.max(HEIGHTFIELD_WATER_Y+HEIGHTFIELD_BRIDGE_CLEARANCE,macro);
-  else if(type==="road"||type==="path"||type==="square"||type==="building"||type==="floor"||type==="door"||type==="wall"){
-    naturalHeight=macro;
-  }else{
-    naturalHeight+=signed01(seed,x,y,"heightfield-relief")*HEIGHTFIELD_RELIEF;
-  }
+  const hydrology=hydrologyAtTile(seed,x,y);
+  let naturalHeight;
+  if(type==="water")naturalHeight=Number(hydrology.waterSurfaceHeight);
+  else if(type==="bridge")naturalHeight=Number(hydrology.bridgeDeckHeight??(macro+HEIGHTFIELD_BRIDGE_CLEARANCE));
+  else if(hydrology.active)naturalHeight=Number(hydrology.groundHeight);
+  else naturalHeight=rawPresentationHeight(seed,x,y,type);
   const roadProfile=roadProfileAtVertex(seed,x,y,naturalHeight,macro,type);
   const height=roadProfile?.active?roadProfile.height:naturalHeight;
   const sample=Object.freeze({
@@ -180,7 +349,8 @@ function terrainHeightVertex(seed,xValue,yValue){
     type,
     color:heightfieldColor(seed,x,y,tile?.color,type),
     elevationMeters:elevation,
-    roadProfile
+    roadProfile,
+    hydrology
   });
   heightVertexCache.set(cacheKey,sample);
   if(heightVertexCache.size>HEIGHT_VERTEX_CACHE_LIMIT){
@@ -192,6 +362,11 @@ function terrainHeightVertex(seed,xValue,yValue){
 function terrainHeightAtTile(seed,xValue,yValue,size=16,offsetX=0,offsetY=0){
   if(!String(seed||""))return 0;
   heightGroundSampleCalls++;
+  const centerType=terrainTypeAt(seed,xValue,yValue);
+  if(Math.abs(Number(offsetX||0))<=0.5&&Math.abs(Number(offsetY||0))<=0.5){
+    if(centerType==="water")return Number(hydrologyAtTile(seed,xValue,yValue).waterSurfaceHeight||0);
+    if(centerType==="bridge")return Number(hydrologyAtTile(seed,xValue,yValue).bridgeDeckHeight||0);
+  }
   const step=heightfieldStep(size);
   const x=Number(xValue)+0.5+Number(offsetX||0);
   const y=Number(yValue)+0.5+Number(offsetY||0);
@@ -1701,7 +1876,17 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(surfaceType)||activeAtlas?.uvRect?.(surfaceType)):null;
       const x0=gx*metersPerTile-half,x1=(gx+1)*metersPerTile-half;
       const z0=gz*metersPerTile-half,z1=(gz+1)*metersPerTile-half;
-      const h00=sampleHeight(gx,gz),h10=sampleHeight(gx+1,gz),h01=sampleHeight(gx,gz+1),h11=sampleHeight(gx+1,gz+1);
+      let h00=sampleHeight(gx,gz),h10=sampleHeight(gx+1,gz),h01=sampleHeight(gx,gz+1),h11=sampleHeight(gx+1,gz+1);
+      if(surfaceType==="water"){
+        h00=waterSurfaceAtVertex(seed,baseX+BigInt(gx),baseZ+BigInt(gz));
+        h10=waterSurfaceAtVertex(seed,baseX+BigInt(gx+1),baseZ+BigInt(gz));
+        h01=waterSurfaceAtVertex(seed,baseX+BigInt(gx),baseZ+BigInt(gz+1));
+        h11=waterSurfaceAtVertex(seed,baseX+BigInt(gx+1),baseZ+BigInt(gz+1));
+      }else if(surfaceType==="bridge"){
+        const hydro=hydrologyAtTile(seed,String(baseX+BigInt(gx)),String(baseZ+BigInt(gz)));
+        const deck=Number(hydro.bridgeDeckHeight??sampleHeight(gx+0.5,gz+0.5));
+        h00=h10=h01=h11=deck;
+      }
       const base=positions.length/3;
       positions.push(x0,h00,z0,x1,h10,z0,x0,h01,z1,x1,h11,z1);
       for(let i=0;i<4;i++)normals.push(0,1,0);
@@ -1901,6 +2086,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreDelta=Infinity,maxRoadCoreDelta=-Infinity;
+    let hydrologyWaterCellCount=0,hydrologyBridgeCellCount=0;
+    let hydrologyWaterSurfaceMin=Infinity,hydrologyWaterSurfaceMax=-Infinity;
+    let hydrologyBedMin=Infinity,hydrologyBedMax=-Infinity;
+    let hydrologyBankMin=Infinity,hydrologyBankMax=-Infinity;
+    let hydrologyBridgeClearanceMin=Infinity,hydrologyBridgeClearanceMax=-Infinity;
+    const hydrologyKindCounts={},hydrologySamples=[];
     const variationLocalCellAt=(lx,lz)=>{
       const x=Math.trunc(Number(lx)),z=Math.trunc(Number(lz));
       if(x<0||z<0||x>=size||z>=size)return null;
@@ -2165,12 +2356,56 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(surfaceType)||activeAtlas?.uvRect?.(surfaceType)):null;
         if(rect){texturedBlockCount++;texturedSurfaceTypes.add(surfaceType);}
         else{colorFallbackBlockCount++;fallbackSurfaceTypes.add(surfaceType);}
-        const corners=[
+        const rawCorners=[
           grid[gz*stride+gx],
           grid[gz*stride+gx+1],
           grid[(gz+1)*stride+gx],
           grid[(gz+1)*stride+gx+1]
         ];
+        const cellWorldX=baseX+BigInt(gx),cellWorldZ=baseZ+BigInt(gz);
+        const cellHydrology=(surfaceType==="water"||surfaceType==="bridge")
+          ?hydrologyAtTile(seed,String(cellWorldX),String(cellWorldZ))
+          :null;
+        if(surfaceType==="water"&&cellHydrology?.active){
+          hydrologyWaterCellCount++;
+          const surface=Number(cellHydrology.waterSurfaceHeight),bed=Number(cellHydrology.bedHeight);
+          hydrologyWaterSurfaceMin=Math.min(hydrologyWaterSurfaceMin,surface);
+          hydrologyWaterSurfaceMax=Math.max(hydrologyWaterSurfaceMax,surface);
+          hydrologyBedMin=Math.min(hydrologyBedMin,bed);
+          hydrologyBedMax=Math.max(hydrologyBedMax,bed);
+          hydrologyBankMin=Math.min(hydrologyBankMin,Number(cellHydrology.bankMinHeight));
+          hydrologyBankMax=Math.max(hydrologyBankMax,Number(cellHydrology.bankMaxHeight));
+          hydrologyKindCounts[cellHydrology.bodyKind]=(hydrologyKindCounts[cellHydrology.bodyKind]||0)+1;
+          if(hydrologySamples.length<24)hydrologySamples.push(Object.freeze({
+            x:String(cellWorldX),y:String(cellWorldZ),type:"water",
+            bodyKind:cellHydrology.bodyKind,bodyId:cellHydrology.bodyId,
+            waterSurfaceHeight:surface,bedHeight:bed,
+            bankMinHeight:Number(cellHydrology.bankMinHeight),bankMaxHeight:Number(cellHydrology.bankMaxHeight),
+            transitionWidthTiles:Number(cellHydrology.bankTransitionWidthTiles)
+          }));
+        }else if(surfaceType==="bridge"&&cellHydrology?.active){
+          hydrologyBridgeCellCount++;
+          const clearance=Number(cellHydrology.bridgeClearance||0);
+          hydrologyBridgeClearanceMin=Math.min(hydrologyBridgeClearanceMin,clearance);
+          hydrologyBridgeClearanceMax=Math.max(hydrologyBridgeClearanceMax,clearance);
+          if(hydrologySamples.length<24)hydrologySamples.push(Object.freeze({
+            x:String(cellWorldX),y:String(cellWorldZ),type:"bridge",
+            waterSurfaceHeight:Number(cellHydrology.waterSurfaceHeight),
+            bridgeDeckHeight:Number(cellHydrology.bridgeDeckHeight),
+            bridgeClearance:clearance
+          }));
+        }
+        const corners=rawCorners.map(corner=>{
+          let y=corner.position[1],normal=corner.normal;
+          if(surfaceType==="water"){
+            y=waterSurfaceAtVertex(seed,corner.wx,corner.wz);
+            normal=Object.freeze([0,1,0]);
+          }else if(surfaceType==="bridge"&&cellHydrology?.bridgeDeckHeight!==null){
+            y=Number(cellHydrology.bridgeDeckHeight);
+            normal=Object.freeze([0,1,0]);
+          }
+          return Object.freeze({...corner,position:Object.freeze([corner.position[0],y,corner.position[2]]),normal});
+        });
         const base=positions.length/3;
         for(const corner of corners){
           positions.push(...corner.position);
@@ -2541,6 +2776,34 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       minRoadCoreHeightDelta:Number.isFinite(minRoadCoreDelta)?Number(minRoadCoreDelta.toFixed(6)):0,
       maxRoadCoreHeightDelta:Number.isFinite(maxRoadCoreDelta)?Number(maxRoadCoreDelta.toFixed(6)):0,
       roadProfileGroundingShared:true,
+      hydrologyEnabled:true,
+      hydrologyVersion:HYDROLOGY_VERSION,
+      hydrologyQueryRadiusTiles:HYDROLOGY_QUERY_RADIUS_TILES,
+      hydrologyBankTransitionWidthTiles:HYDROLOGY_BANK_TRANSITION_TILES,
+      hydrologyBankMinRiseWorldUnits:HYDROLOGY_BANK_MIN_RISE,
+      hydrologyBedDepthWorldUnits:HYDROLOGY_BED_DEPTH,
+      hydrologyWaterCellCount,
+      hydrologyBridgeCellCount,
+      hydrologyKindCounts:Object.freeze({...hydrologyKindCounts}),
+      hydrologySamples:Object.freeze(hydrologySamples.slice()),
+      hydrologyWaterSurfaceMin:Number.isFinite(hydrologyWaterSurfaceMin)?Number(hydrologyWaterSurfaceMin.toFixed(6)):null,
+      hydrologyWaterSurfaceMax:Number.isFinite(hydrologyWaterSurfaceMax)?Number(hydrologyWaterSurfaceMax.toFixed(6)):null,
+      hydrologyBedMin:Number.isFinite(hydrologyBedMin)?Number(hydrologyBedMin.toFixed(6)):null,
+      hydrologyBedMax:Number.isFinite(hydrologyBedMax)?Number(hydrologyBedMax.toFixed(6)):null,
+      hydrologyBankMin:Number.isFinite(hydrologyBankMin)?Number(hydrologyBankMin.toFixed(6)):null,
+      hydrologyBankMax:Number.isFinite(hydrologyBankMax)?Number(hydrologyBankMax.toFixed(6)):null,
+      hydrologyBridgeClearanceMin:Number.isFinite(hydrologyBridgeClearanceMin)?Number(hydrologyBridgeClearanceMin.toFixed(6)):null,
+      hydrologyBridgeClearanceMax:Number.isFinite(hydrologyBridgeClearanceMax)?Number(hydrologyBridgeClearanceMax.toFixed(6)):null,
+      hydrologyWaterBelowBank:Boolean(!Number.isFinite(hydrologyWaterSurfaceMax)||!Number.isFinite(hydrologyBankMin)||hydrologyWaterSurfaceMax<hydrologyBankMin),
+      hydrologyBedBelowWater:Boolean(!Number.isFinite(hydrologyBedMax)||!Number.isFinite(hydrologyWaterSurfaceMin)||hydrologyBedMax<hydrologyWaterSurfaceMin),
+      hydrologyBridgeClearsWater:Boolean(!Number.isFinite(hydrologyBridgeClearanceMin)||hydrologyBridgeClearanceMin>=HEIGHTFIELD_BRIDGE_CLEARANCE-1e-6),
+      hydrologySeamSafeGlobalCoordinates:true,
+      hydrologyChunkPrepared:true,
+      hydrologyPerFrameRegenerationCount:0,
+      hydrologyRendererOnly:true,
+      hydrologyNavigationAuthority:false,
+      hydrologyCollisionAuthority:false,
+      hydrologyWaterIdentityChanged:false,
       visibleFrameTerrainRebuildCount:0,
       meshInstanceCount:1,
       materialCount:1,
@@ -2915,7 +3178,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function heightAtTile(x,y,chunkSize=16,offsetX=0,offsetY=0){
     return terrainHeightAtTile(String(seedProvider()||""),x,y,chunkSize,offsetX,offsetY);
   }
-  return Object.freeze({build,reposition,destroy,stats,heightAtTile,updateAmbientMotion,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials,refreshContactShadowMaterials});
+  return Object.freeze({
+    build,reposition,destroy,stats,heightAtTile,
+    hydrologyAtTile:(x,y)=>hydrologyAtTile(String(seedProvider()||""),x,y),
+    waterSurfaceAtVertex:(x,y)=>waterSurfaceAtVertex(String(seedProvider()||""),x,y),
+    updateAmbientMotion,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials,refreshContactShadowMaterials
+  });
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});
