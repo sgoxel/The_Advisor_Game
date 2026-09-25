@@ -930,6 +930,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreHeightDelta=Infinity,maxRoadCoreHeightDelta=-Infinity;
     let hydrologyResourceCount=0,hydrologyWaterCellCount=0,hydrologyBridgeCellCount=0;
+    let hydrologyBridgeWaterUnderlayCellCount=0,hydrologyBridgeDeckTriangleCount=0;
     let hydrologyWaterSurfaceMin=Infinity,hydrologyWaterSurfaceMax=-Infinity;
     let hydrologyBedMin=Infinity,hydrologyBedMax=-Infinity,hydrologyBankMin=Infinity,hydrologyBankMax=-Infinity;
     let hydrologyBridgeClearanceMin=Infinity,hydrologyBridgeClearanceMax=-Infinity;
@@ -989,6 +990,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
           hydrologyResourceCount++;
           hydrologyWaterCellCount+=Number(resource.hydrologyWaterCellCount||0);
           hydrologyBridgeCellCount+=Number(resource.hydrologyBridgeCellCount||0);
+          hydrologyBridgeWaterUnderlayCellCount+=Number(resource.hydrologyBridgeWaterUnderlayCellCount||0);
+          hydrologyBridgeDeckTriangleCount+=Number(resource.hydrologyBridgeDeckTriangleCount||0);
           if(Number.isFinite(Number(resource.hydrologyWaterSurfaceMin)))hydrologyWaterSurfaceMin=Math.min(hydrologyWaterSurfaceMin,Number(resource.hydrologyWaterSurfaceMin));
           if(Number.isFinite(Number(resource.hydrologyWaterSurfaceMax)))hydrologyWaterSurfaceMax=Math.max(hydrologyWaterSurfaceMax,Number(resource.hydrologyWaterSurfaceMax));
           if(Number.isFinite(Number(resource.hydrologyBedMin)))hydrologyBedMin=Math.min(hydrologyBedMin,Number(resource.hydrologyBedMin));
@@ -1295,6 +1298,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       hydrologyResourceCount,
       hydrologyWaterCellCount,
       hydrologyBridgeCellCount,
+      hydrologyBridgeWaterUnderlayCellCount,
+      hydrologyBridgeDeckTriangleCount,
+      hydrologyBridgeWaterUnderlayVisible:hydrologyBridgeWaterUnderlayCellCount>0&&hydrologyBridgeDeckTriangleCount>=2,
       hydrologyKindCounts:Object.freeze({...hydrologyKindCounts}),
       hydrologySamples:Object.freeze(hydrologySamples.slice()),
       hydrologyWaterSurfaceMin:Number.isFinite(hydrologyWaterSurfaceMin)?Number(hydrologyWaterSurfaceMin.toFixed(6)):null,
