@@ -4,6 +4,12 @@
 const DEFAULT_MAX_DISTANCE_TILES=192;
 const DEFAULT_MAX_NODES=12000;
 const DEFAULT_DETOUR_ALLOWANCE_TILES=48;
+const ROUTE_ELEVATION_POLICY=WorldStandards.ROUTE_ELEVATION_POLICY||Object.freeze({
+  version:"elevation-route-v1",
+  uphillPenaltyBlend:0.35,
+  downhillPenaltyBlend:0.12,
+  referenceTerrainSpeedKmh:Number(WorldStandards.WALK_SPEED_KMH?.grass||3)
+});
 const DIRECTIONS=Object.freeze([
   Object.freeze({dx:"0",dy:"-1",order:0}),
   Object.freeze({dx:"1",dy:"0",order:1}),
@@ -109,6 +115,17 @@ function failure(reason,start,destination,extra){
     blockedRejectedCount:0,
     slopeBlockedRejectedCount:0,
     slopePenaltySeconds:0,
+    elevationPenaltySeconds:0,
+    horizontalCostSeconds:0,
+    uphillPenaltySeconds:0,
+    downhillPenaltySeconds:0,
+    roadBenefitSeconds:0,
+    difficultTerrainPenaltySeconds:0,
+    totalAscentMeters:0,
+    totalDescentMeters:0,
+    engineeredStepCount:0,
+    bridgeStepCount:0,
+    externalPenaltySeconds:0,
     maxSlopeAngleDegrees:0,
     searchRadius:0,
     maxNodes:0
@@ -123,18 +140,101 @@ function reconstruct(cameFrom,points,currentKey){
   const path=keys.map(item=>points.get(item)).filter(Boolean).map(point=>Object.freeze({x:point.x,y:point.y}));
   return {path:Object.freeze(path),pathKeys:Object.freeze(keys.slice())};
 }
-function routeSlopeMetrics(seed,path){
-  let slopePenaltySeconds=0,maxSlopeAngleDegrees=0;
+function routeEdgeCost(seed,fromValue,toValue,fromStateValue,toStateValue){
+  const from=normalizePoint(fromValue),to=normalizePoint(toValue);
+  const fromState=fromStateValue||movementState(seed,from.x,from.y);
+  const toState=toStateValue||movementState(seed,to.x,to.y);
+  const transition=Walkability.transition(seed,from,to,{fromState,toState});
+  if(!transition?.allowed||!Number.isFinite(Number(transition.seconds))){
+    return Object.freeze({
+      allowed:false,
+      reason:String(transition?.reason||"blocked-transition"),
+      seconds:Infinity,
+      transition
+    });
+  }
+
+  const diagonal=Boolean(transition.slope?.diagonal);
+  const distanceFactor=diagonal?Math.SQRT2:1;
+  const horizontalSeconds=Number(toState?.secondsPerTile||0)*distanceFactor;
+  const symmetricSlopePenaltySeconds=Math.max(0,Number(transition.seconds)-horizontalSeconds);
+  const movementDeltaMeters=Number(transition.slope?.movementDeltaMeters||0);
+  const uphill=movementDeltaMeters>1e-9;
+  const downhill=movementDeltaMeters<-1e-9;
+  const directionBlend=uphill
+    ?Number(ROUTE_ELEVATION_POLICY.uphillPenaltyBlend||0)
+    :downhill
+      ?Number(ROUTE_ELEVATION_POLICY.downhillPenaltyBlend||0)
+      :0;
+  const directionalElevationPenaltySeconds=symmetricSlopePenaltySeconds*Math.max(0,directionBlend);
+  const elevationPenaltySeconds=symmetricSlopePenaltySeconds+directionalElevationPenaltySeconds;
+  const seconds=Number(transition.seconds)+directionalElevationPenaltySeconds;
+
+  const referenceSpeedKmh=Math.max(0.1,Number(ROUTE_ELEVATION_POLICY.referenceTerrainSpeedKmh||3));
+  const referenceHorizontalSeconds=
+    WorldStandards.TILE_METERS*distanceFactor/(referenceSpeedKmh*1000/3600);
+  const routeCell=toState?.category===Walkability.CATEGORY.ROUTE;
+  const difficultCell=toState?.category===Walkability.CATEGORY.DIFFICULT;
+  const roadBenefitSeconds=routeCell?Math.max(0,referenceHorizontalSeconds-horizontalSeconds):0;
+  const difficultTerrainPenaltySeconds=difficultCell?Math.max(0,horizontalSeconds-referenceHorizontalSeconds):0;
+
+  return Object.freeze({
+    allowed:true,
+    reason:String(transition.reason||"ok"),
+    seconds,
+    horizontalSeconds,
+    symmetricSlopePenaltySeconds,
+    directionalElevationPenaltySeconds,
+    elevationPenaltySeconds,
+    uphillPenaltySeconds:uphill?directionalElevationPenaltySeconds:0,
+    downhillPenaltySeconds:downhill?directionalElevationPenaltySeconds:0,
+    roadBenefitSeconds,
+    difficultTerrainPenaltySeconds,
+    movementDeltaMeters,
+    ascentMeters:Math.max(0,movementDeltaMeters),
+    descentMeters:Math.max(0,-movementDeltaMeters),
+    angleDegrees:Number(transition.slope?.angleDegrees||0),
+    slopeClass:String(transition.slope?.slopeClass||""),
+    engineered:Boolean(transition.engineered),
+    bridge:Boolean(toState?.terrainType==="bridge"),
+    transition
+  });
+}
+function routeCostMetrics(seed,path){
+  let horizontalCostSeconds=0,elevationPenaltySeconds=0,uphillPenaltySeconds=0,downhillPenaltySeconds=0;
+  let roadBenefitSeconds=0,difficultTerrainPenaltySeconds=0,totalAscentMeters=0,totalDescentMeters=0;
+  let maxSlopeAngleDegrees=0,engineeredStepCount=0,bridgeStepCount=0,internalSeconds=0;
   for(let i=1;i<path.length;i++){
     const from=path[i-1],to=path[i];
     const fromState=movementState(seed,from.x,from.y),toState=movementState(seed,to.x,to.y);
-    const edge=Walkability.transition(seed,from,to,{fromState,toState});
-    if(!edge?.allowed)continue;
-    maxSlopeAngleDegrees=Math.max(maxSlopeAngleDegrees,Number(edge.slope?.angleDegrees||0));
-    slopePenaltySeconds+=Math.max(0,Number(edge.seconds)-Number(toState?.secondsPerTile||0));
+    const edge=routeEdgeCost(seed,from,to,fromState,toState);
+    if(!edge.allowed)continue;
+    horizontalCostSeconds+=Number(edge.horizontalSeconds||0);
+    elevationPenaltySeconds+=Number(edge.elevationPenaltySeconds||0);
+    uphillPenaltySeconds+=Number(edge.uphillPenaltySeconds||0);
+    downhillPenaltySeconds+=Number(edge.downhillPenaltySeconds||0);
+    roadBenefitSeconds+=Number(edge.roadBenefitSeconds||0);
+    difficultTerrainPenaltySeconds+=Number(edge.difficultTerrainPenaltySeconds||0);
+    totalAscentMeters+=Number(edge.ascentMeters||0);
+    totalDescentMeters+=Number(edge.descentMeters||0);
+    maxSlopeAngleDegrees=Math.max(maxSlopeAngleDegrees,Number(edge.angleDegrees||0));
+    if(edge.engineered)engineeredStepCount++;
+    if(edge.bridge)bridgeStepCount++;
+    internalSeconds+=Number(edge.seconds||0);
   }
   return Object.freeze({
-    slopePenaltySeconds:Number(slopePenaltySeconds.toFixed(6)),
+    internalSeconds:Number(internalSeconds.toFixed(6)),
+    horizontalCostSeconds:Number(horizontalCostSeconds.toFixed(6)),
+    elevationPenaltySeconds:Number(elevationPenaltySeconds.toFixed(6)),
+    slopePenaltySeconds:Number(elevationPenaltySeconds.toFixed(6)),
+    uphillPenaltySeconds:Number(uphillPenaltySeconds.toFixed(6)),
+    downhillPenaltySeconds:Number(downhillPenaltySeconds.toFixed(6)),
+    roadBenefitSeconds:Number(roadBenefitSeconds.toFixed(6)),
+    difficultTerrainPenaltySeconds:Number(difficultTerrainPenaltySeconds.toFixed(6)),
+    totalAscentMeters:Number(totalAscentMeters.toFixed(6)),
+    totalDescentMeters:Number(totalDescentMeters.toFixed(6)),
+    engineeredStepCount,
+    bridgeStepCount,
     maxSlopeAngleDegrees:Number(maxSlopeAngleDegrees.toFixed(4))
   });
 }
@@ -171,6 +271,17 @@ function findRoute(seed,startValue,destinationValue,options){
       blockedRejectedCount:0,
       slopeBlockedRejectedCount:0,
       slopePenaltySeconds:0,
+      elevationPenaltySeconds:0,
+      horizontalCostSeconds:0,
+      uphillPenaltySeconds:0,
+      downhillPenaltySeconds:0,
+      roadBenefitSeconds:0,
+      difficultTerrainPenaltySeconds:0,
+      totalAscentMeters:0,
+      totalDescentMeters:0,
+      engineeredStepCount:0,
+      bridgeStepCount:0,
+      externalPenaltySeconds:0,
       maxSlopeAngleDegrees:0,
       searchRadius:0,
       maxNodes
@@ -210,7 +321,8 @@ function findRoute(seed,startValue,destinationValue,options){
 
     if(currentKey===key(destination)){
       const rebuilt=reconstruct(cameFrom,points,currentKey);
-      const slopeMetrics=routeSlopeMetrics(seed,rebuilt.path);
+      const costMetrics=routeCostMetrics(seed,rebuilt.path);
+      const externalPenaltySeconds=Math.max(0,Number(current.g)-Number(costMetrics.internalSeconds||0));
       return frozenResult({
         found:true,
         reason:"ok",
@@ -223,8 +335,19 @@ function findRoute(seed,startValue,destinationValue,options){
         expandedCount,
         blockedRejectedCount,
         slopeBlockedRejectedCount,
-        slopePenaltySeconds:slopeMetrics.slopePenaltySeconds,
-        maxSlopeAngleDegrees:slopeMetrics.maxSlopeAngleDegrees,
+        slopePenaltySeconds:costMetrics.slopePenaltySeconds,
+        elevationPenaltySeconds:costMetrics.elevationPenaltySeconds,
+        horizontalCostSeconds:costMetrics.horizontalCostSeconds,
+        uphillPenaltySeconds:costMetrics.uphillPenaltySeconds,
+        downhillPenaltySeconds:costMetrics.downhillPenaltySeconds,
+        roadBenefitSeconds:costMetrics.roadBenefitSeconds,
+        difficultTerrainPenaltySeconds:costMetrics.difficultTerrainPenaltySeconds,
+        totalAscentMeters:costMetrics.totalAscentMeters,
+        totalDescentMeters:costMetrics.totalDescentMeters,
+        engineeredStepCount:costMetrics.engineeredStepCount,
+        bridgeStepCount:costMetrics.bridgeStepCount,
+        externalPenaltySeconds:Number(externalPenaltySeconds.toFixed(6)),
+        maxSlopeAngleDegrees:costMetrics.maxSlopeAngleDegrees,
         searchRadius,
         maxNodes
       });
@@ -254,11 +377,11 @@ function findRoute(seed,startValue,destinationValue,options){
       }
       const currentState=stateCache.get(currentKey)||movementState(seed,current.point.x,current.point.y);
       stateCache.set(currentKey,currentState);
-      const transition=Walkability.transition(seed,current.point,next,{fromState:currentState,toState:state});
-      if(!transition?.allowed||!Number.isFinite(transition.seconds)){
+      const edgeCost=routeEdgeCost(seed,current.point,next,currentState,state);
+      if(!edgeCost.allowed||!Number.isFinite(edgeCost.seconds)){
         blockedRejectedCount++;
-        if(transition?.reason==="cliff"||transition?.reason==="engineered-grade-limit"||
-          transition?.reason==="unsafe-very-steep-terrain"||transition?.reason==="diagonal-cliff-corner"){
+        if(edgeCost.reason==="cliff"||edgeCost.reason==="engineered-grade-limit"||
+          edgeCost.reason==="unsafe-very-steep-terrain"||edgeCost.reason==="diagonal-cliff-corner"){
           slopeBlockedRejectedCount++;
         }
         continue;
@@ -270,11 +393,12 @@ function findRoute(seed,startValue,destinationValue,options){
           state,
           from:current.point,
           start,
-          destination
+          destination,
+          edgeCost
         })));
         if(Number.isFinite(rawPenalty)&&rawPenalty>0)penaltySeconds=rawPenalty;
       }
-      const tentative=current.g+Number(transition.seconds)+penaltySeconds;
+      const tentative=current.g+Number(edgeCost.seconds)+penaltySeconds;
       const previous=gScore.get(nextKey);
       if(previous!=null&&tentative>=previous-1e-9)continue;
 
@@ -367,7 +491,7 @@ function proof(seed){
       const from=first.path[index];
       const fromState=movementState(seedKey,from.x,from.y);
       const toState=movementState(seedKey,point.x,point.y);
-      return total+(Walkability.transition(seedKey,from,point,{fromState,toState})?.seconds??Infinity);
+      return total+(routeEdgeCost(seedKey,from,point,fromState,toState)?.seconds??Infinity);
     },0)
     :Infinity;
   const movementCostPass=first.found&&Math.abs(costCheck-first.totalSeconds)<1e-6;
@@ -422,6 +546,8 @@ function proof(seed){
 window.RoutePlanner=Object.freeze({
   DEFAULT_MAX_DISTANCE_TILES,
   DEFAULT_MAX_NODES,
+  ROUTE_ELEVATION_POLICY,
+  routeEdgeCost,
   findRoute,
   proof
 });
