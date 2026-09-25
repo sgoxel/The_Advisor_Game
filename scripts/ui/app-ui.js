@@ -1327,6 +1327,9 @@ async function ensureTerrainViewPrepared(seed,center,zoom=Camera.getZoom(),optio
       requiredKeys:collectTerrainPreparationKeysFromTiles(cached.tiles),
       cachedTerrain:cached
     };
+    if(options?.runtimeStreaming){
+      return Object.freeze({...descriptor,playCanvasRuntimeStreaming:true,legacyTexturePreparationSkipped:true});
+    }
   }else{
     descriptor=terrainViewDescriptor(seed,center,zoom);
   }
