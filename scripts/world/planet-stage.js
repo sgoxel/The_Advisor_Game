@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-sphere-foundation-v1";
+const VERSION="planet-sphere-foundation-v2";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -18,6 +18,7 @@ let device=null;
 let root=null;
 let canvas=null;
 let planet=null;
+let cameraEntity=null;
 let resizeObserver=null;
 let yawDegrees=-22;
 let pitchDegrees=-12;
@@ -105,6 +106,15 @@ function resize(){
   app.setCanvasResolution(pc.RESOLUTION_AUTO);
   app.resizeCanvas(width,height);
   app.updateCanvasSize?.();
+  if(cameraEntity){
+    const verticalHalfFov=(34*Math.PI/180)*0.5;
+    const aspect=Math.max(0.1,width/height);
+    const horizontalHalfFov=Math.atan(Math.tan(verticalHalfFov)*aspect);
+    const limitingHalfFov=Math.max(0.05,Math.min(verticalHalfFov,horizontalHalfFov));
+    const distance=(DISPLAY_RADIUS_UNITS/Math.sin(limitingHalfFov))*1.12;
+    cameraEntity.setLocalPosition(0,0,distance);
+    cameraEntity.lookAt(0,0,0);
+  }
 }
 function bindInput(){
   canvas.tabIndex=0;
@@ -149,18 +159,16 @@ function bindInput(){
   });
 }
 function buildScene(){
-  app.scene.ambientLight=new pc.Color(0.11,0.14,0.18);
+  app.scene.ambientLight=new pc.Color(0.18,0.21,0.25);
 
-  const camera=new pc.Entity("PlanetCamera");
-  camera.addComponent("camera",{
+  cameraEntity=new pc.Entity("PlanetCamera");
+  cameraEntity.addComponent("camera",{
     clearColor:new pc.Color(0.012,0.018,0.032),
     fov:34,
     nearClip:0.1,
     farClip:100
   });
-  camera.setLocalPosition(0,0,13.2);
-  camera.lookAt(0,0,0);
-  app.root.addChild(camera);
+  app.root.addChild(cameraEntity);
 
   const surfaceMaterial=new pc.StandardMaterial();
   surfaceMaterial.name="PlanetFoundationSurface";
@@ -172,15 +180,22 @@ function buildScene(){
   surfaceMaterial.update();
 
   planet=new pc.Entity("FantasyPlanet");
-  planet.addComponent("render",{type:"sphere",material:surfaceMaterial,castShadows:false,receiveShadows:true});
-  planet.setLocalScale(DISPLAY_RADIUS_UNITS*2,DISPLAY_RADIUS_UNITS*2,DISPLAY_RADIUS_UNITS*2);
+  planet.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  const sphereGeometry=new pc.SphereGeometry({
+    radius:DISPLAY_RADIUS_UNITS,
+    latitudeBands:64,
+    longitudeBands:96
+  });
+  const sphereMesh=pc.Mesh.fromGeometry(device,sphereGeometry);
+  const sphereInstance=new pc.MeshInstance(sphereMesh,surfaceMaterial,planet);
+  planet.render.meshInstances=[sphereInstance];
   app.root.addChild(planet);
 
   const keyLight=new pc.Entity("PlanetKeyLight");
   keyLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(0.95,0.96,1),
-    intensity:1.55,
+    intensity:1.35,
     castShadows:false
   });
   keyLight.setLocalEulerAngles(32,-38,0);
@@ -190,7 +205,7 @@ function buildScene(){
   rimLight.addComponent("light",{
     type:"directional",
     color:new pc.Color(0.38,0.52,0.72),
-    intensity:0.42,
+    intensity:0.58,
     castShadows:false
   });
   rimLight.setLocalEulerAngles(-22,142,0);
@@ -296,7 +311,7 @@ function destroy(){
   resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   app?.destroy?.();
-  app=null;device=null;pc=null;planet=null;canvas=null;ready=false;
+  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;ready=false;
   root?.replaceChildren?.();
 }
 
