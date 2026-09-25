@@ -137,6 +137,7 @@ function createManager({
   let signature="chunk="+size+"|"+String(signatureProvider()||"standard");
   let lastCenterChunk=null;
   let lastRequest=null;
+  let lastExactActiveIds=null;
   let settings=get();
   let idleTimer=0;
   let stationarySince=performance.now();
@@ -214,7 +215,7 @@ function createManager({
     lastInvalidationReason=String(reason||"manual");
     cancelWork();
     for(const entry of entries.values())destroyEntry(entry);
-    entries.clear();queue=[];queued.clear();destinationDataPrepared.clear();lastCenterChunk=null;
+    entries.clear();queue=[];queued.clear();destinationDataPrepared.clear();lastCenterChunk=null;lastExactActiveIds=null;
     signature=currentSignature();
   }
   function cancelWork(){
@@ -540,23 +541,34 @@ function createManager({
         continue;
       }
       const itemStarted=performance.now();
-      if(item.source==="destination"&&typeof prepareChunkData==="function"&&!destinationDataPrepared.has(item.fullKey)){
-        const preparedData=prepareChunkData({x:item.x,y:item.y,chunkSize:size,signature:item.signature,state:item.state||"Prepared",source:"destination"});
-        const dataElapsed=performance.now()-itemStarted;
-        destinationDataPrepared.set(item.fullKey,preparedData);
-        destinationDataSliceCount++;
-        destinationDataLastMs=dataElapsed;
-        destinationDataTotalMs+=dataElapsed;
-        destinationDataMaxMs=Math.max(destinationDataMaxMs,dataElapsed);
-        // A destination slice is deliberately one phase only. Stop this frame
-        // after world-data generation so mesh/GPU composition cannot run before
-        // the browser gets an animation-frame paint opportunity.
-        queue.unshift(item);
-        queued.add(item.fullKey);
-        processed++;
-        break;
+      if(item.source==="destination"&&typeof prepareChunkData==="function"){
+        const record=destinationDataPrepared.get(item.fullKey)||null;
+        if(!record||record.pending===true){
+          const response=prepareChunkData({
+            x:item.x,y:item.y,chunkSize:size,signature:item.signature,
+            state:item.state||"Prepared",source:"destination",streamingProfile:"minimum",
+            incrementalState:record?.state||null,maxCells:2
+          });
+          const dataElapsed=performance.now()-itemStarted;
+          destinationDataSliceCount++;
+          destinationDataLastMs=dataElapsed;
+          destinationDataTotalMs+=dataElapsed;
+          destinationDataMaxMs=Math.max(destinationDataMaxMs,dataElapsed);
+          if(response?.pending===true){
+            destinationDataPrepared.set(item.fullKey,{pending:true,state:response.state});
+          }else{
+            destinationDataPrepared.set(item.fullKey,{pending:false,data:response?.data??response});
+          }
+          // Exactly one deterministic data slice per paint. Even completion waits
+          // for the next frame before mesh/GPU composition.
+          queue.unshift(item);
+          queued.add(item.fullKey);
+          processed++;
+          break;
+        }
       }
-      const preparedData=item.source==="destination"?destinationDataPrepared.get(item.fullKey):null;
+      const dataRecord=item.source==="destination"?destinationDataPrepared.get(item.fullKey):null;
+      const preparedData=dataRecord?.data??dataRecord;
       prepareNow(item.x,item.y,item.state||"Prepared",false,item.source||"normal",preparedData);
       const itemElapsed=performance.now()-itemStarted;
       if(item.source==="destination")destinationDataPrepared.delete(item.fullKey);
@@ -605,6 +617,25 @@ function createManager({
   function destinationPlan(request){
     const center=Object.freeze({x:String(request?.center?.x??"0"),y:String(request?.center?.y??"0")});
     const centerChunk=chunkFromCenter(center);
+    const explicit=[...new Set((Array.isArray(request?.requiredChunkIds)?request.requiredChunkIds:[])
+      .map(value=>String(value||"")).filter(value=>/^-?\d+,-?\d+$/.test(value)))];
+    if(explicit.length){
+      const points=explicit.map(parseCoord).sort((a,b)=>{
+        const da=Math.max(Math.abs(a.x-centerChunk.x),Math.abs(a.y-centerChunk.y));
+        const db=Math.max(Math.abs(b.x-centerChunk.x),Math.abs(b.y-centerChunk.y));
+        return da-db||a.y-b.y||a.x-b.x;
+      });
+      const minX=Math.min(...points.map(p=>p.x)),maxX=Math.max(...points.map(p=>p.x));
+      const minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y));
+      const activeBounds=Object.freeze({minX,maxX,minY,maxY});
+      const requiredIds=points.map(point=>coordKey(point.x,point.y));
+      const items=points.map(point=>({
+        x:point.x,y:point.y,signature:currentSignature(),state:"Prepared",source:"destination",
+        priority:DESTINATION_QUEUE_PRIORITY,
+        distance:Math.max(Math.abs(point.x-centerChunk.x),Math.abs(point.y-centerChunk.y))
+      }));
+      return Object.freeze({center,centerChunk,activeBounds,safetyBounds:activeBounds,items:Object.freeze(items),requiredIds:Object.freeze(requiredIds),exact:true});
+    }
     const rx=Math.max(0,Number(request?.activeRadiusX||0)|0),ry=Math.max(0,Number(request?.activeRadiusY||0)|0);
     const activeBounds=makeBounds(centerChunk,rx,ry);
     const safetyBounds=makeBounds(centerChunk,rx+DESTINATION_SAFETY_RING,ry+DESTINATION_SAFETY_RING);
@@ -617,7 +648,7 @@ function createManager({
         items.push({x,y,signature:currentSignature(),state:"Prepared",source:"destination",priority:DESTINATION_QUEUE_PRIORITY+distance*20,distance});
       }
     }
-    return Object.freeze({center,centerChunk,activeBounds,safetyBounds,items:Object.freeze(items),requiredIds:Object.freeze(requiredIds)});
+    return Object.freeze({center,centerChunk,activeBounds,safetyBounds,items:Object.freeze(items),requiredIds:Object.freeze(requiredIds),exact:false});
   }
   function destinationProgress(plan,state=streamingState){
     const sig=currentSignature();
@@ -716,8 +747,13 @@ function createManager({
       activeRadiusY:Math.max(0,Number(request.activeRadiusY||0))
     };
     const targets=targetSets(nextRequest);
-    const activeCoords=new Map([...targets.active].map(key=>[key,parseCoord(key)]));
+    const explicit=[...new Set((Array.isArray(request?.requiredChunkIds)?request.requiredChunkIds:[])
+      .map(value=>String(value||"")).filter(value=>/^-?\d+,-?\d+$/.test(value)))];
+    const activeCoords=explicit.length
+      ?new Map(explicit.map(key=>[key,parseCoord(key)]))
+      :new Map([...targets.active].map(key=>[key,parseCoord(key)]));
     const preparedCoords=new Map([...targets.prepared].map(key=>[key,parseCoord(key)]));
+    for(const [key,point] of activeCoords)preparedCoords.set(key,point);
     const missing=[];
     for(const point of activeCoords.values()){
       if(!entries.has(entryKey(sig,point.x,point.y)))missing.push(coordKey(point.x,point.y));
@@ -729,6 +765,7 @@ function createManager({
     stopIdleExpansion("destination-commit",true);
     clearIdleQueue();
     lastRequest=nextRequest;
+    lastExactActiveIds=explicit.length?Object.freeze([...activeCoords.keys()].sort()):null;
     lastNavigationKey=[nextRequest.center.x,nextRequest.center.y,nextRequest.activeRadiusX,nextRequest.activeRadiusY].join("|");
     stationarySince=performance.now();
 
@@ -786,6 +823,7 @@ function createManager({
     }
     lastNavigationKey=navigationKey;
     lastRequest=nextRequest;
+    lastExactActiveIds=null;
     clearIdleQueue();
     const targets=targetSets(lastRequest);
     const activeCoords=new Map([...targets.active].map(key=>[key,parseCoord(key)]));
@@ -841,9 +879,11 @@ function createManager({
       activeTargetCount:lastRequest
         ?(Math.max(0,Number(lastRequest.activeRadiusX||0))*2+1)*(Math.max(0,Number(lastRequest.activeRadiusY||0))*2+1)
         :0,
-      activeStateComplete:lastRequest
-        ?active===((Math.max(0,Number(lastRequest.activeRadiusX||0))*2+1)*(Math.max(0,Number(lastRequest.activeRadiusY||0))*2+1))
-        :active===0,
+      activeStateComplete:lastExactActiveIds
+        ?active===lastExactActiveIds.length
+        :lastRequest
+          ?active===((Math.max(0,Number(lastRequest.activeRadiusX||0))*2+1)*(Math.max(0,Number(lastRequest.activeRadiusY||0))*2+1))
+          :active===0,
       direction:lastDirection,
       Active:active,
       Prepared:prepared,
