@@ -50,7 +50,7 @@ let generatedTexture=null;
 let startupProgress={mode:"indeterminate",measuredPercent:null,displayedPercent:null,phaseId:"planning",phaseLabel:"Planning startup…",completedWeightedWork:0,totalWeightedWork:100,firstPaintAtMs:Date.now(),determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,optionalPostReadyWorkCount:0};
 let loadingProof=null;
 const STARTUP_SLICE_BUDGET_MS=6;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null};
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{}};
 let longTaskObserver=null;
 let heartbeatTimer=null;
 let lastHeartbeatAt=0;
@@ -130,6 +130,14 @@ function beginResponsivenessTelemetry(){
       longTaskObserver.observe({entryTypes:["longtask"]});
     }catch(_){}
   }
+}
+async function measuredPhase(id,work){
+  await yieldBrowser();
+  const started=performance.now();
+  const result=await work();
+  startupScheduler.phaseTimings[id]=Number((performance.now()-started).toFixed(3));
+  await yieldBrowser();
+  return result;
 }
 function endResponsivenessTelemetry(){
   if(heartbeatTimer){clearInterval(heartbeatTimer);heartbeatTimer=null;}
@@ -459,7 +467,7 @@ async function start(){
     await yieldPaint();
     document.body.classList.add("planet-stage-active");
 
-    pc=await import(ENGINE_URL);
+    pc=await measuredPhase("engineImportMs",()=>import(ENGINE_URL));
     setStartupProgress("renderer","Initializing PlayCanvas…",32);
     await yieldPaint();
     canvas=document.createElement("canvas");
@@ -470,25 +478,25 @@ async function start(){
     root.replaceChildren(canvas);
     if(loader)root.appendChild(loader);
 
-    device=await pc.createGraphicsDevice(canvas,{
+    device=await measuredPhase("graphicsDeviceMs",()=>pc.createGraphicsDevice(canvas,{
       deviceTypes:[pc.DEVICETYPE_WEBGL2],
       antialias:true,
       depth:true,
       powerPreference:"high-performance"
-    });
+    }));
     const options=new pc.AppOptions();
     options.graphicsDevice=device;
     options.componentSystems=[pc.RenderComponentSystem,pc.CameraComponentSystem,pc.LightComponentSystem];
     options.resourceHandlers=[pc.TextureHandler];
 
     app=new pc.AppBase(canvas);
-    app.init(options);
-    await buildScene();
+    await measuredPhase("appInitMs",async()=>app.init(options));
+    await measuredPhase("buildSceneMs",()=>buildScene());
     await yieldPaint();
     bindInput();
     resize();
     app.on?.("update",()=>{frameCount++;});
-    app.start();
+    await measuredPhase("appStartMs",async()=>app.start());
 
     if("ResizeObserver" in window){
       resizeObserver=new ResizeObserver(resize);
