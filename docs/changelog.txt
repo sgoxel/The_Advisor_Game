@@ -1491,3 +1491,12 @@
 - Runtime evidence records 0 terrain-worker errors, 10 worker completions / 747 classified cells by the phone gate, sparse minimum meshes (8 resources / 578 prepared cells before the phone step), destination max slice 38.1 ms, zero >200 ms destination slices, continuous paint heartbeats, and unchanged protagonist/Simulation authority.
 - Cached return/revisit paths no longer flash LOAD_GATE when all required destination chunks already exist in retained Active/Prepared/Cached storage.
 - Exact tested implementation head 6d067ac1e2067549546e39b35ea3835d6dc973a9 deployed successfully via GitHub Pages run 36122557902.
+
+2026-09-25 13:29:05 +03:00 | WP-S003-006-011 | Sparse destination coverage regression fix — PASS
+- Fixed the reported "PlayCanvas chunk world data is incomplete" area-loading interruption caused when a previously cached streaming-minimum chunk contained only the sparse cells needed by an earlier view and was incorrectly treated as complete for a shifted camera view.
+- Sparse chunk snapshots now expand deterministically with newly required cell indices; destination readiness validates required-cell coverage rather than mere chunk-entry presence; insufficient sparse PlayCanvas resources are replaced from the expanded snapshot without allowing destruction of the old resource to evict the newer cache record.
+- Runtime area preparation now preserves stale/coalesced destination semantics and surfaces renderer preparation failure directly instead of falling through to a misleading incomplete-world-data error.
+- Exact implementation commit 1234bf2feaca53ae86b002e0fad8e9f4891eb680 deployed successfully via GitHub Pages run 36123673091.
+- Push Visual Evidence run 36123673613 passed on the exact implementation commit.
+- Dedicated WP-S003-006-011 regression run 36123749306 passed on the exact implementation commit. Eight fresh screenshots were directly inspected; FINAL VISUAL 8.2/10 PASS with no blank/broken terrain, loading-overlay layout failure, clipping that prevents use, or area-loading interruption.
+- Runtime evidence reached READY at the distant (262,-192) destination and the coalesced (320,-240) target, returned to cached origin/revisit views, retained continuous LOAD_GATE paint on landscape/phone, recorded 0 terrain-worker errors, 10 worker completions / 747 classified cells, 0 destination long tasks >50 ms, and a 26.8 ms maximum destination slice while preserving Simulation authority.
