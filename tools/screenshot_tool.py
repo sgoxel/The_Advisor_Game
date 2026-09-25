@@ -100,7 +100,7 @@ SCENARIOS = {
     "wp-s003-006-009",
     "wp-s003-006-011",
     "wp-s003-006-012",
-    "wp-s003-006-013",
+    "wp-s003-006-013",\n    "wp-s003-006-014",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s003-008-002",
@@ -192,7 +192,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-009": 11,
     "wp-s003-006-011": 8,
     "wp-s003-006-012": 8,
-    "wp-s003-006-013": 6,
+    "wp-s003-006-013": 6,\n    "wp-s003-006-014": 6,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
@@ -1593,6 +1593,26 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
+    if scenario == "wp-s003-006-014":
+        from selenium.webdriver.support.ui import WebDriverWait
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 60.0)
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.();
+                const v=window.PlanetStage?.verify?.();
+                return Boolean(
+                  s?.ready===true &&
+                  s?.stage==='seeded-planetary-geography' &&
+                  s?.geographyVersion==='planetary-geography-v2' &&
+                  Number(s?.canvasCount||0)===1 &&
+                  v?.pass===true
+                );
+                """
+            )
+        )
+        return "seeded-planetary-geography-ready"
     if scenario == "wp-s003-006-013":
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
@@ -6205,6 +6225,47 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-006-014":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("default",(1280,800)),
+            ("continent",(1280,800)),
+            ("mountain",(1280,800)),
+            ("island",(1280,800)),
+            ("mountain",(844,390)),
+            ("continent",(390,844)),
+        )
+        key,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        time.sleep(0.25)
+        if key=="default":
+            result=driver.execute_script("return window.PlanetStage?.setRotation?.(-18,-10) || null")
+        else:
+            result=driver.execute_script(
+                """
+                const stage=window.PlanetStage;
+                const target=stage?.snapshot?.()?.featureTargets?.[String(arguments[0])] || null;
+                return target&&stage?.setViewTarget ? stage.setViewTarget(target) : null;
+                """,
+                key
+            )
+        if not isinstance(result,dict) or result.get("ready") is not True:
+            raise RuntimeError(f"Seeded planet view target failed for {key}: {result}")
+        WebDriverWait(driver,20.0).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.();
+                return Boolean(
+                  s?.ready===true &&
+                  s?.stage==='seeded-planetary-geography' &&
+                  s?.geographyHash &&
+                  document.querySelectorAll('#planetCanvas').length===1
+                );
+                """
+            )
+        )
+        return f"seeded-planet:{key}:viewport={viewport[0]}x{viewport[1]}"
+
     if scenario == "wp-s003-006-013":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -7962,6 +8023,78 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-014":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-006-014 requires six seeded-planet evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        hashes=[]
+        build_times=[]
+        for index,build in enumerate(builds, start=1):
+            stage=build.get("planetStage") or {}
+            systems=stage.get("activeSystems") or {}
+            generation=stage.get("generation") or {}
+            stats=stage.get("geographyStats") or {}
+            verification=stage.get("geographyVerification") or {}
+            layout=stage.get("geographyLayout") or {}
+            if stage.get("ready") is not True or stage.get("stage") != "seeded-planetary-geography":
+                raise RuntimeError(f"Seeded planet stage not ready in frame {index}: {stage}")
+            if stage.get("version") != "planetary-geography-globe-v1":
+                raise RuntimeError(f"Unexpected planet renderer version in frame {index}: {stage}")
+            if stage.get("geographyVersion") != "planetary-geography-v2":
+                raise RuntimeError(f"Unexpected geography version in frame {index}: {stage}")
+            if abs(float(stage.get("worldScaleFraction") or 0)-0.10)>1e-9:
+                raise RuntimeError(f"Planet scale fraction is not 10% in frame {index}: {stage}")
+            if int(stage.get("worldRadiusMeters") or 0) != 637100:
+                raise RuntimeError(f"Planet radius mismatch in frame {index}: {stage}")
+            if not stage.get("activeSeed") or not stage.get("geographyHash"):
+                raise RuntimeError(f"Planet seed/hash missing in frame {index}: {stage}")
+            hashes.append(stage.get("geographyHash"))
+            build_times.append(float(stage.get("buildTimeMs") or 0))
+            if verification.get("sameSeedMatch") is not True or verification.get("differentSeedChanges") is not True:
+                raise RuntimeError(f"Seed determinism/change proof failed in frame {index}: {verification}")
+            seam=verification.get("seam") or {}
+            if seam.get("longitudePass") is not True or float(seam.get("northPoleRangeMeters") or 999)>0.001 or float(seam.get("southPoleRangeMeters") or 999)>0.001:
+                raise RuntimeError(f"Spherical seam/pole continuity failed in frame {index}: {verification}")
+            if int(stats.get("landSamples") or 0)<=0 or int(stats.get("oceanSamples") or 0)<=0:
+                raise RuntimeError(f"Land/ocean generation missing in frame {index}: {stats}")
+            if int(stats.get("islandSamples") or 0)<=0 or int(stats.get("mountainSamples") or 0)<=0:
+                raise RuntimeError(f"Island/mountain generation missing in frame {index}: {stats}")
+            if float(stats.get("maxElevationMeters") or 0)<3000 or float(stats.get("minElevationMeters") or 0)>-1000:
+                raise RuntimeError(f"Planetary elevation range is too weak in frame {index}: {stats}")
+            if int(layout.get("continentCount") or 0)<3 or int(layout.get("islandNodeCount") or 0)<8 or int(layout.get("mountainNodeCount") or 0)<10:
+                raise RuntimeError(f"Planetary layout lacks large-scale geography in frame {index}: {layout}")
+            texture=stage.get("texture") or {}
+            mesh=stage.get("mesh") or {}
+            if int(texture.get("width") or 0)<512 or int(texture.get("height") or 0)<256:
+                raise RuntimeError(f"Generated geography texture too small in frame {index}: {texture}")
+            if int(mesh.get("latitudeSegments") or 0)<64 or int(mesh.get("longitudeSegments") or 0)<96:
+                raise RuntimeError(f"Relief sphere mesh too coarse in frame {index}: {mesh}")
+            if float(stage.get("heightExaggeration") or 0)<=1:
+                raise RuntimeError(f"Macro height relief is not visually exaggerated in frame {index}: {stage}")
+            if generation.get("generatedOnce") is not True or generation.get("perFrameGeneration") is not False or generation.get("sphericalAuthority") is not True or generation.get("planarTileAuthority") is not False:
+                raise RuntimeError(f"Planet generation authority/per-frame contract failed in frame {index}: {generation}")
+            for key in (
+                "protagonistEnabled","npcEnabled","tileSystemActive","localTerrainActive",
+                "settlementGenerationActive","buildingGenerationActive","worldDetailSimulationActive"
+            ):
+                if systems.get(key) is not False:
+                    raise RuntimeError(f"Stage 2 unexpectedly enabled {key} in frame {index}: {stage}")
+            if int(stage.get("canvasCount") or 0)!=1 or int(build.get("planetCanvasCount") or 0)!=1 or int(build.get("legacyCanvasCount") or 0)!=0:
+                raise RuntimeError(f"Planet canvas contract failed in frame {index}: {build}")
+            if build.get("terrainGridPresent") is True or build.get("protagonistPresent") is True:
+                raise RuntimeError(f"Retired local gameplay DOM is active in frame {index}: {build}")
+        if len(set(hashes)) != 1:
+            raise RuntimeError(f"Planet geography changed across rotation/view frames: {hashes}")
+        landscape=frames[4].get("runtime",{}).get("viewport",{})
+        portrait=frames[5].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>450:
+            raise RuntimeError(f"Phone-landscape planet frame has unexpected viewport: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"Phone-portrait planet frame has unexpected viewport: {portrait}")
+        if max(build_times)>15000:
+            raise RuntimeError(f"Planet build time exceeded 15s evidence bound: {build_times}")
+        return
+
     if scenario == "wp-s003-006-013":
         if len(frames) < 6:
             raise RuntimeError("wp-s003-006-013 requires six planet-sphere evidence frames")
