@@ -6265,36 +6265,58 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         driver.set_window_size(int(viewport[0]),int(viewport[1]))
         time.sleep(0.3)
         action=_set_camera_view_and_render_active(driver,int(target["x"]),int(target["y"]),float(zoom),timeout=120.0)
-        WebDriverWait(driver,120.0).until(
-            lambda d: d.execute_script(
+        try:
+            WebDriverWait(driver,120.0).until(
+                lambda d: d.execute_script(
+                    """
+                    const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                    const current=loading?.current || {};
+                    const area=window.AppUI?.runtimeAreaLoadingSnapshot?.() || {};
+                    const renderer=window.GameRenderer?.snapshot?.() || {};
+                    const camera=window.Camera?.getCenter?.() || null;
+                    const frame=renderer?.frame?.center || null;
+                    return Boolean(
+                      document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
+                      loading?.overlay?.hidden===true &&
+                      current.state==='hidden' &&
+                      current.readiness?.playableReady===true &&
+                      area.state==='READY' &&
+                      renderer?.simulationSnapshot?.campaignActive===true &&
+                      renderer?.regionKey &&
+                      renderer?.terrainChunks?.landformPass===true &&
+                      camera && frame &&
+                      String(camera.x)===String(arguments[0]) &&
+                      String(camera.y)===String(arguments[1]) &&
+                      String(frame.x)===String(arguments[0]) &&
+                      String(frame.y)===String(arguments[1]) &&
+                      Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
+                    );
+                    """,
+                    str(target["x"]),str(target["y"])
+                )
+            )
+        except Exception as exc:
+            diagnostic=driver.execute_script(
                 """
-                const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
-                const current=loading?.current || {};
-                const area=window.AppUI?.runtimeAreaLoadingSnapshot?.() || {};
                 const renderer=window.GameRenderer?.snapshot?.() || {};
-                const camera=window.Camera?.getCenter?.() || null;
-                const frame=renderer?.frame?.center || null;
-                return Boolean(
-                  document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
-                  loading?.overlay?.hidden===true &&
-                  current.state==='hidden' &&
-                  current.readiness?.playableReady===true &&
-                  area.state==='READY' &&
-                  renderer?.simulationSnapshot?.campaignActive===true &&
-                  renderer?.regionKey &&
-                  renderer?.protagonistVisible===true &&
-                  renderer?.terrainChunks?.landformPass===true &&
-                  camera && frame &&
-                  String(camera.x)===String(arguments[0]) &&
-                  String(camera.y)===String(arguments[1]) &&
-                  String(frame.x)===String(arguments[0]) &&
-                  String(frame.y)===String(arguments[1]) &&
-                  Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
-                );
+                return {
+                  target:{x:String(arguments[0]),y:String(arguments[1])},
+                  campaignState:document.querySelector('#campaignState')?.textContent?.trim()||null,
+                  sceneLoading:window.AppUI?.sceneLoadingSnapshot?.()||null,
+                  runtimeAreaLoading:window.AppUI?.runtimeAreaLoadingSnapshot?.()||null,
+                  camera:window.Camera?.getCenter?.()||null,
+                  frame:renderer?.frame?.center||null,
+                  simulationCampaignActive:Boolean(renderer?.simulationSnapshot?.campaignActive),
+                  regionKey:renderer?.regionKey||null,
+                  protagonistVisible:Boolean(renderer?.protagonistVisible),
+                  visibleChunkCount:Number(renderer?.terrainChunks?.visibleChunkCount||0),
+                  landformPass:renderer?.terrainChunks?.landformPass===true,
+                  preload:renderer?.terrainPreload||null
+                };
                 """,
                 str(target["x"]),str(target["y"])
             )
-        )
+            raise RuntimeError(f"Macro landform post-navigation readiness failed for {key}: {diagnostic}") from exc
         current=driver.execute_script(
             """
             const key=String(arguments[0]);
