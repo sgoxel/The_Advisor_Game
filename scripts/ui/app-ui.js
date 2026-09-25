@@ -2453,7 +2453,7 @@ function startClock(){
   renderClock();
   clockTimer=setInterval(renderClock,250);
 }
-async function startNewCampaign(){
+async function startNewCampaign(seedOverride=null){
   try{
     await waitForApplicationStartup();
   }catch(error){
@@ -2462,7 +2462,7 @@ async function startNewCampaign(){
     return;
   }
   beginSceneLoading("new-campaign","world");
-  const result=SeedSystem.startNewCampaign();
+  const result=SeedSystem.startNewCampaign(typeof seedOverride==="string"?seedOverride:null);
   restoredCampaign=false;
   residentSchedulePinned=false;
   lastResidentScheduleProof=null;
@@ -2628,6 +2628,7 @@ window.AppUI=Object.freeze({
   applicationStartupSnapshot,
   setSceneLoadingProof,
   clearSceneLoadingProof,
+  startNewCampaignForEvidence:(seed)=>startNewCampaign(String(seed||"")),
   refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot()),
   refreshResidentRoster:()=>renderResidentRosterProof(),
