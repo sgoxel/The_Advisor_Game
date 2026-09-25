@@ -69,7 +69,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-009` — Raised Road + Path Surface Profiles on Heightfield Terrain — COMPLETED
 - `WP-S003-006-010` — Adaptive Idle Chunk Cache Expansion — COMPLETED
 - `WP-S003-006-011` — Responsive Long-Distance Chunk Streaming + Area Loading Gate — COMPLETED
-- `WP-S003-006-012` — Hydrology-Carved Basins + Depressed Water Surfaces
+- `WP-S003-006-012` — Hydrology-Carved Basins + Depressed Water Surfaces — COMPLETED
 - `WP-S003-006-013` — Macro Valleys, Ridges, Cliffs + Mountain Pass Terrain Forms
 - `WP-S003-006-014` — Terrain-Adaptive Roads, Cut/Fill Embankments + Bridge Deck Clearance
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
