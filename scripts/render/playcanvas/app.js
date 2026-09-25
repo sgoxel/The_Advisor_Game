@@ -879,6 +879,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   }
   function terrainMeshMetrics(){
     let meshResourceCount=0,activeMeshCount=0,preparedMeshCount=0,cachedMeshCount=0;
+    let streamingMinimumMeshResourceCount=0,streamingSparseMeshResourceCount=0,streamingSparseMeshCellCount=0;
     let meshInstanceCount=0,vertices=0,triangles=0;
     let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,interiorObjectPresentationCount=0,propPresentationCount=0;
     let entranceTreatmentCount=0,entranceOrdinaryCount=0,entranceSpecialCount=0,entranceThresholdCount=0,entranceFramePrimitiveCount=0,entranceWearCount=0,entranceAwningCount=0,entranceSignCount=0,entrancePrimitiveCount=0;
@@ -935,8 +936,14 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const heightfieldResources=new Map();
     const materialNames=new Set();
     terrainPreloadManager?.forEachResource?.((resource,entry)=>{
-      if(resource?.presentationKind!=="chunk-mesh")return;
+      const presentationKind=String(resource?.presentationKind||"");
+      if(presentationKind!=="chunk-mesh"&&presentationKind!=="streaming-minimum-chunk-mesh")return;
       meshResourceCount++;
+      if(resource?.streamingMinimum===true||presentationKind==="streaming-minimum-chunk-mesh")streamingMinimumMeshResourceCount++;
+      if(resource?.streamingSparseMesh===true){
+        streamingSparseMeshResourceCount++;
+        streamingSparseMeshCellCount+=Number(resource.streamingSparseMeshCellCount||0);
+      }
       if(entry?.state==="Active")activeMeshCount++;
       else if(entry?.state==="Prepared")preparedMeshCount++;
       else cachedMeshCount++;
@@ -1228,6 +1235,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return Object.freeze({
       resourceKind:"chunk-mesh",
       meshResourceCount,activeMeshCount,preparedMeshCount,cachedMeshCount,
+      streamingMinimumMeshResourceCount,streamingSparseMeshResourceCount,streamingSparseMeshCellCount,
       meshInstanceCount,vertices,triangles,
       heightfieldResourceCount,indexedHeightfieldResourceCount,
       heightfieldGridResolution,heightfieldStepTiles,
