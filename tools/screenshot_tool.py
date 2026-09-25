@@ -2252,7 +2252,7 @@ def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool 
         const reduced=Boolean(arguments[1]);
         const api=window.AppUI;
         if(!api?.setSceneLoadingProof||!api?.sceneLoadingSnapshot)return null;
-        api.setSceneLoadingProof(phase,{reducedMotion:reduced,startupProgress:Boolean(arguments[2]),progress:arguments[3],progressText:arguments[3]===null?null:(Math.round(Number(arguments[3]))+"%")});
+        api.setSceneLoadingProof(phase,{reducedMotion:reduced,startupProgress:Boolean(arguments[2]),progress:arguments[3],progressText:arguments[3]===null?null:(Number(arguments[3])<=0?"Planning startup…":(Math.round(Number(arguments[3]))+"%"))});
         return api.sceneLoadingSnapshot();
         """,
         phase,
