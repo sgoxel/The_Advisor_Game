@@ -7972,7 +7972,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             systems=stage.get("activeSystems") or {}
             if stage.get("ready") is not True or stage.get("stage") != "planet-sphere-foundation":
                 raise RuntimeError(f"Planet stage not ready in frame {index}: {stage}")
-            if stage.get("version") != "planet-sphere-foundation-v1":
+            if stage.get("version") != "planet-sphere-foundation-v2":
                 raise RuntimeError(f"Unexpected planet-stage version in frame {index}: {stage}")
             if abs(float(stage.get("worldScaleFraction") or 0)-0.10)>1e-9:
                 raise RuntimeError(f"Planet scale fraction is not 10% in frame {index}: {stage}")
