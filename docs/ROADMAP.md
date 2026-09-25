@@ -29,7 +29,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-001-005` — Diagonal + Multi-Terrain Junction Smoothing — COMPLETED
 - `WP-S002-002` — Special Buildings + Functional Lots — COMPLETED
 - `WP-S002-003` — Authoritative Walkability and Collision Foundation — COMPLETED
-- `WP-S002-003-001` — Elevation + Slope-Aware Walkability, Climbability + Cliff Blocking
+- `WP-S002-003-001` — Elevation + Slope-Aware Walkability, Climbability + Cliff Blocking — COMPLETED
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 - `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference
 
