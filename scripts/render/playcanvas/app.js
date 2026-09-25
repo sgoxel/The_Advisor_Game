@@ -800,7 +800,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // SEED in resource identity so a real campaign switch cannot reuse the
     // previous campaign's prepared meshes. Framebuffer/material quality remains
     // excluded because those changes do not alter geometry.
-    return "geometry=continuous-world-field-v1|seed="+String(lastRawSeed||"none");
+    return "geometry=continuous-world-field-v2|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -1381,7 +1381,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       continuousWorldMeterField:generatorStats.continuousWorldMeterField===true,
       logicalTilesAuthoritative:generatorStats.logicalTilesAuthoritative===true,
       rendererPatchOnly:generatorStats.rendererPatchOnly===true,
-      landformVersion:String(generatorStats.landformVersion||"continuous-world-field-v1"),
+      landformVersion:String(generatorStats.landformVersion||"continuous-world-field-v2"),
       landformSampleRadiusMeters:Number(generatorStats.landformSampleRadiusMeters||0),
       landformResourceCount,
       landformClassCounts:Object.freeze({...landformClassCounts}),
