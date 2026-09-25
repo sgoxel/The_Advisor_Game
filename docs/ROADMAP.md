@@ -87,7 +87,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-009-006` — Architectural Entrance Readability + Threshold Dressing — COMPLETED
 - `WP-S003-009-007` — Settlement Landmarks + Visual Hierarchy — COMPLETED
 - `WP-S003-009-008` — Large-Scale Terrain Variation + Semantic Wear Zones — COMPLETED
-- `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation
+- `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation — COMPLETED
 - `WP-S003-009-010` — Day/Night Atmospheric Color + Lighting Palette
 - `WP-S003-009-011` — Biome-Aware Wilderness Dressing + Ambient Fauna
 - `WP-S003-010` — Continuous Multi-Scale Strategic Zoom + Continent Overview LOD
