@@ -800,7 +800,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // SEED in resource identity so a real campaign switch cannot reuse the
     // previous campaign's prepared meshes. Framebuffer/material quality remains
     // excluded because those changes do not alter geometry.
-    return "geometry=heightfield-v15-split-cliff-topology|seed="+String(lastRawSeed||"none");
+    return "geometry=heightfield-v16-faceted-cliff-cuts|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -1376,7 +1376,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         hydrologyRendererOnly&&!hydrologyNavigationAuthority&&!hydrologyCollisionAuthority&&!hydrologyWaterIdentityChanged
       ),
       landformEnabled:landformResourceCount>0&&generatorStats.landformEnabled===true,
-      landformVersion:String(generatorStats.landformVersion||"macro-landform-v6"),
+      landformVersion:String(generatorStats.landformVersion||"macro-landform-v7"),
       landformSampleRadiusTiles:Number(generatorStats.landformSampleRadiusTiles||0),
       landformResourceCount,
       landformClassCounts:Object.freeze({...landformClassCounts}),
@@ -1387,7 +1387,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):null,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):null,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):null,
-      landformSteepFaceTreatment:String(generatorStats.landformSteepFaceTreatment||"exaggerated-heightfield+split-cliff-topology"),
+      landformSteepFaceTreatment:String(generatorStats.landformSteepFaceTreatment||"exaggerated-faceted-heightfield+downhill-cliff-cuts"),
       landformCliffFaceCount,landformCliffFaceTriangleCount,
       landformCliffLipCount,landformCliffLipTriangleCount,landformTriangleBudget,
       landformDrawCallsAdded,landformTrianglesAdded,landformMaterialsAdded,

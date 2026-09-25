@@ -18,9 +18,9 @@ function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 function worldVisualStyle(){return window.AdvisorWorldVisualStyle||null;}
 function styleColor(role,color){const style=worldVisualStyle();return style?.gradeRgb?style.gradeRgb(role,color):color;}
 
-const HEIGHTFIELD_VERTICAL_SCALE=0.024;
-const HEIGHTFIELD_MIN_Y=-32;
-const HEIGHTFIELD_MAX_Y=32;
+const HEIGHTFIELD_VERTICAL_SCALE=0.035;
+const HEIGHTFIELD_MIN_Y=-56;
+const HEIGHTFIELD_MAX_Y=56;
 const HEIGHTFIELD_RELIEF=0.085;
 const HEIGHTFIELD_WATER_Y=-0.22;
 const HEIGHTFIELD_BRIDGE_CLEARANCE=0.32;
@@ -31,7 +31,7 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
-const LANDFORM_VERSION="macro-landform-v6";
+const LANDFORM_VERSION="macro-landform-v7";
 const LANDFORM_SAMPLE_RADIUS_TILES=8;
 const LANDFORM_CACHE_LIMIT=32768;
 const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=12;
@@ -42,8 +42,8 @@ const LANDFORM_CLIFF_FACE_MAX_HEIGHT=2.65;
 const LANDFORM_CLIFF_FACE_APRON_MIN=0.68;
 const LANDFORM_CLIFF_FACE_APRON_MAX=1.34;
 const LANDFORM_CLIFF_LIP_INSET=1.08;
-const LANDFORM_CLIFF_BREAK_RISE_MIN=1.10;
-const LANDFORM_CLIFF_BREAK_RISE_MAX=2.40;
+const LANDFORM_CLIFF_BREAK_DEPTH_MIN=0.55;
+const LANDFORM_CLIFF_BREAK_DEPTH_MAX=1.20;
 const WORLD_TILE_METERS=2;
 const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
@@ -2640,10 +2640,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           return Object.freeze({...corner,position:Object.freeze([corner.position[0],y,corner.position[2]]),normal});
         });
         // True cliff cells replace the normal continuous top quad with a
-        // deterministic split top surface. The downhill and uphill halves keep
-        // every cell boundary at the shared prepared heightfield; only the
-        // interior break is raised, exposing a real rock face without an
-        // overlay strip or hidden duplicate ground sheet.
+        // deterministic split top surface. Every outer cell boundary stays on
+        // the shared prepared heightfield. The interior downhill half is cut
+        // below the continuous surface while the uphill half stays on it,
+        // exposing a rock face without raised fins or overlay geometry.
         let splitCliff=null;
         if(
           landformCliffFaceCount<LANDFORM_CLIFF_FACE_MAX_PER_CHUNK &&
@@ -2672,21 +2672,34 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           }
         }
 
+        const reliefShade=normal=>{
+          if(!TERRAIN_VARIATION_NATURAL_TYPES.has(surfaceType))return 1;
+          const nx=Number(normal[0]||0),ny=Number(normal[1]||1),nz=Number(normal[2]||0);
+          const directional=clamp(nx*-0.46+ny*0.80+nz*-0.39,0,1);
+          return clamp(0.60+directional*0.55,0.62,1.12);
+        };
         const emitSurfaceVertex=(position,fx,fz,normal)=>{
           positions.push(Number(position[0]),Number(position[1]),Number(position[2]));
           normals.push(Number(normal[0]),Number(normal[1]),Number(normal[2]));
           const variation=terrainVariationTintAtCellPoint(gx,gz,fx,fz,baseVisualType);
+          const shade=reliefShade(normal);
+          const shaded=[
+            clamp(Number(variation[0])*shade,0,1.18),
+            clamp(Number(variation[1])*shade,0,1.18),
+            clamp(Number(variation[2])*shade,0,1.18),
+            1
+          ];
           if(rect){
-            appendColor32(colors32,variation,1);
+            appendColor32(colors32,shaded,1);
             const u=Number(rect.u0)+(Number(rect.u1)-Number(rect.u0))*fx;
             const v=Number(rect.v0)+(Number(rect.v1)-Number(rect.v0))*fz;
             uvs.push(u,v);
           }else{
             const fallback=heightfieldColor(seed,cellWorldX,cellWorldZ,sourceCell?.color,baseVisualType);
             appendColor32(colors32,[
-              fallback[0]*variation[0],
-              fallback[1]*variation[1],
-              fallback[2]*variation[2],
+              fallback[0]*shaded[0],
+              fallback[1]*shaded[1],
+              fallback[2]*shaded[2],
               1
             ],1);
             uvs.push(fx,fz);
@@ -2711,18 +2724,27 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
 
         if(!splitCliff){
           const base=positions.length/3;
+          const naturalSurface=TERRAIN_VARIATION_NATURAL_TYPES.has(surfaceType);
+          const baseNormal=naturalSurface?topNormal(corners[0].position,corners[1].position,corners[2].position):null;
+          const baseShade=naturalSurface?reliefShade(baseNormal):1;
           for(const corner of corners){
             positions.push(...corner.position);
-            normals.push(...corner.normal);
+            normals.push(...(baseNormal||corner.normal));
             const variation=terrainVariationAtVertex(corner.wx,corner.wz,baseVisualType);
+            const shadedTint=[
+              clamp(Number(variation.tint[0])*baseShade,0,1.18),
+              clamp(Number(variation.tint[1])*baseShade,0,1.18),
+              clamp(Number(variation.tint[2])*baseShade,0,1.18),
+              1
+            ];
             if(rect){
-              appendColor32(colors32,variation.tint,1);
+              appendColor32(colors32,shadedTint,1);
             }else{
               const fallback=heightfieldColor(seed,corner.wx,corner.wz,sourceCell?.color,baseVisualType);
               appendColor32(colors32,[
-                fallback[0]*variation.tint[0],
-                fallback[1]*variation.tint[1],
-                fallback[2]*variation.tint[2],
+                fallback[0]*shadedTint[0],
+                fallback[1]*shadedTint[1],
+                fallback[2]*shadedTint[2],
                 1
               ],1);
             }
@@ -2748,25 +2770,25 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           const innerFracA=cornerFractions[edge.ia],innerFracB=cornerFractions[edge.ib];
           const lerp=(a,b,t)=>Number(a)+(Number(b)-Number(a))*t;
           const breakT=clamp(LANDFORM_CLIFF_LIP_INSET/metersPerTile,0.32,0.58);
-          const breakRise=clamp(
-            LANDFORM_CLIFF_BREAK_RISE_MIN+
-            Number(cliff.cliffSignal||0)*0.62+
-            Number(cliff.localReliefMeters||0)/920,
-            LANDFORM_CLIFF_BREAK_RISE_MIN,
-            LANDFORM_CLIFF_BREAK_RISE_MAX
+          const breakDepth=clamp(
+            LANDFORM_CLIFF_BREAK_DEPTH_MIN+
+            Number(cliff.cliffSignal||0)*0.25+
+            Number(cliff.localReliefMeters||0)/2200,
+            LANDFORM_CLIFF_BREAK_DEPTH_MIN,
+            LANDFORM_CLIFF_BREAK_DEPTH_MAX
           );
-          const lowA=[
+          const highA=[
             lerp(topA[0],innerA[0],breakT),
             lerp(topA[1],innerA[1],breakT),
             lerp(topA[2],innerA[2],breakT)
           ];
-          const lowB=[
+          const highB=[
             lerp(topB[0],innerB[0],breakT),
             lerp(topB[1],innerB[1],breakT),
             lerp(topB[2],innerB[2],breakT)
           ];
-          const highA=[lowA[0],lowA[1]+breakRise,lowA[2]];
-          const highB=[lowB[0],lowB[1]+breakRise,lowB[2]];
+          const lowA=[highA[0],highA[1]-breakDepth,highA[2]];
+          const lowB=[highB[0],highB[1]-breakDepth,highB[2]];
           const breakFracA=[
             lerp(fracA[0],innerFracA[0],breakT),
             lerp(fracA[1],innerFracA[1],breakT)
@@ -3287,7 +3309,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):0,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):0,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):0,
-      landformSteepFaceTreatment:"exaggerated-heightfield+split-cliff-topology",
+      landformSteepFaceTreatment:"exaggerated-faceted-heightfield+downhill-cliff-cuts",
       landformCliffFaceCount,landformCliffFaceTriangleCount,
       landformCliffLipCount,landformCliffLipTriangleCount,
       landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
@@ -3581,12 +3603,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
       landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
-      landformSteepFaceTreatment:"exaggerated-heightfield+split-cliff-topology",
+      landformSteepFaceTreatment:"exaggerated-faceted-heightfield+downhill-cliff-cuts",
       landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
       landformCliffFaceApronMaxWorldUnits:LANDFORM_CLIFF_FACE_APRON_MAX,
       landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
-      landformCliffBreakRiseMinWorldUnits:LANDFORM_CLIFF_BREAK_RISE_MIN,
-      landformCliffBreakRiseMaxWorldUnits:LANDFORM_CLIFF_BREAK_RISE_MAX,
+      landformCliffBreakDepthMinWorldUnits:LANDFORM_CLIFF_BREAK_DEPTH_MIN,
+      landformCliffBreakDepthMaxWorldUnits:LANDFORM_CLIFF_BREAK_DEPTH_MAX,
       landformTriangleBudgetPerChunk:LANDFORM_CLIFF_FACE_MAX_PER_CHUNK*4,
       contourAlgorithm:"categorical-marching-corners-rounded-fan",
       contourPreparationOnly:true,

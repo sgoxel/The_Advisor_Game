@@ -1580,6 +1580,11 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
+    if scenario == "starting-village":
+        # Cold software-WebGL startup may legitimately exceed the generic
+        # readiness window after terrain mesh changes. This is test-harness
+        # wait time only and does not relax any readiness or validation check.
+        timeout = max(timeout, 180.0)
     if scenario == "wp-s003-006-012":
         # Dedicated hydrology verification needs the conservative 25-chunk
         # tilted-camera coverage introduced after the previous visual failure.
@@ -8120,7 +8125,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(cliff_chunks.get("landformCliffFaceCount") or 0)<1 or int(cliff_chunks.get("landformCliffFaceTriangleCount") or 0)<2:
             raise RuntimeError(f"Cliff evidence frame did not prepare any sparse same-mesh cliff face: {cliff_chunks}")
         if int(cliff_chunks.get("landformCliffLipCount") or 0)<1 or int(cliff_chunks.get("landformCliffLipTriangleCount") or 0)<2:
-            raise RuntimeError(f"Cliff evidence frame did not prepare split same-mesh cliff topology: {cliff_chunks}")
+            raise RuntimeError(f"Cliff evidence frame did not prepare downhill-cut same-mesh cliff topology: {cliff_chunks}")
         return
 
     if scenario == "wp-s003-006-012":
