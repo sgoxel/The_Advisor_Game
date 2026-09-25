@@ -1591,6 +1591,11 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-006-013":
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
+        # Start evidence from a genuinely playable campaign and avoid unrelated
+        # background cache expansion while cold software-WebGL settles.
+        _set_terrain_preload_settings(
+            driver, radius=2, cache=256, directional=True, background=False
+        )
     if scenario == "wp-s003-006-011":
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
@@ -1706,6 +1711,23 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                               current.renderSucceeded === true &&
                               current.readiness?.playableReady === true &&
                               loading?.overlay?.hidden === true
+                            );
+                          })()) &&
+                          (arguments[0] !== 'wp-s003-006-013' || (() => {
+                            const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                            const current=loading?.current || {};
+                            const area=window.AppUI?.runtimeAreaLoadingSnapshot?.() || {};
+                            const campaignState=document.querySelector('#campaignState')?.textContent?.trim();
+                            return Boolean(
+                              campaignState === 'ACTIVE' &&
+                              loading?.overlay?.hidden === true &&
+                              current.state === 'hidden' &&
+                              current.readiness?.playableReady === true &&
+                              renderer?.simulationSnapshot?.campaignActive === true &&
+                              renderer?.regionKey &&
+                              renderer?.protagonistVisible === true &&
+                              renderer?.terrainChunks?.landformPass === true &&
+                              area.state === 'READY'
                             );
                           })()) &&
                           (arguments[0] !== 'wp-s003-005-003' || (() => {
@@ -6243,6 +6265,36 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         driver.set_window_size(int(viewport[0]),int(viewport[1]))
         time.sleep(0.3)
         action=_set_camera_view_and_render_active(driver,int(target["x"]),int(target["y"]),float(zoom),timeout=120.0)
+        WebDriverWait(driver,120.0).until(
+            lambda d: d.execute_script(
+                """
+                const loading=window.AppUI?.sceneLoadingSnapshot?.() || {};
+                const current=loading?.current || {};
+                const area=window.AppUI?.runtimeAreaLoadingSnapshot?.() || {};
+                const renderer=window.GameRenderer?.snapshot?.() || {};
+                const camera=window.Camera?.getCenter?.() || null;
+                const frame=renderer?.frame?.center || null;
+                return Boolean(
+                  document.querySelector('#campaignState')?.textContent?.trim()==='ACTIVE' &&
+                  loading?.overlay?.hidden===true &&
+                  current.state==='hidden' &&
+                  current.readiness?.playableReady===true &&
+                  area.state==='READY' &&
+                  renderer?.simulationSnapshot?.campaignActive===true &&
+                  renderer?.regionKey &&
+                  renderer?.protagonistVisible===true &&
+                  renderer?.terrainChunks?.landformPass===true &&
+                  camera && frame &&
+                  String(camera.x)===String(arguments[0]) &&
+                  String(camera.y)===String(arguments[1]) &&
+                  String(frame.x)===String(arguments[0]) &&
+                  String(frame.y)===String(arguments[1]) &&
+                  Number(renderer?.terrainChunks?.visibleChunkCount||0)>0
+                );
+                """,
+                str(target["x"]),str(target["y"])
+            )
+        )
         current=driver.execute_script(
             """
             const key=String(arguments[0]);
@@ -7997,6 +8049,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Macro landform determinism/authority isolation failed: {proof}")
         observed=set()
         for index,build in enumerate(builds):
+            scene=build.get("sceneLoading") or {}
+            scene_current=scene.get("current") or {}
+            area=build.get("runtimeAreaLoading") or {}
+            if (
+                build.get("campaignState") != "ACTIVE"
+                or (scene.get("overlay") or {}).get("hidden") is not True
+                or scene_current.get("state") != "hidden"
+                or (scene_current.get("readiness") or {}).get("playableReady") is not True
+                or area.get("state") != "READY"
+            ):
+                raise RuntimeError(
+                    f"Macro landform frame {index+1} was captured before genuine playable readiness: "
+                    f"campaign={build.get('campaignState')}, scene={scene}, area={area}"
+                )
             chunks=((build.get("gpuRenderer") or {}).get("terrainChunks") or {})
             if chunks.get("landformEnabled") is not True or chunks.get("landformPass") is not True:
                 raise RuntimeError(f"Prepared macro landform telemetry failed in frame {index+1}: {chunks}")
