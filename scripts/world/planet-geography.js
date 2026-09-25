@@ -1,15 +1,15 @@
 (function(){
 "use strict";
 
-const VERSION="planetary-geography-v2";
+const VERSION="planetary-geography-v3";
 const DEFAULT_SEED="The_Advisor_Game_Planet_001";
 const STORAGE_KEY="advisor.planet.seed.v1";
 const CONTINENT_COUNT=5;
-const CONTINENT_LOBES_PER=4;
+const CONTINENT_LOBES_PER=6;
 const ISLAND_CHAIN_COUNT=4;
 const ISLANDS_PER_CHAIN=5;
-const ISOLATED_ISLAND_COUNT=10;
-const MOUNTAIN_NODES_PER_CONTINENT=7;
+const ISOLATED_ISLAND_COUNT=8;
+const MOUNTAIN_NODES_PER_CONTINENT=9;
 
 function clamp(v,a=0,b=1){return Math.min(b,Math.max(a,Number(v)||0));}
 function smooth01(v){const t=clamp(v);return t*t*(3-2*t);}
@@ -166,8 +166,8 @@ function colorFor(sample){
     const t=clamp((e-1800)/1600);
     return [lerp(0.37,0.46,t),lerp(0.33,0.42,t),lerp(0.25,0.35,t)];
   }
-  const snow=clamp((e-3400)/2100+lat*0.28);
-  return [lerp(0.48,0.94,snow),lerp(0.46,0.95,snow),lerp(0.43,0.96,snow)];
+  const snow=clamp((e-4550)/1750+Math.max(0,lat-0.62)*0.75);
+  return [lerp(0.44,0.94,snow),lerp(0.42,0.95,snow),lerp(0.39,0.97,snow)];
 }
 function create(seedValue){
   const seed=sanitizeSeed(seedValue);
@@ -193,10 +193,10 @@ function create(seedValue){
     continentLobes.push(main);group.push(main);
     const primaryBearing=rng()*Math.PI*2;
     for(let j=1;j<CONTINENT_LOBES_PER;j++){
-      const bearing=primaryBearing+(j-1)*(Math.PI*0.58)+(rng()-0.5)*0.65;
-      const offset=mainRadius*(0.28+rng()*0.38);
+      const bearing=primaryBearing+(j-1)*(Math.PI*0.43)+(rng()-0.5)*0.78;
+      const offset=mainRadius*(0.24+rng()*0.52);
       const childCenter=offsetOnSphere(center,offset,bearing);
-      const radius=mainRadius*(0.48+rng()*0.30);
+      const radius=mainRadius*(0.32+rng()*0.34);
       const child=lobe(childCenter,radius,0.30,0.94);
       continentLobes.push(child);group.push(child);
     }
@@ -207,7 +207,7 @@ function create(seedValue){
   for(let i=0;i<ISOLATED_ISLAND_COUNT;i++){
     let center=randomUnit(rng,0.9);
     for(let attempt=0;attempt<30&&maxInfluence(center,continentLobes)>0.26;attempt++)center=randomUnit(rng,0.9);
-    isolatedIslands.push(lobe(center,0.075+rng()*0.105,0.24,0.95));
+    isolatedIslands.push(lobe(center,0.065+rng()*0.085,0.22,0.95));
   }
   const islandChains=[];
   for(let chain=0;chain<ISLAND_CHAIN_COUNT;chain++){
@@ -218,7 +218,7 @@ function create(seedValue){
     for(let i=0;i<ISLANDS_PER_CHAIN;i++){
       const centered=i-(ISLANDS_PER_CHAIN-1)/2;
       const center=offsetOnSphere(origin,Math.abs(centered)*0.115,bearing+(centered<0?Math.PI:0)+(rng()-0.5)*0.25);
-      nodes.push(lobe(center,0.055+rng()*0.055,0.24,0.86));
+      nodes.push(lobe(center,0.045+rng()*0.047,0.20,0.86));
     }
     islandChains.push(...nodes);
   }
@@ -228,13 +228,13 @@ function create(seedValue){
   continentGroups.forEach(group=>{
     const rngMountain=rngFromSeed(seed,"mountain:"+group.id);
     const bearing=rngMountain()*Math.PI*2;
-    const span=0.68;
+    const span=0.78;
     for(let i=0;i<MOUNTAIN_NODES_PER_CONTINENT;i++){
       const t=i/(MOUNTAIN_NODES_PER_CONTINENT-1)-0.5;
       const angle=Math.abs(t)*span;
       const directionBearing=bearing+(t<0?Math.PI:0)+(rngMountain()-0.5)*0.14;
       const center=offsetOnSphere(group.center,angle,directionBearing);
-      mountainNodes.push(lobe(center,0.105+rngMountain()*0.075,0.22,0.88+0.12*(1-Math.abs(t)*2)));
+      mountainNodes.push(lobe(center,0.082+rngMountain()*0.060,0.20,0.86+0.14*(1-Math.abs(t)*2)));
     }
   });
 
@@ -245,34 +245,42 @@ function create(seedValue){
     mountain:hash32(seed+"|mountain-noise"),
     peak:hash32(seed+"|peak-noise"),
     ocean:hash32(seed+"|ocean"),
-    moisture:hash32(seed+"|moisture")
+    moisture:hash32(seed+"|moisture"),
+    warpX:hash32(seed+"|warp-x"),
+    warpY:hash32(seed+"|warp-y"),
+    warpZ:hash32(seed+"|warp-z")
   });
 
   function sampleDirection(directionValue){
     const d=normalize(directionValue.x,directionValue.y,directionValue.z);
-    const continent=maxInfluence(d,continentLobes);
-    const island=maxInfluence(d,islandLobes);
-    const coastNoise=(fbm3(bases.coast,d,2.5,4)-0.5)*0.30+(fbm3(bases.detail,d,8.5,3)-0.5)*0.075;
-    const landSignal=Math.max(continent,island*1.08)+coastNoise-0.34;
+    const warpFrequency=2.15,warpStrength=0.18;
+    const wx=(noise3(bases.warpX,d.x*warpFrequency+4.1,d.y*warpFrequency-1.7,d.z*warpFrequency+2.3)-0.5)*2*warpStrength;
+    const wy=(noise3(bases.warpY,d.x*warpFrequency-3.4,d.y*warpFrequency+5.2,d.z*warpFrequency-0.9)-0.5)*2*warpStrength;
+    const wz=(noise3(bases.warpZ,d.x*warpFrequency+1.2,d.y*warpFrequency+0.8,d.z*warpFrequency-4.6)-0.5)*2*warpStrength;
+    const warped=normalize(d.x+wx,d.y+wy,d.z+wz);
+    const continent=maxInfluence(warped,continentLobes);
+    const island=maxInfluence(warped,islandLobes);
+    const coastNoise=(fbm3(bases.coast,warped,2.7,4)-0.5)*0.44+(fbm3(bases.detail,warped,9.5,3)-0.5)*0.12;
+    const landSignal=Math.max(continent,island*1.08)+coastNoise-0.33;
     const land=landSignal>0;
-    const interior=land?clamp(landSignal/0.54):0;
-    const mountainBase=maxInfluence(d,mountainNodes);
-    const mountainNoise=0.46+0.54*ridged3(bases.mountain,d,9.0,3);
-    const mountainInfluence=land?clamp(mountainBase*mountainNoise*smooth01(interior*1.7)):0;
-    const highlandNoise=fbm3(bases.highland,d,5.0,4);
-    const peakNoise=ridged3(bases.peak,d,19.0,3);
-    const moisture=fbm3(bases.moisture,d,3.6,3);
+    const interior=land?clamp(landSignal/0.56):0;
+    const mountainBase=maxInfluence(warped,mountainNodes);
+    const mountainNoise=0.34+0.66*ridged3(bases.mountain,warped,10.5,3);
+    const mountainInfluence=land?clamp(mountainBase*mountainNoise*smooth01(interior*1.85)):0;
+    const highlandNoise=fbm3(bases.highland,warped,5.4,4);
+    const peakNoise=ridged3(bases.peak,warped,22.0,3);
+    const moisture=fbm3(bases.moisture,warped,3.8,3);
 
     let elevationMeters;
     if(land){
       const rolling=Math.max(0,highlandNoise-0.40)*920;
       const base=35+interior*760+rolling;
-      const mountains=Math.pow(mountainInfluence,1.18)*(2600+2700*peakNoise);
-      const exceptional=Math.pow(mountainInfluence,3.2)*(500+1200*peakNoise);
+      const mountains=Math.pow(mountainInfluence,1.48)*(2300+2900*peakNoise);
+      const exceptional=Math.pow(mountainInfluence,3.4)*(350+1050*peakNoise);
       elevationMeters=clamp(base+mountains+exceptional,5,7000);
     }else{
       const deep=clamp((-landSignal+0.04)/0.42);
-      const oceanNoise=fbm3(bases.ocean,d,3.2,3);
+      const oceanNoise=fbm3(bases.ocean,warped,3.2,3);
       elevationMeters=-clamp(120+deep*(1350+3900*oceanNoise),80,5500);
     }
 
