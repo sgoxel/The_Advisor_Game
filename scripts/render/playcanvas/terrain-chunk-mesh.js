@@ -117,15 +117,15 @@ function roadProfileAtVertex(seed,xValue,yValue,naturalHeight,macro,type){
   });
 }
 
-function heightfieldColor(seed,x,z,value){
+function heightfieldColor(seed,x,z,value,type="grass"){
   const text=String(value||"").trim();
   const match=/^#([0-9a-f]{6})$/i.exec(text);
   if(match){
     const n=parseInt(match[1],16);
-    return styleColor("terrain",[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255,1]);
+    return styleColor("terrain:"+String(type||"grass"),[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255,1]);
   }
   const noise=signed01(seed,x,z,"color");
-  return styleColor("terrain",[
+  return styleColor("terrain:"+String(type||"grass"),[
     clamp(0.29+noise*0.018,0.20,0.40),
     clamp(0.42+noise*0.025,0.30,0.55),
     clamp(0.215+noise*0.012,0.14,0.30),
@@ -162,7 +162,7 @@ function terrainHeightVertex(seed,xValue,yValue){
   const sample=Object.freeze({
     height:clamp(height,-3.4,3.4),
     type,
-    color:heightfieldColor(seed,x,y,tile?.color),
+    color:heightfieldColor(seed,x,y,tile?.color,type),
     elevationMeters:elevation,
     roadProfile
   });
@@ -536,7 +536,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   }
   function sampleColor(seed,x,z){
     const n=signed01(seed,x,z,"color");
-    return styleColor("terrain",[
+    return styleColor("terrain:grass",[
       clamp(0.29+n*0.018,0.20,0.40),
       clamp(0.42+n*0.025,0.30,0.55),
       clamp(0.215+n*0.012,0.14,0.30),
@@ -598,7 +598,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         r+=color[0];g+=color[1];b+=color[2];n++;
       }
     }
-    return {type:chosenType||"grass",color:n?styleColor("terrain",[r/n,g/n,b/n,1]):fallback};
+    return {type:chosenType||"grass",color:n?styleColor("terrain:"+String(chosenType||"grass"),[r/n,g/n,b/n,1]):fallback};
   }
   function localTileCenter(worldData,x,y){
     const size=Number(worldData?.chunkSize||0);
