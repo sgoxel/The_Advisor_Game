@@ -366,6 +366,7 @@ function finishSceneLoading(reason,renderSucceeded){
 }
 function failSceneLoading(error){
   if(sceneLoadingHideTimer){clearTimeout(sceneLoadingHideTimer);sceneLoadingHideTimer=null}
+  if(sceneLoadingState.progress)sceneLoadingState.progress.mode="failed";
   sceneLoadingState.state="error";
   sceneLoadingState.phase="error";
   sceneLoadingState.failedAtMs=Date.now();
