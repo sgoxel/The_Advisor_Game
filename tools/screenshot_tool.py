@@ -217,7 +217,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-007": 8,
     "wp-s003-009-008": 8,
     "wp-s003-009-009": 6,
-    "wp-s003-009-010": 6,
+    "wp-s003-009-010": 7,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -7329,7 +7329,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "wp-s003-009-010":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=((5.5,"dawn",(1280,800)),(12.0,"day",(1280,800)),(17.5,"late-day",(1280,800)),(21.0,"night",(1280,800)),(12.0,"day",(844,390)),(21.0,"night",(390,844)))
-        hour,expected,viewport=plan[min(frame_index,len(plan)-1)]
+        hour,expected,viewport=plan[min(max(0,frame_index-1),len(plan)-1)]
         driver.set_window_size(int(viewport[0]),int(viewport[1]))
         result=driver.execute_script("return window.PlanetStage?.applyAuthoritativeFantasyTime?.({hour:Number(arguments[0]),minute:0},'visual-evidence-authoritative-time') || null",float(hour))
         if not isinstance(result,dict):
@@ -8580,16 +8580,16 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         return
 
     if scenario == "wp-s003-009-010":
-        if len(frames) < 6:
-            raise RuntimeError("wp-s003-009-010 requires six atmosphere evidence frames")
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-009-010 requires readiness plus six atmosphere evidence frames")
         expected=("dawn","day","late-day","night","day","night")
-        for index,frame in enumerate(frames[:6]):
+        for index,frame in enumerate(frames[1:7]):
             planet=(frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {})
             atmosphere=planet.get("atmosphere") or {}
             if atmosphere.get("active") is not True or atmosphere.get("simulationAuthority") is not False:
-                raise RuntimeError(f"Atmosphere authority failed in frame {index+1}: {atmosphere}")
+                raise RuntimeError(f"Atmosphere authority failed in evidence frame {index+1}: {atmosphere}")
             if atmosphere.get("phase")!=expected[index] or int(atmosphere.get("dynamicLightCount") or 0)!=2 or int(atmosphere.get("drawCallImpact") or -1)!=0:
-                raise RuntimeError(f"Atmosphere palette/budget failed in frame {index+1}: {atmosphere}")
+                raise RuntimeError(f"Atmosphere palette/budget failed in evidence frame {index+1}: {atmosphere}")
         return
 
     if scenario == "wp-s003-009-009":
