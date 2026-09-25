@@ -1571,7 +1571,11 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         _set_terrain_preload_settings(
             driver, radius=2, cache=256, directional=True, background=False
         )
-        _set_terrain_chunk_size(driver, 16)
+        selected_chunk_size=driver.execute_script(
+            "return window.TerrainChunkSizeSettings?.set?.(16)?.chunkSize ?? window.TerrainChunkSizeSettings?.get?.()?.chunkSize ?? null"
+        )
+        if int(selected_chunk_size or 0) != 16:
+            raise RuntimeError(f"Failed to preconfigure terrain chunk size 16: {selected_chunk_size}")
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
