@@ -248,3 +248,6 @@ Suggestion: when production environment art is refreshed, consider replacing the
 
 
 2026-09-25 14:21:05 +03:00 | WP-S002-004-001 | Phase 1 | Suggestion: profile longer local valley/pass searches on representative modern phones/tablets. If measured route-query latency becomes significant, add deterministic chunk-level coarse slope/pass/road summaries as a search acceleration layer while preserving the same elevation-route-v1 edge costs, exact authoritative Walkability legality, bounded local A*, renderer independence and deterministic final route results. Do not implement unless explicitly requested.
+
+
+2026-09-25 14:46:06 +03:00 | WP-S003-003-001 | Phase 1 | Suggestion: when the contextual action panel is open on narrow portrait screens, move or temporarily offset the existing bottom-center portrait navigation control so it does not overlap the panel's footer/evidence label. Preserve the current >=44 px interaction actions, bottom-sheet readability, camera controls, touch behavior and bounded interaction authority. Do not implement unless explicitly requested.
