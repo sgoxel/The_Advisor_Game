@@ -258,3 +258,5 @@ Suggestion: when production environment art is refreshed, consider replacing the
 
 
 2026-09-25 19:21:26 +03:00 | WP-S003-006-013 | Phase 1 | Suggestion: make the next explicit world-building step planetary geography only—add deterministic large-scale ocean/landmass/continent masks on the existing 637.1 km-radius sphere before introducing local terrain, settlements, roads, characters or NPC simulation. Preserve the 10%-Earth physical scale, planet-space authority, one active canvas, mobile framing and tile-free world truth. Do not implement unless explicitly requested.
+
+2026-09-26 01:48:00 +03:00 | WP-S003-008-002-001 | Phase 1 | Suggestion: when a future planet-to-ground transition introduces larger first-playable task graphs, replace the current coarse deterministic phase weights with incrementally registered required work units while preserving monotonic display, no elapsed-time fakery, optional post-ready separation, bounded DOM updates and the same lightweight loading presentation. Do not implement unless explicitly requested.
