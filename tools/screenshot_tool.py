@@ -105,6 +105,7 @@ SCENARIOS = {
     "wp-s003-009-004",
     "wp-s003-009-004-001",
     "wp-s003-009-004-002",
+    "wp-s003-009-005",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -186,6 +187,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-004": 6,
     "wp-s003-009-004-001": 7,
     "wp-s003-009-004-002": 8,
+    "wp-s003-009-005": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1553,7 +1555,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
-    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002"}:
+    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005"}:
         driver.set_window_size(1280, 800)
         # Cold software-WebGL CI can spend well over two minutes preparing the
         # visible semantic terrain set. This is evidence wait time only; runtime
@@ -1602,8 +1604,8 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 _set_terrain_preload_settings(
                     driver, radius=2, cache=256, directional=True, background=False
                 )
-            if scenario == "wp-s003-009-004-002":
-                # Keep contour evidence focused on the visible/prepared ring.
+            if scenario in {"wp-s003-009-004-002", "wp-s003-009-005"}:
+                # Keep contour/art-treatment evidence focused on the visible/prepared ring.
                 # Extra idle/background cache work is not part of this WP proof.
                 _set_terrain_preload_settings(
                     driver, radius=1, cache=128, directional=False, background=False
@@ -1619,7 +1621,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -5926,6 +5928,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-005":
+        _ensure_texture_quality_profile(driver, "standard")
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "art-treatment:overview+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        if frame_index == 1:
+            return "art-treatment:multi-character+" + _prepare_multi_character_grounding(driver)
+        if frame_index == 2:
+            return "art-treatment:multi-character-close+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
+        if frame_index == 3:
+            return "art-treatment:trees-buildings-east+" + _set_camera_view_and_render_active(driver, 8, 0, 1.00, timeout=45.0)
+        if frame_index == 4:
+            return "art-treatment:trees-buildings-south+" + _set_camera_view_and_render_active(driver, 0, 8, 1.00, timeout=45.0)
+        if frame_index == 5:
+            return "art-treatment:wider-village+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
+        if frame_index == 6:
+            driver.set_window_size(390, 844)
+            return "art-treatment:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        driver.set_window_size(844, 390)
+        return "art-treatment:phone-landscape+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
     if scenario == "wp-s003-009-004-002":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
@@ -6731,6 +6753,47 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-005":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-009-005 requires eight unified-art evidence frames")
+        max_active=0
+        for index,frame in enumerate(frames[:8]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            style=gpu.get("worldVisualStyle") or {}
+            treatment=style.get("spriteTreatment") or {}
+            character=treatment.get("character") or {}
+            tree=treatment.get("tree") or {}
+            chars=gpu.get("characterPresentation") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            perf=style.get("performance") or {}
+            if style.get("signature")!="living-world-style-v3":
+                raise RuntimeError(f"Unified art style signature missing in frame {index+1}: {style.get('signature')}")
+            if character.get("role")!="character-accent" or tree.get("role")!="vegetation-midground":
+                raise RuntimeError(f"Unified sprite roles missing in frame {index+1}: {treatment}")
+            if float(character.get("alphaTest") or 0)<0.12 or float(tree.get("alphaTest") or 0)<0.12:
+                raise RuntimeError(f"Unified alpha-edge treatment missing in frame {index+1}: {treatment}")
+            if treatment.get("sharedMaterialOnly") is not True or treatment.get("destructiveAssetRewrite") is not False:
+                raise RuntimeError(f"Unified treatment architecture invalid in frame {index+1}: {treatment}")
+            if perf.get("postProcessing") is not False or perf.get("perObjectShaders") is not False or int(perf.get("extraLights") or 0)!=0:
+                raise RuntimeError(f"Unified art treatment added expensive rendering in frame {index+1}: {perf}")
+            if int(chars.get("sharedMaterialCount") or 0)>int(chars.get("sharedTextureCount") or 0)+1:
+                raise RuntimeError(f"Character material sharing regressed in frame {index+1}: {chars}")
+            if int(chunks.get("treeSpriteMaterialCount") or 0)>2 or int(chunks.get("treeSharedTextureCount") or 0)>1:
+                raise RuntimeError(f"Tree shared material/texture budget regressed in frame {index+1}: {chunks}")
+            if gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Unified art treatment changed Simulation authority in frame {index+1}")
+            max_active=max(max_active,int(chars.get("activeCharacterCount") or 0))
+        if max_active<3:
+            raise RuntimeError(f"Unified art evidence did not show protagonist plus several characters: max active={max_active}")
+        portrait=frames[6].get("runtime",{}).get("viewport",{})
+        landscape=frames[7].get("runtime",{}).get("viewport",{})
+        if int(portrait.get("height") or 0)<=int(portrait.get("width") or 0):
+            raise RuntimeError(f"Phone portrait unified-art evidence missing: {portrait}")
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
+            raise RuntimeError(f"Phone landscape unified-art evidence missing: {landscape}")
         return
 
     if scenario == "wp-s003-009-004-002":
