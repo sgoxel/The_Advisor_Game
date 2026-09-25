@@ -5367,17 +5367,27 @@ def _switch_to_alternate_landmark_seed(driver) -> str:
         const api=window.PlayCanvasChunkWorldData;
         if(!current||!api?.landmarkPlan||!window.AppUI?.startNewCampaignForEvidence)return {ok:false,reason:'landmark-seed-api-missing'};
         const before=api.landmarkPlan(current);
+        const validVillage=(candidate)=>{
+          const houses=window.HousePlans?.build?.(candidate)||[];
+          const lots=window.SpecialLots?.build?.(candidate)||[];
+          return houses.length===6 &&
+            houses.every(item=>item?.entrance&&['S','E'].includes(String(item.entrance.side||''))) &&
+            lots.length===7 &&
+            lots.filter(item=>item?.enterable).every(item=>item?.access&&['S','E'].includes(String(item.access.side||'')));
+        };
         let selected=null;
         for(let i=1;i<=64;i++){
           const candidate='LANDMARK-CONTEXT-'+String(i).padStart(2,'0');
+          if(!validVillage(candidate))continue;
           const plan=api.landmarkPlan(candidate);
-          if(plan&&before&&String(plan.contextTag)!==String(before.contextTag)){selected={seed:candidate,plan};break;}
+          if(plan&&before&&String(plan.contextTag)!==String(before.contextTag)){selected={seed:candidate,plan,validVillage:true};break;}
         }
         if(!selected){
           for(let i=1;i<=64;i++){
             const candidate='LANDMARK-CONTEXT-'+String(i).padStart(2,'0');
+            if(!validVillage(candidate))continue;
             const plan=api.landmarkPlan(candidate);
-            if(plan&&before&&String(plan.treatment)!==String(before.treatment)){selected={seed:candidate,plan};break;}
+            if(plan&&before&&String(plan.treatment)!==String(before.treatment)){selected={seed:candidate,plan,validVillage:true};break;}
           }
         }
         return selected?{ok:true,before,selected}:{ok:false,reason:'alternate-context-not-found',before};
