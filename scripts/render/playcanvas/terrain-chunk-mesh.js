@@ -18,8 +18,10 @@ function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 function worldVisualStyle(){return window.AdvisorWorldVisualStyle||null;}
 function styleColor(role,color){const style=worldVisualStyle();return style?.gradeRgb?style.gradeRgb(role,color):color;}
 
-const HEIGHTFIELD_VERTICAL_SCALE=0.0022;
-const HEIGHTFIELD_RELIEF=0.065;
+const HEIGHTFIELD_VERTICAL_SCALE=0.012;
+const HEIGHTFIELD_MIN_Y=-16;
+const HEIGHTFIELD_MAX_Y=16;
+const HEIGHTFIELD_RELIEF=0.085;
 const HEIGHTFIELD_WATER_Y=-0.22;
 const HEIGHTFIELD_BRIDGE_CLEARANCE=0.32;
 const HYDROLOGY_VERSION="hydrology-basin-v1";
@@ -29,7 +31,7 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
-const LANDFORM_VERSION="macro-landform-v1";
+const LANDFORM_VERSION="macro-landform-v2";
 const LANDFORM_SAMPLE_RADIUS_TILES=8;
 const LANDFORM_CACHE_LIMIT=32768;
 const WORLD_TILE_METERS=2;
@@ -117,20 +119,27 @@ function landformAtTile(seedValue,xValue,yValue){
   const xSaddle=Math.min(e,w)-center-Math.max(0,Math.min(n,s)-center);
   const ySaddle=Math.min(n,s)-center-Math.max(0,Math.min(e,w)-center);
   const saddleStrength=Math.max(0,xSaddle,ySaddle);
-  const ridgeSignal=clamp(curvature/55,0,1)*clamp(relief/80,0,1);
-  const valleySignal=clamp(-curvature/55,0,1)*clamp(relief/80,0,1);
-  const cliffSignal=clamp((gradient-3.0)/7.0,0,1)*clamp((relief-35)/105,0,1);
-  const passSignal=clamp(saddleStrength/45,0,1)*clamp(relief/70,0,1);
+  // Separate curvature-based ridge/valley identity from genuinely steep faces.
+  // The previous thresholds saturated cliff/pass across most mountainous samples,
+  // which made class labels unhelpful and visually flattened distinct forms.
+  const ridgeSignal=clamp((curvature-8)/72,0,1)*clamp((relief-55)/230,0,1);
+  const valleySignal=clamp((-curvature-8)/72,0,1)*clamp((relief-55)/230,0,1);
+  const cliffSignal=clamp((gradient-7)/16,0,1)*clamp((relief-120)/300,0,1);
+  const passSignal=clamp((saddleStrength-10)/60,0,1)*clamp((relief-95)/260,0,1);
   let kind="plain";
-  if(passSignal>=0.16)kind="pass";
-  else if(cliffSignal>=0.28)kind="cliff";
-  else if(ridgeSignal>=0.20)kind="ridge";
-  else if(valleySignal>=0.20)kind="valley";
-  else if(gradient>=1.8)kind="slope";
-  const cliffShape=clamp(curvature/80,-1,1);
+  const passDominant=passSignal>=0.24&&passSignal>=Math.max(ridgeSignal,valleySignal)*1.15;
+  if(passDominant)kind="pass";
+  else if(ridgeSignal>=0.16)kind="ridge";
+  else if(valleySignal>=0.16)kind="valley";
+  else if(cliffSignal>=0.22)kind="cliff";
+  else if(gradient>=2.8)kind="slope";
+  const cliffShape=clamp(curvature/90,-1,1);
+  // Presentation-only vertical conditioning exaggerates broad form readability
+  // without changing authoritative elevation, navigation or collision. Values
+  // remain global-coordinate deterministic and therefore seam-safe.
   const conditionOffset=clamp(
-    ridgeSignal*0.17-valleySignal*0.15-passSignal*0.13+cliffSignal*cliffShape*0.10,
-    -0.28,0.28
+    ridgeSignal*0.90-valleySignal*0.85-passSignal*0.58+cliffSignal*cliffShape*0.48,
+    -1.20,1.20
   );
   const result=Object.freeze({
     version:LANDFORM_VERSION,x,y,kind,
@@ -267,8 +276,8 @@ function hydrologyAtTile(seedValue,xValue,yValue){
   const bankMinRaw=bankHeights.length?Math.min(...bankHeights):macroHeight(seed,x,y).macro+HYDROLOGY_BANK_MIN_RISE;
   const bankMaxRaw=bankHeights.length?Math.max(...bankHeights):bankMinRaw;
   waterSurface=Math.min(waterSurface,bankMinRaw-HYDROLOGY_BANK_MIN_RISE);
-  waterSurface=clamp(waterSurface,-3.30,3.10);
-  const bedHeight=clamp(waterSurface-HYDROLOGY_BED_DEPTH,-3.40,3.00);
+  waterSurface=clamp(waterSurface,HEIGHTFIELD_MIN_Y+0.35,HEIGHTFIELD_MAX_Y-0.50);
+  const bedHeight=clamp(waterSurface-HYDROLOGY_BED_DEPTH,HEIGHTFIELD_MIN_Y+0.10,HEIGHTFIELD_MAX_Y-0.65);
   const distance=Number.isFinite(nearestWaterDistance)?nearestWaterDistance:null;
   const influence=distance===null?0:smoothstep01(1-clamp((distance-0.25)/HYDROLOGY_BANK_TRANSITION_TILES,0,1));
   let groundHeight=rawPresentationHeight(seed,x,y,centerType);
@@ -338,7 +347,7 @@ function waterSurfaceAtVertex(seedValue,xValue,yValue){
     const profile=hydrologyAtTile(seed,x,y);
     value=Number.isFinite(Number(profile.waterSurfaceHeight))?Number(profile.waterSurfaceHeight):macroHeight(seed,x,y).macro-HYDROLOGY_WATER_DEPTH;
   }
-  value=clamp(value,-3.30,3.10);
+  value=clamp(value,HEIGHTFIELD_MIN_Y+0.35,HEIGHTFIELD_MAX_Y-0.50);
   hydrologyVertexCache.set(key,value);
   if(hydrologyVertexCache.size>HYDROLOGY_CACHE_LIMIT){
     const oldest=hydrologyVertexCache.keys().next().value;
@@ -439,7 +448,7 @@ function terrainHeightVertex(seed,xValue,yValue){
   const roadProfile=roadProfileAtVertex(seed,x,y,naturalHeight,macro,type);
   const height=roadProfile?.active?roadProfile.height:naturalHeight;
   const sample=Object.freeze({
-    height:clamp(height,-3.4,3.4),
+    height:clamp(height,HEIGHTFIELD_MIN_Y,HEIGHTFIELD_MAX_Y),
     type,
     color:heightfieldColor(seed,x,y,tile?.color,type),
     elevationMeters:elevation,
@@ -2328,13 +2337,13 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       if(!TERRAIN_VARIATION_CONSTRUCTED_TYPES.has(type)&&TERRAIN_VARIATION_NATURAL_TYPES.has(type)){
         const landform=landformAtTile(seed,wx,wz);
         if(landform.kind==="cliff"){
-          r*=0.86;g*=0.84;b*=0.82;categories.push("cliff-face");
+          r*=0.80;g*=0.80;b*=0.80;categories.push("cliff-face");
         }else if(landform.kind==="ridge"){
-          r*=0.97;g*=0.94;b*=0.90;categories.push("ridge");
+          r*=0.90;g*=0.88;b*=0.84;categories.push("ridge");
         }else if(landform.kind==="valley"){
-          r*=0.92;g*=0.98;b*=0.96;categories.push("valley");
+          r*=0.84;g*=0.96;b*=0.90;categories.push("valley");
         }else if(landform.kind==="pass"){
-          r*=0.92;g*=0.94;b*=0.96;categories.push("mountain-pass");
+          r*=0.84;g*=0.88;b*=0.94;categories.push("mountain-pass");
         }else if(landform.kind==="slope"){
           categories.push("mountain-slope");
         }

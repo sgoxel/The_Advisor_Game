@@ -6190,18 +6190,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0)||
                   (Math.abs(a.x)+Math.abs(a.y))-(Math.abs(b.x)+Math.abs(b.y))
                 )[0]||null;
-                const valley=best('valleySignal');
-                const ridge=best('ridgeSignal');
-                const cliff=best('cliffSignal');
-                const pass=best('passSignal');
-                const slope=candidates.filter(row=>Number(row.profile?.gradientMetersPerTile||0)>=1.8)
-                  .sort((a,b)=>Math.abs(Number(a.profile?.gradientMetersPerTile||0)-3.8)-Math.abs(Number(b.profile?.gradientMetersPerTile||0)-3.8))[0]||cliff;
-                const riverValley=best('valleySignal',row=>row.terrain==='water')||best('valleySignal',row=>{
-                  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+                // Evidence names must point at the matching production class.
+                // Fallback scoring is retained only to produce a useful diagnostic;
+                // passProof below refuses a mislabeled named target.
+                const valley=best('valleySignal',row=>row.profile?.kind==='valley')||best('valleySignal');
+                const ridge=best('ridgeSignal',row=>row.profile?.kind==='ridge')||best('ridgeSignal');
+                const cliff=best('cliffSignal',row=>row.profile?.kind==='cliff')||best('cliffSignal');
+                const pass=best('passSignal',row=>row.profile?.kind==='pass')||best('passSignal');
+                const slope=candidates.filter(row=>row.profile?.kind==='slope')
+                  .sort((a,b)=>Math.abs(Number(a.profile?.gradientMetersPerTile||0)-5.0)-Math.abs(Number(b.profile?.gradientMetersPerTile||0)-5.0))[0]||
+                  candidates.filter(row=>Number(row.profile?.gradientMetersPerTile||0)>=2.8)
+                    .sort((a,b)=>Number(a.profile?.gradientMetersPerTile||0)-Number(b.profile?.gradientMetersPerTile||0))[0]||cliff;
+                const nearWater=row=>{
+                  if(row.terrain==='water')return true;
+                  for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){
                     if(String(T.getTile(seed,String(row.x+dx),String(row.y+dy))?.type||'')==='water')return true;
                   }
                   return false;
-                })||valley;
+                };
+                const riverValley=best('valleySignal',row=>row.profile?.kind==='valley'&&nearWater(row))||valley;
                 const boundary=candidates.filter(row=>mod(row.x,chunkSize)===0||mod(row.y,chunkSize)===0)
                   .sort((a,b)=>Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0))[0]||ridge;
                 const selected={valley,ridge,slope,cliff,pass,riverValley,boundary};
@@ -6221,10 +6228,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   row.profile?.rendererOnly===true&&row.profile?.navigationAuthority===false&&
                   row.profile?.collisionAuthority===false&&row.profile?.simulationAuthorityPreserved===true
                 );
+                const classMatch=Boolean(
+                  valley?.profile?.kind==='valley'&&ridge?.profile?.kind==='ridge'&&
+                  slope?.profile?.kind==='slope'&&cliff?.profile?.kind==='cliff'&&
+                  pass?.profile?.kind==='pass'
+                );
                 const passProof=Boolean(
                   valley&&ridge&&slope&&cliff&&pass&&boundary&&
-                  deterministic&&authority&&
-                  signals.valley>=0.12&&signals.ridge>=0.12&&signals.cliff>=0.12&&signals.pass>=0.06&&signals.slope>=1.8
+                  deterministic&&authority&&classMatch&&
+                  signals.valley>=0.16&&signals.ridge>=0.16&&signals.cliff>=0.22&&signals.pass>=0.24&&signals.slope>=2.8
                 );
                 const compact=Object.fromEntries(Object.entries(selected).map(([key,row])=>[
                   key,row?{x:row.x,y:row.y,terrain:row.terrain,elevationMeters:row.elevationMeters,profile:row.profile}:null
@@ -6232,8 +6244,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 const proof={
                   pass:passProof,version:String(valley?.profile?.version||''),
                   seed,chunkSize,selected:compact,signals,candidateCount:candidates.length,
-                  deterministic,authority,
-                  riverValleyAvailable:Boolean(riverValley&&riverValley!==valley),
+                  deterministic,authority,classMatch,
+                  riverValleyAvailable:Boolean(riverValley&&nearWater(riverValley)),
                   source:'GeographyFoundation.environment.elevationMeters',
                   navigationAuthorityPreserved:true,collisionAuthorityPreserved:true
                 };
@@ -8063,9 +8075,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if not selected.get(key):
                 raise RuntimeError(f"Macro landform visual target missing: {key}; proof={proof}")
         signals=proof.get("signals") or {}
-        if float(signals.get("valley") or 0)<0.12 or float(signals.get("ridge") or 0)<0.12:
+        if proof.get("classMatch") is not True:
+            raise RuntimeError(f"Named macro landform targets do not match production classes: {proof}")
+        if float(signals.get("valley") or 0)<0.16 or float(signals.get("ridge") or 0)<0.16:
             raise RuntimeError(f"Valley/ridge signal is too weak: {proof}")
-        if float(signals.get("cliff") or 0)<0.12 or float(signals.get("pass") or 0)<0.06 or float(signals.get("slope") or 0)<1.8:
+        if float(signals.get("cliff") or 0)<0.22 or float(signals.get("pass") or 0)<0.24 or float(signals.get("slope") or 0)<2.8:
             raise RuntimeError(f"Cliff/pass/slope signal is too weak: {proof}")
         if proof.get("deterministic") is not True or proof.get("authority") is not True:
             raise RuntimeError(f"Macro landform determinism/authority isolation failed: {proof}")

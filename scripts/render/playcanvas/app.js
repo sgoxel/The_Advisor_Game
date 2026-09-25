@@ -800,7 +800,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // SEED in resource identity so a real campaign switch cannot reuse the
     // previous campaign's prepared meshes. Framebuffer/material quality remains
     // excluded because those changes do not alter geometry.
-    return "geometry=heightfield-v9-macro-landforms|seed="+String(lastRawSeed||"none");
+    return "geometry=heightfield-v10-macro-landforms|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -1369,7 +1369,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         hydrologyRendererOnly&&!hydrologyNavigationAuthority&&!hydrologyCollisionAuthority&&!hydrologyWaterIdentityChanged
       ),
       landformEnabled:landformResourceCount>0&&generatorStats.landformEnabled===true,
-      landformVersion:String(generatorStats.landformVersion||"macro-landform-v1"),
+      landformVersion:String(generatorStats.landformVersion||"macro-landform-v2"),
       landformSampleRadiusTiles:Number(generatorStats.landformSampleRadiusTiles||0),
       landformResourceCount,
       landformClassCounts:Object.freeze({...landformClassCounts}),
