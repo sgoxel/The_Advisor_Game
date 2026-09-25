@@ -6318,7 +6318,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         plan=(
             ("lake",1.00,(1280,800)),
             ("river",1.00,(1280,800)),
-            ("bridge",1.25,(1280,800)),
+            ("bridge",2.00,(1280,800)),
             ("flat",0.50,(1280,800)),
             ("highland",1.00,(1280,800)),
             ("boundary",2.00,(1280,800)),
@@ -7889,8 +7889,15 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Bridge clearance telemetry failed: {bridge_chunks}")
         if int(bridge_chunks.get("hydrologyBridgeCellCount") or 0)<1:
             raise RuntimeError(f"No prepared bridge cell recorded: {bridge_chunks}")
-        if int(proof.get("bridgeVisibleWaterNeighbors") or 0)<1:
-            raise RuntimeError(f"Bridge visual target has no exposed water nearby: {proof.get('bridge')}")
+        bridge_proof=proof.get("bridge") or {}
+        if (bridge_proof.get("hydro") or {}).get("bridgeUnderlyingWater") is not True:
+            raise RuntimeError(f"Bridge target is not grounded in authoritative underlying water: {bridge_proof}")
+        if bridge_chunks.get("hydrologyBridgeWaterUnderlayVisible") is not True:
+            raise RuntimeError(f"Bridge water underlay/deck presentation is not active: {bridge_chunks}")
+        if int(bridge_chunks.get("hydrologyBridgeWaterUnderlayCellCount") or 0)<1:
+            raise RuntimeError(f"No bridge-over-water underlay cell was prepared: {bridge_chunks}")
+        if int(bridge_chunks.get("hydrologyBridgeDeckTriangleCount") or 0)<2:
+            raise RuntimeError(f"Raised bridge deck geometry was not prepared: {bridge_chunks}")
         phone_landscape=frames[6].get("runtime",{}).get("viewport",{})
         phone_portrait=frames[7].get("runtime",{}).get("viewport",{})
         if int(phone_landscape.get("width") or 0)>900 or int(phone_landscape.get("height") or 0)>450:
