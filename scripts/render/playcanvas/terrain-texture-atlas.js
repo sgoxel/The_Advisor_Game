@@ -6,11 +6,11 @@ const CORE_TYPES=Object.freeze([
   "water","rock","sand","farmland"
 ]);
 const COLUMNS=4;
-const PAD=2;
+function padFor(size){return Math.max(1,Math.round(Math.max(16,Number(size)||16)/16));}
 const FALLBACK=Object.freeze({
-  grass:"#567d46",forest:"#355c38",dirt:"#8b6545",mud:"#70584a",
-  road:"#88765f",bridge:"#7d6243",square:"#8b8172",path:"#9a8061",
-  plot:"#725a3f",water:"#3f7897",rock:"#777b78",sand:"#b9a46c",farmland:"#7c7040"
+  grass:"#668d4a",forest:"#315c3a",dirt:"#a36f43",mud:"#644a36",
+  road:"#a7885f",bridge:"#835e3b",square:"#a39b8d",path:"#b18d5f",
+  plot:"#79583d",water:"#3d7798",rock:"#747771",sand:"#c1aa6b",farmland:"#7d8447"
 });
 
 function create({pc,device}={}){
@@ -42,9 +42,9 @@ function create({pc,device}={}){
     return {index,col:index%COLUMNS,row:Math.floor(index/COLUMNS)};
   }
   function uvRect(type){
-    const slot=slotFor(type),size=runtimeResolution(),rows=Math.ceil(CORE_TYPES.length/COLUMNS);
-    const stride=size+PAD*2,width=COLUMNS*stride,height=rows*stride;
-    const x=slot.col*stride+PAD,y=slot.row*stride+PAD,half=0.5;
+    const slot=slotFor(type),size=runtimeResolution(),rows=Math.ceil(CORE_TYPES.length/COLUMNS),pad=padFor(size);
+    const stride=size+pad*2,width=COLUMNS*stride,height=rows*stride;
+    const x=slot.col*stride+pad,y=slot.row*stride+pad,half=0.5;
     return Object.freeze({
       u0:(x+half)/width,
       // Canvas rows are top-down while PlayCanvas UV V=0 samples from the
@@ -78,7 +78,7 @@ function create({pc,device}={}){
       return lastStats;
     }
 
-    const size=runtimeResolution(),rows=Math.ceil(CORE_TYPES.length/COLUMNS),stride=size+PAD*2;
+    const size=runtimeResolution(),rows=Math.ceil(CORE_TYPES.length/COLUMNS),pad=padFor(size),stride=size+pad*2;
     const canvas=document.createElement("canvas");
     canvas.width=COLUMNS*stride;canvas.height=rows*stride;
     const ctx=canvas.getContext("2d",{alpha:true});
@@ -87,7 +87,7 @@ function create({pc,device}={}){
 
     const pngResolvedKeys=[],svgFallbackKeys=[],colorFallbackKeys=[],failedKeys=[],resolvedSources={};
     for(const type of CORE_TYPES){
-      const key=logicalKey(type),slot=slotFor(type),x=slot.col*stride+PAD,y=slot.row*stride+PAD;
+      const key=logicalKey(type),slot=slotFor(type),x=slot.col*stride+pad,y=slot.row*stride+pad;
       let source=null,error=null;
       try{
         await window.TextureAssets.preloadKeys([key]);
@@ -115,10 +115,10 @@ function create({pc,device}={}){
       // Duplicate edge pixels into the local gutter so linear filtering cannot
       // sample a neighboring terrain family.
       try{
-        ctx.drawImage(canvas,x,y,size,1,x,y-PAD,size,PAD);
-        ctx.drawImage(canvas,x,y+size-1,size,1,x,y+size,size,PAD);
-        ctx.drawImage(canvas,x,y,1,size,x-PAD,y,PAD,size);
-        ctx.drawImage(canvas,x+size-1,y,1,size,x+size,y,PAD,size);
+        ctx.drawImage(canvas,x,y,size,1,x,y-pad,size,pad);
+        ctx.drawImage(canvas,x,y+size-1,size,1,x,y+size,size,pad);
+        ctx.drawImage(canvas,x,y,1,size,x-pad,y,pad,size);
+        ctx.drawImage(canvas,x+size-1,y,1,size,x+size,y,pad,size);
       }catch(_){}
     }
 
@@ -201,6 +201,7 @@ function create({pc,device}={}){
       minFilter:pc.FILTER_LINEAR,magFilter:pc.FILTER_LINEAR,
       addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE
     });
+    next._advisorDisableMipSampling=true;
     next.setSource(canvas);
     const previous=texture,previousDetail=detailTexture,previousNormalDetail=normalDetailTexture;
     texture=next;detailTexture=nextDetail;normalDetailTexture=nextNormalDetail;signature=nextSignature;atlasBuilds++;textureGeneration++;
@@ -214,6 +215,7 @@ function create({pc,device}={}){
     lastStats=Object.freeze({
       ready:true,signature,runtimeResolution:size,
       atlasWidth:canvas.width,atlasHeight:canvas.height,
+      atlasPaddingPixels:pad,atlasPaddingRatio:Number((pad/size).toFixed(4)),
       coreTypeCount:CORE_TYPES.length,
       resolvedTextureKeyCount:CORE_TYPES.length-colorFallbackKeys.length,
       pngResolvedKeys:Object.freeze(pngResolvedKeys.slice()),
@@ -232,7 +234,9 @@ function create({pc,device}={}){
       detailTextureReady:true,detailTextureShared:true,detailTextureSourceKey:detailSourceKey,
       normalDetailTextureReady:true,normalDetailTextureShared:true,normalDetailStrength:1.25,
       microReliefMode:"shared-normal-map",microReliefGeometryVerticesAdded:0,microReliefMaterialVariantsAdded:0,
-      heightfieldSurfaceMode:"shared-neutral-detail+shared-normal-detail+semantic-vertex-color",
+      heightfieldSurfaceMode:"semantic-atlas-per-logical-tile+uv1-normal-detail",
+      semanticSurfaceAtlas:true,semanticSurfaceInteriorOpacity:1,
+      atlasMipmaps:false,atlasFilterMode:"linear-no-mip",
       frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
       textureGeneration,textureDestructions,retiredTextureCount:retiredTextures.length,
       simulationAuthorityPreserved:true

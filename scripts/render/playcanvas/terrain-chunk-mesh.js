@@ -33,6 +33,13 @@ const BUILDING_MATERIAL_VARIANTS=Object.freeze([
   Object.freeze({roof:Object.freeze([1.00,0.84,0.76]),wall:Object.freeze([0.96,0.91,0.82]),trim:Object.freeze([0.86,0.78,0.67])}),
   Object.freeze({roof:Object.freeze([0.82,0.88,0.84]),wall:Object.freeze([0.90,0.93,0.84]),trim:Object.freeze([0.78,0.82,0.74])})
 ]);
+const SEMANTIC_TERRAIN_TYPES=new Set(["grass","forest","dirt","mud","road","bridge","square","path","plot","water","rock","sand","farmland"]);
+function semanticSurfaceType(value){
+  const type=String(value||"grass");
+  if(SEMANTIC_TERRAIN_TYPES.has(type))return type;
+  if(type==="building"||type==="floor"||type==="wall"||type==="door")return "plot";
+  return "grass";
+}
 const heightReferenceCache=new Map();
 const heightVertexCache=new Map();
 const HEIGHT_VERTEX_CACHE_LIMIT=16384;
@@ -494,6 +501,53 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         opacity:1,
         blendWeightInterior:1,
         vertexColorTint:false
+      });
+    }
+    return Object.freeze(out);
+  }
+
+  function surfaceIdentityBindings(){
+    const atlas=textureAtlasProvider?.()||null,state=atlas?.stats?.()||null;
+    const texture=state?.ready?atlas?.texture?.():null;
+    const routeBindings=routeSurfaceBindings();
+    const out={};
+    for(const type of ["grass","forest","dirt","mud","water","rock","sand","farmland","plot","bridge","road","path","square"]){
+      const route=routeBindings[type]||null;
+      if(route){
+        const routeMaterial=routeSurfaceMaterials.get(type)||null;
+        out[type]=Object.freeze({
+          authoritativeSurfaceId:type,
+          materialKey:String(route.materialName||""),
+          diffuseTextureKey:"tile:"+type,
+          textureBound:Boolean(route.textureBound),
+          textureName:String(routeMaterial?.diffuseMap?.name||""),
+          textureWidth:Number(routeMaterial?.diffuseMap?.width||0),
+          textureHeight:Number(routeMaterial?.diffuseMap?.height||0),
+          atlasCellResolution:Number(state?.runtimeResolution||0),
+          uvScale:Object.freeze([Number(route.uvRect?.uScale||0),Number(route.uvRect?.vScale||0)]),
+          tint:Object.freeze([Number(routeMaterial?.diffuse?.r??1),Number(routeMaterial?.diffuse?.g??1),Number(routeMaterial?.diffuse?.b??1)]),
+          blendWeightRange:Object.freeze([1,1]),opacity:1,
+          mipmaps:false,sampling:"linear-no-mip",
+          cacheSignature:String(route.atlasSignature||state?.signature||"")
+        });
+        continue;
+      }
+      const rect=state?.ready?atlas?.uvRect?.(type):null;
+      out[type]=Object.freeze({
+        authoritativeSurfaceId:type,
+        materialKey:String(material?.name||"terrain-chunk-surface"),
+        diffuseTextureKey:"tile:"+type,
+        textureBound:Boolean(texture&&rect),
+        textureName:String(texture?.name||""),
+        textureWidth:Number(texture?.width||0),
+        textureHeight:Number(texture?.height||0),
+        atlasCellResolution:Number(state?.runtimeResolution||0),
+        uvScale:Object.freeze([rect?Number(rect.u1)-Number(rect.u0):0,rect?Number(rect.v1)-Number(rect.v0):0]),
+        tint:Object.freeze([1,1,1]),
+        blendWeightRange:Object.freeze([1,1]),opacity:1,
+        mipmaps:Boolean(texture?.mipmaps),
+        sampling:texture?._advisorDisableMipSampling===true?"linear-no-mip":"runtime",
+        cacheSignature:String(state?.signature||"")
       });
     }
     return Object.freeze(out);
@@ -1212,18 +1266,24 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function build(spec){
     const started=performance.now();
     const size=Math.max(1,Number(spec.chunkSize)||16);
-    const segments=heightfieldSegments(size);
-    const step=heightfieldStep(size);
+    // Surface identity is logical-tile authoritative. One prepared terrain quad
+    // per logical tile keeps semantic atlas UVs exact while remaining one mesh /
+    // one shared material per chunk (never one Entity/material per tile).
+    const segments=size;
+    const step=1;
     const metersPerTile=2;
     const half=size*metersPerTile/2;
     const seed=String(seedProvider()||"");
     const baseX=BigInt(Math.trunc(Number(spec.x)||0))*BigInt(size);
     const baseZ=BigInt(Math.trunc(Number(spec.y)||0))*BigInt(size);
-    const positions=[],normals=[],colors32=[],uvs=[],indices=[];
+    const positions=[],normals=[],colors32=[],uvs=[],detailUvs=[],indices=[];
     const activeAtlas=textureAtlasProvider?.()||null;
-    const detailReady=Boolean(activeAtlas?.stats?.()?.detailTextureReady);
-    let texturedBlockCount=detailReady?segments*segments:0,colorFallbackBlockCount=detailReady?0:segments*segments;
+    const atlasState=activeAtlas?.stats?.()||null;
+    const semanticAtlasReady=Boolean(atlasState?.ready&&activeAtlas?.texture?.());
+    const detailReady=Boolean(atlasState?.normalDetailTextureReady);
+    let texturedBlockCount=0,colorFallbackBlockCount=0;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
+    const semanticSurfaceTileCounts={};
     const localSamples=new Map();
     let minHeight=Infinity,maxHeight=-Infinity,minElevation=Infinity,maxElevation=-Infinity;
     let roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
@@ -1236,23 +1296,24 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       localSamples.set(key,sample);
       return sample;
     };
+    const stride=segments+1;
+    const grid=new Array(stride*stride);
     for(let gz=0;gz<=segments;gz++){
       for(let gx=0;gx<=segments;gx++){
-        const tileX=gx*step,tileZ=gz*step;
-        const wx=baseX+BigInt(tileX),wz=baseZ+BigInt(tileZ);
+        const wx=baseX+BigInt(gx),wz=baseZ+BigInt(gz);
         const sample=sampleVertex(wx,wz);
-        const left=sampleVertex(wx-BigInt(step),wz).height;
-        const right=sampleVertex(wx+BigInt(step),wz).height;
-        const up=sampleVertex(wx,wz-BigInt(step)).height;
-        const down=sampleVertex(wx,wz+BigInt(step)).height;
-        const dx=(right-left)/(2*step*metersPerTile),dz=(down-up)/(2*step*metersPerTile);
+        const left=sampleVertex(wx-1n,wz).height;
+        const right=sampleVertex(wx+1n,wz).height;
+        const up=sampleVertex(wx,wz-1n).height;
+        const down=sampleVertex(wx,wz+1n).height;
+        const dx=(right-left)/(2*metersPerTile),dz=(down-up)/(2*metersPerTile);
         const nx=-dx,ny=1,nz=-dz,normLen=Math.hypot(nx,ny,nz)||1;
-        positions.push(tileX*metersPerTile-half,sample.height,tileZ*metersPerTile-half);
-        normals.push(nx/normLen,ny/normLen,nz/normLen);
-        appendColor32(colors32,sample.color,1);
-        // The shared detail texture repeats independently from terrain-family color,
-        // so indexed border vertices keep one UV and remain seam-safe.
-        uvs.push(Number(wx)*0.25,Number(wz)*0.25);
+        grid[gz*stride+gx]=Object.freeze({
+          wx,wz,
+          position:Object.freeze([gx*metersPerTile-half,sample.height,gz*metersPerTile-half]),
+          normal:Object.freeze([nx/normLen,ny/normLen,nz/normLen]),
+          sample
+        });
         minHeight=Math.min(minHeight,sample.height);maxHeight=Math.max(maxHeight,sample.height);
         minElevation=Math.min(minElevation,sample.elevationMeters);maxElevation=Math.max(maxElevation,sample.elevationMeters);
         if(sample.roadProfile?.active){
@@ -1270,28 +1331,56 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           minRoadProfileDelta=Math.min(minRoadProfileDelta,Number(profile.delta||0));
           maxRoadProfileDelta=Math.max(maxRoadProfileDelta,Number(profile.delta||0));
         }
-        if(detailReady)texturedSurfaceTypes.add(sample.type);else fallbackSurfaceTypes.add(sample.type);
-      }
-    }
-    const stride=segments+1;
-    for(let gz=0;gz<segments;gz++){
-      for(let gx=0;gx<segments;gx++){
-        const i0=gz*stride+gx,i1=i0+1,i2=i0+stride,i3=i2+1;
-        indices.push(i0,i2,i1, i1,i2,i3);
       }
     }
     const borderHeights=Object.freeze({
-      north:Object.freeze(Array.from({length:stride},(_,i)=>positions[i*3+1])),
-      south:Object.freeze(Array.from({length:stride},(_,i)=>positions[((segments*stride)+i)*3+1])),
-      west:Object.freeze(Array.from({length:stride},(_,i)=>positions[(i*stride)*3+1])),
-      east:Object.freeze(Array.from({length:stride},(_,i)=>positions[(i*stride+segments)*3+1]))
+      north:Object.freeze(Array.from({length:stride},(_,i)=>grid[i].sample.height)),
+      south:Object.freeze(Array.from({length:stride},(_,i)=>grid[segments*stride+i].sample.height)),
+      west:Object.freeze(Array.from({length:stride},(_,i)=>grid[i*stride].sample.height)),
+      east:Object.freeze(Array.from({length:stride},(_,i)=>grid[i*stride+segments].sample.height))
     });
+    for(let gz=0;gz<segments;gz++){
+      for(let gx=0;gx<segments;gx++){
+        const sourceCell=spec.worldData?.cells?.[gz*size+gx]||null;
+        const surfaceType=semanticSurfaceType(sourceCell?.type||grid[gz*stride+gx].sample.type);
+        semanticSurfaceTileCounts[surfaceType]=(semanticSurfaceTileCounts[surfaceType]||0)+1;
+        const rect=semanticAtlasReady?activeAtlas?.uvRect?.(surfaceType):null;
+        if(rect){texturedBlockCount++;texturedSurfaceTypes.add(surfaceType);}
+        else{colorFallbackBlockCount++;fallbackSurfaceTypes.add(surfaceType);}
+        const corners=[
+          grid[gz*stride+gx],
+          grid[gz*stride+gx+1],
+          grid[(gz+1)*stride+gx],
+          grid[(gz+1)*stride+gx+1]
+        ];
+        const base=positions.length/3;
+        for(const corner of corners){
+          positions.push(...corner.position);
+          normals.push(...corner.normal);
+          if(rect)appendColor32(colors32,[1,1,1,1],1);
+          else appendColor32(colors32,corner.sample.color,1);
+          detailUvs.push(Number(corner.wx)*0.25,Number(corner.wz)*0.25);
+        }
+        if(rect){
+          uvs.push(
+            Number(rect.u0),Number(rect.v0),
+            Number(rect.u1),Number(rect.v0),
+            Number(rect.u0),Number(rect.v1),
+            Number(rect.u1),Number(rect.v1)
+          );
+        }else{
+          uvs.push(0,0,1,0,0,1,1,1);
+        }
+        indices.push(base,base+2,base+1, base+1,base+2,base+3);
+      }
+    }
 
     const mesh=new pc.Mesh(device);
     mesh.setPositions(positions);
     mesh.setNormals(normals);
     mesh.setColors32(colors32);
     mesh.setUvs(0,uvs);
+    mesh.setUvs(1,detailUvs);
     mesh.setIndices(indices);
     mesh.update();
     const entity=new pc.Entity("TerrainChunkMesh_"+spec.x+"_"+spec.y);
@@ -1397,7 +1486,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       segments,
       heightfieldGridResolution:segments+1,
       heightfieldStepTiles:step,
-      indexedSharedVertices:true,
+      indexedSharedVertices:false,
+      indexedSemanticQuads:true,
+      semanticUvChannel:0,
+      normalDetailUvChannel:1,
+      semanticSurfaceTileCount:size*size,
+      semanticSurfaceTileCounts:Object.freeze({...semanticSurfaceTileCounts}),
       vertexCount:positions.length/3,
       triangleCount:indices.length/3,
       minConditionedHeight:Number(minHeight.toFixed(4)),
@@ -1436,7 +1530,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainTextureAtlasReady:Boolean(activeAtlas?.stats?.()?.ready),
       terrainTextureAtlasSignature:String(activeAtlas?.stats?.()?.signature||""),
       terrainSurfaceDetailTextureReady:detailReady,
-      terrainSurfaceMode:"shared-detail-texture+semantic-vertex-color",
+      terrainSemanticAtlasReady:semanticAtlasReady,
+      terrainSurfaceMode:"semantic-atlas-per-logical-tile+uv1-normal-detail",
       presentationMeshInstanceCount,
       presentationEntityCount,
       sourcePresentationEntityCount,
@@ -1616,6 +1711,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       sharedPresentationMaterialCount:presentationMaterials.size,
       worldVisualStyleSignature:String(worldVisualStyle()?.signature||"legacy"),
       worldVisualStylePaletteRoleCount:Object.keys(worldVisualStyle()?.palette||{}).length,
+      terrainSemanticUvPerTile:true,
+      indexedSharedVertices:false,
+      indexedSemanticQuads:true,
+      semanticTerrainMaterialCount:1,
+      surfaceIdentityBindings:surfaceIdentityBindings(),
       buildingMaterialVariationDeterministic:true,
       buildingMaterialVariantPaletteSize:BUILDING_MATERIAL_VARIANTS.length,
       buildingMaterialVariantCount:new Set([...buildingMaterialVariantEvidence.values()].map(item=>item.variantIndex)).size,

@@ -766,14 +766,18 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const q=textureQualitySnapshot();
     mat.vertexColors=true;
     mat.diffuseVertexColor=true;
-    mat.diffuseMap=state?.ready?detailTexture:null;
-    // Micro-relief is a single shared normal map prepared with the terrain
-    // detail texture. Low quality disables auxiliary maps cleanly; Standard+
-    // keeps the bounded shading detail without adding geometry/material variants.
+    // UV0 now selects the authoritative terrain family's authored atlas cell.
+    // The atlas itself is opaque, so surface interiors retain full identity.
+    mat.diffuseMap=state?.ready?texture:null;
+    mat.diffuseMapUv=0;
+    mat.diffuse.set(1,1,1);
+    // UV1 keeps the existing shared micro-relief repetition independent from
+    // semantic atlas UVs, so one shared material remains sufficient.
     const origin=rememberMaterialOrigin(mat)||{};
     materialQualityOrigins.set(mat,{...origin,normalMap:state?.ready?normalDetailTexture:null});
     const microReliefEnabled=Boolean(state?.ready)&&terrainMicroReliefEffective(q);
     mat.normalMap=microReliefEnabled?normalDetailTexture:null;
+    mat.normalMapUv=1;
     mat.bumpiness=microReliefEnabled?0.65:0;
     mat.gloss=0.06;
     mat.metalness=0;
@@ -879,6 +883,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let roadCellCount=0,waterCellCount=0,bridgeCellCount=0,terrainTypeCount=0;
     let texturedBlockCount=0,colorFallbackBlockCount=0;
     const texturedSurfaceTypes=new Set(),fallbackSurfaceTypes=new Set();
+    const semanticSurfaceTileCounts={};
     let seedDerivedPresentation=true,hardCodedSampleGeometry=false;
     let heightfieldResourceCount=0,indexedHeightfieldResourceCount=0;
     let minConditionedHeight=Infinity,maxConditionedHeight=-Infinity;
@@ -904,7 +909,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       triangles+=Number(resource.triangleCount||0);
       if(resource.heightfieldGridResolution){
         heightfieldResourceCount++;
-        if(resource.indexedSharedVertices===true)indexedHeightfieldResourceCount++;
+        if(resource.indexedSharedVertices===true||resource.indexedSemanticQuads===true)indexedHeightfieldResourceCount++;
         heightfieldGridResolution=Math.max(heightfieldGridResolution,Number(resource.heightfieldGridResolution||0));
         heightfieldStepTiles=Math.max(heightfieldStepTiles,Number(resource.heightfieldStepTiles||0));
         minConditionedHeight=Math.min(minConditionedHeight,Number(resource.minConditionedHeight||0));
@@ -1048,6 +1053,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       colorFallbackBlockCount+=Number(resource.colorFallbackBlockCount||0);
       for(const type of resource.texturedSurfaceTypes||[])texturedSurfaceTypes.add(String(type));
       for(const type of resource.fallbackSurfaceTypes||[])fallbackSurfaceTypes.add(String(type));
+      for(const [type,count] of Object.entries(resource.semanticSurfaceTileCounts||{})){
+        semanticSurfaceTileCounts[type]=(semanticSurfaceTileCounts[type]||0)+Number(count||0);
+      }
       seedDerivedPresentation=seedDerivedPresentation&&resource.seedDerivedPresentation===true;
       hardCodedSampleGeometry=hardCodedSampleGeometry||resource.hardCodedSampleGeometry===true;
       const name=resource.meshInstance?.material?.name;
@@ -1066,6 +1074,17 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const heightfieldPass=heightfieldResourceCount>0&&indexedHeightfieldResourceCount===heightfieldResourceCount&&sharedBorderMaxError<=1e-7;
     const generatorStats=terrainChunkMeshFactory?.stats?.()||{};
     const routeSurfaceMaterialCount=Number(generatorStats.routeSurfaceMaterialCount||0);
+    const textureProfile=textureQualitySnapshot();
+    const surfaceDebugReport=Object.freeze(Object.fromEntries(
+      Object.entries(generatorStats.surfaceIdentityBindings||{}).map(([type,row])=>[
+        type,
+        Object.freeze({
+          ...row,
+          qualityProfile:String(textureProfile.profile||"standard"),
+          materialCacheSignature:String(textureProfile.cacheSignature||"")
+        })
+      ])
+    ));
 
     return Object.freeze({
       resourceKind:"chunk-mesh",
@@ -1073,7 +1092,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       meshInstanceCount,vertices,triangles,
       heightfieldResourceCount,indexedHeightfieldResourceCount,
       heightfieldGridResolution,heightfieldStepTiles,
-      indexedSharedVertices:heightfieldPass,
+      indexedSharedVertices:generatorStats.indexedSharedVertices===true,
+      indexedSemanticQuads:generatorStats.indexedSemanticQuads===true,
+      semanticUvChannel:0,normalDetailUvChannel:1,
       heightfieldPass,
       minConditionedHeight:Number.isFinite(minConditionedHeight)?Number(minConditionedHeight.toFixed(4)):null,
       maxConditionedHeight:Number.isFinite(maxConditionedHeight)?Number(maxConditionedHeight.toFixed(4)):null,
@@ -1178,6 +1199,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       texturedBlockCount,colorFallbackBlockCount,
       texturedSurfaceTypes:Object.freeze([...texturedSurfaceTypes].sort()),
       fallbackSurfaceTypes:Object.freeze([...fallbackSurfaceTypes].sort()),
+      semanticSurfaceTileCounts:Object.freeze({...semanticSurfaceTileCounts}),
+      surfaceIdentityMode:"semantic-atlas-per-logical-tile",
+      surfaceDebugReport,
       textureAtlas:terrainTextureAtlas?.stats?.()||null,
       terrainSurfaceMode:String(terrainTextureAtlas?.stats?.()?.heightfieldSurfaceMode||""),
       terrainDetailTextureReady:terrainTextureAtlas?.stats?.()?.detailTextureReady===true,

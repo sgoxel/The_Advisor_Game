@@ -103,6 +103,7 @@ SCENARIOS = {
     "wp-s003-009-002",
     "wp-s003-009-003",
     "wp-s003-009-004",
+    "wp-s003-009-004-001",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -182,6 +183,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-002": 11,
     "wp-s003-009-003": 9,
     "wp-s003-009-004": 6,
+    "wp-s003-009-004-001": 7,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -5912,6 +5914,23 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-004-001":
+        _ensure_texture_quality_profile(driver, "standard")
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "surface-identity:overview-0.50x+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
+        if frame_index == 1:
+            return "surface-identity:origin-1.00x+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 2:
+            return "surface-identity:origin-2.00x+" + _set_camera_view_and_render_active(driver, 0, 0, 2.00, timeout=45.0)
+        if frame_index == 3:
+            return "surface-identity:road-grass+" + _focus_road_profile_target(driver, "grass") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+        if frame_index == 4:
+            return "surface-identity:road-dirt-mud+" + _focus_road_profile_target(driver, "dirt-mud") + "+" + _set_camera_zoom_and_render(driver, 1.00, timeout=30.0)
+        if frame_index == 5:
+            return "surface-identity:square-close+" + _focus_road_profile_target(driver, "square") + "+" + _set_camera_zoom_and_render(driver, 2.00, timeout=30.0)
+        driver.set_window_size(844, 390)
+        return "surface-identity:phone-landscape+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
     if scenario == "wp-s003-009-004":
         profiles=("low","standard","high","ultra")
         if frame_index < 4:
@@ -6681,6 +6700,60 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-004-001":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-009-004-001 requires seven terrain-surface evidence frames")
+        expected_zooms=("0.50×","1.00×","2.00×","1.00×","1.00×","2.00×","1.00×")
+        required_surfaces=("grass","dirt","road","path","square")
+        for index,frame in enumerate(frames[:7]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            atlas=chunks.get("textureAtlas") or {}
+            report=chunks.get("surfaceDebugReport") or {}
+            if build.get("cameraZoom")!=expected_zooms[index]:
+                raise RuntimeError(f"Surface identity zoom mismatch in frame {index+1}: expected {expected_zooms[index]}, got {build.get('cameraZoom')}")
+            if chunks.get("surfaceIdentityMode")!="semantic-atlas-per-logical-tile":
+                raise RuntimeError(f"Semantic terrain identity mode missing in frame {index+1}: {chunks.get('surfaceIdentityMode')}")
+            if chunks.get("terrainSurfaceMode")!="semantic-atlas-per-logical-tile+uv1-normal-detail":
+                raise RuntimeError(f"Terrain surface mode mismatch in frame {index+1}: {chunks.get('terrainSurfaceMode')}")
+            if chunks.get("indexedSemanticQuads") is not True or chunks.get("oneEntityPerTile") is not False:
+                raise RuntimeError(f"Terrain topology violated bounded chunk rendering in frame {index+1}: {chunks}")
+            if int(chunks.get("colorFallbackBlockCount") or 0)!=0:
+                raise RuntimeError(f"Visible/prepared terrain fell back to color-only blocks in frame {index+1}: {chunks.get('colorFallbackBlockCount')}")
+            if int(chunks.get("routeSurfaceStaleBindingCount") or 0)!=0:
+                raise RuntimeError(f"Stale route atlas binding in frame {index+1}: {chunks.get('routeSurfaceStaleBindingCount')}")
+            if atlas.get("semanticSurfaceAtlas") is not True or atlas.get("atlasMipmaps") is not False:
+                raise RuntimeError(f"Semantic terrain atlas sampling contract failed in frame {index+1}: {atlas}")
+            if gpu.get("simulationAuthorityPreserved") is not True or chunks.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Terrain surface presentation changed Simulation authority in frame {index+1}")
+            for surface in required_surfaces:
+                row=report.get(surface) or {}
+                if row.get("authoritativeSurfaceId")!=surface:
+                    raise RuntimeError(f"Missing authoritative surface debug row for {surface}: {row}")
+                if row.get("diffuseTextureKey")!=f"tile:{surface}":
+                    raise RuntimeError(f"Wrong texture key for {surface}: {row}")
+                if row.get("textureBound") is not True or int(row.get("textureWidth") or 0)<=0 or int(row.get("textureHeight") or 0)<=0:
+                    raise RuntimeError(f"Surface texture is not actually bound for {surface}: {row}")
+                if int(row.get("atlasCellResolution") or 0)<=0:
+                    raise RuntimeError(f"Surface atlas cell resolution missing for {surface}: {row}")
+                uv=row.get("uvScale") or []
+                if len(uv)!=2 or min(float(v) for v in uv)<=0:
+                    raise RuntimeError(f"Surface UV scale invalid for {surface}: {row}")
+                tint=row.get("tint") or []
+                if len(tint)!=3 or min(float(v) for v in tint)<=0:
+                    raise RuntimeError(f"Surface tint invalid for {surface}: {row}")
+                if tuple(float(v) for v in (row.get("blendWeightRange") or []))!=(1.0,1.0):
+                    raise RuntimeError(f"Surface interior blend weight is not opaque for {surface}: {row}")
+                if abs(float(row.get("opacity") or 0)-1.0)>1e-6:
+                    raise RuntimeError(f"Surface opacity is not 1 for {surface}: {row}")
+                if row.get("qualityProfile")!="standard" or not row.get("materialCacheSignature"):
+                    raise RuntimeError(f"Surface quality/cache evidence missing for {surface}: {row}")
+        phone=frames[6].get("runtime",{}).get("viewport",{})
+        if int(phone.get("width") or 0)<=int(phone.get("height") or 0):
+            raise RuntimeError(f"Phone-landscape terrain-surface evidence missing: {phone}")
         return
 
     if scenario == "wp-s003-009-004":
