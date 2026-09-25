@@ -8588,7 +8588,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             atmosphere=planet.get("atmosphere") or {}
             if atmosphere.get("active") is not True or atmosphere.get("simulationAuthority") is not False:
                 raise RuntimeError(f"Atmosphere authority failed in evidence frame {index+1}: {atmosphere}")
-            if atmosphere.get("phase")!=expected[index] or int(atmosphere.get("dynamicLightCount") or 0)!=2 or int(atmosphere.get("drawCallImpact") or -1)!=0:
+            if atmosphere.get("phase")!=expected[index] or int(atmosphere.get("dynamicLightCount") or 0)!=2 or int(atmosphere.get("drawCallImpact", -1))!=0:
                 raise RuntimeError(f"Atmosphere palette/budget failed in evidence frame {index+1}: {atmosphere}")
         return
 
