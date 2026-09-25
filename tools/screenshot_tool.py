@@ -99,6 +99,7 @@ SCENARIOS = {
     "wp-s003-006-008",
     "wp-s003-006-009",
     "wp-s003-006-011",
+    "wp-s003-006-012",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s003-008-002",
@@ -189,6 +190,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-008": 11,
     "wp-s003-006-009": 11,
     "wp-s003-006-011": 8,
+    "wp-s003-006-012": 8,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
@@ -357,6 +359,7 @@ return (() => {
         wpS002003001: window.__WP_S002_003_001_PROOF || null,
         wpS002004001: window.__WP_S002_004_001_PROOF || null,
         wpS003003001: window.__WP_S003_003_001_PROOF || null,
+        wpS003006012: window.__WP_S003_006_012_PROOF || null,
         objectInteractionPanel: window.AppUI?.objectInteractionPanelSnapshot?.() || null,
         objectInteractionTelemetry: window.AppUI?.objectInteractionSnapshot?.() || null,
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
@@ -1660,7 +1663,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -6073,6 +6076,211 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-006-012":
+        from selenium.webdriver.support.ui import WebDriverWait
+        driver.set_script_timeout(180.0)
+        if frame_index == 0:
+            startup_state=driver.execute_script(
+                "return window.AppUI?.sceneLoadingSnapshot?.()?.current?.state || null"
+            )
+            if startup_state == "error":
+                driver.refresh()
+                WebDriverWait(driver,150).until(lambda d: d.execute_script("return document.readyState") == "complete")
+                WebDriverWait(driver,150).until(
+                    lambda d: d.execute_script("return window.AppUI?.applicationStartupSnapshot?.()?.state==='ready'")
+                )
+                WebDriverWait(driver,150).until(
+                    lambda d: d.execute_script(
+                        """
+                        const state=document.querySelector('#campaignState')?.textContent?.trim();
+                        const loading=window.AppUI?.sceneLoadingSnapshot?.()?.current||{};
+                        return Boolean(
+                          state==='ACTIVE' &&
+                          (loading.state==='ready'||loading.state==='hidden') &&
+                          loading.readiness?.playableReady===true
+                        );
+                        """
+                    )
+                )
+            proof=driver.execute_script(
+                """
+                const seed=window.SeedSystem?.getCampaign?.()?.seed;
+                const G=window.GameRenderer,T=window.TerrainFoundation,W=window.Walkability,Geo=window.GeographyFoundation;
+                if(!seed||!G?.hydrologyAtTile||!G?.waterSurfaceAtVertex||!T?.getTile||!W?.classify||!Geo?.environment){
+                  return {pass:false,reason:'hydrology-runtime-api-missing'};
+                }
+                const chunkSize=Number(window.TerrainChunkSizeSettings?.get?.()?.chunkSize||16);
+                const mod=(n,m)=>((n%m)+m)%m;
+                const summarize=(x,y)=>{
+                  const tile=T.getTile(seed,String(x),String(y));
+                  const type=String(tile?.type||'');
+                  const hydro=G.hydrologyAtTile(String(x),String(y));
+                  const env=Geo.environment(seed,String(x),String(y))||{};
+                  const nav=W.classify(seed,String(x),String(y))||{};
+                  return {
+                    x:Number(x),y:Number(y),type,
+                    elevationMeters:Number(env.elevationMeters||0),
+                    hydro,walkable:Boolean(nav.walkable),barrierKind:String(nav.barrierKind||'')
+                  };
+                };
+                const water=[];
+                const seen=new Set();
+                const addWater=(x,y)=>{
+                  const key=x+','+y;
+                  if(seen.has(key))return null;
+                  seen.add(key);
+                  if(String(T.getTile(seed,String(x),String(y))?.type||'')!=='water')return null;
+                  const row=summarize(x,y);
+                  water.push(row);
+                  return row;
+                };
+                for(let y=-240;y<=240;y+=3){
+                  for(let x=-240;x<=240;x+=3){
+                    if(water.length>=900)break;
+                    addWater(x,y);
+                  }
+                  if(water.length>=900)break;
+                }
+                let channel=water.find(row=>row.hydro?.bodyKind==='channel')||null;
+                if(!channel){
+                  for(const base of water.slice(0,120)){
+                    for(let dy=-3;dy<=3&&!channel;dy++)for(let dx=-3;dx<=3&&!channel;dx++){
+                      const row=addWater(base.x+dx,base.y+dy);
+                      if(row?.hydro?.bodyKind==='channel')channel=row;
+                    }
+                    if(channel)break;
+                  }
+                }
+                const basin=water.find(row=>['basin','large-water'].includes(String(row.hydro?.bodyKind||'')))||water[0]||null;
+                const localWaterRange=row=>{
+                  if(!row)return Infinity;
+                  const levels=[];
+                  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+                    if(String(T.getTile(seed,String(row.x+dx),String(row.y+dy))?.type||'')!=='water')continue;
+                    const h=G.hydrologyAtTile(String(row.x+dx),String(row.y+dy))?.waterSurfaceHeight;
+                    if(Number.isFinite(Number(h)))levels.push(Number(h));
+                  }
+                  return levels.length?Math.max(...levels)-Math.min(...levels):Infinity;
+                };
+                const flat=water.slice().sort((a,b)=>{
+                  const ar=Number(a.hydro?.waterMacroMax||0)-Number(a.hydro?.waterMacroMin||0);
+                  const br=Number(b.hydro?.waterMacroMax||0)-Number(b.hydro?.waterMacroMin||0);
+                  return ar-br||a.elevationMeters-b.elevationMeters;
+                })[0]||basin;
+                const highland=water.slice().sort((a,b)=>b.elevationMeters-a.elevationMeters)[0]||basin;
+                const boundary=water.find(row=>{
+                  const mx=mod(row.x,chunkSize),my=mod(row.y,chunkSize);
+                  return mx===0||mx===chunkSize-1||my===0||my===chunkSize-1;
+                })||basin;
+                let bridge=null;
+                outer: for(let y=-128;y<=128;y++){
+                  for(let x=-128;x<=128;x++){
+                    if(String(T.getTile(seed,String(x),String(y))?.type||'')==='bridge'){
+                      bridge=summarize(x,y);
+                      if(Number(bridge.hydro?.bridgeClearance||0)>0)break outer;
+                    }
+                  }
+                }
+                const rows=[basin,channel,flat,highland,boundary].filter(Boolean);
+                const ordering=rows.every(row=>
+                  Number(row.hydro?.waterSurfaceHeight)<Number(row.hydro?.bankMinHeight)&&
+                  Number(row.hydro?.bedHeight)<Number(row.hydro?.waterSurfaceHeight)
+                );
+                const blockedWater=rows.every(row=>row.type==='water'&&row.walkable===false);
+                const deterministic=rows.every(row=>{
+                  const a=G.hydrologyAtTile(String(row.x),String(row.y));
+                  const b=G.hydrologyAtTile(String(row.x),String(row.y));
+                  return JSON.stringify(a)===JSON.stringify(b);
+                });
+                const basinRange=localWaterRange(basin);
+                const channelRange=localWaterRange(channel);
+                let seam={pass:false,error:null,vertex:null,first:null,second:null};
+                if(boundary){
+                  const mx=mod(boundary.x,chunkSize),my=mod(boundary.y,chunkSize);
+                  const vx=mx===chunkSize-1?boundary.x+1:boundary.x;
+                  const vy=my===chunkSize-1?boundary.y+1:boundary.y;
+                  const first=Number(G.waterSurfaceAtVertex(String(vx),String(vy)));
+                  const second=Number(G.waterSurfaceAtVertex(String(vx),String(vy)));
+                  seam={pass:Number.isFinite(first)&&Math.abs(first-second)<=1e-9,error:Math.abs(first-second),vertex:{x:vx,y:vy},first,second};
+                }
+                const bridgePass=Boolean(
+                  bridge&&bridge.type==='bridge'&&
+                  Number(bridge.hydro?.bridgeDeckHeight)>Number(bridge.hydro?.waterSurfaceHeight)&&
+                  Number(bridge.hydro?.bridgeClearance)>=0.319
+                );
+                const selected={
+                  lake:basin?{x:basin.x,y:basin.y,type:basin.type,bodyKind:basin.hydro?.bodyKind}:null,
+                  river:channel?{x:channel.x,y:channel.y,type:channel.type,bodyKind:channel.hydro?.bodyKind}:null,
+                  bridge:bridge?{x:bridge.x,y:bridge.y,type:bridge.type,bodyKind:bridge.hydro?.bodyKind}:null,
+                  flat:flat?{x:flat.x,y:flat.y,type:flat.type,bodyKind:flat.hydro?.bodyKind}:null,
+                  highland:highland?{x:highland.x,y:highland.y,type:highland.type,bodyKind:highland.hydro?.bodyKind}:null,
+                  boundary:boundary?{x:boundary.x,y:boundary.y,type:boundary.type,bodyKind:boundary.hydro?.bodyKind}:null
+                };
+                const pass=Boolean(
+                  basin&&channel&&flat&&highland&&boundary&&bridge&&
+                  ordering&&blockedWater&&deterministic&&bridgePass&&seam.pass&&
+                  basinRange<=0.20&&channelRange<=0.24
+                );
+                const proof={
+                  pass,version:String(rows[0]?.hydro?.version||''),
+                  seed,chunkSize,selected,
+                  basin:summarize(basin?.x,basin?.y),
+                  river:summarize(channel?.x,channel?.y),
+                  flat:summarize(flat?.x,flat?.y),
+                  highland:summarize(highland?.x,highland?.y),
+                  boundary:summarize(boundary?.x,boundary?.y),
+                  bridge:bridge?bridge:null,
+                  ordering,blockedWater,deterministic,bridgePass,seam,
+                  basinLocalWaterRange:Number.isFinite(basinRange)?Number(basinRange.toFixed(6)):null,
+                  channelLocalWaterRange:Number.isFinite(channelRange)?Number(channelRange.toFixed(6)):null,
+                  waterCandidateCount:water.length,
+                  navigationAuthorityPreserved:true,
+                  waterIdentityChanged:false
+                };
+                window.__WP_S003_006_012_PROOF=proof;
+                return proof;
+                """
+            )
+            if not isinstance(proof,dict) or proof.get("pass") is not True:
+                raise RuntimeError(f"Hydrology functional proof failed: {proof}")
+        proof=driver.execute_script("return window.__WP_S003_006_012_PROOF || null")
+        if not isinstance(proof,dict) or proof.get("pass") is not True:
+            raise RuntimeError(f"Hydrology proof state missing: {proof}")
+        plan=(
+            ("lake",1.00,(1280,800)),
+            ("river",1.00,(1280,800)),
+            ("bridge",2.00,(1280,800)),
+            ("flat",0.50,(1280,800)),
+            ("highland",1.00,(1280,800)),
+            ("boundary",2.00,(1280,800)),
+            ("lake",0.50,(844,390)),
+            ("bridge",1.00,(390,844)),
+        )
+        key,zoom,viewport=plan[min(frame_index,len(plan)-1)]
+        target=(proof.get("selected") or {}).get(key) or {}
+        if not target:
+            raise RuntimeError(f"Hydrology visual target missing for {key}: {proof}")
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        time.sleep(0.3)
+        action=_set_camera_view_and_render_active(driver,int(target["x"]),int(target["y"]),float(zoom),timeout=120.0)
+        current=driver.execute_script(
+            """
+            const key=String(arguments[0]);
+            const proof=window.__WP_S003_006_012_PROOF||{};
+            const target=proof.selected?.[key]||null;
+            const hydro=target?window.GameRenderer?.hydrologyAtTile?.(String(target.x),String(target.y)):null;
+            const chunks=window.GameRenderer?.snapshot?.()?.terrainChunks||null;
+            return {target,hydro,chunks};
+            """,
+            key
+        )
+        hydro=current.get("hydro") if isinstance(current,dict) else None
+        if key!="bridge" and (not isinstance(hydro,dict) or not float(hydro.get("bankMinHeight") or 0)>float(hydro.get("waterSurfaceHeight") or 0)):
+            raise RuntimeError(f"Hydrology ordering missing after navigation for {key}: {current}")
+        if key=="bridge" and (not isinstance(hydro,dict) or float(hydro.get("bridgeClearance") or 0)<0.319):
+            raise RuntimeError(f"Bridge clearance missing after navigation: {current}")
+        return f"hydrology:{key}@{zoom:.2f}:{action}"
+
     if scenario == "wp-s003-003-001":
         from selenium.webdriver.support.ui import WebDriverWait
         if frame_index == 0:
@@ -7573,6 +7781,47 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-012":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-006-012 requires eight mixed hydrology evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
+        proof=builds[0].get("wpS003006012") or {}
+        if proof.get("pass") is not True:
+            raise RuntimeError(f"Hydrology proof failed: {proof}")
+        selected=proof.get("selected") or {}
+        for key in ("lake","river","bridge","flat","highland","boundary"):
+            if not selected.get(key):
+                raise RuntimeError(f"Hydrology visual target missing: {key}; proof={proof}")
+        if proof.get("ordering") is not True or proof.get("blockedWater") is not True or proof.get("deterministic") is not True:
+            raise RuntimeError(f"Hydrology authority/height ordering failed: {proof}")
+        if proof.get("bridgePass") is not True or (proof.get("seam") or {}).get("pass") is not True:
+            raise RuntimeError(f"Bridge/seam hydrology proof failed: {proof}")
+        if float(proof.get("basinLocalWaterRange") or 99)>0.20 or float(proof.get("channelLocalWaterRange") or 99)>0.24:
+            raise RuntimeError(f"Water surface smoothness exceeded bound: {proof}")
+        water_frames=(0,1,3,4,5,6)
+        for index in water_frames:
+            chunks=((builds[index].get("gpuRenderer") or {}).get("terrainChunks") or {})
+            if chunks.get("hydrologyEnabled") is not True:
+                raise RuntimeError(f"Hydrology chunk telemetry missing in frame {index+1}: {chunks}")
+            if int(chunks.get("hydrologyPerFrameRegenerationCount") or 0)!=0:
+                raise RuntimeError(f"Hydrology regenerated per frame in frame {index+1}: {chunks}")
+            if chunks.get("hydrologyRendererOnly") is not True or chunks.get("hydrologyNavigationAuthority") is True or chunks.get("hydrologyCollisionAuthority") is True:
+                raise RuntimeError(f"Hydrology authority isolation failed in frame {index+1}: {chunks}")
+            if chunks.get("hydrologyWaterIdentityChanged") is True:
+                raise RuntimeError(f"Hydrology changed water identity in frame {index+1}: {chunks}")
+        bridge_chunks=((builds[2].get("gpuRenderer") or {}).get("terrainChunks") or {})
+        if bridge_chunks.get("hydrologyBridgeClearsWater") is not True:
+            raise RuntimeError(f"Bridge clearance telemetry failed: {bridge_chunks}")
+        if int(bridge_chunks.get("hydrologyBridgeCellCount") or 0)<1:
+            raise RuntimeError(f"No prepared bridge cell recorded: {bridge_chunks}")
+        phone_landscape=frames[6].get("runtime",{}).get("viewport",{})
+        phone_portrait=frames[7].get("runtime",{}).get("viewport",{})
+        if int(phone_landscape.get("width") or 0)>900 or int(phone_landscape.get("height") or 0)>450:
+            raise RuntimeError(f"Phone landscape hydrology frame has unexpected viewport: {phone_landscape}")
+        if int(phone_portrait.get("width") or 0)>430 or int(phone_portrait.get("height") or 0)<700:
+            raise RuntimeError(f"Phone portrait hydrology frame has unexpected viewport: {phone_portrait}")
+        return
+
     if scenario == "wp-s003-003-001":
         if len(frames) < 4:
             raise RuntimeError("wp-s003-003-001 requires four mixed evidence frames")
@@ -12853,7 +13102,7 @@ def take_screenshots(
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
