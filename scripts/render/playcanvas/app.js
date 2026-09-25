@@ -868,6 +868,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let meshResourceCount=0,activeMeshCount=0,preparedMeshCount=0,cachedMeshCount=0;
     let meshInstanceCount=0,vertices=0,triangles=0;
     let presentationMeshInstanceCount=0,presentationEntityCount=0,sourcePresentationEntityCount=0,buildingPresentationCount=0,interiorObjectPresentationCount=0,propPresentationCount=0;
+    let entranceTreatmentCount=0,entranceOrdinaryCount=0,entranceSpecialCount=0,entranceThresholdCount=0,entranceFramePrimitiveCount=0,entranceWearCount=0,entranceAwningCount=0,entranceSignCount=0,entrancePrimitiveCount=0;
+    const entranceTreatmentSamples=[];
+    let entranceAuthoritativeDoorAnchored=true,entranceRendererOnly=true,entranceNavigationBlocking=false,entranceCollisionBlocking=false;
     let dressingPresentationCount=0,dressingDescriptorCount=0,dressingPrimitiveInstanceCount=0,dressingInstancedGroupCount=0,dressingRouteSafeCount=0;
     const dressingContextCounts={},dressingSemanticCounts={},dressingSamples=[];
     let dressingDeterministic=true,dressingRendererOnly=true;
@@ -966,6 +969,25 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         }
       }
       buildingPresentationCount+=Number(resource.buildingPresentationCount||0);
+      entranceTreatmentCount+=Number(resource.entranceTreatmentCount||0);
+      entranceOrdinaryCount+=Number(resource.entranceOrdinaryCount||0);
+      entranceSpecialCount+=Number(resource.entranceSpecialCount||0);
+      entranceThresholdCount+=Number(resource.entranceThresholdCount||0);
+      entranceFramePrimitiveCount+=Number(resource.entranceFramePrimitiveCount||0);
+      entranceWearCount+=Number(resource.entranceWearCount||0);
+      entranceAwningCount+=Number(resource.entranceAwningCount||0);
+      entranceSignCount+=Number(resource.entranceSignCount||0);
+      entrancePrimitiveCount+=Number(resource.entrancePrimitiveCount||0);
+      entranceAuthoritativeDoorAnchored=entranceAuthoritativeDoorAnchored&&resource.entranceAuthoritativeDoorAnchored!==false;
+      entranceRendererOnly=entranceRendererOnly&&resource.entranceRendererOnly!==false;
+      entranceNavigationBlocking=entranceNavigationBlocking||resource.entranceNavigationBlocking===true;
+      entranceCollisionBlocking=entranceCollisionBlocking||resource.entranceCollisionBlocking===true;
+      if(entranceTreatmentSamples.length<64){
+        for(const item of resource.entranceTreatmentSamples||[]){
+          if(entranceTreatmentSamples.length>=64)break;
+          entranceTreatmentSamples.push(item);
+        }
+      }
       contactShadowBuildingCount+=Number(resource.contactShadowBuildingCount||0);
       contactShadowTreeCount+=Number(resource.contactShadowTreeCount||0);
       contactShadowPropCount+=Number(resource.contactShadowPropCount||0);
@@ -1189,6 +1211,22 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       frustumCulledResourceCount,hardwareInstancedResourceCount,batchedResourceCount,
       renderMeshInstanceCount,visibleMeshInstanceCount,culledMeshInstanceCount,cullEnabledMeshInstanceCount,
       buildingPresentationCount,
+      entranceTreatmentCount,entranceOrdinaryCount,entranceSpecialCount,entranceThresholdCount,
+      entranceFramePrimitiveCount,entranceWearCount,entranceAwningCount,entranceSignCount,entrancePrimitiveCount,
+      entranceTreatmentSamples:Object.freeze(entranceTreatmentSamples.slice()),
+      entranceAuthoritativeDoorAnchored:Boolean(entranceTreatmentCount>0&&entranceAuthoritativeDoorAnchored),
+      entranceRendererOnly:Boolean(entranceRendererOnly),
+      entranceNavigationBlocking:Boolean(entranceNavigationBlocking),
+      entranceCollisionBlocking:Boolean(entranceCollisionBlocking),
+      entranceSharedMaterialCount:Number(generatorStats.entranceSharedMaterialCount||0),
+      entranceReadabilityPresentationPass:Boolean(
+        entranceTreatmentCount>0&&entranceThresholdCount===entranceTreatmentCount&&
+        entranceFramePrimitiveCount===entranceTreatmentCount*3&&
+        entranceWearCount===entranceTreatmentCount&&
+        entranceAuthoritativeDoorAnchored&&entranceRendererOnly&&
+        !entranceNavigationBlocking&&!entranceCollisionBlocking&&
+        Number(generatorStats.entranceSharedMaterialCount||0)<=5
+      ),
       contactShadowTechnique:"batched-foundation-halo+instanced-ground-disc+dynamic-character-disc",
       contactShadowBuildingCount,contactShadowTreeCount,contactShadowPropCount,contactShadowObjectCount,
       contactShadowInstancedGroupCount,contactShadowDrawCalls,
