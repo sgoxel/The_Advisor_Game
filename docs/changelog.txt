@@ -1526,3 +1526,17 @@
 - Route regression remained PASS: 26-step route, 227 evaluated / 164 expanded nodes, blocked-wall rejection, 19.29-degree maximum chosen slope, 54.421429 s horizontal cost and 2.44215 s elevation penalty.
 - Elevation telemetry remained bounded/lazy: 819 source elevation queries, 5,167 cache hits (86.3% hit rate), 2,993 transition queries, 396 blocked slope transitions, 0.0372 ms average elevation query and 3.1 ms maximum sampled query. The complete dedicated browser proof measured 495.7 ms.
 - Exact tested implementation head 8f2dd078874ba773cf215e110acd1591591d3c9e deployed successfully via GitHub Pages run 36128552089.
+
+
+2026-09-25 14:46:06 +03:00 | WP-S003-003-001 | Interactable World Objects + Contextual Use Actions — PASS
+- Classification: MIXED. Added authoritative contextual use contracts plus a visible click/tap action panel.
+- Added cached deterministic ObjectInteractions descriptors for beds, chairs, tables, counters, workbenches, hearths, storage and building doors. Queries use a bounded local spatial index; there is no per-frame prop scan and renderer state is not interaction authority.
+- Safe inspect actions are read-only. Stateful sit/eat/social/work/service/rest/sleep/warm actions delegate to the existing ActionExecutor contract; building-door Enter delegates to BuildingInteriors + RoutePlanner. Generic interaction never creates inventory, economy state or free resources.
+- PlayCanvas now exposes screen-to-world tile picking so normal pointer/touch taps can select nearby interactables. The contextual panel exposes only object-specific actions, disables out-of-range actions, uses >=44 px touch targets and remains responsive on phone/desktop.
+- Functional proof PASS: 37 descriptors / 8 types, 7 representative object types, 7 valid inspect passes, 7 invalid-action rejections, 7 out-of-range rejections, 7 deterministic pick passes and 6 delegated stateful-action passes. Door entry resolved through the existing authoritative building route in 2 steps / 4.8 s.
+- Performance proof remained bounded: 1 nearby query + 7 pick queries in the proof, maximum 49 visited local cells, 0.1 ms maximum measured query time, 0.025 ms average query time, no per-frame scan and no generic resource creation.
+- Attempt 1 run 36130319225 passed automated functional checks but FAILED visual review because all four fresh screenshots were obscured by the existing transient first-campaign Startup interrupted overlay. Direct inspection score: 3/10 FAIL.
+- tools/screenshot_tool.py was improved to reload exactly once only after that transient startup ERROR and to require a restored ACTIVE campaign with playableReady=true; it does not hide/clear the error overlay artificially.
+- Attempt 2 run 36130862740 passed on exact head 6889d6affa16e11dd00ed0ec10c7c39f50cc475c. Artifact 10861383754 / sha256:9eed9237274f6e1e3fbc0db23348da4583a7f93ed96479b9f7e2d8438146707f contains fresh table, hearth, door and phone-chair interaction frames.
+- All four Attempt 2 screenshots were directly inspected. Desktop panels were unobstructed/readable and clear of the control deck; the 390 px phone portrait frame kept both actions usable without clipping. Existing portrait navigation overlaps only the lower evidence footer, not action controls. FINAL VISUAL: 8.4/10 PASS.
+- Exact tested head 6889d6affa16e11dd00ed0ec10c7c39f50cc475c deployed successfully via GitHub Pages run 36130825345; push Visual Evidence run 36130825942 also passed.
