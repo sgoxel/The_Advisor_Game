@@ -17,12 +17,20 @@ function loadResidentMovement(){
   script.onerror=()=>{console.error("Failed to load resident movement simulation.");start();};
   document.head.appendChild(script);
 }
+function loadObjectInteractions(){
+  if(window.ObjectInteractions){loadResidentMovement();return;}
+  const script=document.createElement("script");
+  script.src="scripts/world/object-interactions.js";
+  script.onload=loadResidentMovement;
+  script.onerror=()=>{console.error("Failed to load object interactions.");loadResidentMovement();};
+  document.head.appendChild(script);
+}
 function loadActionExecutor(){
-  if(window.ActionExecutor){loadResidentMovement();return;}
+  if(window.ActionExecutor){loadObjectInteractions();return;}
   const script=document.createElement("script");
   script.src="scripts/world/action-executor.js";
-  script.onload=loadResidentMovement;
-  script.onerror=()=>{console.error("Failed to load action executor.");loadResidentMovement();};
+  script.onload=loadObjectInteractions;
+  script.onerror=()=>{console.error("Failed to load action executor.");loadObjectInteractions();};
   document.head.appendChild(script);
 }
 function loadInterior(){
