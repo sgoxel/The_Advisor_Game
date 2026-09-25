@@ -1607,7 +1607,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 return Boolean(
                   s?.ready===true &&
                   s?.stage==='seeded-planetary-geography' &&
-                  s?.geographyVersion==='planetary-geography-v3' &&
+                  s?.geographyVersion==='planetary-geography-v4' &&
                   Number(s?.canvasCount||0)===1 &&
                   v?.pass===true
                 );
@@ -8040,9 +8040,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             layout=stage.get("geographyLayout") or {}
             if stage.get("ready") is not True or stage.get("stage") != "seeded-planetary-geography":
                 raise RuntimeError(f"Seeded planet stage not ready in frame {index}: {stage}")
-            if stage.get("version") != "planetary-geography-globe-v1":
+            if stage.get("version") != "planetary-geography-globe-v2":
                 raise RuntimeError(f"Unexpected planet renderer version in frame {index}: {stage}")
-            if stage.get("geographyVersion") != "planetary-geography-v3":
+            if stage.get("geographyVersion") != "planetary-geography-v4":
                 raise RuntimeError(f"Unexpected geography version in frame {index}: {stage}")
             if abs(float(stage.get("worldScaleFraction") or 0)-0.10)>1e-9:
                 raise RuntimeError(f"Planet scale fraction is not 10% in frame {index}: {stage}")
