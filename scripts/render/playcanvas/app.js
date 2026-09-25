@@ -1586,7 +1586,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     try{
       const component=camera?.camera;
       if(!component?.screenToWorld)return fallback;
-      const centerSource=centerOverride||lastModel?.center;\n      const center=centerSource?characterScenePoint(centerSource):Object.freeze({x:0,z:0});
+      const centerSource=centerOverride||lastModel?.center;
+      const center=centerSource?characterScenePoint(centerSource):Object.freeze({x:0,z:0});
       const groundY=-0.33;
       const near=Math.max(0.01,Number(component.nearClip||0.1));
       const far=Math.max(near+1,Number(component.farClip||200));
