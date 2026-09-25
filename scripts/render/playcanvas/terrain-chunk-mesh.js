@@ -1067,7 +1067,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     return Object.freeze({left,right,profile});
   }
 
-  function buildBuilding(root,worldData,descriptor,index,batches,roofProfiles,buildingMaterialVariants){
+  function buildBuilding(root,worldData,descriptor,index,batches,roofProfiles,buildingMaterialVariants,entranceTreatmentSamples,entranceCounters){
     const b=localBounds(worldData,descriptor.bounds||{});
     const special=descriptor.source==="special";
     const height=special?2.25:1.75;
@@ -1125,6 +1125,73 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       else if(onMaxY){doorPosition[2]=b.z+outerD*0.5+faceOffset;}
       appendBoxBatch(batchFor(batches,door.name,door),doorPosition,doorScale,0);
       count++;
+
+      // WP-S003-009-006: renderer-only doorway architecture anchored to the
+      // authoritative exterior-door cell. These primitives never participate
+      // in collision/navigation and intentionally reuse a tiny shared material set.
+      const trim=presentationMaterial("entrance-trim",0.72,0.50,0.22,0.06);
+      const threshold=presentationMaterial("entrance-threshold",0.48,0.38,0.26,0.03);
+      const wear=presentationMaterial("entrance-wear",0.34,0.25,0.15,0.02);
+      const awning=presentationMaterial("entrance-awning",0.46,0.20,0.12,0.04);
+      const sign=presentationMaterial("entrance-sign",0.76,0.58,0.24,0.04);
+      const trimBatch=batchFor(batches,trim.name,trim);
+      const thresholdBatch=batchFor(batches,threshold.name,threshold);
+      const wearBatch=batchFor(batches,wear.name,wear);
+      const specialEntrance=descriptor.source==="special";
+      const side=String(descriptor.entrance.side||"").toUpperCase();
+      const outsideX=side==="E"?1:0,outsideZ=side==="S"?1:0;
+      const frameDepth=0.14,frameSide=0.12,frameHalf=0.49;
+      if(side==="E"){
+        const fx=doorPosition[0]+outsideX*0.07;
+        appendBoxBatch(trimBatch,[fx,groundY+0.77,p.z-frameHalf],[frameDepth,1.52,frameSide],0);
+        appendBoxBatch(trimBatch,[fx,groundY+0.77,p.z+frameHalf],[frameDepth,1.52,frameSide],0);
+        appendBoxBatch(trimBatch,[fx,groundY+1.50,p.z],[frameDepth,0.12,1.10],0);
+        appendBoxBatch(thresholdBatch,[doorPosition[0]+0.30,groundY+0.075,p.z],[0.56,0.15,1.18],0);
+        appendBoxBatch(wearBatch,[doorPosition[0]+0.70,groundY+0.026,p.z],[0.82,0.052,1.38],0);
+        if(specialEntrance){
+          appendBoxBatch(batchFor(batches,awning.name,awning),[doorPosition[0]+0.30,groundY+1.72,p.z],[0.72,0.12,1.48],0);
+          appendBoxBatch(batchFor(batches,sign.name,sign),[doorPosition[0]+0.10,groundY+1.14,p.z+0.78],[0.16,0.52,0.42],0);
+        }
+      }else{
+        const fz=doorPosition[2]+outsideZ*0.07;
+        appendBoxBatch(trimBatch,[p.x-frameHalf,groundY+0.77,fz],[frameSide,1.52,frameDepth],0);
+        appendBoxBatch(trimBatch,[p.x+frameHalf,groundY+0.77,fz],[frameSide,1.52,frameDepth],0);
+        appendBoxBatch(trimBatch,[p.x,groundY+1.50,fz],[1.10,0.12,frameDepth],0);
+        appendBoxBatch(thresholdBatch,[p.x,groundY+0.075,doorPosition[2]+0.30],[1.18,0.15,0.56],0);
+        appendBoxBatch(wearBatch,[p.x,groundY+0.026,doorPosition[2]+0.70],[1.38,0.052,0.82],0);
+        if(specialEntrance){
+          appendBoxBatch(batchFor(batches,awning.name,awning),[p.x,groundY+1.72,doorPosition[2]+0.30],[1.48,0.12,0.72],0);
+          appendBoxBatch(batchFor(batches,sign.name,sign),[p.x+0.78,groundY+1.14,doorPosition[2]+0.10],[0.42,0.52,0.16],0);
+        }
+      }
+      const primitiveCount=5+(specialEntrance?2:0);
+      count+=primitiveCount;
+      if(entranceCounters){
+        entranceCounters.total=(entranceCounters.total||0)+1;
+        entranceCounters.ordinary=(entranceCounters.ordinary||0)+(specialEntrance?0:1);
+        entranceCounters.special=(entranceCounters.special||0)+(specialEntrance?1:0);
+        entranceCounters.threshold=(entranceCounters.threshold||0)+1;
+        entranceCounters.frame=(entranceCounters.frame||0)+3;
+        entranceCounters.wear=(entranceCounters.wear||0)+1;
+        entranceCounters.awning=(entranceCounters.awning||0)+(specialEntrance?1:0);
+        entranceCounters.sign=(entranceCounters.sign||0)+(specialEntrance?1:0);
+        entranceCounters.primitives=(entranceCounters.primitives||0)+primitiveCount;
+      }
+      if(Array.isArray(entranceTreatmentSamples)&&entranceTreatmentSamples.length<32){
+        entranceTreatmentSamples.push(Object.freeze({
+          buildingId:String(descriptor.id||index),
+          buildingKind:String(descriptor.kind||""),
+          source:String(descriptor.source||"normal"),
+          door:Object.freeze({x:entranceX,y:entranceY,side}),
+          authoritativeDoor:true,
+          connectorTarget:descriptor.entrance.target?Object.freeze({
+            x:String(descriptor.entrance.target.x),y:String(descriptor.entrance.target.y)
+          }):null,
+          threshold:true,frame:true,localWear:true,
+          awning:specialEntrance,sign:specialEntrance,
+          rendererOnly:true,navigationBlocking:false,collisionBlocking:false
+        }));
+      }
     }
     return count;
   }
@@ -1570,8 +1637,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const batches=staticBatchCollector();
     const roofProfiles=[];
     const buildingMaterialVariants=[];
+    const entranceTreatmentSamples=[];
+    const entranceCounters={total:0,ordinary:0,special:0,threshold:0,frame:0,wear:0,awning:0,sign:0,primitives:0};
     let sourcePresentationPrimitiveCount=0;
-    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles,buildingMaterialVariants);
+    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles,buildingMaterialVariants,entranceTreatmentSamples,entranceCounters);
     for(let i=0;i<interiorObjects.length;i++)sourcePresentationPrimitiveCount+=buildInteriorObject(spec.worldData,interiorObjects[i],batches);
     const routePresentation=buildRoutePresentation(spec.worldData,connectorDescriptors,batches);
     sourcePresentationPrimitiveCount+=routePresentation.sourcePrimitiveCount;
@@ -1784,6 +1853,21 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       savedDrawCalls,
       drawCallReductionRatio:unoptimizedPresentationDrawCalls?Number((savedDrawCalls/unoptimizedPresentationDrawCalls).toFixed(4)):0,
       buildingPresentationCount:buildings.length,
+      entranceTreatmentCount:Number(entranceCounters.total||0),
+      entranceOrdinaryCount:Number(entranceCounters.ordinary||0),
+      entranceSpecialCount:Number(entranceCounters.special||0),
+      entranceThresholdCount:Number(entranceCounters.threshold||0),
+      entranceFramePrimitiveCount:Number(entranceCounters.frame||0),
+      entranceWearCount:Number(entranceCounters.wear||0),
+      entranceAwningCount:Number(entranceCounters.awning||0),
+      entranceSignCount:Number(entranceCounters.sign||0),
+      entrancePrimitiveCount:Number(entranceCounters.primitives||0),
+      entranceTreatmentSamples:Object.freeze(entranceTreatmentSamples.slice()),
+      entranceAuthoritativeDoorAnchored:entranceTreatmentSamples.every(item=>item.authoritativeDoor===true),
+      entranceRendererOnly:true,
+      entranceNavigationBlocking:false,
+      entranceCollisionBlocking:false,
+      entranceSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("entrance-")).length,
       buildingMaterialVariationDeterministic:true,
       buildingMaterialVariantPaletteSize:BUILDING_MATERIAL_VARIANTS.length,
       buildingMaterialVariantCount:new Set(buildingMaterialVariants.map(item=>item.variantIndex)).size,
@@ -1943,6 +2027,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       treeCylinderSpherePlaceholders:false,
       dressingSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("dressing-")).length,
       dressingHardwareInstanced:true,
+      entranceSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("entrance-")).length,
+      entranceRendererOnly:true,
+      entranceNavigationBlocking:false,
+      entranceCollisionBlocking:false,
       contactShadowMaterialCount:contactShadowMaterials.size,
       contactShadowQuality:String(contactShadowProfile().level),
       contactShadowOpacity:Number(contactShadowProfile().opacity.toFixed(3)),
