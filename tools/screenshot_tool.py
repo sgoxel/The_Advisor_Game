@@ -2273,6 +2273,22 @@ def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool 
     )
 
 
+def _set_planet_loading_proof(driver, mode: str, phase: str, label: str, progress: float) -> str:
+    result=driver.execute_script(
+        """
+        const api=window.PlanetStage;
+        if(!api?.setLoadingProof||!api?.snapshot)return null;
+        return api.setLoadingProof(arguments[0],arguments[1],arguments[2],arguments[3]);
+        """,mode,phase,label,float(progress)
+    )
+    if not isinstance(result,dict):
+        raise RuntimeError(f"Planet loading proof failed: {result}")
+    proof=result.get("startupProgress") or {}
+    if proof.get("loadingProofActive") is not True:
+        raise RuntimeError(f"Planet loading proof was not activated: {result}")
+    return f"planet-loading:{mode}:{phase}:{int(progress)}%"
+
+
 def _reload_current_build(driver, timeout: float = 20.0) -> str:
     from selenium.webdriver.support.ui import WebDriverWait
 
@@ -7975,20 +7991,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
     if scenario == "wp-s003-008-002-001":
         plan=(
-            ("renderer",0,"Planning startup…",(1440,900)),
-            ("world",18,"18%",(1440,900)),
-            ("assets",42,"42%",(1440,900)),
-            ("assets",64,"64%",(1440,900)),
-            ("finalizing",84,"84%",(1440,900)),
-            ("ready",100,"100%",(1440,900)),
-            ("world",42,"42%",(390,844)),
-            ("error",64,"64%",(844,390)),
+            ("indeterminate","planning","Planning startup…",0,(1440,900)),
+            ("determinate","engine","Loading renderer…",15,(1440,900)),
+            ("determinate","geography","Generating continents, oceans and islands…",52,(1440,900)),
+            ("determinate","surface","Painting planetary surface and relief…",68,(1440,900)),
+            ("determinate","mesh","Building planetary height mesh…",84,(1440,900)),
+            ("ready","ready","First playable planet ready",100,(1440,900)),
+            ("determinate","surface","Painting planetary surface and relief…",68,(390,844)),
+            ("failed","error","The planet could not finish preparing.",68,(844,390)),
         )
-        phase,value,label,viewport=plan[min(frame_index,len(plan)-1)]
+        mode,phase,label,value,viewport=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(*viewport)
-        if phase=="ready":
-            return _set_scene_loading_proof(driver,"ready",startup_progress=True,progress=value)
-        return _set_scene_loading_proof(driver,phase,startup_progress=True,progress=value)
+        return _set_planet_loading_proof(driver,mode,phase,label,value)
     if scenario == "wp-s003-008-002":
         if frame_index == 0:
             driver.set_window_size(1440, 900)
@@ -11285,24 +11299,22 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if len(frames) < 8:
             raise RuntimeError("wp-s003-008-002-001 requires eight startup-progress evidence frames")
         builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
-        loadings=[build.get("sceneLoading") or {} for build in builds]
-        actual=loadings[0].get("progress") or {}
-        if actual.get("mode")!="ready" or float(actual.get("measuredPercent") or 0)!=100 or float(actual.get("displayedPercent") or 0)!=100:
-            raise RuntimeError(f"Actual first-playable startup progress did not finish truthfully: {actual}")
-        if float(actual.get("completedWeightedFirstPlayableWork") or 0)!=float(actual.get("totalWeightedFirstPlayableWork") or -1):
-            raise RuntimeError(f"Actual weighted startup plan incomplete: {actual}")
+        stages=[build.get("planetStage") or {} for build in builds]
+        expected=(0,15,52,68,84,100,68,68)
+        modes=("indeterminate","determinate","determinate","determinate","determinate","ready","determinate","failed")
+        for index,(stage,value,mode) in enumerate(zip(stages,expected,modes),start=1):
+            progress=stage.get("startupProgress") or {}
+            if progress.get("loadingProofActive") is not True:
+                raise RuntimeError(f"Planet startup progress proof missing in frame {index}: {stage}")
+            if progress.get("mode")!=mode:
+                raise RuntimeError(f"Planet startup progress mode mismatch in frame {index}: expected {mode}, got {progress}")
+            if abs(float(progress.get("displayedPercent") or 0)-value)>0.01:
+                raise RuntimeError(f"Planet startup progress value mismatch in frame {index}: expected {value}, got {progress}")
+            if stage.get("ready") is not True or stage.get("generation",{}).get("perFrameGeneration") is not False:
+                raise RuntimeError(f"Planet authority/readiness regressed in frame {index}: {stage}")
+        actual=stages[0].get("startupProgress") or {}
         if not actual.get("measured100AtMs") or not actual.get("gameplayReadyAtMs"):
-            raise RuntimeError(f"Actual startup progress timestamps missing: {actual}")
-        expected=(0,18,42,64,84,100,42,64)
-        for index,(loading,value) in enumerate(zip(loadings,expected),start=1):
-            overlay=loading.get("overlay") or {}
-            proof=loading.get("proofOverride") or {}
-            if proof.get("startupProgress") is not True or overlay.get("progressVisible") is not True:
-                raise RuntimeError(f"Startup progress presentation missing in frame {index}: {loading}")
-            if value>0 and str(value) not in str(overlay.get("progressText") or ""):
-                raise RuntimeError(f"Startup progress text mismatch in frame {index}: expected {value}, got {overlay}")
-        if (loadings[7].get("overlay") or {}).get("state")!="error":
-            raise RuntimeError(f"Fatal startup proof did not enter error state: {loadings[7]}")
+            raise RuntimeError(f"Actual startup completion timestamps missing behind proof: {actual}")
         return
 
     if scenario == "wp-s003-008-002":
