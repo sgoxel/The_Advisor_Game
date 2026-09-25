@@ -88,7 +88,8 @@ const sceneLoadingState={
   readiness:null,
   phaseEvents:[],
   cycles:[],
-  proofOverride:null
+  proofOverride:null,
+  progress:null
 };
 const applicationStartupGate={
   state:"idle",
@@ -208,6 +209,55 @@ function archiveSceneLoadingCycle(){
   sceneLoadingState.cycles.push(currentSceneLoadingCycle());
   if(sceneLoadingState.cycles.length>6)sceneLoadingState.cycles.splice(0,sceneLoadingState.cycles.length-6);
 }
+const STARTUP_PROGRESS_WEIGHTS=Object.freeze({renderer:18,world:24,assets:42,finalizing:16});
+function newStartupProgress(){
+  return {
+    mode:"indeterminate",measuredPercent:null,displayedPercent:null,totalWeightedWork:100,completedWeightedWork:0,
+    completedPhases:new Set(),determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,
+    requiredChunkCount:0,completedRequiredChunkCount:0,optionalPostReadyWorkCount:0
+  };
+}
+function ensureStartupProgressPlan(){
+  if(!sceneLoadingState.progress)sceneLoadingState.progress=newStartupProgress();
+  const p=sceneLoadingState.progress;
+  if(p.mode==="indeterminate"){
+    p.mode="determinate";p.determinateAtMs=Date.now();p.measuredPercent=0;p.displayedPercent=0;
+  }
+  return p;
+}
+function completeStartupProgressPhase(phase){
+  const p=ensureStartupProgressPlan();
+  const key=String(phase||"");
+  if(STARTUP_PROGRESS_WEIGHTS[key]&&!p.completedPhases.has(key)){
+    p.completedPhases.add(key);p.completedWeightedWork=Math.min(100,p.completedWeightedWork+STARTUP_PROGRESS_WEIGHTS[key]);
+  }
+  p.measuredPercent=Math.min(99,p.completedWeightedWork);
+  p.displayedPercent=Math.max(Number(p.displayedPercent||0),p.measuredPercent);
+  return p;
+}
+function syncStartupProgressTelemetry(){
+  const p=sceneLoadingState.progress;if(!p)return;
+  const snapshot=window.GameRenderer?.snapshot?.()||{};
+  const preload=snapshot.terrainPreload||{};
+  const required=Number(preload.requiredChunkCount??preload.activeChunkCount??0);
+  const completed=Number(preload.completedRequiredChunkCount??preload.readyChunkCount??required);
+  if(Number.isFinite(required)&&required>=0)p.requiredChunkCount=required;
+  if(Number.isFinite(completed)&&completed>=0)p.completedRequiredChunkCount=Math.min(p.requiredChunkCount||completed,completed);
+  const optional=Number(preload.optionalPostReadyWorkCount??preload.pendingPreloadCount??0);
+  if(Number.isFinite(optional)&&optional>=0)p.optionalPostReadyWorkCount=optional;
+}
+function startupProgressSnapshot(){
+  const p=sceneLoadingState.progress;if(!p)return null;
+  syncStartupProgressTelemetry();
+  return Object.freeze({
+    mode:p.mode,measuredPercent:p.measuredPercent,displayedPercent:p.displayedPercent,
+    currentPhaseId:sceneLoadingState.phase,currentPhaseLabel:(SCENE_LOADING_PHASES[sceneLoadingState.phase]||SCENE_LOADING_PHASES.boot).message,
+    totalWeightedFirstPlayableWork:p.totalWeightedWork,completedWeightedFirstPlayableWork:p.completedWeightedWork,
+    requiredChunkCount:p.requiredChunkCount,completedRequiredChunkCount:p.completedRequiredChunkCount,
+    optionalPostReadyWorkCount:p.optionalPostReadyWorkCount,firstPaintAtMs:sceneLoadingState.startedAtMs,
+    determinateAtMs:p.determinateAtMs,measured100AtMs:p.measured100AtMs,gameplayReadyAtMs:p.gameplayReadyAtMs
+  });
+}
 function applySceneLoadingPresentation(){
   if(!e.sceneLoadingOverlay)return;
   const proof=sceneLoadingState.proofOverride;
@@ -229,13 +279,20 @@ function applySceneLoadingPresentation(){
       ?"The scene could not finish preparing. "+sceneLoadingState.error
       :info.message)
   );
-  const showRuntimeProgress=Boolean(proof?.runtimeArea&&Number.isFinite(proof?.progress));
-  if(e.sceneLoadingProgress)e.sceneLoadingProgress.hidden=!showRuntimeProgress;
-  if(showRuntimeProgress&&e.sceneLoadingProgressBar){
-    const value=Math.max(0,Math.min(100,Number(proof.progress)||0));
+  const startupProgress=sceneLoadingState.progress;
+  const proofProgress=Boolean((proof?.runtimeArea||proof?.startupProgress)&&Number.isFinite(proof?.progress));
+  const showStartupProgress=!proof&&effectiveState!=="error"&&Boolean(startupProgress);
+  const showProgress=proofProgress||showStartupProgress;
+  if(e.sceneLoadingProgress)e.sceneLoadingProgress.hidden=!showProgress;
+  e.sceneLoadingProgress?.classList.toggle("is-indeterminate",Boolean(!proof&&startupProgress?.mode==="indeterminate"));
+  if(showProgress&&e.sceneLoadingProgressBar){
+    const value=proofProgress?Math.max(0,Math.min(100,Number(proof.progress)||0)):Math.max(0,Math.min(100,Number(startupProgress?.displayedPercent)||0));
     e.sceneLoadingProgressBar.style.width=value.toFixed(1)+"%";
     e.sceneLoadingProgressBar.parentElement?.setAttribute("aria-valuenow",String(Math.round(value)));
-    if(e.sceneLoadingProgressText)e.sceneLoadingProgressText.textContent=String(proof.progressText||Math.round(value)+"%");
+    if(e.sceneLoadingProgressText)e.sceneLoadingProgressText.textContent=String(
+      proofProgress?(proof.progressText||Math.round(value)+"%"):
+      (startupProgress?.mode==="indeterminate"?"Planning startup…":Math.round(value)+"%")
+    );
   }
   e.sceneLoadingRetry.hidden=effectiveState!=="error";
 }
@@ -265,6 +322,7 @@ function beginSceneLoading(origin,phase="renderer"){
   sceneLoadingState.readiness=sceneLoadingReadiness(false);
   sceneLoadingState.phaseEvents=[];
   sceneLoadingState.proofOverride=null;
+  sceneLoadingState.progress=newStartupProgress();
   recordSceneLoadingEvent(sceneLoadingState.phase,"loading");
   applySceneLoadingPresentation();
   return sceneLoadingSnapshot();
@@ -273,6 +331,7 @@ function setSceneLoadingPhase(phase){
   if(sceneLoadingState.state!=="loading")return sceneLoadingSnapshot();
   const next=String(phase||"boot");
   if(sceneLoadingState.phase===next)return sceneLoadingSnapshot();
+  completeStartupProgressPhase(sceneLoadingState.phase);
   sceneLoadingState.phase=next;
   recordSceneLoadingEvent(next,"loading");
   applySceneLoadingPresentation();
@@ -283,6 +342,10 @@ function finishSceneLoading(reason,renderSucceeded){
   const readiness=sceneLoadingReadiness(sceneLoadingState.renderSucceeded);
   const campaignActive=readiness.campaignActive;
   if(!readiness.interactionReady||(campaignActive&&!readiness.playableReady))return false;
+  completeStartupProgressPhase(sceneLoadingState.phase);
+  const progress=ensureStartupProgressPlan();
+  progress.completedWeightedWork=progress.totalWeightedWork;
+  progress.measuredPercent=100;progress.displayedPercent=100;progress.mode="ready";progress.measured100AtMs=Date.now();progress.gameplayReadyAtMs=progress.measured100AtMs;
   sceneLoadingState.state="ready";
   sceneLoadingState.phase="ready";
   sceneLoadingState.readyAtMs=Date.now();
@@ -320,6 +383,7 @@ function setSceneLoadingProof(phase,options={}){
     message:options?.message?String(options.message):null,
     reducedMotion:Boolean(options?.reducedMotion),
     runtimeArea:Boolean(options?.runtimeArea),
+    startupProgress:Boolean(options?.startupProgress),
     progress:Number.isFinite(Number(options?.progress))?Math.max(0,Math.min(100,Number(options.progress))):null,
     progressText:options?.progressText?String(options.progressText):null,
     atMs:Date.now()
@@ -339,6 +403,7 @@ function sceneLoadingSnapshot(){
     current:currentSceneLoadingCycle(),
     cycles:Object.freeze([...sceneLoadingState.cycles,currentSceneLoadingCycle()]),
     proofOverride:sceneLoadingState.proofOverride,
+    progress:startupProgressSnapshot(),
     startupGate:applicationStartupSnapshot(),
     reducedMotionPreferred:loadingReducedMotion(),
     overlay:Object.freeze({
