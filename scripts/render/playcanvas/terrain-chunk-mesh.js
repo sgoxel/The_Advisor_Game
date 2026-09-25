@@ -31,7 +31,7 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
-const LANDFORM_VERSION="continuous-world-field-v1";
+const LANDFORM_VERSION="continuous-world-field-v2";
 const LANDFORM_SAMPLE_RADIUS_METERS=96;
 const LANDFORM_CACHE_LIMIT=32768;
 const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=0;
@@ -106,16 +106,22 @@ function worldFieldSample(seed,xUnit,zUnit){
   if(!field?.sample)throw new Error("WorldField is required for natural terrain authority");
   return field.sample(String(seed||""),worldMetersFromUnit(xUnit),worldMetersFromUnit(zUnit));
 }
+function worldFieldElevation(seed,xUnit,zUnit){
+  const field=window.WorldField;
+  if(!field?.elevationMeters)throw new Error("WorldField elevation API is required for natural terrain authority");
+  return Number(field.elevationMeters(String(seed||""),worldMetersFromUnit(xUnit),worldMetersFromUnit(zUnit)));
+}
 function referenceElevation(seed){
   const key=String(seed||"");
   if(!key)return 0;
   if(heightReferenceCache.has(key))return heightReferenceCache.get(key);
-  const value=Number(window.WorldField?.sample?.(key,"0","0")?.elevationMeters||0);
+  const sampled=worldFieldElevation(key,0,0);
+  const value=Number.isFinite(sampled)?sampled:0;
   heightReferenceCache.set(key,value);
   return value;
 }
 function sourceElevationMeters(seed,x,y){
-  const elevation=Number(worldFieldSample(seed,x,y).elevationMeters);
+  const elevation=worldFieldElevation(seed,x,y);
   return Number.isFinite(elevation)?elevation:referenceElevation(seed);
 }
 function landformAtWorldUnit(seedValue,xValue,yValue){
@@ -170,11 +176,10 @@ function landformAtWorldUnit(seedValue,xValue,yValue){
   return result;
 }
 function macroHeight(seed,x,y){
-  const landform=landformAtWorldUnit(seed,x,y);
-  const sampledElevation=Number(landform.elevationMeters);
+  const sampledElevation=worldFieldElevation(seed,x,y);
   const elevation=Number.isFinite(sampledElevation)?sampledElevation:referenceElevation(seed);
   const baseMacro=(elevation-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE;
-  return Object.freeze({elevation,baseMacro,macro:baseMacro,landform});
+  return Object.freeze({elevation,baseMacro,macro:baseMacro});
 }
 function smoothstep01(value){
   const t=clamp(Number(value)||0,0,1);
@@ -456,16 +461,14 @@ function terrainHeightVertex(seed,xValue,yValue){
   const macroSample=macroHeight(seed,x,y);
   const elevation=Number(macroSample.elevation);
   const macro=Number(macroSample.macro);
-  const landform=macroSample.landform;
   const preparedCell=window.TerrainFoundation?.getTile?.(seed,x,y)||null;
   const resolvedSurface=resolvedSurfaceAt(seed,x,y,preparedCell);
   const type=resolvedSurface.type;
-  const hydrology=hydrologyAtTile(seed,x,y);
+  const hydrology=(type==="water"||type==="bridge")?hydrologyAtTile(seed,x,y):null;
   let naturalHeight;
-  if(type==="water")naturalHeight=Number(hydrology.waterSurfaceHeight);
-  else if(type==="bridge")naturalHeight=Number(hydrology.bridgeDeckHeight??macro);
-  else if(hydrology.active)naturalHeight=Number(hydrology.groundHeight);
-  else naturalHeight=rawPresentationHeight(seed,x,y,type);
+  if(type==="water")naturalHeight=Number(hydrology?.waterSurfaceHeight??macro-HYDROLOGY_WATER_DEPTH);
+  else if(type==="bridge")naturalHeight=Number(hydrology?.bridgeDeckHeight??macro);
+  else naturalHeight=macro;
   const roadProfile=roadProfileAtVertex(seed,x,y,naturalHeight,macro,type);
   const height=roadProfile?.active?roadProfile.height:naturalHeight;
   const sample=Object.freeze({
@@ -473,7 +476,6 @@ function terrainHeightVertex(seed,xValue,yValue){
     type,
     color:heightfieldColor(seed,x,y,resolvedSurface.structural?preparedCell?.color:null,type),
     elevationMeters:elevation,
-    landform,
     roadProfile,
     hydrology
   });
@@ -1984,10 +1986,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const sw=macroHeight(seed,String(baseX),String(baseZ+BigInt(size))).macro;
     const se=macroHeight(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size))).macro;
     const streamingLandforms=[
-      landformAtWorldUnit(seed,String(baseX),String(baseZ)),
-      landformAtWorldUnit(seed,String(baseX+BigInt(size)),String(baseZ)),
-      landformAtWorldUnit(seed,String(baseX),String(baseZ+BigInt(size))),
-      landformAtWorldUnit(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size)))
+      landformAtWorldUnit(seed,String(baseX+BigInt(Math.floor(size/2))),String(baseZ+BigInt(Math.floor(size/2))))
     ];
     const streamingLandformClassCounts={};
     for(const row of streamingLandforms)streamingLandformClassCounts[row.kind]=(streamingLandformClassCounts[row.kind]||0)+1;
@@ -2279,6 +2278,16 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let landformGradientMin=Infinity,landformGradientMax=-Infinity;
     let landformReliefMin=Infinity,landformReliefMax=-Infinity;
     let landformConditionOffsetMin=Infinity,landformConditionOffsetMax=-Infinity;
+    const representativeLandform=landformAtWorldUnit(
+      seed,
+      String(baseX+BigInt(Math.floor(size/2))),
+      String(baseZ+BigInt(Math.floor(size/2)))
+    );
+    landformClassCounts[representativeLandform.kind]=(landformClassCounts[representativeLandform.kind]||0)+1;
+    landformGradientMin=landformGradientMax=Number(representativeLandform.gradientMetersPerWorldUnit||0);
+    landformReliefMin=landformReliefMax=Number(representativeLandform.localReliefMeters||0);
+    landformConditionOffsetMin=landformConditionOffsetMax=Number(representativeLandform.conditionOffset||0);
+    if(representativeLandform.kind!=="plain")landformSamples.push(representativeLandform);
     const variationLocalCellAt=(lx,lz)=>{
       const x=Math.trunc(Number(lx)),z=Math.trunc(Number(lz));
       if(x<0||z<0||x>=size||z>=size)return null;
@@ -2517,17 +2526,6 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         });
         minHeight=Math.min(minHeight,sample.height);maxHeight=Math.max(maxHeight,sample.height);
         minElevation=Math.min(minElevation,sample.elevationMeters);maxElevation=Math.max(maxElevation,sample.elevationMeters);
-        if(sample.landform){
-          const lf=sample.landform;
-          landformClassCounts[lf.kind]=(landformClassCounts[lf.kind]||0)+1;
-          landformGradientMin=Math.min(landformGradientMin,Number(lf.gradientMetersPerWorldUnit||0));
-          landformGradientMax=Math.max(landformGradientMax,Number(lf.gradientMetersPerWorldUnit||0));
-          landformReliefMin=Math.min(landformReliefMin,Number(lf.localReliefMeters||0));
-          landformReliefMax=Math.max(landformReliefMax,Number(lf.localReliefMeters||0));
-          landformConditionOffsetMin=Math.min(landformConditionOffsetMin,Number(lf.conditionOffset||0));
-          landformConditionOffsetMax=Math.max(landformConditionOffsetMax,Number(lf.conditionOffset||0));
-          if(lf.kind!=="plain"&&landformSamples.length<32)landformSamples.push(lf);
-        }
         if(sample.roadProfile?.active){
           const profile=sample.roadProfile;
           roadProfileVertexCount++;
@@ -3324,7 +3322,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):0,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):0,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):0,
-      landformSteepFaceTreatment:"exaggerated-faceted-heightfield+downhill-cliff-cuts",
+      landformSteepFaceTreatment:"continuous-heightfield-slope+faceted-normals",
       landformCliffFaceCount,landformCliffFaceTriangleCount,
       landformCliffLipCount,landformCliffLipTriangleCount,
       landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
@@ -3618,7 +3616,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
       landformPerFrameRegenerationCount:0,landformRendererOnly:false,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
-      landformSteepFaceTreatment:"exaggerated-faceted-heightfield+downhill-cliff-cuts",
+      landformSteepFaceTreatment:"continuous-heightfield-slope+faceted-normals",
       landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
       landformCliffFaceApronMaxWorldUnits:LANDFORM_CLIFF_FACE_APRON_MAX,
       landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
