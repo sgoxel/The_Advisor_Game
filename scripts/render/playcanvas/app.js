@@ -1667,10 +1667,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       activeRadiusY:radii.y
     },{onProgress,graceMs,forceGate});
     if(!result?.ready)return Object.freeze({...result,terrainTextures,buildingTextures,treeSprites});
-    const worldAssets=await prepareWorldAssets();
-    if(!worldAssets?.ready){
-      return Object.freeze({...result,ready:false,prepared:false,worldAssetsReady:false,worldAssets,terrainTextures,buildingTextures,treeSprites,reason:"destination-world-assets-not-ready",simulationAuthorityPreserved:true});
-    }
+    // The streaming-minimum mesh is self-contained (terrain atlas + procedural
+    // building presentation). Optional glTF/prop world assets are deliberately
+    // not part of the gate-critical path and resume after Ready.
+    const worldAssets=Object.freeze({ready:true,deferred:true,reason:"streaming-minimum-critical-path",simulationAuthorityPreserved:true});
     pendingTerrainDestination=Object.freeze({
       key:preparedTerrainKey(lastRawSeed,frame.center),
       center:Object.freeze({x:String(frame.center.x),y:String(frame.center.y)}),
@@ -1692,7 +1692,15 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return terrainPreloadManager?.cancelDestination?.(reason)||null;
   }
   function finishTerrainDestination(){
-    return terrainPreloadManager?.finishDestination?.()||null;
+    const result=terrainPreloadManager?.finishDestination?.()||null;
+    const background=Boolean(window.TerrainChunkPreloadSettings?.get?.()?.backgroundChunkGeneration);
+    if(background){
+      setTimeout(()=>{
+        if(!app||!terrainPreloadManager)return;
+        void prepareWorldAssets().catch(error=>console.warn("Deferred destination world-asset preparation failed.",error));
+      },0);
+    }
+    return result;
   }
 
   function preparedTerrainKey(seed,center){
@@ -2414,6 +2422,7 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
     const treeSprites=await prepareTreeSpriteAtlas();
     const terrainKey=preparedTerrainKey(lastRawSeed,frame.center);
     const pending=pendingTerrainDestination?.key===terrainKey?pendingTerrainDestination:null;
+    const committedDestination=Boolean(pending);
     let preload;
     if(pending){
       const manager=initTerrainPreload();
@@ -2430,7 +2439,15 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
     }else{
       preload=updateTerrainPreload(frame.center);
     }
-    const worldAssets=await prepareWorldAssets();
+    if(committedDestination){
+      lastWorldPreparation=Object.freeze({
+        ready:true,deferred:true,reason:"streaming-minimum-committed",
+        regionCount:Number(preload?.Active||0),keyCount:0,
+        regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),
+        simulationAuthorityPreserved:true
+      });
+    }
+    const worldAssets=committedDestination?lastWorldPreparation:await prepareWorldAssets();
     if(!worldAssets.ready){
       if(!assetPreparationProofState)setNormalWorldEnabled(false);
       return Object.freeze({prepared:false,chunkMesh:true,chunkWorldData:true,worldAssetsReady:false,regionKey:frame.regionKey||null,preload,worldAssets,reason:"world-assets-not-ready",simulationAuthorityPreserved:true});
