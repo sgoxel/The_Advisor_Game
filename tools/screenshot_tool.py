@@ -74,6 +74,7 @@ SCENARIOS = {
     "wp-s001-001",
     "wp-s001-004",
     "wp-s002-003-001",
+    "wp-s002-004-001",
     "wp-s003-005",
     "playcanvas-foundation",
     "playcanvas-scene",
@@ -162,6 +163,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s001-001": 5,
     "wp-s001-004": 2,
     "wp-s002-003-001": 1,
+    "wp-s002-004-001": 1,
     "wp-s003-005": 3,
     "playcanvas-foundation": 3,
     "playcanvas-scene": 6,
@@ -351,6 +353,7 @@ return (() => {
       assetStandardProof: window.WP_S003_005_002_EVIDENCE || null,
       currentBuild: {
         wpS002003001: window.__WP_S002_003_001_PROOF || null,
+        wpS002004001: window.__WP_S002_004_001_PROOF || null,
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
         sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
         runtimeAreaLoading: window.AppUI?.runtimeAreaLoadingSnapshot?.() || null,
@@ -6065,6 +6068,242 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s002-004-001":
+        if frame_index != 0:
+            return "elevation-route:no-op"
+        result=driver.execute_script(
+            """
+            const seed=window.SeedSystem?.getCampaign?.()?.seed;
+            const W=window.Walkability,R=window.RoutePlanner,P=window.PRNG;
+            if(!seed||!W?.transition||!R?.findRoute||!R?.routeEdgeCost||!P?.foundationUint32){
+              return {ok:false,reason:'elevation-route-runtime-api-missing'};
+            }
+            W.clearSlopeCache?.();
+            const started=performance.now();
+            const point=(x,y)=>({x:String(x),y:String(y)});
+            const classify=p=>window.InteriorObjects?.classifyNavigation
+              ?window.InteriorObjects.classifyNavigation(seed,p.x,p.y)
+              :W.classify(seed,p.x,p.y);
+            const naturalState=s=>Boolean(
+              s?.walkable &&
+              s?.category!==W.CATEGORY.ROUTE &&
+              s?.category!==W.CATEGORY.INTERIOR &&
+              s?.category!==W.CATEGORY.ENTRANCE &&
+              !s?.buildingId
+            );
+            const edgeSummary=e=>({
+              allowed:Boolean(e?.allowed),
+              reason:String(e?.reason||''),
+              seconds:Number.isFinite(Number(e?.seconds))?Number(Number(e.seconds).toFixed(6)):null,
+              horizontalSeconds:Number(Number(e?.horizontalSeconds||0).toFixed(6)),
+              elevationPenaltySeconds:Number(Number(e?.elevationPenaltySeconds||0).toFixed(6)),
+              uphillPenaltySeconds:Number(Number(e?.uphillPenaltySeconds||0).toFixed(6)),
+              downhillPenaltySeconds:Number(Number(e?.downhillPenaltySeconds||0).toFixed(6)),
+              roadBenefitSeconds:Number(Number(e?.roadBenefitSeconds||0).toFixed(6)),
+              difficultTerrainPenaltySeconds:Number(Number(e?.difficultTerrainPenaltySeconds||0).toFixed(6)),
+              movementDeltaMeters:Number(Number(e?.movementDeltaMeters||e?.transition?.slope?.movementDeltaMeters||0).toFixed(6)),
+              angleDegrees:Number(Number(e?.angleDegrees||e?.transition?.slope?.angleDegrees||0).toFixed(4)),
+              slopeClass:String(e?.slopeClass||e?.transition?.slope?.slopeClass||''),
+              engineered:Boolean(e?.engineered||e?.transition?.engineered),
+              bridge:Boolean(e?.bridge)
+            });
+            const routeSummary=r=>({
+              found:Boolean(r?.found),
+              reason:String(r?.reason||''),
+              start:r?.start||null,
+              destination:r?.destination||null,
+              stepCount:Number(r?.stepCount||0),
+              totalSeconds:Number.isFinite(Number(r?.totalSeconds))?Number(Number(r.totalSeconds).toFixed(6)):null,
+              evaluatedCount:Number(r?.evaluatedCount||0),
+              expandedCount:Number(r?.expandedCount||0),
+              blockedRejectedCount:Number(r?.blockedRejectedCount||0),
+              slopeBlockedRejectedCount:Number(r?.slopeBlockedRejectedCount||0),
+              horizontalCostSeconds:Number(Number(r?.horizontalCostSeconds||0).toFixed(6)),
+              elevationPenaltySeconds:Number(Number(r?.elevationPenaltySeconds||0).toFixed(6)),
+              uphillPenaltySeconds:Number(Number(r?.uphillPenaltySeconds||0).toFixed(6)),
+              downhillPenaltySeconds:Number(Number(r?.downhillPenaltySeconds||0).toFixed(6)),
+              roadBenefitSeconds:Number(Number(r?.roadBenefitSeconds||0).toFixed(6)),
+              difficultTerrainPenaltySeconds:Number(Number(r?.difficultTerrainPenaltySeconds||0).toFixed(6)),
+              totalAscentMeters:Number(Number(r?.totalAscentMeters||0).toFixed(6)),
+              totalDescentMeters:Number(Number(r?.totalDescentMeters||0).toFixed(6)),
+              engineeredStepCount:Number(r?.engineeredStepCount||0),
+              bridgeStepCount:Number(r?.bridgeStepCount||0),
+              maxSlopeAngleDegrees:Number(Number(r?.maxSlopeAngleDegrees||0).toFixed(4)),
+              searchRadius:Number(r?.searchRadius||0),
+              maxNodes:Number(r?.maxNodes||0),
+              pathSignature:r?.found?r.pathKeys.join('|')+'@'+Number(r.totalSeconds).toFixed(6):String(r?.reason||'none')
+            });
+            const found={gentle:null,directional:null,cliff:null,valleyPass:null,roadRoute:null,roadSlope:null,bridgeRoute:null};
+
+            for(let i=0;i<12000&&(!found.gentle||!found.directional||!found.cliff);i++){
+              const x=(P.foundationUint32(seed,'wp-s002-004-001:x:'+i)%8192)-4096;
+              const y=(P.foundationUint32(seed,'wp-s002-004-001:y:'+i)%8192)-4096;
+              const horizontal=(P.foundationUint32(seed,'wp-s002-004-001:o:'+i)&1)===0;
+              const a=point(x,y),b=point(x+(horizontal?1:0),y+(horizontal?0:1));
+              const sa=classify(a),sb=classify(b);
+              if(!naturalState(sa)||!naturalState(sb))continue;
+              const ab=R.routeEdgeCost(seed,a,b,sa,sb);
+              const slope=ab?.transition?.slope;
+              const cls=String(slope?.slopeClass||'');
+              if(!found.gentle&&ab.allowed&&cls==='gentle'){
+                const t0=performance.now();
+                const route=R.findRoute(seed,a,b,{detourAllowanceTiles:4,maxNodes:256});
+                const ms=performance.now()-t0;
+                if(route.found)found.gentle={from:a,to:b,edge:edgeSummary(ab),route:routeSummary(route),queryMs:Number(ms.toFixed(3))};
+              }
+              if(!found.directional&&ab.allowed&&(cls==='moderate'||cls==='steep')&&Math.abs(Number(slope?.movementDeltaMeters||0))>1e-9){
+                const ba=R.routeEdgeCost(seed,b,a,sb,sa);
+                if(ba.allowed){
+                  const uphill=Number(slope.movementDeltaMeters)>0?ab:ba;
+                  const downhill=Number(slope.movementDeltaMeters)>0?ba:ab;
+                  if(Number(uphill.seconds)>Number(downhill.seconds)+1e-9){
+                    found.directional={from:a,to:b,uphill:edgeSummary(uphill),downhill:edgeSummary(downhill)};
+                  }
+                }
+              }
+              if(!found.cliff&&!ab.allowed&&['cliff','engineered-grade-limit','unsafe-very-steep-terrain'].includes(String(ab.reason||''))){
+                const t0=performance.now();
+                const route=R.findRoute(seed,a,b,{detourAllowanceTiles:0,maxNodes:128});
+                const ms=performance.now()-t0;
+                if(!route.found){
+                  found.cliff={from:a,to:b,edge:edgeSummary(ab),route:routeSummary(route),queryMs:Number(ms.toFixed(3))};
+                }
+              }
+            }
+
+            const straightProfile=(start,dx,dy,length)=>{
+              const points=[start];
+              let directCost=0,maxSlope=0,blockedEdges=0,elevationPenalty=0;
+              for(let step=1;step<=length;step++){
+                const p=point(Number(start.x)+dx*step,Number(start.y)+dy*step);
+                const prev=points[points.length-1],sa=classify(prev),sb=classify(p);
+                if(!sa?.walkable||!sb?.walkable)return null;
+                const edge=R.routeEdgeCost(seed,prev,p,sa,sb);
+                maxSlope=Math.max(maxSlope,Number(edge?.angleDegrees||edge?.transition?.slope?.angleDegrees||0));
+                if(!edge.allowed)blockedEdges++;
+                else{
+                  directCost+=Number(edge.seconds||0);
+                  elevationPenalty+=Number(edge.elevationPenaltySeconds||0);
+                }
+                points.push(p);
+              }
+              return {points,directCost,blockedEdges,maxSlope,elevationPenalty};
+            };
+
+            for(let i=0;i<1400&&!found.valleyPass;i++){
+              const x=(P.foundationUint32(seed,'wp-s002-004-001:vx:'+i)%6144)-3072;
+              const y=(P.foundationUint32(seed,'wp-s002-004-001:vy:'+i)%6144)-3072;
+              const horizontal=(P.foundationUint32(seed,'wp-s002-004-001:vo:'+i)&1)===0;
+              const length=8+(P.foundationUint32(seed,'wp-s002-004-001:vl:'+i)%13);
+              const dx=horizontal?1:0,dy=horizontal?0:1;
+              const start=point(x,y),end=point(x+dx*length,y+dy*length);
+              const profile=straightProfile(start,dx,dy,length);
+              if(!profile||(profile.blockedEdges===0&&profile.maxSlope<14))continue;
+              const t0=performance.now();
+              const route=R.findRoute(seed,start,end,{detourAllowanceTiles:28,maxNodes:4500});
+              const ms=performance.now()-t0;
+              if(!route.found||route.stepCount<=length)continue;
+              const easier=Number(route.maxSlopeAngleDegrees)+0.5<Number(profile.maxSlope)||profile.blockedEdges>0;
+              const costPreferred=profile.blockedEdges>0||Number(route.totalSeconds)<Number(profile.directCost)-1e-6;
+              if(easier&&costPreferred){
+                const repeat=R.findRoute(seed,start,end,{detourAllowanceTiles:28,maxNodes:4500});
+                found.valleyPass={
+                  start,end,directSteps:length,
+                  directProfile:{
+                    blockedEdges:profile.blockedEdges,
+                    maxSlopeAngleDegrees:Number(profile.maxSlope.toFixed(4)),
+                    directCostSeconds:profile.blockedEdges?null:Number(profile.directCost.toFixed(6)),
+                    elevationPenaltySeconds:Number(profile.elevationPenalty.toFixed(6))
+                  },
+                  route:routeSummary(route),
+                  deterministic:routeSummary(route).pathSignature===routeSummary(repeat).pathSignature,
+                  queryMs:Number(ms.toFixed(3)),
+                  kind:profile.blockedEdges>0?'ridge-cliff-detour':'lower-grade-valley-pass'
+                };
+              }
+            }
+
+            const regression=R.proof(seed);
+            if(regression?.route?.found){
+              found.roadRoute={
+                route:routeSummary(regression.route),
+                roadPathSteps:Number(regression.roadPathSteps||0),
+                difficultSteps:Number(regression.difficultSteps||0),
+                destinationLabel:String(regression.destinationLabel||'')
+              };
+            }
+
+            for(let y=-32;y<=32&&!found.roadSlope;y++){
+              for(let x=-32;x<=32&&!found.roadSlope;x++){
+                for(const [dx,dy] of [[1,0],[0,1]]){
+                  const a=point(x,y),b=point(x+dx,y+dy),sa=classify(a),sb=classify(b);
+                  if(sa?.category!==W.CATEGORY.ROUTE||sb?.category!==W.CATEGORY.ROUTE)continue;
+                  const edge=R.routeEdgeCost(seed,a,b,sa,sb);
+                  if(edge.allowed&&Number(edge.angleDegrees||0)>=7){
+                    found.roadSlope={from:a,to:b,edge:edgeSummary(edge)};
+                    break;
+                  }
+                }
+              }
+            }
+
+            for(let y=-56;y<=56&&!found.bridgeRoute;y++){
+              for(let x=-56;x<=56&&!found.bridgeRoute;x++){
+                const center=point(x,y),sc=classify(center);
+                if(sc?.terrainType!=='bridge')continue;
+                for(const [dx,dy] of [[1,0],[0,1]]){
+                  const left=point(x-dx,y-dy),right=point(x+dx,y+dy);
+                  if(classify(left)?.terrainType!=='bridge'&&classify(right)?.terrainType!=='bridge')continue;
+                  for(const span of [3,4,5,6]){
+                    const start=point(x-dx*span,y-dy*span),end=point(x+dx*span,y+dy*span);
+                    const ss=classify(start),se=classify(end);
+                    if(!ss?.walkable||!se?.walkable)continue;
+                    const t0=performance.now();
+                    const route=R.findRoute(seed,start,end,{detourAllowanceTiles:12,maxNodes:1800});
+                    const ms=performance.now()-t0;
+                    if(route.found&&Number(route.bridgeStepCount||0)>0){
+                      found.bridgeRoute={start,end,route:routeSummary(route),queryMs:Number(ms.toFixed(3))};
+                      break;
+                    }
+                  }
+                  if(found.bridgeRoute)break;
+                }
+              }
+            }
+
+            const stats=W.slopeStats?.()||{};
+            const elapsed=performance.now()-started;
+            const pass=Boolean(
+              found.gentle?.route?.found &&
+              found.directional &&
+              Number(found.directional.uphill.seconds)>Number(found.directional.downhill.seconds) &&
+              found.cliff && found.cliff.route?.found===false &&
+              found.valleyPass?.route?.found && found.valleyPass?.deterministic===true &&
+              found.roadRoute?.route?.found &&
+              Number(found.roadRoute.route.roadBenefitSeconds)>0 &&
+              Number(found.roadRoute.route.engineeredStepCount)>0 &&
+              found.roadSlope?.edge?.allowed &&
+              found.bridgeRoute?.route?.found && Number(found.bridgeRoute.route.bridgeStepCount)>0 &&
+              regression?.pass===true &&
+              Number(stats.elevationCacheHits||0)>0 &&
+              stats.rendererIndependent===true
+            );
+            const proof={
+              ok:true,pass,seed,
+              policy:R.ROUTE_ELEVATION_POLICY,
+              scenarios:found,
+              routeRegression:regression,
+              stats,
+              proofMs:Number(elapsed.toFixed(3)),
+              visual:'N/A - authoritative route choice/cost behavior is functional Simulation evidence'
+            };
+            window.__WP_S002_004_001_PROOF=proof;
+            return proof;
+            """
+        )
+        if not isinstance(result,dict) or result.get("ok") is not True:
+            raise RuntimeError(f"Elevation-route proof could not run: {result}")
+        return "elevation-route:functional-proof"
     if scenario == "wp-s002-003-001":
         if frame_index != 0:
             return "slope-walkability:no-op"
@@ -7247,6 +7486,37 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s002-004-001":
+        if len(frames) < 1:
+            raise RuntimeError("wp-s002-004-001 requires one functional evidence frame")
+        build=frames[0].get("runtime",{}).get("currentBuild",{})
+        proof=build.get("wpS002004001") or {}
+        if proof.get("pass") is not True:
+            raise RuntimeError(f"Elevation-aware route proof failed: {proof}")
+        scenarios=proof.get("scenarios") or {}
+        required=("gentle","directional","cliff","valleyPass","roadRoute","roadSlope","bridgeRoute")
+        missing=[key for key in required if not scenarios.get(key)]
+        if missing:
+            raise RuntimeError(f"Elevation-route evidence scenarios missing: {missing}; proof={proof}")
+        valley=scenarios.get("valleyPass") or {}
+        if (valley.get("route") or {}).get("found") is not True or valley.get("deterministic") is not True:
+            raise RuntimeError(f"Valley/pass route preference failed: {valley}")
+        road=(scenarios.get("roadRoute") or {}).get("route") or {}
+        if float(road.get("roadBenefitSeconds") or 0)<=0 or int(road.get("engineeredStepCount") or 0)<=0:
+            raise RuntimeError(f"Road preference metrics missing: {road}")
+        bridge=(scenarios.get("bridgeRoute") or {}).get("route") or {}
+        if int(bridge.get("bridgeStepCount") or 0)<=0:
+            raise RuntimeError(f"Bridge route evidence missing: {bridge}")
+        directional=scenarios.get("directional") or {}
+        if float((directional.get("uphill") or {}).get("seconds") or 0)<=float((directional.get("downhill") or {}).get("seconds") or 0):
+            raise RuntimeError(f"Directional elevation penalty is not asymmetric: {directional}")
+        if (proof.get("routeRegression") or {}).get("pass") is not True:
+            raise RuntimeError(f"Existing route proof regressed: {proof.get('routeRegression')}")
+        stats=proof.get("stats") or {}
+        if stats.get("rendererIndependent") is not True or int(stats.get("elevationCacheHits") or 0)<=0:
+            raise RuntimeError(f"Elevation authority/cache telemetry failed: {stats}")
+        return
+
     if scenario == "wp-s002-003-001":
         if len(frames) < 1:
             raise RuntimeError("wp-s002-003-001 requires one functional evidence frame")
