@@ -79,7 +79,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-009-004-001` — Terrain Surface Identity + Blend Weight, UV + Material Binding Correction — COMPLETED
 - `WP-S003-009-004-002` — Tile-Authoritative Smooth Terrain Contours + Rounded Surface Boundaries — COMPLETED
 - `WP-S003-009-005` — Loading-Screen-Inspired Unified Character, Tree + 3D Environment Art Treatment — COMPLETED
-- `WP-S003-009-006` — Architectural Entrance Readability + Threshold Dressing
+- `WP-S003-009-006` — Architectural Entrance Readability + Threshold Dressing — COMPLETED
 - `WP-S003-009-007` — Settlement Landmarks + Visual Hierarchy
 - `WP-S003-009-008` — Large-Scale Terrain Variation + Semantic Wear Zones
 - `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation
