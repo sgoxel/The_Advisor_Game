@@ -10350,6 +10350,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Distant destination did not exercise off-main-thread terrain classification: {world2}")
         if int(world2.get("terrainWorkerErrors") or 0)>0:
             raise RuntimeError(f"Terrain streaming worker reported runtime errors: {world2}")
+        sparse_resources=int(chunks2.get("streamingSparseMeshResourceCount") or 0)
+        sparse_cells=int(chunks2.get("streamingSparseMeshCellCount") or 0)
+        chunk_size=int(chunks2.get("chunkSize") or 0)
+        if sparse_resources<=0 or sparse_cells<=0:
+            raise RuntimeError(f"Destination did not use sparse gate-critical meshes: {chunks2}")
+        if chunk_size<=0 or sparse_cells>=sparse_resources*chunk_size*chunk_size:
+            raise RuntimeError(f"Gate-critical mesh expanded sparse cells back to full chunks: {chunks2}")
         if int(chunks2.get("visibleMeshInstanceCount") or 0)<=0:
             raise RuntimeError(f"Destination gate released before a visible GPU frame: {chunks2}")
         if int((areas[2].get("lastPaint") or {}).get("visibleMeshInstanceCount") or 0)<=0:
