@@ -690,18 +690,23 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
   const existing=cache.get(key);
   if(existing?.snapshot?.complete){
     cacheHits++;existing.touches++;existing.lastUsed=performance.now();
-    return Object.freeze({pending:false,data:existing.snapshot,completed:existing.snapshot.cells?.length||0,total:existing.snapshot.cells?.length||0,percent:100,cached:true});
+    const prepared=Number(existing.snapshot.streamingMinimumPreparedCellCount||existing.snapshot.cells?.filter?.(Boolean)?.length||existing.snapshot.cells?.length||0);
+    return Object.freeze({pending:false,data:existing.snapshot,completed:prepared,total:prepared,percent:100,cached:true});
   }
   const seed=String(spec.seed||"");
   const size=Math.max(1,Number(spec.chunkSize)||16);
-  const total=size*size;
+  const fullCellCount=size*size;
+  const requestedIndices=[...new Set((Array.isArray(spec?.requiredCellIndices)?spec.requiredCellIndices:[])
+    .map(Number).filter(index=>Number.isInteger(index)&&index>=0&&index<fullCellCount))].sort((a,b)=>a-b);
+  const indices=requestedIndices.length?requestedIndices:Array.from({length:fullCellCount},(_,index)=>index);
+  const total=indices.length;
   let work=state;
   if(!work||work.key!==key){
     const bounds=boundsFor(spec.x,spec.y,size);
     work={
-      key,seed,size,bounds,
+      key,seed,size,bounds,indices:Object.freeze(indices.slice()),
       minX:BigInt(bounds.minX),minY:BigInt(bounds.minY),
-      cursor:0,cells:new Array(total),surfaceCounts:{},
+      cursor:0,cells:new Array(fullCellCount),surfaceCounts:{},
       textureKeys:new Set(),overlayTextureKeys:new Set(),buildingIds:new Set(),
       walkableCount:0,blockedCount:0,startedAt:performance.now()
     };
@@ -710,7 +715,7 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
   const sliceStarted=performance.now();
   let processed=0;
   while(work.cursor<total&&processed<slice){
-    const index=work.cursor;
+    const index=work.indices[work.cursor];
     const localY=Math.floor(index/size),localX=index-localY*size;
     const x=String(work.minX+BigInt(localX)),y=String(work.minY+BigInt(localY));
     const tile=streamingMinimumTile(seed,x,y);
@@ -752,6 +757,8 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
     key,version:VERSION,seed,
     chunkX:Number(spec.x),chunkY:Number(spec.y),chunkSize:size,
     bounds:work.bounds,complete:true,streamingMinimum:true,
+    streamingMinimumSparse:total<fullCellCount,
+    streamingMinimumPreparedCellCount:total,
     cells:Object.freeze(work.cells),
     terrain:Object.freeze({
       surfaceCounts:Object.freeze({...work.surfaceCounts}),
