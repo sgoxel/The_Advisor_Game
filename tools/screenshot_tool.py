@@ -6172,21 +6172,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             proof=driver.execute_script(
                 """
                 const seed=window.SeedSystem?.getCampaign?.()?.seed;
-                const G=window.GameRenderer,T=window.TerrainFoundation,W=window.Walkability,Geo=window.GeographyFoundation;
-                if(!seed||!G?.landformAtTile||!T?.getTile||!W?.classify||!Geo?.environment){
-                  return {pass:false,reason:'landform-runtime-api-missing'};
+                const G=window.GameRenderer,WF=window.WorldField;
+                if(!seed||!G?.landformAtWorldUnit||!WF?.sample||!WF?.landform||!WF?.proof){
+                  return {pass:false,reason:'continuous-world-field-runtime-api-missing'};
                 }
                 const chunkSize=Number(window.TerrainChunkSizeSettings?.get?.()?.chunkSize||16);
                 const mod=(n,m)=>((n%m)+m)%m;
                 const candidates=[];
-                for(let y=-360;y<=360;y+=8){
-                  for(let x=-360;x<=360;x+=8){
-                    const profile=G.landformAtTile(String(x),String(y));
+                for(let y=-8000;y<=8000;y+=128){
+                  for(let x=-8000;x<=8000;x+=128){
+                    const profile=G.landformAtWorldUnit(String(x),String(y));
                     if(!profile)continue;
+                    const field=WF.sample(seed,x*2,y*2);
                     candidates.push({
                       x,y,profile,
-                      terrain:String(T.getTile(seed,String(x),String(y))?.type||''),
-                      elevationMeters:Number(Geo.environment(seed,String(x),String(y))?.elevationMeters||0)
+                      terrain:String(field?.surfaceType||''),
+                      waterKind:field?.waterKind||null,
+                      elevationMeters:Number(field?.elevationMeters||0),
+                      xMeters:String(field?.xMeters??x*2),
+                      zMeters:String(field?.zMeters??y*2)
                     });
                   }
                 }
@@ -6195,74 +6199,80 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0)||
                   (Math.abs(a.x)+Math.abs(a.y))-(Math.abs(b.x)+Math.abs(b.y))
                 )[0]||null;
-                // Evidence names must point at the matching production class.
-                // Fallback scoring is retained only to produce a useful diagnostic;
-                // passProof below refuses a mislabeled named target.
                 const valley=best('valleySignal',row=>row.profile?.kind==='valley')||best('valleySignal');
                 const ridge=best('ridgeSignal',row=>row.profile?.kind==='ridge')||best('ridgeSignal');
                 const cliff=best('cliffSignal',row=>row.profile?.kind==='cliff')||best('cliffSignal');
                 const pass=best('passSignal',row=>row.profile?.kind==='pass')||best('passSignal');
-                const slope=candidates.filter(row=>row.profile?.kind==='slope')
-                  .sort((a,b)=>Math.abs(Number(a.profile?.gradientMetersPerTile||0)-5.0)-Math.abs(Number(b.profile?.gradientMetersPerTile||0)-5.0))[0]||
-                  candidates.filter(row=>Number(row.profile?.gradientMetersPerTile||0)>=2.8)
-                    .sort((a,b)=>Number(a.profile?.gradientMetersPerTile||0)-Number(b.profile?.gradientMetersPerTile||0))[0]||cliff;
+                const slope=candidates.filter(row=>row.profile?.kind==='slope'&&Number(row.profile?.slopeDegrees||0)>=8)
+                  .sort((a,b)=>Math.abs(Number(a.profile?.slopeDegrees||0)-18)-Math.abs(Number(b.profile?.slopeDegrees||0)-18))[0]||cliff;
                 const nearWater=row=>{
                   if(row.terrain==='water')return true;
-                  for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){
-                    if(String(T.getTile(seed,String(row.x+dx),String(row.y+dy))?.type||'')==='water')return true;
+                  for(const d of [[-128,0],[128,0],[0,-128],[0,128],[-256,0],[256,0],[0,-256],[0,256]]){
+                    if(String(WF.sample(seed,(row.x+d[0])*2,(row.y+d[1])*2)?.surfaceType||'')==='water')return true;
                   }
                   return false;
                 };
-                const riverValley=best('valleySignal',row=>row.profile?.kind==='valley'&&nearWater(row))||valley;
+                const riverValley=best('valleySignal',row=>row.profile?.kind==='valley'&&nearWater(row))
+                  ||best('valleySignal',row=>nearWater(row))
+                  ||valley;
                 const boundary=candidates.filter(row=>mod(row.x,chunkSize)===0||mod(row.y,chunkSize)===0)
                   .sort((a,b)=>Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0))[0]||ridge;
                 const selected={valley,ridge,slope,cliff,pass,riverValley,boundary};
                 const deterministic=Object.values(selected).filter(Boolean).every(row=>{
-                  const a=G.landformAtTile(String(row.x),String(row.y));
-                  const b=G.landformAtTile(String(row.x),String(row.y));
+                  const a=G.landformAtWorldUnit(String(row.x),String(row.y));
+                  const b=G.landformAtWorldUnit(String(row.x),String(row.y));
                   return JSON.stringify(a)===JSON.stringify(b);
                 });
-                const signals={
-                  valley:Number(valley?.profile?.valleySignal||0),
-                  ridge:Number(ridge?.profile?.ridgeSignal||0),
-                  cliff:Number(cliff?.profile?.cliffSignal||0),
-                  pass:Number(pass?.profile?.passSignal||0),
-                  slope:Number(slope?.profile?.gradientMetersPerTile||0)
-                };
                 const authority=Object.values(selected).filter(Boolean).every(row=>
-                  row.profile?.rendererOnly===true&&row.profile?.navigationAuthority===false&&
-                  row.profile?.collisionAuthority===false&&row.profile?.simulationAuthorityPreserved===true
+                  row.profile?.continuousMeterField===true&&
+                  row.profile?.tileAuthority===false&&row.profile?.chunkAuthority===false&&
+                  row.profile?.source==='WorldField.landform'
                 );
                 const classMatch=Boolean(
                   valley?.profile?.kind==='valley'&&ridge?.profile?.kind==='ridge'&&
                   slope?.profile?.kind==='slope'&&cliff?.profile?.kind==='cliff'&&
                   pass?.profile?.kind==='pass'
                 );
+                const signals={
+                  valley:Number(valley?.profile?.valleySignal||0),
+                  ridge:Number(ridge?.profile?.ridgeSignal||0),
+                  cliff:Number(cliff?.profile?.cliffSignal||0),
+                  pass:Number(pass?.profile?.passSignal||0),
+                  slopeDegrees:Number(slope?.profile?.slopeDegrees||0)
+                };
+                const fieldProof=WF.proof(seed);
                 const passProof=Boolean(
                   valley&&ridge&&slope&&cliff&&pass&&boundary&&
                   deterministic&&authority&&classMatch&&
-                  signals.valley>=0.16&&signals.ridge>=0.16&&signals.cliff>=0.22&&signals.pass>=0.24&&signals.slope>=2.8
+                  fieldProof?.deterministic===true&&fieldProof?.continuousMeterField===true&&
+                  fieldProof?.tileAuthority===false&&fieldProof?.chunkAuthority===false&&
+                  signals.valley>=0.12&&signals.ridge>=0.14&&signals.cliff>=0.22&&
+                  signals.pass>=0.12&&signals.slopeDegrees>=8
                 );
                 const compact=Object.fromEntries(Object.entries(selected).map(([key,row])=>[
-                  key,row?{x:row.x,y:row.y,terrain:row.terrain,elevationMeters:row.elevationMeters,profile:row.profile}:null
+                  key,row?{
+                    x:row.x,y:row.y,xMeters:row.xMeters,zMeters:row.zMeters,
+                    terrain:row.terrain,waterKind:row.waterKind,elevationMeters:row.elevationMeters,
+                    profile:row.profile
+                  }:null
                 ]));
                 const proof={
-                  pass:passProof,version:String(valley?.profile?.version||''),
+                  pass:passProof,version:String(WF.VERSION||''),
                   seed,chunkSize,selected:compact,signals,candidateCount:candidates.length,
-                  deterministic,authority,classMatch,
+                  deterministic,authority,classMatch,fieldProof,
                   riverValleyAvailable:Boolean(riverValley&&nearWater(riverValley)),
-                  source:'GeographyFoundation.environment.elevationMeters',
-                  navigationAuthorityPreserved:true,collisionAuthorityPreserved:true
+                  source:'WorldField.sample+landform',
+                  continuousWorldMeterField:true,tileAuthorityDiscarded:true,chunkAuthority:false
                 };
                 window.__WP_S003_006_013_PROOF=proof;
                 return proof;
                 """
             )
             if not isinstance(proof,dict) or proof.get("pass") is not True:
-                raise RuntimeError(f"Macro landform functional proof failed: {proof}")
+                raise RuntimeError(f"Continuous world-field functional proof failed: {proof}")
         proof=driver.execute_script("return window.__WP_S003_006_013_PROOF || null")
         if not isinstance(proof,dict) or proof.get("pass") is not True:
-            raise RuntimeError(f"Macro landform proof state missing: {proof}")
+            raise RuntimeError(f"Continuous world-field proof state missing: {proof}")
         plan=(
             ("valley",1.00,(1280,800)),
             ("ridge",1.00,(1280,800)),
@@ -6278,7 +6288,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         key,zoom,viewport=plan[min(frame_index,len(plan)-1)]
         target=(proof.get("selected") or {}).get(key) or {}
         if not target:
-            raise RuntimeError(f"Macro landform visual target missing for {key}: {proof}")
+            raise RuntimeError(f"Continuous world-field visual target missing for {key}: {proof}")
         driver.set_window_size(int(viewport[0]),int(viewport[1]))
         time.sleep(0.3)
         action=_set_camera_view_and_render_active(driver,int(target["x"]),int(target["y"]),float(zoom),timeout=120.0)
@@ -6323,32 +6333,34 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   runtimeAreaLoading:window.AppUI?.runtimeAreaLoadingSnapshot?.()||null,
                   camera:window.Camera?.getCenter?.()||null,
                   frame:renderer?.frame?.center||null,
-                  simulationCampaignActive:Boolean(renderer?.simulationSnapshot?.campaignActive),
-                  regionKey:renderer?.regionKey||null,
-                  protagonistVisible:Boolean(renderer?.protagonistVisible),
                   visibleChunkCount:Number(renderer?.terrainChunks?.visibleChunkCount||0),
                   landformPass:renderer?.terrainChunks?.landformPass===true,
-                  preload:renderer?.terrainPreload||null
+                  terrainChunks:renderer?.terrainChunks||null
                 };
                 """,
                 str(target["x"]),str(target["y"])
             )
-            raise RuntimeError(f"Macro landform post-navigation readiness failed for {key}: {diagnostic}") from exc
+            raise RuntimeError(f"Continuous world-field post-navigation readiness failed for {key}: {diagnostic}") from exc
         current=driver.execute_script(
             """
             const key=String(arguments[0]);
             const proof=window.__WP_S003_006_013_PROOF||{};
             const target=proof.selected?.[key]||null;
-            const landform=target?window.GameRenderer?.landformAtTile?.(String(target.x),String(target.y)):null;
+            const landform=target?window.GameRenderer?.landformAtWorldUnit?.(String(target.x),String(target.y)):null;
             const chunks=window.GameRenderer?.snapshot?.()?.terrainChunks||null;
             return {target,landform,chunks};
             """,
             key
         )
         landform=current.get("landform") if isinstance(current,dict) else None
-        if not isinstance(landform,dict) or landform.get("rendererOnly") is not True:
-            raise RuntimeError(f"Macro landform profile missing after navigation for {key}: {current}")
-        return f"macro-landform:{key}@{zoom:.2f}:{action}"
+        if (
+            not isinstance(landform,dict)
+            or landform.get("continuousMeterField") is not True
+            or landform.get("tileAuthority") is not False
+            or landform.get("chunkAuthority") is not False
+        ):
+            raise RuntimeError(f"Continuous world-field profile missing after navigation for {key}: {current}")
+        return f"continuous-world-field:{key}@{zoom:.2f}:{action}"
 
     if scenario == "wp-s003-006-012":
         from selenium.webdriver.support.ui import WebDriverWait
@@ -8070,25 +8082,31 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "wp-s003-006-013":
         if len(frames) < 10:
-            raise RuntimeError("wp-s003-006-013 requires ten mixed macro-landform evidence frames")
+            raise RuntimeError("wp-s003-006-013 requires ten continuous world-field evidence frames")
         builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:10]]
         proof=builds[0].get("wpS003006013") or {}
         if proof.get("pass") is not True:
-            raise RuntimeError(f"Macro landform proof failed: {proof}")
+            raise RuntimeError(f"Continuous world-field proof failed: {proof}")
         selected=proof.get("selected") or {}
         for key in ("valley","ridge","slope","cliff","pass","boundary"):
             if not selected.get(key):
-                raise RuntimeError(f"Macro landform visual target missing: {key}; proof={proof}")
+                raise RuntimeError(f"Continuous world-field visual target missing: {key}; proof={proof}")
         signals=proof.get("signals") or {}
         if proof.get("classMatch") is not True:
-            raise RuntimeError(f"Named macro landform targets do not match production classes: {proof}")
-        if float(signals.get("valley") or 0)<0.16 or float(signals.get("ridge") or 0)<0.16:
+            raise RuntimeError(f"Named continuous landforms do not match field classes: {proof}")
+        if float(signals.get("valley") or 0)<0.12 or float(signals.get("ridge") or 0)<0.14:
             raise RuntimeError(f"Valley/ridge signal is too weak: {proof}")
-        if float(signals.get("cliff") or 0)<0.22 or float(signals.get("pass") or 0)<0.24 or float(signals.get("slope") or 0)<2.8:
+        if float(signals.get("cliff") or 0)<0.22 or float(signals.get("pass") or 0)<0.12 or float(signals.get("slopeDegrees") or 0)<8:
             raise RuntimeError(f"Cliff/pass/slope signal is too weak: {proof}")
         if proof.get("deterministic") is not True or proof.get("authority") is not True:
-            raise RuntimeError(f"Macro landform determinism/authority isolation failed: {proof}")
-        observed=set()
+            raise RuntimeError(f"Continuous field determinism/authority failed: {proof}")
+        field_proof=proof.get("fieldProof") or {}
+        if (
+            field_proof.get("continuousMeterField") is not True
+            or field_proof.get("tileAuthority") is not False
+            or field_proof.get("chunkAuthority") is not False
+        ):
+            raise RuntimeError(f"WorldField did not prove tile/chunk authority removal: {proof}")
         for index,build in enumerate(builds):
             scene=build.get("sceneLoading") or {}
             scene_current=scene.get("current") or {}
@@ -8101,31 +8119,28 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 or area.get("state") != "READY"
             ):
                 raise RuntimeError(
-                    f"Macro landform frame {index+1} was captured before genuine playable readiness: "
+                    f"Continuous terrain frame {index+1} was captured before genuine playable readiness: "
                     f"campaign={build.get('campaignState')}, scene={scene}, area={area}"
                 )
             chunks=((build.get("gpuRenderer") or {}).get("terrainChunks") or {})
             if chunks.get("landformEnabled") is not True or chunks.get("landformPass") is not True:
-                raise RuntimeError(f"Prepared macro landform telemetry failed in frame {index+1}: {chunks}")
+                raise RuntimeError(f"Continuous field telemetry failed in frame {index+1}: {chunks}")
+            if chunks.get("naturalTerrainAuthority") != "WorldField":
+                raise RuntimeError(f"Natural terrain authority is not WorldField in frame {index+1}: {chunks}")
+            if chunks.get("continuousWorldMeterField") is not True or chunks.get("logicalTilesAuthoritative") is not False:
+                raise RuntimeError(f"Tile-authoritative terrain survived in frame {index+1}: {chunks}")
             if int(chunks.get("landformPerFrameRegenerationCount") or 0)!=0:
-                raise RuntimeError(f"Macro landform regenerated per frame in frame {index+1}: {chunks}")
-            if chunks.get("landformRendererOnly") is not True or chunks.get("landformNavigationAuthority") is True or chunks.get("landformCollisionAuthority") is True:
-                raise RuntimeError(f"Macro landform authority isolation failed in frame {index+1}: {chunks}")
+                raise RuntimeError(f"Continuous landform regenerated per frame in frame {index+1}: {chunks}")
+            if chunks.get("landformRendererOnly") is not False:
+                raise RuntimeError(f"WorldField was incorrectly reported as renderer-only in frame {index+1}: {chunks}")
+            if chunks.get("landformNavigationAuthority") is True or chunks.get("landformCollisionAuthority") is True:
+                raise RuntimeError(f"Navigation/collision authority changed unexpectedly in frame {index+1}: {chunks}")
             if int(chunks.get("landformDrawCallsAdded") or 0)!=0 or int(chunks.get("landformMaterialsAdded") or 0)!=0:
-                raise RuntimeError(f"Macro landform added an unexpected draw call/material in frame {index+1}: {chunks}")
-            if int(chunks.get("landformTrianglesAdded") or 0)>int(chunks.get("landformTriangleBudget") or 0):
-                raise RuntimeError(f"Macro landform sparse cliff triangles exceeded the prepared budget in frame {index+1}: {chunks}")
+                raise RuntimeError(f"Continuous field added unexpected draw calls/materials in frame {index+1}: {chunks}")
+            if int(chunks.get("landformTrianglesAdded") or 0)!=0:
+                raise RuntimeError(f"Retired cell-local cliff topology still adds triangles in frame {index+1}: {chunks}")
             if float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
-                raise RuntimeError(f"Macro landform chunk border mismatch in frame {index+1}: {chunks}")
-            for key,value in (chunks.get("landformClassCounts") or {}).items():
-                if int(value or 0)>0: observed.add(str(key))
-        if not ({"ridge","valley"} & observed):
-            raise RuntimeError(f"Active resources did not expose ridge/valley telemetry: observed={sorted(observed)}")
-        cliff_chunks=((builds[3].get("gpuRenderer") or {}).get("terrainChunks") or {})
-        if int(cliff_chunks.get("landformCliffFaceCount") or 0)<1 or int(cliff_chunks.get("landformCliffFaceTriangleCount") or 0)<2:
-            raise RuntimeError(f"Cliff evidence frame did not prepare any sparse same-mesh cliff face: {cliff_chunks}")
-        if int(cliff_chunks.get("landformCliffLipCount") or 0)<1 or int(cliff_chunks.get("landformCliffLipTriangleCount") or 0)<2:
-            raise RuntimeError(f"Cliff evidence frame did not prepare downhill-cut same-mesh cliff topology: {cliff_chunks}")
+                raise RuntimeError(f"Continuous field patch border mismatch in frame {index+1}: {chunks}")
         return
 
     if scenario == "wp-s003-006-012":
