@@ -1544,36 +1544,48 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       if(!TERRAIN_VARIATION_CONSTRUCTED_TYPES.has(type)&&TERRAIN_VARIATION_NATURAL_TYPES.has(type)){
         const macroStrength=(type==="grass"||type==="forest"||type==="farmland")?0.11:
           (type==="dirt"||type==="mud"||type==="sand")?0.075:0.045;
-        r*=1+macro*macroStrength*0.68;
-        g*=1+macro*macroStrength;
-        b*=1+macro*macroStrength*0.48;
+        // Mesh.setColors32 is a normalized UINT8 stream: components above 1.0
+        // cannot reach the shader. Encode both sides of the field as relative
+        // hue/value attenuation so dry/warm and damp/lush regions are both
+        // visible without a second material, texture, draw call or shader.
+        if(macro>=0){
+          const dry=clamp(macro,0,1);
+          r*=1-macroStrength*0.20*dry;
+          g*=1-macroStrength*0.65*dry;
+          b*=1-macroStrength*1.00*dry;
+        }else{
+          const lush=clamp(-macro,0,1);
+          r*=1-macroStrength*0.85*lush;
+          g*=1-macroStrength*0.20*lush;
+          b*=1-macroStrength*0.35*lush;
+        }
 
         const routeWear=context.route*(type==="grass"||type==="forest"?1:0.72);
         if(routeWear>0.08){
-          r*=1+0.115*routeWear;
-          g*=1-0.090*routeWear;
-          b*=1-0.145*routeWear;
+          r*=1-0.020*routeWear;
+          g*=1-0.100*routeWear;
+          b*=1-0.160*routeWear;
           categories.push("road-shoulder");
         }
         const buildingWear=context.building*(type==="grass"||type==="forest"?1:0.65);
         if(buildingWear>0.08){
-          r*=1+0.105*buildingWear;
-          g*=1-0.080*buildingWear;
-          b*=1-0.135*buildingWear;
+          r*=1-0.025*buildingWear;
+          g*=1-0.090*buildingWear;
+          b*=1-0.145*buildingWear;
           categories.push("building-wear");
         }
         const moisture=context.moisture*(type==="grass"||type==="forest"||type==="mud"?1:0.45);
         if(moisture>0.08){
-          r*=1-0.090*moisture;
-          g*=1+0.030*moisture;
-          b*=1+0.070*moisture;
+          r*=1-0.120*moisture;
+          g*=1-0.035*moisture;
+          b*=1-0.015*moisture;
           categories.push("moisture");
         }
         const forestContact=context.forest*(type==="grass"||type==="forest"?1:0.35);
         if(forestContact>0.08){
-          r*=1-0.050*forestContact;
-          g*=1+0.045*forestContact;
-          b*=1-0.030*forestContact;
+          r*=1-0.080*forestContact;
+          g*=1-0.015*forestContact;
+          b*=1-0.050*forestContact;
           categories.push("forest-contact");
         }
         if(context.route<0.05&&context.building<0.05&&context.moisture<0.08&&Math.abs(macro)>0.18){
@@ -1581,9 +1593,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         }
       }
       const tint=Object.freeze([
-        clamp(r,0.80,1.10),
-        clamp(g,0.80,1.10),
-        clamp(b,0.80,1.10),
+        clamp(r,0.80,1.00),
+        clamp(g,0.80,1.00),
+        clamp(b,0.80,1.00),
         1
       ]);
       const tinted=Math.abs(tint[0]-1)>0.006||Math.abs(tint[1]-1)>0.006||Math.abs(tint[2]-1)>0.006;
@@ -2026,6 +2038,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
+      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.80-1.00",
       terrainVariationDeterministic:true,
       terrainVariationRendererOnly:true,
       terrainVariationNavigationAuthority:false,
@@ -2306,6 +2319,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
+      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.80-1.00",
       terrainVariationRendererOnly:true,
       terrainVariationNavigationAuthority:false,
       terrainVariationCollisionAuthority:false,
