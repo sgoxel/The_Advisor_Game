@@ -421,6 +421,20 @@ function failRuntimeAreaLoading(error){
     progressText:"Retry the camera move."
   });
 }
+async function waitForRuntimeDestinationPaint(maxFrames=6){
+  for(let frame=0;frame<Math.max(1,Number(maxFrames)||1);frame++){
+    await new Promise(resolve=>requestAnimationFrame(()=>resolve()));
+    const snapshot=GameRenderer.snapshot?.()||{};
+    const chunks=snapshot.terrainChunks||{};
+    const canvas=snapshot.canvas||{};
+    if(
+      Number(chunks.activeMeshCount||chunks.visibleChunkCount||0)>0&&
+      Number(chunks.visibleMeshInstanceCount||0)>0&&
+      Number(canvas.cssWidth||1)>0&&Number(canvas.cssHeight||1)>0
+    )return Object.freeze({painted:true,frame:frame+1,visibleMeshInstanceCount:Number(chunks.visibleMeshInstanceCount||0)});
+  }
+  return Object.freeze({painted:false,frame:Math.max(1,Number(maxFrames)||1),visibleMeshInstanceCount:0});
+}
 function completeRuntimeAreaLoading(){
   const rendererProgress=GameRenderer.finishTerrainDestination?.()||null;
   runtimeAreaLoadingState.state="READY";
@@ -1677,8 +1691,12 @@ function navigateCameraTo(target,navigationMeta=null,{forceGate=false}={}){
       lastCameraDirection=normalizeDirection(BigInt(requested.x)-BigInt(centerBefore.x),BigInt(requested.y)-BigInt(centerBefore.y));
       const protagonistAfter=Protagonist.getPosition();
       cameraIndependenceProven=sameCoordinate(protagonistBefore,protagonistAfter);
-      await renderTerrain();
+      const rendered=await renderTerrain();
+      if(rendered!==true)throw new Error("Destination render did not complete");
       updateCameraPresentation();
+      const paint=await waitForRuntimeDestinationPaint(6);
+      if(!paint.painted)throw new Error("Destination did not produce a visible rendered frame");
+      runtimeAreaLoadingState.lastPaint=paint;
       rememberCameraNavigation(navigationMeta,centerBefore,Camera.getCenter(),protagonistBefore,protagonistAfter);
       completeRuntimeAreaLoading();
       if(intent===runtimeAreaIntentSerial)pendingCameraTarget=null;

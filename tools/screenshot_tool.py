@@ -10265,6 +10265,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         area2=builds[2].get("runtimeAreaLoading") or {}
         if area2.get("state")!="READY":
             raise RuntimeError(f"Destination did not recover to READY: {area2}")
+        chunks2=gpus[2].get("terrainChunks") or {}
+        if int(chunks2.get("visibleMeshInstanceCount") or 0)<=0:
+            raise RuntimeError(f"Destination gate released before a visible GPU frame: {chunks2}")
+        if int((area2.get("lastPaint") or {}).get("visibleMeshInstanceCount") or 0)<=0:
+            raise RuntimeError(f"Destination paint confirmation missing: {area2}")
         preload=gpus[3].get("terrainPreload") or {}
         area3=builds[3].get("runtimeAreaLoading") or {}
         if int(preload.get("staleDestinationCancelled") or 0)<=0 and int(area3.get("coalesced") or 0)<=0:
