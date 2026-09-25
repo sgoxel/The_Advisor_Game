@@ -6249,7 +6249,7 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
-    if scenario == "wp-s003-006-014":
+    if scenario in {"wp-s003-006-014","wp-s003-008-004"}:
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
             ("default",(1280,800)),
@@ -8061,7 +8061,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
-    if scenario == "wp-s003-006-014":
+    if scenario in {"wp-s003-006-014","wp-s003-008-004"}:
         if len(frames) < 6:
             raise RuntimeError("wp-s003-006-014 requires six seeded-planet evidence frames")
         builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
@@ -8162,6 +8162,22 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         rotations=[]
         for index,build in enumerate(builds, start=1):
             stage=build.get("planetStage") or {}
+            if scenario=="wp-s003-008-004":
+                scheduler=stage.get("startupScheduler") or {}
+                if scheduler.get("sharedCooperativeScheduler") is not True or scheduler.get("criticalPathOnly") is not True:
+                    raise RuntimeError(f"Startup scheduler contract missing in frame {index}: {scheduler}")
+                if int(scheduler.get("yieldCount") or 0)<2 or int(scheduler.get("sliceCount") or 0)<3:
+                    raise RuntimeError(f"Startup did not cooperatively yield enough in frame {index}: {scheduler}")
+                if float(scheduler.get("maxSliceMs") or 9999)>50:
+                    raise RuntimeError(f"Startup slice exceeded long-task threshold in frame {index}: {scheduler}")
+                if int(scheduler.get("heartbeatCount") or 0)<1 or int(scheduler.get("paintHeartbeatCount") or 0)<3:
+                    raise RuntimeError(f"Startup heartbeat/paint proof missing in frame {index}: {scheduler}")
+                if int(scheduler.get("longTaskOver200") or 0)>0:
+                    raise RuntimeError(f"Severe >200ms startup long task detected in frame {index}: {scheduler}")
+                if int(scheduler.get("completedFirstPlayableWorkUnits") or 0)!=int(scheduler.get("firstPlayableWorkUnits") or -1):
+                    raise RuntimeError(f"First-playable sliced work incomplete in frame {index}: {scheduler}")
+                if int(scheduler.get("optionalPostReadyWorkCount") or -1)!=0:
+                    raise RuntimeError(f"Optional work leaked into planet critical path in frame {index}: {scheduler}")
             systems=stage.get("activeSystems") or {}
             if stage.get("ready") is not True or stage.get("stage") != "planet-sphere-foundation":
                 raise RuntimeError(f"Planet stage not ready in frame {index}: {stage}")
