@@ -532,7 +532,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         });
         continue;
       }
-      const rect=state?.ready?atlas?.uvRect?.(type):null;
+      const rect=state?.ready?(atlas?.meshUvRect?.(type)||atlas?.uvRect?.(type)):null;
       out[type]=Object.freeze({
         authoritativeSurfaceId:type,
         materialKey:String(material?.name||"terrain-chunk-surface"),
@@ -1380,7 +1380,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         const sourceCell=spec.worldData?.cells?.[gz*size+gx]||null;
         const surfaceType=semanticSurfaceType(sourceCell?.type||grid[gz*stride+gx].sample.type);
         semanticSurfaceTileCounts[surfaceType]=(semanticSurfaceTileCounts[surfaceType]||0)+1;
-        const rect=semanticAtlasReady?activeAtlas?.uvRect?.(surfaceType):null;
+        const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(surfaceType)||activeAtlas?.uvRect?.(surfaceType)):null;
         if(rect){texturedBlockCount++;texturedSurfaceTypes.add(surfaceType);}
         else{colorFallbackBlockCount++;fallbackSurfaceTypes.add(surfaceType);}
         const corners=[
@@ -1750,6 +1750,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       worldVisualStyleSignature:String(worldVisualStyle()?.signature||"legacy"),
       worldVisualStylePaletteRoleCount:Object.keys(worldVisualStyle()?.palette||{}).length,
       terrainSemanticUvPerTile:true,
+      semanticMeshUvOrientation:String(activeAtlas?.stats?.()?.semanticMeshUvOrientation||"source-row-space"),
       indexedSharedVertices:false,
       indexedSemanticQuads:true,
       semanticTerrainMaterialCount:1,

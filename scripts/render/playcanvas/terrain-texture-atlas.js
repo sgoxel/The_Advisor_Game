@@ -56,6 +56,22 @@ function create({pc,device}={}){
       type:CORE_TYPES[slot.index]
     });
   }
+  function meshUvRect(type){
+    const slot=slotFor(type),size=runtimeResolution(),rows=Math.ceil(CORE_TYPES.length/COLUMNS),pad=padFor(size);
+    const stride=size+pad*2,width=COLUMNS*stride,height=rows*stride;
+    const x=slot.col*stride+pad,y=slot.row*stride+pad,half=0.5;
+    // pc.Texture.setSource(canvas) uploads browser canvas rows in texture source
+    // orientation for direct mesh UVs. Material map tiling/offset uses the
+    // existing flipped uvRect() contract, but explicit UV0 must stay in source
+    // row space or top-row terrain families can land in unused atlas cells.
+    return Object.freeze({
+      u0:(x+half)/width,
+      v0:(y+half)/height,
+      u1:(x+size-half)/width,
+      v1:(y+size-half)/height,
+      type:CORE_TYPES[slot.index]
+    });
+  }
   function fillFallback(ctx,type,x,y,size){
     ctx.fillStyle=FALLBACK[type]||FALLBACK.grass;
     ctx.fillRect(x,y,size,size);
@@ -236,6 +252,8 @@ function create({pc,device}={}){
       microReliefMode:"shared-normal-map",microReliefGeometryVerticesAdded:0,microReliefMaterialVariantsAdded:0,
       heightfieldSurfaceMode:"semantic-atlas-per-logical-tile+uv1-normal-detail",
       semanticSurfaceAtlas:true,semanticSurfaceInteriorOpacity:1,
+      semanticMeshUvOrientation:"source-row-space",
+      materialTransformUvOrientation:"playcanvas-flipped-row-space",
       atlasMipmaps:false,atlasFilterMode:"linear-no-mip",
       frameDecodeCount:0,frameRasterizeCount:0,frameAtlasBuildCount:0,
       textureGeneration,textureDestructions,retiredTextureCount:retiredTextures.length,
@@ -265,7 +283,7 @@ function create({pc,device}={}){
     texture=null;detailTexture=null;normalDetailTexture=null;signature="";
     lastStats=Object.freeze({...lastStats,ready:false,gpuTextureCount:0,detailGpuTextureCount:0,normalDetailGpuTextureCount:0,totalGpuTextureCount:0,detailTextureReady:false,normalDetailTextureReady:false,textureDestructions,retiredTextureCount:0});
   }
-  return Object.freeze({prepare,uvRect,texture:getTexture,detailTexture:getDetailTexture,normalDetailTexture:getNormalDetailTexture,stats,releaseRetiredTextures,destroy,coreTypes:CORE_TYPES});
+  return Object.freeze({prepare,uvRect,meshUvRect,texture:getTexture,detailTexture:getDetailTexture,normalDetailTexture:getNormalDetailTexture,stats,releaseRetiredTextures,destroy,coreTypes:CORE_TYPES});
 }
 window.PlayCanvasTerrainTextureAtlas=Object.freeze({create,coreTypes:CORE_TYPES});
 })();
