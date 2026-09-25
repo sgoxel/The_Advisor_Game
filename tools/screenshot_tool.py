@@ -1629,8 +1629,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     driver, radius=1, cache=256, directional=True, background=True
                 )
             if scenario == "wp-s003-006-011":
+                # Keep the stress proof focused on explicit destination-priority
+                # streaming. Normal background generation is intentionally disabled
+                # so cold software-WebGL CI does not spend the evidence window
+                # composing unrelated full-quality neighbor chunks.
                 _set_terrain_preload_settings(
-                    driver, radius=2, cache=256, directional=True, background=True
+                    driver, radius=2, cache=256, directional=True, background=False
                 )
                 _set_terrain_chunk_size(driver, 16)
             if scenario in {"wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009"}:
