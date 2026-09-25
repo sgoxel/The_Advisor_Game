@@ -1500,3 +1500,15 @@
 - Push Visual Evidence run 36123673613 passed on the exact implementation commit.
 - Dedicated WP-S003-006-011 regression run 36123749306 passed on the exact implementation commit. Eight fresh screenshots were directly inspected; FINAL VISUAL 8.2/10 PASS with no blank/broken terrain, loading-overlay layout failure, clipping that prevents use, or area-loading interruption.
 - Runtime evidence reached READY at the distant (262,-192) destination and the coalesced (320,-240) target, returned to cached origin/revisit views, retained continuous LOAD_GATE paint on landscape/phone, recorded 0 terrain-worker errors, 10 worker completions / 747 classified cells, 0 destination long tasks >50 ms, and a 26.8 ms maximum destination slice while preserving Simulation authority.
+
+2026-09-25 13:56:35 +03:00 | WP-S002-003-001 | Elevation + Slope-Aware Walkability, Climbability + Cliff Blocking — PASS
+- Classification: FUNCTIONAL / SIMULATION. VISUAL: N/A because authoritative slope, transition legality and route-cost behavior cannot be meaningfully verified from screenshots.
+- Added renderer-independent deterministic slope authority from GeographyFoundation elevation, using a bounded cached local movement elevation mapping and explicit gentle/moderate/steep/very-steep/cliff bands.
+- Walkability now exposes adjacent transition authority with movement-cost multipliers, cliff blocking, unsafe very-steep terrain blocking, graded building/interior pad preservation, engineered road/path grade limits, and diagonal cliff-corner protection.
+- RoutePlanner now consumes authoritative transition legality/cost instead of destination-cell movement cost alone while preserving deterministic bounded A* behavior and existing object/interior navigation integration.
+- Attempt 1 run 36125906881 failed only because the new functional proof was not dispatched on the first frame; production movement code was unchanged. The evidence harness was corrected before Attempt 2.
+- Attempt 2 run 36126316943 on exact head d023454d888257ae209ec029709c427248b29420 passed. Artifact 10860350483 / sha256:43c5c5f38aef185c4decfccf7fc2ca0b2fe3e4d4543c18f0ba1ff2b9472d737c records all required deterministic functional scenarios.
+- Evidence includes gentle ground (4.2892° / 1.00×), moderate hill (11.3099° / 1.18×), steep climbable slope (15.3763° / 1.55×), blocked cliff (36.8699°), highland pass (16.6992°), manageable engineered road (14.0362° / 1.2475×), road-over-cliff rejection, chunk-boundary transition, and diagonal cliff-corner rejection.
+- Existing local RoutePlanner regression remains PASS with a 26-step route, deterministic result, blocked-wall rejection, movement-cost agreement, one slope-blocked alternative, and 19.29° maximum chosen-route slope.
+- Slope telemetry: 11,769 elevation queries, 11,628 cache hits (~49.7% hit rate), 7,745 transition queries, 176 slope-blocked transitions, 0.0234 ms average elevation query and 3.2 ms maximum sampled query. Authority remains renderer-independent.
+- Exact tested implementation head d023454d888257ae209ec029709c427248b29420 deployed successfully via GitHub Pages run 36126304642.
