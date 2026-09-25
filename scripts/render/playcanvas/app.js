@@ -837,10 +837,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     });
     return terrainChunkMeshFactory;
   }
-  function prepareTerrainMeshChunk(spec){
-    const factory=initTerrainChunkMeshFactory();
-    if(!factory)throw new Error("PlayCanvas terrain chunk mesh factory is unavailable");
-    const worldData=window.PlayCanvasChunkWorldData?.getOrCreate?.({
+  function prepareTerrainChunkData(spec){
+    return window.PlayCanvasChunkWorldData?.getOrCreate?.({
       seed:lastRawSeed||"",
       x:spec.x,
       y:spec.y,
@@ -848,6 +846,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       signature:spec.signature,
       state:spec.state
     })||null;
+  }
+  function prepareTerrainMeshChunk(spec){
+    const factory=initTerrainChunkMeshFactory();
+    if(!factory)throw new Error("PlayCanvas terrain chunk mesh factory is unavailable");
+    const worldData=prepareTerrainChunkData(spec);
     const chunkPosition=terrainChunkPosition(spec.x,spec.y,spec.chunkSize);
     const resource=factory.build({...spec,worldData,worldX:chunkPosition.x,worldZ:chunkPosition.z});
     resource.worldData=worldData;
@@ -1494,6 +1497,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       signatureProvider:terrainChunkSignature,
       performanceProvider:()=>renderQualitySnapshot(),
       prepareChunk:prepareTerrainMeshChunk,
+      prepareChunkData:prepareTerrainChunkData,
       activateChunk:activateTerrainChunk,
       deactivateChunk:deactivateTerrainChunk,
       destroyChunk:destroyTerrainChunk

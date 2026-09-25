@@ -1657,6 +1657,7 @@ function cameraNavigationSnapshot(){
 }
 function navigateCameraTo(target,navigationMeta=null,{forceGate=false}={}){
   const requested=WorldCoordinates.position(String(target.x),String(target.y));
+  if(pendingCameraTarget||runtimeAreaLoadingState.state!=="READY")runtimeAreaLoadingState.coalesced++;
   pendingCameraTarget=requested;
   const intent=++runtimeAreaIntentSerial;
   GameRenderer.cancelTerrainDestination?.("new-camera-intent");

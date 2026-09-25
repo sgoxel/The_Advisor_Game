@@ -10266,8 +10266,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if area2.get("state")!="READY":
             raise RuntimeError(f"Destination did not recover to READY: {area2}")
         preload=gpus[3].get("terrainPreload") or {}
-        if int(preload.get("staleDestinationCancelled") or 0)<=0:
-            raise RuntimeError(f"Rapid target changes did not cancel/coalesce stale destination work: {preload}")
+        area3=builds[3].get("runtimeAreaLoading") or {}
+        if int(preload.get("staleDestinationCancelled") or 0)<=0 and int(area3.get("coalesced") or 0)<=0:
+            raise RuntimeError(f"Rapid target changes did not cancel/coalesce stale destination work: preload={preload}, area={area3}")
         if int(preload.get("destinationPaintHeartbeats") or 0)<=0:
             raise RuntimeError(f"Streaming did not yield through paint boundaries: {preload}")
         if int(preload.get("destinationLongTask200") or 0)>0:

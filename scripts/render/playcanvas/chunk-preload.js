@@ -117,6 +117,7 @@ function directionUnit(dx,dy){
 function createManager({
   chunkSize=16,
   prepareChunk,
+  prepareChunkData=null,
   activateChunk,
   deactivateChunk,
   destroyChunk,
@@ -154,7 +155,9 @@ function createManager({
   let destinationStartedAtMs=null,destinationGateShownAtMs=null,destinationReadyAtMs=null,destinationTarget=null,destinationRequiredIds=Object.freeze([]);
   let destinationLastProgress=Object.freeze({state:"READY",required:0,completed:0,percent:100,target:null});
   let destinationSliceCount=0,destinationLastSliceMs=0,destinationMaxSliceMs=0,destinationTotalSliceMs=0;
+  let destinationDataSliceCount=0,destinationDataLastMs=0,destinationDataMaxMs=0,destinationDataTotalMs=0;
   let destinationLongTask50=0,destinationLongTask100=0,destinationLongTask200=0,destinationPaintHeartbeats=0;
+  const destinationDataPrepared=new Set();
   let updateCalls=0,lastUpdateMs=0,maxUpdateMs=0,totalUpdateMs=0,transitionCalls=0,totalTransitionMs=0,maxTransitionMs=0;
   let lastInvalidationReason=null;
   let lastWorkMs=0,maxWorkMs=0,backgroundFrames=0;
@@ -288,7 +291,10 @@ function createManager({
     }
     if(!removed.length)return 0;
     queue=keep;
-    for(const item of removed)queued.delete(item.fullKey);
+    for(const item of removed){
+      queued.delete(item.fullKey);
+      destinationDataPrepared.delete(item.fullKey);
+    }
     staleDestinationCancelled+=removed.length;
     lastQueuePreview=Object.freeze(queue.slice(0,8).map(item=>Object.freeze({x:item.x,y:item.y,priority:item.priority,distance:item.distance,source:item.source||"normal"})));
     return removed.length;
@@ -533,8 +539,25 @@ function createManager({
         continue;
       }
       const itemStarted=performance.now();
+      if(item.source==="destination"&&typeof prepareChunkData==="function"&&!destinationDataPrepared.has(item.fullKey)){
+        prepareChunkData({x:item.x,y:item.y,chunkSize:size,signature:item.signature,state:item.state||"Prepared",source:"destination"});
+        const dataElapsed=performance.now()-itemStarted;
+        destinationDataPrepared.add(item.fullKey);
+        destinationDataSliceCount++;
+        destinationDataLastMs=dataElapsed;
+        destinationDataTotalMs+=dataElapsed;
+        destinationDataMaxMs=Math.max(destinationDataMaxMs,dataElapsed);
+        // Requeue the exact same destination chunk so mesh/GPU composition runs
+        // in the next paint-separated task instead of sharing one long task
+        // with deterministic world-data generation.
+        queue.unshift(item);
+        queued.add(item.fullKey);
+        processed++;
+        continue;
+      }
       prepareNow(item.x,item.y,item.state||"Prepared",false,item.source||"normal");
       const itemElapsed=performance.now()-itemStarted;
+      if(item.source==="destination")destinationDataPrepared.delete(item.fullKey);
       if(item.source==="idle"){
         lastIdleWorkMs=itemElapsed;
         totalIdleWorkMs+=itemElapsed;
@@ -785,6 +808,10 @@ function createManager({
       destinationLastSliceMs:Number(destinationLastSliceMs.toFixed(3)),
       destinationMaxSliceMs:Number(destinationMaxSliceMs.toFixed(3)),
       destinationAverageSliceMs:Number((destinationSliceCount?destinationTotalSliceMs/destinationSliceCount:0).toFixed(3)),
+      destinationDataSliceCount,
+      destinationDataLastMs:Number(destinationDataLastMs.toFixed(3)),
+      destinationDataMaxMs:Number(destinationDataMaxMs.toFixed(3)),
+      destinationDataAverageMs:Number((destinationDataSliceCount?destinationDataTotalMs/destinationDataSliceCount:0).toFixed(3)),
       destinationLongTask50,destinationLongTask100,destinationLongTask200,destinationPaintHeartbeats,
       destinationQueueDepth:queue.filter(item=>item.source==="destination").length,
       recentFrameTimeMs:lastHeadroom.frameMs,
