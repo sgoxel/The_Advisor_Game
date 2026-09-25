@@ -5,7 +5,7 @@
 // The loading presentation supplies the palette/mood language only. Gameplay
 // keeps its own geometry, sprites, UI and renderer architecture.
 const STYLE=Object.freeze({
-  signature:"living-world-style-v2",
+  signature:"living-world-style-v3",
   reference:"scene-loading-color-language",
   palette:Object.freeze({
     gold:Object.freeze([0.949,0.831,0.494]),
@@ -40,6 +40,25 @@ const STYLE=Object.freeze({
     sharedGloss:0.10,
     presentationGlossMax:0.11,
     metalness:0
+  }),
+  spriteTreatment:Object.freeze({
+    character:Object.freeze({
+      diffuseTint:Object.freeze([0.965,0.940,0.885]),
+      emissiveTint:Object.freeze([0.955,0.925,0.855]),
+      alphaTest:0.16,
+      useLighting:false,
+      role:"character-accent"
+    }),
+    tree:Object.freeze({
+      diffuseTint:Object.freeze([0.900,0.945,0.845]),
+      emissiveTint:Object.freeze([0.835,0.895,0.765]),
+      alphaTest:0.16,
+      useLighting:false,
+      role:"vegetation-midground"
+    }),
+    edgePolicy:"alpha-test-clean",
+    destructiveAssetRewrite:false,
+    sharedMaterialOnly:true
   }),
   terrainGrade:Object.freeze({
     green:Object.freeze({saturation:1.30,brightness:1.045,redScale:0.955,greenScale:1.045,blueScale:0.915,redOffset:-0.004,greenOffset:0.022,blueOffset:0}),
@@ -91,6 +110,7 @@ function snapshot(){
     hierarchy:STYLE.hierarchy,
     lighting:STYLE.lighting,
     materials:STYLE.materials,
+    spriteTreatment:STYLE.spriteTreatment,
     terrainGrade:STYLE.terrainGrade,
     performance:STYLE.performance,
     stylized:true,
@@ -108,6 +128,7 @@ window.AdvisorWorldVisualStyle=Object.freeze({
   hierarchy:STYLE.hierarchy,
   lighting:STYLE.lighting,
   materials:STYLE.materials,
+  spriteTreatment:STYLE.spriteTreatment,
   terrainGrade:STYLE.terrainGrade,
   performance:STYLE.performance,
   gradeRgb,
