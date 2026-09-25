@@ -800,7 +800,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // SEED in resource identity so a real campaign switch cannot reuse the
     // previous campaign's prepared meshes. Framebuffer/material quality remains
     // excluded because those changes do not alter geometry.
-    return "geometry=heightfield-v12-visible-landform-relief|seed="+String(lastRawSeed||"none");
+    return "geometry=heightfield-v13-cliff-lips-contours|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -943,6 +943,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let landformReliefMin=Infinity,landformReliefMax=-Infinity,landformConditionOffsetMin=Infinity,landformConditionOffsetMax=-Infinity;
     let landformDrawCallsAdded=0,landformTrianglesAdded=0,landformMaterialsAdded=0,landformPerFrameRegenerationCount=0;
     let landformCliffFaceCount=0,landformCliffFaceTriangleCount=0,landformTriangleBudget=0;
+    let landformCliffLipCount=0,landformCliffLipTriangleCount=0;
     let landformDeterministic=true,landformSeamSafeGlobalCoordinates=true,landformChunkPrepared=true,landformRendererOnly=true;
     let landformNavigationAuthority=false,landformCollisionAuthority=false,landformSimulationAuthorityPreserved=true;
     const landformClassCounts={},landformSamples=[];
@@ -1044,6 +1045,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
           landformMaterialsAdded+=Number(resource.landformMaterialsAdded||0);
           landformCliffFaceCount+=Number(resource.landformCliffFaceCount||0);
           landformCliffFaceTriangleCount+=Number(resource.landformCliffFaceTriangleCount||0);
+          landformCliffLipCount+=Number(resource.landformCliffLipCount||0);
+          landformCliffLipTriangleCount+=Number(resource.landformCliffLipTriangleCount||0);
           landformTriangleBudget+=Number(resource.landformTriangleBudgetPerChunk||0);
           landformPerFrameRegenerationCount+=Number(resource.landformPerFrameRegenerationCount||0);
           landformDeterministic=landformDeterministic&&resource.landformDeterministic!==false;
@@ -1373,7 +1376,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         hydrologyRendererOnly&&!hydrologyNavigationAuthority&&!hydrologyCollisionAuthority&&!hydrologyWaterIdentityChanged
       ),
       landformEnabled:landformResourceCount>0&&generatorStats.landformEnabled===true,
-      landformVersion:String(generatorStats.landformVersion||"macro-landform-v3"),
+      landformVersion:String(generatorStats.landformVersion||"macro-landform-v4"),
       landformSampleRadiusTiles:Number(generatorStats.landformSampleRadiusTiles||0),
       landformResourceCount,
       landformClassCounts:Object.freeze({...landformClassCounts}),
@@ -1384,8 +1387,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):null,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):null,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):null,
-      landformSteepFaceTreatment:String(generatorStats.landformSteepFaceTreatment||"world-gradient+macro-elevation-shading+sparse-downhill-cliff-aprons"),
-      landformCliffFaceCount,landformCliffFaceTriangleCount,landformTriangleBudget,
+      landformSteepFaceTreatment:String(generatorStats.landformSteepFaceTreatment||"gradient+elevation-contours+sparse-cliff-aprons+top-rock-lips"),
+      landformCliffFaceCount,landformCliffFaceTriangleCount,
+      landformCliffLipCount,landformCliffLipTriangleCount,landformTriangleBudget,
       landformDrawCallsAdded,landformTrianglesAdded,landformMaterialsAdded,
       landformDeterministic,landformSeamSafeGlobalCoordinates,landformChunkPrepared,landformPerFrameRegenerationCount,
       landformRendererOnly,landformNavigationAuthority,landformCollisionAuthority,landformSimulationAuthorityPreserved,

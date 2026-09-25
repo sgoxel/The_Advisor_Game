@@ -31,16 +31,19 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
-const LANDFORM_VERSION="macro-landform-v3";
+const LANDFORM_VERSION="macro-landform-v4";
 const LANDFORM_SAMPLE_RADIUS_TILES=8;
 const LANDFORM_CACHE_LIMIT=32768;
-const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=24;
+const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=12;
 const LANDFORM_CLIFF_FACE_MIN_SIGNAL=0.32;
 const LANDFORM_CLIFF_FACE_MIN_RELIEF_METERS=160;
 const LANDFORM_CLIFF_FACE_MIN_HEIGHT=0.72;
 const LANDFORM_CLIFF_FACE_MAX_HEIGHT=2.65;
 const LANDFORM_CLIFF_FACE_APRON_MIN=0.68;
 const LANDFORM_CLIFF_FACE_APRON_MAX=1.34;
+const LANDFORM_CLIFF_LIP_INSET=0.46;
+const LANDFORM_CONTOUR_INTERVAL_METERS=120;
+const LANDFORM_CONTOUR_HALF_WIDTH_METERS=18;
 const WORLD_TILE_METERS=2;
 const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
@@ -2261,6 +2264,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const hydrologyKindCounts={},hydrologySamples=[];
     const landformClassCounts={},landformSamples=[];
     let landformCliffFaceCount=0,landformCliffFaceTriangleCount=0;
+    let landformCliffLipCount=0,landformCliffLipTriangleCount=0;
     let landformGradientMin=Infinity,landformGradientMax=-Infinity;
     let landformReliefMin=Infinity,landformReliefMax=-Infinity;
     let landformConditionOffsetMin=Infinity,landformConditionOffsetMax=-Infinity;
@@ -2373,10 +2377,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           r*=directionalShade;g*=directionalShade;b*=directionalShade;
           categories.push("landform-relief-shade");
         }
-        const relativeWorldHeight=(Number(landform.elevationMeters||0)-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE;
+        const elevationMeters=Number(landform.elevationMeters||0);
+        const relativeWorldHeight=(elevationMeters-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE;
         const elevationShade=clamp(0.72+0.28*clamp((relativeWorldHeight+2.5)/13.5,0,1),0.72,1);
         r*=elevationShade;g*=elevationShade;b*=elevationShade;
         categories.push("macro-elevation-shade");
+        const contourModulo=((elevationMeters%LANDFORM_CONTOUR_INTERVAL_METERS)+LANDFORM_CONTOUR_INTERVAL_METERS)%LANDFORM_CONTOUR_INTERVAL_METERS;
+        const contourDistance=Math.min(contourModulo,LANDFORM_CONTOUR_INTERVAL_METERS-contourModulo);
+        const contourBand=1-clamp(contourDistance/LANDFORM_CONTOUR_HALF_WIDTH_METERS,0,1);
+        const contourStrength=contourBand*clamp(0.18+slopeStrength*0.82,0,1);
+        if(contourStrength>0.015){
+          const contourShade=1-0.16*contourStrength;
+          r*=contourShade;g*=contourShade;b*=contourShade;
+          categories.push("elevation-contour");
+        }
         const macroStrength=(type==="grass"||type==="forest"||type==="farmland")?0.11:
           (type==="dirt"||type==="mud"||type==="sand")?0.075:0.045;
         // Mesh.setColors32 is a normalized UINT8 stream: components above 1.0
@@ -2684,12 +2698,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
             let edge;
             if(Math.abs(gxGrad)>=Math.abs(gzGrad)){
               edge=gxGrad>=0
-                ?{a:0,b:2,normal:[-1,0,0],flip:true}
-                :{a:1,b:3,normal:[1,0,0],flip:false};
+                ?{a:0,b:2,ia:1,ib:3,normal:[-1,0,0],flip:true}
+                :{a:1,b:3,ia:0,ib:2,normal:[1,0,0],flip:false};
             }else{
               edge=gzGrad>=0
-                ?{a:0,b:1,normal:[0,0,-1],flip:false}
-                :{a:2,b:3,normal:[0,0,1],flip:true};
+                ?{a:0,b:1,ia:2,ib:3,normal:[0,0,-1],flip:false}
+                :{a:2,b:3,ia:0,ib:1,normal:[0,0,1],flip:true};
             }
             const topA=corners[edge.a].position,topB=corners[edge.b].position;
             const faceHeight=clamp(
@@ -2746,8 +2760,37 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
             }else{
               indices.push(cliffBase,cliffBase+1,cliffBase+2, cliffBase+1,cliffBase+3,cliffBase+2);
             }
+
+            // A narrow top rock lip makes the true cliff break visible from the
+            // normal tilted orthographic camera. It follows the prepared top
+            // surface and stays inside the same semantic cell/mesh.
+            const innerA=corners[edge.ia].position,innerB=corners[edge.ib].position;
+            const lipT=clamp(LANDFORM_CLIFF_LIP_INSET/metersPerTile,0.08,0.32);
+            const lipBase=positions.length/3;
+            const lerp=(a,b,t)=>Number(a)+(Number(b)-Number(a))*t;
+            positions.push(
+              Number(topA[0]),Number(topA[1])+0.028,Number(topA[2]),
+              Number(topB[0]),Number(topB[1])+0.028,Number(topB[2]),
+              lerp(topA[0],innerA[0],lipT),lerp(topA[1],innerA[1],lipT)+0.028,lerp(topA[2],innerA[2],lipT),
+              lerp(topB[0],innerB[0],lipT),lerp(topB[1],innerB[1],lipT)+0.028,lerp(topB[2],innerB[2],lipT)
+            );
+            for(let i=0;i<4;i++)normals.push(0,1,0);
+            for(let i=0;i<4;i++)appendColor32(colors32,cliffTint,1);
+            if(rockRect){
+              uvs.push(
+                Number(rockRect.u0),Number(rockRect.v0),
+                Number(rockRect.u1),Number(rockRect.v0),
+                Number(rockRect.u0),Number(rockRect.v1),
+                Number(rockRect.u1),Number(rockRect.v1)
+              );
+            }else uvs.push(0,0,1,0,0,1,1,1);
+            for(let i=0;i<4;i++)detailUvs.push(Number(cellWorldX)*0.25,Number(cellWorldZ)*0.25);
+            indices.push(lipBase,lipBase+2,lipBase+1, lipBase+1,lipBase+2,lipBase+3);
+
             landformCliffFaceCount++;
             landformCliffFaceTriangleCount+=2;
+            landformCliffLipCount++;
+            landformCliffLipTriangleCount+=2;
           }
         }
 
@@ -3155,7 +3198,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
-      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.58-1.00",
+      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.55-1.00",
       terrainVariationDeterministic:true,
       terrainVariationRendererOnly:true,
       terrainVariationNavigationAuthority:false,
@@ -3201,12 +3244,16 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):0,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):0,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):0,
-      landformSteepFaceTreatment:"world-gradient+macro-elevation-shading+sparse-downhill-cliff-aprons",
+      landformSteepFaceTreatment:"gradient+elevation-contours+sparse-cliff-aprons+top-rock-lips",
       landformCliffFaceCount,landformCliffFaceTriangleCount,
+      landformCliffLipCount,landformCliffLipTriangleCount,
+      landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
       landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
       landformCliffFaceApronMaxWorldUnits:LANDFORM_CLIFF_FACE_APRON_MAX,
-      landformTriangleBudgetPerChunk:LANDFORM_CLIFF_FACE_MAX_PER_CHUNK*2,
-      landformDrawCallsAdded:0,landformTrianglesAdded:landformCliffFaceTriangleCount,landformMaterialsAdded:0,
+      landformTriangleBudgetPerChunk:LANDFORM_CLIFF_FACE_MAX_PER_CHUNK*4,
+      landformDrawCallsAdded:0,
+      landformTrianglesAdded:landformCliffFaceTriangleCount+landformCliffLipTriangleCount,
+      landformMaterialsAdded:0,
       landformDeterministic:true,landformSeamSafeGlobalCoordinates:true,landformChunkPrepared:true,
       landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
@@ -3491,10 +3538,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
       landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
-      landformSteepFaceTreatment:"world-gradient+macro-elevation-shading+sparse-downhill-cliff-aprons",
+      landformSteepFaceTreatment:"gradient+elevation-contours+sparse-cliff-aprons+top-rock-lips",
       landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
       landformCliffFaceApronMaxWorldUnits:LANDFORM_CLIFF_FACE_APRON_MAX,
-      landformTriangleBudgetPerChunk:LANDFORM_CLIFF_FACE_MAX_PER_CHUNK*2,
+      landformCliffLipInsetWorldUnits:LANDFORM_CLIFF_LIP_INSET,
+      landformContourIntervalMeters:LANDFORM_CONTOUR_INTERVAL_METERS,
+      landformTriangleBudgetPerChunk:LANDFORM_CLIFF_FACE_MAX_PER_CHUNK*4,
       contourAlgorithm:"categorical-marching-corners-rounded-fan",
       contourPreparationOnly:true,
       contourHaloTiles:CONTOUR_HALO_TILES,
@@ -3522,7 +3571,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
-      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.58-1.00",
+      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.55-1.00",
       terrainVariationRendererOnly:true,
       terrainVariationNavigationAuthority:false,
       terrainVariationCollisionAuthority:false,
