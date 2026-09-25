@@ -1308,6 +1308,14 @@ body.planet-stage-active{
   overflow:hidden;
   display:block;
   background:
+    radial-gradient(circle at 9% 17%,rgba(235,245,255,.72) 0 1px,transparent 1.5px),
+    radial-gradient(circle at 18% 71%,rgba(191,215,244,.52) 0 1px,transparent 1.5px),
+    radial-gradient(circle at 29% 31%,rgba(255,244,218,.46) 0 1px,transparent 1.4px),
+    radial-gradient(circle at 38% 84%,rgba(211,226,255,.52) 0 1px,transparent 1.5px),
+    radial-gradient(circle at 63% 14%,rgba(230,239,255,.58) 0 1px,transparent 1.5px),
+    radial-gradient(circle at 73% 76%,rgba(197,219,248,.46) 0 1px,transparent 1.4px),
+    radial-gradient(circle at 86% 29%,rgba(255,246,222,.55) 0 1px,transparent 1.5px),
+    radial-gradient(circle at 92% 63%,rgba(214,231,255,.48) 0 1px,transparent 1.4px),
     radial-gradient(circle at 50% 44%,rgba(31,49,72,.42),transparent 34%),
     radial-gradient(circle at 50% 50%,#101a29 0%,#090f19 46%,#05080e 100%);
   touch-action:none;
