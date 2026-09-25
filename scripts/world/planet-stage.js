@@ -56,6 +56,8 @@ let heartbeatTimer=null;
 let controlledWorkActive=false;
 let lastHeartbeatAt=0;
 let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
+let cloudLayer=null;
+let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
 function loadingNodes(){
@@ -465,6 +467,35 @@ function bindInput(){
     if(handled)event.preventDefault();
   });
 }
+function seededUnit(label){
+  let h=2166136261>>>0;for(const ch of String(activeSeed)+"|"+label){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return (h>>>0)/4294967295;
+}
+function makeCloudTexture(){
+  const source=document.createElement("canvas");source.width=256;source.height=128;
+  const ctx=source.getContext("2d");const image=ctx.createImageData(source.width,source.height),data=image.data;
+  const phaseA=seededUnit("cloud-a")*Math.PI*2,phaseB=seededUnit("cloud-b")*Math.PI*2,phaseC=seededUnit("cloud-c")*Math.PI*2;
+  for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++){
+    const u=x/source.width,v=y/source.height,lat=(v-.5)*Math.PI;
+    const field=Math.sin(u*Math.PI*10+phaseA)*.34+Math.sin(u*Math.PI*22+v*Math.PI*5+phaseB)*.22+Math.cos(u*Math.PI*7-v*Math.PI*13+phaseC)*.18+Math.cos(lat*3)*.20;
+    const alpha=Math.round(clamp((field-.16)*210,0,72));const i=(y*source.width+x)*4;
+    data[i]=232;data[i+1]=241;data[i+2]=246;data[i+3]=alpha;
+  }
+  ctx.putImageData(image,0,0);
+  const texture=new pc.Texture(device,{width:source.width,height:source.height,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  texture.name="SeededPlanetClouds";texture.addressU=pc.ADDRESS_REPEAT;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(source);return texture;
+}
+function buildAmbientMotion(){
+  const material=new pc.StandardMaterial();const texture=makeCloudTexture();
+  material.name="SeededCloudLayer";material.diffuse.set(.95,.98,1);material.diffuseMap=texture;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.52;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
+  const mesh=pc.createSphere(device,{radius:DISPLAY_RADIUS_UNITS*1.018,latitudeBands:40,longitudeBands:64});
+  cloudLayer=new pc.Entity("AmbientCloudLayer");cloudLayer.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});cloudLayer.render.meshInstances=[new pc.MeshInstance(mesh,material,cloudLayer)];planet.addChild(cloudLayer);
+  ambientMotion={...ambientMotion,cloudLayerCount:1,animatedEntityCount:1,drawCallEstimate:1};
+}
+function updateAmbientMotion(dt){
+  if(!ambientMotion.enabled||!cloudLayer||dragging)return;
+  const started=performance.now();ambientMotion.cloudYawDegrees=(ambientMotion.cloudYawDegrees+Math.min(.12,Math.max(0,Number(dt)||0))*.42)%360;
+  cloudLayer.setLocalEulerAngles(0,ambientMotion.cloudYawDegrees,0);ambientMotion.updateCount++;ambientMotion.lastUpdateMs=performance.now()-started;ambientMotion.maxUpdateMs=Math.max(ambientMotion.maxUpdateMs,ambientMotion.lastUpdateMs);
+}
 async function buildScene(){
   const started=performance.now();
   setStartupProgress("geography","Generating continents, oceans and islands…",52);
@@ -502,6 +533,7 @@ async function buildScene(){
   const mesh=await buildPlanetMesh();
   planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
   app.root.addChild(planet);
+  buildAmbientMotion();
 
   const keyLight=new pc.Entity("PlanetKeyLight");
   keyLight.addComponent("light",{
@@ -569,7 +601,7 @@ async function start(){
     await yieldPaint();
     bindInput();
     resize();
-    app.on?.("update",()=>{frameCount++;});
+    app.on?.("update",dt=>{frameCount++;updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
 
     if("ResizeObserver" in window){
@@ -660,6 +692,7 @@ function snapshot(){
       physicalElevationMeters:true
     }),
     frameCount,
+    ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,fullWorldScan:false,cameraOnly:true}),
     startupError,
     startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
