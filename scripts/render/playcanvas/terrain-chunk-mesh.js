@@ -39,8 +39,8 @@ const CONTOUR_ROUND_RADIUS_TILES=0.50;
 const CONTOUR_ARC_SEGMENTS=5;
 const CONTOUR_Y_OFFSET=0.008;
 const CONTOUR_HALO_TILES=1;
-const TERRAIN_VARIATION_MACRO_SCALE_TILES=8n;
-const TERRAIN_VARIATION_CONTEXT_RADIUS_TILES=3;
+const TERRAIN_VARIATION_MACRO_SCALE_TILES=12n;
+const TERRAIN_VARIATION_CONTEXT_RADIUS_TILES=2;
 const TERRAIN_VARIATION_NATURAL_TYPES=new Set(["grass","forest","dirt","mud","sand","farmland","rock"]);
 const TERRAIN_VARIATION_CONSTRUCTED_TYPES=new Set(["road","path","square","bridge","plot","water"]);
 function semanticSurfaceType(value){
@@ -1542,38 +1542,38 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const categories=["broad-macro"];
       let r=1,g=1,b=1;
       if(!TERRAIN_VARIATION_CONSTRUCTED_TYPES.has(type)&&TERRAIN_VARIATION_NATURAL_TYPES.has(type)){
-        const macroStrength=(type==="grass"||type==="forest"||type==="farmland")?0.065:
-          (type==="dirt"||type==="mud"||type==="sand")?0.042:0.025;
-        r*=1+macro*macroStrength*0.55;
+        const macroStrength=(type==="grass"||type==="forest"||type==="farmland")?0.11:
+          (type==="dirt"||type==="mud"||type==="sand")?0.075:0.045;
+        r*=1+macro*macroStrength*0.68;
         g*=1+macro*macroStrength;
-        b*=1+macro*macroStrength*0.38;
+        b*=1+macro*macroStrength*0.48;
 
         const routeWear=context.route*(type==="grass"||type==="forest"?1:0.72);
         if(routeWear>0.08){
-          r*=1+0.075*routeWear;
-          g*=1-0.060*routeWear;
-          b*=1-0.105*routeWear;
+          r*=1+0.115*routeWear;
+          g*=1-0.090*routeWear;
+          b*=1-0.145*routeWear;
           categories.push("road-shoulder");
         }
         const buildingWear=context.building*(type==="grass"||type==="forest"?1:0.65);
         if(buildingWear>0.08){
-          r*=1+0.070*buildingWear;
-          g*=1-0.055*buildingWear;
-          b*=1-0.100*buildingWear;
+          r*=1+0.105*buildingWear;
+          g*=1-0.080*buildingWear;
+          b*=1-0.135*buildingWear;
           categories.push("building-wear");
         }
         const moisture=context.moisture*(type==="grass"||type==="forest"||type==="mud"?1:0.45);
         if(moisture>0.08){
-          r*=1-0.060*moisture;
-          g*=1+0.035*moisture;
-          b*=1+0.045*moisture;
+          r*=1-0.090*moisture;
+          g*=1+0.030*moisture;
+          b*=1+0.070*moisture;
           categories.push("moisture");
         }
         const forestContact=context.forest*(type==="grass"||type==="forest"?1:0.35);
         if(forestContact>0.08){
-          r*=1-0.030*forestContact;
-          g*=1+0.026*forestContact;
-          b*=1-0.018*forestContact;
+          r*=1-0.050*forestContact;
+          g*=1+0.045*forestContact;
+          b*=1-0.030*forestContact;
           categories.push("forest-contact");
         }
         if(context.route<0.05&&context.building<0.05&&context.moisture<0.08&&Math.abs(macro)>0.18){
