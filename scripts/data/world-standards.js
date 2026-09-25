@@ -69,6 +69,17 @@ const SLOPE_POLICY=Object.freeze({
   elevationCacheLimit:32768
 });
 
+// Route planning keeps Walkability's symmetric slope safety/cost, then adds a
+// small bounded directional effort term so climbing costs more than descending.
+// The term is proportional to the already-bounded slope penalty, so it cannot
+// explode on valid transitions and roads still benefit from engineered grading.
+const ROUTE_ELEVATION_POLICY=Object.freeze({
+  version:"elevation-route-v1",
+  uphillPenaltyBlend:0.35,
+  downhillPenaltyBlend:0.12,
+  referenceTerrainSpeedKmh:WALK_SPEED_KMH.grass
+});
+
 function tilesToMeters(tiles){return Number(tiles)*TILE_METERS}
 function metersToTiles(meters){return Number(meters)/TILE_METERS}
 function walkMinutes(distanceMeters,speedKmh){
@@ -83,7 +94,7 @@ window.WorldStandards=Object.freeze({
   VILLAGE_CELL_SIZE_TILES,VILLAGE_JITTER_TILES,
   MAX_BRIDGE_WALK_MINUTES,BRIDGE_TIME_LIMIT_METERS,
   PRACTICAL_RURAL_BRIDGE_MAX_METERS,MAX_RURAL_BRIDGE_TILES,
-  ROAD_WIDTH_TILES,SLOPE_POLICY,
+  ROAD_WIDTH_TILES,SLOPE_POLICY,ROUTE_ELEVATION_POLICY,
   tilesToMeters,metersToTiles,walkMinutes
 });
 })();
