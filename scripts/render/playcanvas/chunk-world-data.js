@@ -765,7 +765,14 @@ function generate(spec){
   return snapshot;
 }
 const STREAMING_MINIMUM_STARTING_VILLAGE_DETAIL_RADIUS=64;
-function streamingMinimumTileFromType(type,x,y){
+function streamingMinimumTileFromType(seed,underlying,x,y){
+  const local=window.StartingVillage?.local?.(seed,x,y)||null;
+  const infrastructure=local?StartingVillage.infrastructureAt(seed,local):null;
+  const type=local
+    ?(infrastructure
+      ?StartingVillage.resolveInfrastructure(seed,local,infrastructure,underlying)
+      :StartingVillage.resolveTerrain(seed,local,underlying))
+    :underlying;
   const palette=TerrainPalette.get(type);
   return Object.freeze({
     x:String(x),y:String(y),type:String(type||"grass"),
@@ -859,7 +866,7 @@ function prepareMinimumStep(spec,state=null,maxCells=8){
     const x=String(work.minX+BigInt(localX)),y=String(work.minY+BigInt(localY));
     const workerType=work.workerStatus==="ready"?work.workerTypes?.get(index):null;
     const tile=workerType
-      ?streamingMinimumTileFromType(workerType,x,y)
+      ?streamingMinimumTileFromType(seed,workerType,x,y)
       :streamingMinimumTile(seed,x,y);
     if(!workerType)terrainFoundationCalls++;
     const movement=Walkability.classifyPrepared
