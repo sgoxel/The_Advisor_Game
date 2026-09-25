@@ -109,6 +109,7 @@ SCENARIOS = {
     "wp-s003-009-006",
     "wp-s003-009-007",
     "wp-s003-009-008",
+    "wp-s003-009-009",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -194,6 +195,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-006": 8,
     "wp-s003-009-007": 8,
     "wp-s003-009-008": 8,
+    "wp-s003-009-009": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -6178,6 +6180,32 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-009":
+        _ensure_texture_quality_profile(driver, "standard")
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            quality=_set_graphics_quality_mode(driver, "standard")
+            return "ambient:standard-time-a+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        if frame_index == 1:
+            time.sleep(0.75)
+            return "ambient:standard-time-b+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        if frame_index == 2:
+            return "ambient:landmark-close+" + _focus_landmark(driver, 1.50, False)
+        if frame_index == 3:
+            quality=_set_graphics_quality_mode(driver, "low")
+            return "ambient:low-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 4:
+            quality=_set_graphics_quality_mode(driver, "standard")
+            return "ambient:standard-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 5:
+            quality=_set_graphics_quality_mode(driver, "high")
+            return "ambient:high-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
+        if frame_index == 6:
+            quality=_set_graphics_quality_mode(driver, "standard")
+            return "ambient:far-zoom-lod+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
+        driver.set_window_size(844, 390)
+        quality=_set_graphics_quality_mode(driver, "standard")
+        return "ambient:phone-landscape+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
     if scenario == "wp-s003-009-008":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
@@ -7062,6 +7090,74 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-009":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-009-009 requires eight ambient-motion evidence frames")
+        protagonist_locations=[]
+        max_types=max_active_types=max_trees=max_smoke=max_pennants=0
+        max_cpu_ms=0.0
+        first_updates=None
+        second_updates=None
+        for index,frame in enumerate(frames[:8]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            if chunks.get("ambientMotionPass") is not True:
+                raise RuntimeError(f"Ambient motion contract failed in frame {index+1}: {chunks}")
+            if chunks.get("ambientRendererOnly") is not True or chunks.get("ambientNavigationAuthority") is not False or chunks.get("ambientCollisionAuthority") is not False:
+                raise RuntimeError(f"Ambient motion authority isolation failed in frame {index+1}: {chunks}")
+            if chunks.get("ambientSimulationAuthorityPreserved") is not True or gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Ambient motion changed Simulation authority in frame {index+1}")
+            if chunks.get("ambientContextAware") is not True or chunks.get("ambientCullingMode")!="chunk-active+mesh-frustum+zoom-lod":
+                raise RuntimeError(f"Ambient context/culling contract missing in frame {index+1}: {chunks}")
+            if chunks.get("ambientLowProfileReduction") is not True or chunks.get("ambientMobileWebGL2Safe") is not True:
+                raise RuntimeError(f"Ambient quality/mobile contract missing in frame {index+1}: {chunks}")
+            if int(chunks.get("ambientParticleEmitterCount") or 0)!=0 or int(chunks.get("ambientAnimatedMaterialShaderCount") or 0)!=0:
+                raise RuntimeError(f"Ambient motion unexpectedly added particle/shader update systems in frame {index+1}: {chunks}")
+            resources=max(1,int(chunks.get("ambientMotionResourceCount") or 0))
+            if int(chunks.get("ambientAddedDrawCalls") or 0)>resources*2:
+                raise RuntimeError(f"Ambient draw-call budget exceeded in frame {index+1}: {chunks}")
+            if int(chunks.get("ambientSharedMaterialCount") or 0)>2:
+                raise RuntimeError(f"Ambient shared material budget exceeded in frame {index+1}: {chunks}")
+            max_types=max(max_types,int(chunks.get("ambientEffectTypeCount") or 0))
+            max_active_types=max(max_active_types,int(chunks.get("ambientActiveEffectTypeCount") or 0))
+            max_trees=max(max_trees,int(chunks.get("ambientTreeCount") or 0))
+            max_smoke=max(max_smoke,int(chunks.get("ambientSmokeEmitterCount") or 0))
+            max_pennants=max(max_pennants,int(chunks.get("ambientPennantCount") or 0))
+            max_cpu_ms=max(max_cpu_ms,float(chunks.get("ambientMaxCpuUpdateMs") or 0))
+            protagonist_locations.append(build.get("protagonistLocation"))
+            if index==0:first_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
+            if index==1:second_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
+        if max_types<3 or max_active_types<3 or max_trees<=0 or max_smoke<=0 or max_pennants<=0:
+            raise RuntimeError(f"Ambient evidence lacks tree/smoke/pennant coverage: types={max_types}, active={max_active_types}, trees={max_trees}, smoke={max_smoke}, pennants={max_pennants}")
+        if first_updates is None or second_updates is None or second_updates<=first_updates:
+            raise RuntimeError(f"Ambient motion did not advance shared instance buffers over time: {first_updates} -> {second_updates}")
+        if max_cpu_ms>12.0:
+            raise RuntimeError(f"Ambient per-resource CPU update exceeded 12 ms evidence budget: {max_cpu_ms:.3f} ms")
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Ambient camera/quality evidence changed protagonist authority: {protagonist_locations}")
+        low_chunks=(frames[3].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
+        standard_chunks=(frames[4].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
+        far_chunks=(frames[6].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
+        if int(low_chunks.get("ambientActiveEffectTypeCount") or 0)>1 or int(low_chunks.get("ambientLodSimplifiedResourceCount") or 0)<=0:
+            raise RuntimeError(f"Low profile did not reduce ambient effects: {low_chunks}")
+        if int(standard_chunks.get("ambientActiveEffectTypeCount") or 0)<2:
+            raise RuntimeError(f"Standard profile did not restore ambient effects: {standard_chunks}")
+        if int(far_chunks.get("ambientLodSimplifiedResourceCount") or 0)<=0:
+            raise RuntimeError(f"Far zoom did not simplify ambient effects: {far_chunks}")
+        actions=[str(frame.get("action") or "") for frame in frames[:8]]
+        for required_action in (
+            "ambient:standard-time-a","ambient:standard-time-b","ambient:landmark-close",
+            "ambient:low-profile","ambient:standard-profile","ambient:high-profile",
+            "ambient:far-zoom-lod","ambient:phone-landscape",
+        ):
+            if not any(required_action in action for action in actions):
+                raise RuntimeError(f"Required ambient-motion scene {required_action} missing: {actions}")
+        landscape=frames[7].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
+            raise RuntimeError(f"Phone-landscape ambient-motion evidence missing: {landscape}")
         return
 
     if scenario == "wp-s003-009-008":
@@ -11914,12 +12010,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

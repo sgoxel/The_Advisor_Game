@@ -230,6 +230,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   let treeSpriteMaterialRebinds=0,treeSpriteMaterialRefreshes=0;
   let buildingSurfaceMaterialRebinds=0,buildingSurfaceMaterialRefreshes=0;
   let contactShadowMaterialRefreshes=0;
+  let ambientUpdateCalls=0,ambientSkippedUpdateCalls=0,ambientBufferUpdates=0,totalAmbientUpdateMs=0,maxAmbientUpdateMs=0,lastAmbientUpdateMs=0;
   let routeSurfaceMaterialRebinds=0,routeSurfaceMaterialRefreshes=0;
 
   function applyBuildingSurfaceMaterial(m,name,r,g,b,tint=[1,1,1]){
@@ -314,6 +315,28 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     for(const m of contactShadowMaterials.values())bindContactShadowMaterial(m);
     if(contactShadowMaterials.size)contactShadowMaterialRefreshes++;
     return contactShadowMaterials.size;
+  }
+
+  function ambientMaterial(name,r,g,b,opacity=1){
+    const key="ambient-"+String(name||"effect");
+    let m=presentationMaterials.get(key)||null;
+    if(!m){
+      m=new pc.StandardMaterial();
+      m.name="chunk-"+key;
+      m.gloss=0.02;
+      m.metalness=0;
+      m.diffuse.set(r,g,b);
+      m.emissive.set(r*0.08,g*0.08,b*0.08);
+      m.opacity=clamp(Number(opacity||1),0.05,1);
+      m.blendType=m.opacity<0.999?pc.BLEND_NORMAL:pc.BLEND_NONE;
+      m.depthWrite=m.opacity>=0.999;
+      m.depthTest=true;
+      m.cull=pc.CULLFACE_NONE;
+      m.useLighting=false;
+      m.update();
+      presentationMaterials.set(key,m);
+    }
+    return m;
   }
 
   function presentationMaterial(name,r,g,b,gloss=0.10){
@@ -945,6 +968,19 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       contactShadowQuality:String(contactShadowProfile().level),
       contactShadowOpacity:Number(contactShadowProfile().opacity.toFixed(3)),
       contactShadowMaterialRefreshes,
+      ambientMotionEnabled:true,
+      ambientMotionStrategy:"throttled-shared-instance-buffer",
+      ambientUpdateCalls,ambientSkippedUpdateCalls,ambientBufferUpdates,
+      ambientLastUpdateMs:Number(lastAmbientUpdateMs.toFixed(3)),
+      ambientMaxUpdateMs:Number(maxAmbientUpdateMs.toFixed(3)),
+      ambientAverageUpdateMs:Number((ambientUpdateCalls?totalAmbientUpdateMs/ambientUpdateCalls:0).toFixed(3)),
+      ambientSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("ambient-")).length,
+      ambientParticleEmitterCount:0,
+      ambientAnimatedMaterialShaderCount:0,
+      ambientRendererOnly:true,
+      ambientNavigationAuthority:false,
+      ambientCollisionAuthority:false,
+      ambientSimulationAuthorityPreserved:true,
       routeSurfaceMaterialCount:routeSurfaceMaterials.size,
       routeSurfaceMaterialNames:Object.freeze([...routeSurfaceMaterials.values()].map(m=>m.name).sort()),
       surfaceBindings:routeSurfaceBindings(),
@@ -1001,6 +1037,145 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     instancedObjectCount+=instances.length;
     frustumCulledMeshInstances++;
     return {entity,meshInstance:mi,vertexBuffer:vb,instances};
+  }
+
+  const ambientMatrix=new pc.Mat4(),ambientPos=new pc.Vec3(),ambientRot=new pc.Quat(),ambientScale=new pc.Vec3();
+  function ambientQuality(levelOverride=null){
+    const q=qualityProvider?.()||{};
+    const level=String(levelOverride||q.activeLevel||q.mode||"standard").toLowerCase();
+    if(level==="low")return Object.freeze({level:"low",interval:0.25,treeAmplitude:0.55,smoke:false,pennant:false});
+    if(level==="high")return Object.freeze({level:"high",interval:0.10,treeAmplitude:1.15,smoke:true,pennant:true});
+    return Object.freeze({level:"standard",interval:0.125,treeAmplitude:1.0,smoke:true,pennant:true});
+  }
+  function collectAmbientBuildingInstances(worldData,buildings,roofProfiles){
+    const smoke=[],pennants=[];
+    let smokeEmitterCount=0;
+    const seed=String(seedProvider()||"");
+    for(let i=0;i<buildings.length;i++){
+      const descriptor=buildings[i]||{},profile=roofProfiles[i]||null;
+      const bounds=localBounds(worldData,descriptor.bounds||{});
+      const ridgeY=Number(profile?.ridgeTopY??2.5);
+      const identity=String(descriptor.id||i)+"|"+String(descriptor.kind||"")+"|"+String(descriptor.source||"normal");
+      const h=hash32(seed+"|ambient-building|"+identity);
+      const treatment=String(descriptor.landmark?.treatment||"");
+      const special=String(descriptor.source||"")==="special";
+      const contextualStack=treatment==="forge-stack"||treatment==="timber-stack";
+      const domesticHearth=!special&&(h%5===0);
+      if(special||contextualStack||domesticHearth){
+        smokeEmitterCount++;
+        const x=bounds.x+bounds.width*(contextualStack?0.24:0.18);
+        const z=bounds.z-bounds.depth*(contextualStack?0.12:0.16);
+        for(let puff=0;puff<3;puff++){
+          const phase=(puff/3)*Math.PI*2+((h>>>8)&255)/255;
+          const s=0.28+puff*0.08;
+          smoke.push({
+            position:[x,ridgeY+0.42+puff*0.48,z],
+            scale:[s,s*0.86,s],
+            euler:[0,0,0],
+            ambientPhase:phase,
+            ambientDrift:0.10+(((h>>>(puff*3))&7)/7)*0.10
+          });
+        }
+      }
+      if(descriptor.landmark){
+        const phase=((h>>>16)&1023)/1023*Math.PI*2;
+        pennants.push({
+          position:[bounds.x,ridgeY+1.30,bounds.z],
+          scale:[0.82,0.16,0.07],
+          euler:[0,Number((h>>>4)%360),0],
+          ambientPhase:phase,
+          ambientStrength:0.85+((h>>>10)&15)/60
+        });
+      }
+    }
+    return Object.freeze({smoke,pennants,smokeEmitterCount});
+  }
+  function writeAmbientGroup(group,timeSeconds,kind,intensity=1){
+    if(!group?.instances?.length||!group.vertexBuffer)return 0;
+    const instances=group.instances;
+    let data=group.ambientMatrixData;
+    if(!(data instanceof Float32Array)||data.length!==instances.length*16){
+      data=new Float32Array(instances.length*16);
+      group.ambientMatrixData=data;
+    }
+    for(let i=0;i<instances.length;i++){
+      const item=instances[i],phase=Number(item.ambientPhase||0),strength=Number(item.ambientStrength||1);
+      const basePos=item.position||[0,0,0],baseEuler=item.euler||[0,0,0],baseScale=item.scale||[1,1,1];
+      let px=Number(basePos[0]),py=Number(basePos[1]),pz=Number(basePos[2]);
+      let ex=Number(baseEuler[0]||0),ey=Number(baseEuler[1]||0),ez=Number(baseEuler[2]||0);
+      let sx=Number(baseScale[0]),sy=Number(baseScale[1]),sz=Number(baseScale[2]);
+      if(kind==="tree"){
+        const wave=Math.sin(timeSeconds*1.35+phase)*3.0*strength*intensity;
+        ex+=wave*0.16;ez+=wave;
+      }else if(kind==="smoke"){
+        const wave=Math.sin(timeSeconds*1.10+phase);
+        const drift=Number(item.ambientDrift||0.14)*intensity;
+        px+=wave*drift;
+        py+=Math.sin(timeSeconds*1.65+phase)*0.13*intensity;
+        pz+=Math.cos(timeSeconds*0.85+phase)*drift*0.55;
+        const pulse=1+Math.sin(timeSeconds*1.35+phase)*0.10*intensity;
+        sx*=pulse;sy*=pulse;sz*=pulse;
+      }else if(kind==="pennant"){
+        const wave=Math.sin(timeSeconds*2.0+phase)*7.0*strength*intensity;
+        ey+=wave;
+        sx*=1+Math.sin(timeSeconds*2.7+phase)*0.08*intensity;
+      }
+      ambientPos.set(px,py,pz);
+      ambientRot.setFromEulerAngles(ex,ey,ez);
+      ambientScale.set(sx,sy,sz);
+      ambientMatrix.setTRS(ambientPos,ambientRot,ambientScale);
+      data.set(ambientMatrix.data,i*16);
+    }
+    group.vertexBuffer.setData(data);
+    instancingBufferUpdates++;
+    ambientBufferUpdates++;
+    return 1;
+  }
+  function updateAmbientMotion(resource,timeSeconds,{qualityLevel=null,zoom=1,force=false}={}){
+    if(!resource?.ambientMotionEnabled)return Object.freeze({updated:false,reason:"unavailable"});
+    const profile=ambientQuality(qualityLevel);
+    const now=Math.max(0,Number(timeSeconds)||0);
+    const cameraZoom=Math.max(0.05,Number(zoom)||1);
+    const far=cameraZoom<0.62;
+    const treeIntensity=far?0.30:profile.treeAmplitude;
+    const smokeActive=profile.smoke&&!far;
+    const pennantActive=profile.pennant&&!far;
+    resource.ambientTreeActive=resource.ambientTreeCount>0;
+    resource.ambientSmokeActive=smokeActive&&resource.ambientSmokePuffCount>0;
+    resource.ambientPennantActive=pennantActive&&resource.ambientPennantCount>0;
+    resource.ambientActiveEffectTypeCount=(resource.ambientTreeActive?1:0)+(resource.ambientSmokeActive?1:0)+(resource.ambientPennantActive?1:0);
+    resource.ambientQuality=profile.level;
+    resource.ambientZoom=Number(cameraZoom.toFixed(3));
+    resource.ambientLodSimplified=far||profile.level==="low";
+    resource.ambientUpdateIntervalMs=Math.round(profile.interval*1000);
+    const last=Number(resource.ambientLastUpdateTime??-Infinity);
+    if(!force&&now-last<profile.interval){
+      ambientSkippedUpdateCalls++;
+      return Object.freeze({updated:false,reason:"throttled",quality:profile.level,zoom:cameraZoom});
+    }
+    resource.ambientLastUpdateTime=now;
+    const started=performance.now();
+    let buffers=0;
+    for(const group of resource.treeGroups||[]){
+      if(group?.entity)group.entity.enabled=true;
+      buffers+=writeAmbientGroup(group,now,"tree",treeIntensity);
+    }
+    for(const group of resource.ambientGroups||[]){
+      const kind=String(group.ambientKind||"");
+      const active=kind==="smoke"?smokeActive:kind==="pennant"?pennantActive:true;
+      if(group?.entity)group.entity.enabled=active;
+      if(active)buffers+=writeAmbientGroup(group,now,kind,1);
+    }
+    const elapsed=performance.now()-started;
+    ambientUpdateCalls++;
+    totalAmbientUpdateMs+=elapsed;
+    maxAmbientUpdateMs=Math.max(maxAmbientUpdateMs,elapsed);
+    lastAmbientUpdateMs=elapsed;
+    resource.ambientUpdateCount=Number(resource.ambientUpdateCount||0)+1;
+    resource.ambientBufferUpdateCount=Number(resource.ambientBufferUpdateCount||0)+buffers;
+    resource.ambientLastCpuUpdateMs=Number(elapsed.toFixed(3));
+    resource.ambientMaxCpuUpdateMs=Math.max(Number(resource.ambientMaxCpuUpdateMs||0),elapsed);
+    return Object.freeze({updated:true,buffers,cpuMs:Number(elapsed.toFixed(3)),quality:profile.level,zoom:cameraZoom,lodSimplified:resource.ambientLodSimplified});
   }
 
   function buildGabledRoof(root,descriptor,rootName,b,height,outerW,outerD,roof,roofProfiles){
@@ -1408,7 +1583,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         euler:[0,yaw,0],
         anchorBottom:true,
         variant,flipX,scaleChoice,
-        sourceX:String(descriptor.x),sourceY:String(descriptor.y)
+        sourceX:String(descriptor.x),sourceY:String(descriptor.y),
+        ambientPhase:((h>>>20)&1023)/1023*Math.PI*2,
+        ambientStrength:0.78+(((h>>>12)&255)/255)*0.44
       };
       treeVariants[variant].push(item);
       if(treeVariationSamples.length<12)treeVariationSamples.push(Object.freeze({
@@ -1907,6 +2084,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     sourcePresentationPrimitiveCount+=routePresentation.sourcePrimitiveCount;
 
     const staticBatches=finalizeStaticBatches(entity,batches);
+    const ambientBuildings=collectAmbientBuildingInstances(spec.worldData,buildings,roofProfiles);
 
     const treeVariants=[[],[]],rocks=[],treeVariationSamples=[],dressingSamples=[];
     const dressingGroups={woodBoxes:[],darkBoxes:[],foliage:[],accent:[],stone:[],soil:[],cloth:[],darkSpheres:[]};
@@ -1943,6 +2121,12 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       createInstancedGroup(entity,"ChunkTrees_Variant0",primitiveMesh("tree-plane"),treeSpriteMaterial(0),treeVariants[0]),
       createInstancedGroup(entity,"ChunkTrees_Variant1",primitiveMesh("tree-plane"),treeSpriteMaterial(1),treeVariants[1])
     ].filter(Boolean);
+    for(const group of treeGroups)group.ambientKind="tree";
+    const smokeGroup=createInstancedGroup(entity,"ChunkAmbientSmoke",primitiveMesh("sphere"),ambientMaterial("smoke",0.58,0.58,0.56,0.32),ambientBuildings.smoke);
+    if(smokeGroup)smokeGroup.ambientKind="smoke";
+    const pennantGroup=createInstancedGroup(entity,"ChunkAmbientPennants",primitiveMesh("box"),ambientMaterial("pennant",0.72,0.30,0.16,0.96),ambientBuildings.pennants);
+    if(pennantGroup)pennantGroup.ambientKind="pennant";
+    const ambientGroups=[smokeGroup,pennantGroup].filter(Boolean);
     const dressingInstancedGroups=[
       createInstancedGroup(entity,"ChunkDressing_Wood",primitiveMesh("box"),presentationMaterial("dressing-wood",0.54,0.34,0.16,0.08),dressingGroups.woodBoxes),
       createInstancedGroup(entity,"ChunkDressing_DarkWood",primitiveMesh("box"),presentationMaterial("dressing-dark",0.24,0.15,0.09,0.05),dressingGroups.darkBoxes),
@@ -1962,6 +2146,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     );
     const instancedGroups=[
       ...treeGroups,
+      ...ambientGroups,
       ...dressingInstancedGroups,
       createInstancedGroup(entity,"ChunkRocks",primitiveMesh("rock"),presentationMaterial("rock",0.39,0.40,0.37),rocks),
       contactShadowGroup
@@ -1981,8 +2166,30 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const buildMs=performance.now()-started;
     creations++;totalBuildMs+=buildMs;maxBuildMs=Math.max(maxBuildMs,buildMs);
     return {
-      entity,mesh,meshInstance,staticBatches,instancedGroups,
+      entity,mesh,meshInstance,staticBatches,instancedGroups,treeGroups,ambientGroups,
       x:Number(spec.x),y:Number(spec.y),chunkSize:size,signature:String(spec.signature||""),
+      ambientMotionEnabled:true,
+      ambientMotionStrategy:"throttled-shared-instance-buffer",
+      ambientTreeCount:treeVariants[0].length+treeVariants[1].length,
+      ambientSmokeEmitterCount:Number(ambientBuildings.smokeEmitterCount||0),
+      ambientSmokePuffCount:ambientBuildings.smoke.length,
+      ambientPennantCount:ambientBuildings.pennants.length,
+      ambientEffectTypeCount:(treeVariants[0].length+treeVariants[1].length>0?1:0)+(ambientBuildings.smoke.length>0?1:0)+(ambientBuildings.pennants.length>0?1:0),
+      ambientActiveEffectTypeCount:0,
+      ambientAddedDrawCalls:ambientGroups.length,
+      ambientParticleEmitterCount:0,
+      ambientAnimatedMaterialShaderCount:0,
+      ambientContextAware:true,
+      ambientRendererOnly:true,
+      ambientNavigationAuthority:false,
+      ambientCollisionAuthority:false,
+      ambientSimulationAuthorityPreserved:true,
+      ambientQuality:String(ambientQuality().level),
+      ambientZoom:1,
+      ambientLodSimplified:false,
+      ambientUpdateIntervalMs:Math.round(ambientQuality().interval*1000),
+      ambientUpdateCount:0,ambientBufferUpdateCount:0,ambientLastCpuUpdateMs:0,ambientMaxCpuUpdateMs:0,
+      ambientLastUpdateTime:-Infinity,
       segments,
       heightfieldGridResolution:heightSegments+1,
       heightfieldStepTiles:heightStep,
@@ -2447,7 +2654,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
   function heightAtTile(x,y,chunkSize=16,offsetX=0,offsetY=0){
     return terrainHeightAtTile(String(seedProvider()||""),x,y,chunkSize,offsetX,offsetY);
   }
-  return Object.freeze({build,reposition,destroy,stats,heightAtTile,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials,refreshContactShadowMaterials});
+  return Object.freeze({build,reposition,destroy,stats,heightAtTile,updateAmbientMotion,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials,refreshContactShadowMaterials});
 }
 
 window.PlayCanvasTerrainChunkMesh=Object.freeze({create});
