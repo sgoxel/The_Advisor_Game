@@ -106,6 +106,7 @@ SCENARIOS = {
     "wp-s003-009-004-001",
     "wp-s003-009-004-002",
     "wp-s003-009-005",
+    "wp-s003-009-006",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -188,6 +189,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-004-001": 7,
     "wp-s003-009-004-002": 8,
     "wp-s003-009-005": 8,
+    "wp-s003-009-006": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1555,7 +1557,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
-    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005"}:
+    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006"}:
         driver.set_window_size(1280, 800)
         # Cold software-WebGL CI can spend well over two minutes preparing the
         # visible semantic terrain set. This is evidence wait time only; runtime
@@ -1621,7 +1623,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -5283,6 +5285,51 @@ def _focus_road_profile_target(driver, kind: str) -> str:
     )
 
 
+def _focus_entrance_door(driver, source_kind: str, zoom: float = 1.5) -> str:
+    result = driver.execute_script(
+        """
+        const source=String(arguments[0]||'house');
+        const seed=window.SeedSystem?.getCampaign?.()?.seed;
+        if(!seed||!window.HousePlans?.build||!window.SpecialLots?.build){
+          return {ok:false,reason:'building-plan-api-unavailable'};
+        }
+        const candidates=[];
+        if(source==='house'){
+          for(const plan of window.HousePlans.build(seed)||[]){
+            const e=plan?.entrance;
+            if(!e?.target)continue;
+            candidates.push({id:String(plan.id||''),kind:String(plan.kind||'house'),source:'house',door:{x:Number(e.x),y:Number(e.y),side:String(e.side||'')},target:{x:Number(e.target.x),y:Number(e.target.y)},accessLengthTiles:Number(e.accessLengthTiles||0)});
+          }
+        }else{
+          for(const lot of window.SpecialLots.build(seed)||[]){
+            if(lot?.enterable===false)continue;
+            const e=lot?.access;
+            if(!e?.target)continue;
+            candidates.push({id:String(lot.id||''),kind:String(lot.kind||'special'),source:'special',door:{x:Number(e.x),y:Number(e.y),side:String(e.side||'')},target:{x:Number(e.target.x),y:Number(e.target.y)},accessLengthTiles:Number(e.accessLengthTiles||0)});
+          }
+        }
+        candidates.sort((a,b)=>Number(b.accessLengthTiles||0)-Number(a.accessLengthTiles||0)||String(a.id).localeCompare(String(b.id)));
+        const best=candidates[0]||null;
+        return best?{ok:true,...best}:{ok:false,reason:'entrance-candidate-not-found',source};
+        """,
+        source_kind,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(f"Entrance target {source_kind!r} not found: {result}")
+    action=_set_camera_view_and_render_active(
+        driver,
+        int(result["door"]["x"]),
+        int(result["door"]["y"]),
+        float(zoom),
+        timeout=45.0,
+    )
+    return (
+        f"entrance-focus:{result.get('source')}:{result.get('id')}:{result.get('kind')}:"
+        f"door={result.get('door',{}).get('x')},{result.get('door',{}).get('y')}:"
+        f"side={result.get('door',{}).get('side')}+" + action
+    )
+
+
 def _focus_road_connector(driver, source_kind: str) -> str:
     result = driver.execute_script(
         """
@@ -5928,6 +5975,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-006":
+        _ensure_texture_quality_profile(driver, "standard")
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "entrance:ordinary-close+" + _focus_entrance_door(driver, "house", 2.00)
+        if frame_index == 1:
+            return "entrance:special-close+" + _focus_entrance_door(driver, "special", 2.00)
+        if frame_index == 2:
+            return "entrance:ordinary-context+" + _focus_entrance_door(driver, "house", 1.00)
+        if frame_index == 3:
+            return "entrance:special-context+" + _focus_entrance_door(driver, "special", 1.00)
+        if frame_index == 4:
+            return "entrance:npc-approach+" + _show_npc_building_coherence_proof(driver, 0)
+        if frame_index == 5:
+            return "entrance:npc-door+" + _show_npc_building_coherence_proof(driver, 1)
+        if frame_index == 6:
+            driver.set_window_size(844, 390)
+            return "entrance:phone-landscape+" + _focus_entrance_door(driver, "special", 1.00)
+        driver.set_window_size(1280, 800)
+        return "entrance:multi-building+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
     if scenario == "wp-s003-009-005":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
@@ -6753,6 +6820,40 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-006":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-009-006 requires eight entrance-readability evidence frames")
+        max_treatment=max_ordinary=max_special=0
+        saw_approach=saw_door=False
+        for index,frame in enumerate(frames[:8]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            max_treatment=max(max_treatment,int(chunks.get("entranceTreatmentCount") or 0))
+            max_ordinary=max(max_ordinary,int(chunks.get("entranceOrdinaryCount") or 0))
+            max_special=max(max_special,int(chunks.get("entranceSpecialCount") or 0))
+            if chunks.get("entranceReadabilityPresentationPass") is not True:
+                raise RuntimeError(f"Entrance treatment contract failed in frame {index+1}: {chunks}")
+            if chunks.get("entranceAuthoritativeDoorAnchored") is not True:
+                raise RuntimeError(f"Entrance treatment lost authoritative-door anchoring in frame {index+1}")
+            if chunks.get("entranceRendererOnly") is not True or chunks.get("entranceNavigationBlocking") is not False or chunks.get("entranceCollisionBlocking") is not False:
+                raise RuntimeError(f"Entrance treatment changed gameplay authority in frame {index+1}: {chunks}")
+            if int(chunks.get("entranceSharedMaterialCount") or 0)>5:
+                raise RuntimeError(f"Entrance shared material budget exceeded in frame {index+1}: {chunks.get('entranceSharedMaterialCount')}")
+            if gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Simulation authority changed in frame {index+1}")
+            action=str(frame.get("action") or "")
+            if "npc-approach" in action:saw_approach=True
+            if "npc-door" in action:saw_door=True
+        if max_treatment<=0 or max_ordinary<=0 or max_special<=0:
+            raise RuntimeError(f"Entrance evidence lacks ordinary/special treatment: total={max_treatment}, ordinary={max_ordinary}, special={max_special}")
+        if not saw_approach or not saw_door:
+            raise RuntimeError("NPC approach/door transition entrance evidence missing")
+        landscape=frames[6].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
+            raise RuntimeError(f"Phone-landscape entrance evidence missing: {landscape}")
         return
 
     if scenario == "wp-s003-009-005":
