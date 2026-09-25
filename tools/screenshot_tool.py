@@ -108,6 +108,7 @@ SCENARIOS = {
     "wp-s003-008-002-001",
     "wp-s003-008-003",
     "wp-s003-008-004",
+    "wp-s003-008-005",
     "wp-s003-009-001",
     "wp-s003-009-002",
     "wp-s003-009-003",
@@ -203,6 +204,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-002-001": 8,
     "wp-s003-008-003": 8,
     "wp-s003-008-004": 6,
+    "wp-s003-008-005": 6,
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
     "wp-s003-009-003": 9,
@@ -6249,6 +6251,48 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-008-005":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("all",None,(1280,800)),
+            ("nature",None,(1280,800)),
+            ("water",None,(1280,800)),
+            ("all",0,(1280,800)),
+            ("all",1,(844,390)),
+            ("all",2,(390,844)),
+        )
+        category,select_index,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        time.sleep(0.2)
+        result=driver.execute_script(
+            """
+            const api=window.PlanetStage;
+            if(!api?.openPlaces||!api?.setPlacesCategory)return null;
+            api.openPlaces();api.setPlacesCategory(String(arguments[0]));
+            const before=api.snapshot();
+            const rows=Array.from(document.querySelectorAll('.planet-place-row'));
+            const index=arguments[1];
+            if(index!==null&&index!==undefined&&rows.length){
+              const button=rows[Math.min(Number(index),rows.length-1)]?.querySelector('button');
+              button?.click();
+            }
+            const panel=document.querySelector('.planet-places-panel');
+            const rect=panel?.getBoundingClientRect?.();
+            return {stage:api.snapshot(),rowCount:rows.length,panelRect:rect?{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,width:rect.width,height:rect.height}:null};
+            """,
+            category,select_index
+        )
+        if not isinstance(result,dict) or not isinstance(result.get("stage"),dict):
+            raise RuntimeError(f"Places navigator proof failed: {result}")
+        nav=result["stage"].get("destinationNavigator") or {}
+        if nav.get("open") is not True or int(result.get("rowCount") or 0)<1 or nav.get("fullWorldScan") is not False or nav.get("cameraOnly") is not True:
+            raise RuntimeError(f"Places navigator state invalid: {result}")
+        rect=result.get("panelRect") or {}
+        if float(rect.get("left") or -1)<0 or float(rect.get("top") or -1)<0 or float(rect.get("right") or 1)>float(viewport[0])+1 or float(rect.get("bottom") or 1)>float(viewport[1])+1:
+            raise RuntimeError(f"Places navigator clipped outside viewport: {result}")
+        WebDriverWait(driver,10.0).until(lambda d: d.execute_script("return Boolean(document.querySelector('.planet-places-panel'))"))
+        return f"planet-places:{category}:rows={result.get('rowCount')}:selected={nav.get('selectedId')}:viewport={viewport[0]}x{viewport[1]}"
+
     if scenario in {"wp-s003-006-014","wp-s003-008-004"}:
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
