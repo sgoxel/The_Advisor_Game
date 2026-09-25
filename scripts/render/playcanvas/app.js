@@ -1642,7 +1642,10 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const manager=initTerrainPreload();
     if(!manager)return Object.freeze({ready:false,reason:"preload-unavailable"});
     manager.setChunkSize(terrainChunkSize());
-    const radii=terrainActiveRadii(frame.center);
+    // Destination planning runs while the old area remains visible. Its radius
+    // must come from that current viewport; the destination-centered radius is
+    // recomputed later only after the camera has been staged for handoff.
+    const radii=terrainActiveRadii();
     const terrainTextures=await prepareTerrainTextureAtlas();
     const buildingTextures=await prepareBuildingSurfaceAtlas();
     const treeSprites=await prepareTreeSpriteAtlas();
