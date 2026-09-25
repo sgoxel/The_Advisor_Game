@@ -306,7 +306,7 @@ function resize(){
     const horizontalHalfFov=Math.atan(Math.tan(verticalHalfFov)*aspect);
     const limitingHalfFov=Math.max(0.05,Math.min(verticalHalfFov,horizontalHalfFov));
     const maxReliefFactor=1+(7000/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION;
-    const framingMargin=aspect>1.7?1.015:1.055;
+    const framingMargin=(height<=500&&aspect>1.7)?0.78:(aspect>1.7?1.015:1.055);
     const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*framingMargin;
     cameraEntity.setLocalPosition(0,0,distance);
     cameraEntity.lookAt(0,0,0);
