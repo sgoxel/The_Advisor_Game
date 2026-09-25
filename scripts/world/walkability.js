@@ -32,6 +32,177 @@ const RULES=Object.freeze({
   building:Object.freeze({category:CATEGORY.SOLID,walkable:false,speedKmh:0})
 });
 
+const SLOPE_POLICY=WorldStandards.SLOPE_POLICY;
+const elevationCache=new Map();
+let elevationQueries=0,elevationCacheHits=0,transitionQueries=0,slopeBlockedTransitions=0;
+let totalElevationMs=0,maxElevationMs=0;
+
+function rememberElevation(key,value){
+  elevationCache.set(key,value);
+  if(elevationCache.size>Number(SLOPE_POLICY.elevationCacheLimit||32768)){
+    const oldest=elevationCache.keys().next().value;
+    if(oldest!==undefined)elevationCache.delete(oldest);
+  }
+  return value;
+}
+function elevationSample(seed,xValue,yValue){
+  const x=WorldCoordinates.normalize(xValue),y=WorldCoordinates.normalize(yValue);
+  const key=String(seed)+"|"+x+"|"+y;
+  if(elevationCache.has(key)){
+    elevationCacheHits++;
+    const cached=elevationCache.get(key);
+    elevationCache.delete(key);elevationCache.set(key,cached);
+    return cached;
+  }
+  const started=performance.now();
+  elevationQueries++;
+  const sourceElevationMeters=Number(GeographyFoundation.environment(seed,x,y)?.elevationMeters||0);
+  const movementElevationMeters=sourceElevationMeters*Number(SLOPE_POLICY.localVerticalScale||0.05);
+  const elapsed=performance.now()-started;
+  totalElevationMs+=elapsed;maxElevationMs=Math.max(maxElevationMs,elapsed);
+  return rememberElevation(key,Object.freeze({
+    x,y,sourceElevationMeters,movementElevationMeters,
+    source:"GeographyFoundation.environment",
+    rendererIndependent:true
+  }));
+}
+function slopeClassFor(angleDegrees){
+  const a=Math.max(0,Number(angleDegrees)||0),b=SLOPE_POLICY.bandsDegrees;
+  if(a<=b.gentle)return "gentle";
+  if(a<=b.moderate)return "moderate";
+  if(a<=b.steep)return "steep";
+  if(a<=b.verySteep)return "very-steep";
+  return "cliff";
+}
+function slopeMultiplierFor(slopeClass){
+  const m=SLOPE_POLICY.movementMultipliers;
+  if(slopeClass==="moderate")return Number(m.moderate||1.18);
+  if(slopeClass==="steep")return Number(m.steep||1.55);
+  if(slopeClass==="very-steep")return Number(m.verySteep||2.30);
+  if(slopeClass==="cliff")return Infinity;
+  return Number(m.gentle||1);
+}
+function slopeBetween(seed,fromValue,toValue){
+  const from=WorldCoordinates.position(fromValue.x,fromValue.y);
+  const to=WorldCoordinates.position(toValue.x,toValue.y);
+  const dx=Number(BigInt(to.x)-BigInt(from.x)),dy=Number(BigInt(to.y)-BigInt(from.y));
+  if(!Number.isSafeInteger(dx)||!Number.isSafeInteger(dy)||Math.abs(dx)>1||Math.abs(dy)>1||(dx===0&&dy===0)){
+    return Object.freeze({valid:false,reason:"non-adjacent",from,to});
+  }
+  const a=elevationSample(seed,from.x,from.y),b=elevationSample(seed,to.x,to.y);
+  const horizontalMeters=WorldStandards.TILE_METERS*Math.hypot(dx,dy);
+  const sourceDeltaMeters=b.sourceElevationMeters-a.sourceElevationMeters;
+  const movementDeltaMeters=b.movementElevationMeters-a.movementElevationMeters;
+  const angleDegrees=Math.atan2(Math.abs(movementDeltaMeters),Math.max(1e-9,horizontalMeters))*180/Math.PI;
+  const slopeClass=slopeClassFor(angleDegrees);
+  return Object.freeze({
+    valid:true,from,to,dx,dy,diagonal:dx!==0&&dy!==0,
+    fromSourceElevationMeters:a.sourceElevationMeters,
+    toSourceElevationMeters:b.sourceElevationMeters,
+    sourceDeltaMeters,
+    movementDeltaMeters,
+    horizontalMeters,
+    gradePercent:Math.abs(movementDeltaMeters)/Math.max(1e-9,horizontalMeters)*100,
+    angleDegrees,
+    slopeClass,
+    rendererIndependent:true
+  });
+}
+function isConstructedRouteState(state){return state?.category===CATEGORY.ROUTE}
+function isGradedPadState(state){
+  return Boolean(
+    state?.buildingId||
+    state?.category===CATEGORY.INTERIOR||
+    state?.category===CATEGORY.ENTRANCE||
+    state?.terrainType==="plot"
+  );
+}
+function naturalVerySteepAllowed(fromState,toState){
+  const types=new Set([String(fromState?.terrainType||""),String(toState?.terrainType||"")]);
+  if(types.has("mud")||types.has("sand")||types.has("farmland")||types.has("water"))return false;
+  return types.has("rock");
+}
+function transitionCore(seed,from,to,fromState,toState){
+  if(!fromState?.walkable||!toState?.walkable){
+    return Object.freeze({allowed:false,reason:"blocked-cell",seconds:Infinity,multiplier:Infinity,slope:null});
+  }
+  const slope=slopeBetween(seed,from,to);
+  if(!slope.valid)return Object.freeze({allowed:false,reason:slope.reason,seconds:Infinity,multiplier:Infinity,slope});
+  const distanceFactor=slope.diagonal?Math.SQRT2:1;
+  const gradedPad=isGradedPadState(fromState)||isGradedPadState(toState);
+  if(gradedPad){
+    return Object.freeze({
+      allowed:true,reason:"graded-building-pad",
+      seconds:Number(toState.secondsPerTile)*distanceFactor,
+      multiplier:1,slope,gradedPad:true,engineered:false
+    });
+  }
+  const engineered=isConstructedRouteState(fromState)&&isConstructedRouteState(toState);
+  if(slope.slopeClass==="cliff"){
+    slopeBlockedTransitions++;
+    return Object.freeze({allowed:false,reason:"cliff",seconds:Infinity,multiplier:Infinity,slope,gradedPad:false,engineered});
+  }
+  if(engineered&&slope.angleDegrees>Number(SLOPE_POLICY.engineeredMaxDegrees||33)){
+    slopeBlockedTransitions++;
+    return Object.freeze({allowed:false,reason:"engineered-grade-limit",seconds:Infinity,multiplier:Infinity,slope,gradedPad:false,engineered:true});
+  }
+  if(!engineered&&slope.slopeClass==="very-steep"&&!naturalVerySteepAllowed(fromState,toState)){
+    slopeBlockedTransitions++;
+    return Object.freeze({allowed:false,reason:"unsafe-very-steep-terrain",seconds:Infinity,multiplier:Infinity,slope,gradedPad:false,engineered:false});
+  }
+  let multiplier=slopeMultiplierFor(slope.slopeClass);
+  if(engineered)multiplier=1+(multiplier-1)*Number(SLOPE_POLICY.engineeredPenaltyBlend||0.45);
+  return Object.freeze({
+    allowed:true,reason:engineered?"engineered-slope":"natural-slope",
+    seconds:Number(toState.secondsPerTile)*distanceFactor*multiplier,
+    multiplier,slope,gradedPad:false,engineered
+  });
+}
+function transition(seed,fromValue,toValue,options){
+  transitionQueries++;
+  const from=WorldCoordinates.position(fromValue.x,fromValue.y),to=WorldCoordinates.position(toValue.x,toValue.y);
+  const fromState=options?.fromState||classify(seed,from.x,from.y);
+  const toState=options?.toState||classify(seed,to.x,to.y);
+  const direct=transitionCore(seed,from,to,fromState,toState);
+  if(!direct.allowed||!direct.slope?.diagonal)return direct;
+  const dx=direct.slope.dx,dy=direct.slope.dy;
+  const sideA=WorldCoordinates.add(from,String(dx),"0");
+  const sideB=WorldCoordinates.add(from,"0",String(dy));
+  const sideAState=classify(seed,sideA.x,sideA.y),sideBState=classify(seed,sideB.x,sideB.y);
+  const routeA=
+    transitionCore(seed,from,sideA,fromState,sideAState).allowed&&
+    transitionCore(seed,sideA,to,sideAState,toState).allowed;
+  const routeB=
+    transitionCore(seed,from,sideB,fromState,sideBState).allowed&&
+    transitionCore(seed,sideB,to,sideBState,toState).allowed;
+  if(!routeA&&!routeB){
+    slopeBlockedTransitions++;
+    return Object.freeze({...direct,allowed:false,reason:"diagonal-cliff-corner",seconds:Infinity,multiplier:Infinity,cornerSafe:false});
+  }
+  return Object.freeze({...direct,cornerSafe:true});
+}
+function transitionSeconds(seed,from,to,options){
+  return transition(seed,from,to,options)?.seconds??Infinity;
+}
+function slopeStats(){
+  return Object.freeze({
+    policy:SLOPE_POLICY,
+    elevationCacheEntries:elevationCache.size,
+    elevationQueries,elevationCacheHits,
+    elevationCacheHitRate:(elevationQueries+elevationCacheHits)>0?elevationCacheHits/(elevationQueries+elevationCacheHits):0,
+    transitionQueries,slopeBlockedTransitions,
+    totalElevationMs:Number(totalElevationMs.toFixed(3)),
+    maxElevationMs:Number(maxElevationMs.toFixed(3)),
+    averageElevationMs:Number((elevationQueries?totalElevationMs/elevationQueries:0).toFixed(4)),
+    rendererIndependent:true
+  });
+}
+function clearSlopeCache(){
+  elevationCache.clear();
+  elevationQueries=0;elevationCacheHits=0;transitionQueries=0;slopeBlockedTransitions=0;
+  totalElevationMs=0;maxElevationMs=0;
+}
+
 function ruleFor(type){
   return RULES[type]||RULES.building;
 }
@@ -294,7 +465,8 @@ function proof(seed){
 }
 
 window.Walkability=Object.freeze({
-  CATEGORY,RULES,
-  ruleFor,classifyTile,classifyPrepared,classify,isWalkable,movementSeconds,proof
+  CATEGORY,RULES,SLOPE_POLICY,
+  ruleFor,classifyTile,classifyPrepared,classify,isWalkable,movementSeconds,
+  elevationSample,slopeBetween,transition,transitionSeconds,slopeStats,clearSlopeCache,proof
 });
 })();
