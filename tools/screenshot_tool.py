@@ -10345,6 +10345,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Destination camera mismatch: {builds[2].get('cameraCoordinate')}")
         chunks2=gpus[2].get("terrainChunks") or {}
         preload2=gpus[2].get("terrainPreload") or {}
+        world2=chunks2.get("worldData") or {}
+        if int(world2.get("terrainWorkerCompletions") or 0)<=0 or int(world2.get("terrainWorkerCells") or 0)<=0:
+            raise RuntimeError(f"Distant destination did not exercise off-main-thread terrain classification: {world2}")
+        if int(world2.get("terrainWorkerErrors") or 0)>0:
+            raise RuntimeError(f"Terrain streaming worker reported runtime errors: {world2}")
         if int(chunks2.get("visibleMeshInstanceCount") or 0)<=0:
             raise RuntimeError(f"Destination gate released before a visible GPU frame: {chunks2}")
         if int((areas[2].get("lastPaint") or {}).get("visibleMeshInstanceCount") or 0)<=0:
