@@ -39,7 +39,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   let pc=null,app=null,device=null,host=null,canvas=null,resizeObserver=null,lastModel=null,proofState=null,occlusionProofState=null,beforeInit=null,afterInit=null,sceneAnchor=null,quality=null;
   let sceneAnchorRevision=0,lastPositionedAnchorRevision=0,lastResizeSignature="",lastCameraBillboardYawDegrees=45;
   let cameraRoot=null,camera=null,worldRoot=null,terrainPreloadRoot=null,terrainRoot=null,terrainBaseEntity=null,structuresRoot=null,propsRoot=null,characterContactRoot=null,charactersRoot=null,lightingRoot=null,interiorProofRoot=null,characterProofRoot=null,assetPreparationProofRoot=null;
-  let characterPreparation=null,worldPreparation=null,terrainPreloadManager=null,terrainChunkMeshFactory=null,terrainTextureAtlas=null,buildingSurfaceAtlas=null,treeSpriteAtlas=null,lastPreparedTerrainKey="",pendingTerrainDestination=null,interiorProofState=null,interiorProofPanel=null,characterProofState=null,characterProofPanel=null,lastRawSeed=null,assetPreparationProofState=false,qualityChangeHandler=null,renderQualityChangeHandler=null,renderQualityFrameHandler=null,ambientMotionFrameHandler=null,ambientMotionProofOverride=null,terrainMicroReliefProofOverride=null;
+  let characterPreparation=null,worldPreparation=null,terrainPreloadManager=null,terrainChunkMeshFactory=null,terrainTextureAtlas=null,buildingSurfaceAtlas=null,treeSpriteAtlas=null,lastPreparedTerrainKey="",interiorProofState=null,interiorProofPanel=null,characterProofState=null,characterProofPanel=null,lastRawSeed=null,assetPreparationProofState=false,qualityChangeHandler=null,renderQualityChangeHandler=null,renderQualityFrameHandler=null,ambientMotionFrameHandler=null,ambientMotionProofOverride=null,terrainMicroReliefProofOverride=null;
   let lastWorldPreparation=Object.freeze({ready:false,regionCount:0,keyCount:0,regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),simulationAuthorityPreserved:true});
   let lastMaterialQuality=Object.freeze({profile:"standard",cacheSignature:"pc-material-quality@standard",materialCount:0,textureCount:0,materialVariantCount:0,worldAssetCacheLimit:48,textureBudgetMB:48,anisotropy:2,auxiliaryMaps:true,detailMaps:false,simulationAuthorityPreserved:true});
   let lastAssetPreparationProof=Object.freeze({active:false,logicalKey:null,entityCount:0,meshInstanceCount:0,materialCount:0,networkLoads:0,containerParses:0,simulationAuthorityPreserved:true});
@@ -837,27 +837,17 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     });
     return terrainChunkMeshFactory;
   }
-  function prepareTerrainChunkData(spec){
-    const request={
-      seed:lastRawSeed||"",
-      x:spec.x,y:spec.y,chunkSize:spec.chunkSize,
-      signature:spec.signature,state:spec.state,
-      streamingProfile:spec.streamingProfile||"full"
-    };
-    if(
-      spec?.source==="destination"&&String(spec?.streamingProfile||"")==="minimum"&&
-      typeof window.PlayCanvasChunkWorldData?.prepareMinimumStep==="function"
-    ){
-      return window.PlayCanvasChunkWorldData.prepareMinimumStep(
-        request,spec.incrementalState||null,Math.max(1,Number(spec.maxCells)||2)
-      );
-    }
-    return window.PlayCanvasChunkWorldData?.getOrCreate?.(request)||null;
-  }
   function prepareTerrainMeshChunk(spec){
     const factory=initTerrainChunkMeshFactory();
     if(!factory)throw new Error("PlayCanvas terrain chunk mesh factory is unavailable");
-    const worldData=spec?.preparedData??prepareTerrainChunkData(spec);
+    const worldData=window.PlayCanvasChunkWorldData?.getOrCreate?.({
+      seed:lastRawSeed||"",
+      x:spec.x,
+      y:spec.y,
+      chunkSize:spec.chunkSize,
+      signature:spec.signature,
+      state:spec.state
+    })||null;
     const chunkPosition=terrainChunkPosition(spec.x,spec.y,spec.chunkSize);
     const resource=factory.build({...spec,worldData,worldX:chunkPosition.x,worldZ:chunkPosition.z});
     resource.worldData=worldData;
@@ -1504,7 +1494,6 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       signatureProvider:terrainChunkSignature,
       performanceProvider:()=>renderQualitySnapshot(),
       prepareChunk:prepareTerrainMeshChunk,
-      prepareChunkData:prepareTerrainChunkData,
       activateChunk:activateTerrainChunk,
       deactivateChunk:deactivateTerrainChunk,
       destroyChunk:destroyTerrainChunk
@@ -1581,7 +1570,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       simulationAuthorityPreserved:true
     });
   }
-  function terrainActiveRadii(centerOverride=null){
+  function terrainActiveRadii(){
     const meters=Math.max(1,terrainChunkSize()*WORLD_TILE_METERS);
     const width=Math.max(1,host?.clientWidth||1),height=Math.max(1,host?.clientHeight||1);
     const aspect=width/height;
@@ -1593,8 +1582,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     try{
       const component=camera?.camera;
       if(!component?.screenToWorld)return fallback;
-      const centerSource=centerOverride||lastModel?.center;
-      const center=centerSource?characterScenePoint(centerSource):Object.freeze({x:0,z:0});
+      const center=lastModel?.center?characterScenePoint(lastModel.center):Object.freeze({x:0,z:0});
       const groundY=-0.33;
       const near=Math.max(0.01,Number(component.nearClip||0.1));
       const far=Math.max(near+1,Number(component.farClip||200));
@@ -1621,148 +1609,27 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       return fallback;
     }
   }
-  function terrainChunkFloor(value,size){
-    const v=BigInt(String(value)),d=BigInt(Math.max(1,Number(size)||1));
-    let q=v/d,r=v%d;
-    if(r<0n)q-=1n;
-    return Number(q);
-  }
-  function terrainDestinationRequirements(frame,halo=1){
-    const size=Math.max(1,terrainChunkSize());
-    const columns=Math.max(1,Number(frame?.columns||1)),rows=Math.max(1,Number(frame?.rows||1));
-    const halfCols=Math.floor(columns/2),halfRows=Math.floor(rows/2);
-    const cx=BigInt(String(frame?.center?.x??"0")),cy=BigInt(String(frame?.center?.y??"0"));
-    const margin=BigInt(Math.max(1,Number(halo)||1));
-    const minX=cx-BigInt(halfCols)-margin,maxX=cx+BigInt(columns-halfCols-1)+margin;
-    const minY=cy-BigInt(halfRows)-margin,maxY=cy+BigInt(rows-halfRows-1)+margin;
-    const byChunk=new Map();
-    const d=BigInt(size);
-    for(let y=minY;y<=maxY;y++){
-      for(let x=minX;x<=maxX;x++){
-        const chunkX=terrainChunkFloor(x,size),chunkY=terrainChunkFloor(y,size);
-        const id=String(chunkX)+","+String(chunkY);
-        const localX=Number(x-BigInt(chunkX)*d),localY=Number(y-BigInt(chunkY)*d);
-        const index=localY*size+localX;
-        if(!byChunk.has(id))byChunk.set(id,[]);
-        byChunk.get(id).push(index);
-      }
-    }
-    const requiredChunkIds=Object.freeze([...byChunk.keys()].sort((a,b)=>{
-      const [ax,ay]=a.split(",").map(Number),[bx,by]=b.split(",").map(Number);
-      return ay-by||ax-bx;
-    }));
-    const requiredCellsByChunk={};
-    for(const id of requiredChunkIds){
-      requiredCellsByChunk[id]=Object.freeze([...new Set(byChunk.get(id))].sort((a,b)=>a-b));
-    }
-    return Object.freeze({
-      requiredChunkIds,
-      requiredCellsByChunk:Object.freeze(requiredCellsByChunk),
-      requestedCellCount:requiredChunkIds.reduce((sum,id)=>sum+requiredCellsByChunk[id].length,0),
-      haloTiles:Number(margin)
-    });
-  }
-  function terrainDestinationChunkIds(frame){
-    return terrainDestinationRequirements(frame,1).requiredChunkIds;
-  }
-  function terrainDestinationRadii(frame){
-    const size=Math.max(1,terrainChunkSize());
-    const columns=Math.max(1,Number(frame?.columns||1));
-    const rows=Math.max(1,Number(frame?.rows||1));
-    return Object.freeze({
-      x:Math.max(1,Math.ceil(Math.floor(columns/2)/size)),
-      y:Math.max(1,Math.ceil(Math.floor(rows/2)/size))
-    });
-  }
-  function repositionTerrainResourcesIfNeeded(manager){
-    if(!manager||lastPositionedAnchorRevision===sceneAnchorRevision)return 0;
-    let count=0;
-    manager.forEachResource(resource=>{positionTerrainChunk(resource);count++;});
-    navigationTelemetry.bulkChunkRepositions++;
-    navigationTelemetry.bulkChunkRepositionedResources+=count;
-    lastPositionedAnchorRevision=sceneAnchorRevision;
-    return count;
-  }
   function updateTerrainPreload(center){
     const manager=initTerrainPreload();
     if(!manager||!center)return null;
     const started=performance.now();
     navigationTelemetry.preloadUpdateCalls++;
     manager.setChunkSize(terrainChunkSize());
-    const radii=terrainActiveRadii(center);
+    const radii=terrainActiveRadii();
     const result=manager.update({center,activeRadiusX:radii.x,activeRadiusY:radii.y});
-    repositionTerrainResourcesIfNeeded(manager);
+    if(lastPositionedAnchorRevision!==sceneAnchorRevision){
+      let count=0;
+      manager.forEachResource(resource=>{positionTerrainChunk(resource);count++;});
+      navigationTelemetry.bulkChunkRepositions++;
+      navigationTelemetry.bulkChunkRepositionedResources+=count;
+      lastPositionedAnchorRevision=sceneAnchorRevision;
+    }
     const elapsed=performance.now()-started;
     navigationTelemetry.lastPreloadUpdateMs=elapsed;
     navigationTelemetry.totalPreloadUpdateMs+=elapsed;
     navigationTelemetry.maxPreloadUpdateMs=Math.max(navigationTelemetry.maxPreloadUpdateMs,elapsed);
     return result;
   }
-  async function prepareTerrainDestination(model,{onProgress=null,graceMs=180,forceGate=false}={}){
-    lastRawSeed=model?.seed??lastRawSeed;
-    const frame=window.RendererContract?.frameFromModel?.(model)||null;
-    if(!frame?.center)return Object.freeze({ready:false,reason:"missing-center"});
-    const manager=initTerrainPreload();
-    if(!manager)return Object.freeze({ready:false,reason:"preload-unavailable"});
-    manager.setChunkSize(terrainChunkSize());
-    // Destination coverage comes from the requested logical view itself, not
-    // from either the old camera transform or the not-yet-committed target.
-    // This keeps long-distance work bounded and deterministic.
-    const radii=terrainDestinationRadii(frame);
-    const destinationRequirements=terrainDestinationRequirements(frame,1);
-    const requiredChunkIds=destinationRequirements.requiredChunkIds;
-    const requiredCellsByChunk=destinationRequirements.requiredCellsByChunk;
-    const terrainTextures=await prepareTerrainTextureAtlas();
-    const buildingTextures=await prepareBuildingSurfaceAtlas();
-    const treeSprites=await prepareTreeSpriteAtlas();
-    const result=await manager.prepareDestination({
-      center:frame.center,
-      activeRadiusX:radii.x,
-      activeRadiusY:radii.y,
-      requiredChunkIds,
-      requiredCellsByChunk
-    },{onProgress,graceMs,forceGate});
-    if(!result?.ready)return Object.freeze({...result,terrainTextures,buildingTextures,treeSprites});
-    // The streaming-minimum mesh is self-contained (terrain atlas + procedural
-    // building presentation). Optional glTF/prop world assets are deliberately
-    // not part of the gate-critical path and resume after Ready.
-    const worldAssets=Object.freeze({ready:true,deferred:true,reason:"streaming-minimum-critical-path",simulationAuthorityPreserved:true});
-    pendingTerrainDestination=Object.freeze({
-      key:preparedTerrainKey(lastRawSeed,frame.center),
-      center:Object.freeze({x:String(frame.center.x),y:String(frame.center.y)}),
-      activeRadiusX:radii.x,activeRadiusY:radii.y,
-      requiredChunkIds,
-      requiredCellsByChunk,
-      requestedCellCount:destinationRequirements.requestedCellCount
-    });
-    return Object.freeze({
-      ...result,
-      worldAssetsReady:true,
-      worldAssets,
-      terrainTextures,buildingTextures,treeSprites,
-      activeRadiusX:radii.x,activeRadiusY:radii.y,requiredChunkIds,
-      requiredDestinationCellCount:destinationRequirements.requestedCellCount,
-      streamingMinimumResources:Number(manager.stats?.().streamingMinimumResources||0),
-      destinationPresentationProfile:"minimum",
-      simulationAuthorityPreserved:true
-    });
-  }
-  function cancelTerrainDestination(reason="superseded"){
-    pendingTerrainDestination=null;
-    return terrainPreloadManager?.cancelDestination?.(reason)||null;
-  }
-  function finishTerrainDestination(){
-    const result=terrainPreloadManager?.finishDestination?.()||null;
-    const background=Boolean(window.TerrainChunkPreloadSettings?.get?.()?.backgroundChunkGeneration);
-    if(background){
-      setTimeout(()=>{
-        if(!app||!terrainPreloadManager)return;
-        void prepareWorldAssets().catch(error=>console.warn("Deferred destination world-asset preparation failed.",error));
-      },0);
-    }
-    return result;
-  }
-
   function preparedTerrainKey(seed,center){
     if(!center)return "";
     return [
@@ -2322,7 +2189,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     lastSnapshot=baseSnapshot();
     return lastSnapshot;
   }
-  function updateCameraTransform(centerOverride=null){
+  function updateCameraTransform(){
     if(!camera)return;
     const started=performance.now();
     navigationTelemetry.cameraTransformCalls++;
@@ -2330,7 +2197,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       const building=selectInteriorProofBuilding(interiorProofState),bounds=proofBounds(building);
       if(bounds)updateInteriorProofCamera(bounds);
     }else{
-      const center=centerOverride||lastModel?.center||window.Camera?.getCenter?.()||{x:"0",y:"0"};
+      const center=lastModel?.center||window.Camera?.getCenter?.()||{x:"0",y:"0"};
       ensureSceneAnchor(center);
       const dx=safeDeltaTiles(center.x,sceneAnchor?.x??center.x)??0,dy=safeDeltaTiles(center.y,sceneAnchor?.y??center.y)??0;
       const targetX=dx*WORLD_TILE_METERS,targetZ=dy*WORLD_TILE_METERS,zoom=clamp(Number(lastModel?.cameraZoom??window.Camera?.getZoom?.()??1),0.5,2);
@@ -2362,7 +2229,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     navigationTelemetry.totalCameraTransformMs+=elapsed;
     navigationTelemetry.maxCameraTransformMs=Math.max(navigationTelemetry.maxCameraTransformMs,elapsed);
   }
-  function resize(centerOverride=null){
+  function resize(){
     if(!app||!host||!device)return;
     const width=Math.max(1,Math.round(host.clientWidth||1)),height=Math.max(1,Math.round(host.clientHeight||1));
     quality=resolveQuality(width,height);
@@ -2376,7 +2243,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       lastResizeSignature=signature;
       navigationTelemetry.canvasResizeCalls++;
     }else navigationTelemetry.canvasResizeSkips++;
-    updateCameraTransform(centerOverride);
+    updateCameraTransform();
     if(lastModel?.visibleCharacters&&charactersRoot)syncCharacterBillboards(lastModel.visibleCharacters);
   }
   function frameStats(){const stats=app?.stats||{},rawGpu=Number(stats.frame?.gpuTime??stats.frame?.gpuMs);return Object.freeze({frameMs:Number(stats.frame?.ms||0),gpuMs:Number.isFinite(rawGpu)?rawGpu:null,renderMs:Number(stats.frame?.renderTime||0),drawCalls:Number(stats.drawCalls?.total||device?._drawCallsPerFrame||0),triangles:Number(stats.frame?.triangles||device?._primitiveCount||0)});}
@@ -2473,42 +2340,12 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
     const frame=window.RendererContract?.frameFromModel?.(model)||null;
     if(!frame?.center)return Object.freeze({prepared:false,chunkMesh:false,worldAssetsReady:false,regionKey:frame?.regionKey||null,reason:"missing-center"});
     ensureSceneAnchor(frame.center);
-    // During destination handoff lastModel may still describe the previous view.
-    // Drive resize/camera preparation from the requested frame so scene-anchor
-    // rebasing cannot bounce back to stale coordinates before chunk repositioning.
-    resize(frame.center);
+    resize();
     const terrainTextures=await prepareTerrainTextureAtlas();
     const buildingTextures=await prepareBuildingSurfaceAtlas();
     const treeSprites=await prepareTreeSpriteAtlas();
-    const terrainKey=preparedTerrainKey(lastRawSeed,frame.center);
-    const pending=pendingTerrainDestination?.key===terrainKey?pendingTerrainDestination:null;
-    const committedDestination=Boolean(pending);
-    let preload;
-    if(pending){
-      const manager=initTerrainPreload();
-      preload=manager?.commitDestination?.({
-        center:pending.center,
-        activeRadiusX:pending.activeRadiusX,
-        activeRadiusY:pending.activeRadiusY,
-        requiredChunkIds:pending.requiredChunkIds
-      })||Object.freeze({ready:false,reason:"destination-commit-unavailable"});
-      if(preload?.ready!==true){
-        return Object.freeze({prepared:false,chunkMesh:true,chunkWorldData:true,worldAssetsReady:false,regionKey:frame.regionKey||null,preload,reason:"destination-commit-not-ready",simulationAuthorityPreserved:true});
-      }
-      repositionTerrainResourcesIfNeeded(manager);
-      pendingTerrainDestination=null;
-    }else{
-      preload=updateTerrainPreload(frame.center);
-    }
-    if(committedDestination){
-      lastWorldPreparation=Object.freeze({
-        ready:true,deferred:true,reason:"streaming-minimum-committed",
-        regionCount:Number(preload?.Active||0),keyCount:0,
-        regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),
-        simulationAuthorityPreserved:true
-      });
-    }
-    const worldAssets=committedDestination?lastWorldPreparation:await prepareWorldAssets();
+    const preload=updateTerrainPreload(frame.center);
+    const worldAssets=await prepareWorldAssets();
     if(!worldAssets.ready){
       if(!assetPreparationProofState)setNormalWorldEnabled(false);
       return Object.freeze({prepared:false,chunkMesh:true,chunkWorldData:true,worldAssetsReady:false,regionKey:frame.regionKey||null,preload,worldAssets,reason:"world-assets-not-ready",simulationAuthorityPreserved:true});
@@ -2563,10 +2400,10 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
   }
   function setBuildingProofState(state){proofState=(state===null||state===undefined||state==="off")?null:String(state);applyCutaway();lastSnapshot=baseSnapshot();return lastSnapshot;}
   function setBuildingOcclusionProofState(state){occlusionProofState=(state===null||state===undefined||state==="off")?null:String(state);lastSnapshot=baseSnapshot();return lastSnapshot;}
-  function clear(){pendingTerrainDestination=null;assetPreparationProofState=false;ambientMotionProofOverride=null;assetPreparationProofRoot&&clearEntityChildren(assetPreparationProofRoot);if(assetPreparationProofRoot)assetPreparationProofRoot.enabled=false;lastAssetPreparationProof=Object.freeze({active:false,logicalKey:null,entityCount:0,meshInstanceCount:0,materialCount:0,networkLoads:0,containerParses:0,simulationAuthorityPreserved:true});lastModel=null;lastRawSeed=null;lastPreparedTerrainKey="";worldPreparation?.invalidate?.();lastWorldPreparation=Object.freeze({ready:false,regionCount:0,keyCount:0,regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),simulationAuthorityPreserved:true});lastRawInteriorObjects=[];lastRawBuildingInteriors=[];setInteriorObjectProofState(null);setCharacterProofState(null);clearCharacterBillboards();if(host)host.hidden=true;lastSnapshot=baseSnapshot({ready:Boolean(app&&device)});}
+  function clear(){assetPreparationProofState=false;ambientMotionProofOverride=null;assetPreparationProofRoot&&clearEntityChildren(assetPreparationProofRoot);if(assetPreparationProofRoot)assetPreparationProofRoot.enabled=false;lastAssetPreparationProof=Object.freeze({active:false,logicalKey:null,entityCount:0,meshInstanceCount:0,materialCount:0,networkLoads:0,containerParses:0,simulationAuthorityPreserved:true});lastModel=null;lastRawSeed=null;lastPreparedTerrainKey="";worldPreparation?.invalidate?.();lastWorldPreparation=Object.freeze({ready:false,regionCount:0,keyCount:0,regionKeys:Object.freeze([]),logicalKeys:Object.freeze([]),simulationAuthorityPreserved:true});lastRawInteriorObjects=[];lastRawBuildingInteriors=[];setInteriorObjectProofState(null);setCharacterProofState(null);clearCharacterBillboards();if(host)host.hidden=true;lastSnapshot=baseSnapshot({ready:Boolean(app&&device)});}
   function snapshot(){if(app&&device)lastSnapshot=baseSnapshot();return lastSnapshot;}
-  function destroy(){pendingTerrainDestination=null;resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);if(qualityChangeHandler)window.removeEventListener?.("advisor:texture-quality-change",qualityChangeHandler);qualityChangeHandler=null;if(renderQualityChangeHandler)window.removeEventListener?.("advisor:render-quality-change",renderQualityChangeHandler);renderQualityChangeHandler=null;if(renderQualityFrameHandler)app?.off?.("update",renderQualityFrameHandler);renderQualityFrameHandler=null;if(ambientMotionFrameHandler)app?.off?.("update",ambientMotionFrameHandler);ambientMotionFrameHandler=null;ambientMotionClockSeconds=0;ambientMotionProofOverride=null;ambientFrameTelemetry.calls=0;ambientFrameTelemetry.totalMs=0;ambientFrameTelemetry.lastMs=0;ambientFrameTelemetry.maxMs=0;ambientFrameTelemetry.lastActiveResources=0;terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;terrainTextureAtlas?.destroy?.();terrainTextureAtlas=null;buildingSurfaceAtlas?.destroy?.();buildingSurfaceAtlas=null;treeSpriteAtlas?.destroy?.();treeSpriteAtlas=null;lastPreparedTerrainKey="";window.PlayCanvasChunkWorldData?.clear?.();app?.destroy?.();app=null;device=null;lastResizeSignature="";sceneAnchorRevision=0;lastPositionedAnchorRevision=0;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;characterContactRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;assetPreparationProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;lastCutawayState=Object.freeze({active:false,local:true,targetBuildingId:null,hiddenRoofCount:0,totalRoofCount:0});characterContactBuffer?.destroy?.();characterContactBuffer=null;characterContactCapacity=0;characterContactMesh?.destroy?.();characterContactMesh=null;characterContactEntity=null;characterContactMeshInstance=null;characterContactMaterialRef=null;characterContactBufferUpdates=0;materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation?.invalidate?.();worldPreparation?.invalidate?.();characterPreparation=null;worldPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});lastCharacterContactState=Object.freeze({count:0,drawCalls:0,materialCount:0,hardwareInstanced:true,terrainAlignedCount:0,quality:"standard",opacity:0.145,simulationAuthorityPreserved:true});}
-  return Object.freeze({init,render,prepareTerrain,prepareTerrainDestination,cancelTerrainDestination,finishTerrainDestination,getPreparedTerrainView,prepareCharacters,updateCharacters,clear,snapshot,destroy,setAssetPreparationProofState,setAmbientMotionProofState,setTerrainMicroReliefProofState,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,screenToCameraDelta,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
+  function destroy(){resizeObserver?.disconnect?.();resizeObserver=null;window.removeEventListener?.("resize",resize);if(qualityChangeHandler)window.removeEventListener?.("advisor:texture-quality-change",qualityChangeHandler);qualityChangeHandler=null;if(renderQualityChangeHandler)window.removeEventListener?.("advisor:render-quality-change",renderQualityChangeHandler);renderQualityChangeHandler=null;if(renderQualityFrameHandler)app?.off?.("update",renderQualityFrameHandler);renderQualityFrameHandler=null;if(ambientMotionFrameHandler)app?.off?.("update",ambientMotionFrameHandler);ambientMotionFrameHandler=null;ambientMotionClockSeconds=0;ambientMotionProofOverride=null;ambientFrameTelemetry.calls=0;ambientFrameTelemetry.totalMs=0;ambientFrameTelemetry.lastMs=0;ambientFrameTelemetry.maxMs=0;ambientFrameTelemetry.lastActiveResources=0;terrainPreloadManager?.destroy?.();terrainPreloadManager=null;terrainChunkMeshFactory=null;terrainTextureAtlas?.destroy?.();terrainTextureAtlas=null;buildingSurfaceAtlas?.destroy?.();buildingSurfaceAtlas=null;treeSpriteAtlas?.destroy?.();treeSpriteAtlas=null;lastPreparedTerrainKey="";window.PlayCanvasChunkWorldData?.clear?.();app?.destroy?.();app=null;device=null;lastResizeSignature="";sceneAnchorRevision=0;lastPositionedAnchorRevision=0;cameraRoot=null;camera=null;worldRoot=null;terrainPreloadRoot=null;terrainRoot=null;terrainBaseEntity=null;structuresRoot=null;propsRoot=null;characterContactRoot=null;charactersRoot=null;lightingRoot=null;interiorProofRoot=null;characterProofRoot=null;assetPreparationProofRoot=null;interiorProofPanel?.remove?.();interiorProofPanel=null;characterProofPanel?.remove?.();characterProofPanel=null;roofEntities.length=0;lastCutawayState=Object.freeze({active:false,local:true,targetBuildingId:null,hiddenRoofCount:0,totalRoofCount:0});characterContactBuffer?.destroy?.();characterContactBuffer=null;characterContactCapacity=0;characterContactMesh?.destroy?.();characterContactMesh=null;characterContactEntity=null;characterContactMeshInstance=null;characterContactMaterialRef=null;characterContactBufferUpdates=0;materials.clear();characterMaterials.clear();characterTextures.clear();characterEntities.clear();registeredCharacterAssets.clear();characterPreparation?.invalidate?.();worldPreparation?.invalidate?.();characterPreparation=null;worldPreparation=null;canvas?.remove?.();canvas=null;host=null;sceneAnchor=null;lastCharacterState=Object.freeze({activeCharacterCount:0,simulatedCharacterCount:0,preparedCharacterCount:0,visibleCharacterIds:Object.freeze([]),visibleProtagonist:false,instances:Object.freeze([])});lastCharacterContactState=Object.freeze({count:0,drawCalls:0,materialCount:0,hardwareInstanced:true,terrainAlignedCount:0,quality:"standard",opacity:0.145,simulationAuthorityPreserved:true});}
+  return Object.freeze({init,render,prepareTerrain,getPreparedTerrainView,prepareCharacters,updateCharacters,clear,snapshot,destroy,setAssetPreparationProofState,setAmbientMotionProofState,setTerrainMicroReliefProofState,setBuildingProofState,setBuildingOcclusionProofState,setInteriorObjectProofState,setCharacterProofState,screenToCameraDelta,projectionBasis:Object.freeze({x:1,y:1}),proofStates:Object.freeze(["outside","entering","inside","behind","leaving"]),occlusionProofStates:Object.freeze(["front","behind","clear","inside","restored"]),interiorObjectProofStates:Object.freeze(["house","special"]),characterProofStates:Object.freeze(["open","front","behind","entering","inside"])});
 }
 window.PlayCanvasRendererFactory=Object.freeze({engineVersion:ENGINE_VERSION,engineUrl:ENGINE_URL,loadEngine,create});
 })();
