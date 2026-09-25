@@ -55,6 +55,7 @@ let longTaskObserver=null;
 let heartbeatTimer=null;
 let controlledWorkActive=false;
 let lastHeartbeatAt=0;
+let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
 function loadingNodes(){
@@ -258,7 +259,71 @@ async function makeGeographyTexture(){
     peak:highest,
     deepOcean:deepest
   });
+  buildDestinationDescriptors();
   return texture;
+}
+function stablePlaceName(kind,target,index){
+  const stems=["Alder","Brim","Cinder","Dawn","Elder","Frost","Glen","Haven","Iron","Juniper","Kings","Lumen","Morrow","North","Oak","Raven","Silver","Thorn","Vale","Willow"];
+  const tails={continent:["reach","land","march"],island:["isle","haven","key"],mountain:["spire","peak","crown"],peak:["summit","crest","crown"],water:["deep","sea","blue"]};
+  const lat=Math.round((Number(target?.latitudeDegrees)||0)*10),lon=Math.round((Number(target?.longitudeDegrees)||0)*10);
+  let h=2166136261>>>0;for(const ch of String(activeSeed)+"|"+kind+"|"+lat+"|"+lon+"|"+index){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  const stem=stems[h%stems.length],suffix=(tails[kind]||["reach"])[(h>>>8)%(tails[kind]||["reach"]).length];
+  return stem+" "+suffix.charAt(0).toUpperCase()+suffix.slice(1);
+}
+function greatCircleDistanceKm(a,b){
+  const lat1=Number(a?.latitudeRadians)||0,lat2=Number(b?.latitudeRadians)||0;
+  const dLat=lat2-lat1,dLon=(Number(b?.longitudeRadians)||0)-(Number(a?.longitudeRadians)||0);
+  const q=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return WORLD_RADIUS_METERS*(2*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q))))/1000;
+}
+function buildDestinationDescriptors(){
+  const started=performance.now();
+  const source=[
+    ["continent","landmark",featureTargets?.continent,"Major continental landmass"],
+    ["island","nature",featureTargets?.island,"Seeded island landmark"],
+    ["mountain","nature",featureTargets?.mountain,"Mountain range high point"],
+    ["peak","nature",featureTargets?.peak,"Highest surveyed elevation"],
+    ["water","water",featureTargets?.deepOcean,"Deep ocean basin"]
+  ];
+  destinationNavigator.descriptors=source.filter(row=>row[2]).map((row,index)=>{
+    const [kind,category,target,description]=row;
+    return Object.freeze({id:"planet-place-"+kind+"-"+index,name:stablePlaceName(kind,target,index),type:kind,category,description,
+      latitudeRadians:Number(target.latitudeRadians)||0,longitudeRadians:Number(target.longitudeRadians)||0,
+      latitudeDegrees:Number(target.latitudeDegrees)||0,longitudeDegrees:Number(target.longitudeDegrees)||0,
+      elevationMeters:Number(target.elevationMeters)||0});
+  });
+  destinationNavigator.queryCount++;
+  destinationNavigator.lastQueryMs=Number((performance.now()-started).toFixed(3));
+}
+function renderDestinationNavigator(){
+  if(!root)return;
+  let button=root.querySelector(".planet-places-button");
+  if(!button){
+    button=document.createElement("button");button.type="button";button.className="planet-places-button";button.textContent="Places";button.setAttribute("aria-expanded","false");
+    button.addEventListener("click",()=>{destinationNavigator.open=!destinationNavigator.open;renderDestinationNavigator();});
+    root.appendChild(button);
+  }
+  button.setAttribute("aria-expanded",String(destinationNavigator.open));
+  let panel=root.querySelector(".planet-places-panel");
+  if(!destinationNavigator.open){panel?.remove();return;}
+  if(!panel){panel=document.createElement("section");panel.className="planet-places-panel";panel.setAttribute("aria-label","World destinations");root.appendChild(panel);}
+  const categories=[["all","All"],["landmark","Landmarks"],["nature","Nature"],["water","Water"]];
+  const visible=destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category);
+  panel.replaceChildren();
+  const head=document.createElement("div");head.className="planet-places-head";head.innerHTML="<div><small>WORLD NAVIGATOR</small><strong>Places</strong></div>";
+  const close=document.createElement("button");close.type="button";close.className="planet-places-close";close.textContent="×";close.setAttribute("aria-label","Close places");close.onclick=()=>{destinationNavigator.open=false;renderDestinationNavigator();};head.appendChild(close);panel.appendChild(head);
+  const filters=document.createElement("div");filters.className="planet-places-filters";
+  for(const [id,label] of categories){const b=document.createElement("button");b.type="button";b.textContent=label;b.dataset.active=String(destinationNavigator.category===id);b.onclick=()=>{destinationNavigator.category=id;renderDestinationNavigator();};filters.appendChild(b);}panel.appendChild(filters);
+  const list=document.createElement("div");list.className="planet-places-list";
+  for(const d of visible){
+    const row=document.createElement("article");row.className="planet-place-row";row.dataset.selected=String(destinationNavigator.selectedId===d.id);
+    const info=document.createElement("div");const distance=greatCircleDistanceKm({latitudeRadians:0,longitudeRadians:0},d);
+    info.innerHTML="<strong></strong><span></span><small></small>";info.querySelector("strong").textContent=d.name;info.querySelector("span").textContent=d.type+" · "+Math.round(distance).toLocaleString()+" km from world origin";info.querySelector("small").textContent=d.description+" · "+Math.round(d.elevationMeters).toLocaleString()+" m";
+    const go=document.createElement("button");go.type="button";go.textContent="View";go.onclick=()=>{destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();};
+    row.append(info,go);list.appendChild(row);
+  }
+  panel.appendChild(list);
+  const foot=document.createElement("p");foot.className="planet-places-foot";foot.textContent="Camera view only · "+visible.length+" bounded seeded destinations";panel.appendChild(foot);
 }
 function visualElevationMeters(sample){
   if(sample.land)return Math.max(40,Number(sample.elevationMeters)||0);
@@ -521,6 +586,7 @@ async function start(){
     await yieldPaint();
     root.dataset.ready="true";
     root.dataset.seed=activeSeed;
+    renderDestinationNavigator();
     return snapshot();
   }catch(error){
     controlledWorkActive=false;
@@ -594,6 +660,7 @@ function snapshot(){
       physicalElevationMeters:true
     }),
     frameCount,
+    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,fullWorldScan:false,cameraOnly:true}),
     startupError,
     startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
     loadingPresentation:Object.freeze({...((loadingProof||startupProgress)),loadingProofActive:Boolean(loadingProof)}),
@@ -629,7 +696,7 @@ function destroy(){
   geography=null;root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,destroy,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},setPlacesCategory:(category)=>{destinationNavigator.category=["all","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
