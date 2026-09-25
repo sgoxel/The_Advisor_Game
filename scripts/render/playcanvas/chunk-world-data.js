@@ -656,10 +656,118 @@ function generate(spec){
   lastGeneratedIds=Object.freeze([key,...lastGeneratedIds].slice(0,12));
   return snapshot;
 }
+function prepareMinimumStep(spec,state=null,maxCells=2){
+  const key=signatureFor(spec);
+  const existing=cache.get(key);
+  if(existing?.snapshot?.complete){
+    cacheHits++;existing.touches++;existing.lastUsed=performance.now();
+    return Object.freeze({pending:false,data:existing.snapshot,completed:existing.snapshot.cells?.length||0,total:existing.snapshot.cells?.length||0,percent:100,cached:true});
+  }
+  const seed=String(spec.seed||"");
+  const size=Math.max(1,Number(spec.chunkSize)||16);
+  const total=size*size;
+  let work=state;
+  if(!work||work.key!==key){
+    const bounds=boundsFor(spec.x,spec.y,size);
+    work={
+      key,seed,size,bounds,
+      minX:BigInt(bounds.minX),minY:BigInt(bounds.minY),
+      cursor:0,cells:new Array(total),surfaceCounts:{},
+      textureKeys:new Set(),overlayTextureKeys:new Set(),buildingIds:new Set(),
+      walkableCount:0,blockedCount:0,startedAt:performance.now()
+    };
+  }
+  const slice=Math.max(1,Math.min(8,Number(maxCells)||2));
+  let processed=0;
+  while(work.cursor<total&&processed<slice){
+    const index=work.cursor;
+    const localY=Math.floor(index/size),localX=index-localY*size;
+    const x=String(work.minX+BigInt(localX)),y=String(work.minY+BigInt(localY));
+    const tile=TerrainFoundation.getTile(seed,x,y);
+    terrainFoundationCalls++;
+    const movement=Walkability.classifyPrepared
+      ?Walkability.classifyPrepared(seed,tile)
+      :Walkability.classify(seed,x,y);
+    walkabilityClassifications++;
+    if(movement?.walkable)work.walkableCount++;else work.blockedCount++;
+    const cell=freezeTile(tile,movement,localX,localY);
+    work.cells[index]=cell;
+    work.surfaceCounts[cell.type]=(work.surfaceCounts[cell.type]||0)+1;
+    if(cell.textureKey)work.textureKeys.add(cell.textureKey);
+    if(cell.overlayTextureKey)work.overlayTextureKeys.add(cell.overlayTextureKey);
+    if(cell.buildingId)work.buildingIds.add(cell.buildingId);
+    work.cursor++;processed++;
+  }
+  if(work.cursor<total){
+    return Object.freeze({
+      pending:true,state:work,completed:work.cursor,total,
+      percent:Math.min(99,Math.floor(work.cursor/total*100))
+    });
+  }
+
+  const elapsed=performance.now()-work.startedAt;
+  totalGenerationMs+=elapsed;maxGenerationMs=Math.max(maxGenerationMs,elapsed);
+  completeChunkGenerations++;
+  if(spec.state==="Active")activeGenerations++;
+  else if(spec.state==="Prepared")preparedGenerations++;
+  else otherGenerations++;
+
+  const emptyList=Object.freeze([]);
+  const snapshot=Object.freeze({
+    key,version:VERSION,seed,
+    chunkX:Number(spec.x),chunkY:Number(spec.y),chunkSize:size,
+    bounds:work.bounds,complete:true,streamingMinimum:true,
+    cells:Object.freeze(work.cells),
+    terrain:Object.freeze({
+      surfaceCounts:Object.freeze({...work.surfaceCounts}),
+      textureKeys:Object.freeze([...work.textureKeys].sort()),
+      overlayTextureKeys:Object.freeze([...work.overlayTextureKeys].sort()),
+      walkableCount:work.walkableCount,blockedCount:work.blockedCount
+    }),
+    buildingIds:Object.freeze([...work.buildingIds].sort()),
+    buildings:emptyList,
+    staticObjects:emptyList,
+    presentation:Object.freeze({
+      terrainMeshRequired:true,
+      source:"seed-chunk-world-data",
+      buildingDescriptors:emptyList,
+      landmark:null,
+      propDescriptors:emptyList,
+      connectorDescriptors:emptyList,
+      routeNetwork:Object.freeze({
+        connectorCellCount:0,connectorRouteIds:emptyList,connectedRouteCount:0,totalRouteCount:0,
+        routeSafetyPass:true,deterministic:true,rendererOnly:true,simulationAuthorityPreserved:true
+      }),
+      dressing:Object.freeze({
+        count:0,routeSafeCount:0,contexts:Object.freeze({}),semantics:Object.freeze({}),
+        deterministic:true,rendererOnly:true
+      }),
+      interiorObjectDescriptors:emptyList,
+      hardCodedSampleGeometry:false,
+      streamingMinimum:true
+    }),
+    generationMs:Number(elapsed.toFixed(3)),
+    generatedTerrainCalls:total,
+    generatedWalkabilityClassifications:total,
+    simulationAuthorityPreserved:true
+  });
+  cache.set(key,{snapshot,lastUsed:performance.now(),touches:0});
+  everGenerated.add(key);
+  lastGeneratedIds=Object.freeze([key,...lastGeneratedIds].slice(0,12));
+  return Object.freeze({pending:false,data:snapshot,completed:total,total,percent:100,cached:false});
+}
 function getOrCreate(spec){
   const key=signatureFor(spec);
   const existing=cache.get(key);
   if(existing){
+    const wantsFull=String(spec?.streamingProfile||"full")!=="minimum";
+    if(existing.snapshot?.streamingMinimum&&wantsFull){
+      cacheMisses++;
+      regenerationCount++;
+      const snapshot=generate(spec);
+      everGenerated.add(key);
+      return snapshot;
+    }
     cacheHits++;existing.touches++;existing.lastUsed=performance.now();
     return existing.snapshot;
   }
@@ -851,6 +959,6 @@ function clear(){
 }
 window.PlayCanvasChunkWorldData=Object.freeze({
   version:VERSION,
-  getOrCreate,touch,release,collectView,stats,clear,signatureFor,landmarkPlan:settlementLandmarkPlan
+  getOrCreate,prepareMinimumStep,touch,release,collectView,stats,clear,signatureFor,landmarkPlan:settlementLandmarkPlan
 });
 })();
