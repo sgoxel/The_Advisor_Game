@@ -209,29 +209,28 @@ async function makeGeographyTexture(){
   let landSamples=0,oceanSamples=0,islandSamples=0,mountainSamples=0,peakSamples=0;
   let highest=null,deepest=null,bestIsland=null,bestMountain=null,bestContinent=null;
 
-  await runSlicedRange(TEXTURE_HEIGHT,py=>{
+  await runSlicedRange(TEXTURE_WIDTH*TEXTURE_HEIGHT,index=>{
+    const py=Math.floor(index/TEXTURE_WIDTH),px=index-py*TEXTURE_WIDTH;
     const v=(py+0.5)/TEXTURE_HEIGHT;
     const lat=(0.5-v)*Math.PI;
-    for(let px=0;px<TEXTURE_WIDTH;px++){
-      const u=(px+0.5)/TEXTURE_WIDTH;
-      const lon=(u-0.5)*Math.PI*2;
-      const sample=geography.sampleLatLon(lat,lon);
-      const rgba=rgbaFromColor(sample.color);
-      const index=(py*TEXTURE_WIDTH+px)*4;
-      data[index]=rgba[0];data[index+1]=rgba[1];data[index+2]=rgba[2];data[index+3]=255;
-      minElevation=Math.min(minElevation,sample.elevationMeters);
-      maxElevation=Math.max(maxElevation,sample.elevationMeters);
-      if(sample.land)landSamples++;else oceanSamples++;
-      if(sample.islandInfluence>0.28&&sample.continentInfluence<0.22&&sample.land)islandSamples++;
-      if(sample.mountainInfluence>0.18)mountainSamples++;
-      if(sample.elevationMeters>=3400)peakSamples++;
-      const descriptor=Object.freeze({latitudeRadians:sample.latitudeRadians,longitudeRadians:sample.longitudeRadians,latitudeDegrees:Number((sample.latitudeRadians*180/Math.PI).toFixed(3)),longitudeDegrees:Number((sample.longitudeRadians*180/Math.PI).toFixed(3)),elevationMeters:sample.elevationMeters,surfaceClass:sample.surfaceClass,continentInfluence:sample.continentInfluence,islandInfluence:sample.islandInfluence,mountainInfluence:sample.mountainInfluence});
-      if(!highest||sample.elevationMeters>highest.elevationMeters)highest=descriptor;
-      if(!deepest||sample.elevationMeters<deepest.elevationMeters)deepest=descriptor;
-      if(sample.land&&sample.islandInfluence>0.22&&sample.continentInfluence<0.28&&(!bestIsland||sample.islandInfluence>bestIsland.islandInfluence))bestIsland=descriptor;
-      if(sample.land&&(!bestMountain||sample.mountainInfluence>bestMountain.mountainInfluence||(sample.mountainInfluence===bestMountain.mountainInfluence&&sample.elevationMeters>bestMountain.elevationMeters)))bestMountain=descriptor;
-      if(sample.land&&(!bestContinent||sample.continentInfluence>bestContinent.continentInfluence))bestContinent=descriptor;
-    }
+    const u=(px+0.5)/TEXTURE_WIDTH;
+    const lon=(u-0.5)*Math.PI*2;
+    const sample=geography.sampleLatLon(lat,lon);
+    const rgba=rgbaFromColor(sample.color);
+    const dataIndex=index*4;
+    data[dataIndex]=rgba[0];data[dataIndex+1]=rgba[1];data[dataIndex+2]=rgba[2];data[dataIndex+3]=255;
+    minElevation=Math.min(minElevation,sample.elevationMeters);
+    maxElevation=Math.max(maxElevation,sample.elevationMeters);
+    if(sample.land)landSamples++;else oceanSamples++;
+    if(sample.islandInfluence>0.28&&sample.continentInfluence<0.22&&sample.land)islandSamples++;
+    if(sample.mountainInfluence>0.18)mountainSamples++;
+    if(sample.elevationMeters>=3400)peakSamples++;
+    const descriptor=Object.freeze({latitudeRadians:sample.latitudeRadians,longitudeRadians:sample.longitudeRadians,latitudeDegrees:Number((sample.latitudeRadians*180/Math.PI).toFixed(3)),longitudeDegrees:Number((sample.longitudeRadians*180/Math.PI).toFixed(3)),elevationMeters:sample.elevationMeters,surfaceClass:sample.surfaceClass,continentInfluence:sample.continentInfluence,islandInfluence:sample.islandInfluence,mountainInfluence:sample.mountainInfluence});
+    if(!highest||sample.elevationMeters>highest.elevationMeters)highest=descriptor;
+    if(!deepest||sample.elevationMeters<deepest.elevationMeters)deepest=descriptor;
+    if(sample.land&&sample.islandInfluence>0.22&&sample.continentInfluence<0.28&&(!bestIsland||sample.islandInfluence>bestIsland.islandInfluence))bestIsland=descriptor;
+    if(sample.land&&(!bestMountain||sample.mountainInfluence>bestMountain.mountainInfluence||(sample.mountainInfluence===bestMountain.mountainInfluence&&sample.elevationMeters>bestMountain.elevationMeters)))bestMountain=descriptor;
+    if(sample.land&&(!bestContinent||sample.continentInfluence>bestContinent.continentInfluence))bestContinent=descriptor;
   });
   ctx.putImageData(image,0,0);
 
