@@ -1512,3 +1512,17 @@
 - Existing local RoutePlanner regression remains PASS with a 26-step route, deterministic result, blocked-wall rejection, movement-cost agreement, one slope-blocked alternative, and 19.29° maximum chosen-route slope.
 - Slope telemetry: 11,769 elevation queries, 11,628 cache hits (~49.7% hit rate), 7,745 transition queries, 176 slope-blocked transitions, 0.0234 ms average elevation query and 3.2 ms maximum sampled query. Authority remains renderer-independent.
 - Exact tested implementation head d023454d888257ae209ec029709c427248b29420 deployed successfully via GitHub Pages run 36126304642.
+
+
+2026-09-25 14:21:05 +03:00 | WP-S002-004-001 | Elevation-Aware Route Cost + Valley/Pass Preference — PASS
+- Classification: FUNCTIONAL / SIMULATION. VISUAL: N/A because route legality, deterministic path choice and authoritative elevation-cost behavior cannot be meaningfully verified from screenshot appearance.
+- Added deterministic route-cost policy elevation-route-v1 on top of authoritative Walkability transitions: bounded asymmetric uphill/downhill effort, horizontal terrain cost, explicit road benefit, difficult-terrain penalty, ascent/descent totals, engineered/bridge step counts and maximum chosen-route slope.
+- RoutePlanner still uses bounded deterministic local A* and authoritative GeographyFoundation-derived slope data; rendered Y remains presentation-only and impossible cliff transitions remain rejected.
+- Attempt 1 run 36128230130 failed only because the new functional evidence scenario was not dispatched on frame 1; production route logic was unchanged. tools/screenshot_tool.py dispatch was corrected before Attempt 2.
+- Attempt 2 run 36128566452 passed on exact head 8f2dd078874ba773cf215e110acd1591591d3c9e. Artifact 10860254501 / sha256:bb0875404fe30c5d53e824084fc286685377eafc1130c783502b0e7461c716a4 records the functional proof.
+- Deterministic ridge/pass evidence: a 12-step direct ridge profile contained 10 blocked edges and reached 27.6995 degrees; the selected 20-step detour stayed at or below 23.0255 degrees and reproduced the identical route signature on repeat.
+- Directional slope evidence: the same 15.3763-degree steep edge cost 4.182 s uphill versus 3.8784 s downhill; gentle flat movement remained 2.4 s with zero elevation penalty.
+- Road/bridge evidence: the representative route used 21 road-path steps / 20 engineered steps with 8.0 s road benefit; an engineered 14.0362-degree road edge remained legal; the bridge scenario used 2 bridge steps and completed in 16.91152 s; unsafe very-steep terrain at 29.8989 degrees remained unreachable.
+- Route regression remained PASS: 26-step route, 227 evaluated / 164 expanded nodes, blocked-wall rejection, 19.29-degree maximum chosen slope, 54.421429 s horizontal cost and 2.44215 s elevation penalty.
+- Elevation telemetry remained bounded/lazy: 819 source elevation queries, 5,167 cache hits (86.3% hit rate), 2,993 transition queries, 396 blocked slope transitions, 0.0372 ms average elevation query and 3.1 ms maximum sampled query. The complete dedicated browser proof measured 495.7 ms.
+- Exact tested implementation head 8f2dd078874ba773cf215e110acd1591591d3c9e deployed successfully via GitHub Pages run 36128552089.
