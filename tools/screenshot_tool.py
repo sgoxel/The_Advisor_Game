@@ -79,6 +79,7 @@ SCENARIOS = {
     "playcanvas-foundation",
     "playcanvas-scene",
     "wp-s003-003",
+    "wp-s003-003-001",
     "wp-s003-004-002",
     "wp-s003-004-003",
     "wp-s003-004-004",
@@ -168,6 +169,7 @@ SCENARIO_MIN_SHOTS = {
     "playcanvas-foundation": 3,
     "playcanvas-scene": 6,
     "wp-s003-003": 3,
+    "wp-s003-003-001": 4,
     "wp-s003-004-002": 8,
     "wp-s003-004-003": 6,
     "wp-s003-004-004": 11,
@@ -354,6 +356,9 @@ return (() => {
       currentBuild: {
         wpS002003001: window.__WP_S002_003_001_PROOF || null,
         wpS002004001: window.__WP_S002_004_001_PROOF || null,
+        wpS003003001: window.__WP_S003_003_001_PROOF || null,
+        objectInteractionPanel: window.AppUI?.objectInteractionPanelSnapshot?.() || null,
+        objectInteractionTelemetry: window.AppUI?.objectInteractionSnapshot?.() || null,
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
         sceneLoading: window.AppUI?.sceneLoadingSnapshot?.() || null,
         runtimeAreaLoading: window.AppUI?.runtimeAreaLoadingSnapshot?.() || null,
@@ -6068,6 +6073,57 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-003-001":
+        from selenium.webdriver.support.ui import WebDriverWait
+        type_by_frame=("table","hearth","door","chair")
+        target_type=type_by_frame[min(frame_index,len(type_by_frame)-1)]
+        if frame_index == 3:
+            driver.set_window_size(390,844)
+            time.sleep(0.35)
+        result=driver.execute_async_script(
+            """
+            const type=String(arguments[0]);
+            const done=arguments[arguments.length-1];
+            try{
+              const first=window.AppUI?.showObjectInteractionForEvidence?.(type,0);
+              const coord=first?.coordinate;
+              if(!first||!coord){done({ok:false,reason:'interaction-proof-target-missing',type});return;}
+              const proof=first.proof||window.AppUI?.objectInteractionVerify?.()||null;
+              if(proof)window.__WP_S003_003_001_PROOF=proof;
+              Promise.resolve(window.AppUI?.navigateCameraToForEvidence?.(coord.x,coord.y,false))
+                .then(()=>{
+                  const shown=window.AppUI?.showObjectInteractionForEvidence?.(type,0);
+                  done({
+                    ok:Boolean(shown?.context),
+                    type,
+                    coordinate:coord,
+                    context:shown?.context||null,
+                    panel:window.AppUI?.objectInteractionPanelSnapshot?.()||null,
+                    proof:shown?.proof||proof,
+                    telemetry:window.AppUI?.objectInteractionSnapshot?.()||null
+                  });
+                })
+                .catch(error=>done({ok:false,reason:String(error),type}));
+            }catch(error){done({ok:false,reason:String(error),type});}
+            """,
+            target_type
+        )
+        if not isinstance(result,dict) or result.get("ok") is not True:
+            raise RuntimeError(f"Contextual interaction evidence failed for {target_type}: {result}")
+        if frame_index == 0:
+            proof=result.get("proof") or {}
+            if proof.get("pass") is not True:
+                raise RuntimeError(f"Contextual interaction functional proof failed: {proof}")
+        WebDriverWait(driver,20).until(
+            lambda d: d.execute_script(
+                "return Boolean(window.AppUI?.objectInteractionPanelSnapshot?.()?.visible)"
+            )
+        )
+        panel=result.get("panel") or {}
+        enabled=panel.get("enabledActions") or []
+        if not enabled:
+            raise RuntimeError(f"No enabled contextual action rendered for {target_type}: {panel}")
+        return f"object-interaction:{target_type}:actions={','.join(str(x) for x in enabled)}"
     if scenario == "wp-s002-004-001":
         if frame_index != 0:
             return "elevation-route:no-op"
@@ -7486,6 +7542,45 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-003-001":
+        if len(frames) < 4:
+            raise RuntimeError("wp-s003-003-001 requires four mixed evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:4]]
+        proof=builds[0].get("wpS003003001") or {}
+        if proof.get("pass") is not True:
+            raise RuntimeError(f"Contextual interaction proof failed: {proof}")
+        if int(proof.get("representativeTypeCount") or 0)<6:
+            raise RuntimeError(f"Fewer than six representative object types verified: {proof}")
+        for key in ("validCount","invalidCount","clickPickCount"):
+            if int(proof.get(key) or 0)<6:
+                raise RuntimeError(f"Contextual interaction proof {key} below six: {proof}")
+        if int(proof.get("statefulCount") or 0)<5:
+            raise RuntimeError(f"Fewer than five delegated stateful actions verified: {proof}")
+        if (proof.get("doorScenario") or {}).get("enterPass") is not True:
+            raise RuntimeError(f"Door did not delegate to authoritative building routing: {proof.get('doorScenario')}")
+        stats=proof.get("stats") or {}
+        if stats.get("boundedLocalQuery") is not True or stats.get("perFrameScan") is not False or stats.get("createsResources") is not False:
+            raise RuntimeError(f"Object interaction performance/resource contract failed: {stats}")
+        if int(stats.get("maxVisitedCells") or 0)>289:
+            raise RuntimeError(f"Object interaction local query exceeded bounded 17x17 maximum: {stats}")
+        expected=("table","hearth","door","chair")
+        for index,(build,expected_type) in enumerate(zip(builds,expected)):
+            panel=build.get("objectInteractionPanel") or {}
+            if panel.get("visible") is not True or panel.get("proofMode") is not True:
+                raise RuntimeError(f"Interaction panel missing from frame {index+1}: {panel}")
+            if panel.get("selectedType")!=expected_type:
+                raise RuntimeError(f"Unexpected interaction type in frame {index+1}: {panel}")
+            if int(panel.get("buttonCount") or 0)<2:
+                raise RuntimeError(f"Interaction actions not populated in frame {index+1}: {panel}")
+            if int(panel.get("minTouchTargetPx") or 0)<44:
+                raise RuntimeError(f"Interaction touch target below 44 px in frame {index+1}: {panel}")
+            if not panel.get("enabledActions"):
+                raise RuntimeError(f"No enabled interaction actions in frame {index+1}: {panel}")
+        viewport=frames[3].get("runtime",{}).get("viewport",{})
+        if int(viewport.get("width") or 0)>430 or int(viewport.get("height") or 0)<700:
+            raise RuntimeError(f"Phone portrait interaction evidence did not use expected viewport: {viewport}")
+        return
+
     if scenario == "wp-s002-004-001":
         if len(frames) < 1:
             raise RuntimeError("wp-s002-004-001 requires one functional evidence frame")
@@ -12722,12 +12817,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
