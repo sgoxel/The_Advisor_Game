@@ -100,6 +100,7 @@ SCENARIOS = {
     "wp-s003-006-009",
     "wp-s003-006-011",
     "wp-s003-006-012",
+    "wp-s003-006-013",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s003-008-002",
@@ -191,6 +192,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-009": 11,
     "wp-s003-006-011": 8,
     "wp-s003-006-012": 8,
+    "wp-s003-006-013": 10,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
@@ -360,6 +362,7 @@ return (() => {
         wpS002004001: window.__WP_S002_004_001_PROOF || null,
         wpS003003001: window.__WP_S003_003_001_PROOF || null,
         wpS003006012: window.__WP_S003_006_012_PROOF || null,
+        wpS003006013: window.__WP_S003_006_013_PROOF || null,
         objectInteractionPanel: window.AppUI?.objectInteractionPanelSnapshot?.() || null,
         objectInteractionTelemetry: window.AppUI?.objectInteractionSnapshot?.() || null,
         campaignState: document.querySelector('#campaignState')?.textContent?.trim() || null,
@@ -1585,6 +1588,9 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
+    if scenario == "wp-s003-006-013":
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 180.0)
     if scenario == "wp-s003-006-011":
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
@@ -1671,7 +1677,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1988,8 +1994,8 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     action += "+cold-start-retry-recovered"
 
         except Exception as exc:
-            if scenario == "wp-s003-006-012":
-                # Hydrology evidence can hit the same cold software-WebGL campaign
+            if scenario in {"wp-s003-006-012", "wp-s003-006-013"}:
+                # Terrain evidence can hit the same cold software-WebGL campaign
                 # readiness race already exercised by other terrain scenarios. The
                 # first wait above may time out before their post-wait recovery path
                 # is reached. Use the real Retry Startup/reload path exactly once,
@@ -6132,6 +6138,127 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-006-013":
+        from selenium.webdriver.support.ui import WebDriverWait
+        driver.set_script_timeout(180.0)
+        if frame_index == 0:
+            proof=driver.execute_script(
+                """
+                const seed=window.SeedSystem?.getCampaign?.()?.seed;
+                const G=window.GameRenderer,T=window.TerrainFoundation,W=window.Walkability,Geo=window.GeographyFoundation;
+                if(!seed||!G?.landformAtTile||!T?.getTile||!W?.classify||!Geo?.environment){
+                  return {pass:false,reason:'landform-runtime-api-missing'};
+                }
+                const chunkSize=Number(window.TerrainChunkSizeSettings?.get?.()?.chunkSize||16);
+                const mod=(n,m)=>((n%m)+m)%m;
+                const candidates=[];
+                for(let y=-360;y<=360;y+=8){
+                  for(let x=-360;x<=360;x+=8){
+                    const profile=G.landformAtTile(String(x),String(y));
+                    if(!profile)continue;
+                    candidates.push({
+                      x,y,profile,
+                      terrain:String(T.getTile(seed,String(x),String(y))?.type||''),
+                      elevationMeters:Number(Geo.environment(seed,String(x),String(y))?.elevationMeters||0)
+                    });
+                  }
+                }
+                const best=(field,filter=()=>true)=>candidates.filter(filter).sort((a,b)=>
+                  Number(b.profile?.[field]||0)-Number(a.profile?.[field]||0)||
+                  Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0)||
+                  (Math.abs(a.x)+Math.abs(a.y))-(Math.abs(b.x)+Math.abs(b.y))
+                )[0]||null;
+                const valley=best('valleySignal');
+                const ridge=best('ridgeSignal');
+                const cliff=best('cliffSignal');
+                const pass=best('passSignal');
+                const slope=candidates.filter(row=>Number(row.profile?.gradientMetersPerTile||0)>=1.8)
+                  .sort((a,b)=>Math.abs(Number(a.profile?.gradientMetersPerTile||0)-3.8)-Math.abs(Number(b.profile?.gradientMetersPerTile||0)-3.8))[0]||cliff;
+                const riverValley=best('valleySignal',row=>row.terrain==='water')||best('valleySignal',row=>{
+                  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+                    if(String(T.getTile(seed,String(row.x+dx),String(row.y+dy))?.type||'')==='water')return true;
+                  }
+                  return false;
+                }))||valley;
+                const boundary=candidates.filter(row=>mod(row.x,chunkSize)===0||mod(row.y,chunkSize)===0)
+                  .sort((a,b)=>Number(b.profile?.localReliefMeters||0)-Number(a.profile?.localReliefMeters||0))[0]||ridge;
+                const selected={valley,ridge,slope,cliff,pass,riverValley,boundary};
+                const deterministic=Object.values(selected).filter(Boolean).every(row=>{
+                  const a=G.landformAtTile(String(row.x),String(row.y));
+                  const b=G.landformAtTile(String(row.x),String(row.y));
+                  return JSON.stringify(a)===JSON.stringify(b);
+                });
+                const signals={
+                  valley:Number(valley?.profile?.valleySignal||0),
+                  ridge:Number(ridge?.profile?.ridgeSignal||0),
+                  cliff:Number(cliff?.profile?.cliffSignal||0),
+                  pass:Number(pass?.profile?.passSignal||0),
+                  slope:Number(slope?.profile?.gradientMetersPerTile||0)
+                };
+                const authority=Object.values(selected).filter(Boolean).every(row=>
+                  row.profile?.rendererOnly===true&&row.profile?.navigationAuthority===false&&
+                  row.profile?.collisionAuthority===false&&row.profile?.simulationAuthorityPreserved===true
+                );
+                const passProof=Boolean(
+                  valley&&ridge&&slope&&cliff&&pass&&boundary&&
+                  deterministic&&authority&&
+                  signals.valley>=0.12&&signals.ridge>=0.12&&signals.cliff>=0.12&&signals.pass>=0.06&&signals.slope>=1.8
+                );
+                const compact=Object.fromEntries(Object.entries(selected).map(([key,row])=>[
+                  key,row?{x:row.x,y:row.y,terrain:row.terrain,elevationMeters:row.elevationMeters,profile:row.profile}:null
+                ]));
+                const proof={
+                  pass:passProof,version:String(valley?.profile?.version||''),
+                  seed,chunkSize,selected:compact,signals,candidateCount:candidates.length,
+                  deterministic,authority,
+                  riverValleyAvailable:Boolean(riverValley&&riverValley!==valley),
+                  source:'GeographyFoundation.environment.elevationMeters',
+                  navigationAuthorityPreserved:true,collisionAuthorityPreserved:true
+                };
+                window.__WP_S003_006_013_PROOF=proof;
+                return proof;
+                """
+            )
+            if not isinstance(proof,dict) or proof.get("pass") is not True:
+                raise RuntimeError(f"Macro landform functional proof failed: {proof}")
+        proof=driver.execute_script("return window.__WP_S003_006_013_PROOF || null")
+        if not isinstance(proof,dict) or proof.get("pass") is not True:
+            raise RuntimeError(f"Macro landform proof state missing: {proof}")
+        plan=(
+            ("valley",1.00,(1280,800)),
+            ("ridge",1.00,(1280,800)),
+            ("slope",2.00,(1280,800)),
+            ("cliff",2.00,(1280,800)),
+            ("pass",1.00,(1280,800)),
+            ("riverValley",1.00,(1280,800)),
+            ("boundary",2.00,(1280,800)),
+            ("ridge",0.50,(1280,800)),
+            ("valley",0.75,(844,390)),
+            ("pass",1.00,(390,844)),
+        )
+        key,zoom,viewport=plan[min(frame_index,len(plan)-1)]
+        target=(proof.get("selected") or {}).get(key) or {}
+        if not target:
+            raise RuntimeError(f"Macro landform visual target missing for {key}: {proof}")
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        time.sleep(0.3)
+        action=_set_camera_view_and_render_active(driver,int(target["x"]),int(target["y"]),float(zoom),timeout=120.0)
+        current=driver.execute_script(
+            """
+            const key=String(arguments[0]);
+            const proof=window.__WP_S003_006_013_PROOF||{};
+            const target=proof.selected?.[key]||null;
+            const landform=target?window.GameRenderer?.landformAtTile?.(String(target.x),String(target.y)):null;
+            const chunks=window.GameRenderer?.snapshot?.()?.terrainChunks||null;
+            return {target,landform,chunks};
+            """,
+            key
+        )
+        landform=current.get("landform") if isinstance(current,dict) else None
+        if not isinstance(landform,dict) or landform.get("rendererOnly") is not True:
+            raise RuntimeError(f"Macro landform profile missing after navigation for {key}: {current}")
+        return f"macro-landform:{key}@{zoom:.2f}:{action}"
+
     if scenario == "wp-s003-006-012":
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_script_timeout(180.0)
@@ -7850,6 +7977,43 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-006-013":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-006-013 requires ten mixed macro-landform evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:10]]
+        proof=builds[0].get("wpS003006013") or {}
+        if proof.get("pass") is not True:
+            raise RuntimeError(f"Macro landform proof failed: {proof}")
+        selected=proof.get("selected") or {}
+        for key in ("valley","ridge","slope","cliff","pass","boundary"):
+            if not selected.get(key):
+                raise RuntimeError(f"Macro landform visual target missing: {key}; proof={proof}")
+        signals=proof.get("signals") or {}
+        if float(signals.get("valley") or 0)<0.12 or float(signals.get("ridge") or 0)<0.12:
+            raise RuntimeError(f"Valley/ridge signal is too weak: {proof}")
+        if float(signals.get("cliff") or 0)<0.12 or float(signals.get("pass") or 0)<0.06 or float(signals.get("slope") or 0)<1.8:
+            raise RuntimeError(f"Cliff/pass/slope signal is too weak: {proof}")
+        if proof.get("deterministic") is not True or proof.get("authority") is not True:
+            raise RuntimeError(f"Macro landform determinism/authority isolation failed: {proof}")
+        observed=set()
+        for index,build in enumerate(builds):
+            chunks=((build.get("gpuRenderer") or {}).get("terrainChunks") or {})
+            if chunks.get("landformEnabled") is not True or chunks.get("landformPass") is not True:
+                raise RuntimeError(f"Prepared macro landform telemetry failed in frame {index+1}: {chunks}")
+            if int(chunks.get("landformPerFrameRegenerationCount") or 0)!=0:
+                raise RuntimeError(f"Macro landform regenerated per frame in frame {index+1}: {chunks}")
+            if chunks.get("landformRendererOnly") is not True or chunks.get("landformNavigationAuthority") is True or chunks.get("landformCollisionAuthority") is True:
+                raise RuntimeError(f"Macro landform authority isolation failed in frame {index+1}: {chunks}")
+            if int(chunks.get("landformDrawCallsAdded") or 0)!=0 or int(chunks.get("landformTrianglesAdded") or 0)!=0 or int(chunks.get("landformMaterialsAdded") or 0)!=0:
+                raise RuntimeError(f"Macro landform exceeded zero-extra-resource treatment contract in frame {index+1}: {chunks}")
+            if float(chunks.get("sharedBorderMaxError") or 0)>1e-7:
+                raise RuntimeError(f"Macro landform chunk border mismatch in frame {index+1}: {chunks}")
+            for key,value in (chunks.get("landformClassCounts") or {}).items():
+                if int(value or 0)>0: observed.add(str(key))
+        if not ({"ridge","valley"} & observed):
+            raise RuntimeError(f"Active resources did not expose ridge/valley telemetry: observed={sorted(observed)}")
+        return
+
     if scenario == "wp-s003-006-012":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-006-012 requires eight mixed hydrology evidence frames")
@@ -13197,12 +13361,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

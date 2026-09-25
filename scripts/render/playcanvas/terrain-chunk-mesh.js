@@ -29,6 +29,9 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
+const LANDFORM_VERSION="macro-landform-v1";
+const LANDFORM_SAMPLE_RADIUS_TILES=8;
+const LANDFORM_CACHE_LIMIT=32768;
 const WORLD_TILE_METERS=2;
 const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
@@ -60,10 +63,12 @@ const heightReferenceCache=new Map();
 const heightVertexCache=new Map();
 const hydrologyProfileCache=new Map();
 const hydrologyVertexCache=new Map();
+const landformProfileCache=new Map();
 const HEIGHT_VERTEX_CACHE_LIMIT=16384;
 const HYDROLOGY_CACHE_LIMIT=16384;
 let heightVertexSampleCalls=0,heightVertexCacheHits=0,heightGroundSampleCalls=0;
 let hydrologyQueryCalls=0,hydrologyCacheHits=0;
+let landformQueryCalls=0,landformCacheHits=0;
 
 function floorDivBig(value,divisor){
   let q=value/divisor,r=value%divisor;
@@ -84,9 +89,80 @@ function referenceElevation(seed){
   heightReferenceCache.set(key,value);
   return value;
 }
+function sourceElevationMeters(seed,x,y){
+  return Number(window.GeographyFoundation?.environment?.(seed,String(x),String(y))?.elevationMeters||referenceElevation(seed));
+}
+function landformAtTile(seedValue,xValue,yValue){
+  const seed=String(seedValue||""),x=String(xValue),y=String(yValue);
+  const cacheKey=seed+"|"+x+"|"+y;
+  const cached=landformProfileCache.get(cacheKey);
+  if(cached){landformCacheHits++;return cached;}
+  landformQueryCalls++;
+  let bx,by;
+  try{bx=BigInt(x);by=BigInt(y);}catch(_){
+    return Object.freeze({version:LANDFORM_VERSION,x,y,kind:"plain",elevationMeters:referenceElevation(seed),conditionOffset:0,rendererOnly:true,navigationAuthority:false,collisionAuthority:false});
+  }
+  const r=BigInt(LANDFORM_SAMPLE_RADIUS_TILES);
+  const center=sourceElevationMeters(seed,bx,by);
+  const n=sourceElevationMeters(seed,bx,by-r),e=sourceElevationMeters(seed,bx+r,by);
+  const s=sourceElevationMeters(seed,bx,by+r),w=sourceElevationMeters(seed,bx-r,by);
+  const ne=sourceElevationMeters(seed,bx+r,by-r),nw=sourceElevationMeters(seed,bx-r,by-r);
+  const se=sourceElevationMeters(seed,bx+r,by+r),sw=sourceElevationMeters(seed,bx-r,by+r);
+  const values=[center,n,e,s,w,ne,nw,se,sw];
+  const relief=Math.max(...values)-Math.min(...values);
+  const gradientX=(e-w)/(2*LANDFORM_SAMPLE_RADIUS_TILES);
+  const gradientY=(s-n)/(2*LANDFORM_SAMPLE_RADIUS_TILES);
+  const gradient=Math.hypot(gradientX,gradientY);
+  const curvature=center-(n+e+s+w)/4;
+  const xSaddle=Math.min(e,w)-center-Math.max(0,Math.min(n,s)-center);
+  const ySaddle=Math.min(n,s)-center-Math.max(0,Math.min(e,w)-center);
+  const saddleStrength=Math.max(0,xSaddle,ySaddle);
+  const ridgeSignal=clamp(curvature/55,0,1)*clamp(relief/80,0,1);
+  const valleySignal=clamp(-curvature/55,0,1)*clamp(relief/80,0,1);
+  const cliffSignal=clamp((gradient-3.0)/7.0,0,1)*clamp((relief-35)/105,0,1);
+  const passSignal=clamp(saddleStrength/45,0,1)*clamp(relief/70,0,1);
+  let kind="plain";
+  if(passSignal>=0.16)kind="pass";
+  else if(cliffSignal>=0.28)kind="cliff";
+  else if(ridgeSignal>=0.20)kind="ridge";
+  else if(valleySignal>=0.20)kind="valley";
+  else if(gradient>=1.8)kind="slope";
+  const cliffShape=clamp(curvature/80,-1,1);
+  const conditionOffset=clamp(
+    ridgeSignal*0.17-valleySignal*0.15-passSignal*0.13+cliffSignal*cliffShape*0.10,
+    -0.28,0.28
+  );
+  const result=Object.freeze({
+    version:LANDFORM_VERSION,x,y,kind,
+    elevationMeters:center,
+    gradientMetersPerTile:Number(gradient.toFixed(4)),
+    gradientX:Number(gradientX.toFixed(4)),gradientY:Number(gradientY.toFixed(4)),
+    localReliefMeters:Number(relief.toFixed(2)),
+    curvatureMeters:Number(curvature.toFixed(3)),
+    saddleStrengthMeters:Number(saddleStrength.toFixed(3)),
+    ridgeSignal:Number(ridgeSignal.toFixed(4)),
+    valleySignal:Number(valleySignal.toFixed(4)),
+    cliffSignal:Number(cliffSignal.toFixed(4)),
+    passSignal:Number(passSignal.toFixed(4)),
+    conditionOffset:Number(conditionOffset.toFixed(6)),
+    sampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
+    source:"GeographyFoundation.environment.elevationMeters",
+    deterministic:true,seamSafeGlobalCoordinates:true,chunkPrepared:true,
+    rendererOnly:true,navigationAuthority:false,collisionAuthority:false,
+    simulationAuthorityPreserved:true
+  });
+  landformProfileCache.set(cacheKey,result);
+  if(landformProfileCache.size>LANDFORM_CACHE_LIMIT){
+    const oldest=landformProfileCache.keys().next().value;
+    if(oldest!==undefined)landformProfileCache.delete(oldest);
+  }
+  return result;
+}
 function macroHeight(seed,x,y){
-  const elevation=Number(window.GeographyFoundation?.environment?.(seed,String(x),String(y))?.elevationMeters||referenceElevation(seed));
-  return Object.freeze({elevation,macro:(elevation-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE});
+  const landform=landformAtTile(seed,x,y);
+  const elevation=Number(landform.elevationMeters||referenceElevation(seed));
+  const baseMacro=(elevation-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE;
+  return Object.freeze({elevation,baseMacro,macro:baseMacro+Number(landform.conditionOffset||0),landform});
 }
 function smoothstep01(value){
   const t=clamp(Number(value)||0,0,1);
@@ -348,10 +424,10 @@ function terrainHeightVertex(seed,xValue,yValue){
     return cached;
   }
   heightVertexSampleCalls++;
-  const env=window.GeographyFoundation?.environment?.(seed,x,y)||null;
-  const elevation=Number(env?.elevationMeters||referenceElevation(seed));
-  const reference=referenceElevation(seed);
-  const macro=(elevation-reference)*HEIGHTFIELD_VERTICAL_SCALE;
+  const macroSample=macroHeight(seed,x,y);
+  const elevation=Number(macroSample.elevation);
+  const macro=Number(macroSample.macro);
+  const landform=macroSample.landform;
   const tile=window.TerrainFoundation?.getTile?.(seed,x,y)||null;
   const type=String(tile?.type||"grass");
   const hydrology=hydrologyAtTile(seed,x,y);
@@ -367,6 +443,7 @@ function terrainHeightVertex(seed,xValue,yValue){
     type,
     color:heightfieldColor(seed,x,y,tile?.color,type),
     elevationMeters:elevation,
+    landform,
     roadProfile,
     hydrology
   });
@@ -1876,6 +1953,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const ne=macroHeight(seed,String(baseX+BigInt(size)),String(baseZ)).macro;
     const sw=macroHeight(seed,String(baseX),String(baseZ+BigInt(size))).macro;
     const se=macroHeight(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size))).macro;
+    const streamingLandforms=[
+      landformAtTile(seed,String(baseX),String(baseZ)),
+      landformAtTile(seed,String(baseX+BigInt(size)),String(baseZ)),
+      landformAtTile(seed,String(baseX),String(baseZ+BigInt(size))),
+      landformAtTile(seed,String(baseX+BigInt(size)),String(baseZ+BigInt(size)))
+    ];
+    const streamingLandformClassCounts={};
+    for(const row of streamingLandforms)streamingLandformClassCounts[row.kind]=(streamingLandformClassCounts[row.kind]||0)+1;
     const sampleHeight=(tileX,tileZ)=>{
       const tx=clamp(Number(tileX)/size,0,1),tz=clamp(Number(tileZ)/size,0,1);
       const north=nw+(ne-nw)*tx;
@@ -2056,6 +2141,17 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       ambientRendererOnly:true,ambientNavigationAuthority:false,ambientCollisionAuthority:false,
       ambientSimulationAuthorityPreserved:true,ambientQuality:"minimum",ambientZoom:1,ambientLodSimplified:true,
       ambientUpdateIntervalMs:0,ambientUpdateCount:0,ambientBufferUpdateCount:0,ambientLastCpuUpdateMs:0,ambientMaxCpuUpdateMs:0,
+      landformEnabled:true,landformVersion:LANDFORM_VERSION,landformSampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
+      landformClassCounts:Object.freeze({...streamingLandformClassCounts}),landformSamples:Object.freeze(streamingLandforms.slice()),
+      landformGradientMin:Math.min(...streamingLandforms.map(row=>Number(row.gradientMetersPerTile||0))),
+      landformGradientMax:Math.max(...streamingLandforms.map(row=>Number(row.gradientMetersPerTile||0))),
+      landformReliefMin:Math.min(...streamingLandforms.map(row=>Number(row.localReliefMeters||0))),
+      landformReliefMax:Math.max(...streamingLandforms.map(row=>Number(row.localReliefMeters||0))),
+      landformConditionOffsetMin:Math.min(...streamingLandforms.map(row=>Number(row.conditionOffset||0))),
+      landformConditionOffsetMax:Math.max(...streamingLandforms.map(row=>Number(row.conditionOffset||0))),
+      landformSteepFaceTreatment:"shared-terrain-vertex-color",landformDrawCallsAdded:0,landformTrianglesAdded:0,landformMaterialsAdded:0,
+      landformDeterministic:true,landformSeamSafeGlobalCoordinates:true,landformChunkPrepared:true,landformPerFrameRegenerationCount:0,
+      landformRendererOnly:true,landformNavigationAuthority:false,landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
       segments:size,heightfieldGridResolution:heightSegments+1,heightfieldStepTiles:heightStep,
       semanticGridResolution:size+1,semanticStepTiles:1,indexedSharedVertices:false,indexedSemanticQuads:true,
       streamingSparseMesh:true,streamingSparseMeshCellCount:emittedCellCount,
@@ -2147,6 +2243,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let hydrologyBridgeClearanceMin=Infinity,hydrologyBridgeClearanceMax=-Infinity;
     let hydrologyWaterBelowBank=true,hydrologyBedBelowWater=true,hydrologyBridgeClearsWater=true;
     const hydrologyKindCounts={},hydrologySamples=[];
+    const landformClassCounts={},landformSamples=[];
+    let landformGradientMin=Infinity,landformGradientMax=-Infinity;
+    let landformReliefMin=Infinity,landformReliefMax=-Infinity;
+    let landformConditionOffsetMin=Infinity,landformConditionOffsetMax=-Infinity;
     const variationLocalCellAt=(lx,lz)=>{
       const x=Math.trunc(Number(lx)),z=Math.trunc(Number(lz));
       if(x<0||z<0||x>=size||z>=size)return null;
@@ -2226,6 +2326,18 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const categories=["broad-macro"];
       let r=1,g=1,b=1;
       if(!TERRAIN_VARIATION_CONSTRUCTED_TYPES.has(type)&&TERRAIN_VARIATION_NATURAL_TYPES.has(type)){
+        const landform=landformAtTile(seed,wx,wz);
+        if(landform.kind==="cliff"){
+          r*=0.86;g*=0.84;b*=0.82;categories.push("cliff-face");
+        }else if(landform.kind==="ridge"){
+          r*=0.97;g*=0.94;b*=0.90;categories.push("ridge");
+        }else if(landform.kind==="valley"){
+          r*=0.92;g*=0.98;b*=0.96;categories.push("valley");
+        }else if(landform.kind==="pass"){
+          r*=0.92;g*=0.94;b*=0.96;categories.push("mountain-pass");
+        }else if(landform.kind==="slope"){
+          categories.push("mountain-slope");
+        }
         const macroStrength=(type==="grass"||type==="forest"||type==="farmland")?0.11:
           (type==="dirt"||type==="mud"||type==="sand")?0.075:0.045;
         // Mesh.setColors32 is a normalized UINT8 stream: components above 1.0
@@ -2347,6 +2459,17 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         });
         minHeight=Math.min(minHeight,sample.height);maxHeight=Math.max(maxHeight,sample.height);
         minElevation=Math.min(minElevation,sample.elevationMeters);maxElevation=Math.max(maxElevation,sample.elevationMeters);
+        if(sample.landform){
+          const lf=sample.landform;
+          landformClassCounts[lf.kind]=(landformClassCounts[lf.kind]||0)+1;
+          landformGradientMin=Math.min(landformGradientMin,Number(lf.gradientMetersPerTile||0));
+          landformGradientMax=Math.max(landformGradientMax,Number(lf.gradientMetersPerTile||0));
+          landformReliefMin=Math.min(landformReliefMin,Number(lf.localReliefMeters||0));
+          landformReliefMax=Math.max(landformReliefMax,Number(lf.localReliefMeters||0));
+          landformConditionOffsetMin=Math.min(landformConditionOffsetMin,Number(lf.conditionOffset||0));
+          landformConditionOffsetMax=Math.max(landformConditionOffsetMax,Number(lf.conditionOffset||0));
+          if(lf.kind!=="plain"&&landformSamples.length<32)landformSamples.push(lf);
+        }
         if(sample.roadProfile?.active){
           const profile=sample.roadProfile;
           roadProfileVertexCount++;
@@ -2941,6 +3064,22 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       minRoadCoreHeightDelta:Number.isFinite(minRoadCoreDelta)?Number(minRoadCoreDelta.toFixed(6)):0,
       maxRoadCoreHeightDelta:Number.isFinite(maxRoadCoreDelta)?Number(maxRoadCoreDelta.toFixed(6)):0,
       roadProfileGroundingShared:true,
+      landformEnabled:true,
+      landformVersion:LANDFORM_VERSION,
+      landformSampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
+      landformClassCounts:Object.freeze({...landformClassCounts}),
+      landformSamples:Object.freeze(landformSamples.slice()),
+      landformGradientMin:Number.isFinite(landformGradientMin)?Number(landformGradientMin.toFixed(4)):0,
+      landformGradientMax:Number.isFinite(landformGradientMax)?Number(landformGradientMax.toFixed(4)):0,
+      landformReliefMin:Number.isFinite(landformReliefMin)?Number(landformReliefMin.toFixed(2)):0,
+      landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):0,
+      landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):0,
+      landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):0,
+      landformSteepFaceTreatment:"shared-terrain-vertex-color",
+      landformDrawCallsAdded:0,landformTrianglesAdded:0,landformMaterialsAdded:0,
+      landformDeterministic:true,landformSeamSafeGlobalCoordinates:true,landformChunkPrepared:true,
+      landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
+      landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
       hydrologyEnabled:true,
       hydrologyVersion:HYDROLOGY_VERSION,
       hydrologyQueryRadiusTiles:HYDROLOGY_QUERY_RADIUS_TILES,
@@ -3214,6 +3353,15 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       hydrologyNavigationAuthority:false,
       hydrologyCollisionAuthority:false,
       hydrologyWaterIdentityChanged:false,
+      landformEnabled:true,
+      landformVersion:LANDFORM_VERSION,
+      landformSampleRadiusTiles:LANDFORM_SAMPLE_RADIUS_TILES,
+      landformQueryCalls,landformCacheHits,
+      landformCacheHitRate:Number((landformQueryCalls+landformCacheHits?landformCacheHits/(landformQueryCalls+landformCacheHits):0).toFixed(4)),
+      landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
+      landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
+      landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
+      landformSteepFaceTreatment:"shared-terrain-vertex-color",
       contourAlgorithm:"categorical-marching-corners-rounded-fan",
       contourPreparationOnly:true,
       contourHaloTiles:CONTOUR_HALO_TILES,
@@ -3373,6 +3521,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     build,reposition,destroy,stats,heightAtTile,
     hydrologyAtTile:(x,y)=>hydrologyAtTile(String(seedProvider()||""),x,y),
     waterSurfaceAtVertex:(x,y)=>waterSurfaceAtVertex(String(seedProvider()||""),x,y),
+    landformAtTile:(x,y)=>landformAtTile(String(seedProvider()||""),x,y),
     updateAmbientMotion,refreshTreeMaterials,refreshBuildingMaterials,refreshRouteSurfaceMaterials,refreshContactShadowMaterials
   });
 }

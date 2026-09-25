@@ -800,7 +800,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     // SEED in resource identity so a real campaign switch cannot reuse the
     // previous campaign's prepared meshes. Framebuffer/material quality remains
     // excluded because those changes do not alter geometry.
-    return "geometry=heightfield-v8-hydrology-basins|seed="+String(lastRawSeed||"none");
+    return "geometry=heightfield-v9-macro-landforms|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
@@ -939,6 +939,12 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     let hydrologySeamSafeGlobalCoordinates=true,hydrologyChunkPrepared=true,hydrologyPerFrameRegenerationCount=0;
     let hydrologyRendererOnly=true,hydrologyNavigationAuthority=false,hydrologyCollisionAuthority=false,hydrologyWaterIdentityChanged=false;
     const hydrologyKindCounts={},hydrologySamples=[];
+    let landformResourceCount=0,landformGradientMin=Infinity,landformGradientMax=-Infinity;
+    let landformReliefMin=Infinity,landformReliefMax=-Infinity,landformConditionOffsetMin=Infinity,landformConditionOffsetMax=-Infinity;
+    let landformDrawCallsAdded=0,landformTrianglesAdded=0,landformMaterialsAdded=0,landformPerFrameRegenerationCount=0;
+    let landformDeterministic=true,landformSeamSafeGlobalCoordinates=true,landformChunkPrepared=true,landformRendererOnly=true;
+    let landformNavigationAuthority=false,landformCollisionAuthority=false,landformSimulationAuthorityPreserved=true;
+    const landformClassCounts={},landformSamples=[];
     let routeSurfaceCellCount=0,routeMainRoadCellCount=0,routeLocalPathCellCount=0,routeSquareCellCount=0,routeConnectorCellCount=0;
     let routeEdgeStripCount=0,routeDiagonalBridgeCount=0,routeDiagonalRibbonOnlyCellCount=0,routeSurfaceTriangleCount=0,routeNetworkConnectedRouteCount=0,routeNetworkTotalRouteCount=0;
     let routeSurfaceRouteSafe=true,routeNetworkRouteSafetyPass=true,routeSurfaceRendererOnly=true,routeNetworkDeterministic=true;
@@ -1021,6 +1027,33 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
             for(const item of resource.hydrologySamples||[]){
               if(hydrologySamples.length>=64)break;
               hydrologySamples.push(item);
+            }
+          }
+        }
+        if(resource.landformEnabled===true){
+          landformResourceCount++;
+          if(Number.isFinite(Number(resource.landformGradientMin)))landformGradientMin=Math.min(landformGradientMin,Number(resource.landformGradientMin));
+          if(Number.isFinite(Number(resource.landformGradientMax)))landformGradientMax=Math.max(landformGradientMax,Number(resource.landformGradientMax));
+          if(Number.isFinite(Number(resource.landformReliefMin)))landformReliefMin=Math.min(landformReliefMin,Number(resource.landformReliefMin));
+          if(Number.isFinite(Number(resource.landformReliefMax)))landformReliefMax=Math.max(landformReliefMax,Number(resource.landformReliefMax));
+          if(Number.isFinite(Number(resource.landformConditionOffsetMin)))landformConditionOffsetMin=Math.min(landformConditionOffsetMin,Number(resource.landformConditionOffsetMin));
+          if(Number.isFinite(Number(resource.landformConditionOffsetMax)))landformConditionOffsetMax=Math.max(landformConditionOffsetMax,Number(resource.landformConditionOffsetMax));
+          landformDrawCallsAdded+=Number(resource.landformDrawCallsAdded||0);
+          landformTrianglesAdded+=Number(resource.landformTrianglesAdded||0);
+          landformMaterialsAdded+=Number(resource.landformMaterialsAdded||0);
+          landformPerFrameRegenerationCount+=Number(resource.landformPerFrameRegenerationCount||0);
+          landformDeterministic=landformDeterministic&&resource.landformDeterministic!==false;
+          landformSeamSafeGlobalCoordinates=landformSeamSafeGlobalCoordinates&&resource.landformSeamSafeGlobalCoordinates!==false;
+          landformChunkPrepared=landformChunkPrepared&&resource.landformChunkPrepared!==false;
+          landformRendererOnly=landformRendererOnly&&resource.landformRendererOnly!==false;
+          landformNavigationAuthority=landformNavigationAuthority||resource.landformNavigationAuthority===true;
+          landformCollisionAuthority=landformCollisionAuthority||resource.landformCollisionAuthority===true;
+          landformSimulationAuthorityPreserved=landformSimulationAuthorityPreserved&&resource.landformSimulationAuthorityPreserved!==false;
+          for(const [key,value] of Object.entries(resource.landformClassCounts||{}))landformClassCounts[key]=(landformClassCounts[key]||0)+Number(value||0);
+          if(landformSamples.length<64){
+            for(const item of resource.landformSamples||[]){
+              if(landformSamples.length>=64)break;
+              landformSamples.push(item);
             }
           }
         }
@@ -1334,6 +1367,27 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
         hydrologyWaterBelowBank&&hydrologyBedBelowWater&&hydrologyBridgeClearsWater&&
         hydrologySeamSafeGlobalCoordinates&&hydrologyChunkPrepared&&hydrologyPerFrameRegenerationCount===0&&
         hydrologyRendererOnly&&!hydrologyNavigationAuthority&&!hydrologyCollisionAuthority&&!hydrologyWaterIdentityChanged
+      ),
+      landformEnabled:landformResourceCount>0&&generatorStats.landformEnabled===true,
+      landformVersion:String(generatorStats.landformVersion||"macro-landform-v1"),
+      landformSampleRadiusTiles:Number(generatorStats.landformSampleRadiusTiles||0),
+      landformResourceCount,
+      landformClassCounts:Object.freeze({...landformClassCounts}),
+      landformSamples:Object.freeze(landformSamples.slice()),
+      landformGradientMin:Number.isFinite(landformGradientMin)?Number(landformGradientMin.toFixed(4)):null,
+      landformGradientMax:Number.isFinite(landformGradientMax)?Number(landformGradientMax.toFixed(4)):null,
+      landformReliefMin:Number.isFinite(landformReliefMin)?Number(landformReliefMin.toFixed(2)):null,
+      landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):null,
+      landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):null,
+      landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):null,
+      landformSteepFaceTreatment:String(generatorStats.landformSteepFaceTreatment||"shared-terrain-vertex-color"),
+      landformDrawCallsAdded,landformTrianglesAdded,landformMaterialsAdded,
+      landformDeterministic,landformSeamSafeGlobalCoordinates,landformChunkPrepared,landformPerFrameRegenerationCount,
+      landformRendererOnly,landformNavigationAuthority,landformCollisionAuthority,landformSimulationAuthorityPreserved,
+      landformPass:Boolean(
+        landformResourceCount>0&&landformDeterministic&&landformSeamSafeGlobalCoordinates&&landformChunkPrepared&&
+        landformPerFrameRegenerationCount===0&&landformRendererOnly&&!landformNavigationAuthority&&!landformCollisionAuthority&&
+        landformSimulationAuthorityPreserved&&landformDrawCallsAdded===0&&landformTrianglesAdded===0&&landformMaterialsAdded===0
       ),
       contourAlgorithm:String(generatorStats.contourAlgorithm||""),
       contourPreparationOnly:generatorStats.contourPreparationOnly===true,
@@ -2694,6 +2748,7 @@ simulationAuthorityPreserved:true,migrationFoundation:true}),contactGrounding:la
     screenToCameraDelta,screenToWorldTile,
     hydrologyAtTile:(x,y)=>terrainChunkMeshFactory?.hydrologyAtTile?.(x,y)||null,
     waterSurfaceAtVertex:(x,y)=>terrainChunkMeshFactory?.waterSurfaceAtVertex?.(x,y)??null,
+    landformAtTile:(x,y)=>terrainChunkMeshFactory?.landformAtTile?.(x,y)||null,
     // Conservative logical-view coverage for the tilted orthographic PlayCanvas
     // camera. The previous 1:1 hint under-prepared sparse destination cells at
     // 0.50x and portrait aspect ratios, exposing clear-color holes around roads
