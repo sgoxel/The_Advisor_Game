@@ -14,7 +14,17 @@
   aria-label="Fantasy world planet foundation"
   data-ready="false"
 >
-  <div class="planet-stage-loading" aria-live="polite">Building world…</div>
+  <div class="planet-stage-loading" aria-live="polite" data-mode="indeterminate">
+    <div class="planet-stage-loading-card">
+      <div class="planet-stage-loading-orbit" aria-hidden="true"><span></span><i></i></div>
+      <strong class="planet-stage-loading-title">Waking the world</strong>
+      <span class="planet-stage-loading-phase">Planning startup…</span>
+      <div class="planet-stage-loading-progress" role="progressbar" aria-label="First playable progress" aria-valuemin="0" aria-valuemax="100">
+        <span class="planet-stage-loading-bar"></span>
+      </div>
+      <code class="planet-stage-loading-percent">Planning startup…</code>
+    </div>
+  </div>
 </main>
 <script src="scripts/world/planet-geography.js?v=planetary-geography-v4"></script>\n<script src="scripts/world/planet-stage.js?v=planetary-geography-globe-v2"></script>
 </body>
