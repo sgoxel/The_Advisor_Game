@@ -1463,17 +1463,18 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     let roadProfileVertexCount=0,roadProfileCoreVertexCount=0,roadProfileShoulderVertexCount=0;
     let roadProfileRoadVertexCount=0,roadProfilePathVertexCount=0,roadProfileSquareVertexCount=0;
     let minRoadProfileDelta=Infinity,maxRoadProfileDelta=-Infinity,minRoadCoreDelta=Infinity,maxRoadCoreDelta=-Infinity;
-    const variationTileAt=(wx,wz)=>{
-      const key=String(wx)+","+String(wz);
+    const variationLocalCellAt=(lx,lz)=>{
+      const x=Math.trunc(Number(lx)),z=Math.trunc(Number(lz));
+      if(x<0||z<0||x>=size||z>=size)return null;
+      const key=x+","+z;
       if(terrainVariationTileCache.has(key))return terrainVariationTileCache.get(key);
-      let rawType="";
-      if(wx>=baseX&&wx<baseX+BigInt(size)&&wz>=baseZ&&wz<baseZ+BigInt(size)){
-        const lx=Number(wx-baseX),lz=Number(wz-baseZ);
-        rawType=String(spec.worldData?.cells?.[lz*size+lx]?.type||"grass");
-      }else{
-        rawType=String(window.TerrainFoundation?.getTile?.(seed,String(wx),String(wz))?.type||"grass");
-      }
-      const result=Object.freeze({rawType,type:semanticSurfaceType(rawType)});
+      const cell=spec.worldData?.cells?.[z*size+x]||null;
+      const rawType=String(cell?.type||"grass");
+      const result=Object.freeze({
+        rawType,
+        type:semanticSurfaceType(rawType),
+        buildingId:cell?.buildingId?String(cell.buildingId):null
+      });
       terrainVariationTileCache.set(key,result);
       return result;
     };
@@ -1482,14 +1483,20 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       if(terrainVariationContextCache.has(key))return terrainVariationContextCache.get(key);
       let routeDistance=Infinity,buildingDistance=Infinity,waterDistance=Infinity,forestDistance=Infinity;
       const radius=TERRAIN_VARIATION_CONTEXT_RADIUS_TILES;
+      const lx=Number(wx-baseX),lz=Number(wz-baseZ);
       for(let dz=-radius;dz<=radius;dz++){
         for(let dx=-radius;dx<=radius;dx++){
           const distance=Math.hypot(dx,dz);
           if(distance>radius+0.001)continue;
-          const tile=variationTileAt(wx+BigInt(dx),wz+BigInt(dz));
+          // Semantic wear uses the already-prepared authoritative cells in this
+          // chunk. No TerrainFoundation calls are allowed from this renderer
+          // presentation pass. The global macro field below owns cross-chunk
+          // continuity; semantic proximity fades to zero at chunk boundaries.
+          const tile=variationLocalCellAt(Math.floor(lx)+dx,Math.floor(lz)+dz);
+          if(!tile)continue;
           const t=String(tile.type||""),raw=String(tile.rawType||"");
           if(["road","path","square"].includes(t))routeDistance=Math.min(routeDistance,distance);
-          if(t==="plot"||["building","floor","wall","door"].includes(raw))buildingDistance=Math.min(buildingDistance,distance);
+          if(tile.buildingId||t==="plot"||["building","floor","wall","door"].includes(raw))buildingDistance=Math.min(buildingDistance,distance);
           if(t==="water")waterDistance=Math.min(waterDistance,distance);
           if(t==="forest")forestDistance=Math.min(forestDistance,distance);
         }
@@ -1498,11 +1505,14 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         if(!Number.isFinite(distance))return 0;
         return smoothstep01(1-clamp((distance-0.25)/(radius+0.25),0,1));
       };
+      const edgeDistance=Math.max(0,Math.min(lx,lz,size-lx,size-lz));
+      const edgeFade=smoothstep01(clamp(edgeDistance/Math.max(1,radius),0,1));
       const result=Object.freeze({
-        route:influence(routeDistance),
-        building:influence(buildingDistance),
-        moisture:influence(waterDistance),
-        forest:influence(forestDistance),
+        route:influence(routeDistance)*edgeFade,
+        building:influence(buildingDistance)*edgeFade,
+        moisture:influence(waterDistance)*edgeFade,
+        forest:influence(forestDistance)*edgeFade,
+        edgeFade:Number(edgeFade.toFixed(4)),
         routeDistance:Number.isFinite(routeDistance)?Number(routeDistance.toFixed(3)):null,
         buildingDistance:Number.isFinite(buildingDistance)?Number(buildingDistance.toFixed(3)):null,
         waterDistance:Number.isFinite(waterDistance)?Number(waterDistance.toFixed(3)):null,
@@ -2012,6 +2022,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationTrianglesAdded:0,
       terrainVariationGlobalCoordinateField:true,
       terrainVariationChunkBorderContinuous:true,
+      terrainVariationSemanticEdgeFade:true,
+      terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
       terrainVariationDeterministic:true,
@@ -2290,6 +2302,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationTrianglesAdded:0,
       terrainVariationGlobalCoordinateField:true,
       terrainVariationChunkBorderContinuous:true,
+      terrainVariationSemanticEdgeFade:true,
+      terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
       terrainVariationRendererOnly:true,
