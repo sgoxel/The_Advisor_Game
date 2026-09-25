@@ -108,6 +108,7 @@ SCENARIOS = {
     "wp-s003-009-005",
     "wp-s003-009-006",
     "wp-s003-009-007",
+    "wp-s003-009-008",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -192,6 +193,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-005": 8,
     "wp-s003-009-006": 8,
     "wp-s003-009-007": 8,
+    "wp-s003-009-008": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1559,7 +1561,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario == "wp-s003-007-001":
         driver.set_window_size(1920, 1080)
         timeout = max(timeout, 30.0)
-    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007"}:
+    if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008"}:
         driver.set_window_size(1280, 800)
         # Cold software-WebGL CI can spend well over two minutes preparing the
         # visible semantic terrain set. This is evidence wait time only; runtime
@@ -1625,7 +1627,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -1886,7 +1888,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                         """
                     )
                 )
-            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007"}:
+            if scenario in {"wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008"}:
                 recovery = driver.execute_script(
                     """
                     const campaignState=document.querySelector('#campaignState')?.textContent?.trim() || '';
@@ -4873,6 +4875,38 @@ def _focus_tree_sample_chunk(driver) -> str:
     return f"tree-focus:{sample['chunkX']},{sample['chunkY']}:trees={sample['count']}{point}+"+action
 
 
+def _focus_terrain_variation_category(driver, category: str, zoom: float = 1.25) -> str:
+    sample = driver.execute_script(
+        """
+        const category=String(arguments[0]||'');
+        const chunks=window.GameRenderer?.snapshot?.()?.terrainChunks || {};
+        const samples=Array.isArray(chunks.terrainVariationSamples)?chunks.terrainVariationSamples:[];
+        const candidates=samples.filter(item=>
+          String(item?.category||'')===category &&
+          Number.isFinite(Number(item?.x)) &&
+          Number.isFinite(Number(item?.y))
+        );
+        if(!candidates.length)return null;
+        candidates.sort((a,b)=>{
+          const ai=Math.max(Number(a?.routeInfluence||0),Number(a?.buildingInfluence||0),Number(a?.moistureInfluence||0),Number(a?.forestInfluence||0));
+          const bi=Math.max(Number(b?.routeInfluence||0),Number(b?.buildingInfluence||0),Number(b?.moistureInfluence||0),Number(b?.forestInfluence||0));
+          return bi-ai || String(a?.x||'').localeCompare(String(b?.x||'')) || String(a?.y||'').localeCompare(String(b?.y||''));
+        });
+        return candidates[0];
+        """,
+        category,
+    )
+    if not isinstance(sample, dict):
+        raise RuntimeError(f"Terrain variation category {category!r} not found")
+    x=int(round(float(sample.get("x") or 0)))
+    y=int(round(float(sample.get("y") or 0)))
+    action=_set_camera_view_and_render_active(driver,x,y,float(zoom),timeout=45.0)
+    return (
+        f"terrain-variation:{category}:{sample.get('surfaceType')}@{x},{y}:"
+        f"tint={sample.get('tint')}+"+action
+    )
+
+
 def _focus_dressing_sample(driver, context: str | None = None, *, road_adjacent: bool = False) -> str:
     sample = driver.execute_script(
         """
@@ -6144,6 +6178,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-008":
+        _ensure_texture_quality_profile(driver, "standard")
+        if frame_index == 0:
+            driver.set_window_size(1280, 800)
+            return "terrain-variation:overview+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        if frame_index == 1:
+            return _focus_terrain_variation_category(driver, "building-wear", 1.25)
+        if frame_index == 2:
+            return _focus_terrain_variation_category(driver, "road-shoulder", 1.25)
+        if frame_index == 3:
+            return _focus_terrain_variation_category(driver, "forest-contact", 1.25)
+        if frame_index == 4:
+            return _focus_terrain_variation_category(driver, "moisture", 1.00)
+        if frame_index == 5:
+            return _focus_terrain_variation_category(driver, "quiet-natural", 1.00)
+        if frame_index == 6:
+            return "terrain-variation:chunk-boundary+" + _set_camera_view_and_render_active(driver, 16, 0, 0.75, timeout=45.0)
+        driver.set_window_size(844, 390)
+        return "terrain-variation:phone-landscape+" + _focus_terrain_variation_category(driver, "road-shoulder", 0.75)
     if scenario == "wp-s003-009-007":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
@@ -7009,6 +7062,68 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone portrait dressing evidence missing: {viewports[6]}")
         if int(viewports[7].get("width") or 0)<=int(viewports[7].get("height") or 0):
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
+        return
+
+    if scenario == "wp-s003-009-008":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-009-008 requires eight terrain-variation evidence frames")
+        categories=set()
+        max_tinted=0
+        min_tint=1.0
+        max_tint=1.0
+        protagonist_locations=[]
+        for index,frame in enumerate(frames[:8]):
+            build=frame.get("runtime",{}).get("currentBuild",{})
+            gpu=build.get("gpuRenderer") or {}
+            chunks=gpu.get("terrainChunks") or {}
+            if chunks.get("terrainVariationPass") is not True:
+                raise RuntimeError(f"Terrain variation contract failed in frame {index+1}: {chunks}")
+            if chunks.get("terrainVariationRendererOnly") is not True or chunks.get("terrainVariationNavigationAuthority") is not False or chunks.get("terrainVariationCollisionAuthority") is not False:
+                raise RuntimeError(f"Terrain variation authority isolation failed in frame {index+1}: {chunks}")
+            if chunks.get("terrainVariationSimulationAuthorityPreserved") is not True or gpu.get("simulationAuthorityPreserved") is not True:
+                raise RuntimeError(f"Terrain variation changed Simulation authority in frame {index+1}")
+            if chunks.get("terrainVariationDeterministic") is not True or chunks.get("terrainVariationGlobalCoordinateField") is not True:
+                raise RuntimeError(f"Terrain variation determinism/global-coordinate contract failed in frame {index+1}: {chunks}")
+            if chunks.get("terrainVariationChunkBorderContinuous") is not True or chunks.get("terrainVariationContourCompatible") is not True:
+                raise RuntimeError(f"Terrain variation chunk/contour continuity failed in frame {index+1}: {chunks}")
+            if chunks.get("terrainVariationBaseSurfaceIdentityPreserved") is not True:
+                raise RuntimeError(f"Terrain variation weakened base-surface identity contract in frame {index+1}")
+            if any(int(chunks.get(key) or 0)!=0 for key in ("terrainVariationDrawCallsAdded","terrainVariationMaterialsAdded","terrainVariationTexturesAdded","terrainVariationTrianglesAdded")):
+                raise RuntimeError(f"Terrain variation added avoidable rendering resources in frame {index+1}: {chunks}")
+            max_tinted=max(max_tinted,int(chunks.get("terrainVariationTintedVertexCount") or 0))
+            min_tint=min(min_tint,float(chunks.get("terrainVariationMinTintComponent") or 1))
+            max_tint=max(max_tint,float(chunks.get("terrainVariationMaxTintComponent") or 1))
+            for key,value in (chunks.get("terrainVariationCategoryCounts") or {}).items():
+                if int(value or 0)>0:categories.add(str(key))
+            bindings=chunks.get("surfaceIdentityBindings") or {}
+            for surface in ("grass","dirt","road","square"):
+                binding=bindings.get(surface) or {}
+                if binding.get("textureBound") is not True:
+                    raise RuntimeError(f"Base surface {surface} lost authored texture binding in frame {index+1}: {binding}")
+            protagonist_locations.append(build.get("protagonistLocation"))
+        required={"broad-macro","building-wear","road-shoulder","forest-contact","moisture","quiet-natural"}
+        if not required.issubset(categories):
+            raise RuntimeError(f"Terrain variation semantic coverage incomplete: categories={sorted(categories)}")
+        if max_tinted<=0:
+            raise RuntimeError("Terrain variation evidence never tinted any prepared terrain vertex")
+        if min_tint<0.80-1e-6 or max_tint>1.10+1e-6:
+            raise RuntimeError(f"Terrain variation tint escaped bounded range: min={min_tint}, max={max_tint}")
+        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
+            raise RuntimeError(f"Terrain variation camera evidence changed protagonist authority: {protagonist_locations}")
+        actions=[str(frame.get("action") or "") for frame in frames[:8]]
+        for required_action in (
+            "terrain-variation:building-wear",
+            "terrain-variation:road-shoulder",
+            "terrain-variation:forest-contact",
+            "terrain-variation:moisture",
+            "terrain-variation:quiet-natural",
+            "terrain-variation:chunk-boundary",
+        ):
+            if not any(required_action in action for action in actions):
+                raise RuntimeError(f"Required terrain-variation scene {required_action} missing: {actions}")
+        landscape=frames[7].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
+            raise RuntimeError(f"Phone-landscape terrain-variation evidence missing: {landscape}")
         return
 
     if scenario == "wp-s003-009-007":
@@ -11799,12 +11914,12 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario in {"building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
