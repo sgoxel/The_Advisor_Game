@@ -1067,7 +1067,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     return Object.freeze({left,right,profile});
   }
 
-  function buildBuilding(root,worldData,descriptor,index,batches,roofProfiles,buildingMaterialVariants,entranceTreatmentSamples,entranceCounters){
+  function buildBuilding(root,worldData,descriptor,index,batches,roofProfiles,buildingMaterialVariants,entranceTreatmentSamples,entranceCounters,landmarkSamples,landmarkCounters){
     const b=localBounds(worldData,descriptor.bounds||{});
     const special=descriptor.source==="special";
     const height=special?2.25:1.75;
@@ -1190,6 +1190,64 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           threshold:true,frame:true,localWear:true,
           awning:specialEntrance,sign:specialEntrance,
           rendererOnly:true,navigationBlocking:false,collisionBlocking:false
+        }));
+      }
+    }
+
+    const landmark=descriptor.landmark||null;
+    if(landmark){
+      const timber=presentationMaterial("landmark-timber",0.42,0.24,0.10,0.05);
+      const accent=presentationMaterial("landmark-accent",0.78,0.46,0.16,0.04);
+      const stone=presentationMaterial("landmark-stone",0.52,0.48,0.39,0.05);
+      const treatment=String(landmark.treatment||"civic-cupola");
+      let primitiveCount=0;
+      const add=(mat,position,scale)=>{
+        appendBoxBatch(batchFor(batches,mat.name,mat),position,scale,0);
+        primitiveCount++;
+      };
+      const roofBaseY=wallTopY+0.48;
+      if(treatment==="forge-stack"||treatment==="timber-stack"){
+        const x=b.x+outerW*0.24,z=b.z-outerD*0.12;
+        add(stone,[x,roofBaseY+0.58,z],[0.52,1.60,0.52]);
+        add(accent,[x,roofBaseY+1.40,z],[0.68,0.14,0.68]);
+        add(timber,[x,roofBaseY+1.57,z],[0.42,0.20,0.42]);
+      }else if(treatment==="market-crest"){
+        add(timber,[b.x,roofBaseY+0.68,b.z],[0.18,1.35,0.18]);
+        add(timber,[b.x,roofBaseY+1.18,b.z],[1.15,0.14,0.18]);
+        add(accent,[b.x+0.34,roofBaseY+0.87,b.z],[0.58,0.58,0.10]);
+      }else if(treatment==="harvest-cupola"){
+        add(timber,[b.x,roofBaseY+0.36,b.z],[0.78,0.70,0.78]);
+        add(accent,[b.x,roofBaseY+0.76,b.z],[1.02,0.14,1.02]);
+        add(timber,[b.x,roofBaseY+1.13,b.z],[0.14,0.72,0.14]);
+        add(accent,[b.x,roofBaseY+1.34,b.z],[0.86,0.10,0.14]);
+      }else{
+        const watch=treatment==="watch-cupola";
+        add(stone,[b.x,roofBaseY+(watch?0.48:0.39),b.z],[watch?0.92:0.78,watch?0.96:0.78,watch?0.92:0.78]);
+        add(accent,[b.x,roofBaseY+(watch?1.01:0.84),b.z],[watch?1.20:1.02,0.16,watch?1.20:1.02]);
+        add(timber,[b.x,roofBaseY+(watch?1.36:1.18),b.z],[0.14,0.62,0.14]);
+      }
+      count+=primitiveCount;
+      if(landmarkCounters){
+        landmarkCounters.total=(landmarkCounters.total||0)+1;
+        landmarkCounters.primitives=(landmarkCounters.primitives||0)+primitiveCount;
+        landmarkCounters.treatments[treatment]=(landmarkCounters.treatments[treatment]||0)+1;
+        landmarkCounters.contexts[String(landmark.contextTag||"mixed")]=(landmarkCounters.contexts[String(landmark.contextTag||"mixed")]||0)+1;
+      }
+      if(Array.isArray(landmarkSamples)&&landmarkSamples.length<16){
+        landmarkSamples.push(Object.freeze({
+          buildingId:String(descriptor.id||index),
+          buildingKind:String(descriptor.kind||""),
+          treatment,
+          role:String(landmark.role||""),
+          contextTag:String(landmark.contextTag||"mixed"),
+          contextTags:Object.freeze([...(landmark.contextTags||[])]),
+          settlementClass:String(landmark.settlementClass||"village"),
+          settlementRevision:String(landmark.settlementRevision||""),
+          primitiveCount,
+          rendererOnly:true,
+          navigationAuthority:false,
+          collisionAuthority:false,
+          simulationAuthorityPreserved:true
         }));
       }
     }
@@ -1639,8 +1697,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const buildingMaterialVariants=[];
     const entranceTreatmentSamples=[];
     const entranceCounters={total:0,ordinary:0,special:0,threshold:0,frame:0,wear:0,awning:0,sign:0,primitives:0};
+    const landmarkSamples=[];
+    const landmarkCounters={total:0,primitives:0,treatments:{},contexts:{}};
     let sourcePresentationPrimitiveCount=0;
-    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles,buildingMaterialVariants,entranceTreatmentSamples,entranceCounters);
+    for(let i=0;i<buildings.length;i++)sourcePresentationPrimitiveCount+=buildBuilding(entity,spec.worldData,buildings[i],i,batches,roofProfiles,buildingMaterialVariants,entranceTreatmentSamples,entranceCounters,landmarkSamples,landmarkCounters);
     for(let i=0;i<interiorObjects.length;i++)sourcePresentationPrimitiveCount+=buildInteriorObject(spec.worldData,interiorObjects[i],batches);
     const routePresentation=buildRoutePresentation(spec.worldData,connectorDescriptors,batches);
     sourcePresentationPrimitiveCount+=routePresentation.sourcePrimitiveCount;
@@ -1868,6 +1928,17 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       entranceNavigationBlocking:false,
       entranceCollisionBlocking:false,
       entranceSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("entrance-")).length,
+      landmarkPresentationCount:Number(landmarkCounters.total||0),
+      landmarkPrimitiveCount:Number(landmarkCounters.primitives||0),
+      landmarkTreatmentCounts:Object.freeze({...landmarkCounters.treatments}),
+      landmarkContextCounts:Object.freeze({...landmarkCounters.contexts}),
+      landmarkSamples:Object.freeze(landmarkSamples.slice()),
+      landmarkSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("landmark-")).length,
+      landmarkDeterministic:Boolean(presentation.landmark?.deterministic!==false),
+      landmarkRendererOnly:Boolean(presentation.landmark?.rendererOnly!==false),
+      landmarkNavigationAuthority:false,
+      landmarkCollisionAuthority:false,
+      landmarkSimulationAuthorityPreserved:Boolean(presentation.landmark?.simulationAuthorityPreserved!==false),
       buildingMaterialVariationDeterministic:true,
       buildingMaterialVariantPaletteSize:BUILDING_MATERIAL_VARIANTS.length,
       buildingMaterialVariantCount:new Set(buildingMaterialVariants.map(item=>item.variantIndex)).size,
@@ -2031,6 +2102,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       entranceRendererOnly:true,
       entranceNavigationBlocking:false,
       entranceCollisionBlocking:false,
+      landmarkSharedMaterialCount:[...presentationMaterials.keys()].filter(name=>String(name).startsWith("landmark-")).length,
+      landmarkRendererOnly:true,
+      landmarkNavigationAuthority:false,
+      landmarkCollisionAuthority:false,
       contactShadowMaterialCount:contactShadowMaterials.size,
       contactShadowQuality:String(contactShadowProfile().level),
       contactShadowOpacity:Number(contactShadowProfile().opacity.toFixed(3)),
