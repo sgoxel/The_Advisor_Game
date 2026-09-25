@@ -795,10 +795,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return Object.freeze({...finalState,materialRebindCount:1,routeMaterialRefreshCount,retiredTextureReleaseCount});
   }
   function terrainChunkSignature(){
-    // Chunk resources contain deterministic geometry plus references to shared
-    // materials. Framebuffer scale and material-quality changes do not alter
-    // geometry, so they must not invalidate prepared chunk meshes/entities.
-    return "geometry=heightfield-v7-semantic-rounded-contours";
+    // Chunk geometry/world data is SEED-derived. Include the active campaign
+    // SEED in resource identity so a real campaign switch cannot reuse the
+    // previous campaign's prepared meshes. Framebuffer/material quality remains
+    // excluded because those changes do not alter geometry.
+    return "geometry=heightfield-v7-semantic-rounded-contours|seed="+String(lastRawSeed||"none");
   }
   function terrainChunkPosition(chunkX,chunkY,chunkSize){
     const anchorX=BigInt(sceneAnchor?.x||"0"),anchorY=BigInt(sceneAnchor?.y||"0");
