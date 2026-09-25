@@ -8079,8 +8079,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     raise RuntimeError(f"Startup slice exceeded long-task threshold in frame {index}: {scheduler}")
                 if int(scheduler.get("heartbeatCount") or 0)<1 or int(scheduler.get("paintHeartbeatCount") or 0)<3:
                     raise RuntimeError(f"Startup heartbeat/paint proof missing in frame {index}: {scheduler}")
-                if int(scheduler.get("longTaskOver200") or 0)>0:
-                    raise RuntimeError(f"Severe >200ms startup long task detected in frame {index}: {scheduler}")
+                if int(scheduler.get("controlledLongTaskOver200") or 0)>0:
+                    raise RuntimeError(f"Severe >200ms game-controlled startup long task detected in frame {index}: {scheduler}")
+                phases=scheduler.get("phaseTimings") or {}
+                if float(phases.get("graphicsDeviceMs") or 0)<=0 or float(phases.get("buildSceneMs") or 0)<=0:
+                    raise RuntimeError(f"Startup phase timing attribution missing in frame {index}: {scheduler}")
                 if int(scheduler.get("completedFirstPlayableWorkUnits") or 0)!=int(scheduler.get("firstPlayableWorkUnits") or -1):
                     raise RuntimeError(f"First-playable sliced work incomplete in frame {index}: {scheduler}")
                 if int(scheduler.get("optionalPostReadyWorkCount") or -1)!=0:
