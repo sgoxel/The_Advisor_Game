@@ -1891,18 +1891,21 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       if(gx<0||gz<0||gx>=size||gz>=size)continue;
       emittedCellCount++;
       const surfaceType=semanticSurfaceType(sourceCell.type||"grass");
-      const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(surfaceType)||activeAtlas?.uvRect?.(surfaceType)):null;
+      const worldX=baseX+BigInt(gx),worldZ=baseZ+BigInt(gz);
+      const hydro=surfaceType==="bridge"?hydrologyAtTile(seed,String(worldX),String(worldZ)):null;
+      const bridgeOverWater=Boolean(surfaceType==="bridge"&&hydro?.bridgeUnderlyingWater===true);
+      const baseVisualType=bridgeOverWater?"water":surfaceType;
+      const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(baseVisualType)||activeAtlas?.uvRect?.(baseVisualType)):null;
       const x0=gx*metersPerTile-half,x1=(gx+1)*metersPerTile-half;
       const z0=gz*metersPerTile-half,z1=(gz+1)*metersPerTile-half;
       let h00=sampleHeight(gx,gz),h10=sampleHeight(gx+1,gz),h01=sampleHeight(gx,gz+1),h11=sampleHeight(gx+1,gz+1);
-      if(surfaceType==="water"){
-        h00=waterSurfaceAtVertex(seed,baseX+BigInt(gx),baseZ+BigInt(gz));
-        h10=waterSurfaceAtVertex(seed,baseX+BigInt(gx+1),baseZ+BigInt(gz));
-        h01=waterSurfaceAtVertex(seed,baseX+BigInt(gx),baseZ+BigInt(gz+1));
-        h11=waterSurfaceAtVertex(seed,baseX+BigInt(gx+1),baseZ+BigInt(gz+1));
+      if(surfaceType==="water"||bridgeOverWater){
+        h00=waterSurfaceAtVertex(seed,worldX,worldZ);
+        h10=waterSurfaceAtVertex(seed,worldX+1n,worldZ);
+        h01=waterSurfaceAtVertex(seed,worldX,worldZ+1n);
+        h11=waterSurfaceAtVertex(seed,worldX+1n,worldZ+1n);
       }else if(surfaceType==="bridge"){
-        const hydro=hydrologyAtTile(seed,String(baseX+BigInt(gx)),String(baseZ+BigInt(gz)));
-        const deck=Number(hydro.bridgeDeckHeight??sampleHeight(gx+0.5,gz+0.5));
+        const deck=Number(hydro?.bridgeDeckHeight??sampleHeight(gx+0.5,gz+0.5));
         h00=h10=h01=h11=deck;
       }
       const base=positions.length/3;
@@ -1910,7 +1913,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       for(let i=0;i<4;i++)normals.push(0,1,0);
       if(rect){
         texturedBlockCount++;
-        texturedSurfaceTypes.add(surfaceType);
+        texturedSurfaceTypes.add(baseVisualType);
         for(let i=0;i<4;i++)appendColor32(colors32,[1,1,1,1],1);
         uvs.push(
           Number(rect.u0),Number(rect.v0),
@@ -1920,18 +1923,49 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         );
       }else{
         colorFallbackBlockCount++;
-        fallbackSurfaceTypes.add(surfaceType);
-        const fallback=heightfieldColor(seed,baseX+BigInt(gx),baseZ+BigInt(gz),sourceCell.color,surfaceType);
+        fallbackSurfaceTypes.add(baseVisualType);
+        const fallback=heightfieldColor(seed,worldX,worldZ,sourceCell.color,baseVisualType);
         for(let i=0;i<4;i++)appendColor32(colors32,fallback,1);
         uvs.push(0,0,1,0,0,1,1,1);
       }
       detailUvs.push(
-        Number(baseX+BigInt(gx))*0.25,Number(baseZ+BigInt(gz))*0.25,
-        Number(baseX+BigInt(gx+1))*0.25,Number(baseZ+BigInt(gz))*0.25,
-        Number(baseX+BigInt(gx))*0.25,Number(baseZ+BigInt(gz+1))*0.25,
-        Number(baseX+BigInt(gx+1))*0.25,Number(baseZ+BigInt(gz+1))*0.25
+        Number(worldX)*0.25,Number(worldZ)*0.25,
+        Number(worldX+1n)*0.25,Number(worldZ)*0.25,
+        Number(worldX)*0.25,Number(worldZ+1n)*0.25,
+        Number(worldX+1n)*0.25,Number(worldZ+1n)*0.25
       );
       indices.push(base,base+2,base+1,base+1,base+2,base+3);
+      if(bridgeOverWater){
+        const bridgeRect=semanticAtlasReady?(activeAtlas?.meshUvRect?.("bridge")||activeAtlas?.uvRect?.("bridge")):null;
+        const deckY=Number(hydro.bridgeDeckHeight);
+        const orientation=bridgeDeckOrientation(seed,worldX,worldZ);
+        const centerX=(gx+0.5)*metersPerTile-half,centerZ=(gz+0.5)*metersPerTile-half;
+        const halfLength=metersPerTile*0.53,halfWidth=metersPerTile*0.31;
+        const minX=centerX-(orientation==="horizontal"?halfLength:halfWidth);
+        const maxX=centerX+(orientation==="horizontal"?halfLength:halfWidth);
+        const minZ=centerZ-(orientation==="vertical"?halfLength:halfWidth);
+        const maxZ=centerZ+(orientation==="vertical"?halfLength:halfWidth);
+        const deckBase=positions.length/3;
+        positions.push(minX,deckY,minZ,maxX,deckY,minZ,minX,deckY,maxZ,maxX,deckY,maxZ);
+        for(let i=0;i<4;i++)normals.push(0,1,0);
+        if(bridgeRect){
+          texturedSurfaceTypes.add("bridge");
+          for(let i=0;i<4;i++)appendColor32(colors32,[1,1,1,1],1);
+          uvs.push(
+            Number(bridgeRect.u0),Number(bridgeRect.v0),
+            Number(bridgeRect.u1),Number(bridgeRect.v0),
+            Number(bridgeRect.u0),Number(bridgeRect.v1),
+            Number(bridgeRect.u1),Number(bridgeRect.v1)
+          );
+        }else{
+          fallbackSurfaceTypes.add("bridge");
+          const deckColor=heightfieldColor(seed,worldX,worldZ,sourceCell.color,"bridge");
+          for(let i=0;i<4;i++)appendColor32(colors32,deckColor,1);
+          uvs.push(0,0,1,0,0,1,1,1);
+        }
+        for(let i=0;i<4;i++)detailUvs.push(Number(worldX)*0.25,Number(worldZ)*0.25);
+        indices.push(deckBase,deckBase+2,deckBase+1,deckBase+1,deckBase+2,deckBase+3);
+      }
     }
     const mesh=new pc.Mesh(device);
     mesh.setPositions(positions);
