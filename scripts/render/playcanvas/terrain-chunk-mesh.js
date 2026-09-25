@@ -31,7 +31,7 @@ const HYDROLOGY_BANK_MIN_RISE=0.12;
 const HYDROLOGY_WATER_DEPTH=0.22;
 const HYDROLOGY_BED_DEPTH=0.18;
 const HYDROLOGY_LEVEL_STEP=0.035;
-const LANDFORM_VERSION="macro-landform-v2";
+const LANDFORM_VERSION="macro-landform-v3";
 const LANDFORM_SAMPLE_RADIUS_TILES=8;
 const LANDFORM_CACHE_LIMIT=32768;
 const LANDFORM_CLIFF_FACE_MAX_PER_CHUNK=24;
@@ -39,6 +39,8 @@ const LANDFORM_CLIFF_FACE_MIN_SIGNAL=0.32;
 const LANDFORM_CLIFF_FACE_MIN_RELIEF_METERS=160;
 const LANDFORM_CLIFF_FACE_MIN_HEIGHT=0.72;
 const LANDFORM_CLIFF_FACE_MAX_HEIGHT=2.65;
+const LANDFORM_CLIFF_FACE_APRON_MIN=0.68;
+const LANDFORM_CLIFF_FACE_APRON_MAX=1.34;
 const WORLD_TILE_METERS=2;
 const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
@@ -2365,12 +2367,16 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
             -1,1
           );
           const directionalShade=clamp(
-            1-slopeStrength*(0.10+0.22*Math.max(0,towardPositiveDiagonal)),
-            0.66,1
+            1-slopeStrength*(0.12+0.30*Math.max(0,towardPositiveDiagonal)),
+            0.58,1
           );
           r*=directionalShade;g*=directionalShade;b*=directionalShade;
           categories.push("landform-relief-shade");
         }
+        const relativeWorldHeight=(Number(landform.elevationMeters||0)-referenceElevation(seed))*HEIGHTFIELD_VERTICAL_SCALE;
+        const elevationShade=clamp(0.72+0.28*clamp((relativeWorldHeight+2.5)/13.5,0,1),0.72,1);
+        r*=elevationShade;g*=elevationShade;b*=elevationShade;
+        categories.push("macro-elevation-shade");
         const macroStrength=(type==="grass"||type==="forest"||type==="farmland")?0.11:
           (type==="dirt"||type==="mud"||type==="sand")?0.075:0.045;
         // Mesh.setColors32 is a normalized UINT8 stream: components above 1.0
@@ -2694,15 +2700,25 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
               LANDFORM_CLIFF_FACE_MAX_HEIGHT
             );
             const offset=0.035;
-            const ox=edge.normal[0]*offset,oz=edge.normal[2]*offset;
+            const apronDepth=clamp(
+              LANDFORM_CLIFF_FACE_APRON_MIN+
+              Number(cliff.cliffSignal||0)*0.34+
+              Number(cliff.localReliefMeters||0)/1500,
+              LANDFORM_CLIFF_FACE_APRON_MIN,
+              LANDFORM_CLIFF_FACE_APRON_MAX
+            );
+            const topOx=edge.normal[0]*offset,topOz=edge.normal[2]*offset;
+            const bottomOx=edge.normal[0]*apronDepth,bottomOz=edge.normal[2]*apronDepth;
             const cliffBase=positions.length/3;
             positions.push(
-              Number(topA[0])+ox,Number(topA[1])+0.015,Number(topA[2])+oz,
-              Number(topB[0])+ox,Number(topB[1])+0.015,Number(topB[2])+oz,
-              Number(topA[0])+ox,Number(topA[1])-faceHeight,Number(topA[2])+oz,
-              Number(topB[0])+ox,Number(topB[1])-faceHeight,Number(topB[2])+oz
+              Number(topA[0])+topOx,Number(topA[1])+0.018,Number(topA[2])+topOz,
+              Number(topB[0])+topOx,Number(topB[1])+0.018,Number(topB[2])+topOz,
+              Number(topA[0])+bottomOx,Number(topA[1])-faceHeight,Number(topA[2])+bottomOz,
+              Number(topB[0])+bottomOx,Number(topB[1])-faceHeight,Number(topB[2])+bottomOz
             );
-            for(let i=0;i<4;i++)normals.push(...edge.normal);
+            const faceNx=edge.normal[0],faceNy=0.34,faceNz=edge.normal[2];
+            const faceNorm=Math.hypot(faceNx,faceNy,faceNz)||1;
+            for(let i=0;i<4;i++)normals.push(faceNx/faceNorm,faceNy/faceNorm,faceNz/faceNorm);
             const rockRect=semanticAtlasReady?(activeAtlas?.meshUvRect?.("rock")||activeAtlas?.uvRect?.("rock")):null;
             const rockTint=terrainVariationAtVertex(cellWorldX,cellWorldZ,"rock").tint;
             const cliffTint=[
@@ -3139,7 +3155,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
-      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.80-1.00",
+      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.58-1.00",
       terrainVariationDeterministic:true,
       terrainVariationRendererOnly:true,
       terrainVariationNavigationAuthority:false,
@@ -3185,8 +3201,10 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformReliefMax:Number.isFinite(landformReliefMax)?Number(landformReliefMax.toFixed(2)):0,
       landformConditionOffsetMin:Number.isFinite(landformConditionOffsetMin)?Number(landformConditionOffsetMin.toFixed(6)):0,
       landformConditionOffsetMax:Number.isFinite(landformConditionOffsetMax)?Number(landformConditionOffsetMax.toFixed(6)):0,
-      landformSteepFaceTreatment:"world-gradient-vertex-shading+sparse-same-mesh-cliff-skirts",
+      landformSteepFaceTreatment:"world-gradient+macro-elevation-shading+sparse-downhill-cliff-aprons",
       landformCliffFaceCount,landformCliffFaceTriangleCount,
+      landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
+      landformCliffFaceApronMaxWorldUnits:LANDFORM_CLIFF_FACE_APRON_MAX,
       landformTriangleBudgetPerChunk:LANDFORM_CLIFF_FACE_MAX_PER_CHUNK*2,
       landformDrawCallsAdded:0,landformTrianglesAdded:landformCliffFaceTriangleCount,landformMaterialsAdded:0,
       landformDeterministic:true,landformSeamSafeGlobalCoordinates:true,landformChunkPrepared:true,
@@ -3473,7 +3491,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       landformProfileCacheSize:landformProfileCache.size,landformCacheLimit:LANDFORM_CACHE_LIMIT,
       landformPerFrameRegenerationCount:0,landformRendererOnly:true,landformNavigationAuthority:false,
       landformCollisionAuthority:false,landformSimulationAuthorityPreserved:true,
-      landformSteepFaceTreatment:"world-gradient-vertex-shading+sparse-same-mesh-cliff-skirts",
+      landformSteepFaceTreatment:"world-gradient+macro-elevation-shading+sparse-downhill-cliff-aprons",
+      landformCliffFaceApronMinWorldUnits:LANDFORM_CLIFF_FACE_APRON_MIN,
+      landformCliffFaceApronMaxWorldUnits:LANDFORM_CLIFF_FACE_APRON_MAX,
       landformTriangleBudgetPerChunk:LANDFORM_CLIFF_FACE_MAX_PER_CHUNK*2,
       contourAlgorithm:"categorical-marching-corners-rounded-fan",
       contourPreparationOnly:true,
@@ -3502,7 +3522,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       terrainVariationAuthorityQueriesAdded:0,
       terrainVariationContourCompatible:true,
       terrainVariationBaseSurfaceIdentityPreserved:true,
-      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.80-1.00",
+      terrainVariationVertexColorEncoding:"uint8-multiply-visible-range-0.58-1.00",
       terrainVariationRendererOnly:true,
       terrainVariationNavigationAuthority:false,
       terrainVariationCollisionAuthority:false,
