@@ -1192,3 +1192,100 @@ details[open] summary{border-bottom:1px solid #343a30}
   }
 }
 
+
+
+/* WP-S003-003-001 — contextual world object interaction panel */
+.object-interaction-panel{
+  position:absolute;
+  right:clamp(12px,2vw,28px);
+  bottom:clamp(12px,2vw,24px);
+  z-index:37;
+  width:min(360px,calc(100% - 24px));
+  max-height:min(54vh,430px);
+  overflow:auto;
+  padding:14px;
+  border:1px solid rgba(219,200,163,.72);
+  border-radius:14px;
+  background:linear-gradient(180deg,rgba(28,31,29,.96),rgba(20,22,22,.94));
+  color:#f5eddc;
+  box-shadow:0 12px 34px rgba(0,0,0,.34);
+  backdrop-filter:blur(8px);
+}
+.object-interaction-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.object-interaction-header>div{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.object-interaction-header span{
+  font-size:.72rem;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:#c8b88f;
+}
+.object-interaction-header strong{
+  font-size:1rem;
+  overflow-wrap:anywhere;
+}
+.object-interaction-close{
+  min-width:44px;
+  min-height:44px;
+  border-radius:10px;
+  font-size:1.35rem;
+  line-height:1;
+}
+.object-interaction-meta{
+  margin-top:8px;
+  font-size:.78rem;
+  color:#cabf9e;
+}
+.object-interaction-message{
+  margin:10px 0 12px;
+  font-size:.86rem;
+  line-height:1.42;
+}
+.object-interaction-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.object-interaction-actions button{
+  min-height:46px;
+  padding:9px 10px;
+  border-radius:10px;
+  font-weight:700;
+  touch-action:manipulation;
+}
+.object-interaction-actions button[disabled]{
+  opacity:.48;
+  cursor:not-allowed;
+}
+.object-interaction-actions button[data-ready="true"]{
+  border-color:rgba(228,197,118,.82);
+}
+.object-interaction-panel[data-proof="true"]::after{
+  content:"Evidence state";
+  display:block;
+  margin-top:9px;
+  font-size:.68rem;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#a9c7aa;
+}
+@media (max-width:640px){
+  .object-interaction-panel{
+    right:8px;
+    bottom:8px;
+    width:calc(100% - 16px);
+    max-height:48vh;
+    padding:12px;
+  }
+  .object-interaction-actions{
+    grid-template-columns:1fr 1fr;
+  }
+}
