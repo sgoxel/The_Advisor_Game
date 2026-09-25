@@ -118,6 +118,7 @@ function createManager({
   chunkSize=16,
   prepareChunk,
   prepareChunkData=null,
+  cancelChunkData=null,
   activateChunk,
   deactivateChunk,
   destroyChunk,
@@ -284,7 +285,11 @@ function createManager({
     return removed.length;
   }
   function clearDestinationQueue(reason="superseded"){
-    if(!queue.length)return 0;
+    try{cancelChunkData?.(reason);}catch(_){}
+    if(!queue.length){
+      destinationDataPrepared.clear();
+      return 0;
+    }
     const keep=[],removed=[];
     for(const item of queue){
       if(item.source==="destination")removed.push(item);
