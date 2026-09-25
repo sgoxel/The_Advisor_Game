@@ -842,7 +842,8 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
       seed:lastRawSeed||"",
       x:spec.x,y:spec.y,chunkSize:spec.chunkSize,
       signature:spec.signature,state:spec.state,
-      streamingProfile:spec.streamingProfile||"full"
+      streamingProfile:spec.streamingProfile||"full",
+      requiredCellIndices:Array.isArray(spec.requiredCellIndices)?spec.requiredCellIndices:null
     };
     if(
       spec?.source==="destination"&&String(spec?.streamingProfile||"")==="minimum"&&
