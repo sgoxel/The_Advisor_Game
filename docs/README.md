@@ -198,6 +198,23 @@ Meaningful personal history should persist, including profession or residence ch
 
 # 🌍 Living World
 
+## Current Planet-First Rebuild Baseline
+
+The active game build is intentionally at **world-construction Stage 1**. It shows only the canonical fantasy planet sphere so the world scale and planet-space foundation can be established before local terrain, settlements, characters or simulation detail are reintroduced.
+
+The canonical fantasy planet uses **10% of Earth's linear scale**:
+- reference Earth mean radius: **6,371 km**;
+- fantasy world radius: **637.1 km**;
+- fantasy world diameter: **1,274.2 km**;
+- fantasy world circumference: approximately **4,003.0 km**.
+
+The displayed PlayCanvas sphere is a visualization of that physical world, not a literal meter-per-engine-unit mesh. Physical measurements remain in meters/kilometers independently of renderer scale.
+
+The world is a **finite continuous sphere**, not an unbounded planar tile grid. No tile is authoritative world state. Future local terrain and LOD systems may use bounded render patches or caches, but those patches must sample planet-space world data and remain disposable presentation/performance structures rather than defining world truth.
+
+For Stage 1, protagonist, NPC, settlement, building and local-terrain systems are deliberately dormant. Later stages will add planetary geography first, then progressively finer detail while preserving the same canonical planet scale.
+
+
 ## Starting Village
 
 Every new campaign begins with the protagonist as an ordinary low-rank character in a **SEED-generated inhabited village**.
@@ -240,7 +257,7 @@ The world supports varied settlement archetypes rather than repeating one generi
 
 Settlement appearance, population, buildings, professions, roads, resources, defenses, prosperity, hazards and surrounding environment should reflect geography, history and campaign state.
 
-The overall world is continuous and unbounded from the player's perspective. The Protagonist begins every new campaign at world coordinate **(0,0)**, and that origin is the initial center of the gameplay view. Both X and Y may extend without a gameplay-defined boundary in negative or positive directions. Large settlements may extend across multiple local areas while remaining one coherent place.
+The overall world is continuous but finite because it is represented on the canonical spherical planet. Planet-space coordinates must map consistently to the sphere surface; longitude wraps naturally and no planar X/Y edge defines the world. When character simulation is reintroduced, actor positions must resolve to this same planet-space authority rather than an unbounded tile plane.
 
 ## World Planning Order
 
@@ -248,11 +265,9 @@ World generation uses a permanent reservation order: **roads/public infrastructu
 
 ## World Scale and Travel
 
-The authoritative world grid uses **1 tile = 2 meters × 2 meters**. Pixel size is only camera presentation and does not change physical distance.
+The authoritative world scale is physical **planet-space distance in meters**, not tiles. Renderer pixels, mesh density, local LOD resolution and future cache patch sizes must never change physical distance.
 
-Normal NPC walking is intentionally conservative for game readability: about **3.0 km/h** on open ground and **3.6 km/h** on a good road/bridge, with slower speeds in forest, mud and mountain terrain. Village spacing and road/bridge realism use these physical measurements.
-
-Distinct village centers must remain at least one fantasy walking hour apart. Using the fastest normal road speed, that lower bound is **3.6 km = 1,800 tiles**. Rural bridges are practically capped at **120 m = 60 tiles** and must also satisfy the existing 10-fantasy-minute bridge-time limit.
+When travel simulation is reintroduced, normal walking may remain intentionally conservative for readability: about **3.0 km/h** on open ground and **3.6 km/h** on a good road/bridge, with slower speeds in difficult terrain. Distinct village centers should remain at least one fantasy walking hour apart, so the fastest normal-road lower bound remains **3.6 km**. Rural bridges remain practically capped at **120 m** and must also satisfy the 10-fantasy-minute bridge-time limit.
 
 ## SEED-Generated Geographic Hierarchy and Scale
 
@@ -264,9 +279,9 @@ Generated geography must also obey realism constraints rather than placing settl
 
 If a SEED-generated village candidate would violate this minimum travel-time rule, the generator must deterministically reject that candidate and continue to the next deterministic candidate derived from the same SEED process. Therefore the world remains both realistic and reproducible.
 
-The current foundation model treats one logical tile as **2 meters** for world-scale travel calculations. Village placement is structured so neighboring village centers remain far enough apart that even the fastest normal road walking speed (**3.6 km/h**) cannot produce a sub-one-hour village-to-village walk. When the straight-line lower bound already exceeds one fantasy hour, that lower bound is sufficient proof and avoids an unnecessary multi-kilometer A* search.
+Planetary geography must use the Campaign SEED to reproduce the same large-scale world foundation at the same planet-space positions. Future village placement must use physical distance and route cost on the spherical world; it must not depend on an authoritative tile size. When a geodesic or other valid lower bound already proves that two candidate settlements exceed the minimum travel time, generation should avoid unnecessary detailed pathfinding.
 
-Main roads are persistent geographic infrastructure: terrain generation cannot simply erase or interrupt them. The Starting Village uses connected main roads and a deterministic gateway connection to broader mainland terrain. Under the authoritative **2 m/tile** scale, a good road/bridge uses **3.6 km/h** for normal walking calculations. Rural bridges must satisfy both the **10 fantasy-minute** limit and the stricter **120 m / 60-tile practical cap**. Typical widths are 2 m for rough paths, 4 m for rural roads, 4–6 m for village main roads, up to 8 m for towns, 12 m for cities, and 20 m only for capital-city main roads.
+Future main roads remain persistent geographic infrastructure: terrain generation cannot erase or interrupt them. A good road/bridge may use **3.6 km/h** for normal walking calculations. Rural bridges must satisfy both the **10 fantasy-minute** limit and the stricter **120 m practical cap**. Typical widths remain physical measurements: 2 m for rough paths, 4 m for rural roads, 4–6 m for village main roads, up to 8 m for towns, 12 m for cities, and 20 m only for capital-city main roads.
 
 
 Settlements are historical entities, not frozen templates. Population, prosperity, security, trade, resources, hazards, construction, destruction, war and other pressures may cause them to grow, decline, fortify, change function, lose structures, become abandoned or ruined, recover, rebuild or be repopulated.
