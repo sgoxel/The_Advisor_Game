@@ -110,9 +110,9 @@ let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_
 let localLodIndex=0;
 const localResourceCache=new Map();
 let localResources={activeSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastEvictionReason:null};
-let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,borderVisible:false,borderSampleCount:0,borderSegmentCount:0,politicalOwnerCount:0,scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
+let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapContextCache={key:null,value:null};
-let mapBorderCache={key:null,segments:[],sampleCount:0,ownerCount:0,builtAtMs:0};
+let mapBorderCache={key:null,segments:[],sampleCount:0,ownerCount:0,worldVertexCount:0,builtAtMs:0};
 let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
 let politicalScaleEvidenceCache=null;
 
@@ -232,67 +232,102 @@ function ensureMapPresentationDom(){
   const scale=document.createElement("div");scale.className="planet-scale-ruler";scale.innerHTML='<div class="planet-scale-meta"><strong></strong><span></span></div><div class="planet-scale-line"><i></i></div><small></small>';
   layer.append(borders,labels,info,scale);root.appendChild(layer);return layer;
 }
-function projectMapLabel(descriptor){
-  if(!canvas||!cameraEntity?.camera)return null;
-  const rect=canvas.getBoundingClientRect(),blend=projectionState.blend;
-  if(blend<=.02){
-    const direction=window.PlanetGeography?.directionFromLatLon?.(descriptor.latitudeRadians,descriptor.longitudeRadians);if(!direction)return null;
-    const radius=DISPLAY_RADIUS_UNITS*1.035;
-    const world=new pc.Vec3(direction.x*radius,direction.y*radius,direction.z*radius);
-    const screen=cameraEntity.camera.worldToScreen(world);
-    if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||screen.z<0)return null;
-    return {x:screen.x/Math.max(1,rect.width)*100,y:screen.y/Math.max(1,rect.height)*100};
+function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMeters=0){
+  if(!pc||!cameraEntity?.camera||!window.PlanetGeography?.directionFromLatLon)return null;
+  const lat=clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999),lon=wrapLongitudeRadians(longitudeRadians);
+  const tangentActive=Boolean(tangentPatch?.enabled&&projectionState.blend>.055);
+  if(tangentActive){
+    const dims=localPatchDimensions(),lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+    const north=(lat-lat0)*WORLD_RADIUS_METERS,east=wrapLongitudeRadians(lon-lon0)*WORLD_RADIUS_METERS*cosLat;
+    if(Math.abs(east)>dims.patchWidth*.52||Math.abs(north)>dims.patchHeight*.52)return null;
+    const local=new pc.Vec3(east/dims.metersPerUnit,localGroundHeightUnits(east,north,dims)+Number(surfaceOffsetMeters||0)/dims.metersPerUnit,-north/dims.metersPerUnit);
+    const world=tangentPatch.getWorldTransform().transformPoint(local,new pc.Vec3());
+    return {world,mode:"tangent",latitudeRadians:lat,longitudeRadians:lon,eastMeters:east,northMeters:north};
   }
-  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
-  const dLat=Number(descriptor.latitudeRadians)-lat0;
-  const dLon=wrapLongitudeRadians(Number(descriptor.longitudeRadians)-lon0);
-  const north=dLat*WORLD_RADIUS_METERS,east=dLon*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(lat0));
-  const width=Math.max(1,zoomState.visibleFootprintWidthMeters),height=Math.max(1,zoomState.visibleFootprintHeightMeters);
-  return {x:50+(east/width)*100,y:50-(north/height)*100};
+  const direction=window.PlanetGeography.directionFromLatLon(lat,lon);if(!direction)return null;
+  let sample=null;try{sample=geography?.sampleLatLon?.(lat,lon)||null;}catch(_){sample=null;}
+  const visualMeters=visualElevationMeters(sample||{land:true,elevationMeters:0});
+  const radius=DISPLAY_RADIUS_UNITS*(1+(visualMeters/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION)+(DISPLAY_RADIUS_UNITS/WORLD_RADIUS_METERS)*Number(surfaceOffsetMeters||0);
+  const local=new pc.Vec3(direction.x*radius,direction.y*radius,direction.z*radius);
+  const world=planet?.getWorldTransform?.().transformPoint(local,new pc.Vec3())||local;
+  return {world,mode:"globe",latitudeRadians:lat,longitudeRadians:lon,eastMeters:null,northMeters:null};
+}
+function projectGeographicAnchor(anchor,options={}){
+  if(!canvas||!cameraEntity?.camera||!anchor)return null;
+  const scene=geographicScenePoint(anchor.latitudeRadians,anchor.longitudeRadians,options.surfaceOffsetMeters||0);if(!scene)return null;
+  if(scene.mode==="globe"&&planet){
+    const center=planet.getPosition(),normal=scene.world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(scene.world);
+    if(normal.dot(toCamera)<=0)return null;
+  }
+  const screen=cameraEntity.camera.worldToScreen(scene.world),rect=canvas.getBoundingClientRect();
+  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z)||screen.z<0)return null;
+  const xPct=screen.x/Math.max(1,rect.width)*100,yPct=screen.y/Math.max(1,rect.height)*100;
+  if(options.allowOffscreen!==true&&(xPct<0||xPct>100||yPct<0||yPct>100))return null;
+  return {
+    x:xPct,y:yPct,screenX:screen.x,screenY:screen.y,depth:screen.z,mode:scene.mode,
+    latitudeRadians:scene.latitudeRadians,longitudeRadians:scene.longitudeRadians,
+    worldX:Number(scene.world.x.toFixed(6)),worldY:Number(scene.world.y.toFixed(6)),worldZ:Number(scene.world.z.toFixed(6))
+  };
+}
+function projectMapLabel(descriptor){return projectGeographicAnchor(descriptor,{surfaceOffsetMeters:8});}
+function mapLandmarkKindsForBand(band){
+  const table={
+    planet:["continent","peak","water"],
+    continent:["continent","peak","mountain","island","water"],
+    "country-region":["peak","mountain","city","island","water"],
+    "regional-overview":["peak","mountain","city","town","ruin","water"],
+    "regional-detail":["peak","mountain","city","town","ruin","water"],
+    district:["city","town","village","ruin"],
+    "local-area":["city","town","village","ruin"],
+    settlement:["town","village","ruin"],
+    "near-ground":["village","ruin"],
+    ground:["village","ruin"]
+  };
+  return table[band]||[];
+}
+function geoPointFromViewportGrid(gx,gy,cols,rows,width,height){
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  const east=(gx/(cols-1)-.5)*width,north=(.5-gy/(rows-1))*height;
+  return Object.freeze({
+    latitudeRadians:clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999),
+    longitudeRadians:wrapLongitudeRadians(lon0+east/(WORLD_RADIUS_METERS*cosLat))
+  });
+}
+function interpolateGeoPoint(a,b,t){
+  const dLon=wrapLongitudeRadians(b.longitudeRadians-a.longitudeRadians);
+  return {latitudeRadians:a.latitudeRadians+(b.latitudeRadians-a.latitudeRadians)*t,longitudeRadians:wrapLongitudeRadians(a.longitudeRadians+dLon*t)};
 }
 function buildMapBorderSegments(){
-  const band=zoomState.band;
-  const visible=["country-region","regional-overview","regional-detail"].includes(band);
-  if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,ownerCount:0,built:false};
-  const quantizedScalar=Math.round(zoomState.scalar*20)/20;
-  const key=[activeSeed,band,quantizedScalar,Math.round(zoomState.focusLatitudeRadians*180/Math.PI*2)/2,Math.round(zoomState.focusLongitudeRadians*180/Math.PI*2)/2,Math.round((canvas?.clientWidth||1)/(canvas?.clientHeight||1)*10)/10].join("|");
-  if(mapBorderCache.key===key)return {segments:mapBorderCache.segments,sampleCount:mapBorderCache.sampleCount,ownerCount:mapBorderCache.ownerCount,built:false};
-  const started=performance.now(),cols=13,rows=9,owners=[],ownerIds=new Set();
+  const band=zoomState.band,visible=["country-region","regional-overview","regional-detail"].includes(band);
+  if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,ownerCount:0,worldVertexCount:0,built:false};
+  const quantizedScalar=Math.round(zoomState.scalar*40)/40;
+  const key=[activeSeed,band,quantizedScalar,Math.round(zoomState.focusLatitudeRadians*180/Math.PI*4)/4,Math.round(zoomState.focusLongitudeRadians*180/Math.PI*4)/4,Math.round((canvas?.clientWidth||1)/(canvas?.clientHeight||1)*10)/10].join("|");
+  if(mapBorderCache.key===key)return {segments:mapBorderCache.segments,sampleCount:mapBorderCache.sampleCount,ownerCount:mapBorderCache.ownerCount,worldVertexCount:mapBorderCache.worldVertexCount,built:false};
+  const started=performance.now(),cols=25,rows=17,owners=[],ownerIds=new Set();
   const width=Math.max(1,zoomState.visibleFootprintWidthMeters),height=Math.max(1,zoomState.visibleFootprintHeightMeters);
-  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
   for(let r=0;r<rows;r++){
     const row=[];
     for(let col=0;col<cols;col++){
-      const east=(col/(cols-1)-.5)*width,north=(.5-r/(rows-1))*height;
-      const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-      const lon=wrapLongitudeRadians(lon0+east/(WORLD_RADIUS_METERS*cosLat));
-      const tile=mapWorldTileAt(lat,lon);
+      const point=geoPointFromViewportGrid(col,r,cols,rows,width,height),tile=mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
       let owner=null;try{owner=window.PoliticalGeography.ownerAt(activeSeed,tile.x,tile.y);}catch(_){owner=null;}
       const id=String(owner?.id||"none");ownerIds.add(id);row.push(id);
     }
     owners.push(row);
   }
-  const segments=[],sx=1000/(cols-1),sy=1000/(rows-1);
-  const centerOwner=owners[Math.floor(rows/2)][Math.floor(cols/2)];
+  const segments=[],centerOwner=owners[Math.floor(rows/2)][Math.floor(cols/2)];
   const crossesFocusedBorder=(left,right)=>(left===centerOwner)!==(right===centerOwner);
-  // Outline only the country under the view focus. Neighboring countries still
-  // contribute to ownership resolution, but their mutual borders are omitted
-  // so the map stays readable instead of becoming a dense political mesh.
   for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
-    const a=owners[r][col],b=owners[r][col+1],c=owners[r+1][col+1],d=owners[r+1][col];
-    const x=col*sx,y=r*sy,crossings=[];
-    if(crossesFocusedBorder(a,b))crossings.push({x:x+sx*.5,y});
-    if(crossesFocusedBorder(b,c))crossings.push({x:x+sx,y:y+sy*.5});
-    if(crossesFocusedBorder(d,c))crossings.push({x:x+sx*.5,y:y+sy});
-    if(crossesFocusedBorder(a,d))crossings.push({x,y:y+sy*.5});
-    if(crossings.length===2)segments.push({x1:crossings[0].x,y1:crossings[0].y,x2:crossings[1].x,y2:crossings[1].y});
-    else if(crossings.length===4){
-      segments.push({x1:crossings[0].x,y1:crossings[0].y,x2:crossings[1].x,y2:crossings[1].y});
-      segments.push({x1:crossings[2].x,y1:crossings[2].y,x2:crossings[3].x,y2:crossings[3].y});
-    }
+    const a=owners[r][col],b=owners[r][col+1],c=owners[r+1][col+1],d=owners[r+1][col],crossings=[];
+    if(crossesFocusedBorder(a,b))crossings.push(geoPointFromViewportGrid(col+.5,r,cols,rows,width,height));
+    if(crossesFocusedBorder(b,c))crossings.push(geoPointFromViewportGrid(col+1,r+.5,cols,rows,width,height));
+    if(crossesFocusedBorder(d,c))crossings.push(geoPointFromViewportGrid(col+.5,r+1,cols,rows,width,height));
+    if(crossesFocusedBorder(a,d))crossings.push(geoPointFromViewportGrid(col,r+.5,cols,rows,width,height));
+    if(crossings.length===2)segments.push({a:crossings[0],b:crossings[1]});
+    else if(crossings.length===4){segments.push({a:crossings[0],b:crossings[1]});segments.push({a:crossings[2],b:crossings[3]});}
   }
-  mapBorderCache={key,segments,sampleCount:cols*rows,ownerCount:ownerIds.size,builtAtMs:Number((performance.now()-started).toFixed(3))};
-  return {segments,sampleCount:cols*rows,ownerCount:ownerIds.size,built:true};
+  const worldVertexCount=segments.length*3;
+  mapBorderCache={key,segments,sampleCount:cols*rows,ownerCount:ownerIds.size,worldVertexCount,builtAtMs:Number((performance.now()-started).toFixed(3))};
+  return {segments,sampleCount:cols*rows,ownerCount:ownerIds.size,worldVertexCount,built:true};
 }
 function renderMapPresentation(){
   const layer=ensureMapPresentationDom();if(!layer)return;
@@ -302,17 +337,53 @@ function renderMapPresentation(){
   const names=document.createElement("div");names.className="planet-map-context-names";
   const labels={continent:"CONTINENT",country:"COUNTRY",region:"REGION",city:"CITY",district:"ZONE",village:"VILLAGE"};
   for(const kind of contextKinds){const row=document.createElement("div");row.innerHTML="<span></span><strong></strong>";row.querySelector("span").textContent=labels[kind]||kind.toUpperCase();row.querySelector("strong").textContent=String(context?.[kind]||"—");names.appendChild(row);}info.appendChild(names);
-  const border=buildMapBorderSegments(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();svg.hidden=!border.segments.length;
-  for(const seg of border.segments){const line=document.createElementNS("http://www.w3.org/2000/svg","line");line.setAttribute("x1",seg.x1.toFixed(1));line.setAttribute("y1",seg.y1.toFixed(1));line.setAttribute("x2",seg.x2.toFixed(1));line.setAttribute("y2",seg.y2.toFixed(1));line.setAttribute("class","planet-political-border");svg.appendChild(line);}
-  const labelsLayer=layer.querySelector(".planet-map-labels");labelsLayer.replaceChildren();let labelCount=0;
-  const candidates=destinationNavigator.descriptors.filter(d=>placeKinds.includes(d.type)).sort((a,b)=>(b.importance||0)-(a.importance||0));
-  for(const d of candidates){
-    if(labelCount>=6)break;const p=projectMapLabel(d);if(!p||p.x<7||p.x>93||p.y<9||p.y>91)continue;
-    const tag=document.createElement("div");tag.className="planet-map-label";tag.dataset.kind=d.type;tag.style.left=p.x.toFixed(2)+"%";tag.style.top=p.y.toFixed(2)+"%";tag.innerHTML="<small></small><strong></strong>";tag.querySelector("small").textContent=d.type.toUpperCase();tag.querySelector("strong").textContent=d.name;labelsLayer.appendChild(tag);labelCount++;
+
+  const border=buildMapBorderSegments(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();
+  let projectedBorderSegmentCount=0;
+  const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
+  for(const seg of border.segments){
+    const samples=[seg.a,interpolateGeoPoint(seg.a,seg.b,.5),seg.b].map(point=>projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true}));
+    if(samples.some(p=>!p))continue;
+    const xs=samples.map(p=>p.x),ys=samples.map(p=>p.y);
+    if(Math.max(...xs)<-3||Math.min(...xs)>103||Math.max(...ys)<-3||Math.min(...ys)>103)continue;
+    const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");
+    line.setAttribute("points",samples.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
+    line.setAttribute("class","planet-political-border");svg.appendChild(line);projectedBorderSegmentCount++;
   }
-  const multiplier=mapZoomScaleMultiplier(),scaleMeters=niceScaleDistanceMeters(zoomState.visibleFootprintWidthMeters),rect=canvas?.getBoundingClientRect?.(),barPx=clamp(scaleMeters/Math.max(1,zoomState.visibleFootprintWidthMeters)*(rect?.width||1),72,190);
+  svg.hidden=projectedBorderSegmentCount===0;
+
+  const labelsLayer=layer.querySelector(".planet-map-labels");labelsLayer.replaceChildren();
+  const rect=canvas?.getBoundingClientRect?.(),portrait=(rect?.height||1)>(rect?.width||1),maxLandmarkCount=portrait?3:4;
+  const landmarkKinds=mapLandmarkKindsForBand(zoomState.band),landmarkCandidates=destinationNavigator.descriptors.filter(d=>landmarkKinds.includes(d.type)).sort((a,b)=>(b.importance||0)-(a.importance||0));
+  const occupied=[],landmarkIds=new Set(),visibleLandmarks=[];
+  for(const d of landmarkCandidates){
+    if(visibleLandmarks.length>=maxLandmarkCount)break;
+    const p=projectGeographicAnchor(d,{surfaceOffsetMeters:8});if(!p||p.x<5||p.x>95||p.y<10||p.y>93)continue;
+    if((p.x<30&&p.y<30)||(p.x>78&&p.y<18))continue;
+    if(occupied.some(o=>Math.hypot(o.x-p.screenX,o.y-p.screenY)<(portrait?100:118)))continue;
+    const tag=document.createElement("div");tag.className="planet-map-landmark";tag.dataset.kind=d.type;tag.style.left=p.x.toFixed(2)+"%";tag.style.top=p.y.toFixed(2)+"%";tag.innerHTML="<small></small><strong></strong>";tag.querySelector("small").textContent=d.type.toUpperCase();tag.querySelector("strong").textContent=d.name;labelsLayer.appendChild(tag);
+    landmarkIds.add(d.id);occupied.push({x:p.screenX,y:p.screenY});
+    visibleLandmarks.push(Object.freeze({id:d.id,name:d.name,type:d.type,latitudeDegrees:Number((d.latitudeRadians*180/Math.PI).toFixed(5)),longitudeDegrees:Number((d.longitudeRadians*180/Math.PI).toFixed(5)),screenX:Number(p.screenX.toFixed(2)),screenY:Number(p.screenY.toFixed(2)),projection:p.mode}));
+  }
+
+  let labelCount=0;
+  const candidates=destinationNavigator.descriptors.filter(d=>placeKinds.includes(d.type)&&!landmarkIds.has(d.id)).sort((a,b)=>(b.importance||0)-(a.importance||0));
+  for(const d of candidates){
+    if(labelCount>=5)break;const p=projectMapLabel(d);if(!p||p.x<7||p.x>93||p.y<9||p.y>91)continue;
+    if(occupied.some(o=>Math.hypot(o.x-p.screenX,o.y-p.screenY)<(portrait?92:108)))continue;
+    const tag=document.createElement("div");tag.className="planet-map-label";tag.dataset.kind=d.type;tag.style.left=p.x.toFixed(2)+"%";tag.style.top=p.y.toFixed(2)+"%";tag.innerHTML="<small></small><strong></strong>";tag.querySelector("small").textContent=d.type.toUpperCase();tag.querySelector("strong").textContent=d.name;labelsLayer.appendChild(tag);occupied.push({x:p.screenX,y:p.screenY});labelCount++;
+  }
+
+  const multiplier=mapZoomScaleMultiplier(),scaleMeters=niceScaleDistanceMeters(zoomState.visibleFootprintWidthMeters),barPx=clamp(scaleMeters/Math.max(1,zoomState.visibleFootprintWidthMeters)*(rect?.width||1),72,190);
   const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=formatZoomScale(multiplier);scale.querySelector(".planet-scale-meta span").textContent=zoomState.band.replaceAll("-"," ");scale.querySelector(".planet-scale-line").style.width=Math.round(barPx)+"px";scale.querySelector("small").textContent=formatDistanceMeters(scaleMeters);
-  mapPresentation={active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount,borderVisible:border.segments.length>0,borderSampleCount:border.sampleCount,borderSegmentCount:border.segments.length,politicalOwnerCount:border.ownerCount,scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false};
+  mapPresentation={
+    active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount,
+    landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
+    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
+    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
+    scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
+    updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
+  };
 }
 function updateMapPresentation(){if(!root||!canvas||!activeSeed)return;renderMapPresentation();}
 
