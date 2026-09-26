@@ -1594,6 +1594,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
+    if scenario == "wp-s003-008-006":
+        # Tooltip evidence exercises the canonical local PlayCanvas scene, not the
+        # planet-only presentation. Cold software-WebGL CI can need the same
+        # bounded startup allowance as other terrain/presentation evidence.
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 180.0)
     if scenario == "starting-village":
         # Cold software-WebGL startup may legitimately exceed the generic
         # readiness window after terrain mesh changes. This is test-harness
@@ -2064,7 +2070,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     action += "+cold-start-retry-recovered"
 
         except Exception as exc:
-            if scenario in {"wp-s003-006-012", "wp-s003-006-013"}:
+            if scenario in {"wp-s003-006-012", "wp-s003-006-013", "wp-s003-008-006"}:
                 # Terrain evidence can hit the same cold software-WebGL campaign
                 # readiness race already exercised by other terrain scenarios. The
                 # first wait above may time out before their post-wait recovery path
