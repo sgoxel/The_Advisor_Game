@@ -7938,13 +7938,20 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "camera-pan":
         return _drag_canvas(driver, 120 if frame_index % 2 else -120, 0)
     if scenario == "camera-zoom":
-        actions = (
-            lambda: _wheel_canvas(driver, -500),
-            lambda: _wheel_canvas(driver, 500),
-            lambda: _pinch_gameplay(driver, 1.5),
-            lambda: _pinch_gameplay(driver, 2.0 / 3.0),
-        )
-        return actions[(frame_index - 1) % len(actions)]()
+        # Frame 0 is desktop landscape. Exercise the same real input paths at
+        # phone landscape and phone portrait sizes so WP-S003-010 evidence
+        # covers all first-class viewport classes without synthetic zoom APIs.
+        if frame_index == 1:
+            driver.set_window_size(844, 390)
+            time.sleep(0.2)
+            return "phone-landscape:" + _wheel_canvas(driver, -500)
+        if frame_index == 2:
+            return "phone-landscape:" + _wheel_canvas(driver, 500)
+        if frame_index == 3:
+            driver.set_window_size(390, 844)
+            time.sleep(0.2)
+            return "phone-portrait:" + _pinch_gameplay(driver, 1.5)
+        return "phone-portrait:" + _pinch_gameplay(driver, 2.0 / 3.0)
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
