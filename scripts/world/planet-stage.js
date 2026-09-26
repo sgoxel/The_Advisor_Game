@@ -214,7 +214,7 @@ function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
 function localPatchDimensions(){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
-  const visibleHeight=aspect>=1?24:50;
+  const visibleHeight=aspect>=1?32:58;
   const visibleWidth=visibleHeight*aspect;
   return {visibleWidth,visibleHeight,patchWidth:visibleWidth*LOCAL_PATCH_MARGIN,patchHeight:visibleHeight*LOCAL_PATCH_MARGIN};
 }
@@ -232,7 +232,8 @@ function localSurfaceSample(eastMeters,northMeters,base){
   const land=!!base?.land;
   const microElevation=land?field*4.8:field*.45;
   const baseColor=Array.isArray(base?.color)?base.color:[.18,.32,.22];
-  const light=field*.11;
+  const detail=Math.sin(eastMeters*.92+phase*1.7)*Math.sin(northMeters*.78-phase*.9)*.035;
+  const light=field*.11+detail;
   const high=Number(base?.elevationMeters||0)>2600;
   const color=land
     ? (high
@@ -312,7 +313,10 @@ function updateProjectionPresentation(){
     tangentPatch.enabled=blend>.04;
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    const patchScale=1.65;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    // Expand the patch through the handoff so the viewport never collapses to a
+    // small floating strip; converge to the true bounded local footprint at ground scale.
+    const handoffScale=1+Math.pow(1-blend,1.35)*2.4;
+    const patchScale=1.65*handoffScale;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // Keep the local patch opaque once active; the globe handles the early handoff.
   }
   planet.enabled=blend<.18;
@@ -336,13 +340,13 @@ function applyCameraZoom(){
   // point; no second map or local simulation authority is introduced.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=1.9;
+  const localZ=2.15;
   const cameraZ=globeZ*(1-blend)+localZ*blend;
   const cameraY=1.25*blend;
   const targetZ=-.18*blend;
   const targetY=-.05*blend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
-  if(cameraEntity.camera)cameraEntity.camera.fov=34+16*blend;
+  if(cameraEntity.camera)cameraEntity.camera.fov=34+10*blend;
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
