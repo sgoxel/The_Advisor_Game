@@ -1674,10 +1674,17 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 }
                 const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
                 const radius=Math.max(1,Number(stage.constants?.WORLD_RADIUS_METERS||1));
-                const country=politics.countryAt(seed,'0','0');
-                const plans=(archetypes.settlementsForCountry(seed,country,1)||[]).slice();
+                const landTarget=s?.featureTargets?.continuityFocus;
+                if(!landTarget || landTarget?.surfaceClass==='ocean')throw new Error('canonical interior-land focus unavailable');
+                stage.setViewTarget({latitudeRadians:Number(landTarget.latitudeRadians),longitudeRadians:Number(landTarget.longitudeRadians)});
+                const landSnap=stage.snapshot(),landTile=landSnap?.canonicalFocus?.worldTile;
+                if(landSnap?.canonicalFocus?.surfaceIdentity?.center?.land!==true || !landTile)throw new Error('canonical interior-land focus did not resolve to planetary land');
+                const country=politics.countryAt(seed,String(landTile.x),String(landTile.y));
+                const plans=(archetypes.settlementsForCountry(seed,country,2)||[]).slice(0,40);
+                const fx=Number(landTile.x),fy=Number(landTile.y);
                 const priority=(plan)=>plan?.role==='starting-village'?0:plan?.classId==='village'?1:plan?.classId==='hamlet'?2:plan?.classId==='town'?3:plan?.classId==='city'?4:5;
-                plans.sort((a,b)=>priority(a)-priority(b)||String(a.id).localeCompare(String(b.id)));
+                const distance2=(plan)=>{const x=Number(plan?.center?.x),y=Number(plan?.center?.y);return Number.isFinite(x)&&Number.isFinite(y)?(x-fx)*(x-fx)+(y-fy)*(y-fy):Number.POSITIVE_INFINITY;};
+                plans.sort((a,b)=>distance2(a)-distance2(b)||priority(a)-priority(b)||String(a.id).localeCompare(String(b.id)));
                 let chosen=null;
                 for(const plan of plans){
                   const x=Number(plan?.center?.x),y=Number(plan?.center?.y);
