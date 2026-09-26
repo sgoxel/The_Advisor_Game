@@ -1668,44 +1668,44 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         if scenario == "wp-s003-010-003-007":
             selected=driver.execute_script("""
                 const stage=window.PlanetStage,s=stage.snapshot(),seed=s?.activeSeed;
-                const archetypes=window.SettlementArchetypes,politics=window.PoliticalGeography;
-                if(!seed || !archetypes?.settlementsForCountry || !politics?.countryAt){
-                  throw new Error('canonical settlement authority unavailable');
+                const archetypes=window.SettlementArchetypes,politics=window.PoliticalGeography,bridge=window.PlanetWorldProjection;
+                if(!seed || !archetypes?.settlementsForCountry || !politics?.countryAt || !bridge?.forSeed){
+                  throw new Error('canonical settlement projection authority unavailable');
                 }
-                const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-                const radius=Math.max(1,Number(stage.constants?.WORLD_RADIUS_METERS||1));
-                const landTarget=s?.featureTargets?.continuityFocus;
-                if(!landTarget || landTarget?.surfaceClass==='ocean')throw new Error('canonical interior-land focus unavailable');
-                stage.setViewTarget({latitudeRadians:Number(landTarget.latitudeRadians),longitudeRadians:Number(landTarget.longitudeRadians)});
-                const landSnap=stage.snapshot(),landTile=landSnap?.canonicalFocus?.worldTile;
-                if(landSnap?.canonicalFocus?.surfaceIdentity?.center?.land!==true || !landTile)throw new Error('canonical interior-land focus did not resolve to planetary land');
-                const country=politics.countryAt(seed,String(landTile.x),String(landTile.y));
+                const projection=bridge.forSeed(seed);
+                const country=politics.countryAt(seed,"0","0");
                 const plans=(archetypes.settlementsForCountry(seed,country,2)||[]).slice(0,40);
-                const fx=Number(landTile.x),fy=Number(landTile.y);
                 const priority=(plan)=>plan?.role==='starting-village'?0:plan?.classId==='village'?1:plan?.classId==='hamlet'?2:plan?.classId==='town'?3:plan?.classId==='city'?4:5;
-                const distance2=(plan)=>{const x=Number(plan?.center?.x),y=Number(plan?.center?.y);return Number.isFinite(x)&&Number.isFinite(y)?(x-fx)*(x-fx)+(y-fy)*(y-fy):Number.POSITIVE_INFINITY;};
-                plans.sort((a,b)=>distance2(a)-distance2(b)||priority(a)-priority(b)||String(a.id).localeCompare(String(b.id)));
+                plans.sort((a,b)=>priority(a)-priority(b)||String(a.id).localeCompare(String(b.id)));
                 let chosen=null;
                 for(const plan of plans){
-                  const x=Number(plan?.center?.x),y=Number(plan?.center?.y);
-                  if(!Number.isFinite(x)||!Number.isFinite(y))continue;
-                  const lat=y*tileMeters/radius,lon=x*tileMeters/radius;
-                  if(Math.abs(lat)>78*Math.PI/180||Math.abs(lon)>Math.PI)continue;
-                  stage.setViewTarget({latitudeRadians:lat,longitudeRadians:lon});
+                  const projected=projection.projectSettlement(plan);
+                  if(!projected?.land)continue;
+                  stage.setViewTarget({latitudeRadians:projected.latitudeRadians,longitudeRadians:projected.longitudeRadians});
                   const now=stage.snapshot(),surface=now?.canonicalFocus?.surfaceIdentity?.center,worldTile=now?.canonicalFocus?.worldTile;
-                  const tileMatch=Math.abs(Number(worldTile?.x)-x)<=1&&Math.abs(Number(worldTile?.y)-y)<=1;
+                  const dx=Math.abs(Number(worldTile?.x)-Number(plan?.center?.x));
+                  const dy=Math.abs(Number(worldTile?.y)-Number(plan?.center?.y));
                   let owner=null;try{owner=politics.ownerAt(seed,String(plan.center.x),String(plan.center.y));}catch(_){owner=null;}
-                  if(surface?.land===true&&tileMatch&&owner?.id===plan.countryId){
-                    chosen={settlementId:plan.id,settlementName:plan.name,countryId:plan.countryId,role:plan.role,classId:plan.classId,center:plan.center,focus:now.canonicalFocus};
+                  if(surface?.land===true&&dx<=1&&dy<=1&&owner?.id===plan.countryId){
+                    chosen={
+                      settlementId:plan.id,settlementName:plan.name,countryId:plan.countryId,role:plan.role,classId:plan.classId,
+                      center:plan.center,projected,focus:now.canonicalFocus
+                    };
                     break;
                   }
                 }
-                if(!chosen) throw new Error('origin canonical settlement has no bounded planetary land projection: plans='+plans.length);
+                if(!chosen) throw new Error(
+                  'canonical projection produced no planetary-land settlement: plans='+plans.length+
+                  ', projectedSettlementLand='+Number(projection?.support?.projectedSettlementLandCount||0)
+                );
                 stage.setZoomScalar(0.54);
                 const ready=stage.snapshot();
                 return {
                   settlementId:chosen.settlementId,settlementName:chosen.settlementName,countryId:chosen.countryId,
                   role:chosen.role,classId:chosen.classId,center:chosen.center,
+                  projectionVersion:projection.version,projectionAnchor:projection.anchor,projectionSupport:projection.support,
+                  projectedLatitudeDegrees:chosen.projected.latitudeDegrees,
+                  projectedLongitudeDegrees:chosen.projected.longitudeDegrees,
                   focusTile:ready?.canonicalFocus?.worldTile,
                   latitudeDegrees:ready?.canonicalFocus?.latitudeDegrees,
                   longitudeDegrees:ready?.canonicalFocus?.longitudeDegrees,
