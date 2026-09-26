@@ -546,6 +546,7 @@ function bindInput(){
   canvas.setAttribute("aria-label","Rotatable seeded fantasy planet. Drag to rotate.");
   canvas.addEventListener("contextmenu",event=>event.preventDefault());
   canvas.addEventListener("pointerdown",event=>{
+    if(event.pointerType==="mouse"&&event.button!==0)return;
     dragging=true;pointerId=event.pointerId;
     lastPointerX=event.clientX;lastPointerY=event.clientY;inspection.pointerDownX=event.clientX;inspection.pointerDownY=event.clientY;inspection.dragDistance=0;
     canvas.setPointerCapture?.(event.pointerId);
