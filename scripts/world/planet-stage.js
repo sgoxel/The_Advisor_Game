@@ -270,11 +270,27 @@ async function makeGeographyTexture(){
 }
 function stablePlaceName(kind,target,index){
   const stems=["Alder","Brim","Cinder","Dawn","Elder","Frost","Glen","Haven","Iron","Juniper","Kings","Lumen","Morrow","North","Oak","Raven","Silver","Thorn","Vale","Willow"];
-  const tails={continent:["reach","land","march"],island:["isle","haven","key"],mountain:["spire","peak","crown"],peak:["summit","crest","crown"],water:["deep","sea","blue"]};
+  const tails={continent:["reach","land","march"],island:["isle","haven","key"],mountain:["spire","peak","crown"],peak:["summit","crest","crown"],water:["deep","sea","blue"],village:["ford","stead","wick"],town:["bridge","market","cross"],city:["hold","gate","court"],ruin:["watch","keep","fall"],hunting:["wood","chase","wild"],fishing:["bay","shore","cove"]};
   const lat=Math.round((Number(target?.latitudeDegrees)||0)*10),lon=Math.round((Number(target?.longitudeDegrees)||0)*10);
   let h=2166136261>>>0;for(const ch of String(activeSeed)+"|"+kind+"|"+lat+"|"+lon+"|"+index){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
   const stem=stems[h%stems.length],suffix=(tails[kind]||["reach"])[(h>>>8)%(tails[kind]||["reach"]).length];
   return stem+" "+suffix.charAt(0).toUpperCase()+suffix.slice(1);
+}
+function descriptorAt(latitudeRadians,longitudeRadians){
+  const lat=clamp(latitudeRadians,-Math.PI/2+.01,Math.PI/2-.01),lon=((longitudeRadians+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+  const sample=geography.sampleLatLon(lat,lon);
+  return Object.freeze({latitudeRadians:lat,longitudeRadians:lon,latitudeDegrees:Number((lat*180/Math.PI).toFixed(3)),longitudeDegrees:Number((lon*180/Math.PI).toFixed(3)),elevationMeters:Number(sample.elevationMeters)||0,surfaceClass:sample.surfaceClass,land:Boolean(sample.land)});
+}
+function boundedNearbySample(base,wantLand,label){
+  if(!base)return null;
+  const seed=String(activeSeed)+"|destination|"+label;let h=2166136261>>>0;for(const ch of seed){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  for(let ring=1;ring<=6;ring++)for(let step=0;step<12;step++){
+    const angle=((step+(h%12))/12)*Math.PI*2,span=.025*ring;
+    const target=descriptorAt(Number(base.latitudeRadians)+Math.sin(angle)*span,Number(base.longitudeRadians)+Math.cos(angle)*span/Math.max(.3,Math.cos(Number(base.latitudeRadians)||0)));
+    if(target.land===wantLand)return target;
+  }
+  const fallback=descriptorAt(Number(base.latitudeRadians)||0,Number(base.longitudeRadians)||0);
+  return fallback.land===wantLand?fallback:null;
 }
 function greatCircleDistanceKm(a,b){
   const lat1=Number(a?.latitudeRadians)||0,lat2=Number(b?.latitudeRadians)||0;
@@ -282,18 +298,25 @@ function greatCircleDistanceKm(a,b){
   const q=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
   return WORLD_RADIUS_METERS*(2*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q))))/1000;
 }
+function currentViewTarget(){return {latitudeRadians:pitchDegrees*Math.PI/180,longitudeRadians:-yawDegrees*Math.PI/180};}
 function buildDestinationDescriptors(){
-  const started=performance.now();
+  const started=performance.now(),continent=featureTargets?.continent,island=featureTargets?.island||continent,mountain=featureTargets?.mountain||continent;
   const source=[
-    ["continent","landmark",featureTargets?.continent,"Major continental landmass"],
-    ["island","nature",featureTargets?.island,"Seeded island landmark"],
-    ["mountain","nature",featureTargets?.mountain,"Mountain range high point"],
-    ["peak","nature",featureTargets?.peak,"Highest surveyed elevation"],
-    ["water","water",featureTargets?.deepOcean,"Deep ocean basin"]
+    ["village","settlements",continent,"Starting-area village on seeded habitable land",3],
+    ["town","cities",boundedNearbySample(continent,true,"town"),"Regional market town",3],
+    ["city","cities",boundedNearbySample(continent,true,"city"),"Major seeded regional center",4],
+    ["ruin","historical",boundedNearbySample(mountain,true,"ruin"),"Old hill ruin / historical site",2],
+    ["hunting","hunting",boundedNearbySample(continent,true,"hunt"),"Woodland and upland hunting grounds",1],
+    ["fishing","fishing",boundedNearbySample(island,false,"fish"),"Coastal fishing waters",1],
+    ["continent","landmark",continent,"Major continental landmass",5],
+    ["island","nature",island,"Seeded island landmark",3],
+    ["mountain","nature",mountain,"Mountain range high point",3],
+    ["peak","nature",featureTargets?.peak,"Highest surveyed elevation",4],
+    ["water","water",featureTargets?.deepOcean,"Deep ocean basin",2]
   ];
   destinationNavigator.descriptors=source.filter(row=>row[2]).map((row,index)=>{
-    const [kind,category,target,description]=row;
-    return Object.freeze({id:"planet-place-"+kind+"-"+index,name:stablePlaceName(kind,target,index),type:kind,category,description,
+    const [kind,category,target,description,importance]=row;
+    return Object.freeze({id:"planet-place-"+kind+"-"+index,name:stablePlaceName(kind,target,index),type:kind,category,description,importance,
       latitudeRadians:Number(target.latitudeRadians)||0,longitudeRadians:Number(target.longitudeRadians)||0,
       latitudeDegrees:Number(target.latitudeDegrees)||0,longitudeDegrees:Number(target.longitudeDegrees)||0,
       elevationMeters:Number(target.elevationMeters)||0});
@@ -313,23 +336,24 @@ function renderDestinationNavigator(){
   let panel=root.querySelector(".planet-places-panel");
   if(!destinationNavigator.open){panel?.remove();return;}
   if(!panel){panel=document.createElement("section");panel.className="planet-places-panel";panel.setAttribute("aria-label","World destinations");root.appendChild(panel);}
-  const categories=[["all","All"],["landmark","Landmarks"],["nature","Nature"],["water","Water"]];
-  const visible=destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category);
+  const categories=[["all","All"],["settlements","Settlements"],["cities","Cities / Towns"],["historical","Ruins"],["hunting","Hunting"],["fishing","Fishing"],["water","Water"],["nature","Nature"]];
+  const center=currentViewTarget();
+  const visible=destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).map(d=>({d,distance:greatCircleDistanceKm(center,d)})).sort((a,b)=>a.distance-b.distance||(b.d.importance||0)-(a.d.importance||0));
   panel.replaceChildren();
   const head=document.createElement("div");head.className="planet-places-head";head.innerHTML="<div><small>WORLD NAVIGATOR</small><strong>Places</strong></div>";
   const close=document.createElement("button");close.type="button";close.className="planet-places-close";close.textContent="×";close.setAttribute("aria-label","Close places");close.onclick=()=>{destinationNavigator.open=false;renderDestinationNavigator();};head.appendChild(close);panel.appendChild(head);
   const filters=document.createElement("div");filters.className="planet-places-filters";
   for(const [id,label] of categories){const b=document.createElement("button");b.type="button";b.textContent=label;b.dataset.active=String(destinationNavigator.category===id);b.onclick=()=>{destinationNavigator.category=id;renderDestinationNavigator();};filters.appendChild(b);}panel.appendChild(filters);
   const list=document.createElement("div");list.className="planet-places-list";
-  for(const d of visible){
-    const row=document.createElement("article");row.className="planet-place-row";row.dataset.selected=String(destinationNavigator.selectedId===d.id);
-    const info=document.createElement("div");const distance=greatCircleDistanceKm({latitudeRadians:0,longitudeRadians:0},d);
-    info.innerHTML="<strong></strong><span></span><small></small>";info.querySelector("strong").textContent=d.name;info.querySelector("span").textContent=d.type+" · "+Math.round(distance).toLocaleString()+" km from world origin";info.querySelector("small").textContent=d.description+" · "+Math.round(d.elevationMeters).toLocaleString()+" m";
-    const go=document.createElement("button");go.type="button";go.textContent="View";go.onclick=()=>{destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();};
+  for(const entry of visible){
+    const d=entry.d,row=document.createElement("article");row.className="planet-place-row";row.dataset.selected=String(destinationNavigator.selectedId===d.id);
+    const info=document.createElement("div");
+    info.innerHTML="<strong></strong><span></span><small></small>";info.querySelector("strong").textContent=d.name;info.querySelector("span").textContent=d.type+" · "+Math.round(entry.distance).toLocaleString()+" km from view";info.querySelector("small").textContent=d.description+" · "+Math.round(d.elevationMeters).toLocaleString()+" m";
+    const go=document.createElement("button");go.type="button";go.textContent="View";go.onclick=()=>{destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,type:d.type,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();};
     row.append(info,go);list.appendChild(row);
   }
   panel.appendChild(list);
-  const foot=document.createElement("p");foot.className="planet-places-foot";foot.textContent="Camera view only · "+visible.length+" bounded seeded destinations";panel.appendChild(foot);
+  const foot=document.createElement("p");foot.className="planet-places-foot";foot.textContent="Camera view only · "+visible.length+" bounded seeded destinations · no world scan";panel.appendChild(foot);
 }
 function wildernessHash(label){
   let h=2166136261>>>0;for(const ch of String(activeSeed)+"|wilderness|"+label){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return h>>>0;
@@ -811,7 +835,7 @@ function destroy(){
   geography=null;root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},setPlacesCategory:(category)=>{destinationNavigator.category=["all","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
