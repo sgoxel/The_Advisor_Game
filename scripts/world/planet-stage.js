@@ -553,7 +553,7 @@ function pickInspection(clientX,clientY){
   }
   const depthOf=record=>{const value=Number(typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity);return Number.isFinite(value)?value:Infinity;};
   const priorityOf=record=>{const value=Number(record.pickPriority??0);return Number.isFinite(value)?value:0;};
-  candidates.sort((a,b)=>priorityOf(b)-priorityOf(a)||depthOf(a)-depthOf(b)||String(a.id).localeCompare(String(b.id)));
+  candidates.sort((a,b)=>priorityOf(b)-priorityOf(a)||depthOf(a)-depthOf(b)||inspectionRegistryKey(a.type,a.id).localeCompare(inspectionRegistryKey(b.type,b.id)));
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
   const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.id);inspection.selectedType=picked.type;if(!renderInspectionTooltip(picked))return null;return picked;
 }
