@@ -135,7 +135,7 @@ on:
   issue_comment:
     types: [created]
   push:
-    branches: [main]
+    branches: [main, agent6-wp-s003-010-003-007]
     paths:
       - tools/screenshot_tool.py
       - tools/requirements.txt
@@ -223,7 +223,7 @@ jobs:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event_name == 'push' && github.ref_name || 'main' }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -278,7 +278,11 @@ jobs:
             publish="${INPUT_PUBLISH:-false}"
           elif [ "$EVENT_NAME" = 'push' ]; then
             target='http://127.0.0.1:8000/'
-            scenario='wp-s003-010-003-005-002'
+            if [ "$GITHUB_REF_NAME" = 'agent6-wp-s003-010-003-007' ]; then
+              scenario='wp-s003-010-003-007'
+            else
+              scenario='wp-s003-010-003-005-002'
+            fi
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             requested_profile="$(printf '%s' "$COMMENT_BODY" | awk '{print $3}')"
