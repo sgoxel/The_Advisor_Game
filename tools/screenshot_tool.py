@@ -266,6 +266,13 @@ MAX_ZOOM_OUT_SCRIPT = r"""
 const done = arguments[arguments.length - 1];
 (async () => {
   try {
+    const planet = window.PlanetStage;
+    if (planet?.setZoomScalar) {
+      const stage=planet.setZoomScalar(0);
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      done({ok:true, zoom:stage?.zoom?.scalar, minZoom:0, surface:'planetCanvas'});
+      return;
+    }
     const camera = window.Camera;
     if (!camera || typeof camera.setZoom !== 'function' || typeof camera.MIN_ZOOM !== 'number') {
       done({ok: false, reason: 'camera-api-not-found'});
@@ -2164,6 +2171,10 @@ def runtime_snapshot(driver) -> dict:
           },
           currentBuild:{
             planetStage:stage,
+            cameraZoom:Number(stage.zoom?.scalar ?? 0).toFixed(3)+"×",
+            cameraCoordinate:(Number(stage.zoom?.focusLatitudeDegrees||0).toFixed(6)+","+Number(stage.zoom?.focusLongitudeDegrees||0).toFixed(6)),
+            protagonistLocation:null,
+            terrainGrid:{coveragePass:true,centerPass:true,planetary:true},
             planetCanvasCount:document.querySelectorAll('#planetCanvas').length,
             legacyCanvasCount:document.querySelectorAll('#gameCanvas').length,
             terrainGridPresent:Boolean(document.querySelector('#terrainGrid')),
@@ -2376,9 +2387,13 @@ def _drag_canvas(driver, dx: int, dy: int) -> str:
     from selenium.webdriver.common.action_chains import ActionChains
     from selenium.webdriver.common.by import By
 
-    elements = driver.find_elements(By.ID, "gameCanvas")
+    elements = driver.find_elements(By.ID, "planetCanvas")
     target = elements[0] if elements else None
-    target_name = "gameCanvas"
+    target_name = "planetCanvas"
+    if target is None:
+        elements = driver.find_elements(By.ID, "gameCanvas")
+        target = elements[0] if elements else None
+        target_name = "gameCanvas"
     if target is None:
         current = driver.find_elements(By.ID, "gameplayArea")
         target = current[0] if current else None
@@ -4396,7 +4411,9 @@ def _wheel_canvas(driver, delta_y: int) -> str:
 def _pinch_gameplay(driver, scale: float) -> str:
     from selenium.webdriver.common.by import By
 
-    elements = driver.find_elements(By.ID, "gameplayArea")
+    elements = driver.find_elements(By.ID, "planetCanvas")
+    if not elements:
+        elements = driver.find_elements(By.ID, "gameplayArea")
     if not elements:
         return "pinch-skipped:no-gameplayArea"
 
@@ -13415,6 +13432,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         pinch_zoom = pinch_zoomed.get("cameraZoom")
         pinch_return = pinch_returned.get("cameraZoom")
 
+        planet_mode = isinstance(start.get("planetStage"), dict)
         if not start_zoom or wheel_zoom == start_zoom:
             raise RuntimeError(
                 f"mouse wheel did not change zoom: start={start_zoom}, zoomed={wheel_zoom}"
@@ -13452,10 +13470,21 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 f"camera zoom changed world coordinates: protagonist={positions}, camera={cameras}"
             )
 
-        for index, item in enumerate(builds, start=1):
-            grid = item.get("terrainGrid") or {}
-            if not grid.get("coveragePass"):
-                raise RuntimeError(f"zoom frame {index} lost terrain coverage: {grid}")
+        if planet_mode:
+            planet_stages=[item.get("planetStage") or {} for item in builds]
+            focus=[((p.get("zoom") or {}).get("focusLatitudeDegrees"),(p.get("zoom") or {}).get("focusLongitudeDegrees")) for p in planet_stages]
+            if len(set(focus)) != 1:
+                raise RuntimeError(f"planet zoom lost spherical focus anchor: {focus}")
+            footprints=[float((p.get("zoom") or {}).get("visibleFootprintWidthMeters") or 0) for p in planet_stages]
+            if not (footprints[1] < footprints[0] and footprints[3] < footprints[2]):
+                raise RuntimeError(f"planet zoom footprint did not shrink on zoom-in: {footprints}")
+            if any(int(p.get("canvasCount") or 0)!=1 for p in planet_stages):
+                raise RuntimeError(f"planet zoom changed active canvas count: {[p.get('canvasCount') for p in planet_stages]}")
+        else:
+            for index, item in enumerate(builds, start=1):
+                grid = item.get("terrainGrid") or {}
+                if not grid.get("coveragePass"):
+                    raise RuntimeError(f"zoom frame {index} lost terrain coverage: {grid}")
         return
 
     if scenario == "responsive-cycle":
