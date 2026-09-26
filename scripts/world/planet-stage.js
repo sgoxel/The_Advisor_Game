@@ -351,16 +351,17 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     tangentPatch.enabled=blend>.02;
     ensureHorizonSkirt();
-    if(horizonSkirt){horizonSkirt.enabled=blend>.10;horizonSkirt.setLocalPosition(0,-.24*blend,0);}
-    tangentPatch.setLocalPosition(0,-.12*blend,0);
+    const viewBlend=smoothstep01(clamp(blend*1.55,0,1));
+    if(horizonSkirt){horizonSkirt.enabled=viewBlend>.85;horizonSkirt.setLocalPosition(0,-.18,0);}
+    tangentPatch.setLocalPosition(0,-.08*viewBlend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    // Expand the patch through the handoff so the viewport never collapses to a
-    // small floating strip; converge to the true bounded local footprint at ground scale.
-    const handoffScale=2.75+Math.pow(1-blend,1.35)*3.25;
-    const patchScale=1.65*handoffScale;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
-    // Keep the local patch opaque once active; the globe handles the early handoff.
+    // Physical footprint now changes by LOD level, so keep the presentation mesh
+    // itself close to a stable viewport-filling size instead of magnifying the
+    // near-ground patch during the handoff.
+    const patchScale=1.10+(1-viewBlend)*.25;
+    tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
   }
-  planet.enabled=blend<.30;
+  planet.enabled=blend<.16;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
 }
 function applyCameraZoom(){
@@ -376,18 +377,20 @@ function applyCameraZoom(){
   zoomState.cameraDistance=distance;zoomState.band=zoomBandFor(scalar);
   updateProjectionState();
   const blend=projectionState.blend;
-  // The focused surface point is rotated to the front of the globe. Blend the
-  // camera from orbit-to-centre into an oblique tangent view of that exact
-  // point; no second map or local simulation authority is introduced.
+  // Move into a clearly elevated tangent camera before the globe is retired.
+  // Intermediate regional/district tiers should read as progressively closer
+  // terrain maps, not as a low grazing-angle strip that appears to jump to ground.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=.78;
-  const cameraZ=globeZ*(1-blend)+localZ*blend;
-  const cameraY=.18*blend;
-  const targetZ=-1.08*blend;
-  const targetY=-.42*blend;
+  const viewBlend=smoothstep01(clamp(blend*1.55,0,1));
+  const localZ=6.20;
+  const localY=5.00;
+  const cameraZ=globeZ*(1-viewBlend)+localZ*viewBlend;
+  const cameraY=localY*viewBlend;
+  const targetZ=0;
+  const targetY=-.12*viewBlend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
-  if(cameraEntity.camera)cameraEntity.camera.fov=34+22*blend;
+  if(cameraEntity.camera)cameraEntity.camera.fov=34+12*viewBlend;
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
