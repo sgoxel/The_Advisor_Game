@@ -526,10 +526,11 @@ function renderInspectionTooltip(record){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
   const started=performance.now(),bounds=record.screenBounds();
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)){dismissInspection();return false;}
-  const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f");
-  if(tip.dataset.contentKey!==contentKey&&(tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250)){
+  const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f"),recordKey=record.type+":"+String(record.id);
+  const selectionChanged=tip.dataset.recordKey!==recordKey;
+  if(tip.dataset.contentKey!==contentKey&&(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250)){
     tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
-    tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;inspection.lastContentRefreshAtMs=now;
+    tip.dataset.recordKey=recordKey;tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;inspection.lastContentRefreshAtMs=now;
   }
   const rootRect=root.getBoundingClientRect(),anchorX=(bounds.left+bounds.right)/2-rootRect.left,anchorY=bounds.top-rootRect.top;
   tip.style.visibility="hidden";tip.style.left="0px";tip.style.top="0px";
