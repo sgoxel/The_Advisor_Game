@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-surface-transition-v1";
+const VERSION="planet-multiscale-ground-v2";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -78,10 +78,19 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.72,transitionEnd:.92,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.58,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
-let localDetail={active:false,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
+const LOCAL_DETAIL_LEVELS=Object.freeze([
+  Object.freeze({id:"regional-overview",max:.70,visibleHeightMeters:420000,sampleSpacingMeters:12000,reliefClampMeters:7000,reliefGain:11}),
+  Object.freeze({id:"regional-detail",max:.78,visibleHeightMeters:140000,sampleSpacingMeters:4000,reliefClampMeters:7000,reliefGain:10}),
+  Object.freeze({id:"district",max:.86,visibleHeightMeters:36000,sampleSpacingMeters:1200,reliefClampMeters:6000,reliefGain:9}),
+  Object.freeze({id:"local-area",max:.92,visibleHeightMeters:8000,sampleSpacingMeters:250,reliefClampMeters:4200,reliefGain:7}),
+  Object.freeze({id:"settlement",max:.97,visibleHeightMeters:1800,sampleSpacingMeters:60,reliefClampMeters:1600,reliefGain:4}),
+  Object.freeze({id:"near-ground",max:.995,visibleHeightMeters:360,sampleSpacingMeters:12,reliefClampMeters:180,reliefGain:1.5}),
+  Object.freeze({id:"ground",max:1,visibleHeightMeters:54,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,reliefClampMeters:10,reliefGain:.35})
+]);
+let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 
 function tangentFrame(latitudeRadians,longitudeRadians){
   const lat=Number(latitudeRadians)||0,lon=Number(longitudeRadians)||0;
@@ -214,11 +223,21 @@ function normalizeYaw(value){
 }
 function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS[ZOOM_BANDS.length-1]).id;}
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
+function localDetailLevelForZoom(value=zoomState.scalar){
+  return LOCAL_DETAIL_LEVELS.find(level=>value<=level.max)||LOCAL_DETAIL_LEVELS[LOCAL_DETAIL_LEVELS.length-1];
+}
 function localPatchDimensions(){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
-  const visibleHeight=aspect>=1?54:82;
+  const level=localDetailLevelForZoom();
+  const portraitFactor=aspect>=1?1:(82/54);
+  const visibleHeight=level.visibleHeightMeters*portraitFactor;
   const visibleWidth=visibleHeight*aspect;
-  return {visibleWidth,visibleHeight,patchWidth:visibleWidth*LOCAL_PATCH_MARGIN,patchHeight:visibleHeight*LOCAL_PATCH_MARGIN};
+  const patchWidth=visibleWidth*LOCAL_PATCH_MARGIN,patchHeight=visibleHeight*LOCAL_PATCH_MARGIN;
+  // Normalize every physical LOD footprint into a bounded presentation mesh.
+  // This keeps vertex counts stable while the represented world area shrinks by
+  // several orders of magnitude on the way to the 2 m ground tier.
+  const metersPerUnit=Math.max(1,Math.max(patchWidth,patchHeight)/8);
+  return {levelId:level.id,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,metersPerUnit};
 }
 function localHash(eastMeters,northMeters,salt=0){
   const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5);
@@ -246,9 +265,9 @@ function localSurfaceSample(eastMeters,northMeters,base){
 }
 function buildTangentPatchMesh(){
   const started=performance.now(),dims=localPatchDimensions();
-  const columns=Math.max(2,Math.ceil(dims.patchWidth/LOCAL_SAMPLE_SPACING_METERS)+1);
-  const rows=Math.max(2,Math.ceil(dims.patchHeight/LOCAL_SAMPLE_SPACING_METERS)+1);
-  const positions=[],normals=[],uvs=[],indices=[],localMetersPerUnit=50;
+  const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1);
+  const rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
+  const positions=[],normals=[],uvs=[],indices=[],localMetersPerUnit=dims.metersPerUnit;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
   const centerElevation=Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
   for(let z=0;z<rows;z++){
@@ -264,15 +283,17 @@ function buildTangentPatchMesh(){
       // turning coarse planetary sample boundaries into local-scale cliffs.
       // Clamp the macro delta to the bounded near-ground window and layer only
       // subtle deterministic micro relief on top.
-      const macroDelta=clamp(elevation-centerElevation,-10,10);
-      const heightUnits=(macroDelta+local.microElevation*.8)/localMetersPerUnit*.32;
+      const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
+      const groundDetailWeight=smoothstep01((zoomState.scalar-.90)/.10);
+      const microMeters=local.microElevation*.8*groundDetailWeight;
+      const heightUnits=(macroDelta*dims.reliefGain+microMeters)/localMetersPerUnit;
       positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
       normals.push(0,1,0);uvs.push(ux,vz);
     }
   }
   for(let z=0;z<rows-1;z++)for(let x=0;x<columns-1;x++){const a=z*columns+x,b=a+1,c=a+columns,d=c+1;indices.push(a,c,b,b,c,d);}
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
-  localDetail={active:true,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns,rows,vertices:positions.length/3,triangles:indices.length/3,estimatedBytes:positions.length*4+normals.length*4+uvs.length*4+indices.length*4,buildTimeMs:Number((performance.now()-started).toFixed(3)),rebuildCount:localDetail.rebuildCount+1,activePatchCount:1,signature:[activeSeed,lat0.toFixed(6),lon0.toFixed(6),columns,rows].join("|")};
+  localDetail={active:true,level:dims.levelId,sampleSpacingMeters:dims.sampleSpacingMeters,visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns,rows,vertices:positions.length/3,triangles:indices.length/3,estimatedBytes:positions.length*4+normals.length*4+uvs.length*4+indices.length*4,buildTimeMs:Number((performance.now()-started).toFixed(3)),rebuildCount:localDetail.rebuildCount+1,activePatchCount:1,signature:[activeSeed,lat0.toFixed(6),lon0.toFixed(6),dims.levelId,columns,rows].join("|")};
   return mesh;
 }
 function rebuildTangentPatch(){
@@ -326,11 +347,11 @@ function ensureHorizonSkirt(){
 function updateProjectionPresentation(){
   if(!planet)return;
   const blend=projectionState.blend;
-  if(blend>0){ensureTangentPatch();const dims=localPatchDimensions(),sig=[activeSeed,zoomState.focusLatitudeRadians.toFixed(6),zoomState.focusLongitudeRadians.toFixed(6),Math.ceil(dims.patchWidth/2),Math.ceil(dims.patchHeight/2)].join("|");if(localDetail.signature!==sig){rebuildTangentPatch();updateTangentPatchTexture();}}
+  if(blend>0){ensureTangentPatch();const dims=localPatchDimensions(),sig=[activeSeed,zoomState.focusLatitudeRadians.toFixed(6),zoomState.focusLongitudeRadians.toFixed(6),dims.levelId,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters),Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)].join("|");if(localDetail.signature!==sig){rebuildTangentPatch();updateTangentPatchTexture();}}
   if(tangentPatch){
-    tangentPatch.enabled=blend>.04;
+    tangentPatch.enabled=blend>.02;
     ensureHorizonSkirt();
-    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.24*blend,0);}
+    if(horizonSkirt){horizonSkirt.enabled=blend>.10;horizonSkirt.setLocalPosition(0,-.24*blend,0);}
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Expand the patch through the handoff so the viewport never collapses to a
@@ -339,7 +360,7 @@ function updateProjectionPresentation(){
     const patchScale=1.65*handoffScale;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // Keep the local patch opaque once active; the globe handles the early handoff.
   }
-  planet.enabled=blend<.18;
+  planet.enabled=blend<.30;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
 }
 function applyCameraZoom(){
@@ -373,8 +394,14 @@ function applyCameraZoom(){
   const visibleHeightUnits=2*focusDistance*Math.tan(verticalFov/2);
   const visibleWidthUnits=visibleHeightUnits*aspect;
   const metersPerUnit=WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS;
-  zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
-  zoomState.visibleFootprintHeightMeters=Math.max(2,visibleHeightUnits*metersPerUnit);
+  if(blend>.02){
+    const dims=localPatchDimensions();
+    zoomState.visibleFootprintWidthMeters=Math.max(2,dims.visibleWidth);
+    zoomState.visibleFootprintHeightMeters=Math.max(2,dims.visibleHeight);
+  }else{
+    zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
+    zoomState.visibleFootprintHeightMeters=Math.max(2,visibleHeightUnits*metersPerUnit);
+  }
 }
 function setZoomScalar(value){
   const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
@@ -1076,7 +1103,7 @@ function snapshot(){
       visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),
       visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3)),
       wheelEvents:zoomState.wheelEvents,pinchEvents:zoomState.pinchEvents,zoomChanges:zoomState.zoomChanges,
-      bands:ZOOM_BANDS.map(b=>b.id),sameSphericalAuthority:true
+      bands:ZOOM_BANDS.map(b=>b.id),detailLevels:LOCAL_DETAIL_LEVELS.map(level=>level.id),sameSphericalAuthority:true
     }),
     projection:Object.freeze({
       mode:projectionState.mode,
@@ -1158,7 +1185,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS
   })
 });
 const boot=()=>start().catch(()=>{});
