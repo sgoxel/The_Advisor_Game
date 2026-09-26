@@ -1667,35 +1667,56 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         )
         if scenario == "wp-s003-010-003-007":
             selected=driver.execute_script("""
-                const stage=window.PlanetStage;
-                const s=stage.snapshot(),seed=s?.activeSeed ?? window.SeedSystem?.getCampaign?.()?.seed;
-                if(!seed || !window.SettlementArchetypes?.build) throw new Error('canonical settlement authority unavailable');
-                const candidates=[
-                  s?.featureTargets?.continuityFocus,s?.featureTargets?.continent,s?.featureTargets?.mountain,
-                  s?.featureTargets?.peak,s?.featureTargets?.island
-                ].filter(Boolean);
-                const accept=()=>{
-                  const now=stage.snapshot(),surface=now?.canonicalFocus?.surfaceIdentity?.center;
-                  let settlement=null;
-                  try{settlement=window.SettlementArchetypes?.build?.(seed,now?.canonicalFocus?.worldTile,{role:'zoom-focus'})||null;}catch(_){settlement=null;}
-                  return surface?.land===true && settlement ? {settlementId:settlement.id,focus:now.canonicalFocus} : null;
-                };
-                let chosen=null;
-                for(const target of candidates){stage.setViewTarget(target);chosen=accept();if(chosen)break;}
-                if(!chosen){
-                  const probes=[[-40,-120],[-30,-60],[-20,0],[-10,60],[0,120],[15,-150],[25,-90],[35,-30],[45,30],[55,90],[60,150],[-55,150]];
-                  for(const [lat,lon] of probes){stage.setRotation(-lon,lat);chosen=accept();if(chosen)break;}
+                const stage=window.PlanetStage,s=stage.snapshot(),seed=s?.activeSeed;
+                const archetypes=window.SettlementArchetypes,politics=window.PoliticalGeography,profiles=window.CountryProfile;
+                if(!seed || !archetypes?.settlementsForCountry || !politics?.countryAt || !profiles?.sampleCountries){
+                  throw new Error('canonical settlement authority unavailable');
                 }
-                if(!chosen) throw new Error('verified land + canonical settlement target unavailable: seed='+String(seed)+', candidates='+candidates.length+', archetypes='+Boolean(window.SettlementArchetypes?.build));
+                const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+                const radius=Math.max(1,Number(stage.constants?.WORLD_RADIUS_METERS||1));
+                const countries=[],countryIds=new Set();
+                const addCountry=(country)=>{
+                  if(country?.id&&!countryIds.has(country.id)&&countries.length<5){countryIds.add(country.id);countries.push(country);}
+                };
+                addCountry(politics.countryAt(seed,'0','0'));
+                for(const profile of profiles.sampleCountries(seed)||[]){
+                  addCountry(politics.countryById(seed,profile?.countryId));
+                  if(countries.length>=5)break;
+                }
+                const plans=[],planIds=new Set();
+                for(const country of countries){
+                  for(const plan of archetypes.settlementsForCountry(seed,country,4)||[]){
+                    if(plan?.id&&!planIds.has(plan.id)){planIds.add(plan.id);plans.push(plan);}
+                  }
+                }
+                const priority=(plan)=>plan?.role==='starting-village'?0:plan?.classId==='village'?1:plan?.classId==='hamlet'?2:plan?.classId==='town'?3:plan?.classId==='city'?4:5;
+                plans.sort((a,b)=>priority(a)-priority(b)||String(a.id).localeCompare(String(b.id)));
+                let chosen=null;
+                for(const plan of plans){
+                  const x=Number(plan?.center?.x),y=Number(plan?.center?.y);
+                  if(!Number.isFinite(x)||!Number.isFinite(y))continue;
+                  const lat=y*tileMeters/radius,lon=x*tileMeters/radius;
+                  if(Math.abs(lat)>78*Math.PI/180||Math.abs(lon)>Math.PI)continue;
+                  stage.setViewTarget({latitudeRadians:lat,longitudeRadians:lon});
+                  const now=stage.snapshot(),surface=now?.canonicalFocus?.surfaceIdentity?.center,worldTile=now?.canonicalFocus?.worldTile;
+                  const tileMatch=Math.abs(Number(worldTile?.x)-x)<=1&&Math.abs(Number(worldTile?.y)-y)<=1;
+                  let owner=null;try{owner=politics.ownerAt(seed,String(plan.center.x),String(plan.center.y));}catch(_){owner=null;}
+                  if(surface?.land===true&&tileMatch&&owner?.id===plan.countryId){
+                    chosen={settlementId:plan.id,settlementName:plan.name,countryId:plan.countryId,role:plan.role,classId:plan.classId,center:plan.center,focus:now.canonicalFocus};
+                    break;
+                  }
+                }
+                if(!chosen) throw new Error('canonical settlement has no bounded planetary land projection: plans='+plans.length+', countries='+countries.length);
                 stage.setZoomScalar(0.54);
                 const ready=stage.snapshot();
                 return {
-                  settlementId:chosen.settlementId,
+                  settlementId:chosen.settlementId,settlementName:chosen.settlementName,countryId:chosen.countryId,
+                  role:chosen.role,classId:chosen.classId,center:chosen.center,
+                  focusTile:ready?.canonicalFocus?.worldTile,
                   latitudeDegrees:ready?.canonicalFocus?.latitudeDegrees,
                   longitudeDegrees:ready?.canonicalFocus?.longitudeDegrees,
                   land:ready?.canonicalFocus?.surfaceIdentity?.center?.land===true,
-                  scalar:ready?.zoom?.scalar,
-                  revealTier:ready?.projection?.localStatic?.revealTier
+                  scalar:ready?.zoom?.scalar,revealTier:ready?.projection?.localStatic?.revealTier
                 };
             """)
             WebDriverWait(driver, timeout).until(
