@@ -340,13 +340,13 @@ function applyCameraZoom(){
   // point; no second map or local simulation authority is introduced.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=1.7;
+  const localZ=1.42;
   const cameraZ=globeZ*(1-blend)+localZ*blend;
-  const cameraY=.92*blend;
-  const targetZ=-.55*blend;
-  const targetY=-.18*blend;
+  const cameraY=.58*blend;
+  const targetZ=-.72*blend;
+  const targetY=-.30*blend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
-  if(cameraEntity.camera)cameraEntity.camera.fov=34+14*blend;
+  if(cameraEntity.camera)cameraEntity.camera.fov=34+18*blend;
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
