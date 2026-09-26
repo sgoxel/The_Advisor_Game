@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v6";
+const VERSION="planet-ground-static-v7";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -123,15 +123,36 @@ let mapContextCache={key:null,value:null};
 let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,builtAtMs:0};
 let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
 let politicalScaleEvidenceCache=null;
+let planetWorldProjectionCache=null;
 
 function wrapLongitudeRadians(value){
   let lon=Number(value)||0;lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return lon;
 }
+function planetWorldProjection(){
+  if(!activeSeed||!window.PlanetWorldProjection?.forSeed)return null;
+  if(planetWorldProjectionCache?.seed===activeSeed)return planetWorldProjectionCache;
+  try{planetWorldProjectionCache=window.PlanetWorldProjection.forSeed(activeSeed)||null;}
+  catch(_){planetWorldProjectionCache=null;}
+  return planetWorldProjectionCache;
+}
 function mapWorldTileAt(latitudeRadians,longitudeRadians){
+  const projection=planetWorldProjection();
+  if(projection?.unproject){
+    try{
+      const mapped=projection.unproject(latitudeRadians,longitudeRadians);
+      if(mapped?.x!=null&&mapped?.y!=null)return Object.freeze({
+        x:String(mapped.x),y:String(mapped.y),
+        projectionVersion:String(projection.version||""),
+        projectionAuthority:String(projection.authority||"")
+      });
+    }catch(_){}
+  }
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   return Object.freeze({
     x:String(Math.round(wrapLongitudeRadians(longitudeRadians)*WORLD_RADIUS_METERS/tileMeters)),
-    y:String(Math.round(clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999)*WORLD_RADIUS_METERS/tileMeters))
+    y:String(Math.round(clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999)*WORLD_RADIUS_METERS/tileMeters)),
+    projectionVersion:"legacy-equirectangular-fallback",
+    projectionAuthority:"fallback"
   });
 }
 function mapGeneratedName(kind,latitudeRadians,longitudeRadians){
@@ -719,12 +740,12 @@ function settlementLayoutUnit(key){
 }
 function canonicalSettlementForFocus(){
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
-  const authority=window.SettlementArchetypes,politics=window.PoliticalGeography;
+  const authority=window.SettlementArchetypes,politics=window.PoliticalGeography,projection=planetWorldProjection();
   if(!activeSeed||!authority?.settlementsForCountry||!politics?.countryAt)return null;
   let country=null,plans=[];
   try{
     country=politics.countryAt(activeSeed,focusTile.x,focusTile.y);
-    if(country?.id)plans=authority.settlementsForCountry(activeSeed,country,1)||[];
+    if(country?.id)plans=authority.settlementsForCountry(activeSeed,country,2)||[];
   }catch(_){return null;}
   if(!country?.id||!plans.length)return null;
   let fx,fy;
@@ -732,17 +753,33 @@ function canonicalSettlementForFocus(){
   let best=null;
   for(const plan of plans){
     if(!plan?.id||!plan?.center)continue;
-    let dx,dy;
-    try{dx=BigInt(plan.center.x)-fx;dy=BigInt(plan.center.y)-fy;}catch(_){continue;}
+    let dx,dy,projected=null;
+    try{
+      dx=BigInt(plan.center.x)-fx;dy=BigInt(plan.center.y)-fy;
+      projected=projection?.projectSettlement?.(plan)||projection?.project?.(plan.center.x,plan.center.y)||null;
+    }catch(_){continue;}
+    if(projected&&projected.land!==true)continue;
     const distance2=dx*dx+dy*dy;
-    if(!best||distance2<best.distance2)best={plan,dx,dy,distance2};
+    if(!best||distance2<best.distance2)best={plan,dx,dy,distance2,projected};
   }
   if(!best)return null;
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  const eastMeters=Number(best.dx)*tileMeters,northMeters=Number(best.dy)*tileMeters;
+  let eastMeters=Number(best.dx)*tileMeters,northMeters=Number(best.dy)*tileMeters;
+  if(best.projected){
+    northMeters=(best.projected.latitudeRadians-zoomState.focusLatitudeRadians)*WORLD_RADIUS_METERS;
+    eastMeters=wrapLongitudeRadians(best.projected.longitudeRadians-zoomState.focusLongitudeRadians)*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  }
   return Object.freeze({
     plan:best.plan,countryId:country.id,focusTile,
-    eastMeters,northMeters,distanceMeters:Math.hypot(eastMeters,northMeters)
+    projectedCenter:best.projected?Object.freeze({
+      latitudeDegrees:best.projected.latitudeDegrees,
+      longitudeDegrees:best.projected.longitudeDegrees,
+      land:best.projected.land,
+      surfaceClass:best.projected.surfaceClass
+    }):null,
+    eastMeters,northMeters,distanceMeters:Math.hypot(eastMeters,northMeters),
+    projectionVersion:String(projection?.version||focusTile.projectionVersion||""),
+    projectionAuthority:String(projection?.authority||focusTile.projectionAuthority||"")
   });
 }
 function settlementPresentationPlan(){
@@ -1973,6 +2010,19 @@ function snapshot(){
     geographyLayout:geography?.layout||null,
     geographyStats,
     featureTargets,
+    worldProjection:(()=>{
+      const projection=planetWorldProjection();
+      return projection?Object.freeze({
+        version:projection.version,
+        authority:projection.authority,
+        worldAuthority:projection.worldAuthority,
+        planetAuthority:projection.planetAuthority,
+        tileMeters:projection.tileMeters,
+        radiusMeters:projection.radiusMeters,
+        anchor:projection.anchor,
+        support:projection.support
+      }):null;
+    })(),
     worldScaleFraction:WORLD_SCALE_FRACTION,
     earthReferenceRadiusMeters:EARTH_REFERENCE_RADIUS_METERS,
     worldRadiusMeters:WORLD_RADIUS_METERS,
@@ -2100,7 +2150,7 @@ function destroy(){
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
   inspectionPickables.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
-  geography=null;politicalScaleEvidenceCache=null;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+  geography=null;politicalScaleEvidenceCache=null;planetWorldProjectionCache=null;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setZoomScalar,zoomBy,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
