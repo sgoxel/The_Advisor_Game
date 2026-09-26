@@ -1607,7 +1607,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-008-006","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6258,19 +6258,28 @@ def _set_minimap_view(
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
     if scenario == "wp-s003-008-006":
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver, 60.0).until(
+            lambda d: d.execute_script(
+                "const r=window.GameRenderer?.snapshot?.();return Boolean(r?.ready&&r?.engine==='PlayCanvas'&&r?.inspection?.boundedActiveRegistry===true);"
+            )
+        )
         proof=driver.execute_script("""
-          const api=window.PlanetStage;
-          if(!api?.snapshot)return null;
-          const stage=api.snapshot(),inspection=stage.inspection||{};
-          return {inspection,hasRegister:typeof api.registerInspectionPickable==='function',hasDismiss:typeof api.dismissInspection==='function'};
+          const renderer=window.GameRenderer?.snapshot?.()||null;
+          const inspection=renderer?.inspection||{};
+          return {
+            inspection,
+            hasPick:typeof window.GameRenderer?.pickInspection==='function',
+            hasDismiss:typeof window.GameRenderer?.dismissInspection==='function'
+          };
         """)
-        if not isinstance(proof,dict) or proof.get("hasRegister") is not True or proof.get("hasDismiss") is not True:
-            raise RuntimeError(f"Inspection API unavailable: {proof}")
+        if not isinstance(proof,dict) or proof.get("hasPick") is not True or proof.get("hasDismiss") is not True:
+            raise RuntimeError(f"PlayCanvas inspection API unavailable: {proof}")
         inspection=proof.get("inspection") or {}
         if inspection.get("boundedActiveRegistry") is not True or inspection.get("fullWorldScan") is not False:
-            raise RuntimeError(f"Inspection registry budget invalid: {proof}")
+            raise RuntimeError(f"PlayCanvas inspection budget invalid: {proof}")
         if int(inspection.get("activeNpcCount") or 0)<1 or int(inspection.get("activeBuildingCount") or 0)<1:
-            raise RuntimeError("WP-S003-008-006 cannot pass visual evidence: canonical scene has no active NPC/building presentation targets; refusing fabricated tooltip evidence.")
+            raise RuntimeError("WP-S003-008-006 cannot pass visual evidence: canonical PlayCanvas scene has no active NPC/building presentation targets; refusing fabricated tooltip evidence.")
         return f"inspection:npc={inspection.get('activeNpcCount')}:building={inspection.get('activeBuildingCount')}:selected={inspection.get('selectedId')}"
 
     if scenario == "wp-s003-008-005":
