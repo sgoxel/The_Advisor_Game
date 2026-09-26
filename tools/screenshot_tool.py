@@ -126,6 +126,7 @@ SCENARIOS = {
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
+    "wp-s003-010-003-001",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -228,6 +229,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
+    "wp-s003-010-003-001": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -8052,6 +8054,38 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
             return "desktop:ground-revisit-cache"
         return "planet:full"
+    if scenario == "wp-s003-010-003-001":
+        # Capture the geographic information hierarchy against one stable seeded
+        # focus, including the 50%-slower input telemetry and mobile layout.
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t); window.PlanetStage.setZoomScalar(0.52);
+            """)
+            return "desktop:country-region-labels-borders"
+        if frame_index == 2:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.68)")
+            return "desktop:regional-overview"
+        if frame_index == 3:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.76)")
+            return "desktop:regional-detail"
+        if frame_index == 4:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.84)")
+            return "desktop:district-zone-city"
+        if frame_index == 5:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.95)")
+            return "desktop:settlement-city-village"
+        if frame_index == 6:
+            driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
+            return "desktop:ground-local-context"
+        if frame_index == 7:
+            driver.set_window_size(390,844); time.sleep(0.2)
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.95)")
+            return "phone-portrait:settlement-map-info"
+        return "planet:continent-info-scale-ruler"
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8295,6 +8329,55 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-001":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-010-003-001 requires eight map-information evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
+        stages=[build.get("planetStage") or {} for build in builds]
+        for index,stage in enumerate(stages, start=1):
+            if stage.get("ready") is not True or stage.get("version") != "planet-map-info-v4":
+                raise RuntimeError(f"Map-info planet renderer not ready in frame {index}: {stage}")
+            inp=stage.get("input") or {}
+            if abs(float(inp.get("wheelSensitivity") or 0)-0.00045)>1e-9:
+                raise RuntimeError(f"Wheel zoom is not exactly 50% of prior sensitivity in frame {index}: {inp}")
+            if abs(float(inp.get("pinchSensitivity") or 0)-0.003)>1e-9:
+                raise RuntimeError(f"Pinch zoom is not exactly 50% of prior sensitivity in frame {index}: {inp}")
+            if abs(float(inp.get("zoomInputRateFraction") or 0)-0.5)>1e-9:
+                raise RuntimeError(f"Zoom input rate fraction is not 0.5 in frame {index}: {inp}")
+            info=stage.get("mapPresentation") or {}
+            if info.get("active") is not True or info.get("bounded") is not True or info.get("fullWorldScan") is not False:
+                raise RuntimeError(f"Bounded map presentation contract failed in frame {index}: {info}")
+            if float(info.get("scaleDistanceMeters") or 0)<=0 or not str(info.get("scaleLabel") or ""):
+                raise RuntimeError(f"Scale ruler telemetry missing in frame {index}: {info}")
+            if not str(info.get("zoomScaleLabel") or "").endswith("x"):
+                raise RuntimeError(f"Zoom multiplier label missing in frame {index}: {info}")
+            if int(info.get("labelCount") or 0)>6:
+                raise RuntimeError(f"Map label budget exceeded in frame {index}: {info}")
+        required=[
+            (0,"continent"),
+            (1,"country"),
+            (3,"region"),
+            (4,"city"),
+            (5,"village"),
+            (6,"district"),
+        ]
+        for frame_index,kind in required:
+            kinds=stages[frame_index].get("mapPresentation",{}).get("visibleContextKinds") or []
+            if kind not in kinds:
+                raise RuntimeError(f"Expected {kind} context missing in frame {frame_index+1}: {kinds}")
+        border_frames=[stages[i].get("mapPresentation") or {} for i in (1,2,3,4)]
+        if not any(int(info.get("borderSegmentCount") or 0)>0 for info in border_frames):
+            raise RuntimeError(f"No political borders were generated at country/regional zoom: {border_frames}")
+        if any(int(info.get("borderSampleCount") or 0)>117 for info in border_frames):
+            raise RuntimeError(f"Political border query exceeded bounded 13x9 grid: {border_frames}")
+        multipliers=[float((stages[i].get("mapPresentation") or {}).get("zoomScaleMultiplier") or 0) for i in range(1,7)]
+        if any(b<=a for a,b in zip(multipliers,multipliers[1:])):
+            raise RuntimeError(f"Scale multiplier did not increase monotonically with zoom: {multipliers}")
+        portrait=frames[7].get("runtime",{}).get("viewport",{})
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"Phone portrait map-info frame has unexpected viewport: {portrait}")
+        return
+
     if scenario in {"wp-s003-006-014","wp-s003-008-004"}:
         if len(frames) < 6:
             raise RuntimeError("wp-s003-006-014 requires six seeded-planet evidence frames")
@@ -8329,7 +8412,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             layout=stage.get("geographyLayout") or {}
             if stage.get("ready") is not True or stage.get("stage") != "seeded-planetary-geography":
                 raise RuntimeError(f"Seeded planet stage not ready in frame {index}: {stage}")
-            if stage.get("version") != "planet-multiscale-ground-v3":
+            if stage.get("version") != "planet-map-info-v4":
                 raise RuntimeError(f"Unexpected planet renderer version in frame {index}: {stage}")
             if stage.get("geographyVersion") != "planetary-geography-v4":
                 raise RuntimeError(f"Unexpected geography version in frame {index}: {stage}")
