@@ -708,8 +708,8 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.46,.29,.12),
     route:make("LocalRouteSilhouette",.82,.56,.18,.98),
-    footprint:make("LocalSettlementFootprint",.86,.64,.24,.72),
-    cluster:make("LocalSettlementCluster",.82,.38,.12,.98),
+    footprint:make("LocalSettlementFootprint",.72,.52,.18,.38),
+    cluster:make("LocalSettlementCluster",.70,.22,.08,.99),
     landmark:make("LocalSettlementLandmark",.98,.76,.22,1),
     wall:make("LocalWall",.76,.57,.34),
     roof:make("LocalRoof",.40,.11,.06),
@@ -732,8 +732,8 @@ function settlementRevealTierForZoom(value=zoomState.scalar){
   const scalar=clamp(value,0,1);
   if(scalar<.60)return "none";
   if(scalar<.72)return "footprint";
-  if(scalar<.84)return "route";
-  if(scalar<.93)return "coarse";
+  if(scalar<.78)return "route";
+  if(scalar<.92)return "coarse";
   if(scalar<.985)return "refined";
   return "full";
 }
@@ -745,17 +745,19 @@ function settlementLayoutUnit(key){
 }
 function settlementPresentationScale(plan,dims,tier){
   if(!plan||!dims)return 1;
-  const targetFraction=tier==="footprint"?.16:tier==="route"?.24:tier==="coarse"?.26:tier==="refined"?.18:0;
+  const targetFraction=tier==="footprint"?.20:tier==="route"?.30:tier==="coarse"?.32:tier==="refined"?.22:0;
   if(targetFraction<=0)return 1;
   const diameter=Math.max(1,plan.radiusMeters*2);
-  const maxScale=tier==="footprint"?192:tier==="route"?112:tier==="coarse"?56:tier==="refined"?12:1;
+  const maxScale=tier==="footprint"?256:tier==="route"?180:tier==="coarse"?120:tier==="refined"?18:1;
   return clamp((dims.visibleWidth*targetFraction)/diameter,1,maxScale);
 }
 function settlementPresentationPoint(plan,dims,tier,east,north){
   const scale=settlementPresentationScale(plan,dims,tier);
+  const lateralBoost=tier==="footprint"?3.6:tier==="route"?3.1:tier==="coarse"?2.6:tier==="refined"?1.8:1;
+  const depthBoost=tier==="footprint"?1.45:tier==="route"?1.35:tier==="coarse"?1.2:tier==="refined"?1.1:1;
   return Object.freeze({
-    east:plan.centerEastMeters+(east-plan.centerEastMeters)*scale,
-    north:plan.centerNorthMeters+(north-plan.centerNorthMeters)*scale,
+    east:plan.centerEastMeters+(east-plan.centerEastMeters)*scale*lateralBoost,
+    north:plan.centerNorthMeters+(north-plan.centerNorthMeters)*scale*depthBoost,
     scale
   });
 }
@@ -966,10 +968,10 @@ function rebuildLocalStaticPresentation(signature){
       return;
     }
     localStatic={...localStatic,settlementId:plan.id,settlementName:plan.name,settlementClass:plan.classId,settlementPlanRevision:plan.revision,layoutSignature:plan.layoutSignature,presentationScale:Number(settlementPresentationScale(plan,dims,tier).toFixed(3)),authority:plan.authority+" + shared renderer layout",presentationOnly:true,simulationAuthority:false};
-    if(["footprint","route","coarse"].includes(tier)){
-      const occupiedWidth=Math.max(plan.radiusMeters*1.9,dims.visibleWidth*(tier==="footprint"?.22:tier==="route"?.18:.145));
-      const occupiedDepth=Math.max(plan.radiusMeters*1.55,dims.visibleHeight*(tier==="footprint"?.18:tier==="route"?.15:.118));
-      const reliefMeters=Math.max(8,dims.visibleHeight*(tier==="footprint"?.0055:tier==="route"?.0045:.003));
+    if(["footprint","route","coarse","refined"].includes(tier)){
+      const occupiedWidth=Math.max(plan.radiusMeters*1.9,dims.visibleWidth*(tier==="footprint"?.20:tier==="route"?.17:tier==="coarse"?.13:.075));
+      const occupiedDepth=Math.max(plan.radiusMeters*1.55,dims.visibleHeight*(tier==="footprint"?.16:tier==="route"?.14:tier==="coarse"?.105:.06));
+      const reliefMeters=Math.max(6,dims.visibleHeight*(tier==="footprint"?.0045:tier==="route"?.0038:tier==="coarse"?.0024:.001));
       const heightUnits=reliefMeters/unit;
       const y=localGroundHeightUnits(plan.centerEastMeters,plan.centerNorthMeters,dims)+heightUnits*.5+.02;
       addLocalStatic("SettlementOccupiedArea","box",localStaticMaterials.footprint,plan.centerEastMeters/unit,y,-plan.centerNorthMeters/unit,occupiedWidth/unit,heightUnits,occupiedDepth/unit);
@@ -979,7 +981,7 @@ function rebuildLocalStaticPresentation(signature){
     const roads=addSettlementRoad(plan,dims,roadMaterial,tier);
     if(tier==="full"){localStatic.fullRoadCount=roads;}else{localStatic.coarseRoadCount=roads;}
     localStatic.roadCount=roads;localStatic.triangleEstimate+=roads*12;
-    if(["footprint","route","coarse"].includes(tier)){
+    if(["footprint","route","coarse","refined"].includes(tier)){
       localStatic.coarseBuildingCount=addSettlementClusters(plan,dims,tier);
       localStatic.buildingCount=localStatic.coarseBuildingCount;
       localStatic.triangleEstimate+=localStatic.coarseBuildingCount*12;
