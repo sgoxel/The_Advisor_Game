@@ -773,7 +773,7 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
     const displayColor=forcedLand?local.color.map(v=>clamp(v*.88,0,1)):local.color;
     const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
     const ux=(x+.5)/size,vz=(y+.5)/size,edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-    const alpha=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
+    // Broad rounded feather hides the finite fine-patch rectangle while the cheap surround fills the viewport.\n    const radialDistance=Math.hypot((ux-.5)*2,(vz-.5)*2);\n    const roundedFade=smoothstep01(clamp((1.04-radialDistance)/.46,0,1));\n    const edgeFade=smoothstep01(clamp(edgeDistance/.10,0,1));\n    const alpha=featherEdges?Math.round(255*roundedFade*edgeFade):255;
     data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=alpha;
   }
   ctx.putImageData(image,0,0);
