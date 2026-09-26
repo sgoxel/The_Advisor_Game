@@ -530,7 +530,7 @@ function readableInspectionLines(record){
 function renderInspectionTooltip(record){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
   const started=performance.now(),bounds=record.screenBounds();
-  if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)){dismissInspection();return false;}
+  if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
   const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f"),recordKey=record.type+":"+String(record.id);
   const selectionChanged=tip.dataset.recordKey!==recordKey;
   if(tip.dataset.contentKey!==contentKey&&(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250)){
