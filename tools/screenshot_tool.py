@@ -12269,9 +12269,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if all(isinstance(stage,dict) and stage.get("ready") is True for stage in planet_frames):
             if any(int(frame.get("runtime",{}).get("currentBuild",{}).get("planetCanvasCount") or 0)!=1 for frame in frames[:3]):
                 raise RuntimeError(f"Canonical PlanetStage canvas count invalid: {planet_frames}")
-            seeds=[stage.get("seed") for stage in planet_frames]
+            seeds=[stage.get("activeSeed") for stage in planet_frames]
             if len(set(seeds))!=1 or not seeds[0]:
-                raise RuntimeError(f"Canonical PlanetStage changed/missed SEED: {seeds}")
+                raise RuntimeError(f"Canonical PlanetStage changed/missed active SEED: {seeds}")
             return
         runtimes = [frame.get("runtime", {}) for frame in frames[:3]]
         builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
