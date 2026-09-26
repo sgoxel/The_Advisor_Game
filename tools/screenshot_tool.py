@@ -245,7 +245,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-005": 9,
     "wp-s003-010-003-005-001": 10,
     "wp-s003-010-003-005-002": 10,
-    "wp-s003-010-003-006": 13,
+    "wp-s003-010-003-006": 14,
     "wp-s003-010-003-007": 10,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
@@ -6714,25 +6714,27 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             (0.970,"desktop:1km"),(0.980,"desktop:500m"),(0.990,"desktop:200m"),
             (1.000,"desktop:ground"),
         )
-        scalar,label=plan[min(frame_index,len(plan)-1)]
+        scalar,label=plan[min(max(frame_index-1,0),len(plan)-1)]
         driver.set_window_size(1280,800); time.sleep(0.1)
-        if frame_index == 0:
+        if frame_index <= 1:
             driver.execute_script("""
                 const s=window.PlanetStage.snapshot();
-                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                const t=s?.featureTargets?.continuityFocus || s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
                 if(!t) throw new Error('seeded land target unavailable');
                 window.PlanetStage.setViewTarget(t);
             """)
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
         from selenium.webdriver.support.ui import WebDriverWait
-        WebDriverWait(driver,20.0).until(lambda d: d.execute_script("""
+        WebDriverWait(driver,30.0).until(lambda d: d.execute_script("""
             const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
-            return Number(s?.zoom?.scalar||0)>=Number(arguments[0])-0.000001 &&
+            return Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.000001 &&
                    Number(r?.pendingPreparationCount||0)===0;
         """,scalar))
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},p=s?.projection?.presentation||{};
             return {scalar:s?.zoom?.scalar,visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
+              focusLatitudeDegrees:s?.zoom?.focusLatitudeDegrees,focusLongitudeDegrees:s?.zoom?.focusLongitudeDegrees,
+              centerLand:Boolean(s?.canonicalFocus?.surfaceIdentity?.center?.land),
               level:s?.projection?.localDetail?.level,requested:r?.requestedSignature,prepared:r?.preparedSignature,active:r?.activeSignature,
               pending:r?.pendingPreparationCount,buildMs:r?.lastBuildMs,swapMs:r?.lastSwapMs,blockingZoomBuilds:r?.blockingZoomBuilds,
               targetHeightMeters:p?.targetHeightMeters};
@@ -7077,12 +7079,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError("Settlement reveal exceeded bounded presentation budget")
         return
     if scenario == "wp-s003-010-003-006":
-        if len(frames) < 13:
-            raise RuntimeError("wp-s003-010-003-006 requires thirteen intermediate-scale frames")
-        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:13]]
+        if len(frames) < 14:
+            raise RuntimeError("wp-s003-010-003-006 requires startup plus thirteen fixed-focus land zoom frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[1:14]]
         focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in stages]
         if len(set(focus)) != 1:
             raise RuntimeError(f"Intermediate-scale evidence changed geographic focus: {focus}")
+        if any(((s.get("canonicalFocus") or {}).get("surfaceIdentity") or {}).get("center",{}).get("land") is not True for s in stages):
+            raise RuntimeError("WP-S003-010-003-006 evidence did not remain focused on seeded land")
         heights=[float((s.get("zoom") or {}).get("visibleFootprintHeightMeters") or 0) for s in stages]
         if any(b >= a for a,b in zip(heights,heights[1:])):
             raise RuntimeError(f"Visible footprint did not decrease monotonically: {heights}")
