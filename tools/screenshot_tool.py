@@ -8403,7 +8403,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Camera blend is still accelerated/compressed in frame {index}: projection={p}")
             local=p.get("localDetail") or {}
             if index>=3 and str(local.get("level") or "") in {"regional-overview","regional-detail","district"} and int(local.get("textureSize") or 0)>64:
-                raise RuntimeError(f"Broad LOD texture exceeds 64px streaming budget in frame {index}: {local}")\n            build_ms=float((p.get("resourceBudget") or {}).get("lastBuildMs") or 0)\n            if build_ms>220:\n                raise RuntimeError(f"Broad LOD synchronous build still exceeds 220 ms in frame {index}: {build_ms} ms")
+                raise RuntimeError(f"Broad LOD texture exceeds 64px streaming budget in frame {index}: {local}")
+            build_ms=float((p.get("resourceBudget") or {}).get("lastBuildMs") or 0)
+            if build_ms>220:
+                raise RuntimeError(f"Broad LOD synchronous build still exceeds 220 ms in frame {index}: {build_ms} ms")
         if any(b<a for a,b in zip(blends,blends[1:])):
             raise RuntimeError(f"Projection blend is not monotonic: {blends}")
         if any(b<a for a,b in zip(camera_y,camera_y[1:])):
