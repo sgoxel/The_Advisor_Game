@@ -127,6 +127,7 @@ SCENARIOS = {
     "wp-s003-010-002",
     "wp-s003-010-003",
     "wp-s003-010-003-001",
+    "wp-s003-010-003-002",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -231,6 +232,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
     "wp-s003-010-003-001": 8,
+    "wp-s003-010-003-002": 10,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1630,7 +1632,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -8106,6 +8108,33 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver.execute_script("window.PlanetStage.setZoomScalar(0.95)")
             return "phone-portrait:settlement-map-info"
         return "planet:continent-info-scale-ruler"
+    if scenario == "wp-s003-010-003-002":
+        # Frame 0 is the harness's untouched full-planet proof. Frames 1..8 are
+        # the dense reported problem range; frame 9 is a ground regression check.
+        plan=(
+            (0.650515,"desktop:0.20x"),
+            (0.690106,"desktop:0.24x"),
+            (0.715682,"desktop:0.27x"),
+            (0.738561,"desktop:0.30x"),
+            (0.765739,"desktop:0.34x"),
+            (0.789892,"desktop:0.38x"),
+            (0.811625,"desktop:0.42x"),
+            (0.831379,"desktop:0.46x"),
+            (1.000000,"desktop:ground-reference"),
+        )
+        if frame_index == 0:
+            return "planet:full"
+        scalar,label=plan[min(frame_index-1,len(plan)-1)]
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        return label
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8349,6 +8378,58 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-002":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-002 requires ten dense mid-zoom evidence frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        dense=stages[1:9]
+        focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in dense]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Mid-zoom focus drifted across evidence: {focus}")
+        heights=[];blends=[];camera_y=[];fovs=[];multipliers=[]
+        for index,stage in enumerate(dense, start=1):
+            if stage.get("ready") is not True or stage.get("version") != "planet-ground-static-v3":
+                raise RuntimeError(f"Corrected planet renderer not ready in frame {index}: {stage}")
+            inp=stage.get("input") or {}
+            if abs(float(inp.get("wheelSensitivity") or 0)-0.00045)>1e-9 or abs(float(inp.get("pinchSensitivity") or 0)-0.003)>1e-9:
+                raise RuntimeError(f"50%-slower zoom sensitivities regressed in frame {index}: {inp}")
+            z=stage.get("zoom") or {};p=stage.get("projection") or {};present=p.get("presentation") or {}
+            heights.append(float(z.get("visibleFootprintHeightMeters") or 0))
+            blends.append(float(p.get("blend") or 0))
+            camera_y.append(float(present.get("cameraY") or 0))
+            fovs.append(float(present.get("fov") or 0))
+            multipliers.append(float((stage.get("mapPresentation") or {}).get("zoomScaleMultiplier") or 0))
+            if abs(float(present.get("viewBlend") or 0)-float(p.get("blend") or 0))>0.002:
+                raise RuntimeError(f"Camera blend is still accelerated/compressed in frame {index}: projection={p}")
+            local=p.get("localDetail") or {}
+            if index>=3 and str(local.get("level") or "") in {"regional-overview","regional-detail","district"} and int(local.get("textureSize") or 0)>64:
+                raise RuntimeError(f"Broad LOD texture exceeds 64px streaming budget in frame {index}: {local}")\n            build_ms=float((p.get("resourceBudget") or {}).get("lastBuildMs") or 0)\n            if build_ms>220:\n                raise RuntimeError(f"Broad LOD synchronous build still exceeds 220 ms in frame {index}: {build_ms} ms")
+        if any(b<a for a,b in zip(blends,blends[1:])):
+            raise RuntimeError(f"Projection blend is not monotonic: {blends}")
+        if any(b<a for a,b in zip(camera_y,camera_y[1:])):
+            raise RuntimeError(f"Camera elevation is not monotonic through mid zoom: {camera_y}")
+        if any(b<a for a,b in zip(fovs,fovs[1:])):
+            raise RuntimeError(f"Camera FOV is not monotonic through mid zoom: {fovs}")
+        if any(b>=a for a,b in zip(heights,heights[1:])):
+            raise RuntimeError(f"Visible footprint does not decrease monotonically: {heights}")
+        ratios=[a/max(1,b) for a,b in zip(heights,heights[1:])]
+        if max(ratios)>1.35:
+            raise RuntimeError(f"Mid-zoom footprint still changes too abruptly for the visible x-scale: ratios={ratios}, heights={heights}")
+        if any(b<=a for a,b in zip(multipliers,multipliers[1:])):
+            raise RuntimeError(f"Visible x scale is not increasing monotonically: {multipliers}")
+        political=dense[0].get("politicalScale") or {}
+        if int(political.get("countryCellSize") or 0) < 196608:
+            raise RuntimeError(f"Country scale was not materially increased: {political}")
+        if int(political.get("regionCellSize") or 0) != 8192:
+            raise RuntimeError(f"Region cell authority changed unexpectedly: {political}")
+        if float(political.get("countryRegionLinearRatio") or 0) < 24:
+            raise RuntimeError(f"Countries do not contain enough regional scale depth: {political}")
+        if int(political.get("boundedSampleCount") or 0) != 35 or int(political.get("boundedDistinctCountryOwners") or 99) > 12:
+            raise RuntimeError(f"Bounded political density still shows too many countries: {political}")
+        if political.get("fullWorldScan") is not False:
+            raise RuntimeError(f"Political density evidence performed a full-world scan: {political}")
+        return
+
     if scenario == "wp-s003-010-003-001":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-010-003-001 requires eight map-information evidence frames")
