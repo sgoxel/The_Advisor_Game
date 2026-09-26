@@ -214,7 +214,7 @@ function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
 function localPatchDimensions(){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
-  const visibleHeight=aspect>=1?32:58;
+  const visibleHeight=aspect>=1?38:64;
   const visibleWidth=visibleHeight*aspect;
   return {visibleWidth,visibleHeight,patchWidth:visibleWidth*LOCAL_PATCH_MARGIN,patchHeight:visibleHeight*LOCAL_PATCH_MARGIN};
 }
@@ -340,13 +340,13 @@ function applyCameraZoom(){
   // point; no second map or local simulation authority is introduced.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=2.15;
+  const localZ=1.7;
   const cameraZ=globeZ*(1-blend)+localZ*blend;
-  const cameraY=1.25*blend;
-  const targetZ=-.18*blend;
-  const targetY=-.05*blend;
+  const cameraY=.92*blend;
+  const targetZ=-.55*blend;
+  const targetY=-.18*blend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
-  if(cameraEntity.camera)cameraEntity.camera.fov=34+10*blend;
+  if(cameraEntity.camera)cameraEntity.camera.fov=34+14*blend;
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
