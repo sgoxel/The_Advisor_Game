@@ -33,7 +33,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 - `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference — COMPLETED
 
-# Stage 3 — TOP PRIORITY ACTIVE STAGE: Continuous Planet-to-Ground Zoom + PlayCanvas 3D World
+# Stage 3 — TOP PRIORITY BLOCKER: Zero-Movement Planet-to-Ground Zoom Continuity + PlayCanvas 3D World
 
 - `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
 - `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
@@ -102,9 +102,11 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-003` — Zoom-Only Camera Orientation + Focus Continuity — COMPLETED
 - `WP-S003-010-003-004` — Terrain-Anchored Landmarks + World-Projected Political Borders — COMPLETED
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
-- `WP-S003-010-003-006` — Continuous Intermediate Scale Ladder + Streaming-Safe LOD Handoffs
-- `WP-S003-010-003-007` — Progressive Settlement + Local Feature Reveal Before Ground
-- `WP-S003-010-003-008` — Zoom-Aware Globe Atlas Labels + Visible-Screen Culling
+- `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs
+- `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity
+- `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs
+- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground
+- `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips
