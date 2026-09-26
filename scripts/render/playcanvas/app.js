@@ -2252,7 +2252,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   }
   function buildingInspectionRecord(building){
     if(!building?.bounds)return null;const b=building.bounds,corners=[[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]];const pts=[];
-    for(const pair of corners){const scene=characterScenePoint({x:pair[0],y:pair[1]}),screen=projectedScreenPoint(scene,0);if(screen)pts.push(screen);}if(!pts.length)return null;
+    for(const pair of corners){const scene=characterScenePoint({x:pair[0],y:pair[1]}),screen=projectedScreenPoint(scene,0);if(!screen)return null;pts.push(screen);}
     const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),lift=Math.max(24,Number(lastModel?.tileSize||64)*.55),left=Math.min(...xs)-8,right=Math.max(...xs)+8,bottom=Math.max(...ys)+8,top=Math.min(...ys)-lift;
     const centerWorld={x:(Number(b.minX)+Number(b.maxX))/2,y:(Number(b.minY)+Number(b.maxY))/2},centerScene=characterScenePoint(centerWorld);
     return {type:"building",id:String(building.id),item:building,bounds:{left,right,top,bottom},anchor:{x:(left+right)/2,y:top},depth:inspectionCameraDepth(centerScene,0)};
