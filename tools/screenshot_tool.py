@@ -1667,11 +1667,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         )
         if scenario == "wp-s003-010-003-007":
             selected=driver.execute_script("""
-                const stage=window.PlanetStage,seed=window.SeedSystem?.getCampaign?.()?.seed;
-                const s=stage.snapshot();
+                const stage=window.PlanetStage;
+                const s=stage.snapshot(),seed=s?.activeSeed ?? window.SeedSystem?.getCampaign?.()?.seed;
+                if(!seed || !window.SettlementArchetypes?.build) throw new Error('canonical settlement authority unavailable');
                 const candidates=[
-                  s?.featureTargets?.continent,s?.featureTargets?.mountain,s?.featureTargets?.peak,
-                  s?.featureTargets?.island,s?.featureTargets?.continuity
+                  s?.featureTargets?.continuityFocus,s?.featureTargets?.continent,s?.featureTargets?.mountain,
+                  s?.featureTargets?.peak,s?.featureTargets?.island
                 ].filter(Boolean);
                 const accept=()=>{
                   const now=stage.snapshot(),surface=now?.canonicalFocus?.surfaceIdentity?.center;
@@ -1685,7 +1686,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                   const probes=[[-40,-120],[-30,-60],[-20,0],[-10,60],[0,120],[15,-150],[25,-90],[35,-30],[45,30],[55,90],[60,150],[-55,150]];
                   for(const [lat,lon] of probes){stage.setRotation(-lon,lat);chosen=accept();if(chosen)break;}
                 }
-                if(!chosen) throw new Error('verified land + canonical settlement target unavailable');
+                if(!chosen) throw new Error('verified land + canonical settlement target unavailable: seed='+String(seed)+', candidates='+candidates.length+', archetypes='+Boolean(window.SettlementArchetypes?.build));
                 stage.setZoomScalar(0.54);
                 const ready=stage.snapshot();
                 return {
