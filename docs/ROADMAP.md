@@ -33,7 +33,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 - `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference — COMPLETED
 
-# Stage 3 — PlayCanvas 3D World + 2D Character Billboard Foundation
+# Stage 3 — PlayCanvas 3D World + Planet-to-Ground Gameplay Area Visualization Foundation
 
 - `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
 - `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
@@ -81,7 +81,6 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
 - `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention — COMPLETED
 - `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup — COMPLETED
-- `WP-S003-008-006` — Clickable NPC + Building Inspection Tooltips
 - `WP-S003-009` — Loading-Screen-Inspired Living World Visual Direction Foundation — COMPLETED
 - `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — COMPLETED
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
@@ -94,21 +93,24 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-009-007` — Settlement Landmarks + Visual Hierarchy — COMPLETED
 - `WP-S003-009-008` — Large-Scale Terrain Variation + Semantic Wear Zones — COMPLETED
 - `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation — COMPLETED
-- `WP-S003-009-010` — Day/Night Atmospheric Color + Lighting Palette
-- `WP-S003-009-011` — Biome-Aware Wilderness Dressing + Ambient Fauna
-- `WP-S003-009-012` — Reactive Ambient Wildlife Behavior
-- `WP-S003-009-013` — Contextual Building Activity Indicators
-- `WP-S003-009-014` — Local Environmental Reaction Effects
-- `WP-S003-009-015` — Positional Ambient Soundscape + Activity Audio
-- `WP-S003-009-016` — Regional Weather Presentation + Local Behavior Hooks
-- `WP-S003-009-017` — Seasonal World Presentation + Vegetation State
-- `WP-S003-009-018` — Function-Readable Building Surroundings + Ownership Cues
-- `WP-S003-009-019` — Campaign-State Environmental Wear, Damage + Recovery Projection
-- `WP-S003-009-020` — Crossroads Direction Signposts + Named Route Wayfinding
 - `WP-S003-010` — Continuous Planet-to-Ground Zoom + Multi-Scale Focus Foundation
 - `WP-S003-010-001` — Globe-to-Surface Focus Anchor + Projection Transition
 - `WP-S003-010-002` — Viewport-Bounded Ground Detail + 2 m Surface Resolution
 - `WP-S003-010-003` — Zoom-Driven Detail Refinement + Off-Screen Eviction
+- `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
+- `WP-S003-010-005` — Planet-to-Gameplay-Area End-to-End Visual Acceptance
+- `WP-S003-011` — Clickable NPC + Building Inspection Tooltips
+- `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette
+- `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna
+- `WP-S003-014` — Reactive Ambient Wildlife Behavior
+- `WP-S003-015` — Contextual Building Activity Indicators
+- `WP-S003-016` — Local Environmental Reaction Effects
+- `WP-S003-017` — Positional Ambient Soundscape + Activity Audio
+- `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks
+- `WP-S003-019` — Seasonal World Presentation + Vegetation State
+- `WP-S003-020` — Function-Readable Building Surroundings + Ownership Cues
+- `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection
+- `WP-S003-022` — Crossroads Direction Signposts + Named Route Wayfinding
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
