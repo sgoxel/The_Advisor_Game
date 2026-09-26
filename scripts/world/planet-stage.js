@@ -641,13 +641,13 @@ function fantasyHourFromStamp(stamp){
 }
 function paletteForHour(hour){
   const stops=[
-    {h:0,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.065},
-    {h:5,phase:"dawn",key:[1,.68,.42],fill:[.40,.44,.68],ambient:[.36,.30,.34],sky:[.12,.075,.14],keyI:1.18,fillI:.82,emissive:.050},
-    {h:8,phase:"day",key:[1,.93,.72],fill:[.36,.54,.82],ambient:[.42,.46,.54],sky:[.018,.045,.09],keyI:1.38,fillI:.90,emissive:.018},
-    {h:12,phase:"day",key:[1,.97,.90],fill:[.34,.50,.78],ambient:[.40,.43,.50],sky:[.004,.008,.018],keyI:1.50,fillI:.94,emissive:.016},
-    {h:17,phase:"late-day",key:[1,.78,.48],fill:[.46,.42,.70],ambient:[.38,.32,.40],sky:[.085,.052,.105],keyI:1.30,fillI:.86,emissive:.042},
-    {h:20,phase:"night",key:[.60,.68,.98],fill:[.27,.38,.70],ambient:[.24,.27,.40],sky:[.018,.03,.082],keyI:.88,fillI:.76,emissive:.060},
-    {h:24,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.065}
+    {h:0,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090},
+    {h:5,phase:"dawn",key:[1,.68,.42],fill:[.40,.44,.68],ambient:[.36,.30,.34],sky:[.12,.075,.14],keyI:1.18,fillI:.82,emissive:.080},
+    {h:8,phase:"day",key:[1,.93,.72],fill:[.36,.54,.82],ambient:[.42,.46,.54],sky:[.018,.045,.09],keyI:1.38,fillI:.90,emissive:.025},
+    {h:12,phase:"day",key:[1,.97,.90],fill:[.34,.50,.78],ambient:[.40,.43,.50],sky:[.004,.008,.018],keyI:1.50,fillI:.94,emissive:.022},
+    {h:17,phase:"late-day",key:[1,.78,.48],fill:[.46,.42,.70],ambient:[.38,.32,.40],sky:[.085,.052,.105],keyI:1.30,fillI:.86,emissive:.070},
+    {h:20,phase:"night",key:[.60,.68,.98],fill:[.27,.38,.70],ambient:[.24,.27,.40],sky:[.018,.03,.082],keyI:.88,fillI:.76,emissive:.085},
+    {h:24,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090}
   ];
   let a=stops[0],b=stops[1];for(let i=0;i<stops.length-1;i++){if(hour>=stops[i].h&&hour<=stops[i+1].h){a=stops[i];b=stops[i+1];break;}}
   const t=clamp((hour-a.h)/Math.max(.001,b.h-a.h),0,1),phase=(t<.5?a.phase:b.phase);
@@ -657,7 +657,7 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
   const hour=fantasyHourFromStamp(stamp);if(hour===null||!keyLight||!fillLight||!surfaceMaterial||!cameraEntity)return snapshot();
   const p=paletteForHour(hour);
   keyLight.light.color.set(...p.key);keyLight.light.intensity=p.keyI;fillLight.light.color.set(...p.fill);fillLight.light.intensity=p.fillI;
-  app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);surfaceMaterial.emissive.set(p.emissive,p.emissive*.9,p.emissive*.75);surfaceMaterial.update();
+  app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);const emissiveTint=p.phase==="night"?[.52,.72,1]:p.phase==="dawn"?[1,.66,.42]:p.phase==="late-day"?[1,.58,.34]:[1,.96,.84];surfaceMaterial.emissive.set(p.emissive*emissiveTint[0],p.emissive*emissiveTint[1],p.emissive*emissiveTint[2]);surfaceMaterial.update();
   atmosphere={active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false,keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3)))};
   return snapshot();
 }
