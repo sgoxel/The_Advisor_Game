@@ -222,8 +222,8 @@ function buildTangentPatchMesh(){
   const started=performance.now(),dims=localPatchDimensions();
   const columns=Math.max(2,Math.ceil(dims.patchWidth/LOCAL_SAMPLE_SPACING_METERS)+1);
   const rows=Math.max(2,Math.ceil(dims.patchHeight/LOCAL_SAMPLE_SPACING_METERS)+1);
-  const positions=[],normals=[],uvs=[],indices=[],metersPerUnit=WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS;
-  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  const positions=[],normals=[],uvs=[],indices=[],localMetersPerUnit=50;
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));\n  const centerElevation=Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
   for(let z=0;z<rows;z++){
     const vz=z/(rows-1),northMeters=(vz-.5)*dims.patchHeight;
     for(let x=0;x<columns;x++){
