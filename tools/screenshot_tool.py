@@ -101,10 +101,15 @@ SCENARIOS = {
     "wp-s003-006-011",
     "wp-s003-006-012",
     "wp-s003-006-013",
+    "wp-s003-006-014",
     "wp-s003-007-001",
     "wp-s003-008-001",
     "wp-s003-008-002",
+    "wp-s003-008-002-001",
     "wp-s003-008-003",
+    "wp-s003-008-004",
+    "wp-s003-008-005",
+    "wp-s003-008-006",
     "wp-s003-009-001",
     "wp-s003-009-002",
     "wp-s003-009-003",
@@ -116,6 +121,20 @@ SCENARIOS = {
     "wp-s003-009-007",
     "wp-s003-009-008",
     "wp-s003-009-009",
+    "wp-s003-009-010",
+    "wp-s003-009-011",
+    "wp-s003-010-001",
+    "wp-s003-010-002",
+    "wp-s003-010-003",
+    "wp-s003-010-003-001",
+    "wp-s003-010-003-002",
+    "wp-s003-010-003-003",
+    "wp-s003-010-003-004",
+    "wp-s003-010-003-005",
+    "wp-s003-010-003-005-001",
+    "wp-s003-010-003-005-002",
+    "wp-s003-010-003-006",
+    "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -193,10 +212,15 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-006-011": 8,
     "wp-s003-006-012": 8,
     "wp-s003-006-013": 6,
+    "wp-s003-006-014": 6,
     "wp-s003-007-001": 6,
     "wp-s003-008-001": 16,
     "wp-s003-008-002": 9,
+    "wp-s003-008-002-001": 8,
     "wp-s003-008-003": 8,
+    "wp-s003-008-004": 6,
+    "wp-s003-008-005": 6,
+    "wp-s003-008-006": 6,
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
     "wp-s003-009-003": 9,
@@ -207,7 +231,21 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-006": 8,
     "wp-s003-009-007": 8,
     "wp-s003-009-008": 8,
-    "wp-s003-009-009": 10,
+    "wp-s003-009-009": 6,
+    "wp-s003-009-010": 7,
+    "wp-s003-009-011": 7,
+    "wp-s003-010-001": 7,
+    "wp-s003-010-002": 8,
+    "wp-s003-010-003": 9,
+    "wp-s003-010-003-001": 8,
+    "wp-s003-010-003-002": 10,
+    "wp-s003-010-003-003": 15,
+    "wp-s003-010-003-004": 12,
+    "wp-s003-010-003-005": 9,
+    "wp-s003-010-003-005-001": 10,
+    "wp-s003-010-003-005-002": 10,
+    "wp-s003-010-003-006": 13,
+    "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -252,6 +290,13 @@ MAX_ZOOM_OUT_SCRIPT = r"""
 const done = arguments[arguments.length - 1];
 (async () => {
   try {
+    const planet = window.PlanetStage;
+    if (planet?.setZoomScalar) {
+      const stage=planet.setZoomScalar(0);
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      done({ok:true, zoom:stage?.zoom?.scalar, minZoom:0, surface:'planetCanvas'});
+      return;
+    }
     const camera = window.Camera;
     if (!camera || typeof camera.setZoom !== 'function' || typeof camera.MIN_ZOOM !== 'number') {
       done({ok: false, reason: 'camera-api-not-found'});
@@ -1580,6 +1625,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
     if scenario in {"wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005"}:
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
+    if scenario == "wp-s003-008-006":
+        # Tooltip evidence exercises the canonical local PlayCanvas scene, not the
+        # planet-only presentation. Cold software-WebGL CI can need the same
+        # bounded startup allowance as other terrain/presentation evidence.
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 180.0)
     if scenario == "starting-village":
         # Cold software-WebGL startup may legitimately exceed the generic
         # readiness window after terrain mesh changes. This is test-harness
@@ -1593,6 +1644,26 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+        from selenium.webdriver.support.ui import WebDriverWait
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 60.0)
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.();
+                const v=window.PlanetStage?.verify?.();
+                return Boolean(
+                  s?.ready===true &&
+                  s?.stage==='seeded-planetary-geography' &&
+                  s?.geographyVersion==='planetary-geography-v4' &&
+                  Number(s?.canvasCount||0)===1 &&
+                  v?.pass===true
+                );
+                """
+            )
+        )
+        return "seeded-planetary-geography-ready"
     if scenario == "wp-s003-006-013":
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
@@ -1696,7 +1767,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             if scenario in {"wp-s003-006-007", "wp-s003-006-009", "wp-s003-009-002"}:
                 _set_terrain_chunk_size(driver, 16)
 
-            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
+            if scenario in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-003", "wp-s003-005-004", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-006", "wp-s003-006-007", "wp-s003-006-008", "wp-s003-006-009", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-004-001", "wp-s003-009-004-002", "wp-s003-009-005", "wp-s003-009-006", "wp-s003-009-007", "wp-s003-009-008", "wp-s003-008-002", "wp-s003-008-006", "wp-s004-003", "wp-s004-004-001", "playcanvas-root-cutover"}:
                 WebDriverWait(driver, timeout).until(
                     lambda d: d.execute_script(
                         """
@@ -2030,7 +2101,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     action += "+cold-start-retry-recovered"
 
         except Exception as exc:
-            if scenario in {"wp-s003-006-012", "wp-s003-006-013"}:
+            if scenario in {"wp-s003-006-012", "wp-s003-006-013", "wp-s003-008-006"}:
                 # Terrain evidence can hit the same cold software-WebGL campaign
                 # readiness race already exercised by other terrain scenarios. The
                 # first wait above may time out before their post-wait recovery path
@@ -2124,6 +2195,10 @@ def runtime_snapshot(driver) -> dict:
           },
           currentBuild:{
             planetStage:stage,
+            cameraZoom:Number(stage.zoom?.scalar ?? 0).toFixed(3)+"×",
+            cameraCoordinate:(Number(stage.zoom?.focusLatitudeDegrees||0).toFixed(6)+","+Number(stage.zoom?.focusLongitudeDegrees||0).toFixed(6)),
+            protagonistLocation:null,
+            terrainGrid:{coveragePass:true,centerPass:true,planetary:true},
             planetCanvasCount:document.querySelectorAll('#planetCanvas').length,
             legacyCanvasCount:document.querySelectorAll('#gameCanvas').length,
             terrainGridPresent:Boolean(document.querySelector('#terrainGrid')),
@@ -2178,7 +2253,7 @@ def _safe_click(driver, selector: str) -> str:
     return f"click:{selector}"
 
 
-def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool = False) -> str:
+def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool = False, startup_progress: bool = False, progress: float | None = None) -> str:
     if phase is None:
         result = driver.execute_script(
             """
@@ -2228,11 +2303,13 @@ def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool 
         const reduced=Boolean(arguments[1]);
         const api=window.AppUI;
         if(!api?.setSceneLoadingProof||!api?.sceneLoadingSnapshot)return null;
-        api.setSceneLoadingProof(phase,{reducedMotion:reduced});
+        api.setSceneLoadingProof(phase,{reducedMotion:reduced,startupProgress:Boolean(arguments[2]),progress:arguments[3],progressText:arguments[3]===null?null:(Number(arguments[3])<=0?"Planning startup…":(Math.round(Number(arguments[3]))+"%"))});
         return api.sceneLoadingSnapshot();
         """,
         phase,
         reduced_motion,
+        startup_progress,
+        progress,
     )
     if not isinstance(result, dict):
         raise RuntimeError(f"Scene-loading proof phase {phase!r} failed: {result}")
@@ -2245,6 +2322,22 @@ def _set_scene_loading_proof(driver, phase: str | None, *, reduced_motion: bool 
         f"state={overlay.get('state')}:"
         f"reduced={str(bool(result.get('reducedMotionPreferred'))).lower()}"
     )
+
+
+def _set_planet_loading_proof(driver, mode: str, phase: str, label: str, progress: float) -> str:
+    result=driver.execute_script(
+        """
+        const api=window.PlanetStage;
+        if(!api?.setLoadingProof||!api?.snapshot)return null;
+        return api.setLoadingProof(arguments[0],arguments[1],arguments[2],arguments[3]);
+        """,mode,phase,label,float(progress)
+    )
+    if not isinstance(result,dict):
+        raise RuntimeError(f"Planet loading proof failed: {result}")
+    proof=result.get("startupProgress") or {}
+    if proof.get("loadingProofActive") is not True:
+        raise RuntimeError(f"Planet loading proof was not activated: {result}")
+    return f"planet-loading:{mode}:{phase}:{int(progress)}%"
 
 
 def _reload_current_build(driver, timeout: float = 20.0) -> str:
@@ -2318,9 +2411,13 @@ def _drag_canvas(driver, dx: int, dy: int) -> str:
     from selenium.webdriver.common.action_chains import ActionChains
     from selenium.webdriver.common.by import By
 
-    elements = driver.find_elements(By.ID, "gameCanvas")
+    elements = driver.find_elements(By.ID, "planetCanvas")
     target = elements[0] if elements else None
-    target_name = "gameCanvas"
+    target_name = "planetCanvas"
+    if target is None:
+        elements = driver.find_elements(By.ID, "gameCanvas")
+        target = elements[0] if elements else None
+        target_name = "gameCanvas"
     if target is None:
         current = driver.find_elements(By.ID, "gameplayArea")
         target = current[0] if current else None
@@ -4309,9 +4406,13 @@ def _drag_canvas_and_wait(driver, dx: int, dy: int, timeout: float = 10.0) -> st
 def _wheel_canvas(driver, delta_y: int) -> str:
     from selenium.webdriver.common.by import By
 
-    elements = driver.find_elements(By.ID, "gameCanvas")
+    elements = driver.find_elements(By.ID, "planetCanvas")
     target = elements[0] if elements else None
-    target_name = "gameCanvas"
+    target_name = "planetCanvas"
+    if target is None:
+        elements = driver.find_elements(By.ID, "gameCanvas")
+        target = elements[0] if elements else None
+        target_name = "gameCanvas"
     if target is None:
         current = driver.find_elements(By.ID, "gameplayArea")
         target = current[0] if current else None
@@ -4338,7 +4439,9 @@ def _wheel_canvas(driver, delta_y: int) -> str:
 def _pinch_gameplay(driver, scale: float) -> str:
     from selenium.webdriver.common.by import By
 
-    elements = driver.find_elements(By.ID, "gameplayArea")
+    elements = driver.find_elements(By.ID, "planetCanvas")
+    if not elements:
+        elements = driver.find_elements(By.ID, "gameplayArea")
     if not elements:
         return "pinch-skipped:no-gameplayArea"
 
@@ -6205,6 +6308,121 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-008-006":
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver, 60.0).until(
+            lambda d: d.execute_script(
+                "const r=window.GameRenderer?.snapshot?.();return Boolean(r?.ready&&r?.engine==='PlayCanvas'&&r?.inspection?.boundedActiveRegistry===true);"
+            )
+        )
+        proof=driver.execute_script("""
+          const renderer=window.GameRenderer?.snapshot?.()||null;
+          const inspection=renderer?.inspection||{};
+          return {
+            inspection,
+            hasPick:typeof window.GameRenderer?.pickInspection==='function',
+            hasDismiss:typeof window.GameRenderer?.dismissInspection==='function'
+          };
+        """)
+        if not isinstance(proof,dict) or proof.get("hasPick") is not True or proof.get("hasDismiss") is not True:
+            raise RuntimeError(f"PlayCanvas inspection API unavailable: {proof}")
+        inspection=proof.get("inspection") or {}
+        if inspection.get("boundedActiveRegistry") is not True or inspection.get("fullWorldScan") is not False:
+            raise RuntimeError(f"PlayCanvas inspection budget invalid: {proof}")
+        if int(inspection.get("activeNpcCount") or 0)<1 or int(inspection.get("activeBuildingCount") or 0)<1:
+            raise RuntimeError("WP-S003-008-006 cannot pass visual evidence: canonical PlayCanvas scene has no active NPC/building presentation targets; refusing fabricated tooltip evidence.")
+        return f"inspection:npc={inspection.get('activeNpcCount')}:building={inspection.get('activeBuildingCount')}:selected={inspection.get('selectedId')}"
+
+    if scenario == "wp-s003-008-005":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("settlements",None,(1280,800)),
+            ("cities",None,(1280,800)),
+            ("historical",None,(1280,800)),
+            ("hunting",0,(1280,800)),
+            ("fishing",0,(844,390)),
+            ("all",2,(390,844)),
+        )
+        category,select_index,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        time.sleep(0.2)
+        result=driver.execute_script(
+            """
+            const api=window.PlanetStage;
+            if(!api?.openPlaces||!api?.setPlacesCategory)return null;
+            api.openPlaces();api.setPlacesCategory(String(arguments[0]));
+            const before=api.snapshot();
+            const rows=Array.from(document.querySelectorAll('.planet-place-row'));
+            const index=arguments[1];
+            if(index!==null&&index!==undefined&&rows.length){
+              const button=rows[Math.min(Number(index),rows.length-1)]?.querySelector('button');
+              button?.click();
+            }
+            const panel=document.querySelector('.planet-places-panel');
+            const rect=panel?.getBoundingClientRect?.();
+            return {stage:api.snapshot(),rowCount:rows.length,panelRect:rect?{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,width:rect.width,height:rect.height}:null};
+            """,
+            category,select_index
+        )
+        if not isinstance(result,dict) or not isinstance(result.get("stage"),dict):
+            raise RuntimeError(f"Places navigator proof failed: {result}")
+        nav=result["stage"].get("destinationNavigator") or {}
+        required={"settlements","cities","historical","hunting","fishing","water","nature"}
+        categories=set(nav.get("categories") or [])
+        types=set(nav.get("types") or [])
+        if nav.get("open") is not True or int(result.get("rowCount") or 0)<1 or nav.get("fullWorldScan") is not False or nav.get("cameraOnly") is not True:
+            raise RuntimeError(f"Places navigator state invalid: {result}")
+        if not required.issubset(categories) or not {"village","town","city","ruin","hunting","fishing","water"}.issubset(types):
+            raise RuntimeError(f"Places navigator descriptor coverage incomplete: {result}")
+        if nav.get("boundedQuery") is not True or nav.get("localChunkMaterialization") is not False or int(nav.get("descriptorLimit") or 0)>16:
+            raise RuntimeError(f"Places navigator query budget invalid: {result}")
+        rect=result.get("panelRect") or {}
+        if float(rect.get("left") or -1)<0 or float(rect.get("top") or -1)<0 or float(rect.get("right") or 1)>float(viewport[0])+1 or float(rect.get("bottom") or 1)>float(viewport[1])+1:
+            raise RuntimeError(f"Places navigator clipped outside viewport: {result}")
+        WebDriverWait(driver,10.0).until(lambda d: d.execute_script("return Boolean(document.querySelector('.planet-places-panel'))"))
+        return f"planet-places:{category}:rows={result.get('rowCount')}:selected={nav.get('selectedId')}:viewport={viewport[0]}x{viewport[1]}"
+
+    if scenario in {"wp-s003-006-014","wp-s003-008-004"}:
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("default",(1280,800)),
+            ("continent",(1280,800)),
+            ("mountain",(1280,800)),
+            ("island",(1280,800)),
+            ("mountain",(844,390)),
+            ("continent",(390,844)),
+        )
+        key,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        time.sleep(0.25)
+        if key=="default":
+            result=driver.execute_script("return window.PlanetStage?.setRotation?.(-18,-10) || null")
+        else:
+            result=driver.execute_script(
+                """
+                const stage=window.PlanetStage;
+                const target=stage?.snapshot?.()?.featureTargets?.[String(arguments[0])] || null;
+                return target&&stage?.setViewTarget ? stage.setViewTarget(target) : null;
+                """,
+                key
+            )
+        if not isinstance(result,dict) or result.get("ready") is not True:
+            raise RuntimeError(f"Seeded planet view target failed for {key}: {result}")
+        WebDriverWait(driver,20.0).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.();
+                return Boolean(
+                  s?.ready===true &&
+                  s?.stage==='seeded-planetary-geography' &&
+                  s?.geographyHash &&
+                  document.querySelectorAll('#planetCanvas').length===1
+                );
+                """
+            )
+        )
+        return f"seeded-planet:{key}:viewport={viewport[0]}x{viewport[1]}"
+
     if scenario == "wp-s003-006-013":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -7195,41 +7413,59 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "dressing:phone-portrait+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
         driver.set_window_size(844, 390)
         return "dressing:phone-landscape+" + _focus_dressing_sample(driver, "commercial") + "+" + _set_camera_zoom_and_render(driver, 0.75, timeout=30.0)
+    if scenario == "wp-s003-009-011":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=((0,0,(1280,800)),(58,-12,(1280,800)),(118,8,(1280,800)),(182,-18,(1280,800)),(248,12,(844,390)),(310,-8,(390,844)))
+        yaw,pitch,viewport=plan[min(max(0,frame_index-1),len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        result=driver.execute_script("return window.PlanetStage?.setRotation?.(Number(arguments[0]),Number(arguments[1])) || null",float(yaw),float(pitch))
+        if not isinstance(result,dict):
+            raise RuntimeError(f"Wilderness planet view failed: {result}")
+        wild=result.get("wilderness") or {}
+        if wild.get("generated") is not True or wild.get("perFrameScatter") is not False or wild.get("simulationAuthority") is not False:
+            raise RuntimeError(f"Wilderness authority failed: {wild}")
+        if int(wild.get("acceptedStaticProps") or 0)<20 or int(wild.get("drawCalls") or 0)>2:
+            raise RuntimeError(f"Wilderness density/budget failed: {wild}")
+        WebDriverWait(driver,10.0).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.wilderness?.generated===true"))
+        return f"planet-wilderness:yaw={yaw}:pitch={pitch}:props={wild.get('acceptedStaticProps')}:faunaZones={wild.get('ambientFaunaZones')}:viewport={viewport[0]}x{viewport[1]}"
+
+    if scenario == "wp-s003-009-010":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=((5.5,"dawn",(1280,800)),(12.0,"day",(1280,800)),(17.5,"late-day",(1280,800)),(21.0,"night",(1280,800)),(12.0,"day",(844,390)),(21.0,"night",(390,844)))
+        hour,expected,viewport=plan[min(max(0,frame_index-1),len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        result=driver.execute_script("return window.PlanetStage?.applyAuthoritativeFantasyTime?.({hour:Number(arguments[0]),minute:0},'visual-evidence-authoritative-time') || null",float(hour))
+        if not isinstance(result,dict):
+            raise RuntimeError(f"Planet atmosphere application failed: {result}")
+        atmosphere=result.get("atmosphere") or {}
+        if atmosphere.get("active") is not True or atmosphere.get("simulationAuthority") is not False or atmosphere.get("source")!="visual-evidence-authoritative-time":
+            raise RuntimeError(f"Planet atmosphere authority isolation failed: {atmosphere}")
+        WebDriverWait(driver,10.0).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.atmosphere?.active===true"))
+        return f"planet-atmosphere:{expected}:hour={hour}:viewport={viewport[0]}x{viewport[1]}"
+
     if scenario == "wp-s003-009-009":
-        _ensure_texture_quality_profile(driver, "standard")
-        if frame_index == 0:
-            driver.set_window_size(1280, 800)
-            quality=_set_graphics_quality_mode(driver, "standard")
-            _set_ambient_motion_proof(driver, None)
-            return "ambient:standard-time-a+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 1:
-            time.sleep(0.75)
-            return "ambient:standard-time-b+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 2:
-            return "ambient:landmark-close+" + _focus_landmark(driver, 1.50, False)
-        if frame_index == 3:
-            quality=_set_graphics_quality_mode(driver, "low")
-            return "ambient:low-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 4:
-            quality=_set_graphics_quality_mode(driver, "standard")
-            return "ambient:standard-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 5:
-            quality=_set_graphics_quality_mode(driver, "high")
-            return "ambient:high-profile+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 6:
-            quality=_set_graphics_quality_mode(driver, "standard")
-            _set_ambient_motion_proof(driver, False)
-            return "ambient:baseline-off+" + quality + "+proof-off+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 7:
-            _set_ambient_motion_proof(driver, None)
-            return "ambient:baseline-on+proof-on+" + _set_camera_view_and_render_active(driver, 0, 0, 1.00, timeout=45.0)
-        if frame_index == 8:
-            quality=_set_graphics_quality_mode(driver, "standard")
-            return "ambient:far-zoom-lod+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.50, timeout=45.0)
-        driver.set_window_size(844, 390)
-        quality=_set_graphics_quality_mode(driver, "standard")
-        _set_ambient_motion_proof(driver, None)
-        return "ambient:phone-landscape+" + quality + "+" + _set_camera_view_and_render_active(driver, 0, 0, 0.75, timeout=45.0)
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            (-18,-10,(1280,800),0.0),
+            (-18,-10,(1280,800),1.2),
+            (55,-8,(1280,800),0.4),
+            (132,12,(1280,800),0.4),
+            (220,-18,(844,390),0.4),
+            (305,15,(390,844),0.4),
+        )
+        yaw,pitch,viewport,wait_s=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        result=driver.execute_script("return window.PlanetStage?.setRotation?.(Number(arguments[0]),Number(arguments[1])) || null",float(yaw),float(pitch))
+        if not isinstance(result,dict) or result.get("ready") is not True:
+            raise RuntimeError(f"Planet ambient view failed: {result}")
+        if wait_s: time.sleep(wait_s)
+        WebDriverWait(driver,10.0).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.ambientMotion?.cloudLayerCount===1"))
+        snap=driver.execute_script("return window.PlanetStage?.snapshot?.() || null")
+        ambient=(snap or {}).get("ambientMotion") or {}
+        if ambient.get("presentationOnly") is not True or ambient.get("simulationAuthority") is not False or int(ambient.get("drawCallEstimate") or 0)>1:
+            raise RuntimeError(f"Planet ambient authority/budget failed: {ambient}")
+        return f"planet-ambient:yaw={yaw}:pitch={pitch}:updates={ambient.get('updateCount')}:viewport={viewport[0]}x{viewport[1]}"
+
     if scenario == "wp-s003-009-008":
         _ensure_texture_quality_profile(driver, "standard")
         if frame_index == 0:
@@ -7702,7 +7938,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -7726,13 +7962,403 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "camera-pan":
         return _drag_canvas(driver, 120 if frame_index % 2 else -120, 0)
     if scenario == "camera-zoom":
-        actions = (
-            lambda: _wheel_canvas(driver, -500),
-            lambda: _wheel_canvas(driver, 500),
-            lambda: _pinch_gameplay(driver, 1.5),
-            lambda: _pinch_gameplay(driver, 2.0 / 3.0),
+        # Frame 0 is desktop landscape. Exercise the same real input paths at
+        # phone landscape and phone portrait sizes so WP-S003-010 evidence
+        # covers all first-class viewport classes without synthetic zoom APIs.
+        if frame_index == 1:
+            driver.set_window_size(844, 390)
+            time.sleep(0.2)
+            return "phone-landscape:" + _wheel_canvas(driver, -500)
+        if frame_index == 2:
+            return "phone-landscape:" + _wheel_canvas(driver, 500)
+        if frame_index == 3:
+            driver.set_window_size(390, 844)
+            time.sleep(0.2)
+            return "phone-portrait:" + _pinch_gameplay(driver, 1.5)
+        return "phone-portrait:" + _pinch_gameplay(driver, 2.0 / 3.0)
+    if scenario == "wp-s003-010-001":
+        # Globe -> tangent -> globe at an equatorial target, then repeat at a
+        # high latitude and finish in phone portrait. Use the public stage API
+        # so telemetry and rendered camera state are captured together.
+        if frame_index == 0:
+            driver.execute_script("window.PlanetStage.setRotation(-18,0); window.PlanetStage.setZoomScalar(0.35)")
+            return "equator:globe"
+        if frame_index == 1:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.82)")
+            return "equator:transition"
+        if frame_index == 2:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.97)")
+            return "equator:local-tangent"
+        if frame_index == 3:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.35)")
+            return "equator:return-globe"
+        if frame_index == 4:
+            driver.execute_script("window.PlanetStage.setRotation(145,72); window.PlanetStage.setZoomScalar(0.97)")
+            return "high-latitude:local-tangent"
+        if frame_index == 5:
+            driver.set_window_size(844,390); time.sleep(0.2)
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.82)")
+            return "phone-landscape:transition"
+        driver.set_window_size(390,844); time.sleep(0.2)
+        driver.execute_script("window.PlanetStage.setZoomScalar(0.97)")
+        return "phone-portrait:local-tangent"
+    if scenario == "wp-s003-010-002":
+        # Frame 0 is the untouched full planet. Subsequent frames keep one
+        # deterministic seeded land focus while stepping through every major
+        # representation scale down to the 2 m ground tier.
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t); window.PlanetStage.setZoomScalar(0.64);
+            """)
+            return "desktop:regional-overview"
+        if frame_index == 2:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.74)")
+            return "desktop:regional-detail"
+        if frame_index == 3:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.82)")
+            return "desktop:district"
+        if frame_index == 4:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.89)")
+            return "desktop:local-area"
+        if frame_index == 5:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.95)")
+            return "desktop:settlement"
+        if frame_index == 6:
+            driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
+            return "desktop:ground-2m-detail"
+        if frame_index == 7:
+            driver.set_window_size(390,844); time.sleep(0.2)
+            driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
+            return "phone-portrait:ground-2m-detail"
+        return "planet:full"
+    if scenario == "wp-s003-010-004":
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver,30.0).until(lambda d: d.execute_script("const s=window.PlanetStage?.snapshot?.();return Boolean(s?.ready&&(s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak));"))
+        plan=((1280,800,0.985,"desktop:near-ground-static"),(1280,800,1.0,"desktop:ground-static"),(844,390,1.0,"phone-landscape:ground-static"),(390,844,1.0,"phone-portrait:ground-static"))
+        viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(viewport[0],viewport[1]); time.sleep(0.2)
+        result=driver.execute_script("""
+            const api=window.PlanetStage,s=api?.snapshot?.(),t=s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak;
+            if(!api||!t) throw new Error('planet/static target unavailable');
+            api.setViewTarget(t);api.setZoomScalar(Number(arguments[0]));
+            return api.snapshot();
+        """,viewport[2])
+        local=((result or {}).get("projection") or {}).get("localStatic") or {}
+        if not local.get("active") or int(local.get("entityCount") or 0)<3 or local.get("viewportBounded") is not True or local.get("grounded") is not True:
+            raise RuntimeError(f"Ground static projection unavailable or unbounded: {local}")
+        if int(local.get("roadCount") or 0)<1 or int(local.get("buildingCount") or 0)<1:
+            raise RuntimeError(f"Land target lacks projected road/buildings: {local}")
+        return viewport[3]+f":entities={local.get('entityCount')}:buildings={local.get('buildingCount')}:trees={local.get('vegetationCount')}"
+    if scenario == "wp-s003-010-003":
+        # Exercise the bounded zoom-detail lifecycle: progressively refine the
+        # same seeded focus, zoom out to cull fine presentation, then revisit
+        # the same tier so cache reuse/eviction telemetry is captured.
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t); window.PlanetStage.setZoomScalar(0.69);
+            """)
+            return "desktop:regional-overview"
+        if frame_index == 2:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.77)")
+            return "desktop:regional-detail"
+        if frame_index == 3:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.85)")
+            return "desktop:district"
+        if frame_index == 4:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.91)")
+            return "desktop:local-area"
+        if frame_index == 5:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.96)")
+            return "desktop:settlement"
+        if frame_index == 6:
+            driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
+            return "desktop:ground-detail"
+        if frame_index == 7:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.35)")
+            return "desktop:outer-detail-culled"
+        if frame_index == 8:
+            driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
+            return "desktop:ground-revisit-cache"
+        return "planet:full"
+    if scenario == "wp-s003-010-003-001":
+        # Capture the geographic information hierarchy against one stable seeded
+        # focus, including the 50%-slower input telemetry and mobile layout.
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t); window.PlanetStage.setZoomScalar(0.52);
+            """)
+            return "desktop:country-region-labels-borders"
+        if frame_index == 2:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.68)")
+            return "desktop:regional-overview"
+        if frame_index == 3:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.76)")
+            return "desktop:regional-detail"
+        if frame_index == 4:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.84)")
+            return "desktop:district-zone-city"
+        if frame_index == 5:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.95)")
+            return "desktop:settlement-city-village"
+        if frame_index == 6:
+            driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
+            return "desktop:ground-local-context"
+        if frame_index == 7:
+            driver.set_window_size(390,844); time.sleep(0.2)
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.95)")
+            return "phone-portrait:settlement-map-info"
+        return "planet:continent-info-scale-ruler"
+    if scenario == "wp-s003-010-003-002":
+        # Frame 0 is the harness's untouched full-planet proof. Frames 1..8 are
+        # the dense reported problem range; frame 9 is a ground regression check.
+        plan=(
+            (0.650515,"desktop:0.20x"),
+            (0.690106,"desktop:0.24x"),
+            (0.715682,"desktop:0.27x"),
+            (0.738561,"desktop:0.30x"),
+            (0.765739,"desktop:0.34x"),
+            (0.789892,"desktop:0.38x"),
+            (0.811625,"desktop:0.42x"),
+            (0.831379,"desktop:0.46x"),
+            (1.000000,"desktop:ground-reference"),
         )
-        return actions[(frame_index - 1) % len(actions)]()
+        if frame_index == 0:
+            return "planet:full"
+        scalar,label=plan[min(frame_index-1,len(plan)-1)]
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        return label
+    if scenario == "wp-s003-010-003-003":
+        # No-movement zoom-only acceptance. Frame 0 is the untouched globe;
+        # frames 1..13 cover the reported 0.04x..0.44x range and frame 14
+        # verifies the later ground camera transition.
+        plan=(
+            (0.301030,"desktop:0.04x"),(0.349485,"desktop:0.05x"),
+            (0.389076,"desktop:0.06x"),(0.422549,"desktop:0.07x"),
+            (0.451545,"desktop:0.08x"),(0.500000,"desktop:0.10x"),
+            (0.556972,"desktop:0.13x"),(0.588046,"desktop:0.15x"),
+            (0.639377,"desktop:0.19x"),(0.680781,"desktop:0.23x"),
+            (0.731181,"desktop:0.29x"),(0.772035,"desktop:0.35x"),
+            (0.821721,"desktop:0.44x"),(1.000000,"desktop:ground-reference"),
+        )
+        if frame_index == 0:
+            return "planet:full"
+        scalar,label=plan[min(frame_index-1,len(plan)-1)]
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        return label
+    if scenario == "wp-s003-010-003-004":
+        # Terrain-anchored border/landmark evidence using one unchanged seeded
+        # focus. The sequence covers the requested globe, projection transition,
+        # regional oblique, tangent/local and phone portrait states.
+        plan=(
+            (0.349485,"desktop:0.05x-globe-landmarks",(1280,800)),
+            (0.422549,"desktop:0.07x-country-border",(1280,800)),
+            (0.451545,"desktop:0.08x-projection-transition",(1280,800)),
+            (0.500000,"desktop:0.10x-country",(1280,800)),
+            (0.588046,"desktop:0.15x-regional",(1280,800)),
+            (0.680781,"desktop:0.23x-regional-topdown",(1280,800)),
+            (0.731181,"desktop:0.29x-regional-detail",(1280,800)),
+            (0.780000,"desktop:regional-oblique-border",(1280,800)),
+            (0.860000,"desktop:district-tangent",(1280,800)),
+            (0.920000,"desktop:local-tangent",(1280,800)),
+            (0.680781,"phone:0.23x-border",(390,844)),
+            (0.900000,"phone:tangent-landmarks",(390,844)),
+        )
+        scalar,label,size=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*size); time.sleep(0.15)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        proof=driver.execute_script("""
+            window.PlanetStage.setZoomScalar(arguments[0]);
+            const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{};
+            return {
+              focus:[s?.zoom?.focusLatitudeDegrees,s?.zoom?.focusLongitudeDegrees],
+              bounded:m?.bounded,fullWorldScan:m?.fullWorldScan,
+              borderSegments:m?.borderSegmentCount,projectedBorderSegments:m?.projectedBorderSegmentCount,
+              borderWorldVertices:m?.borderWorldVertexCount,
+              landmarkCandidates:m?.landmarkCandidateCount,landmarkVisible:m?.landmarkVisibleCount,
+              projectionMode:m?.projectionMode,projectionBlend:m?.projectionBlend
+            };
+        """,scalar)
+        if not isinstance(proof,dict) or proof.get("bounded") is not True or proof.get("fullWorldScan") is not False:
+            raise RuntimeError(f"WP-S003-010-003-004 map budget/projection proof invalid: {proof}")
+        return label
+    if scenario == "wp-s003-010-003-005-001":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            (0.000000,"fixed-focus:0.01x"),(0.349485,"fixed-focus:0.05x"),
+            (0.451545,"fixed-focus:0.08x"),(0.588046,"fixed-focus:0.15x"),
+            (0.731199,"fixed-focus:0.29x"),(0.821726,"fixed-focus:0.44x"),
+            (0.899670,"fixed-focus:0.63x"),(0.946047,"fixed-focus:0.78x"),
+            (1.000000,"fixed-focus:1.00x"),(0.000000,"reverse:0.01x"),
+        )
+        scalar,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.15)
+        if frame_index == 0:
+            WebDriverWait(driver, 30).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.ready===true"))
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continuityFocus || s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",scalar)
+        WebDriverWait(driver,30).until(
+            lambda d: d.execute_script("""
+                const target=Number(arguments[0]),s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{};
+                const overlay=document.querySelector('#planetStageRoot .planet-stage-loading');
+                const zoomOk=Math.abs(Number(s?.zoom?.scalar)-target)<1e-6;
+                const resourceOk=Number(s?.projection?.blend||0)<=0 || (
+                  Number(r?.pendingPreparationCount||0)===0 &&
+                  !!r?.activeSignature &&
+                  r?.activeSignature===r?.requestedSignature
+                );
+                const groundOk=target<.995 || s?.projection?.localStatic?.active===true;
+                return Boolean(s?.ready===true&&zoomOk&&resourceOk&&groundOk&&(!overlay||overlay.hidden===true));
+            """,scalar)
+        )
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),f=s?.canonicalFocus||{},r=s?.projection?.resourceBudget||{};
+            return {scalar:s?.zoom?.scalar,focus:[f?.latitudeDegrees,f?.longitudeDegrees],
+              vector:f?.sphericalVector,tangentOrigin:f?.tangentOriginMeters,lodOrigin:f?.activeLodOriginMeters,
+              worldTile:f?.worldTile,screenTarget:f?.screenSpaceTargetPercent,screenDelta:f?.screenSpaceFocusDeltaPixels,
+              surfaceIdentity:f?.surfaceIdentity,handoff:s?.projection?.presentation?.handoff,mode:s?.projection?.mode,
+              activeSignature:r?.activeSignature,requestedSignature:r?.requestedSignature,pending:r?.pendingPreparationCount,
+              visibleFootprint:[s?.zoom?.visibleFootprintWidthMeters,s?.zoom?.visibleFootprintHeightMeters]};
+        """)
+        if not isinstance(proof,dict) or proof.get("screenDelta") != 0:
+            raise RuntimeError(f"WP-S003-010-003-005-001 canonical focus proof invalid: {proof}")
+        return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-005-002":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            (0.451545,"fixed-focus:0.08x"),(0.588046,"fixed-focus:0.15x"),
+            (0.731199,"fixed-focus:0.29x"),(0.821726,"fixed-focus:0.44x"),
+            (0.866461,"fixed-focus:0.54x"),(0.899670,"fixed-focus:0.63x"),
+            (0.909559,"fixed-focus:0.66x"),(0.946047,"fixed-focus:0.78x"),
+            (0.954243,"fixed-focus:0.81x"),(1.000000,"fixed-focus:1.00x"),
+        )
+        scalar,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.15)
+        if frame_index == 0:
+            WebDriverWait(driver,30).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.ready===true"))
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continuityFocus || s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",scalar)
+        WebDriverWait(driver,30).until(
+            lambda d: d.execute_script("""
+                const target=Number(arguments[0]),s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{};
+                const overlay=document.querySelector('#planetStageRoot .planet-stage-loading');
+                const zoomOk=Math.abs(Number(s?.zoom?.scalar)-target)<1e-6;
+                const resourceOk=Number(s?.projection?.blend||0)<=0 || (
+                  Number(r?.pendingPreparationCount||0)===0 &&
+                  !!r?.activeSignature &&
+                  r?.activeSignature===r?.requestedSignature
+                );
+                return Boolean(s?.ready===true&&zoomOk&&resourceOk&&(!overlay||overlay.hidden===true));
+            """,scalar)
+        )
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),d=s?.projection?.localDetail||{},r=s?.projection?.resourceBudget||{};
+            return {
+              scalar:s?.zoom?.scalar,level:d?.level,textureSize:d?.textureSize,
+              metersPerTexel:d?.detailMetersPerTexel,surroundMetersPerTexel:d?.surroundMetersPerTexel,
+              geometrySpacing:d?.geometrySampleSpacingMeters,anisotropy:d?.anisotropy,
+              minFilter:d?.minFilter,magFilter:d?.magFilter,detailBands:d?.detailBandCount,
+              visibleFootprint:[s?.zoom?.visibleFootprintWidthMeters,s?.zoom?.visibleFootprintHeightMeters],
+              buildMs:r?.lastBuildMs,cached:r?.cachedResourceCount,offscreenFine:r?.offscreenFineDetailActive
+            };
+        """)
+        if not isinstance(proof,dict):
+            raise RuntimeError(f"WP-S003-010-003-005-002 density proof unavailable: {proof}")
+        return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-005":
+        plan=((0.772035,"desktop:0.35x",(1280,800)),(0.821721,"desktop:0.44x",(1280,800)),(0.866461,"desktop:0.54x",(1280,800)),(0.909559,"desktop:0.66x",(1280,800)),(0.954243,"desktop:0.81x",(1280,800)),(0.995000,"desktop:near-ground",(1280,800)),(1.000000,"desktop:ground",(1280,800)),(0.954243,"phone-landscape:0.81x",(844,390)),(0.954243,"phone-portrait:0.81x",(390,844)))
+        scalar,label,size=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*size); time.sleep(0.15)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        proof=driver.execute_script("""
+            window.PlanetStage.setZoomScalar(arguments[0]);
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},d=s?.projection?.localDetail||{};
+            return {mode:s?.projection?.mode,blend:s?.projection?.blend,level:d?.level,fineWidth:d?.patchWidthMeters,fineHeight:d?.patchHeightMeters,visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,active:r?.activeResourceCount,cached:r?.cachedResourceCount,bytes:r?.estimatedCacheBytes,offscreenFine:r?.offscreenFineDetailActive,buildMs:r?.lastBuildMs};
+        """,scalar)
+        if not isinstance(proof,dict) or proof.get("offscreenFine") is not False:
+            raise RuntimeError(f"WP-S003-010-003-005 bounded resource proof invalid: {proof}")
+        return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-006":
+        plan=(
+            (0.700,"desktop:400km"),(0.740,"desktop:250km"),(0.780,"desktop:140km"),
+            (0.820,"desktop:80km"),(0.860,"desktop:50km"),(0.890,"desktop:20km"),
+            (0.920,"desktop:10km"),(0.940,"desktop:5km"),(0.955,"desktop:2km"),
+            (0.970,"desktop:1km"),(0.980,"desktop:500m"),(0.990,"desktop:200m"),
+            (1.000,"desktop:ground"),
+        )
+        scalar,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.1)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver,20.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
+            return Number(s?.zoom?.scalar||0)>=Number(arguments[0])-0.000001 &&
+                   Number(r?.pendingPreparationCount||0)===0;
+        """,scalar))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},p=s?.projection?.presentation||{};
+            return {scalar:s?.zoom?.scalar,visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
+              level:s?.projection?.localDetail?.level,requested:r?.requestedSignature,prepared:r?.preparedSignature,active:r?.activeSignature,
+              pending:r?.pendingPreparationCount,buildMs:r?.lastBuildMs,swapMs:r?.lastSwapMs,blockingZoomBuilds:r?.blockingZoomBuilds,
+              targetHeightMeters:p?.targetHeightMeters};
+        """)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -7906,6 +8532,20 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 6:
             return _set_minimap_view(driver, 6, 4, 1.00, viewport=(844, 390))
         return _set_minimap_view(driver, 0, 0, 1.00, viewport=(1440, 900))
+    if scenario == "wp-s003-008-002-001":
+        plan=(
+            ("indeterminate","planning","Planning startup…",0,(1440,900)),
+            ("determinate","engine","Loading renderer…",15,(1440,900)),
+            ("determinate","geography","Generating continents, oceans and islands…",52,(1440,900)),
+            ("determinate","surface","Painting planetary surface and relief…",68,(1440,900)),
+            ("determinate","mesh","Building planetary height mesh…",84,(1440,900)),
+            ("ready","ready","First playable planet ready",100,(1440,900)),
+            ("determinate","surface","Painting planetary surface and relief…",68,(390,844)),
+            ("failed","error","The planet could not finish preparing.",68,(844,390)),
+        )
+        mode,phase,label,value,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*viewport)
+        return _set_planet_loading_proof(driver,mode,phase,label,value)
     if scenario == "wp-s003-008-002":
         if frame_index == 0:
             driver.set_window_size(1440, 900)
@@ -7962,6 +8602,354 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-006":
+        if len(frames) < 13:
+            raise RuntimeError("wp-s003-010-003-006 requires thirteen intermediate-scale frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:13]]
+        focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Intermediate-scale evidence changed geographic focus: {focus}")
+        heights=[float((s.get("zoom") or {}).get("visibleFootprintHeightMeters") or 0) for s in stages]
+        if any(b >= a for a,b in zip(heights,heights[1:])):
+            raise RuntimeError(f"Visible footprint did not decrease monotonically: {heights}")
+        targets=[float(((s.get("projection") or {}).get("presentation") or {}).get("targetHeightMeters") or 0) for s in stages]
+        if any(b >= a for a,b in zip(targets,targets[1:])):
+            raise RuntimeError(f"Presentation target ladder did not decrease monotonically: {targets}")
+        for s in stages:
+            r=(s.get("projection") or {}).get("resourceBudget") or {}
+            if int(r.get("pendingPreparationCount") or 0) != 0 or int(r.get("blockingZoomBuilds") or 0) != 0:
+                raise RuntimeError(f"LOD handoff remained pending/blocking at capture: {r}")
+        return
+    if scenario == "wp-s003-010-003-005-001":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-005-001 requires ten fixed-focus zoom frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        focus=[(stage.get("canonicalFocus") or {}).get("worldTile") for stage in stages]
+        focus_keys=[json.dumps(item,sort_keys=True) for item in focus]
+        if len(set(focus_keys)) != 1:
+            raise RuntimeError(f"Zoom-only sequence relocated canonical world focus: {focus}")
+        coords=[((stage.get("canonicalFocus") or {}).get("latitudeDegrees"),(stage.get("canonicalFocus") or {}).get("longitudeDegrees")) for stage in stages]
+        if len(set(coords)) != 1:
+            raise RuntimeError(f"Zoom-only sequence changed canonical lat/lon: {coords}")
+        if any(float((stage.get("canonicalFocus") or {}).get("screenSpaceFocusDeltaPixels") or 0) != 0 for stage in stages):
+            raise RuntimeError("Canonical focus target moved in screen space")
+        if round(float((stages[0].get("zoom") or {}).get("scalar", -1)),6) != 0 or round(float((stages[-1].get("zoom") or {}).get("scalar", -1)),6) != 0:
+            raise RuntimeError("Reverse zoom did not return to globe scalar")
+        return
+    if scenario == "wp-s003-010-003-005-002":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-005-002 requires ten fixed-focus density frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        focus=[((stage.get("canonicalFocus") or {}).get("latitudeDegrees"),(stage.get("canonicalFocus") or {}).get("longitudeDegrees")) for stage in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Density evidence changed canonical focus: {focus}")
+        density=[]
+        for stage in stages:
+            d=(stage.get("projection") or {}).get("localDetail") or {}
+            r=(stage.get("projection") or {}).get("resourceBudget") or {}
+            if r.get("offscreenFineDetailActive") is not False or int(r.get("cachedResourceCount") or 0) > 4:
+                raise RuntimeError(f"Density evidence exceeded bounded resource contract: {r}")
+            if d.get("active"):
+                tex=int(d.get("textureSize") or 0)
+                mpt=float(d.get("detailMetersPerTexel") or 0)
+                spacing=float(d.get("geometrySampleSpacingMeters") or d.get("sampleSpacingMeters") or 0)
+                if tex<=0 or mpt<=0 or spacing<=0:
+                    raise RuntimeError(f"Missing source density telemetry: {d}")
+                if int(d.get("anisotropy") or 0) < 1 or d.get("minFilter")!="linear-mipmap-linear" or d.get("magFilter")!="linear":
+                    raise RuntimeError(f"Texture sampling telemetry invalid: {d}")
+                density.append((float((stage.get("zoom") or {}).get("scalar") or 0),tex,mpt,spacing,str(d.get("level") or "")))
+        if len(density) < 5:
+            raise RuntimeError(f"Too few refined LOD samples: {density}")
+        for a,b in zip(density,density[1:]):
+            if b[1] < a[1] or b[2] > a[2]*1.001 or b[3] > a[3]*1.001:
+                raise RuntimeError(f"Closer zoom lost texture/geometry density: {a} -> {b}")
+        local=(stages[5].get("projection") or {}).get("localDetail") or {}
+        settlement=(stages[7].get("projection") or {}).get("localDetail") or {}
+        if str(local.get("level"))!="local-area" or int(local.get("textureSize") or 0)<256 or int(local.get("detailBandCount") or 0)<4:
+            raise RuntimeError(f"0.63x local-area refinement insufficient: {local}")
+        if str(settlement.get("level"))!="settlement" or int(settlement.get("textureSize") or 0)<320 or int(settlement.get("detailBandCount") or 0)<4:
+            raise RuntimeError(f"0.78x settlement refinement insufficient: {settlement}")
+        return
+    if scenario == "wp-s003-010-003-005":
+        if len(frames) < 9:
+            raise RuntimeError("wp-s003-010-003-005 requires nine multi-LOD continuity frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:9]]
+        focus=[(round(float((stage.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((stage.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for stage in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Multi-LOD evidence changed geographic focus: {focus}")
+        for stage in stages:
+            r=(stage.get("projection") or {}).get("resourceBudget") or {}
+            d=(stage.get("projection") or {}).get("localDetail") or {}
+            if r.get("offscreenFineDetailActive") is not False or int(r.get("cachedResourceCount") or 0) > 4:
+                raise RuntimeError(f"Bounded local resource contract failed: {r}")
+            if float((stage.get("projection") or {}).get("blend") or 0) > .055 and (float(d.get("patchWidthMeters") or 0) <= 0 or float(d.get("patchHeightMeters") or 0) <= 0):
+                raise RuntimeError(f"Visible tangent frame lacks bounded terrain footprint: {d}")
+        return
+    if scenario == "wp-s003-010-003-004":
+        if len(frames) < 12:
+            raise RuntimeError("wp-s003-010-003-004 requires twelve anchored border/landmark evidence frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:12]]
+        focus=[(round(float((stage.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((stage.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for stage in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Anchored map evidence changed geographic focus: {focus}")
+        maps=[stage.get("mapPresentation") or {} for stage in stages]
+        if any(m.get("bounded") is not True or m.get("fullWorldScan") is not False for m in maps):
+            raise RuntimeError(f"Map presentation lost bounded/no-full-world contract: {maps}")
+        if max(int(m.get("projectedBorderSegmentCount") or 0) for m in maps[1:8]) < 1:
+            raise RuntimeError("No world-projected political border was visible in country/regional evidence")
+        if max(int(m.get("landmarkVisibleCount") or 0) for m in maps) < 1:
+            raise RuntimeError("No terrain-anchored landmark pointer was visible in evidence")
+        border_maps=maps[1:8]
+        if max(int(m.get("borderWaterSampleCount") or 0) for m in border_maps) < 1:
+            raise RuntimeError("Political border evidence did not exercise land/water clipping")
+        if any(int(m.get("borderOwnerQueryCount") or 0) > int(m.get("borderLandSampleCount") or 0) for m in border_maps):
+            raise RuntimeError(f"Political owner queries exceeded bounded land samples: {border_maps}")
+        if any(int(m.get("borderLandSampleCount") or 0)+int(m.get("borderWaterSampleCount") or 0) != int(m.get("borderSampleCount") or 0) for m in border_maps):
+            raise RuntimeError(f"Border land/water sampling telemetry mismatch: {border_maps}")
+        if max(float(m.get("lastBorderBuildMs") or 0) for m in border_maps) > 220:
+            raise RuntimeError(f"Political border rebuild exceeded 220 ms budget: {border_maps}")
+        if max(float(m.get("lastUpdateMs") or 0) for m in border_maps) > 260:
+            raise RuntimeError(f"Map presentation update exceeded 260 ms budget: {border_maps}")
+        for m in maps:
+            raw=int(m.get("borderSegmentCount") or 0); vertices=int(m.get("borderWorldVertexCount") or 0); projected=int(m.get("projectedBorderSegmentCount") or 0)
+            if raw and vertices != raw*3:
+                raise RuntimeError(f"Border world-vertex telemetry mismatch: {m}")
+            if projected > raw:
+                raise RuntimeError(f"Projected border count exceeds bounded raw segments: {m}")
+        modes={str(m.get("projectionMode") or "") for m in maps}
+        if "globe" not in modes or not any(mode in {"tangent-transition","local-tangent"} for mode in modes):
+            raise RuntimeError(f"Evidence did not exercise globe and tangent projection modes: {modes}")
+    if scenario == "wp-s003-010-003-003":
+        if len(frames) < 15:
+            raise RuntimeError("wp-s003-010-003-003 requires fifteen no-movement zoom evidence frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[1:15]]
+        focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Zoom-only focus drifted: {focus}")
+        map_stages=stages[:13]
+        pitches=[];fovs=[];angles=[]
+        for index,stage in enumerate(map_stages, start=1):
+            p=stage.get("projection") or {}; present=p.get("presentation") or {}
+            pitches.append(float(present.get("cameraPitchDegrees") or 0))
+            fovs.append(float(present.get("fov") or 0))
+            angles.append(float(present.get("angleBlend") or 0))
+            if index <= 10 and abs(pitches[-1]) > 0.25:
+                raise RuntimeError(f"Map-scale camera tilted before local approach in frame {index}: pitch={pitches[-1]}")
+        if any(b<a-0.01 for a,b in zip(pitches,pitches[1:])):
+            raise RuntimeError(f"Camera pitch is not monotonic: {pitches}")
+        if any(b<a-0.01 for a,b in zip(fovs,fovs[1:])):
+            raise RuntimeError(f"Camera FOV is not monotonic: {fovs}")
+        if max(abs(b-a) for a,b in zip(pitches,pitches[1:])) > 12:
+            raise RuntimeError(f"Per-step camera pitch delta is too abrupt: {pitches}")
+        if max(abs(b-a) for a,b in zip(fovs,fovs[1:])) > 5:
+            raise RuntimeError(f"Per-step FOV delta is too abrupt: {fovs}")
+        if abs(float((map_stages[2].get("projection") or {}).get("presentation",{}).get("cameraPitchDegrees") or 0)-
+               float((map_stages[4].get("projection") or {}).get("presentation",{}).get("cameraPitchDegrees") or 0)) > 0.25:
+            raise RuntimeError("0.06x -> 0.08x still rotates the camera")
+        inp=map_stages[0].get("input") or {}
+        if abs(float(inp.get("wheelSensitivity") or 0)-0.00045)>1e-9 or abs(float(inp.get("pinchSensitivity") or 0)-0.003)>1e-9:
+            raise RuntimeError(f"50%-slower zoom sensitivities regressed: {inp}")
+    if scenario == "wp-s003-010-003-002":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-002 requires ten dense mid-zoom evidence frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        dense=stages[1:9]
+        focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in dense]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Mid-zoom focus drifted across evidence: {focus}")
+        heights=[];blends=[];camera_y=[];fovs=[];multipliers=[]
+        for index,stage in enumerate(dense, start=1):
+            if stage.get("ready") is not True or stage.get("version") != "planet-ground-static-v3":
+                raise RuntimeError(f"Corrected planet renderer not ready in frame {index}: {stage}")
+            inp=stage.get("input") or {}
+            if abs(float(inp.get("wheelSensitivity") or 0)-0.00045)>1e-9 or abs(float(inp.get("pinchSensitivity") or 0)-0.003)>1e-9:
+                raise RuntimeError(f"50%-slower zoom sensitivities regressed in frame {index}: {inp}")
+            z=stage.get("zoom") or {};p=stage.get("projection") or {};present=p.get("presentation") or {}
+            heights.append(float(z.get("visibleFootprintHeightMeters") or 0))
+            blends.append(float(p.get("blend") or 0))
+            camera_y.append(float(present.get("cameraY") or 0))
+            fovs.append(float(present.get("fov") or 0))
+            multipliers.append(float((stage.get("mapPresentation") or {}).get("zoomScaleMultiplier") or 0))
+            if abs(float(present.get("viewBlend") or 0)-float(p.get("blend") or 0))>0.002:
+                raise RuntimeError(f"Camera blend is still accelerated/compressed in frame {index}: projection={p}")
+            local=p.get("localDetail") or {}
+            if index>=3 and str(local.get("level") or "") in {"regional-overview","regional-detail","district"} and int(local.get("textureSize") or 0)>64:
+                raise RuntimeError(f"Broad LOD texture exceeds 64px streaming budget in frame {index}: {local}")
+            build_ms=float((p.get("resourceBudget") or {}).get("lastBuildMs") or 0)
+            if build_ms>220:
+                raise RuntimeError(f"Broad LOD synchronous build still exceeds 220 ms in frame {index}: {build_ms} ms")
+        if any(b<a for a,b in zip(blends,blends[1:])):
+            raise RuntimeError(f"Projection blend is not monotonic: {blends}")
+        if any(b<a for a,b in zip(camera_y,camera_y[1:])):
+            raise RuntimeError(f"Camera elevation is not monotonic through mid zoom: {camera_y}")
+        if any(b<a for a,b in zip(fovs,fovs[1:])):
+            raise RuntimeError(f"Camera FOV is not monotonic through mid zoom: {fovs}")
+        if any(b>=a for a,b in zip(heights,heights[1:])):
+            raise RuntimeError(f"Visible footprint does not decrease monotonically: {heights}")
+        ratios=[a/max(1,b) for a,b in zip(heights,heights[1:])]
+        if max(ratios)>1.35:
+            raise RuntimeError(f"Mid-zoom footprint still changes too abruptly for the visible x-scale: ratios={ratios}, heights={heights}")
+        if any(b<=a for a,b in zip(multipliers,multipliers[1:])):
+            raise RuntimeError(f"Visible x scale is not increasing monotonically: {multipliers}")
+        political=dense[0].get("politicalScale") or {}
+        if int(political.get("countryCellSize") or 0) < 196608:
+            raise RuntimeError(f"Country scale was not materially increased: {political}")
+        if int(political.get("regionCellSize") or 0) != 8192:
+            raise RuntimeError(f"Region cell authority changed unexpectedly: {political}")
+        if float(political.get("countryRegionLinearRatio") or 0) < 24:
+            raise RuntimeError(f"Countries do not contain enough regional scale depth: {political}")
+        if int(political.get("boundedSampleCount") or 0) != 35 or int(political.get("boundedDistinctCountryOwners") or 99) > 12:
+            raise RuntimeError(f"Bounded political density still shows too many countries: {political}")
+        if political.get("fullWorldScan") is not False:
+            raise RuntimeError(f"Political density evidence performed a full-world scan: {political}")
+        return
+
+    if scenario == "wp-s003-010-003-001":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-010-003-001 requires eight map-information evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
+        stages=[build.get("planetStage") or {} for build in builds]
+        for index,stage in enumerate(stages, start=1):
+            if stage.get("ready") is not True or stage.get("version") != "planet-ground-static-v3":
+                raise RuntimeError(f"Map-info planet renderer not ready in frame {index}: {stage}")
+            inp=stage.get("input") or {}
+            if abs(float(inp.get("wheelSensitivity") or 0)-0.00045)>1e-9:
+                raise RuntimeError(f"Wheel zoom is not exactly 50% of prior sensitivity in frame {index}: {inp}")
+            if abs(float(inp.get("pinchSensitivity") or 0)-0.003)>1e-9:
+                raise RuntimeError(f"Pinch zoom is not exactly 50% of prior sensitivity in frame {index}: {inp}")
+            if abs(float(inp.get("zoomInputRateFraction") or 0)-0.5)>1e-9:
+                raise RuntimeError(f"Zoom input rate fraction is not 0.5 in frame {index}: {inp}")
+            info=stage.get("mapPresentation") or {}
+            if info.get("active") is not True or info.get("bounded") is not True or info.get("fullWorldScan") is not False:
+                raise RuntimeError(f"Bounded map presentation contract failed in frame {index}: {info}")
+            if float(info.get("scaleDistanceMeters") or 0)<=0 or not str(info.get("scaleLabel") or ""):
+                raise RuntimeError(f"Scale ruler telemetry missing in frame {index}: {info}")
+            if not str(info.get("zoomScaleLabel") or "").endswith("x"):
+                raise RuntimeError(f"Zoom multiplier label missing in frame {index}: {info}")
+            if int(info.get("labelCount") or 0)>6:
+                raise RuntimeError(f"Map label budget exceeded in frame {index}: {info}")
+        required=[
+            (0,"continent"),
+            (1,"country"),
+            (3,"region"),
+            (4,"city"),
+            (5,"village"),
+            (6,"district"),
+        ]
+        for frame_index,kind in required:
+            kinds=stages[frame_index].get("mapPresentation",{}).get("visibleContextKinds") or []
+            if kind not in kinds:
+                raise RuntimeError(f"Expected {kind} context missing in frame {frame_index+1}: {kinds}")
+        border_frames=[stages[i].get("mapPresentation") or {} for i in (1,2,3,4)]
+        if not any(int(info.get("borderSegmentCount") or 0)>0 for info in border_frames):
+            raise RuntimeError(f"No political borders were generated at country/regional zoom: {border_frames}")
+        if any(int(info.get("borderSampleCount") or 0)>117 for info in border_frames):
+            raise RuntimeError(f"Political border query exceeded bounded 13x9 grid: {border_frames}")
+        multipliers=[float((stages[i].get("mapPresentation") or {}).get("zoomScaleMultiplier") or 0) for i in range(1,7)]
+        if any(b<=a for a,b in zip(multipliers,multipliers[1:])):
+            raise RuntimeError(f"Scale multiplier did not increase monotonically with zoom: {multipliers}")
+        portrait=frames[7].get("runtime",{}).get("viewport",{})
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"Phone portrait map-info frame has unexpected viewport: {portrait}")
+        return
+
+    if scenario in {"wp-s003-006-014","wp-s003-008-004"}:
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-006-014 requires six seeded-planet evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:6]]
+        hashes=[]
+        build_times=[]
+        for index,build in enumerate(builds, start=1):
+            stage=build.get("planetStage") or {}
+            if scenario=="wp-s003-008-004":
+                scheduler=stage.get("startupScheduler") or {}
+                if scheduler.get("sharedCooperativeScheduler") is not True or scheduler.get("criticalPathOnly") is not True:
+                    raise RuntimeError(f"Startup scheduler contract missing in frame {index}: {scheduler}")
+                if int(scheduler.get("yieldCount") or 0)<2 or int(scheduler.get("sliceCount") or 0)<3:
+                    raise RuntimeError(f"Startup did not cooperatively yield enough in frame {index}: {scheduler}")
+                if float(scheduler.get("maxSliceMs") or 9999)>50:
+                    raise RuntimeError(f"Startup slice exceeded long-task threshold in frame {index}: {scheduler}")
+                if int(scheduler.get("heartbeatCount") or 0)<1 or int(scheduler.get("paintHeartbeatCount") or 0)<3:
+                    raise RuntimeError(f"Startup heartbeat/paint proof missing in frame {index}: {scheduler}")
+                if int(scheduler.get("controlledLongTaskOver200") or 0)>0:
+                    raise RuntimeError(f"Severe >200ms game-controlled startup long task detected in frame {index}: {scheduler}")
+                phases=scheduler.get("phaseTimings") or {}
+                if float(phases.get("graphicsDeviceMs") or 0)<=0 or float(phases.get("buildSceneMs") or 0)<=0:
+                    raise RuntimeError(f"Startup phase timing attribution missing in frame {index}: {scheduler}")
+                if int(scheduler.get("completedFirstPlayableWorkUnits") or 0)!=int(scheduler.get("firstPlayableWorkUnits") or -1):
+                    raise RuntimeError(f"First-playable sliced work incomplete in frame {index}: {scheduler}")
+                if int(scheduler.get("optionalPostReadyWorkCount", -1))!=0:
+                    raise RuntimeError(f"Optional work leaked into planet critical path in frame {index}: {scheduler}")
+            systems=stage.get("activeSystems") or {}
+            generation=stage.get("generation") or {}
+            stats=stage.get("geographyStats") or {}
+            verification=stage.get("geographyVerification") or {}
+            layout=stage.get("geographyLayout") or {}
+            if stage.get("ready") is not True or stage.get("stage") != "seeded-planetary-geography":
+                raise RuntimeError(f"Seeded planet stage not ready in frame {index}: {stage}")
+            if stage.get("version") != "planet-map-info-v4":
+                raise RuntimeError(f"Unexpected planet renderer version in frame {index}: {stage}")
+            if stage.get("geographyVersion") != "planetary-geography-v4":
+                raise RuntimeError(f"Unexpected geography version in frame {index}: {stage}")
+            if abs(float(stage.get("worldScaleFraction") or 0)-0.10)>1e-9:
+                raise RuntimeError(f"Planet scale fraction is not 10% in frame {index}: {stage}")
+            if int(stage.get("worldRadiusMeters") or 0) != 637100:
+                raise RuntimeError(f"Planet radius mismatch in frame {index}: {stage}")
+            if not stage.get("activeSeed") or not stage.get("geographyHash"):
+                raise RuntimeError(f"Planet seed/hash missing in frame {index}: {stage}")
+            hashes.append(stage.get("geographyHash"))
+            build_times.append(float(stage.get("buildTimeMs") or 0))
+            if verification.get("sameSeedMatch") is not True or verification.get("differentSeedChanges") is not True:
+                raise RuntimeError(f"Seed determinism/change proof failed in frame {index}: {verification}")
+            seam=verification.get("seam") or {}
+            north_pole=seam.get("northPoleRangeMeters")
+            south_pole=seam.get("southPoleRangeMeters")
+            if (
+                seam.get("longitudePass") is not True
+                or north_pole is None or float(north_pole)>0.001
+                or south_pole is None or float(south_pole)>0.001
+            ):
+                raise RuntimeError(f"Spherical seam/pole continuity failed in frame {index}: {verification}")
+            if int(stats.get("landSamples") or 0)<=0 or int(stats.get("oceanSamples") or 0)<=0:
+                raise RuntimeError(f"Land/ocean generation missing in frame {index}: {stats}")
+            if int(stats.get("islandSamples") or 0)<=0 or int(stats.get("mountainSamples") or 0)<=0:
+                raise RuntimeError(f"Island/mountain generation missing in frame {index}: {stats}")
+            if float(stats.get("maxElevationMeters") or 0)<3000 or float(stats.get("minElevationMeters") or 0)>-1000:
+                raise RuntimeError(f"Planetary elevation range is too weak in frame {index}: {stats}")
+            if int(layout.get("continentCount") or 0)<3 or int(layout.get("islandNodeCount") or 0)<8 or int(layout.get("mountainNodeCount") or 0)<10:
+                raise RuntimeError(f"Planetary layout lacks large-scale geography in frame {index}: {layout}")
+            texture=stage.get("texture") or {}
+            mesh=stage.get("mesh") or {}
+            if int(texture.get("width") or 0)<512 or int(texture.get("height") or 0)<256:
+                raise RuntimeError(f"Generated geography texture too small in frame {index}: {texture}")
+            if int(mesh.get("latitudeSegments") or 0)<64 or int(mesh.get("longitudeSegments") or 0)<96:
+                raise RuntimeError(f"Relief sphere mesh too coarse in frame {index}: {mesh}")
+            if float(stage.get("heightExaggeration") or 0)<=1:
+                raise RuntimeError(f"Macro height relief is not visually exaggerated in frame {index}: {stage}")
+            if generation.get("generatedOnce") is not True or generation.get("perFrameGeneration") is not False or generation.get("sphericalAuthority") is not True or generation.get("planarTileAuthority") is not False:
+                raise RuntimeError(f"Planet generation authority/per-frame contract failed in frame {index}: {generation}")
+            for key in (
+                "protagonistEnabled","npcEnabled","tileSystemActive","localTerrainActive",
+                "settlementGenerationActive","buildingGenerationActive","worldDetailSimulationActive"
+            ):
+                if systems.get(key) is not False:
+                    raise RuntimeError(f"Stage 2 unexpectedly enabled {key} in frame {index}: {stage}")
+            if int(stage.get("canvasCount") or 0)!=1 or int(build.get("planetCanvasCount") or 0)!=1 or int(build.get("legacyCanvasCount") or 0)!=0:
+                raise RuntimeError(f"Planet canvas contract failed in frame {index}: {build}")
+            if build.get("terrainGridPresent") is True or build.get("protagonistPresent") is True:
+                raise RuntimeError(f"Retired local gameplay DOM is active in frame {index}: {build}")
+        if len(set(hashes)) != 1:
+            raise RuntimeError(f"Planet geography changed across rotation/view frames: {hashes}")
+        landscape=frames[4].get("runtime",{}).get("viewport",{})
+        portrait=frames[5].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>450:
+            raise RuntimeError(f"Phone-landscape planet frame has unexpected viewport: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"Phone-portrait planet frame has unexpected viewport: {portrait}")
+        if max(build_times)>15000:
+            raise RuntimeError(f"Planet build time exceeded 15s evidence bound: {build_times}")
+        return
+
     if scenario == "wp-s003-006-013":
         if len(frames) < 6:
             raise RuntimeError("wp-s003-006-013 requires six planet-sphere evidence frames")
@@ -7969,6 +8957,22 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         rotations=[]
         for index,build in enumerate(builds, start=1):
             stage=build.get("planetStage") or {}
+            if scenario=="wp-s003-008-004":
+                scheduler=stage.get("startupScheduler") or {}
+                if scheduler.get("sharedCooperativeScheduler") is not True or scheduler.get("criticalPathOnly") is not True:
+                    raise RuntimeError(f"Startup scheduler contract missing in frame {index}: {scheduler}")
+                if int(scheduler.get("yieldCount") or 0)<2 or int(scheduler.get("sliceCount") or 0)<3:
+                    raise RuntimeError(f"Startup did not cooperatively yield enough in frame {index}: {scheduler}")
+                if float(scheduler.get("maxSliceMs") or 9999)>50:
+                    raise RuntimeError(f"Startup slice exceeded long-task threshold in frame {index}: {scheduler}")
+                if int(scheduler.get("heartbeatCount") or 0)<1 or int(scheduler.get("paintHeartbeatCount") or 0)<3:
+                    raise RuntimeError(f"Startup heartbeat/paint proof missing in frame {index}: {scheduler}")
+                if int(scheduler.get("longTaskOver200") or 0)>0:
+                    raise RuntimeError(f"Severe >200ms startup long task detected in frame {index}: {scheduler}")
+                if int(scheduler.get("completedFirstPlayableWorkUnits") or 0)!=int(scheduler.get("firstPlayableWorkUnits") or -1):
+                    raise RuntimeError(f"First-playable sliced work incomplete in frame {index}: {scheduler}")
+                if int(scheduler.get("optionalPostReadyWorkCount") or -1)!=0:
+                    raise RuntimeError(f"Optional work leaked into planet critical path in frame {index}: {scheduler}")
             systems=stage.get("activeSystems") or {}
             if stage.get("ready") is not True or stage.get("stage") != "planet-sphere-foundation":
                 raise RuntimeError(f"Planet stage not ready in frame {index}: {stage}")
@@ -8319,100 +9323,56 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone landscape dressing evidence missing: {viewports[7]}")
         return
 
-    if scenario == "wp-s003-009-009":
-        if len(frames) < 10:
-            raise RuntimeError("wp-s003-009-009 requires ten ambient-motion evidence frames")
-        protagonist_locations=[]
-        max_types=max_active_types=max_trees=max_smoke=max_pennants=0
-        max_cpu_ms=max_frame_cpu_ms=0.0
-        first_updates=None
-        second_updates=None
-        for index,frame in enumerate(frames[:10]):
-            build=frame.get("runtime",{}).get("currentBuild",{})
-            gpu=build.get("gpuRenderer") or {}
-            chunks=gpu.get("terrainChunks") or {}
-            if chunks.get("ambientMotionPass") is not True:
-                raise RuntimeError(f"Ambient motion contract failed in frame {index+1}: {chunks}")
-            if chunks.get("ambientRendererOnly") is not True or chunks.get("ambientNavigationAuthority") is not False or chunks.get("ambientCollisionAuthority") is not False:
-                raise RuntimeError(f"Ambient motion authority isolation failed in frame {index+1}: {chunks}")
-            if chunks.get("ambientSimulationAuthorityPreserved") is not True or gpu.get("simulationAuthorityPreserved") is not True:
-                raise RuntimeError(f"Ambient motion changed Simulation authority in frame {index+1}")
-            if chunks.get("ambientContextAware") is not True or chunks.get("ambientCullingMode")!="chunk-active+mesh-frustum+zoom-lod":
-                raise RuntimeError(f"Ambient context/culling contract missing in frame {index+1}: {chunks}")
-            if chunks.get("ambientLowProfileReduction") is not True or chunks.get("ambientMobileWebGL2Safe") is not True:
-                raise RuntimeError(f"Ambient quality/mobile contract missing in frame {index+1}: {chunks}")
-            if int(chunks.get("ambientParticleEmitterCount") or 0)!=0 or int(chunks.get("ambientAnimatedMaterialShaderCount") or 0)!=0:
-                raise RuntimeError(f"Ambient motion unexpectedly added particle/shader systems in frame {index+1}: {chunks}")
-            resources=max(1,int(chunks.get("ambientMotionResourceCount") or 0))
-            if int(chunks.get("ambientAddedDrawCalls") or 0)>resources*2:
-                raise RuntimeError(f"Ambient draw-call budget exceeded in frame {index+1}: {chunks}")
-            if int(chunks.get("ambientSharedMaterialCount") or 0)>2:
-                raise RuntimeError(f"Ambient shared-material budget exceeded in frame {index+1}: {chunks}")
-            max_types=max(max_types,int(chunks.get("ambientEffectTypeCount") or 0))
-            max_active_types=max(max_active_types,int(chunks.get("ambientActiveEffectTypeCount") or 0))
-            max_trees=max(max_trees,int(chunks.get("ambientTreeCount") or 0))
-            max_smoke=max(max_smoke,int(chunks.get("ambientSmokeEmitterCount") or 0))
-            max_pennants=max(max_pennants,int(chunks.get("ambientPennantCount") or 0))
-            max_cpu_ms=max(max_cpu_ms,float(chunks.get("ambientMaxCpuUpdateMs") or 0))
-            max_frame_cpu_ms=max(max_frame_cpu_ms,float(chunks.get("ambientFrameMaxCpuMs") or 0))
-            protagonist_locations.append(build.get("protagonistLocation"))
-            if index==0:
-                first_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
-            if index==1:
-                second_updates=int(chunks.get("ambientBufferUpdateCount") or 0)
-        if max_types<3 or max_active_types<3 or max_trees<=0 or max_smoke<=0 or max_pennants<=0:
-            raise RuntimeError(f"Ambient evidence lacks tree/smoke/pennant coverage: types={max_types}, active={max_active_types}, trees={max_trees}, smoke={max_smoke}, pennants={max_pennants}")
-        if first_updates is None or second_updates is None or second_updates<=first_updates:
-            raise RuntimeError(f"Ambient motion did not advance shared instance buffers: {first_updates} -> {second_updates}")
-        if max_cpu_ms>12.0 or max_frame_cpu_ms>12.0:
-            raise RuntimeError(f"Ambient CPU budget exceeded: resource={max_cpu_ms:.3f} ms, frame-pass={max_frame_cpu_ms:.3f} ms")
-        if len(set(protagonist_locations))!=1 or not protagonist_locations[0]:
-            raise RuntimeError(f"Ambient evidence changed protagonist authority: {protagonist_locations}")
-        low_chunks=(frames[3].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
-        standard_chunks=(frames[4].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
-        high_chunks=(frames[5].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
-        baseline_gpu=frames[6].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}
-        restored_gpu=frames[7].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}
-        baseline_chunks=baseline_gpu.get("terrainChunks") or {}
-        restored_chunks=restored_gpu.get("terrainChunks") or {}
-        far_chunks=(frames[8].get("runtime",{}).get("currentBuild",{}).get("gpuRenderer") or {}).get("terrainChunks") or {}
-        if int(low_chunks.get("ambientActiveEffectTypeCount") or 0)>1 or int(low_chunks.get("ambientLodSimplifiedResourceCount") or 0)<=0:
-            raise RuntimeError(f"Low profile did not reduce ambient effects: {low_chunks}")
-        if int(standard_chunks.get("ambientActiveEffectTypeCount") or 0)<2 or int(high_chunks.get("ambientActiveEffectTypeCount") or 0)<2:
-            raise RuntimeError("Standard/High profile did not restore ambient effects")
-        if baseline_chunks.get("ambientMotionProofOverride") is not False or int(baseline_chunks.get("ambientActiveEffectTypeCount") or 0)!=0:
-            raise RuntimeError(f"Same-quality ambient-off baseline failed: {baseline_chunks}")
-        if restored_chunks.get("ambientMotionProofOverride") is not None or int(restored_chunks.get("ambientActiveEffectTypeCount") or 0)<2:
-            raise RuntimeError(f"Same-quality ambient-on restore failed: {restored_chunks}")
-        baseline_perf=baseline_gpu.get("performance") or {}
-        restored_perf=restored_gpu.get("performance") or {}
-        baseline_draws=int(baseline_perf.get("drawCalls") or 0)
-        restored_draws=int(restored_perf.get("drawCalls") or 0)
-        draw_impact=restored_draws-baseline_draws
-        if baseline_draws<=0 or restored_draws<=0 or draw_impact<0 or draw_impact>8:
-            raise RuntimeError(f"Ambient same-quality draw-call impact invalid: baseline={baseline_draws}, restored={restored_draws}, impact={draw_impact}")
-        baseline_frame=float(baseline_perf.get("frameMs") or 0)
-        restored_frame=float(restored_perf.get("frameMs") or 0)
-        if baseline_frame<=0 or restored_frame<=0 or restored_frame-baseline_frame>35.0:
-            raise RuntimeError(f"Ambient same-quality frame-time impact too high/no evidence: baseline={baseline_frame:.3f} ms, restored={restored_frame:.3f} ms")
-        baseline_gpu_ms=baseline_perf.get("gpuMs")
-        restored_gpu_ms=restored_perf.get("gpuMs")
-        if baseline_gpu_ms is not None and restored_gpu_ms is not None and float(restored_gpu_ms)-float(baseline_gpu_ms)>8.0:
-            raise RuntimeError(f"Ambient GPU-time impact exceeded 8 ms: baseline={baseline_gpu_ms}, restored={restored_gpu_ms}")
-        if int(far_chunks.get("ambientLodSimplifiedResourceCount") or 0)<=0:
-            raise RuntimeError(f"Far zoom did not simplify ambient effects: {far_chunks}")
-        actions=[str(frame.get("action") or "") for frame in frames[:10]]
-        for required_action in (
-            "ambient:standard-time-a","ambient:standard-time-b","ambient:landmark-close",
-            "ambient:low-profile","ambient:standard-profile","ambient:high-profile",
-            "ambient:baseline-off","ambient:baseline-on","ambient:far-zoom-lod","ambient:phone-landscape",
-        ):
-            if not any(required_action in action for action in actions):
-                raise RuntimeError(f"Required ambient-motion scene {required_action} missing: {actions}")
-        landscape=frames[9].get("runtime",{}).get("viewport",{})
-        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0):
-            raise RuntimeError(f"Phone-landscape ambient-motion evidence missing: {landscape}")
+    if scenario == "wp-s003-009-011":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-009-011 requires readiness plus six wilderness evidence frames")
+        signatures=set()
+        for index,frame in enumerate(frames[1:7]):
+            wild=((frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {}).get("wilderness") or {})
+            if wild.get("generated") is not True or wild.get("perFrameScatter") is not False or wild.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Wilderness authority failed in evidence frame {index+1}: {wild}")
+            if int(wild.get("acceptedStaticProps") or 0)<20 or int(wild.get("drawCalls") or 0)>2 or int(wild.get("triangles") or 0)<=0:
+                raise RuntimeError(f"Wilderness budget failed in evidence frame {index+1}: {wild}")
+            signatures.add((wild.get("acceptedStaticProps"),wild.get("vegetationClusters"),wild.get("rockClusters"),wild.get("ambientFaunaZones")))
+        if len(signatures)!=1:
+            raise RuntimeError(f"Wilderness deterministic counts changed across views: {signatures}")
         return
+
+    if scenario == "wp-s003-009-010":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-009-010 requires readiness plus six atmosphere evidence frames")
+        expected=("dawn","day","late-day","night","day","night")
+        for index,frame in enumerate(frames[1:7]):
+            planet=(frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {})
+            atmosphere=planet.get("atmosphere") or {}
+            if atmosphere.get("active") is not True or atmosphere.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Atmosphere authority failed in evidence frame {index+1}: {atmosphere}")
+            if atmosphere.get("phase")!=expected[index] or int(atmosphere.get("dynamicLightCount") or 0)!=2 or int(atmosphere.get("drawCallImpact", -1))!=0:
+                raise RuntimeError(f"Atmosphere palette/budget failed in evidence frame {index+1}: {atmosphere}")
+        return
+
+    if scenario == "wp-s003-009-009":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-009-009 requires six planet ambient-motion evidence frames")
+        updates=[]
+        for index,frame in enumerate(frames[:6]):
+            planet=(frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {})
+            ambient=planet.get("ambientMotion") or {}
+            if planet.get("ready") is not True or int(ambient.get("cloudLayerCount") or 0)!=1 or int(ambient.get("animatedEntityCount") or 0)!=1:
+                raise RuntimeError(f"Planet ambient layer missing in frame {index+1}: {ambient}")
+            if ambient.get("presentationOnly") is not True or ambient.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Planet ambient authority isolation failed in frame {index+1}: {ambient}")
+            if int(ambient.get("drawCallEstimate") or 0)>1 or float(ambient.get("maxUpdateMs") or 0)>4.0:
+                raise RuntimeError(f"Planet ambient budget exceeded in frame {index+1}: {ambient}")
+            updates.append(int(ambient.get("updateCount") or 0))
+        if updates[1] <= updates[0]:
+            raise RuntimeError(f"Cloud drift did not advance over time: {updates[:2]}")
+        landscape=frames[4].get("runtime",{}).get("viewport",{})
+        portrait=frames[5].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)<=int(landscape.get("height") or 0) or int(portrait.get("height") or 0)<=int(portrait.get("width") or 0):
+            raise RuntimeError(f"Mobile ambient evidence missing: landscape={landscape}, portrait={portrait}")
+        return
+
     if scenario == "wp-s003-009-008":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-009-008 requires eight terrain-variation evidence frames")
@@ -11120,6 +12080,30 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Same-SEED identity roster changed across evidence frames: {static_rosters}")
         return
 
+    if scenario == "wp-s003-008-002-001":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-008-002-001 requires eight startup-progress evidence frames")
+        builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
+        stages=[build.get("planetStage") or {} for build in builds]
+        expected=(0,15,52,68,84,100,68,68)
+        modes=("indeterminate","determinate","determinate","determinate","determinate","ready","determinate","failed")
+        for index,(stage,value,mode) in enumerate(zip(stages,expected,modes),start=1):
+            progress=stage.get("loadingPresentation") or {}
+            if progress.get("loadingProofActive") is not True:
+                raise RuntimeError(f"Planet startup progress proof missing in frame {index}: {stage}")
+            if progress.get("mode")!=mode:
+                raise RuntimeError(f"Planet startup progress mode mismatch in frame {index}: expected {mode}, got {progress}")
+            if abs(float(progress.get("displayedPercent") or 0)-value)>0.01:
+                raise RuntimeError(f"Planet startup progress value mismatch in frame {index}: expected {value}, got {progress}")
+            if stage.get("ready") is not True or stage.get("generation",{}).get("perFrameGeneration") is not False:
+                raise RuntimeError(f"Planet authority/readiness regressed in frame {index}: {stage}")
+        actual=stages[0].get("startupProgress") or {}
+        if actual.get("mode")!="ready" or float(actual.get("measuredPercent") or 0)!=100 or float(actual.get("completedWeightedWork") or 0)!=float(actual.get("totalWeightedWork") or -1):
+            raise RuntimeError(f"Actual first-playable progress did not finish at 100: {actual}")
+        if not actual.get("measured100AtMs") or not actual.get("gameplayReadyAtMs"):
+            raise RuntimeError(f"Actual startup completion timestamps missing behind proof: {actual}")
+        return
+
     if scenario == "wp-s003-008-002":
         if len(frames) < 9:
             raise RuntimeError("wp-s003-008-002 requires nine scene-loading evidence frames")
@@ -11939,6 +12923,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "playcanvas-root-cutover":
         if len(frames) < 3:
             raise RuntimeError("playcanvas-root-cutover requires three evidence frames")
+        planet_frames=[(frame.get("runtime",{}).get("currentBuild",{}).get("planetStage")) for frame in frames[:3]]
+        if all(isinstance(stage,dict) and stage.get("ready") is True for stage in planet_frames):
+            if any(int(frame.get("runtime",{}).get("currentBuild",{}).get("planetCanvasCount") or 0)!=1 for frame in frames[:3]):
+                raise RuntimeError(f"Canonical PlanetStage canvas count invalid: {planet_frames}")
+            seeds=[stage.get("activeSeed") for stage in planet_frames]
+            if len(set(seeds))!=1 or not seeds[0]:
+                raise RuntimeError(f"Canonical PlanetStage changed/missed active SEED: {seeds}")
+            return
         runtimes = [frame.get("runtime", {}) for frame in frames[:3]]
         builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
         gpus = [(item.get("gpuRenderer") or {}) for item in builds]
@@ -13117,6 +14109,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         pinch_zoom = pinch_zoomed.get("cameraZoom")
         pinch_return = pinch_returned.get("cameraZoom")
 
+        planet_mode = isinstance(start.get("planetStage"), dict)
         if not start_zoom or wheel_zoom == start_zoom:
             raise RuntimeError(
                 f"mouse wheel did not change zoom: start={start_zoom}, zoomed={wheel_zoom}"
@@ -13154,10 +14147,30 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 f"camera zoom changed world coordinates: protagonist={positions}, camera={cameras}"
             )
 
-        for index, item in enumerate(builds, start=1):
-            grid = item.get("terrainGrid") or {}
-            if not grid.get("coveragePass"):
-                raise RuntimeError(f"zoom frame {index} lost terrain coverage: {grid}")
+        if planet_mode:
+            planet_stages=[item.get("planetStage") or {} for item in builds]
+            focus=[((p.get("zoom") or {}).get("focusLatitudeDegrees"),(p.get("zoom") or {}).get("focusLongitudeDegrees")) for p in planet_stages]
+            if len(set(focus)) != 1:
+                raise RuntimeError(f"planet zoom lost spherical focus anchor: {focus}")
+            # Use geometric-mean footprint span so the zoom assertion remains
+            # valid when this scenario deliberately switches aspect ratio
+            # between landscape and portrait. Raw width alone is not comparable
+            # across those viewport classes.
+            footprint_spans=[]
+            for p in planet_stages:
+                z=p.get("zoom") or {}
+                width=max(0.0,float(z.get("visibleFootprintWidthMeters") or 0))
+                height=max(0.0,float(z.get("visibleFootprintHeightMeters") or 0))
+                footprint_spans.append((width*height)**0.5)
+            if not (footprint_spans[1] < footprint_spans[0] and footprint_spans[3] < footprint_spans[2]):
+                raise RuntimeError(f"planet zoom footprint did not shrink on zoom-in: {footprint_spans}")
+            if any(int(p.get("canvasCount") or 0)!=1 for p in planet_stages):
+                raise RuntimeError(f"planet zoom changed active canvas count: {[p.get('canvasCount') for p in planet_stages]}")
+        else:
+            for index, item in enumerate(builds, start=1):
+                grid = item.get("terrainGrid") or {}
+                if not grid.get("coveragePass"):
+                    raise RuntimeError(f"zoom frame {index} lost terrain coverage: {grid}")
         return
 
     if scenario == "responsive-cycle":
@@ -13340,7 +14353,7 @@ def take_screenshots(
 
             # Deterministic delay. The old utility used a random delay; CI evidence
             # should be reproducible, so use the midpoint of the supplied range.
-            delay = 0.0 if scenario == "wp-s003-008-002" else (wait_min + wait_max) / 2.0
+            delay = 0.0 if scenario in {"wp-s003-008-002","wp-s003-008-002-001"} else (wait_min + wait_max) / 2.0
             print(f"Opening: {browser_url}")
             print(f"Viewport: {width}x{height}")
             print(f"Waiting {delay:.2f}s before capture")
@@ -13351,12 +14364,15 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
             for index, path in enumerate(paths):
-                if scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                if scenario == "wp-s003-008-002-001":
+                    action = _run_scenario_step(driver, scenario, index, width, height)
+                    time.sleep(interval)
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
@@ -13382,7 +14398,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {

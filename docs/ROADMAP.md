@@ -33,7 +33,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 - `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference — COMPLETED
 
-# Stage 3 — PlayCanvas 3D World + 2D Character Billboard Foundation
+# Stage 3 — TOP PRIORITY BLOCKER: Zero-Movement Planet-to-Ground Zoom Continuity + PlayCanvas 3D World
 
 - `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
 - `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
@@ -71,17 +71,16 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-006-011` — Responsive Long-Distance Chunk Streaming + Area Loading Gate — COMPLETED
 - `WP-S003-006-012` — Hydrology-Carved Basins + Depressed Water Surfaces — COMPLETED
 - `WP-S003-006-013` — Fantasy Planet Sphere Foundation (10% Earth Scale) — COMPLETED
-- `WP-S003-006-014` — Terrain-Adaptive Roads, Cut/Fill Embankments + Bridge Deck Clearance
+- `WP-S003-006-014` — Seeded Planetary Oceans, Continents, Islands + Macro Height Relief — COMPLETED
 - `WP-S003-007` — Orthographic 3D Camera + Depth, Lighting + Interior Visibility — COMPLETED
 - `WP-S003-007-001` — Mobile Adaptive Quality + Dynamic Render Scale — COMPLETED
 - `WP-S003-008` — Responsive Gameplay Control Deck + Multimodal Navigation — COMPLETED
 - `WP-S003-008-001` — Screen-Space Camera Navigation Mapping for Rotated PlayCanvas View — COMPLETED
 - `WP-S003-008-002` — Colorful Animated Scene Loading Status + Ready Transition — COMPLETED
-- `WP-S003-008-002-001` — Real First-Playable Loading Progress + Animated Phase Feedback
+- `WP-S003-008-002-001` — Real First-Playable Loading Progress + Animated Phase Feedback — COMPLETED
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
-- `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention
-- `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup
-- `WP-S003-008-006` — Clickable NPC + Building Inspection Tooltips
+- `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention — COMPLETED
+- `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup — COMPLETED
 - `WP-S003-009` — Loading-Screen-Inspired Living World Visual Direction Foundation — COMPLETED
 - `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — COMPLETED
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
@@ -93,19 +92,35 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-009-006` — Architectural Entrance Readability + Threshold Dressing — COMPLETED
 - `WP-S003-009-007` — Settlement Landmarks + Visual Hierarchy — COMPLETED
 - `WP-S003-009-008` — Large-Scale Terrain Variation + Semantic Wear Zones — COMPLETED
-- `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation
-- `WP-S003-009-010` — Day/Night Atmospheric Color + Lighting Palette
-- `WP-S003-009-011` — Biome-Aware Wilderness Dressing + Ambient Fauna
-- `WP-S003-009-012` — Reactive Ambient Wildlife Behavior
-- `WP-S003-009-013` — Contextual Building Activity Indicators
-- `WP-S003-009-014` — Local Environmental Reaction Effects
-- `WP-S003-009-015` — Positional Ambient Soundscape + Activity Audio
-- `WP-S003-009-016` — Regional Weather Presentation + Local Behavior Hooks
-- `WP-S003-009-017` — Seasonal World Presentation + Vegetation State
-- `WP-S003-009-018` — Function-Readable Building Surroundings + Ownership Cues
-- `WP-S003-009-019` — Campaign-State Environmental Wear, Damage + Recovery Projection
-- `WP-S003-009-020` — Crossroads Direction Signposts + Named Route Wayfinding
-- `WP-S003-010` — Continuous Multi-Scale Strategic Zoom + Continent Overview LOD
+- `WP-S003-009-009` — Low-Cost Ambient Life Motion + Environmental Animation — COMPLETED
+- `WP-S003-010` — Continuous Planet-to-Ground Zoom + Multi-Scale Focus Foundation — COMPLETED
+- `WP-S003-010-001` — Globe-to-Surface Focus Anchor + Projection Transition — COMPLETED
+- `WP-S003-010-002` — Viewport-Bounded Ground Detail + 2 m Surface Resolution — COMPLETED
+- `WP-S003-010-003` — Zoom-Driven Detail Refinement + Off-Screen Eviction — COMPLETED
+- `WP-S003-010-003-001` — Zoom-Aware Geographic Labels, Borders, Scale Ruler + Streaming Pace — COMPLETED
+- `WP-S003-010-003-002` — Smooth Mid-Zoom Projection + Country/Region Scale Rebalance — COMPLETED
+- `WP-S003-010-003-003` — Zoom-Only Camera Orientation + Focus Continuity — COMPLETED
+- `WP-S003-010-003-004` — Terrain-Anchored Landmarks + World-Projected Political Borders — COMPLETED
+- `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
+- `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
+- `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity
+- `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs
+- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground
+- `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling
+- `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
+- `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance
+- `WP-S003-011` — Clickable NPC + Building Inspection Tooltips
+- `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette
+- `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna
+- `WP-S003-014` — Reactive Ambient Wildlife Behavior
+- `WP-S003-015` — Contextual Building Activity Indicators
+- `WP-S003-016` — Local Environmental Reaction Effects
+- `WP-S003-017` — Positional Ambient Soundscape + Activity Audio
+- `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks
+- `WP-S003-019` — Seasonal World Presentation + Vegetation State
+- `WP-S003-020` — Function-Readable Building Surroundings + Ownership Cues
+- `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection
+- `WP-S003-022` — Crossroads Direction Signposts + Named Route Wayfinding
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
 
