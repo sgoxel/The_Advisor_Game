@@ -223,7 +223,8 @@ function buildTangentPatchMesh(){
   const columns=Math.max(2,Math.ceil(dims.patchWidth/LOCAL_SAMPLE_SPACING_METERS)+1);
   const rows=Math.max(2,Math.ceil(dims.patchHeight/LOCAL_SAMPLE_SPACING_METERS)+1);
   const positions=[],normals=[],uvs=[],indices=[],localMetersPerUnit=50;
-  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));\n  const centerElevation=Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  const centerElevation=Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
   for(let z=0;z<rows;z++){
     const vz=z/(rows-1),northMeters=(vz-.5)*dims.patchHeight;
     for(let x=0;x<columns;x++){
@@ -231,8 +232,8 @@ function buildTangentPatchMesh(){
       const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
       let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
       const sample=geography?.sampleLatLon?.(lat,lon);
-      const elevation=Number(sample?.elevationMeters||0),heightUnits=elevation/metersPerUnit*HEIGHT_EXAGGERATION*.18;
-      positions.push(eastMeters/metersPerUnit,heightUnits,-northMeters/metersPerUnit);
+      const elevation=Number(sample?.elevationMeters||0),heightUnits=(elevation-centerElevation)/localMetersPerUnit*.45;
+      positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
       normals.push(0,1,0);uvs.push(ux,vz);
     }
   }
