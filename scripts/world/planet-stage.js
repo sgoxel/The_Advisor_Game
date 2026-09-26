@@ -1032,7 +1032,8 @@ function snapshot(){
       localWorldAuthority:false,
       tangentPatchActive:Boolean(tangentPatch?.enabled),
       tangentPatchDerivedFromFocus:true,
-      tangentPatchSpanMeters:Math.max(localDetail.patchWidthMeters,localDetail.patchHeightMeters),\n      localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false})
+      tangentPatchSpanMeters:Math.max(localDetail.patchWidthMeters,localDetail.patchHeightMeters),
+      localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false})
     }),
     activeSystems:Object.freeze({
       protagonistEnabled:false,
