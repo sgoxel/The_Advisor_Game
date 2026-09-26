@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v6";
+const VERSION="planet-ground-static-v8";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -22,7 +22,17 @@ const ZOOM_MAX=1;
 const ZOOM_WHEEL_SENSITIVITY=0.00045;
 const ZOOM_PINCH_SENSITIVITY=0.003;
 const ZOOM_DISTANCE_FACTOR=0.018;
-const ZOOM_BANDS=Object.freeze([{id:"planet",max:.18},{id:"continent",max:.38},{id:"country-region",max:.58},{id:"regional-overview",max:.70},{id:"regional-detail",max:.78},{id:"district",max:.86},{id:"local-area",max:.92},{id:"settlement",max:.97},{id:"near-ground",max:.995},{id:"ground",max:1}]);
+// One continuous footprint ladder drives every representation:
+// - up to LADDER_START_SCALAR it is the true surface footprint of the globe
+//   camera (it depends on viewport framing, so it is computed, not tabled);
+// - above it the footprint shrinks log-uniformly to the 36 m ground view, so
+//   each wheel/pinch step changes apparent scale by the same factor.
+// Local LOD tiers are native where the ladder equals their height, and the
+// semantic band past SEMANTIC_LOCAL_BAND_START is the band of that tier.
+const LADDER_START_SCALAR=.70;
+const GROUND_FOOTPRINT_HEIGHT_METERS=36;
+const SEMANTIC_LOCAL_BAND_START=.58;
+const ZOOM_BANDS=Object.freeze([{id:"planet",max:.18},{id:"continent",max:.38},{id:"country-region",max:SEMANTIC_LOCAL_BAND_START},{id:"regional-overview",max:null},{id:"regional-detail",max:null},{id:"district",max:null},{id:"local-area",max:null},{id:"settlement",max:null},{id:"near-ground",max:null},{id:"ground",max:1}]);
 
 let pc=null;
 let app=null;
@@ -84,39 +94,90 @@ let lastPinchDistance=null;
 let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
-const LOCAL_RESOURCE_CACHE_LIMIT=4;
+const LOCAL_RESOURCE_CACHE_LIMIT=5;
 const LOCAL_LOD_HYSTERESIS=0.006;
+// Every physical LOD is native at its band's upper scalar and covers at most
+// ~2.5x of visible-footprint range, so presentation compensation never has to
+// shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
 const LOCAL_DETAIL_LEVELS=Object.freeze([
-  Object.freeze({id:"regional-overview",max:.70,visibleHeightMeters:420000,sampleSpacingMeters:12000,textureSize:96,reliefClampMeters:7000,reliefGain:11}),
-  Object.freeze({id:"regional-detail",max:.78,visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:128,reliefClampMeters:7000,reliefGain:10}),
-  Object.freeze({id:"district",max:.86,visibleHeightMeters:36000,sampleSpacingMeters:1200,textureSize:192,reliefClampMeters:6000,reliefGain:9}),
-  Object.freeze({id:"local-area",max:.92,visibleHeightMeters:8000,sampleSpacingMeters:180,textureSize:256,reliefClampMeters:4200,reliefGain:7}),
-  Object.freeze({id:"settlement",max:.97,visibleHeightMeters:1800,sampleSpacingMeters:40,textureSize:320,reliefClampMeters:1600,reliefGain:4}),
-  Object.freeze({id:"near-ground",max:.995,visibleHeightMeters:360,sampleSpacingMeters:8,textureSize:384,reliefClampMeters:180,reliefGain:1.5}),
-  Object.freeze({id:"ground",max:1,visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:384,reliefClampMeters:10,reliefGain:.35})
+  Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:160,reliefClampMeters:7000,reliefGain:11,maxHeightUnits:.95,staticWorld:false}),
+  Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:192,reliefClampMeters:7000,reliefGain:10,maxHeightUnits:.80,staticWorld:false}),
+  Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:256,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
+  Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:320,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
+  Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:384,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
+  Object.freeze({id:"settlement-wide",band:"settlement",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:448,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
+  Object.freeze({id:"settlement",band:"settlement",visibleHeightMeters:2000,sampleSpacingMeters:44,textureSize:448,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
+  Object.freeze({id:"settlement-core",band:"settlement",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:448,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
+  Object.freeze({id:"near-ground-wide",band:"near-ground",visibleHeightMeters:500,sampleSpacingMeters:11,textureSize:352,reliefClampMeters:400,reliefGain:2.2,maxHeightUnits:.33,staticWorld:true}),
+  Object.freeze({id:"near-ground",band:"near-ground",visibleHeightMeters:200,sampleSpacingMeters:5,textureSize:384,reliefClampMeters:180,reliefGain:1.5,maxHeightUnits:.28,staticWorld:true}),
+  Object.freeze({id:"near-ground-close",band:"near-ground",visibleHeightMeters:80,sampleSpacingMeters:3,textureSize:384,reliefClampMeters:60,reliefGain:.9,maxHeightUnits:.22,staticWorld:true}),
+  Object.freeze({id:"ground",band:"ground",visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:384,reliefClampMeters:10,reliefGain:.35,maxHeightUnits:.18,staticWorld:true})
 ]);
-const PRESENTATION_FOOTPRINT_ANCHORS=Object.freeze([
-  Object.freeze({scalar:.35,heightMeters:650000}),
-  Object.freeze({scalar:.60,heightMeters:520000}),
-  Object.freeze({scalar:.70,heightMeters:400000}),
-  Object.freeze({scalar:.74,heightMeters:250000}),
-  Object.freeze({scalar:.78,heightMeters:140000}),
-  Object.freeze({scalar:.82,heightMeters:80000}),
-  Object.freeze({scalar:.86,heightMeters:50000}),
-  Object.freeze({scalar:.89,heightMeters:20000}),
-  Object.freeze({scalar:.92,heightMeters:10000}),
-  Object.freeze({scalar:.94,heightMeters:5000}),
-  Object.freeze({scalar:.955,heightMeters:2000}),
-  Object.freeze({scalar:.97,heightMeters:1000}),
-  Object.freeze({scalar:.98,heightMeters:500}),
-  Object.freeze({scalar:.99,heightMeters:200}),
-  Object.freeze({scalar:.995,heightMeters:50}),
-  Object.freeze({scalar:1,heightMeters:36})
-]);
+const LOCAL_PREP_SLICE_BUDGET_MS=6;
+const LOCAL_STANDIN_MAX_MAGNIFICATION=6;
+const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
+const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
+const GLOBE_VERTICAL_FOV_DEGREES=34;
+let ladderCache={key:null,startHeight:0,levelMax:[]};
+function globeCameraDistanceForScalar(value){
+  const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
+  const travel=Math.max(0,(zoomState.baseCameraDistance||safeSurfaceDistance*2.5)-safeSurfaceDistance);
+  return safeSurfaceDistance+travel*Math.pow(1-clamp(value,0,1),2.15);
+}
+function globeSurfaceFootprintHeightMeters(value){
+  const surfaceDistance=Math.max(.05,globeCameraDistanceForScalar(value)-DISPLAY_RADIUS_UNITS);
+  return 2*surfaceDistance*Math.tan(GLOBE_VERTICAL_FOV_DEGREES*Math.PI/360)*(WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS);
+}
+const LADDER_RATE_RAMP=.08;
+function ladderState(){
+  const key=Number(zoomState.baseCameraDistance||0).toFixed(5);
+  if(ladderCache.key===key)return ladderCache;
+  // Continue from the globe camera's footprint AND its zoom rate at the ladder
+  // start, ramp the log-rate over LADDER_RATE_RAMP, then hold it constant so
+  // the ground view lands exactly on GROUND_FOOTPRINT_HEIGHT_METERS at 1.0.
+  const startHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS*10,globeSurfaceFootprintHeightMeters(LADDER_START_SCALAR));
+  const e=.001,startRate=Math.max(0,(Math.log(globeSurfaceFootprintHeightMeters(LADDER_START_SCALAR-e))-Math.log(startHeight))/e);
+  const span=1-LADDER_START_SCALAR,total=Math.log(startHeight/GROUND_FOOTPRINT_HEIGHT_METERS),ramp=Math.min(LADDER_RATE_RAMP,span*.5);
+  const cruiseRate=(total-startRate*ramp*.5)/(span-ramp*.5);
+  ladderCache={key,startHeight,startRate,cruiseRate,ramp,levelMax:[],orientationStart:0};
+  ladderCache.levelMax=LOCAL_DETAIL_LEVELS.map((level,index)=>index===LOCAL_DETAIL_LEVELS.length-1?1:Number(scalarForFootprintHeight(level.visibleHeightMeters).toFixed(6)));
+  ladderCache.orientationStart=Number(scalarForFootprintHeight(5000).toFixed(4));
+  return ladderCache;
+}
+function presentationTargetHeightMeters(value=zoomState.scalar){
+  const scalar=clamp(value,0,1);
+  if(scalar<=LADDER_START_SCALAR)return globeSurfaceFootprintHeightMeters(scalar);
+  const L=ladderState(),t=scalar-LADDER_START_SCALAR;
+  // integral of rate(t): ramp is a smoothstep blend from startRate to cruiseRate.
+  let drop;
+  if(t<=L.ramp){const u=t/L.ramp,smoothIntegral=u*u*u-u*u*u*u/2;drop=L.startRate*t+(L.cruiseRate-L.startRate)*L.ramp*smoothIntegral;}
+  else drop=L.startRate*L.ramp+(L.cruiseRate-L.startRate)*L.ramp*.5+L.cruiseRate*(t-L.ramp);
+  return Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,L.startHeight*Math.exp(-drop));
+}
+function scalarForFootprintHeight(heightMeters){
+  const h=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,Number(heightMeters)||0);
+  let lo=0,hi=1;
+  for(let i=0;i<48;i++){const mid=(lo+hi)/2;if(presentationTargetHeightMeters(mid)>h)lo=mid;else hi=mid;}
+  return (lo+hi)/2;
+}
+function levelMaxScalar(index){return ladderState().levelMax[index]??1;}
 let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,geometrySampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:0,sourceTextureWidth:0,sourceTextureHeight:0,detailMetersPerTexel:0,surroundMetersPerTexel:0,anisotropy:1,minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:0,surroundDetailBandCount:0,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
-let localLodIndex=0;
+let requestedLodIndex=0;
+let displayResource=null;
+let localJob=null;
+let localQueuedRequest=null;
+let lastZoomDirection=1;
+let localFrameStats={lastFrameMs:0,recent:[],maxDuringPreparationMs:0};
+const localSharedPrimitives={};
 const localResourceCache=new Map();
-let localResources={activeSignature:null,requestedSignature:null,preparedSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastSwapMs:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,blockingZoomBuilds:0,surroundSpanFactor:3,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
+function freshLocalResources(){
+  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,
+    cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
+    lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
+    blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
+    surroundSpanFactor:3,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
+}
+let localResources=freshLocalResources();
 let localPreparationToken=0;
 let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapContextCache={key:null,value:null};
@@ -243,12 +304,12 @@ function ensureMapPresentationDom(){
 function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMeters=0){
   if(!pc||!cameraEntity?.camera||!window.PlanetGeography?.directionFromLatLon)return null;
   const lat=clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999),lon=wrapLongitudeRadians(longitudeRadians);
-  const tangentActive=Boolean(tangentPatch?.enabled&&projectionState.blend>.055);
+  const tangentActive=Boolean(tangentPatch?.enabled&&displayResource&&projectionState.blend>LOCAL_TANGENT_OWNERSHIP_BLEND);
   if(tangentActive){
-    const dims=localPatchDimensions(),lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+    const frame=localDisplayFrame(),dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,cosLat=Math.max(.08,Math.cos(lat0));
     const north=(lat-lat0)*WORLD_RADIUS_METERS,east=wrapLongitudeRadians(lon-lon0)*WORLD_RADIUS_METERS*cosLat;
     if(Math.abs(east)>dims.patchWidth*.52||Math.abs(north)>dims.patchHeight*.52)return null;
-    const local=new pc.Vec3(east/dims.metersPerUnit,localGroundHeightUnits(east,north,dims)+Number(surfaceOffsetMeters||0)/dims.metersPerUnit,-north/dims.metersPerUnit);
+    const local=new pc.Vec3(east/dims.metersPerUnit,localGroundHeightUnits(east,north,frame)+Number(surfaceOffsetMeters||0)/dims.metersPerUnit,-north/dims.metersPerUnit);
     const world=tangentPatch.getWorldTransform().transformPoint(local,new pc.Vec3());
     return {world,mode:"tangent",latitudeRadians:lat,longitudeRadians:lon,eastMeters:east,northMeters:north};
   }
@@ -422,7 +483,8 @@ function projectionHandoffForZoom(value=zoomState.scalar){
   return smoothstep01((clamp(value,0,1)-projectionState.transitionStart)/span);
 }
 function projectionPresentationBlendForZoom(value=zoomState.scalar){
-  return smoothstep01(clamp(projectionHandoffForZoom(value)/.40,0,1));
+  const handoff=projectionHandoffForZoom(value);
+  return smoothstep01(clamp((handoff-.18)/.16,0,1));
 }
 function canonicalSurfaceIdentity(){
   if(!geography)return null;
@@ -564,38 +626,44 @@ function normalizeYaw(value){
   if(n<0)n+=360;
   return n;
 }
-function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS[ZOOM_BANDS.length-1]).id;}
+function rawLodIndexForZoom(value){
+  const max=ladderState().levelMax,index=max.findIndex(m=>value<=m);
+  return index<0?LOCAL_DETAIL_LEVELS.length-1:index;
+}
+function zoomBandFor(value){
+  if(value<=SEMANTIC_LOCAL_BAND_START)return (ZOOM_BANDS.find(b=>b.max!==null&&value<=b.max)||ZOOM_BANDS[2]).id;
+  return LOCAL_DETAIL_LEVELS[rawLodIndexForZoom(value)].band;
+}
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
-function localDetailLevelForZoom(value=zoomState.scalar){
-  if(value>=ZOOM_MAX-1e-7){localLodIndex=LOCAL_DETAIL_LEVELS.length-1;return LOCAL_DETAIL_LEVELS[localLodIndex];}
-  const rawIndex=Math.max(0,LOCAL_DETAIL_LEVELS.findIndex(level=>value<=level.max));
-  if(!localDetail.active){localLodIndex=rawIndex;return LOCAL_DETAIL_LEVELS[localLodIndex];}
-  if(rawIndex>localLodIndex){
-    const boundary=LOCAL_DETAIL_LEVELS[localLodIndex]?.max??1;
-    if(value<boundary+LOCAL_LOD_HYSTERESIS)return LOCAL_DETAIL_LEVELS[localLodIndex];
-  }else if(rawIndex<localLodIndex){
-    const boundary=LOCAL_DETAIL_LEVELS[rawIndex]?.max??0;
-    if(value>boundary-LOCAL_LOD_HYSTERESIS)return LOCAL_DETAIL_LEVELS[localLodIndex];
-  }
-  localLodIndex=rawIndex;
-  return LOCAL_DETAIL_LEVELS[localLodIndex];
+function lodHysteresisAt(index){
+  const max=levelMaxScalar(index),previousMax=index>0?levelMaxScalar(index-1):projectionState.transitionStart;
+  return Math.min(LOCAL_LOD_HYSTERESIS,Math.max(.0005,(max-previousMax)*.2));
 }
-function presentationTargetHeightMeters(value=zoomState.scalar){
-  const scalar=clamp(value,0,1),anchors=PRESENTATION_FOOTPRINT_ANCHORS;
-  if(scalar<=anchors[0].scalar)return anchors[0].heightMeters;
-  for(let i=1;i<anchors.length;i++){
-    const a=anchors[i-1],b=anchors[i];
-    if(scalar<=b.scalar){
-      const t=clamp((scalar-a.scalar)/(b.scalar-a.scalar),0,1);
-      return Math.exp(Math.log(a.heightMeters)*(1-t)+Math.log(b.heightMeters)*t);
-    }
+// Requested LOD follows the zoom scalar (with per-boundary hysteresis). It never
+// builds anything by itself; the visible LOD only changes when a prepared
+// resource is swapped in.
+function requestedLodIndexForZoom(value=zoomState.scalar){
+  const levels=LOCAL_DETAIL_LEVELS;
+  if(value>=ZOOM_MAX-1e-7)return requestedLodIndex=levels.length-1;
+  const rawIndex=rawLodIndexForZoom(value);
+  if(!displayResource)return requestedLodIndex=rawIndex;
+  if(rawIndex>requestedLodIndex){
+    const boundary=levelMaxScalar(requestedLodIndex);
+    if(value<boundary+lodHysteresisAt(requestedLodIndex+1))return requestedLodIndex;
+  }else if(rawIndex<requestedLodIndex){
+    const boundary=levelMaxScalar(rawIndex);
+    if(value>boundary-lodHysteresisAt(rawIndex+1))return requestedLodIndex;
   }
-  return anchors[anchors.length-1].heightMeters;
+  return requestedLodIndex=rawIndex;
 }
-function localPresentationCompensation(value=zoomState.scalar,index=localLodIndex){
+function localDetailLevelForZoom(value=zoomState.scalar){return LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(value)];}
+function localPresentationCompensation(value=zoomState.scalar,index=displayResource?.levelIndex??requestedLodIndex){
   const level=LOCAL_DETAIL_LEVELS[index]||LOCAL_DETAIL_LEVELS[0];
   const targetHeight=presentationTargetHeightMeters(value);
-  return clamp(level.visibleHeightMeters/Math.max(1,targetHeight),.02,1);
+  // Values above 1 only occur while a coarser ready LOD stands in for a finer
+  // one that is still preparing: it is magnified to the exact target footprint
+  // instead of freezing the apparent zoom or popping to an unready tier.
+  return clamp(level.visibleHeightMeters/Math.max(1,targetHeight),LOCAL_STANDIN_MIN_COMPENSATION,LOCAL_STANDIN_MAX_MAGNIFICATION);
 }
 function localTextureSizeForLevel(levelId){
   return Number(LOCAL_DETAIL_LEVELS.find(level=>level.id===levelId)?.textureSize||256);
@@ -628,19 +696,33 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.014;
   return detail;
 }
-function localPatchDimensions(){
+function patchDimensionsForLevel(index){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
-  const level=localDetailLevelForZoom();
+  const levelIndex=clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1),level=LOCAL_DETAIL_LEVELS[levelIndex];
   const portraitFactor=aspect>=1?1:(82/54);
   const visibleHeight=level.visibleHeightMeters*portraitFactor;
   const visibleWidth=visibleHeight*aspect;
   const patchWidth=visibleWidth*LOCAL_PATCH_MARGIN,patchHeight=visibleHeight*LOCAL_PATCH_MARGIN;
   // Normalize every physical LOD footprint into a bounded presentation mesh.
-  // Presentation compensation keeps apparent scale continuous when the cached
-  // physical LOD switches to the next smaller footprint.
   const metersPerUnit=Math.max(1,Math.max(patchWidth,patchHeight)/8);
-  const maxHeightUnits=({"regional-overview":.95,"regional-detail":.80,district:.65,"local-area":.55,settlement:.42,"near-ground":.28,ground:.18})[level.id]??.55;
-  return {levelId:level.id,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,maxHeightUnits,metersPerUnit,presentationCompensation:localPresentationCompensation()};
+  return {levelIndex,levelId:level.id,band:level.band,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,maxHeightUnits:level.maxHeightUnits,metersPerUnit,staticWorld:Boolean(level.staticWorld)};
+}
+// Dimensions of the representation that is actually on screen (the displayed,
+// fully prepared resource), with the compensation that maps it to the target
+// footprint. Falls back to the requested tier before any resource is ready.
+function localPatchDimensions(){
+  const dims=displayResource?{...displayResource.dims}:patchDimensionsForLevel(requestedLodIndexForZoom());
+  dims.presentationCompensation=localPresentationCompensation(zoomState.scalar,dims.levelIndex);
+  return dims;
+}
+function localDisplayFrame(){
+  if(displayResource)return {lat0:displayResource.lat0,lon0:displayResource.lon0,dims:displayResource.dims,groundDetailWeight:displayResource.groundDetailWeight};
+  const dims=patchDimensionsForLevel(requestedLodIndexForZoom());
+  return {lat0:zoomState.focusLatitudeRadians,lon0:zoomState.focusLongitudeRadians,dims,groundDetailWeight:groundDetailWeightForLevel(dims.levelIndex)};
+}
+function groundDetailWeightForLevel(index){
+  const h=LOCAL_DETAIL_LEVELS[index]?.visibleHeightMeters??GROUND_FOOTPRINT_HEIGHT_METERS;
+  return smoothstep01(Math.log(15000/h)/Math.log(15000/GROUND_FOOTPRINT_HEIGHT_METERS));
 }
 function localHash(eastMeters,northMeters,salt=0){
   const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5);
@@ -648,32 +730,31 @@ function localHash(eastMeters,northMeters,salt=0){
   h=Math.imul(h^(h>>>13),1274126177)>>>0;return ((h^(h>>>16))>>>0)/4294967295;
 }
 function localSurfaceSample(eastMeters,northMeters,base){
-  const phase=seededUnit("local-ground")*Math.PI*2;
-  const broad=Math.sin(eastMeters*.085+phase)*Math.cos(northMeters*.073-phase*.61);
-  const medium=Math.sin((eastMeters+northMeters)*.19+phase*.37)*.55;
-  const fine=Math.cos(eastMeters*.41-northMeters*.33+phase*.83)*.22;
-  const field=(broad+medium+fine)/1.77;
+  const salt=((seededUnit("local-ground")*1e9)|0)^0x51f15e;
+  const broad=surfaceValueNoise(eastMeters,northMeters,34,salt+11)*1.15;
+  const medium=surfaceValueNoise(eastMeters,northMeters,12,salt+29)*.72;
+  const fine=surfaceValueNoise(eastMeters,northMeters,4.2,salt+47)*.38;
+  const field=(broad+medium+fine)/2.25;
   const land=!!base?.land;
-  const microElevation=land?field*4.8:field*.45;
+  const microElevation=land?field*5.2:field*.45;
   const baseColor=Array.isArray(base?.color)?base.color:[.18,.32,.22];
-  const detail=Math.sin(eastMeters*.92+phase*1.7)*Math.sin(northMeters*.78-phase*.9)*.035;
-  const light=field*.11+detail;
+  const light=field*.16;
   const high=Number(base?.elevationMeters||0)>2600;
   const color=land
     ? (high
       ? [clamp(.34+light,0,1),clamp(.38+light,0,1),clamp(.30+light*.7,0,1)]
-      : [clamp(baseColor[0]*.48+.16+light,0,1),clamp(baseColor[1]*.48+.28+light,0,1),clamp(baseColor[2]*.40+.10+light*.6,0,1)])
+      : [clamp(baseColor[0]*.52+.14+light,0,1),clamp(baseColor[1]*.52+.24+light,0,1),clamp(baseColor[2]*.44+.09+light*.65,0,1)])
     : [clamp(baseColor[0]*.45+.04+light*.15,0,1),clamp(baseColor[1]*.55+.12+light*.2,0,1),clamp(baseColor[2]*.7+.28+light*.28,0,1)];
   return {microElevation,color};
 }
-function localGroundHeightUnits(eastMeters,northMeters,dims){
-  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+function localGroundHeightUnits(eastMeters,northMeters,frame=localDisplayFrame()){
+  const dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,cosLat=Math.max(.08,Math.cos(lat0));
   const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-  let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
-  const sample=geography?.sampleLatLon?.(lat,lon),centerElevation=Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
+  let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
+  const sample=geography?.sampleLatLon?.(lat,lon),centerElevation=frame.centerElevation??Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
   const local=localSurfaceSample(eastMeters,northMeters,sample),elevation=Number(sample?.elevationMeters||0);
   const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
-  const weight=smoothstep01((zoomState.scalar-.90)/.10),raw=(macroDelta*dims.reliefGain+local.microElevation*.8*weight)/dims.metersPerUnit;
+  const raw=(macroDelta*dims.reliefGain+local.microElevation*.8*frame.groundDetailWeight)/dims.metersPerUnit;
   const ux=eastMeters/dims.patchWidth+.5,vz=northMeters/dims.patchHeight+.5,edge=Math.min(ux,1-ux,vz,1-vz);
   return clamp(raw,-dims.maxHeightUnits,dims.maxHeightUnits)*smoothstep01(clamp(edge/.12,0,1));
 }
@@ -682,160 +763,141 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.92;m.update();return m;};
   localStaticMaterials={road:make("LocalRoad",.34,.25,.16),wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48)};
 }
+function sharedLocalPrimitive(type){
+  if(localSharedPrimitives[type])return localSharedPrimitives[type];
+  const mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
+  mesh.incRefCount();// keep alive across static-world rebuilds
+  return localSharedPrimitives[type]=mesh;
+}
 function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
-  const e=new pc.Entity(name),mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
-  e.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});e.render.meshInstances=[new pc.MeshInstance(mesh,material,e)];
+  const e=new pc.Entity(name);
+  e.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});e.render.meshInstances=[new pc.MeshInstance(sharedLocalPrimitive(type),material,e)];
   e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);localStaticRoot.addChild(e);
 }
-function rebuildLocalStaticPresentation(signature){
-  if(!tangentPatch||!device||!geography)return;
-  const started=performance.now(),dims=localPatchDimensions(),eligible=["near-ground","ground"].includes(dims.levelId);
+function rebuildLocalStaticPresentation(resource){
+  if(!tangentPatch||!device||!geography||!resource)return;
+  const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
   localStaticRoot?.destroy?.();localStaticRoot=null;
-  localStatic={...localStatic,active:false,signature,level:dims.levelId,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0};
+  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0};
   if(!eligible)return;
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
-  const unit=dims.metersPerUnit,center=geography.sampleLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const unit=dims.metersPerUnit,center=geography.sampleLatLon(resource.lat0,resource.lon0);
   if(center?.land){
     const roadWidth=Math.max(4.5,Math.min(9,dims.visibleWidth*.10)),roadSpan=dims.patchHeight*.82,roadSegments=14,segmentMeters=roadSpan/roadSegments;
     for(let r=0;r<roadSegments;r++){
-      const north=-roadSpan*.5+(r+.5)*segmentMeters,y=localGroundHeightUnits(0,north,dims)+.035;
+      const north=-roadSpan*.5+(r+.5)*segmentMeters,y=localGroundHeightUnits(0,north,frame)+.035;
       addLocalStatic("SeedRoad-"+r,"box",localStaticMaterials.road,0,y,north/-unit,roadWidth/unit,.055,segmentMeters*1.08/unit);
     }
     localStatic.roadCount=roadSegments;localStatic.triangleEstimate+=roadSegments*12;
-    const count=dims.levelId==="ground"?6:10;
+    const closeLevel=dims.visibleHeight<=60,count=closeLevel?6:10;
     for(let i=0;i<count;i++){
       const side=i%2===0?-1:1,row=Math.floor(i/2),north=(-.32+row*.16)*dims.patchHeight,east=side*(roadWidth*.5+5+localHash(i*17,north,31)*7);
       if(Math.abs(east)>dims.patchWidth*.43||Math.abs(north)>dims.patchHeight*.43)continue;
-      const w=6.5+localHash(east,north,41)*4.5,d=6+localHash(east,north,42)*3.5,h=4.5+localHash(east,north,43)*2.8,y=localGroundHeightUnits(east,north,dims);
+      const w=6.5+localHash(east,north,41)*4.5,d=6+localHash(east,north,42)*3.5,h=4.5+localHash(east,north,43)*2.8,y=localGroundHeightUnits(east,north,frame);
       addLocalStatic("SeedBuildingBody-"+i,"box",localStaticMaterials.wall,east/unit,y+h*.5/unit,-north/unit,w/unit,h/unit,d/unit);
-      const roofY=y+(h+.65)/unit,roofHalf=w*.66/unit,roofOffset=w*.20/unit;
+      const roofY=y+(h+.65)/unit,roofHalf=w*.66/unit;
       addLocalStatic("SeedBuildingRoofL-"+i,"box",localStaticMaterials.roof,(east-w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,-24);
       addLocalStatic("SeedBuildingRoofR-"+i,"box",localStaticMaterials.roof,(east+w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,24);
       localStatic.buildingCount++;localStatic.triangleEstimate+=36;
     }
-    const trees=dims.levelId==="ground"?14:24;
+    const trees=closeLevel?14:24;
     for(let i=0;i<trees;i++){
       const east=(localHash(i*29,7,51)-.5)*dims.patchWidth*.78,north=(localHash(13,i*31,52)-.5)*dims.patchHeight*.78;
       if(Math.abs(east)<roadWidth*.9)continue;
-      const y=localGroundHeightUnits(east,north,dims),h=3.5+localHash(east,north,53)*3;
+      const y=localGroundHeightUnits(east,north,frame),h=3.5+localHash(east,north,53)*3;
       addLocalStatic("SeedTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,east/unit,y+h*.25/unit,-north/unit,.7/unit,h*.5/unit,.7/unit);
       addLocalStatic("SeedTreeCrown-"+i,"sphere",localStaticMaterials.leaf,east/unit,y+h*.72/unit,-north/unit,4.2/unit,h*.86/unit,4.2/unit);
       localStatic.vegetationCount++;localStatic.triangleEstimate+=180;
     }
   }else{
-    const y=localGroundHeightUnits(0,0,dims)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
+    const y=localGroundHeightUnits(0,0,frame)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
     localStatic.waterCount=1;localStatic.triangleEstimate+=12;
   }
   localStatic.entityCount=localStaticRoot.children.length;localStatic.drawCallEstimate=localStatic.entityCount;localStatic.active=localStatic.entityCount>0;localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
 }
-function buildTangentPatchMesh(){
-  const started=performance.now(),dims=localPatchDimensions();
+// ---- Cooperative LOD preparation -------------------------------------------
+// A local LOD resource (heightfield mesh + detail texture + 3x surround texture)
+// is produced by a generator that yields after every row. The pump runs it in
+// bounded slices off the wheel/pinch path; only a finished resource is ever
+// swapped in (double buffering), and the previous one stays visible meanwhile.
+function* tangentMeshSteps(job){
+  const {dims,lat0,lon0}=job,cosLat=Math.max(.08,Math.cos(lat0));
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1);
   const rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
-  const positions=[],normals=[],uvs=[],indices=[],localMetersPerUnit=dims.metersPerUnit;
-  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
-  const centerElevation=Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
+  const positions=new Float32Array(columns*rows*3),normals=new Float32Array(columns*rows*3),uvs=new Float32Array(columns*rows*2);
+  const frame={lat0,lon0,dims,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation};
   for(let z=0;z<rows;z++){
     const vz=z/(rows-1),northMeters=(vz-.5)*dims.patchHeight;
     for(let x=0;x<columns;x++){
-      const ux=x/(columns-1),eastMeters=(ux-.5)*dims.patchWidth;
-      const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-      let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
-      const sample=geography?.sampleLatLon?.(lat,lon);
-      const local=localSurfaceSample(eastMeters,northMeters,sample);
-      const elevation=Number(sample?.elevationMeters||0);
-      // A 2 m presentation patch must preserve macro height identity without
-      // turning coarse planetary sample boundaries into local-scale cliffs.
-      // Clamp the macro delta to the bounded near-ground window and layer only
-      // subtle deterministic micro relief on top.
-      const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
-      const groundDetailWeight=smoothstep01((zoomState.scalar-.90)/.10);
-      const microMeters=local.microElevation*.8*groundDetailWeight;
-      const rawHeightUnits=(macroDelta*dims.reliefGain+microMeters)/localMetersPerUnit;
-      // Feather the outer 12% of the bounded detailed patch down to its coarse
-      // surround so the LOD boundary never presents as a cut-off rectangular slab.
-      const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      const edgeBlend=smoothstep01(clamp(edgeDistance/.12,0,1));
-      const heightUnits=clamp(rawHeightUnits,-dims.maxHeightUnits,dims.maxHeightUnits)*edgeBlend;
-      positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
-      normals.push(0,1,0);uvs.push(ux,vz);
+      const ux=x/(columns-1),eastMeters=(ux-.5)*dims.patchWidth,v=z*columns+x;
+      // Macro height identity is clamped to the tier's relief window, micro
+      // relief is layered in near the ground, and the outer 12% feathers down
+      // to the coarse surround so the LOD edge never reads as a slab.
+      positions[v*3]=eastMeters/dims.metersPerUnit;positions[v*3+1]=localGroundHeightUnits(eastMeters,northMeters,frame);positions[v*3+2]=-northMeters/dims.metersPerUnit;
+      normals[v*3+1]=1;uvs[v*2]=ux;uvs[v*2+1]=vz;
     }
+    yield 1;
   }
-  for(let z=0;z<rows-1;z++)for(let x=0;x<columns-1;x++){const a=z*columns+x,b=a+1,c=a+columns,d=c+1;indices.push(a,c,b,b,c,d);}
-  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
-  localDetail={active:true,level:dims.levelId,sampleSpacingMeters:dims.sampleSpacingMeters,visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns,rows,vertices:positions.length/3,triangles:indices.length/3,estimatedBytes:positions.length*4+normals.length*4+uvs.length*4+indices.length*4,buildTimeMs:Number((performance.now()-started).toFixed(3)),rebuildCount:localDetail.rebuildCount+1,activePatchCount:1,signature:[activeSeed,lat0.toFixed(6),lon0.toFixed(6),dims.levelId,columns,rows].join("|")};
-  return mesh;
+  const indices=new Uint32Array((columns-1)*(rows-1)*6);let k=0;
+  for(let z=0;z<rows-1;z++)for(let x=0;x<columns-1;x++){const a=z*columns+x,b=a+1,c=a+columns,d=c+1;indices[k++]=a;indices[k++]=c;indices[k++]=b;indices[k++]=b;indices[k++]=c;indices[k++]=d;}
+  return {positions,normals,uvs,indices,columns,rows};
 }
-function destroyCachedLocalResource(resource){
-  if(!resource)return;
-  resource.mesh?.destroy?.();localResources.destroyedMeshes++;
-  resource.detailTexture?.destroy?.();resource.surroundTexture?.destroy?.();localResources.destroyedTextures+=2;
-}
-function trimLocalResourceCache(){
-  while(localResourceCache.size>LOCAL_RESOURCE_CACHE_LIMIT){
-    const oldestKey=localResourceCache.keys().next().value;
-    const resource=localResourceCache.get(oldestKey);
-    localResourceCache.delete(oldestKey);destroyCachedLocalResource(resource);
-    localResources.evictions++;localResources.lastEvictionReason="bounded-lru";
+// Presentation-only relief and land cover, anchored to continuous world meters.
+// Each octave fades in once it spans >2 texels, so every LOD shows structure at
+// its own scale without aliasing, and finer LODs add detail instead of blur.
+const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[1700,56],[560,20],[180,7],[60,2.4],[20,.8]]);
+function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
+function terrainDetailHeight(east,north,metersPerTexel,salt){
+  let h=0;
+  for(let k=0;k<TERRAIN_DETAIL_OCTAVES.length;k++){
+    const [wavelength,amplitude]=TERRAIN_DETAIL_OCTAVES[k],w=detailOctaveWeight(wavelength,metersPerTexel);
+    if(w<=0)break;
+    h+=surfaceValueNoise(east,north,wavelength,salt+k*131)*amplitude*w;
   }
+  return h;
 }
-function scheduleLocalDetailResource(signature){
-  localResources.requestedSignature=signature;
-  if(localResourceCache.has(signature)){activateLocalDetailResource(signature);return;}
-  const token=++localPreparationToken;
-  localResources.pendingPreparationCount=1;
-  localResources.lastPreparationQueuedAtMs=Number(performance.now().toFixed(3));
-  setTimeout(()=>{
-    if(token!==localPreparationToken||localResources.requestedSignature!==signature)return;
-    activateLocalDetailResource(signature);
-    localResources.preparedSignature=signature;
-    localResources.lastPreparationCompletedAtMs=Number(performance.now().toFixed(3));
-  },0);
+function landCoverTint(east,north,metersPerTexel,salt,elevation){
+  // Forest stands (~1-3 km), meadow/field parcels (~300-600 m) and copses
+  // (~80 m). Coarse tiers get the averaged colour, not aliased speckle.
+  const wForest=detailOctaveWeight(2400,metersPerTexel),wField=detailOctaveWeight(420,metersPerTexel),wCopse=detailOctaveWeight(90,metersPerTexel);
+  if(wForest<=0)return [0,0,0];
+  const alpine=smoothstep01((elevation-2200)/900);
+  const forestField=surfaceValueNoise(east,north,2400,salt+7)+surfaceValueNoise(east,north,900,salt+11)*.55*wField;
+  const forest=smoothstep01((forestField-.02)/.12)*wForest*(1-alpine);
+  const parcel=surfaceValueNoise(east,north,420,salt+19)*wField;
+  const copse=smoothstep01((surfaceValueNoise(east,north,90,salt+23)-.18)/.1)*wCopse*(1-forest)*(1-alpine);
+  const dryField=smoothstep01((parcel-.16)/.08)*(1-forest)*(1-alpine);
+  const meadow=smoothstep01((-parcel-.16)/.08)*(1-forest)*(1-alpine);
+  // Fine canopy/grass mottling (~150 m and ~50 m) so forest and meadow
+  // interiors keep readable texture at 1 km-200 m footprints.
+  const mottle=surfaceValueNoise(east,north,150,salt+29)*detailOctaveWeight(150,metersPerTexel)*(.09+.05*forest)+surfaceValueNoise(east,north,50,salt+31)*detailOctaveWeight(50,metersPerTexel)*(.06+.04*forest);
+  return [
+    mottle*.8-.070*forest-.045*copse+.085*dryField+.030*meadow,
+    mottle-.050*forest-.030*copse+.055*dryField+.060*meadow,
+    mottle*.55-.050*forest-.030*copse+.005*dryField+.010*meadow
+  ];
 }
-function activateLocalDetailResource(signature){
-  if(!tangentPatch?.render||!device||!tangentPatchMaterial||!horizonSkirtMaterial)return;
-  const swapStarted=performance.now(),dims=localPatchDimensions();
-  let resource=localResourceCache.get(signature);
-  if(resource){
-    localResourceCache.delete(signature);localResourceCache.set(signature,resource);localResources.cacheHits++;
-    localDetail={...resource.detail,rebuildCount:localDetail.rebuildCount,signature};
-  }else{
-    localResources.cacheMisses++;localResources.pendingPreparationCount=1;
-    const started=performance.now(),mesh=buildTangentPatchMesh(),textureSize=localTextureSizeForLevel(dims.levelId);
-    const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
-    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,textureSize,false);
-    const detailMetersPerTexel=Math.max(dims.patchWidth,dims.patchHeight)/Math.max(1,textureSize);
-    const surroundMetersPerTexel=detailMetersPerTexel*3;
-    const anisotropy=localTextureAnisotropy();
-    resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),geometrySampleSpacingMeters:dims.sampleSpacingMeters,anisotropy,minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel)},estimatedBytes:localDetail.estimatedBytes+textureSize*textureSize*4*2};
-    localDetail={...resource.detail};
-    localResourceCache.set(signature,resource);localResources.lastBuildMs=Number((performance.now()-started).toFixed(3));localResources.pendingPreparationCount=0;
-    trimLocalResourceCache();
-  }
-  tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
-  tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=1;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
-  setHorizonSkirtFootprint(dims,3);
-  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
-  localResources.activeSignature=signature;localResources.preparedSignature=signature;localResources.pendingPreparationCount=0;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
-  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);localResources.lastSwapMs=Number((performance.now()-swapStarted).toFixed(3));
-  rebuildLocalStaticPresentation(signature);
-}
-function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false){
-  const canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
-  const ctx=canvas2d.getContext("2d",{alpha:false}),image=ctx.createImageData(size,size),data=image.data;
-  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
+function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
+  const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
   const useMicroDetail=metersPerTexel<=4;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   const contourStrength=metersPerTexel<=100?.10:metersPerTexel<=1200?.060:.026;
+  const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
+  const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
+  const flatShade=light[2];
+  // Continuous (unwrapped) world meters: no seam where the patch crosses the
+  // +/-180 degree meridian.
+  const worldEastOrigin=lon0*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(lat0)),worldNorthOrigin=lat0*WORLD_RADIUS_METERS;
   const authoritySize=Math.max(2,Math.min(size,128)),authorityCache=new Array(authoritySize*authoritySize);
+  const cosLat0=Math.max(.08,Math.cos(lat0));
   const authorityAt=(ax,ay)=>{
     const ix=Math.max(0,Math.min(authoritySize-1,ax)),iy=Math.max(0,Math.min(authoritySize-1,ay)),key=iy*authoritySize+ix;
     if(authorityCache[key])return authorityCache[key];
     const au=ix/(authoritySize-1),av=iy/(authoritySize-1);
     const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth;
     const alat=clamp(lat0+anorth/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-    const cosLat=Math.max(.08,Math.cos(lat0));let alon=lon0+aeast/(WORLD_RADIUS_METERS*cosLat);alon=wrapLongitudeRadians(alon);
+    const alon=wrapLongitudeRadians(lon0+aeast/(WORLD_RADIUS_METERS*cosLat0));
     return authorityCache[key]=geography.sampleLatLon(alat,alon);
   };
   const mixSample=(ux,vz)=>{
@@ -846,96 +908,261 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
     const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0);
     return {land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters)};
   };
-  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-    const ux=(x+.5)/size,vz=(y+.5)/size;
-    const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
-    const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-    const cosLat=Math.max(.08,Math.cos(lat0));let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
-    const sample=mixSample(ux,vz);
-    let displayColor;
-    const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
-    const elevation=Number(sample?.elevationMeters||0);
-    const relief=clamp(elevation/5200,0,1);
-    const worldEast=lon*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(lat));
-    const worldNorth=lat*WORLD_RADIUS_METERS;
-    const macro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
-    // World-space frequencies are anchored to latitude/longitude-derived meters,
-    // so finer LODs reveal additional source information instead of magnifying a
-    // normalized UV pattern. Land/water and elevation remain authoritative.
-    const identityTint=sample?.land
-      ? [relief*.075,relief*.065,relief*.035]
-      : [-.012,-.004,.028];
-    const contourPhase=(elevation/420)*Math.PI*2;
-    const contour=(.5+.5*Math.sin(contourPhase));
-    const contourLine=Math.pow(1-contour,10)*contourStrength;
-    const authoritative=base.map((v,i)=>clamp(v+macro*(i===2?.70:1)+identityTint[i]-contourLine*(i===2?.55:1),0,1));
-    if(useMicroDetail){
-      const micro=localSurfaceSample(east,north,sample).color;
-      displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));
-    }else{
-      displayColor=authoritative;
+  for(let y=0;y<size;y++){
+    for(let x=0;x<size;x++){
+      const ux=(x+.5)/size,vz=(y+.5)/size;
+      const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
+      const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
+      const lon=wrapLongitudeRadians(lon0+east/(WORLD_RADIUS_METERS*cosLat0));
+      const sample=mixSample(ux,vz);
+      const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
+      const elevation=Number(sample?.elevationMeters||0);
+      const relief=clamp(elevation/5200,0,1);
+      // World-space frequencies are anchored to continuous world meters, so
+      // finer LODs reveal more source information instead of magnifying a
+      // normalized UV pattern. Land/water and elevation remain authoritative.
+      const worldEast=worldEastOrigin+east,worldNorth=worldNorthOrigin+north;
+      const macro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
+      let shade=1,cover=[0,0,0];
+      if(sample?.land){
+        // Hillshade of authoritative elevation + scale-appropriate detail relief.
+        const step=metersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
+        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,metersPerTexel,detailSalt);
+        const hx=Number(mixSample(Math.min(1,ux+dux),vz).elevationMeters||0)+terrainDetailHeight(worldEast+step,worldNorth,metersPerTexel,detailSalt);
+        const hy=Number(mixSample(ux,Math.max(0,vz-dvz)).elevationMeters||0)+terrainDetailHeight(worldEast,worldNorth+step,metersPerTexel,detailSalt);
+        const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
+        const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
+        shade=clamp(1+(lit-flatShade)*1.25,.62,1.32);
+        cover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
+      }
+      const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
+      const contour=.5+.5*Math.sin((elevation/420)*Math.PI*2);
+      const contourLine=Math.pow(1-contour,10)*contourStrength;
+      const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i]-contourLine*(i===2?.55:1))*shade,0,1));
+      let displayColor=authoritative;
+      if(useMicroDetail){const micro=localSurfaceSample(east,north,sample).color;displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));}
+      const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
+      const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
+      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
     }
-    const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
-    const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-    const alpha=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
-    data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=alpha;
+    yield 1;
   }
-  ctx.putImageData(image,0,0);
-  const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  return {data,size,metersPerTexel};
+}
+function* localResourceSteps(job){
+  const meshData=yield* tangentMeshSteps(job);
+  const size=LOCAL_DETAIL_LEVELS[job.levelIndex].textureSize;
+  const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true);
+  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*3,job.dims.patchHeight*3,size,false);
+  return {meshData,detail,surround};
+}
+function textureFromPixels(pixels){
+  const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
+  const ctx=canvas2d.getContext("2d",{alpha:false});ctx.putImageData(new ImageData(pixels.data,pixels.size,pixels.size),0,0);
+  const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
   return texture;
 }
-function updateTangentPatchTexture(){
-  if(!tangentPatchMaterial||!geography)return;
-  const dims=localPatchDimensions(),textureSize=localTextureSizeForLevel(dims.levelId);
-  const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
-  tangentPatchMaterial.diffuseMap=detailTexture;
-  tangentPatchMaterial.emissiveMap=detailTexture;
-  tangentPatchMaterial.opacityMap=detailTexture;
-  tangentPatchMaterial.opacityMapChannel="a";
-  tangentPatchMaterial.opacity=1;
-  tangentPatchMaterial.blendType=pc.BLEND_NORMAL;
-  tangentPatchMaterial.depthWrite=false;
-  tangentPatchMaterial.update();
-  if(horizonSkirtMaterial){
-    // The coarse continuation is exactly 3x the detailed patch in both
-    // presentation space and sampled world space, preserving canonical coast/
-    // relief bearings instead of stretching a 3x texture over a 12x plane.
-    setHorizonSkirtFootprint(dims,3);
-    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,textureSize,false);
-    horizonSkirtMaterial.diffuseMap=surroundTexture;
-    horizonSkirtMaterial.emissiveMap=surroundTexture;
-    horizonSkirtMaterial.diffuse.set(1,1,1);
-    horizonSkirtMaterial.emissive.set(1,1,1);
-    horizonSkirtMaterial.emissiveIntensity=.98;
-    horizonSkirtMaterial.update();
+function skirtMeshForDims(dims,spanFactor=3){
+  const halfX=dims.patchWidth*spanFactor*.5/dims.metersPerUnit,halfZ=dims.patchHeight*spanFactor*.5/dims.metersPerUnit,mesh=new pc.Mesh(device);
+  mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
+  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setUvs(0,[0,0,1,0,0,1,1,1]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
+  return mesh;
+}
+function finalizeLocalResource(job,result){
+  const started=performance.now(),dims=job.dims,{meshData,detail,surround}=result;
+  const mesh=new pc.Mesh(device);mesh.setPositions(meshData.positions);mesh.setNormals(meshData.normals);mesh.setUvs(0,meshData.uvs);mesh.setIndices(meshData.indices);mesh.update();
+  mesh.incRefCount();// owned by the LRU cache, not by whichever MeshInstance shows it
+  const skirtMesh=skirtMeshForDims(dims,3);skirtMesh.incRefCount();
+  const detailTexture=textureFromPixels(detail),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
+  const detailMetersPerTexel=detail.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
+  const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
+  const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+textureSize*textureSize*4*2;
+  const resource={signature:job.signature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,builtAsPrewarm:job.prewarm,mesh,skirtMesh,detailTexture,surroundTexture,estimatedBytes,
+    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
+      visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
+  localResourceCache.set(job.signature,resource);
+  trimLocalResourceCache();
+  localResources.cachedResourceCount=localResourceCache.size;
+  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
+  return resource;
+}
+function destroyCachedLocalResource(resource){
+  if(!resource||resource===displayResource)return;
+  for(const mesh of [resource.mesh,resource.skirtMesh]){if(!mesh)continue;mesh.decRefCount();if(mesh.refCount<1)mesh.destroy();localResources.destroyedMeshes++;}
+  resource.detailTexture?.destroy?.();resource.surroundTexture?.destroy?.();localResources.destroyedTextures+=2;
+}
+function trimLocalResourceCache(){
+  for(const [key,resource] of localResourceCache){
+    if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT)break;
+    if(resource===displayResource)continue;// never evict what is on screen
+    localResourceCache.delete(key);destroyCachedLocalResource(resource);
+    localResources.evictions++;localResources.lastEvictionReason="bounded-lru";
   }
+}
+function localSignatureFor(index,lat,lon){
+  const d=patchDimensionsForLevel(index);
+  return [activeSeed,lat.toFixed(5),lon.toFixed(5),d.levelId,Math.ceil(d.patchWidth/d.sampleSpacingMeters),Math.ceil(d.patchHeight/d.sampleSpacingMeters)].join("|");
+}
+function startLocalJob(index,lat,lon,signature,prewarm){
+  const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize;
+  const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
+  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:lat,lon0:lon,prewarm,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(lat,lon)?.elevationMeters||0),
+    totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
+  job.iterator=localResourceSteps(job);
+  localJob=job;localResources.cacheMisses+=prewarm?0:1;
+  localResources.preparing=true;localResources.preparingPrewarm=prewarm;localResources.preparingSignature=signature;localResources.preparingLevel=dims.levelId;localResources.preparationProgress=0;
+  localResources.lastPreparationQueuedAtMs=Number(job.startedAtMs.toFixed(3));localFrameStats.maxDuringPreparationMs=0;
+  scheduleLocalPump();
+}
+let localPumpScheduled=false;
+function scheduleLocalPump(){
+  if(localPumpScheduled||!localJob)return;
+  localPumpScheduled=true;
+  // Macrotask yield between slices lets input, rAF and rendering run; the
+  // generator never holds the main thread longer than one slice budget.
+  setTimeout(pumpLocalPreparation,0);
+}
+function pumpLocalPreparation(){
+  localPumpScheduled=false;
+  const job=localJob;if(!job||!device)return;
+  const sliceStart=performance.now();let step=null;
+  try{
+    while(!(step=job.iterator.next()).done){job.steps++;if(performance.now()-sliceStart>=LOCAL_PREP_SLICE_BUDGET_MS)break;}
+  }catch(error){
+    // A failed preparation must never wedge the pipeline: drop it, keep the
+    // last valid representation on screen and record the failure.
+    localJob=null;localQueuedRequest=null;localResources.preparing=false;localResources.preparingSignature=null;localResources.preparingLevel=null;
+    localResources.failedPreparations=(localResources.failedPreparations||0)+1;localResources.lastPreparationError=String(error?.message||error);
+    localResources.pendingPreparationCount=0;
+    console.error("Local LOD preparation failed.",error);
+    return;
+  }
+  let sliceMs=performance.now()-sliceStart;
+  if(step.done){
+    const resource=finalizeLocalResource(job,step.value);
+    sliceMs=performance.now()-sliceStart;
+    localJob=null;
+    localResources.lastBuildMs=Number((job.busyMs+sliceMs).toFixed(3));
+    resource.detail.buildTimeMs=localResources.lastBuildMs;
+    localResources.preparing=false;localResources.preparingSignature=null;localResources.preparingLevel=null;localResources.preparationProgress=1;
+    localResources.lastPreparationWallMs=Number((performance.now()-job.startedAtMs).toFixed(3));
+    localResources.lastPreparationBusyMs=Number((job.busyMs+sliceMs).toFixed(3));
+    localResources.lastPreparationSlices=job.slices+1;
+    localResources.lastPreparationCompletedAtMs=Number(performance.now().toFixed(3));
+    localResources.maxFrameMsDuringPreparation=Number(localFrameStats.maxDuringPreparationMs.toFixed(3));
+    localResources.preparedSignature=resource.signature;
+    if(job.prewarm)localResources.prewarmCompleted++;
+    job.slices++;job.maxSliceMs=Math.max(job.maxSliceMs,sliceMs);localResources.maxPreparationSliceMs=Math.max(localResources.maxPreparationSliceMs,Number(sliceMs.toFixed(3)));
+    const queued=localQueuedRequest;localQueuedRequest=null;
+    if(resource.signature===localResources.requestedSignature){activateLocalDetailResource(resource.signature,false);refreshZoomPresentation();}
+    if(queued&&queued.signature===localResources.requestedSignature&&displayResource?.signature!==queued.signature){
+      if(localResourceCache.has(queued.signature)){activateLocalDetailResource(queued.signature,true);refreshZoomPresentation();}
+      else startLocalJob(queued.index,queued.lat,queued.lon,queued.signature,false);
+    }
+    if(!localJob)scheduleLocalPrewarm();
+    return;
+  }
+  job.busyMs+=sliceMs;job.slices++;job.maxSliceMs=Math.max(job.maxSliceMs,sliceMs);
+  localResources.maxPreparationSliceMs=Math.max(localResources.maxPreparationSliceMs,Number(sliceMs.toFixed(3)));
+  localResources.preparationProgress=Number(clamp(job.steps/Math.max(1,job.totalSteps),0,1).toFixed(4));
+  scheduleLocalPump();
+}
+// Called from the zoom/rotation path: records the request and at most swaps
+// an already-prepared resource. It never generates geometry or textures.
+function requestLocalDetailResource(index){
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,signature=localSignatureFor(index,lat,lon);
+  localResources.requestedSignature=signature;localResources.requestedLevel=LOCAL_DETAIL_LEVELS[index].id;
+  if(displayResource?.signature===signature){localResources.pendingPreparationCount=0;return;}
+  localResources.pendingPreparationCount=1;
+  if(localResourceCache.has(signature)){activateLocalDetailResource(signature,true);return;}
+  if(localJob){
+    if(localJob.signature===signature){localJob.prewarm=false;localResources.preparingPrewarm=false;return;}
+    // Let a nearly finished same-focus job land (it is still a closer/nearer
+    // stand-in); otherwise cancel it and start on the latest request.
+    const sameFocus=localJob.lat0===lat&&localJob.lon0===lon;
+    if(sameFocus&&!localJob.prewarm&&localJob.steps/Math.max(1,localJob.totalSteps)>=.5){localQueuedRequest={index,lat,lon,signature};localResources.deferredRequests++;return;}
+    localResources.cancelledPreparations++;localJob=null;
+  }
+  localQueuedRequest=null;
+  startLocalJob(index,lat,lon,signature,false);
+}
+function scheduleLocalPrewarm(){
+  if(localJob||!displayResource||projectionState.blend<=0)return;
+  if(localResources.requestedSignature!==displayResource.signature)return;
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,index=displayResource.levelIndex;
+  for(const candidate of [index+lastZoomDirection,index-lastZoomDirection]){
+    if(candidate<0||candidate>=LOCAL_DETAIL_LEVELS.length)continue;
+    const signature=localSignatureFor(candidate,lat,lon);
+    if(localResourceCache.has(signature))continue;
+    startLocalJob(candidate,lat,lon,signature,true);return;
+  }
+}
+// Double-buffered swap: only a fully prepared resource becomes visible.
+function activateLocalDetailResource(signature,fromCache){
+  if(!tangentPatch?.render||!device||!tangentPatchMaterial||!horizonSkirtMaterial)return false;
+  const resource=localResourceCache.get(signature);if(!resource)return false;
+  const swapStarted=performance.now();
+  localResourceCache.delete(signature);localResourceCache.set(signature,resource);
+  if(fromCache){localResources.cacheHits++;if(resource.builtAsPrewarm)localResources.prewarmHits++;}
+  displayResource=resource;
+  localDetail={...resource.detail,rebuildCount:(localDetail.rebuildCount||0)+1};
+  tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
+  tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  if(horizonSkirt?.render){
+    horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
+    localResources.surroundSpanFactor=3;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*3).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*3).toFixed(3));localResources.surroundWorldMatched=true;
+  }
+  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
+  rebuildLocalStaticPresentation(resource);
+  trimLocalResourceCache();
+  localResources.activeSignature=signature;localResources.visibleLevel=resource.dims.levelId;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
+  localResources.pendingPreparationCount=localResources.requestedSignature===signature?0:1;
+  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
+  const swapMs=performance.now()-swapStarted;localResources.lastSwapMs=Number(swapMs.toFixed(3));localResources.maxSwapMs=Math.max(localResources.maxSwapMs,localResources.lastSwapMs);localResources.swapCount++;
+  return true;
+}
+// Compile the tangent/surround/static-world shader variants during startup
+// (behind the loading overlay and hidden inside the globe) so the first
+// planet-to-local handoff does not stall on shader compilation.
+async function warmLocalRepresentationShaders(){
+  if(!app||!device||!pc)return;
+  ensureTangentPatch();ensureHorizonSkirt();ensureLocalStaticMaterials();
+  const texture=new pc.Texture(device,{width:4,height:4,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  const pixels=texture.lock();pixels.fill(255);texture.unlock();
+  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;
+  const quad=skirtMeshForDims({patchWidth:1,patchHeight:1,metersPerUnit:10},1);quad.incRefCount();
+  tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.opacityMap=texture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=.5;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  horizonSkirtMaterial.diffuseMap=texture;horizonSkirtMaterial.emissiveMap=texture;horizonSkirtMaterial.opacity=.5;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
+  tangentPatch.render.meshInstances=[new pc.MeshInstance(quad,tangentPatchMaterial,tangentPatch)];
+  horizonSkirt.render.meshInstances=[new pc.MeshInstance(quad,horizonSkirtMaterial,horizonSkirt)];
+  const holder=new pc.Entity("LocalShaderWarmup");app.root.addChild(holder);
+  const previousRoot=localStaticRoot;localStaticRoot=holder;
+  for(const [type,material] of [["box",localStaticMaterials.road],["box",localStaticMaterials.wall],["box",localStaticMaterials.roof],["cylinder",localStaticMaterials.trunk],["sphere",localStaticMaterials.leaf],["box",localStaticMaterials.water]])addLocalStatic("Warm-"+material.name,type,material,0,0,0,.01,.01,.01);
+  localStaticRoot=previousRoot;
+  tangentPatch.enabled=true;horizonSkirt.enabled=true;
+  await yieldPaint();await yieldPaint();
+  tangentPatch.enabled=false;horizonSkirt.enabled=false;
+  tangentPatch.render.meshInstances=[];horizonSkirt.render.meshInstances=[];holder.destroy();
+  quad.decRefCount();quad.destroy();texture.destroy();
+  tangentPatchMaterial.diffuseMap=null;tangentPatchMaterial.emissiveMap=null;tangentPatchMaterial.opacityMap=null;tangentPatchMaterial.update();
+  horizonSkirtMaterial.diffuseMap=null;horizonSkirtMaterial.emissiveMap=null;horizonSkirtMaterial.update();
+}
+function recordLocalFrame(dt){
+  const ms=Math.max(0,Number(dt)||0)*1000;localFrameStats.lastFrameMs=ms;
+  localFrameStats.recent.push(ms);if(localFrameStats.recent.length>120)localFrameStats.recent.shift();
+  if(localJob)localFrameStats.maxDuringPreparationMs=Math.max(localFrameStats.maxDuringPreparationMs,ms);
+  localResources.lastFrameMs=Number(ms.toFixed(3));localResources.recentMaxFrameMs=Number(Math.max(0,...localFrameStats.recent).toFixed(3));
+  if(localJob)localResources.maxFrameMsDuringPreparation=Number(localFrameStats.maxDuringPreparationMs.toFixed(3));
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
   tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.72;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
-  tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
+  // Empty until the first cooperatively prepared resource is swapped in.
+  tangentPatch.render.meshInstances=[];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
-}
-function setHorizonSkirtFootprint(dims=localPatchDimensions(),spanFactor=3){
-  if(!horizonSkirt?.render||!device||!horizonSkirtMaterial)return;
-  const factor=Math.max(1,Number(spanFactor)||3);
-  const halfX=dims.patchWidth*factor*.5/dims.metersPerUnit;
-  const halfZ=dims.patchHeight*factor*.5/dims.metersPerUnit;
-  const mesh=new pc.Mesh(device);
-  mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
-  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);
-  mesh.setUvs(0,[0,0,1,0,0,1,1,1]);
-  mesh.setIndices([0,2,1,1,2,3]);mesh.update();
-  const previous=horizonSkirt.render.meshInstances?.[0]?.mesh||null;
-  horizonSkirt.render.meshInstances=[new pc.MeshInstance(mesh,horizonSkirtMaterial,horizonSkirt)];
-  previous?.destroy?.();
-  localResources.surroundSpanFactor=factor;
-  localResources.surroundWidthMeters=Number((dims.patchWidth*factor).toFixed(3));
-  localResources.surroundHeightMeters=Number((dims.patchHeight*factor).toFixed(3));
-  localResources.surroundWorldMatched=true;
 }
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
@@ -944,19 +1171,24 @@ function ensureHorizonSkirt(){
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   horizonSkirt.render.meshInstances=[];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
-  setHorizonSkirtFootprint(localPatchDimensions(),3);
 }
-function updateProjectionPresentation(){
+// Zoom/rotation path: record the requested tier (may swap in a ready one).
+function updateLocalRequest(){
+  if(!planet||projectionState.blend<=0)return;
+  ensureTangentPatch();ensureHorizonSkirt();
+  requestLocalDetailResource(requestedLodIndexForZoom());
+}
+// visibleHeightUnits: vertical extent, in scene units, that the camera sees at
+// the tangent-patch focus. The patch is scaled so it shows exactly the ladder
+// footprint (or, for a stand-in, the closest footprint it can honestly show).
+function updateProjectionPresentation(visibleHeightUnits=1){
   if(!planet)return;
   const blend=projectionState.blend;
-  if(blend>0){
-    ensureTangentPatch();ensureHorizonSkirt();
-    const dims=localPatchDimensions(),sig=[activeSeed,zoomState.focusLatitudeRadians.toFixed(5),zoomState.focusLongitudeRadians.toFixed(5),dims.levelId,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters),Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)].join("|");
-    if(localResources.activeSignature!==sig)scheduleLocalDetailResource(sig);
-  }
   if(tangentPatch){
     const handoff=projectionHandoffForZoom();
-    const tangentVisible=handoff>.02;
+    // Nothing local is shown until a prepared resource exists; the globe keeps
+    // ownership meanwhile, so a preparing LOD can never produce a blank frame.
+    const tangentVisible=handoff>.02&&Boolean(displayResource);
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
     const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
     tangentPatch.enabled=fineVisible;
@@ -964,7 +1196,6 @@ function updateProjectionPresentation(){
     const viewBlend=blend;
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
-      horizonSkirt.setLocalPosition(0,-.012,0);
       // Reveal the canonical tangent continuation quickly enough that the
       // settlement frame is fully owned by the same local geography, rather
       // than looking through a fading globe shell at a different surface.
@@ -974,20 +1205,28 @@ function updateProjectionPresentation(){
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
     }
-    tangentPatch.setLocalPosition(0,0,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    // Match each finer cached LOD's apparent scale to the prior LOD at entry,
-    // then ease toward its native scale across the band.
-    const dims=localPatchDimensions(),basePatchScale=1.45+(1-viewBlend)*.35;
-    const patchScale=basePatchScale*dims.presentationCompensation;
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,targetHeightMeters:presentationTargetHeightMeters()};
+    const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
+    const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
+    const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    // A stand-in prepared for a slightly different focus (after a pan) is
+    // offset by the exact east/north delta so geography stays world-anchored.
+    const offset=displayResource?localFocusOffsetMeters(displayResource):{east:0,north:0};
+    tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,0,-offset.north/dims.metersPerUnit*patchScale);
+    const requestedIndex=requestedLodIndex,visibleIndex=displayResource?.levelIndex??requestedIndex;
+    localResources.standInActive=Boolean(displayResource)&&localResources.requestedSignature!==displayResource.signature;
+    localResources.standInMagnification=Number(Math.max(1,dims.presentationCompensation).toFixed(4));
+    localResources.visibleLevel=displayResource?.dims.levelId??null;
+    localResources.requestedLevelIndex=requestedIndex;localResources.visibleLevelIndex=displayResource?visibleIndex:null;
     if(horizonSkirt){
-      // The coarse continuation owns viewport coverage, so never shrink it with
-      // fine-patch compensation. This prevents black gaps at LOD entry while the
-      // bounded high-density patch still scales to the active visible footprint.
-      const surroundScale=Math.max(basePatchScale,patchScale);
+      // The 3x world-matched continuation shares the patch scale so coast and
+      // relief bearings line up; stand-in shrink is bounded (1/3) so it still
+      // covers the viewport.
+      const surroundScale=patchScale;
       horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
+      horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,-.012,-offset.north/dims.metersPerUnit*surroundScale);
       projectionPresentation={...projectionPresentation,surroundScale};
     }
   }
@@ -997,7 +1236,7 @@ function updateProjectionPresentation(){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  const tangentReveal=projectionPresentationBlendForZoom();
+  const tangentReveal=displayResource?projectionPresentationBlendForZoom():0;
   const globeFade=tangentReveal;
   planet.enabled=globeFade<.9995;
   if(surfaceMaterial){
@@ -1024,7 +1263,7 @@ function updateProjectionPresentation(){
   };
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
-  if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
+  if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;}
 }
 function applyCameraZoom(){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
@@ -1036,13 +1275,10 @@ function applyCameraZoom(){
   const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
   const travel=Math.max(0,zoomState.baseCameraDistance-safeSurfaceDistance);
   const distance=safeSurfaceDistance+travel*Math.pow(1-scalar,2.15);
-  zoomState.cameraDistance=distance;zoomState.band=zoomBandFor(scalar);
+  zoomState.cameraDistance=distance;zoomState.requestedBand=zoomBandFor(scalar);
   updateProjectionState();
   const blend=projectionState.blend;
-  // Move into a clearly elevated tangent camera before the globe is retired.
-  // Intermediate regional/district tiers should read as progressively closer
-  // terrain maps, not as a low grazing-angle strip that appears to jump to ground.
-  updateProjectionPresentation();
+  updateLocalRequest();
   const globeZ=distance;
   const viewBlend=blend;
   const localZ=6.20;
@@ -1052,12 +1288,14 @@ function applyCameraZoom(){
   // introduce the gameplay oblique view gradually across the local approach.
   // This prevents a small wheel/pinch step around 0.06x-0.08x from behaving
   // like camera rotation while preserving the same spherical focus anchor.
-  const orientationStart=.94;
+  // Gameplay oblique tilt starts at the same ~5 km footprint as before the
+  // log-uniform ladder rebalance.
+  const orientationStart=ladderState().orientationStart;
   const orientationEnd=1.0;
   const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
   const angleBlend=smoothstep01(orientationRaw);
   const handoff=projectionHandoffForZoom(scalar);
-  const representationBlend=projectionPresentationBlendForZoom(scalar);
+  const representationBlend=displayResource?projectionPresentationBlendForZoom(scalar):0;
   const tangentVisible=representationBlend>.02;
   // The tangent patch lies in X/Z. Once it becomes the visible representation,
   // view it from above; keeping the old globe-front camera at Y~=0 makes the
@@ -1083,23 +1321,35 @@ function applyCameraZoom(){
   projectionPresentation={...projectionPresentation,viewBlend,handoff,representationBlend,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
-  const verticalFov=34*Math.PI/180;
-  const visibleHeightUnits=2*focusDistance*Math.tan(verticalFov/2);
-  const visibleWidthUnits=visibleHeightUnits*aspect;
-  const metersPerUnit=WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS;
-  if(blend>.055){
-    const dims=localPatchDimensions(),comp=Math.max(.08,dims.presentationCompensation||1);
-    zoomState.visibleFootprintWidthMeters=Math.max(2,dims.visibleWidth/comp);
-    zoomState.visibleFootprintHeightMeters=Math.max(2,dims.visibleHeight/comp);
-  }else{
-    zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
-    zoomState.visibleFootprintHeightMeters=Math.max(2,visibleHeightUnits*metersPerUnit);
-  }
+  const visibleHeightUnits=2*focusDistance*Math.tan(fov*Math.PI/360);
+  updateProjectionPresentation(visibleHeightUnits);
+  const tangentOwnsView=blend>LOCAL_TANGENT_OWNERSHIP_BLEND&&Boolean(displayResource);
+  // Footprint (and therefore the ruler) is what is actually on screen: the
+  // globe camera's surface footprint, or the height the tangent patch shows.
+  const footprintHeight=tangentOwnsView?projectionPresentation.shownHeightMeters:globeSurfaceFootprintHeightMeters(scalar);
+  zoomState.visibleFootprintHeightMeters=Math.max(2,footprintHeight);
+  zoomState.visibleFootprintWidthMeters=Math.max(2,footprintHeight*aspect);
+  zoomState.band=visibleBandFor(zoomState.requestedBand,tangentOwnsView);
   updateMapPresentation();
+}
+// Semantic band shown to the player never claims a finer scale than the
+// representation currently on screen.
+function visibleBandFor(requestedBand,tangentOwnsView){
+  const order=ZOOM_BANDS.map(b=>b.id),requested=order.indexOf(requestedBand);
+  if(!displayResource||projectionState.blend<=0)return requested>order.indexOf("country-region")?"country-region":requestedBand;
+  const visible=order.indexOf(displayResource.dims.band);
+  if(!tangentOwnsView)return requested>visible?order[Math.min(requested,visible)]:requestedBand;
+  return requested>visible?order[visible]:requestedBand;
+}
+function refreshZoomPresentation(){if(cameraEntity&&zoomState.baseCameraDistance)applyCameraZoom();}
+function localFocusOffsetMeters(resource){
+  const cosLat=Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  return {east:wrapLongitudeRadians(resource.lon0-zoomState.focusLongitudeRadians)*WORLD_RADIUS_METERS*cosLat,north:(resource.lat0-zoomState.focusLatitudeRadians)*WORLD_RADIUS_METERS};
 }
 function setZoomScalar(value){
   const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
   if(Math.abs(next-zoomState.scalar)<1e-7)return snapshot();
+  lastZoomDirection=next>zoomState.scalar?1:-1;
   zoomState.scalar=next;zoomState.zoomChanges++;applyCameraZoom();return snapshot();
 }
 function zoomBy(delta){return setZoomScalar(zoomState.scalar+Number(delta||0));}
@@ -1715,8 +1965,9 @@ async function start(){
     await yieldPaint();
     bindInput();
     resize();
-    app.on?.("update",dt=>{frameCount++;updateInspectionTooltip();updateAmbientMotion(dt);});
+    app.on?.("update",dt=>{frameCount++;recordLocalFrame(dt);updateInspectionTooltip();updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
+    await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
 
     if("ResizeObserver" in window){
       resizeObserver=new ResizeObserver(resize);
@@ -1803,7 +2054,8 @@ function snapshot(){
       surfaceIdentity:canonicalSurfaceIdentity()
     }),
     zoom:Object.freeze({
-      scalar:Number(zoomState.scalar.toFixed(6)),band:zoomState.band,
+      scalar:Number(zoomState.scalar.toFixed(6)),band:zoomState.band,requestedBand:zoomState.requestedBand||zoomState.band,visibleBand:zoomState.band,
+      requestedLevel:localResources.requestedLevel,visibleLevel:localResources.visibleLevel,
       focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
       focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),
       cameraDistance:Number(zoomState.cameraDistance.toFixed(6)),
@@ -1811,7 +2063,8 @@ function snapshot(){
       visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),
       visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3)),
       wheelEvents:zoomState.wheelEvents,pinchEvents:zoomState.pinchEvents,zoomChanges:zoomState.zoomChanges,
-      bands:ZOOM_BANDS.map(b=>b.id),detailLevels:LOCAL_DETAIL_LEVELS.map(level=>level.id),sameSphericalAuthority:true
+      bands:ZOOM_BANDS.map(b=>b.id),detailLevels:LOCAL_DETAIL_LEVELS.map(level=>level.id),sameSphericalAuthority:true,
+      ladder:Object.freeze({startScalar:LADDER_START_SCALAR,startHeightMeters:Number(ladderState().startHeight.toFixed(1)),groundHeightMeters:GROUND_FOOTPRINT_HEIGHT_METERS,levelMaxScalars:ladderState().levelMax.slice(),logUniformBelowStart:true})
     }),
     projection:Object.freeze({
       mode:projectionState.mode,
@@ -1886,7 +2139,7 @@ function destroy(){
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
-  for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localResources={activeSignature:null,requestedSignature:null,preparedSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastSwapMs:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,blockingZoomBuilds:0};
+  for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
   inspectionPickables.clear();
@@ -1894,12 +2147,12 @@ function destroy(){
   geography=null;politicalScaleEvidenceCache=null;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setZoomScalar,zoomBy,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setZoomScalar,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS,PRESENTATION_FOOTPRINT_ANCHORS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
   })
 });
 const boot=()=>start().catch(()=>{});
