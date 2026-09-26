@@ -1683,3 +1683,4 @@
 2026-09-26 04:46 +03:00 | WP-S003-008-006 | Removed duplicate type line from unnamed building inspection callouts; named buildings still show authoritative name + type while unnamed buildings show the type once.
 2026-09-26 04:54 +03:00 | WP-S003-008-006 | NPC inspection now trims authoritative display names and uses truthful `Unassigned` profession fallback instead of presenting `Resident` as a profession.
 2026-09-26 05:03 +03:00 | WP-S003-008-006 | Hardened inspection pointer lifecycle: stale press state is cleared on pointer cancellation, lost capture, and button-up canvas leave so later pointer releases cannot become false inspection clicks.
+2026-09-26 05:10 +03:00 | WP-S003-008-006 | NPC inspection no longer invents `Idle` when authoritative activity is absent; it now reports `Activity unavailable` while preserving authoritative labels and known activity states.
