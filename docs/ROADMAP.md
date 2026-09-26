@@ -99,6 +99,8 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003` — Zoom-Driven Detail Refinement + Off-Screen Eviction — COMPLETED
 - `WP-S003-010-003-001` — Zoom-Aware Geographic Labels, Borders, Scale Ruler + Streaming Pace — COMPLETED
 - `WP-S003-010-003-002` — Smooth Mid-Zoom Projection + Country/Region Scale Rebalance — COMPLETED
+- `WP-S003-010-003-003` — Smooth Early-Zoom Camera Angle Continuity
+- `WP-S003-010-003-004` — Terrain-Anchored Landmarks + Camera-Aligned Political Borders
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
 - `WP-S003-010-005` — Planet-to-Gameplay-Area End-to-End Visual Acceptance
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips
