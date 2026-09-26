@@ -1680,3 +1680,4 @@
 2026-09-26 04:55 +03:00 | WP-S003-008-006 | Wired selected-only inspection refresh into the PlayCanvas update loop so callouts follow camera/NPC movement, refresh live authoritative state, and dismiss when targets dematerialize.
 2026-09-26 05:05 +03:00 | WP-S003-008-006 | Replaced fixed NPC-over-building inspection priority with deterministic camera-depth ordering so overlapping picks prefer the visually nearer active presentation target.
 2026-09-26 05:15 +03:00 | WP-S003-008-006 | Removed raw resident-ID and internal building-source fallbacks from inspection callouts; missing identity/type now uses truthful player-facing semantic fallbacks only.
+2026-09-26 04:46 +03:00 | WP-S003-008-006 | Removed duplicate type line from unnamed building inspection callouts; named buildings still show authoritative name + type while unnamed buildings show the type once.
