@@ -310,10 +310,10 @@ function ensureTangentPatch(){
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
   horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
-  horizonSkirtMaterial.diffuse.set(.12,.20,.12);horizonSkirtMaterial.emissive.set(.10,.17,.10);horizonSkirtMaterial.emissiveIntensity=.82;
+  horizonSkirtMaterial.diffuse.set(.18,.30,.16);horizonSkirtMaterial.emissive.set(.15,.25,.13);horizonSkirtMaterial.emissiveIntensity=.96;
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   const mesh=new pc.Mesh(device);
-  mesh.setPositions([-18,-.12,-18,18,-.12,-18,-18,-.12,18,18,-.12,18]);
+  mesh.setPositions([-28,-.08,-28,28,-.08,-28,-28,-.08,28,28,-.08,28]);
   mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   horizonSkirt.render.meshInstances=[new pc.MeshInstance(mesh,horizonSkirtMaterial,horizonSkirt)];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
@@ -325,7 +325,7 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     tangentPatch.enabled=blend>.04;
     ensureHorizonSkirt();
-    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.16*blend,0);}
+    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.10*blend,0);}
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Expand the patch through the handoff so the viewport never collapses to a
