@@ -1692,3 +1692,4 @@
 
 2026-09-26 07:00 +03:00 | WP-S003-008-006 | Fixed canonical JavaScript parse defect in PlanetStage public inspection API: removed a literal \\n token between pickInspection and setPlacesCategory. Implementation commit 22dcdf19aafc130b99813e29be781e1aba553014. WP remains incomplete pending genuine NPC/building visual evidence and final deployment verification.
 2026-09-26 08:00 +03:00 | WP-S003-008-006 | Cleared inspection pick registry and selection telemetry during planet-stage destroy so restart cannot retain stale NPC/building projection callbacks.
+2026-09-26 08:05 +03:00 | WP-S003-008-006 | Overlapping inspection candidates now resolve by explicit priority, nearest presentation depth, then stable ID; supports numeric or dynamic depth without world scans.
