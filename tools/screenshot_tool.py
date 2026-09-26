@@ -129,6 +129,7 @@ SCENARIOS = {
     "wp-s003-010-003-001",
     "wp-s003-010-003-002",
     "wp-s003-010-003-003",
+    "wp-s003-010-003-004",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -235,6 +236,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-001": 8,
     "wp-s003-010-003-002": 10,
     "wp-s003-010-003-003": 15,
+    "wp-s003-010-003-004": 12,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1634,7 +1636,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -8163,6 +8165,48 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             """)
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
         return label
+    if scenario == "wp-s003-010-003-004":
+        # Terrain-anchored border/landmark evidence using one unchanged seeded
+        # focus. The sequence covers the requested globe, projection transition,
+        # regional oblique, tangent/local and phone portrait states.
+        plan=(
+            (0.349485,"desktop:0.05x-globe-landmarks",(1280,800)),
+            (0.422549,"desktop:0.07x-country-border",(1280,800)),
+            (0.451545,"desktop:0.08x-projection-transition",(1280,800)),
+            (0.500000,"desktop:0.10x-country",(1280,800)),
+            (0.588046,"desktop:0.15x-regional",(1280,800)),
+            (0.680781,"desktop:0.23x-regional-topdown",(1280,800)),
+            (0.731181,"desktop:0.29x-regional-detail",(1280,800)),
+            (0.780000,"desktop:regional-oblique-border",(1280,800)),
+            (0.860000,"desktop:district-tangent",(1280,800)),
+            (0.920000,"desktop:local-tangent",(1280,800)),
+            (0.680781,"phone:0.23x-border",(390,844)),
+            (0.900000,"phone:tangent-landmarks",(390,844)),
+        )
+        scalar,label,size=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*size); time.sleep(0.15)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        proof=driver.execute_script("""
+            window.PlanetStage.setZoomScalar(arguments[0]);
+            const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{};
+            return {
+              focus:[s?.zoom?.focusLatitudeDegrees,s?.zoom?.focusLongitudeDegrees],
+              bounded:m?.bounded,fullWorldScan:m?.fullWorldScan,
+              borderSegments:m?.borderSegmentCount,projectedBorderSegments:m?.projectedBorderSegmentCount,
+              borderWorldVertices:m?.borderWorldVertexCount,
+              landmarkCandidates:m?.landmarkCandidateCount,landmarkVisible:m?.landmarkVisibleCount,
+              projectionMode:m?.projectionMode,projectionBlend:m?.projectionBlend
+            };
+        """,scalar)
+        if not isinstance(proof,dict) or proof.get("bounded") is not True or proof.get("fullWorldScan") is not False:
+            raise RuntimeError(f"WP-S003-010-003-004 map budget/projection proof invalid: {proof}")
+        return label
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8406,6 +8450,29 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-004":
+        if len(frames) < 12:
+            raise RuntimeError("wp-s003-010-003-004 requires twelve anchored border/landmark evidence frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:12]]
+        focus=[(round(float((stage.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((stage.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for stage in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Anchored map evidence changed geographic focus: {focus}")
+        maps=[stage.get("mapPresentation") or {} for stage in stages]
+        if any(m.get("bounded") is not True or m.get("fullWorldScan") is not False for m in maps):
+            raise RuntimeError(f"Map presentation lost bounded/no-full-world contract: {maps}")
+        if max(int(m.get("projectedBorderSegmentCount") or 0) for m in maps[1:8]) < 1:
+            raise RuntimeError("No world-projected political border was visible in country/regional evidence")
+        if max(int(m.get("landmarkVisibleCount") or 0) for m in maps) < 1:
+            raise RuntimeError("No terrain-anchored landmark pointer was visible in evidence")
+        for m in maps:
+            raw=int(m.get("borderSegmentCount") or 0); vertices=int(m.get("borderWorldVertexCount") or 0); projected=int(m.get("projectedBorderSegmentCount") or 0)
+            if raw and vertices != raw*3:
+                raise RuntimeError(f"Border world-vertex telemetry mismatch: {m}")
+            if projected > raw:
+                raise RuntimeError(f"Projected border count exceeds bounded raw segments: {m}")
+        modes={str(m.get("projectionMode") or "") for m in maps}
+        if "globe" not in modes or not any(mode in {"tangent-transition","local-tangent"} for mode in modes):
+            raise RuntimeError(f"Evidence did not exercise globe and tangent projection modes: {modes}")
     if scenario == "wp-s003-010-003-003":
         if len(frames) < 15:
             raise RuntimeError("wp-s003-010-003-003 requires fifteen no-movement zoom evidence frames")
@@ -14050,7 +14117,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
