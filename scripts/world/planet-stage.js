@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v6";
+const VERSION="planet-ground-static-v8";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -40,7 +40,7 @@ let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
 let localStaticMaterials=null;
-let localStatic={active:false,signature:null,level:"inactive",roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,authority:"spherical-seed-focus-presentation"};
+let localStatic={active:false,signature:null,semanticKey:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementPlanRevision:null,layoutSignature:null,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,authority:"SettlementArchetypes + deterministic renderer layout"};
 let resizeObserver=null;
 let yawDegrees=-18;
 let pitchDegrees=-10;
@@ -123,15 +123,36 @@ let mapContextCache={key:null,value:null};
 let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,builtAtMs:0};
 let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
 let politicalScaleEvidenceCache=null;
+let planetWorldProjectionCache=null;
 
 function wrapLongitudeRadians(value){
   let lon=Number(value)||0;lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return lon;
 }
+function planetWorldProjection(){
+  if(!activeSeed||!window.PlanetWorldProjection?.forSeed)return null;
+  if(planetWorldProjectionCache?.seed===activeSeed)return planetWorldProjectionCache;
+  try{planetWorldProjectionCache=window.PlanetWorldProjection.forSeed(activeSeed)||null;}
+  catch(_){planetWorldProjectionCache=null;}
+  return planetWorldProjectionCache;
+}
 function mapWorldTileAt(latitudeRadians,longitudeRadians){
+  const projection=planetWorldProjection();
+  if(projection?.unproject){
+    try{
+      const mapped=projection.unproject(latitudeRadians,longitudeRadians);
+      if(mapped?.x!=null&&mapped?.y!=null)return Object.freeze({
+        x:String(mapped.x),y:String(mapped.y),
+        projectionVersion:String(projection.version||""),
+        projectionAuthority:String(projection.authority||"")
+      });
+    }catch(_){}
+  }
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   return Object.freeze({
     x:String(Math.round(wrapLongitudeRadians(longitudeRadians)*WORLD_RADIUS_METERS/tileMeters)),
-    y:String(Math.round(clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999)*WORLD_RADIUS_METERS/tileMeters))
+    y:String(Math.round(clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999)*WORLD_RADIUS_METERS/tileMeters)),
+    projectionVersion:"legacy-equirectangular-fallback",
+    projectionAuthority:"fallback"
   });
 }
 function mapGeneratedName(kind,latitudeRadians,longitudeRadians){
@@ -679,55 +700,311 @@ function localGroundHeightUnits(eastMeters,northMeters,dims){
 }
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
-  const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.92;m.update();return m;};
-  localStaticMaterials={road:make("LocalRoad",.34,.25,.16),wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48)};
+  const make=(name,r,g,b,opacity=1)=>{
+    const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.92;m.opacity=opacity;
+    if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}
+    m.update();return m;
+  };
+  localStaticMaterials={
+    road:make("LocalRoad",.34,.25,.16),
+    route:make("LocalRouteSilhouette",.48,.31,.12,.98),
+    footprint:make("LocalSettlementFootprint",.70,.52,.22,.46),
+    cluster:make("LocalSettlementCluster",.78,.57,.25,.98),
+    landmark:make("LocalSettlementLandmark",.90,.72,.28,1),
+    wall:make("LocalWall",.72,.55,.34),
+    roof:make("LocalRoof",.35,.12,.08),
+    trunk:make("LocalTrunk",.24,.13,.06),
+    leaf:make("LocalLeaf",.16,.39,.12),
+    water:make("LocalWater",.08,.31,.48,.92)
+  };
 }
 function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
   const e=new pc.Entity(name),mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
   e.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});e.render.meshInstances=[new pc.MeshInstance(mesh,material,e)];
   e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);localStaticRoot.addChild(e);
 }
+function settlementRevealTierForZoom(value=zoomState.scalar){
+  const scalar=clamp(value,0,1);
+  if(scalar<.60)return "none";
+  if(scalar<.72)return "footprint";
+  if(scalar<.84)return "route";
+  if(scalar<.93)return "coarse";
+  if(scalar<.985)return "refined";
+  return "full";
+}
+function settlementLayoutUnit(key){
+  let h=2166136261>>>0;
+  const text=String(activeSeed||"")+"|settlement-presentation|"+String(key||"");
+  for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+  return (h>>>0)/4294967295;
+}
+function settlementPresentationScale(plan,dims,tier){
+  if(!plan||!dims)return 1;
+  const targetFraction=tier==="route"?.080:tier==="coarse"?.105:tier==="refined"?.085:0;
+  if(targetFraction<=0)return 1;
+  const diameter=Math.max(1,plan.radiusMeters*2);
+  const maxScale=tier==="route"?64:tier==="coarse"?24:tier==="refined"?6:1;
+  return clamp((dims.visibleWidth*targetFraction)/diameter,1,maxScale);
+}
+function settlementPresentationPoint(plan,dims,tier,east,north){
+  const scale=settlementPresentationScale(plan,dims,tier);
+  return Object.freeze({
+    east:plan.centerEastMeters+(east-plan.centerEastMeters)*scale,
+    north:plan.centerNorthMeters+(north-plan.centerNorthMeters)*scale,
+    scale
+  });
+}
+function canonicalSettlementForFocus(){
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const authority=window.SettlementArchetypes,politics=window.PoliticalGeography,projection=planetWorldProjection();
+  if(!activeSeed||!authority?.settlementsForCountry||!politics?.countryAt)return null;
+  let country=null,plans=[];
+  try{
+    country=politics.countryAt(activeSeed,focusTile.x,focusTile.y);
+    if(country?.id)plans=authority.settlementsForCountry(activeSeed,country,2)||[];
+  }catch(_){return null;}
+  if(!country?.id||!plans.length)return null;
+  let fx,fy;
+  try{fx=BigInt(focusTile.x);fy=BigInt(focusTile.y);}catch(_){return null;}
+  let best=null;
+  for(const plan of plans){
+    if(!plan?.id||!plan?.center)continue;
+    let dx,dy,projected=null;
+    try{
+      dx=BigInt(plan.center.x)-fx;dy=BigInt(plan.center.y)-fy;
+      projected=projection?.projectSettlement?.(plan)||projection?.project?.(plan.center.x,plan.center.y)||null;
+    }catch(_){continue;}
+    if(projected&&projected.land!==true)continue;
+    const distance2=dx*dx+dy*dy;
+    if(!best||distance2<best.distance2)best={plan,dx,dy,distance2,projected};
+  }
+  if(!best)return null;
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  let eastMeters=Number(best.dx)*tileMeters,northMeters=Number(best.dy)*tileMeters;
+  if(best.projected){
+    northMeters=(best.projected.latitudeRadians-zoomState.focusLatitudeRadians)*WORLD_RADIUS_METERS;
+    eastMeters=wrapLongitudeRadians(best.projected.longitudeRadians-zoomState.focusLongitudeRadians)*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  }
+  return Object.freeze({
+    plan:best.plan,countryId:country.id,focusTile,
+    projectedCenter:best.projected?Object.freeze({
+      latitudeDegrees:best.projected.latitudeDegrees,
+      longitudeDegrees:best.projected.longitudeDegrees,
+      land:best.projected.land,
+      surfaceClass:best.projected.surfaceClass
+    }):null,
+    eastMeters,northMeters,distanceMeters:Math.hypot(eastMeters,northMeters),
+    projectionVersion:String(projection?.version||focusTile.projectionVersion||""),
+    projectionAuthority:String(projection?.authority||focusTile.projectionAuthority||"")
+  });
+}
+function settlementPresentationPlan(){
+  const resolved=canonicalSettlementForFocus();
+  if(!resolved)return null;
+  const plan=resolved.plan,classId=String(plan.classId||"village");
+  const radiusByClass={hamlet:110,village:190,town:340,city:560,"national-capital":820};
+  const buildingByClass={hamlet:8,village:14,town:20,city:26,"national-capital":32};
+  const radiusMeters=radiusByClass[classId]||190;
+  const buildingTarget=buildingByClass[classId]||14;
+  const roadBand=String(plan.roadScale?.band||"local");
+  const roadWidthMeters=roadBand==="major"?10:roadBand==="structured"?8:roadBand==="minimal"?4.5:6;
+  const pairRows=Math.ceil(buildingTarget/2),spacing=Math.max(9,Math.min(24,(radiusMeters*1.35)/Math.max(1,pairRows-1)));
+  const slots=[];
+  for(let i=0;i<buildingTarget;i++){
+    const side=i%2===0?-1:1,row=Math.floor(i/2);
+    const north=resolved.northMeters+(row-(pairRows-1)/2)*spacing+(settlementLayoutUnit(plan.id+"|n|"+i)-.5)*spacing*.26;
+    const east=resolved.eastMeters+side*(roadWidthMeters*.5+8+settlementLayoutUnit(plan.id+"|e|"+i)*8);
+    const width=6.5+settlementLayoutUnit(plan.id+"|w|"+i)*4.5;
+    const depth=6+settlementLayoutUnit(plan.id+"|d|"+i)*3.5;
+    const height=4.5+settlementLayoutUnit(plan.id+"|h|"+i)*2.8;
+    slots.push(Object.freeze({east,north,width,depth,height,side,row}));
+  }
+  const trees=[];
+  const treeCount=Math.min(28,buildingTarget+10);
+  for(let i=0;i<treeCount;i++){
+    const angle=settlementLayoutUnit(plan.id+"|ta|"+i)*Math.PI*2;
+    const radius=radiusMeters*(.26+settlementLayoutUnit(plan.id+"|tr|"+i)*.68);
+    trees.push(Object.freeze({
+      east:resolved.eastMeters+Math.cos(angle)*radius,
+      north:resolved.northMeters+Math.sin(angle)*radius,
+      height:3.5+settlementLayoutUnit(plan.id+"|th|"+i)*3.5
+    }));
+  }
+  return Object.freeze({
+    id:String(plan.id),revision:String(plan.revision||""),
+    name:String(plan.name||"Canonical Settlement"),classId,
+    countryId:String(plan.countryId||resolved.countryId),regionId:String(plan.regionId||""),
+    focusTile:resolved.focusTile,centerTile:Object.freeze({x:String(plan.center.x),y:String(plan.center.y)}),
+    centerEastMeters:resolved.eastMeters,centerNorthMeters:resolved.northMeters,distanceMeters:resolved.distanceMeters,
+    radiusMeters,roadWidthMeters,roadSpanMeters:Math.max(180,radiusMeters*2.5),
+    slots:Object.freeze(slots),trees:Object.freeze(trees),
+    landmark:Object.freeze({
+      east:resolved.eastMeters+roadWidthMeters*2.2+12,
+      north:resolved.northMeters-Math.min(34,radiusMeters*.15),
+      height:Math.max(10,radiusMeters*.075)
+    }),
+    authority:"SettlementArchetypes",simulationMutation:false,
+    layoutSignature:[String(plan.id),String(plan.revision||""),String(plan.center.x),String(plan.center.y),buildingTarget].join("|")
+  });
+}
+function addSettlementRoad(plan,dims,material,tier){
+  const unit=dims.metersPerUnit;
+  const broadFactor=tier==="footprint"?.0045:tier==="route"?.0035:tier==="coarse"?.0022:tier==="refined"?.0008:0;
+  const roadWidth=Math.max(plan.roadWidthMeters,dims.visibleWidth*broadFactor);
+  const roadSpan=Math.min(dims.patchHeight*.82,Math.max(plan.roadSpanMeters,dims.visibleHeight*(tier==="full"?.82:.11)));
+  const roadSegments=tier==="full"?14:tier==="refined"?12:tier==="coarse"?10:8;
+  const segmentMeters=roadSpan/roadSegments;
+  for(let r=0;r<roadSegments;r++){
+    const east=plan.centerEastMeters,north=plan.centerNorthMeters-roadSpan*.5+(r+.5)*segmentMeters;
+    const y=localGroundHeightUnits(east,north,dims)+.028;
+    addLocalStatic("SettlementRoad-"+tier+"-"+r,"box",material,east/unit,y,-north/unit,roadWidth/unit,.04,segmentMeters*1.08/unit);
+  }
+  return roadSegments;
+}
+function addSettlementClusters(plan,dims,tier){
+  const unit=dims.metersPerUnit,clusterCount=tier==="route"?4:6,bands=clusterCount/2;
+  const pairRows=Math.max(1,Math.ceil(plan.slots.length/2));
+  const iconScale=tier==="route"?.014:.010;
+  const semanticScale=settlementPresentationScale(plan,dims,tier);
+  let count=0;
+  for(let i=0;i<clusterCount;i++){
+    const side=i%2,band=Math.floor(i/2);
+    const members=plan.slots.filter((slot,index)=>{
+      if(index%2!==side)return false;
+      const row=Math.floor(index/2),bucket=Math.min(bands-1,Math.floor(row*bands/pairRows));
+      return bucket===band;
+    });
+    if(!members.length)continue;
+    const rawEast=members.reduce((sum,item)=>sum+item.east,0)/members.length;
+    const rawNorth=members.reduce((sum,item)=>sum+item.north,0)/members.length;
+    const point=settlementPresentationPoint(plan,dims,tier,rawEast,rawNorth);
+    const minEast=Math.min(...members.map(item=>item.east-item.width*.5)),maxEast=Math.max(...members.map(item=>item.east+item.width*.5));
+    const minNorth=Math.min(...members.map(item=>item.north-item.depth*.5)),maxNorth=Math.max(...members.map(item=>item.north+item.depth*.5));
+    const width=Math.max((maxEast-minEast)*semanticScale,dims.visibleWidth*iconScale,22*semanticScale);
+    const depth=Math.max((maxNorth-minNorth)*semanticScale,dims.visibleHeight*iconScale*.78,18*semanticScale);
+    const height=Math.max(10,Math.min(160,dims.visibleHeight*(tier==="route"?.0042:.0032)));
+    const y=localGroundHeightUnits(point.east,point.north,dims)+height*.5/unit+.035;
+    addLocalStatic("SettlementCluster-"+i,"box",localStaticMaterials.cluster,point.east/unit,y,-point.north/unit,width/unit,height/unit,depth/unit);
+    count++;
+  }
+  return count;
+}
+function addSettlementLandmark(plan,dims,tier){
+  if(!["route","coarse","refined","full"].includes(tier))return 0;
+  const unit=dims.metersPerUnit,p=plan.landmark;
+  const point=tier==="full"?Object.freeze({east:p.east,north:p.north,scale:1}):settlementPresentationPoint(plan,dims,tier,p.east,p.north);
+  const visualHeight=Math.max(
+    p.height*point.scale,
+    tier==="route"?dims.visibleHeight*.008:tier==="coarse"?dims.visibleHeight*.006:tier==="refined"?dims.visibleHeight*.0045:0
+  );
+  const width=Math.max(5*point.scale,visualHeight*.34),y=localGroundHeightUnits(point.east,point.north,dims);
+  addLocalStatic("SettlementLandmark","box",localStaticMaterials.landmark,point.east/unit,y+visualHeight*.5/unit,-point.north/unit,width/unit,visualHeight/unit,width/unit);
+  return 1;
+}
+function addSettlementBuildings(plan,dims,tier){
+  const unit=dims.metersPerUnit;
+  const limit=tier==="refined"?Math.min(12,plan.slots.length):plan.slots.length;
+  const semanticScale=tier==="refined"?settlementPresentationScale(plan,dims,tier):1;
+  let count=0;
+  for(let i=0;i<limit;i++){
+    const b=plan.slots[i];
+    const point=tier==="refined"?settlementPresentationPoint(plan,dims,tier,b.east,b.north):Object.freeze({east:b.east,north:b.north,scale:1});
+    if(Math.abs(point.east)>dims.patchWidth*.48||Math.abs(point.north)>dims.patchHeight*.48)continue;
+    const minWidth=tier==="refined"?dims.visibleWidth*.0032:0;
+    const minDepth=tier==="refined"?dims.visibleHeight*.0042:0;
+    const width=Math.max(b.width*semanticScale,minWidth),depth=Math.max(b.depth*semanticScale,minDepth);
+    const height=Math.max(b.height*semanticScale,tier==="refined"?dims.visibleHeight*.006:0);
+    const y=localGroundHeightUnits(point.east,point.north,dims);
+    addLocalStatic("SettlementBuildingBody-"+i,"box",localStaticMaterials.wall,point.east/unit,y+height*.5/unit,-point.north/unit,width/unit,height/unit,depth/unit);
+    const roofY=y+(height+Math.max(.65,semanticScale*.65))/unit,roofHalf=width*.66/unit,roofOffset=width*.20;
+    addLocalStatic("SettlementBuildingRoofL-"+i,"box",localStaticMaterials.roof,(point.east-roofOffset)/unit,roofY,-point.north/unit,roofHalf,Math.max(.55,semanticScale*.55)/unit,depth*1.18/unit,0,0,-24);
+    addLocalStatic("SettlementBuildingRoofR-"+i,"box",localStaticMaterials.roof,(point.east+roofOffset)/unit,roofY,-point.north/unit,roofHalf,Math.max(.55,semanticScale*.55)/unit,depth*1.18/unit,0,0,24);
+    count++;
+  }
+  return count;
+}
+function addSettlementTrees(plan,dims,tier){
+  const unit=dims.metersPerUnit,limit=tier==="full"?plan.trees.length:Math.min(12,plan.trees.length);
+  const semanticScale=tier==="refined"?settlementPresentationScale(plan,dims,tier):1;
+  let count=0;
+  for(let i=0;i<limit;i++){
+    const t=plan.trees[i];
+    const point=tier==="refined"?settlementPresentationPoint(plan,dims,tier,t.east,t.north):Object.freeze({east:t.east,north:t.north,scale:1});
+    if(Math.abs(point.east)>dims.patchWidth*.47||Math.abs(point.north)>dims.patchHeight*.47)continue;
+    const y=localGroundHeightUnits(point.east,point.north,dims),h=Math.max(t.height*semanticScale,tier==="refined"?dims.visibleHeight*.004:0);
+    const crown=Math.max(4.2*semanticScale,tier==="refined"?dims.visibleWidth*.0028:4.2);
+    addLocalStatic("SettlementTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,point.east/unit,y+h*.25/unit,-point.north/unit,Math.max(.7,semanticScale*.7)/unit,h*.5/unit,Math.max(.7,semanticScale*.7)/unit);
+    addLocalStatic("SettlementTreeCrown-"+i,"sphere",localStaticMaterials.leaf,point.east/unit,y+h*.72/unit,-point.north/unit,crown/unit,h*.86/unit,crown/unit);
+    count++;
+  }
+  return count;
+}
 function rebuildLocalStaticPresentation(signature){
   if(!tangentPatch||!device||!geography)return;
-  const started=performance.now(),dims=localPatchDimensions(),eligible=["near-ground","ground"].includes(dims.levelId);
+  const started=performance.now(),dims=localPatchDimensions(),tier=settlementRevealTierForZoom();
+  const semanticKey=[activeSeed,zoomState.focusLatitudeRadians.toFixed(5),zoomState.focusLongitudeRadians.toFixed(5),dims.levelId,tier].join("|");
+  if(localStatic.semanticKey===semanticKey&&localStaticRoot)return;
   localStaticRoot?.destroy?.();localStaticRoot=null;
-  localStatic={...localStatic,active:false,signature,level:dims.levelId,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0};
-  if(!eligible)return;
+  localStatic={...localStatic,active:false,signature,semanticKey,level:dims.levelId,revealTier:tier,settlementId:null,settlementName:null,settlementClass:null,settlementPlanRevision:null,layoutSignature:null,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0};
+  if(tier==="none")return;
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   if(center?.land){
-    const roadWidth=Math.max(4.5,Math.min(9,dims.visibleWidth*.10)),roadSpan=dims.patchHeight*.82,roadSegments=14,segmentMeters=roadSpan/roadSegments;
-    for(let r=0;r<roadSegments;r++){
-      const north=-roadSpan*.5+(r+.5)*segmentMeters,y=localGroundHeightUnits(0,north,dims)+.035;
-      addLocalStatic("SeedRoad-"+r,"box",localStaticMaterials.road,0,y,north/-unit,roadWidth/unit,.055,segmentMeters*1.08/unit);
+    const plan=settlementPresentationPlan();
+    const inView=Boolean(plan&&Math.abs(plan.centerEastMeters)<=dims.patchWidth*.52&&Math.abs(plan.centerNorthMeters)<=dims.patchHeight*.52);
+    if(!inView){
+      localStatic.revealTier="none";
+      localStatic.entityCount=0;localStatic.drawCallEstimate=0;localStatic.active=false;
+      localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
+      return;
     }
-    localStatic.roadCount=roadSegments;localStatic.triangleEstimate+=roadSegments*12;
-    const count=dims.levelId==="ground"?6:10;
-    for(let i=0;i<count;i++){
-      const side=i%2===0?-1:1,row=Math.floor(i/2),north=(-.32+row*.16)*dims.patchHeight,east=side*(roadWidth*.5+5+localHash(i*17,north,31)*7);
-      if(Math.abs(east)>dims.patchWidth*.43||Math.abs(north)>dims.patchHeight*.43)continue;
-      const w=6.5+localHash(east,north,41)*4.5,d=6+localHash(east,north,42)*3.5,h=4.5+localHash(east,north,43)*2.8,y=localGroundHeightUnits(east,north,dims);
-      addLocalStatic("SeedBuildingBody-"+i,"box",localStaticMaterials.wall,east/unit,y+h*.5/unit,-north/unit,w/unit,h/unit,d/unit);
-      const roofY=y+(h+.65)/unit,roofHalf=w*.66/unit,roofOffset=w*.20/unit;
-      addLocalStatic("SeedBuildingRoofL-"+i,"box",localStaticMaterials.roof,(east-w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,-24);
-      addLocalStatic("SeedBuildingRoofR-"+i,"box",localStaticMaterials.roof,(east+w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,24);
-      localStatic.buildingCount++;localStatic.triangleEstimate+=36;
+    localStatic={...localStatic,settlementId:plan.id,settlementName:plan.name,settlementClass:plan.classId,settlementPlanRevision:plan.revision,layoutSignature:plan.layoutSignature,presentationScale:Number(settlementPresentationScale(plan,dims,tier).toFixed(3)),authority:plan.authority+" + shared renderer layout",presentationOnly:true,simulationAuthority:false};
+    if(tier!=="full"){
+      const occupiedWidth=Math.max(plan.radiusMeters*1.9,dims.visibleWidth*(tier==="footprint"?.060:tier==="route"?.065:tier==="coarse"?.055:.035));
+      const occupiedDepth=Math.max(plan.radiusMeters*1.55,dims.visibleHeight*(tier==="footprint"?.050:tier==="route"?.052:tier==="coarse"?.044:.028));
+      const y=localGroundHeightUnits(plan.centerEastMeters,plan.centerNorthMeters,dims)+.018;
+      addLocalStatic("SettlementOccupiedArea","box",localStaticMaterials.footprint,plan.centerEastMeters/unit,y,-plan.centerNorthMeters/unit,occupiedWidth/unit,.025,occupiedDepth/unit);
+      localStatic.occupiedAreaCount=1;localStatic.triangleEstimate+=12;
     }
-    const trees=dims.levelId==="ground"?14:24;
-    for(let i=0;i<trees;i++){
-      const east=(localHash(i*29,7,51)-.5)*dims.patchWidth*.78,north=(localHash(13,i*31,52)-.5)*dims.patchHeight*.78;
-      if(Math.abs(east)<roadWidth*.9)continue;
-      const y=localGroundHeightUnits(east,north,dims),h=3.5+localHash(east,north,53)*3;
-      addLocalStatic("SeedTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,east/unit,y+h*.25/unit,-north/unit,.7/unit,h*.5/unit,.7/unit);
-      addLocalStatic("SeedTreeCrown-"+i,"sphere",localStaticMaterials.leaf,east/unit,y+h*.72/unit,-north/unit,4.2/unit,h*.86/unit,4.2/unit);
-      localStatic.vegetationCount++;localStatic.triangleEstimate+=180;
+    const roadMaterial=tier==="full"?localStaticMaterials.road:localStaticMaterials.route;
+    const roads=addSettlementRoad(plan,dims,roadMaterial,tier);
+    if(tier==="full"){localStatic.fullRoadCount=roads;}else{localStatic.coarseRoadCount=roads;}
+    localStatic.roadCount=roads;localStatic.triangleEstimate+=roads*12;
+    if(["route","coarse"].includes(tier)){
+      localStatic.coarseBuildingCount=addSettlementClusters(plan,dims,tier);
+      localStatic.buildingCount=localStatic.coarseBuildingCount;
+      localStatic.triangleEstimate+=localStatic.coarseBuildingCount*12;
+    }
+    localStatic.landmarkCount=addSettlementLandmark(plan,dims,tier);
+    localStatic.triangleEstimate+=localStatic.landmarkCount*12;
+    if(["refined","full"].includes(tier)){
+      localStatic.fullBuildingCount=addSettlementBuildings(plan,dims,tier);
+      localStatic.buildingCount=localStatic.fullBuildingCount;
+      localStatic.triangleEstimate+=localStatic.fullBuildingCount*36;
+      localStatic.vegetationCount=addSettlementTrees(plan,dims,tier);
+      localStatic.triangleEstimate+=localStatic.vegetationCount*180;
+    }else if(tier==="coarse"){
+      const coarseTrees=Math.min(4,plan.trees.length);
+      for(let i=0;i<coarseTrees;i++){
+        const t=plan.trees[i],point=settlementPresentationPoint(plan,dims,tier,t.east,t.north);
+        const visual=Math.max(24*point.scale,dims.visibleWidth*.0065),y=localGroundHeightUnits(point.east,point.north,dims);
+        addLocalStatic("SettlementTreeCluster-"+i,"sphere",localStaticMaterials.leaf,point.east/unit,y+visual*.22/unit,-point.north/unit,visual/unit,visual*.44/unit,visual/unit);
+      }
+      localStatic.vegetationCount=coarseTrees;localStatic.triangleEstimate+=coarseTrees*160;
     }
   }else{
     const y=localGroundHeightUnits(0,0,dims)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
-    localStatic.waterCount=1;localStatic.triangleEstimate+=12;
+    localStatic.waterCount=1;localStatic.revealTier="water";localStatic.triangleEstimate+=12;
   }
   localStatic.entityCount=localStaticRoot.children.length;localStatic.drawCallEstimate=localStatic.entityCount;localStatic.active=localStatic.entityCount>0;localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
 }
+function updateLocalStaticSemanticPresentation(){
+  if(!tangentPatch||projectionState.blend<=.055)return;
+  const dims=localPatchDimensions(),tier=settlementRevealTierForZoom();
+  const semanticKey=[activeSeed,zoomState.focusLatitudeRadians.toFixed(5),zoomState.focusLongitudeRadians.toFixed(5),dims.levelId,tier].join("|");
+  if(localStatic.semanticKey!==semanticKey)rebuildLocalStaticPresentation(localResources.activeSignature||localResources.requestedSignature||semanticKey);
+}
+
 function buildTangentPatchMesh(){
   const started=performance.now(),dims=localPatchDimensions();
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1);
@@ -1095,6 +1372,7 @@ function applyCameraZoom(){
     zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
     zoomState.visibleFootprintHeightMeters=Math.max(2,visibleHeightUnits*metersPerUnit);
   }
+  updateLocalStaticSemanticPresentation();
   updateMapPresentation();
 }
 function setZoomScalar(value){
@@ -1764,6 +2042,19 @@ function snapshot(){
     geographyLayout:geography?.layout||null,
     geographyStats,
     featureTargets,
+    worldProjection:(()=>{
+      const projection=planetWorldProjection();
+      return projection?Object.freeze({
+        version:projection.version,
+        authority:projection.authority,
+        worldAuthority:projection.worldAuthority,
+        planetAuthority:projection.planetAuthority,
+        tileMeters:projection.tileMeters,
+        radiusMeters:projection.radiusMeters,
+        anchor:projection.anchor,
+        support:projection.support
+      }):null;
+    })(),
     worldScaleFraction:WORLD_SCALE_FRACTION,
     earthReferenceRadiusMeters:EARTH_REFERENCE_RADIUS_METERS,
     worldRadiusMeters:WORLD_RADIUS_METERS,
@@ -1891,7 +2182,7 @@ function destroy(){
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
   inspectionPickables.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
-  geography=null;politicalScaleEvidenceCache=null;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+  geography=null;politicalScaleEvidenceCache=null;planetWorldProjectionCache=null;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setZoomScalar,zoomBy,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
