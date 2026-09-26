@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v1";
+const VERSION="planet-ground-static-v2";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -81,7 +81,7 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.68,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.60,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
@@ -423,6 +423,24 @@ function localDetailLevelForZoom(value=zoomState.scalar){
   localLodIndex=rawIndex;
   return LOCAL_DETAIL_LEVELS[localLodIndex];
 }
+function localLevelPresentationProgress(value=zoomState.scalar,index=localLodIndex){
+  const start=index===0?projectionState.transitionStart:(LOCAL_DETAIL_LEVELS[index-1].max+LOCAL_LOD_HYSTERESIS);
+  const end=LOCAL_DETAIL_LEVELS[index]?.max??1;
+  if(end<=start)return 1;
+  return smoothstep01((value-start)/(end-start));
+}
+function localPresentationCompensation(value=zoomState.scalar,index=localLodIndex){
+  const level=LOCAL_DETAIL_LEVELS[index]||LOCAL_DETAIL_LEVELS[0];
+  const previousHeight=index===0?520000:(LOCAL_DETAIL_LEVELS[index-1]?.visibleHeightMeters||level.visibleHeightMeters);
+  const entryRatio=clamp(level.visibleHeightMeters/Math.max(1,previousHeight),.08,1);
+  const progress=localLevelPresentationProgress(value,index);
+  return entryRatio+(1-entryRatio)*progress;
+}
+function localTextureSizeForLevel(levelId){
+  if(["regional-overview","regional-detail","district"].includes(levelId))return 128;
+  if(["local-area","settlement"].includes(levelId))return 192;
+  return 256;
+}
 function localPatchDimensions(){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
   const level=localDetailLevelForZoom();
@@ -431,10 +449,10 @@ function localPatchDimensions(){
   const visibleWidth=visibleHeight*aspect;
   const patchWidth=visibleWidth*LOCAL_PATCH_MARGIN,patchHeight=visibleHeight*LOCAL_PATCH_MARGIN;
   // Normalize every physical LOD footprint into a bounded presentation mesh.
-  // This keeps vertex counts stable while the represented world area shrinks by
-  // several orders of magnitude on the way to the 2 m ground tier.
+  // Presentation compensation keeps apparent scale continuous when the cached
+  // physical LOD switches to the next smaller footprint.
   const metersPerUnit=Math.max(1,Math.max(patchWidth,patchHeight)/8);
-  return {levelId:level.id,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,metersPerUnit};
+  return {levelId:level.id,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,metersPerUnit,presentationCompensation:localPresentationCompensation()};
 }
 function localHash(eastMeters,northMeters,salt=0){
   const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5);
@@ -581,10 +599,10 @@ function activateLocalDetailResource(signature){
     localDetail={...resource.detail,rebuildCount:localDetail.rebuildCount,signature};
   }else{
     localResources.cacheMisses++;localResources.pendingPreparationCount=1;
-    const started=performance.now(),mesh=buildTangentPatchMesh(),dims=localPatchDimensions();
-    const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,256,true);
-    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,256,false);
-    resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature},estimatedBytes:localDetail.estimatedBytes+256*256*4*2};
+    const started=performance.now(),mesh=buildTangentPatchMesh(),dims=localPatchDimensions(),textureSize=localTextureSizeForLevel(dims.levelId);
+    const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
+    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,textureSize,false);
+    resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature,textureSize},estimatedBytes:localDetail.estimatedBytes+textureSize*textureSize*4*2};
     localResourceCache.set(signature,resource);localResources.lastBuildMs=Number((performance.now()-started).toFixed(3));localResources.pendingPreparationCount=0;
     trimLocalResourceCache();
   }
@@ -672,23 +690,24 @@ function updateProjectionPresentation(){
     if(localResources.activeSignature!==sig)activateLocalDetailResource(sig);
   }
   if(tangentPatch){
-    tangentPatch.enabled=blend>.02;
+    const tangentVisible=blend>.055;
+    tangentPatch.enabled=tangentVisible;
     ensureHorizonSkirt();
-    const viewBlend=smoothstep01(clamp(blend*4.0,0,1));
-    if(horizonSkirt){horizonSkirt.enabled=blend>.02;horizonSkirt.setLocalPosition(0,-.012,0);}
+    const viewBlend=blend;
+    if(horizonSkirt){horizonSkirt.enabled=tangentVisible;horizonSkirt.setLocalPosition(0,-.012,0);}
     tangentPatch.setLocalPosition(0,0,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    // Physical footprint now changes by LOD level, so keep the presentation mesh
-    // itself close to a stable viewport-filling size instead of magnifying the
-    // near-ground patch during the handoff.
-    const patchScale=1.45+(1-viewBlend)*.35;
+    // Match each finer cached LOD's apparent scale to the prior LOD at entry,
+    // then ease toward its native scale across the band.
+    const dims=localPatchDimensions(),basePatchScale=1.45+(1-viewBlend)*.35;
+    const patchScale=basePatchScale*dims.presentationCompensation;
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     if(horizonSkirt)horizonSkirt.setLocalScale(patchScale,patchScale,patchScale);
   }
-  planet.enabled=blend<=.02;
+  planet.enabled=blend<=.06;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
-  if(blend<=.02){localResources.activeResourceCount=0;localResources.activeSignature=null;}
+  if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
 }
 function applyCameraZoom(){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
@@ -708,7 +727,7 @@ function applyCameraZoom(){
   // terrain maps, not as a low grazing-angle strip that appears to jump to ground.
   updateProjectionPresentation();
   const globeZ=distance;
-  const viewBlend=smoothstep01(clamp(blend*4.0,0,1));
+  const viewBlend=blend;
   const localZ=6.20;
   const localY=5.00;
   const cameraZ=globeZ*(1-viewBlend)+localZ*viewBlend;
@@ -723,10 +742,10 @@ function applyCameraZoom(){
   const visibleHeightUnits=2*focusDistance*Math.tan(verticalFov/2);
   const visibleWidthUnits=visibleHeightUnits*aspect;
   const metersPerUnit=WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS;
-  if(blend>.02){
-    const dims=localPatchDimensions();
-    zoomState.visibleFootprintWidthMeters=Math.max(2,dims.visibleWidth);
-    zoomState.visibleFootprintHeightMeters=Math.max(2,dims.visibleHeight);
+  if(blend>.055){
+    const dims=localPatchDimensions(),comp=Math.max(.08,dims.presentationCompensation||1);
+    zoomState.visibleFootprintWidthMeters=Math.max(2,dims.visibleWidth/comp);
+    zoomState.visibleFootprintHeightMeters=Math.max(2,dims.visibleHeight/comp);
   }else{
     zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
     zoomState.visibleFootprintHeightMeters=Math.max(2,visibleHeightUnits*metersPerUnit);
