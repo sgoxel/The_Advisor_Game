@@ -537,8 +537,9 @@ function renderInspectionTooltip(record,knownBounds=null){
   const selectionChanged=tip.dataset.recordKey!==recordKey;
   if(tip.dataset.contentKey!==contentKey&&(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250)){
     tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
-    tip.dataset.recordKey=recordKey;tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;inspection.lastContentRefreshAtMs=now;
+    tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;inspection.lastContentRefreshAtMs=now;
   }
+  if(selectionChanged)tip.dataset.recordKey=recordKey;
   const rootRect=root.getBoundingClientRect(),anchorX=(bounds.left+bounds.right)/2-rootRect.left,anchorY=bounds.top-rootRect.top;
   tip.style.visibility="hidden";tip.style.left="0px";tip.style.top="0px";
   const tipRect=tip.getBoundingClientRect(),halfWidth=Math.min(rootRect.width/2,tipRect.width/2),margin=12;
