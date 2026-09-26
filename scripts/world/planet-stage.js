@@ -1626,6 +1626,18 @@ function snapshot(){
       mouseDrag:true,touchDrag:true,keyboardRotation:true,wheelZoom:true,pinchZoom:true,keyboardZoom:true,
       wheelSensitivity:ZOOM_WHEEL_SENSITIVITY,pinchSensitivity:ZOOM_PINCH_SENSITIVITY,zoomInputRateFraction:.5
     }),
+    canonicalFocus:Object.freeze({
+      latitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
+      longitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),
+      sphericalVector:tangentFrame(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians).up,
+      worldTile:mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),
+      tangentOriginMeters:projectionState.tangentOrigin,
+      activeLodOriginMeters:projectionState.tangentOrigin,
+      screenSpaceTargetPercent:Object.freeze([50,50]),
+      screenSpaceFocusDeltaPixels:0,
+      authority:"rotation-derived-canonical-latlon",
+      zoomMayRelocateFocus:false
+    }),
     zoom:Object.freeze({
       scalar:Number(zoomState.scalar.toFixed(6)),band:zoomState.band,
       focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
