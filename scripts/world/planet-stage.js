@@ -528,8 +528,12 @@ function renderInspectionTooltip(record){
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)){dismissInspection();return false;}
   const lines=readableInspectionLines(record);tip.replaceChildren();
   lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
-  const rootRect=root.getBoundingClientRect(),x=clamp((bounds.left+bounds.right)/2-rootRect.left,12,rootRect.width-12),y=clamp(bounds.top-rootRect.top-12,12,rootRect.height-12);
-  tip.style.left=x+"px";tip.style.top=y+"px";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
+  const rootRect=root.getBoundingClientRect(),anchorX=(bounds.left+bounds.right)/2-rootRect.left,anchorY=bounds.top-rootRect.top;
+  tip.style.visibility="hidden";tip.style.left="0px";tip.style.top="0px";
+  const tipRect=tip.getBoundingClientRect(),halfWidth=Math.min(rootRect.width/2,tipRect.width/2),margin=12;
+  const x=clamp(anchorX,margin+halfWidth,Math.max(margin+halfWidth,rootRect.width-margin-halfWidth));
+  const placeBelow=anchorY-tipRect.height-margin<margin,y=placeBelow?clamp(anchorY+margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin)):clamp(anchorY-tipRect.height-margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin));
+  tip.classList.toggle("below-anchor",placeBelow);tip.style.left=x+"px";tip.style.top=y+"px";tip.style.visibility="";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
 }
 function pickInspection(clientX,clientY){
   const started=performance.now(),candidates=[];
