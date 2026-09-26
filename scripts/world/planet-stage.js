@@ -652,6 +652,7 @@ function applyCameraZoom(){
     zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
     zoomState.visibleFootprintHeightMeters=Math.max(2,visibleHeightUnits*metersPerUnit);
   }
+  updateMapPresentation();
 }
 function setZoomScalar(value){
   const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
@@ -664,6 +665,7 @@ function applyRotation(){
   planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
   updateZoomFocusFromRotation();
   rotationChangeCount++;
+  if(zoomState.scalar<=projectionState.transitionStart)updateMapPresentation();
 }
 function setRotation(yaw,pitch){
   yawDegrees=normalizeYaw(yaw);
