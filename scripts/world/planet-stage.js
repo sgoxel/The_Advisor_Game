@@ -511,7 +511,7 @@ function resize(){
     cameraEntity.lookAt(0,0,0);
   }
 }
-function dismissInspection(){inspection.selectedId=null;inspection.selectedType=null;inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
+function dismissInspection(){const hadSelection=inspection.selectedId!==null||inspection.selectedType!==null||!!root?.querySelector?.(".world-inspection-tooltip");inspection.selectedId=null;inspection.selectedType=null;if(hadSelection)inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
 function inspectionIdText(id){return String(id).trim();}
 function inspectionRegistryKey(type,id){return String(type)+":"+inspectionIdText(id);}
 function registerInspectionPickable(record){
