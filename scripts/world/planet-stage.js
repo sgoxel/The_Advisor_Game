@@ -232,16 +232,18 @@ function buildMapBorderSegments(){
     owners.push(row);
   }
   const segments=[],sx=1000/(cols-1),sy=1000/(rows-1);
-  // March each owner cell and connect edge crossings inside the cell. This
-  // preserves the bounded 13x9 political query budget while avoiding a visible
-  // rectangular sampling grid in the presentation.
+  const centerOwner=owners[Math.floor(rows/2)][Math.floor(cols/2)];
+  const crossesFocusedBorder=(left,right)=>(left===centerOwner)!==(right===centerOwner);
+  // Outline only the country under the view focus. Neighboring countries still
+  // contribute to ownership resolution, but their mutual borders are omitted
+  // so the map stays readable instead of becoming a dense political mesh.
   for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
     const a=owners[r][col],b=owners[r][col+1],c=owners[r+1][col+1],d=owners[r+1][col];
     const x=col*sx,y=r*sy,crossings=[];
-    if(a!==b)crossings.push({x:x+sx*.5,y});
-    if(b!==c)crossings.push({x:x+sx,y:y+sy*.5});
-    if(d!==c)crossings.push({x:x+sx*.5,y:y+sy});
-    if(a!==d)crossings.push({x,y:y+sy*.5});
+    if(crossesFocusedBorder(a,b))crossings.push({x:x+sx*.5,y});
+    if(crossesFocusedBorder(b,c))crossings.push({x:x+sx,y:y+sy*.5});
+    if(crossesFocusedBorder(d,c))crossings.push({x:x+sx*.5,y:y+sy});
+    if(crossesFocusedBorder(a,d))crossings.push({x,y:y+sy*.5});
     if(crossings.length===2)segments.push({x1:crossings[0].x,y1:crossings[0].y,x2:crossings[1].x,y2:crossings[1].y});
     else if(crossings.length===4){
       segments.push({x1:crossings[0].x,y1:crossings[0].y,x2:crossings[1].x,y2:crossings[1].y});
