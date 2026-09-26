@@ -130,6 +130,7 @@ SCENARIOS = {
     "wp-s003-010-003-002",
     "wp-s003-010-003-003",
     "wp-s003-010-003-004",
+    "wp-s003-010-003-005",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -237,6 +238,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-002": 10,
     "wp-s003-010-003-003": 15,
     "wp-s003-010-003-004": 12,
+    "wp-s003-010-003-005": 9,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1636,7 +1638,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7930,7 +7932,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -8207,6 +8209,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not isinstance(proof,dict) or proof.get("bounded") is not True or proof.get("fullWorldScan") is not False:
             raise RuntimeError(f"WP-S003-010-003-004 map budget/projection proof invalid: {proof}")
         return label
+    if scenario == "wp-s003-010-003-005":
+        plan=((0.772035,"desktop:0.35x",(1280,800)),(0.821721,"desktop:0.44x",(1280,800)),(0.866461,"desktop:0.54x",(1280,800)),(0.909559,"desktop:0.66x",(1280,800)),(0.954243,"desktop:0.81x",(1280,800)),(0.995000,"desktop:near-ground",(1280,800)),(1.000000,"desktop:ground",(1280,800)),(0.954243,"phone-landscape:0.81x",(844,390)),(0.954243,"phone-portrait:0.81x",(390,844)))
+        scalar,label,size=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*size); time.sleep(0.15)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        proof=driver.execute_script("""
+            window.PlanetStage.setZoomScalar(arguments[0]);
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},d=s?.projection?.localDetail||{};
+            return {mode:s?.projection?.mode,blend:s?.projection?.blend,level:d?.level,fineWidth:d?.patchWidthMeters,fineHeight:d?.patchHeightMeters,visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,active:r?.activeResourceCount,cached:r?.cachedResourceCount,bytes:r?.estimatedCacheBytes,offscreenFine:r?.offscreenFineDetailActive,buildMs:r?.lastBuildMs};
+        """,scalar)
+        if not isinstance(proof,dict) or proof.get("offscreenFine") is not False:
+            raise RuntimeError(f"WP-S003-010-003-005 bounded resource proof invalid: {proof}")
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8450,6 +8471,21 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-005":
+        if len(frames) < 9:
+            raise RuntimeError("wp-s003-010-003-005 requires nine multi-LOD continuity frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:9]]
+        focus=[(round(float((stage.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((stage.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for stage in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Multi-LOD evidence changed geographic focus: {focus}")
+        for stage in stages:
+            r=(stage.get("projection") or {}).get("resourceBudget") or {}
+            d=(stage.get("projection") or {}).get("localDetail") or {}
+            if r.get("offscreenFineDetailActive") is not False or int(r.get("cachedResourceCount") or 0) > 4:
+                raise RuntimeError(f"Bounded local resource contract failed: {r}")
+            if float((stage.get("projection") or {}).get("blend") or 0) > .055 and (float(d.get("patchWidthMeters") or 0) <= 0 or float(d.get("patchHeightMeters") or 0) <= 0):
+                raise RuntimeError(f"Visible tangent frame lacks bounded terrain footprint: {d}")
+        return
     if scenario == "wp-s003-010-003-004":
         if len(frames) < 12:
             raise RuntimeError("wp-s003-010-003-004 requires twelve anchored border/landmark evidence frames")
@@ -14128,7 +14164,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
