@@ -1679,3 +1679,4 @@
 2026-09-26 04:45 +03:00 | WP-S003-008-006 | Normalized inspection tooltip profession/activity/building labels into readable player-facing text while retaining authoritative source values; deployment verified.
 2026-09-26 04:55 +03:00 | WP-S003-008-006 | Wired selected-only inspection refresh into the PlayCanvas update loop so callouts follow camera/NPC movement, refresh live authoritative state, and dismiss when targets dematerialize.
 2026-09-26 05:05 +03:00 | WP-S003-008-006 | Replaced fixed NPC-over-building inspection priority with deterministic camera-depth ordering so overlapping picks prefer the visually nearer active presentation target.
+2026-09-26 05:15 +03:00 | WP-S003-008-006 | Removed raw resident-ID and internal building-source fallbacks from inspection callouts; missing identity/type now uses truthful player-facing semantic fallbacks only.
