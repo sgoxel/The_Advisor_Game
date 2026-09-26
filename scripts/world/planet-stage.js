@@ -210,7 +210,7 @@ function normalizeYaw(value){
 function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS[ZOOM_BANDS.length-1]).id;}
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
 function buildTangentPatchMesh(){
-  const segments=40,spanMeters=360000,positions=[],normals=[],uvs=[],indices=[];
+  const segments=40,spanMeters=520000,positions=[],normals=[],uvs=[],indices=[];
   const metersPerUnit=WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS;
   for(let z=0;z<=segments;z++){
     const vz=z/segments, northMeters=(vz-.5)*spanMeters;
@@ -230,7 +230,7 @@ function buildTangentPatchMesh(){
 }
 function updateTangentPatchTexture(){
   if(!tangentPatchMaterial||!geography)return;
-  const size=256,spanMeters=360000,canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
+  const size=256,spanMeters=520000,canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
   const ctx=canvas2d.getContext("2d",{alpha:false}),image=ctx.createImageData(size,size),data=image.data;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
@@ -261,7 +261,7 @@ function updateProjectionPresentation(){
     tangentPatch.enabled=blend>.04;
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    const patchScale=1.15+.35*blend;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    const patchScale=1.9+.45*blend;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     for(const mi of tangentPatch.render.meshInstances)mi.setParameter?.("material_opacity",blend);
   }
   planet.enabled=blend<.96;
@@ -1015,7 +1015,7 @@ function snapshot(){
       localWorldAuthority:false,
       tangentPatchActive:Boolean(tangentPatch?.enabled),
       tangentPatchDerivedFromFocus:true,
-      tangentPatchSpanMeters:360000
+      tangentPatchSpanMeters:520000
     }),
     activeSystems:Object.freeze({
       protagonistEnabled:false,
