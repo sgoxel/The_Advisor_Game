@@ -301,8 +301,8 @@ function updateTangentPatchTexture(){
   tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.update();
   if(horizonSkirtMaterial){
     const center=geography.sampleLatLon(lat0,lon0),edge=localSurfaceSample(spanEast*.46,spanNorth*.46,center);
-    const hc=(center?.land?edge.color:[.08,.20,.28]).map(v=>clamp(v*.76,0,1));
-    horizonSkirtMaterial.diffuse.set(hc[0],hc[1],hc[2]);horizonSkirtMaterial.emissive.set(hc[0]*.82,hc[1]*.82,hc[2]*.82);horizonSkirtMaterial.update();
+    const hc=(center?.land?edge.color:[.08,.20,.28]).map(v=>clamp(v*.68,0,1));
+    horizonSkirtMaterial.diffuse.set(hc[0],hc[1],hc[2]);horizonSkirtMaterial.emissive.set(hc[0]*.72,hc[1]*.72,hc[2]*.72);horizonSkirtMaterial.update();
   }
 }
 function ensureTangentPatch(){
