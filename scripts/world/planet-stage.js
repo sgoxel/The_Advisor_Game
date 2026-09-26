@@ -525,7 +525,7 @@ function unregisterInspectionPickable(id,type=null){
 function readableInspectionLines(record){
   const readable=(value,fallback)=>{const text=String(value??"").trim();return text||fallback;};
   if(record.type==="npc")return [readable(record.name,"Unknown resident"),readable(record.job,"Unassigned"),readable(record.activity,"Activity unavailable")];
-  const typeLabel=readable(record.functionLabel??record.buildingType,"Building"),name=String(record.name??"").trim();
+  const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim();
   return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
 }
 function renderInspectionTooltip(record){
