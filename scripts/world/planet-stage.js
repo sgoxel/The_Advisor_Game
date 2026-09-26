@@ -724,7 +724,7 @@ function canonicalSettlementForFocus(){
   let country=null,plans=[];
   try{
     country=politics.countryAt(activeSeed,focusTile.x,focusTile.y);
-    if(country?.id)plans=authority.settlementsForCountry(activeSeed,country,3)||[];
+    if(country?.id)plans=authority.settlementsForCountry(activeSeed,country,1)||[];
   }catch(_){return null;}
   if(!country?.id||!plans.length)return null;
   let fx,fy;
