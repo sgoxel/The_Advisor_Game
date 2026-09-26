@@ -7994,16 +7994,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "desktop:seeded-land-2m-detail"
         if frame_index == 1:
             driver.set_window_size(844,390); time.sleep(0.2)
-            driver.execute_script("window.PlanetStage.setZoomScalar(0.97)")
-            return "phone-landscape:2m-local-detail"
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t); window.PlanetStage.setZoomScalar(0.97);
+            """)
+            return "phone-landscape:seeded-land-2m-detail"
         if frame_index == 2:
             driver.set_window_size(390,844); time.sleep(0.2)
             driver.execute_script("window.PlanetStage.setZoomScalar(0.97)")
             return "phone-portrait:2m-local-detail"
         if frame_index == 3:
             driver.set_window_size(1280,800); time.sleep(0.2)
-            driver.execute_script("window.PlanetStage.setRotation(36,18); window.PlanetStage.setZoomScalar(0.97)")
-            return "moved-focus:rebuilt"
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.mountain || s?.featureTargets?.peak || s?.featureTargets?.continent;
+                if(!t) throw new Error('seeded mountain target unavailable');
+                window.PlanetStage.setViewTarget(t); window.PlanetStage.setZoomScalar(0.97);
+            """)
+            return "moved-seeded-land-focus:rebuilt"
         driver.execute_script("window.PlanetStage.setZoomScalar(0.80)")
         return "zoom-out:bounded-detail"
     if scenario == "camera-pan-zoom":
