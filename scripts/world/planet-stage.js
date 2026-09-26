@@ -81,7 +81,7 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.35,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.56,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
@@ -417,7 +417,7 @@ function tangentFrame(latitudeRadians,longitudeRadians){
   });
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
-function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.50)/.34);}
+function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.66)/.29);}
 function canonicalSurfaceIdentity(){
   if(!geography)return null;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
@@ -885,7 +885,7 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     const handoff=projectionHandoffForZoom();
     const tangentVisible=handoff>.02;
-    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.78;\n    tangentPatch.enabled=fineVisible;
+    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.84;\n    tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
     if(horizonSkirt){
@@ -912,7 +912,7 @@ function updateProjectionPresentation(){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  planet.enabled=handoff<.88;
+  planet.enabled=handoff<.985;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
