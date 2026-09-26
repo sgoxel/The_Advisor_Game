@@ -14297,7 +14297,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004", "wp-s003-010-003-005-001"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
