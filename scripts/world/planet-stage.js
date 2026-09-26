@@ -180,7 +180,13 @@ function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegre
 function applyCameraZoom(){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
   const scalar=clamp(zoomState.scalar,ZOOM_MIN,ZOOM_MAX);
-  const distance=Math.max(DISPLAY_RADIUS_UNITS*1.025,zoomState.baseCameraDistance*Math.pow(ZOOM_DISTANCE_FACTOR,scalar));
+  // Keep the globe camera outside the displaced planetary mesh throughout this
+  // foundation WP. Later projection-transition WPs take over before true
+  // ground-scale rendering; entering the sphere here produces blank/inverted
+  // frames and breaks continuous visual focus.
+  const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
+  const travel=Math.max(0,zoomState.baseCameraDistance-safeSurfaceDistance);
+  const distance=safeSurfaceDistance+travel*Math.pow(1-scalar,2.15);
   cameraEntity.setLocalPosition(0,0,distance);cameraEntity.lookAt(0,0,0);
   zoomState.cameraDistance=distance;zoomState.band=zoomBandFor(scalar);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
