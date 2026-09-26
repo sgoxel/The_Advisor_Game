@@ -1,11 +1,11 @@
 (function(){
 "use strict";
 
-const COUNTRY_CELL_SIZE=24576;
-const COUNTRY_JITTER=4423;
+const COUNTRY_CELL_SIZE=131072;
+const COUNTRY_JITTER=23593;
 const CANDIDATE_RADIUS=1;
-const BORDER_WARP_SCALE_A=4096;
-const BORDER_WARP_SCALE_B=2048;
+const BORDER_WARP_SCALE_A=16384;
+const BORDER_WARP_SCALE_B=8192;
 const COUNTRY_WORDS_A=Object.freeze([
   "Alder","Amber","Ashen","Black","Bright","Cedar","Dawn","Elder","Falcon","Golden","Green","Grey",
   "High","Iron","Ivory","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"
@@ -388,6 +388,7 @@ function proof(seedValue){
     pass,campaignSeed:seed,
     deterministic,neighborsStable,timeIndependent,terrainAuthorityPreserved,hierarchyIntegrated,
     lazyQueryable,fullWorldMaterialized,candidateCountPerLookup:(CANDIDATE_RADIUS*2+1)**2,
+    countryCellSize:COUNTRY_CELL_SIZE,regionCellSizeReference:8192,countryRegionLinearRatio:COUNTRY_CELL_SIZE/8192,
     countryCountMaterialized:sampleCountries.length,
     capitalInside,borderSamplePass,naturalFeatureInfluence,nonRectangular,
     origin,neighbors:Object.freeze(neighbors),borders,
