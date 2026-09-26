@@ -214,7 +214,7 @@ function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
 function localPatchDimensions(){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
-  const visibleHeight=aspect>=1?46:72;
+  const visibleHeight=aspect>=1?54:82;
   const visibleWidth=visibleHeight*aspect;
   return {visibleWidth,visibleHeight,patchWidth:visibleWidth*LOCAL_PATCH_MARGIN,patchHeight:visibleHeight*LOCAL_PATCH_MARGIN};
 }
@@ -315,7 +315,7 @@ function updateProjectionPresentation(){
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Expand the patch through the handoff so the viewport never collapses to a
     // small floating strip; converge to the true bounded local footprint at ground scale.
-    const handoffScale=1.75+Math.pow(1-blend,1.35)*2.8;
+    const handoffScale=2.15+Math.pow(1-blend,1.35)*3.0;
     const patchScale=1.65*handoffScale;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // Keep the local patch opaque once active; the globe handles the early handoff.
   }
@@ -340,10 +340,10 @@ function applyCameraZoom(){
   // point; no second map or local simulation authority is introduced.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=1.18;
+  const localZ=.96;
   const cameraZ=globeZ*(1-blend)+localZ*blend;
-  const cameraY=.38*blend;
-  const targetZ=-.92*blend;
+  const cameraY=.26*blend;
+  const targetZ=-1.08*blend;
   const targetY=-.36*blend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   if(cameraEntity.camera)cameraEntity.camera.fov=34+18*blend;
