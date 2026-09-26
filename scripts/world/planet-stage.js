@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v5";
+const VERSION="planet-ground-static-v6";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -605,14 +605,27 @@ function localTextureAnisotropy(){
 }
 function surfaceDetailBandCount(metersPerTexel){
   const m=Math.max(0,Number(metersPerTexel)||0);
-  return (m<=24000?1:0)+(m<=6000?1:0)+(m<=1200?1:0)+(m<=100?1:0)+(m<=4?1:0);
+  return (m<=24000?1:0)+(m<=6000?1:0)+(m<=1200?1:0)+(m<=100?1:0)+(m<=30?1:0)+(m<=4?1:0);
+}
+function surfaceHash2(ix,iy,salt){
+  let h=(Math.imul(ix|0,374761393)^Math.imul(iy|0,668265263)^(salt|0))|0;
+  h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;
+  return (h>>>0)/4294967295;
+}
+function surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
+  const x=worldEastMeters/scaleMeters,y=worldNorthMeters/scaleMeters,x0=Math.floor(x),y0=Math.floor(y),tx=smoothstep01(x-x0),ty=smoothstep01(y-y0);
+  const a=surfaceHash2(x0,y0,salt),b=surfaceHash2(x0+1,y0,salt),c=surfaceHash2(x0,y0+1,salt),d=surfaceHash2(x0+1,y0+1,salt);
+  return lerp(lerp(a,b,tx),lerp(c,d,tx),ty)-.5;
 }
 function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
+  const salt=((phase*100000)|0)^0x5f356495;
   let detail=0;
-  if(metersPerTexel<=24000)detail+=Math.sin(worldEastMeters/15200+phase)*Math.cos(worldNorthMeters/18400-phase*.61)*.024;
-  if(metersPerTexel<=6000)detail+=Math.sin((worldEastMeters+worldNorthMeters)/5200+phase*.37)*Math.cos(worldNorthMeters/6100+phase*.83)*.017;
-  if(metersPerTexel<=1200)detail+=Math.sin(worldEastMeters/1180-phase*.47)*Math.sin(worldNorthMeters/1460+phase*1.13)*.012;
-  if(metersPerTexel<=100)detail+=Math.cos((worldEastMeters-worldNorthMeters)/145+phase*1.71)*Math.sin(worldNorthMeters/190-phase*.92)*.008;
+  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.060;
+  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.050;
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.038;
+  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.030;
+  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.022;
+  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.014;
   return detail;
 }
 function localPatchDimensions(){
@@ -969,7 +982,14 @@ function updateProjectionPresentation(){
     const patchScale=basePatchScale*dims.presentationCompensation;
     projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,targetHeightMeters:presentationTargetHeightMeters()};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
-    if(horizonSkirt)horizonSkirt.setLocalScale(patchScale,patchScale,patchScale);
+    if(horizonSkirt){
+      // The coarse continuation owns viewport coverage, so never shrink it with
+      // fine-patch compensation. This prevents black gaps at LOD entry while the
+      // bounded high-density patch still scales to the active visible footprint.
+      const surroundScale=Math.max(basePatchScale,patchScale);
+      horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
+      projectionPresentation={...projectionPresentation,surroundScale};
+    }
   }
   // Keep both representations alive during the projection handoff. The old
   // threshold disabled the globe almost exactly when the tangent camera jumped
