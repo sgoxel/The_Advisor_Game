@@ -102,6 +102,8 @@ let localResources={activeSignature:null,cacheHits:0,cacheMisses:0,evictions:0,d
 let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,borderVisible:false,borderSampleCount:0,borderSegmentCount:0,politicalOwnerCount:0,scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapContextCache={key:null,value:null};
 let mapBorderCache={key:null,segments:[],sampleCount:0,ownerCount:0,builtAtMs:0};
+let projectionPresentation={viewBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34};
+let politicalScaleEvidenceCache=null;
 
 function wrapLongitudeRadians(value){
   let lon=Number(value)||0;lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return lon;
@@ -119,6 +121,31 @@ function mapGeneratedName(kind,latitudeRadians,longitudeRadians){
   const lat=Math.round((Number(latitudeRadians)||0)*180/Math.PI*8),lon=Math.round((Number(longitudeRadians)||0)*180/Math.PI*8);
   let h=2166136261>>>0;for(const ch of String(activeSeed)+"|map:"+kind+"|"+lat+"|"+lon){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
   return stems[h%stems.length]+" "+(tails[kind]||["Reach"])[(h>>>8)%(tails[kind]||["Reach"]).length];
+}
+function politicalScaleEvidence(){
+  if(politicalScaleEvidenceCache)return politicalScaleEvidenceCache;
+  const countryCellSize=Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||0);
+  const regionCellSize=Number(window.RegionProfile?.REGION_CELL_SIZE||8192);
+  const ratio=countryCellSize>0&&regionCellSize>0?countryCellSize/regionCellSize:0;
+  const owners=new Set();let sampleCount=0;
+  if(window.PoliticalGeography?.ownerAt&&activeSeed){
+    for(let y=-131072;y<=131072;y+=65536){
+      for(let x=-196608;x<=196608;x+=65536){
+        try{const owner=window.PoliticalGeography.ownerAt(activeSeed,String(x),String(y));if(owner?.id)owners.add(owner.id);}catch(_){}
+        sampleCount++;
+      }
+    }
+  }
+  politicalScaleEvidenceCache=Object.freeze({
+    countryCellSize,regionCellSize,
+    countryRegionLinearRatio:Number(ratio.toFixed(3)),
+    nominalRegionCellsPerCountry:Number((ratio*ratio).toFixed(1)),
+    boundedSampleCount:sampleCount,
+    boundedDistinctCountryOwners:owners.size,
+    sampleSpanTiles:Object.freeze({width:393216,height:262144}),
+    fullWorldScan:false
+  });
+  return politicalScaleEvidenceCache;
 }
 function mapContextForFocus(){
   if(!activeSeed)return null;
@@ -603,6 +630,7 @@ function activateLocalDetailResource(signature){
     const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
     const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,textureSize,false);
     resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature,textureSize},estimatedBytes:localDetail.estimatedBytes+textureSize*textureSize*4*2};
+    localDetail={...resource.detail};
     localResourceCache.set(signature,resource);localResources.lastBuildMs=Number((performance.now()-started).toFixed(3));localResources.pendingPreparationCount=0;
     trimLocalResourceCache();
   }
@@ -701,6 +729,7 @@ function updateProjectionPresentation(){
     // then ease toward its native scale across the band.
     const dims=localPatchDimensions(),basePatchScale=1.45+(1-viewBlend)*.35;
     const patchScale=basePatchScale*dims.presentationCompensation;
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     if(horizonSkirt)horizonSkirt.setLocalScale(patchScale,patchScale,patchScale);
   }
@@ -735,7 +764,8 @@ function applyCameraZoom(){
   const targetZ=0;
   const targetY=-.12*viewBlend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
-  if(cameraEntity.camera)cameraEntity.camera.fov=34+12*viewBlend;
+  const fov=34+12*viewBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
+  projectionPresentation={...projectionPresentation,viewBlend,cameraY,cameraZ,fov};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
@@ -1472,7 +1502,8 @@ function snapshot(){
       tangentPatchSpanMeters:Math.max(localDetail.patchWidthMeters,localDetail.patchHeightMeters),
       localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false}),
       localStatic:Object.freeze({...localStatic,focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3))}),
-      resourceBudget:Object.freeze({...localResources,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,lodHysteresis:LOCAL_LOD_HYSTERESIS,offscreenFineDetailActive:false,viewportPriority:true})
+      resourceBudget:Object.freeze({...localResources,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,lodHysteresis:LOCAL_LOD_HYSTERESIS,offscreenFineDetailActive:false,viewportPriority:true}),
+      presentation:Object.freeze({...projectionPresentation})
     }),
     activeSystems:Object.freeze({
       protagonistEnabled:false,
@@ -1497,6 +1528,7 @@ function snapshot(){
     inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,boundedActiveRegistry:true,fullWorldScan:false}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number(pitchDegrees.toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     mapPresentation:Object.freeze({...mapPresentation}),
+    politicalScale:politicalScaleEvidence(),
     startupError,
     startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
     loadingPresentation:Object.freeze({...((loadingProof||startupProgress)),loadingProofActive:Boolean(loadingProof)}),
@@ -1532,7 +1564,7 @@ function destroy(){
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
   inspectionPickables.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
-  geography=null;root?.replaceChildren?.();
+  geography=null;politicalScaleEvidenceCache=null;projectionPresentation={viewBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setZoomScalar,zoomBy,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
