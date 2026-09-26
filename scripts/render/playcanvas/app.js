@@ -2257,10 +2257,20 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     return {type:"building",id:String(building.id),priority:2,item:building,bounds:{left,right,top,bottom},anchor:{x:(left+right)/2,y:top}};
   }
   function inspectionBuildingCandidates(x,y){const out=[];for(const building of lastRawBuildingInteriors||[]){const r=buildingInspectionRecord(building);if(r&&x>=r.bounds.left&&x<=r.bounds.right&&y>=r.bounds.top&&y<=r.bounds.bottom)out.push(r);}return out;}
+  function inspectionReadableText(value,fallback){
+    const raw=String(value??"").trim();if(!raw)return fallback;
+    return raw.replace(/[_-]+/g," ").replace(/\s+/g," ").replace(/\b\w/g,char=>char.toUpperCase());
+  }
+  function inspectionActivityText(item){
+    const label=String(item?.activityLabel||"").trim();if(label)return label;
+    const raw=String(item?.activity||"").trim().toLowerCase();
+    const known={idle:"Idle",working:"Working",work:"Working",walking:"Walking",traveling:"Traveling",travelling:"Traveling",eating:"Eating",resting:"Resting",sleeping:"Sleeping",socializing:"Socializing",sitting:"Sitting",home:"Going home",going_home:"Going home",goinghome:"Going home"};
+    return known[raw]||inspectionReadableText(raw,"Idle");
+  }
   function renderInspectionSelection(record){
     const started=performance.now(),tip=inspectionTooltip();if(!tip||!record)return;tip.replaceChildren();let lines=[];
-    if(record.type==="npc"){const i=record.item;lines=[i.residentName||i.residentId||"Resident",i.profession||"Resident",i.activityLabel||i.activity||"Idle"];}
-    else{const b=record.item;lines=[b.label||b.name||b.kind||"Building",b.functionLabel||b.kind||b.source||"Building"];}
+    if(record.type==="npc"){const i=record.item;lines=[i.residentName||i.residentId||"Resident",inspectionReadableText(i.profession,"Resident"),inspectionActivityText(i)];}
+    else{const b=record.item;lines=[b.label||b.name||inspectionReadableText(b.kind,"Building"),inspectionReadableText(b.functionLabel||b.kind||b.source,"Building")];}
     lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=String(line);tip.appendChild(el);});
     const rect=host.getBoundingClientRect(),a=record.anchor||{x:rect.width/2,y:rect.height/2};
     const tipWidth=Math.max(1,Number(tip.offsetWidth||tip.getBoundingClientRect?.().width||148)),tipHeight=Math.max(1,Number(tip.offsetHeight||tip.getBoundingClientRect?.().height||48)),edge=8,gap=10;
