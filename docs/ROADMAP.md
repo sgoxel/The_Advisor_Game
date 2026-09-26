@@ -97,7 +97,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-001` — Globe-to-Surface Focus Anchor + Projection Transition — COMPLETED
 - `WP-S003-010-002` — Viewport-Bounded Ground Detail + 2 m Surface Resolution — COMPLETED
 - `WP-S003-010-003` — Zoom-Driven Detail Refinement + Off-Screen Eviction — COMPLETED
-- `WP-S003-010-003-001` — Zoom-Aware Geographic Labels, Borders, Scale Ruler + Streaming Pace
+- `WP-S003-010-003-001` — Zoom-Aware Geographic Labels, Borders, Scale Ruler + Streaming Pace — COMPLETED
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
 - `WP-S003-010-005` — Planet-to-Gameplay-Area End-to-End Visual Acceptance
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips
