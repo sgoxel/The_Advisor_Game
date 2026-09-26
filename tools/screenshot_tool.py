@@ -1620,7 +1620,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -12265,6 +12265,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "playcanvas-root-cutover":
         if len(frames) < 3:
             raise RuntimeError("playcanvas-root-cutover requires three evidence frames")
+        planet_frames=[(frame.get("runtime",{}).get("currentBuild",{}).get("planetStage")) for frame in frames[:3]]
+        if all(isinstance(stage,dict) and stage.get("ready") is True for stage in planet_frames):
+            if any(int(frame.get("runtime",{}).get("currentBuild",{}).get("planetCanvasCount") or 0)!=1 for frame in frames[:3]):
+                raise RuntimeError(f"Canonical PlanetStage canvas count invalid: {planet_frames}")
+            seeds=[stage.get("seed") for stage in planet_frames]
+            if len(set(seeds))!=1 or not seeds[0]:
+                raise RuntimeError(f"Canonical PlanetStage changed/missed SEED: {seeds}")
+            return
         runtimes = [frame.get("runtime", {}) for frame in frames[:3]]
         builds = [runtime.get("currentBuild", {}) for runtime in runtimes]
         gpus = [(item.get("gpuRenderer") or {}) for item in builds]
