@@ -8022,6 +8022,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "phone-portrait:ground-2m-detail"
         return "planet:full"
     if scenario == "wp-s003-010-004":
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver,30.0).until(lambda d: d.execute_script("const s=window.PlanetStage?.snapshot?.();return Boolean(s?.ready&&(s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak));"))
         plan=((1280,800,0.985,"desktop:near-ground-static"),(1280,800,1.0,"desktop:ground-static"),(844,390,1.0,"phone-landscape:ground-static"),(390,844,1.0,"phone-portrait:ground-static"))
         viewport=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(viewport[0],viewport[1]); time.sleep(0.2)
