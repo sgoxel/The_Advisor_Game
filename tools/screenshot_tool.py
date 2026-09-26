@@ -128,6 +128,7 @@ SCENARIOS = {
     "wp-s003-010-003",
     "wp-s003-010-003-001",
     "wp-s003-010-003-002",
+    "wp-s003-010-003-003",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -233,6 +234,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003": 9,
     "wp-s003-010-003-001": 8,
     "wp-s003-010-003-002": 10,
+    "wp-s003-010-003-003": 15,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1632,7 +1634,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -8135,6 +8137,32 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             """)
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
         return label
+    if scenario == "wp-s003-010-003-003":
+        # No-movement zoom-only acceptance. Frame 0 is the untouched globe;
+        # frames 1..13 cover the reported 0.04x..0.44x range and frame 14
+        # verifies the later ground camera transition.
+        plan=(
+            (0.301030,"desktop:0.04x"),(0.349485,"desktop:0.05x"),
+            (0.389076,"desktop:0.06x"),(0.422549,"desktop:0.07x"),
+            (0.451545,"desktop:0.08x"),(0.500000,"desktop:0.10x"),
+            (0.556972,"desktop:0.13x"),(0.588046,"desktop:0.15x"),
+            (0.639377,"desktop:0.19x"),(0.680781,"desktop:0.23x"),
+            (0.731181,"desktop:0.29x"),(0.772035,"desktop:0.35x"),
+            (0.821721,"desktop:0.44x"),(1.000000,"desktop:ground-reference"),
+        )
+        if frame_index == 0:
+            return "planet:full"
+        scalar,label=plan[min(frame_index-1,len(plan)-1)]
+        if frame_index == 1:
+            driver.set_window_size(1280,800); time.sleep(0.2)
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        return label
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8378,6 +8406,36 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-003":
+        if len(frames) < 15:
+            raise RuntimeError("wp-s003-010-003-003 requires fifteen no-movement zoom evidence frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[1:15]]
+        focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Zoom-only focus drifted: {focus}")
+        map_stages=stages[:13]
+        pitches=[];fovs=[];angles=[]
+        for index,stage in enumerate(map_stages, start=1):
+            p=stage.get("projection") or {}; present=p.get("presentation") or {}
+            pitches.append(float(present.get("cameraPitchDegrees") or 0))
+            fovs.append(float(present.get("fov") or 0))
+            angles.append(float(present.get("angleBlend") or 0))
+            if index <= 10 and abs(pitches[-1]) > 0.25:
+                raise RuntimeError(f"Map-scale camera tilted before local approach in frame {index}: pitch={pitches[-1]}")
+        if any(b<a-0.01 for a,b in zip(pitches,pitches[1:])):
+            raise RuntimeError(f"Camera pitch is not monotonic: {pitches}")
+        if any(b<a-0.01 for a,b in zip(fovs,fovs[1:])):
+            raise RuntimeError(f"Camera FOV is not monotonic: {fovs}")
+        if max(abs(b-a) for a,b in zip(pitches,pitches[1:])) > 12:
+            raise RuntimeError(f"Per-step camera pitch delta is too abrupt: {pitches}")
+        if max(abs(b-a) for a,b in zip(fovs,fovs[1:])) > 5:
+            raise RuntimeError(f"Per-step FOV delta is too abrupt: {fovs}")
+        if abs(float((map_stages[2].get("projection") or {}).get("presentation",{}).get("cameraPitchDegrees") or 0)-
+               float((map_stages[4].get("projection") or {}).get("presentation",{}).get("cameraPitchDegrees") or 0)) > 0.25:
+            raise RuntimeError("0.06x -> 0.08x still rotates the camera")
+        inp=map_stages[0].get("input") or {}
+        if abs(float(inp.get("wheelSensitivity") or 0)-0.00045)>1e-9 or abs(float(inp.get("pinchSensitivity") or 0)-0.003)>1e-9:
+            raise RuntimeError(f"50%-slower zoom sensitivities regressed: {inp}")
     if scenario == "wp-s003-010-003-002":
         if len(frames) < 10:
             raise RuntimeError("wp-s003-010-003-002 requires ten dense mid-zoom evidence frames")
