@@ -305,7 +305,7 @@ function rebuildTangentPatch(){
   if(!tangentPatch?.render||!device)return;
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
 }
-function makeLocalSurfaceTexture(spanEast,spanNorth,size=256){
+function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false){
   const canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
   const ctx=canvas2d.getContext("2d",{alpha:false}),image=ctx.createImageData(size,size),data=image.data;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
@@ -318,7 +318,9 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256){
     const sample=geography.sampleLatLon(lat,lon),local=localSurfaceSample(east,north,sample);
     const displayColor=forcedLand?local.color.map(v=>clamp(v*.88,0,1)):local.color;
     const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
-    data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=255;
+    const ux=(x+.5)/size,vz=(y+.5)/size,edgeDistance=Math.min(ux,1-ux,vz,1-vz);
+    const alpha=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
+    data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=alpha;
   }
   ctx.putImageData(image,0,0);
   const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
@@ -329,13 +331,20 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256){
 function updateTangentPatchTexture(){
   if(!tangentPatchMaterial||!geography)return;
   const dims=localPatchDimensions();
-  const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,256);
-  tangentPatchMaterial.diffuseMap=detailTexture;tangentPatchMaterial.emissiveMap=detailTexture;tangentPatchMaterial.update();
+  const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,256,true);
+  tangentPatchMaterial.diffuseMap=detailTexture;
+  tangentPatchMaterial.emissiveMap=detailTexture;
+  tangentPatchMaterial.opacityMap=detailTexture;
+  tangentPatchMaterial.opacityMapChannel="a";
+  tangentPatchMaterial.opacity=1;
+  tangentPatchMaterial.blendType=pc.BLEND_NORMAL;
+  tangentPatchMaterial.depthWrite=false;
+  tangentPatchMaterial.update();
   if(horizonSkirtMaterial){
     // The flat surround spans 12x the detailed patch in presentation space.
     // Sample exactly 12x the physical area as well so its central texture
     // coordinates line up with the detailed patch edges.
-    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,256);
+    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,256,false);
     horizonSkirtMaterial.diffuseMap=surroundTexture;
     horizonSkirtMaterial.emissiveMap=surroundTexture;
     horizonSkirtMaterial.diffuse.set(1,1,1);
@@ -371,7 +380,7 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     tangentPatch.enabled=blend>.02;
     ensureHorizonSkirt();
-    const viewBlend=smoothstep01(clamp(blend*1.55,0,1));
+    const viewBlend=smoothstep01(clamp(blend*4.0,0,1));
     if(horizonSkirt){horizonSkirt.enabled=blend>.02;horizonSkirt.setLocalPosition(0,-.012,0);}
     tangentPatch.setLocalPosition(0,0,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
@@ -382,7 +391,7 @@ function updateProjectionPresentation(){
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     if(horizonSkirt)horizonSkirt.setLocalScale(patchScale,patchScale,patchScale);
   }
-  planet.enabled=blend<.16;
+  planet.enabled=blend<=.02;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
 }
 function applyCameraZoom(){
@@ -403,7 +412,7 @@ function applyCameraZoom(){
   // terrain maps, not as a low grazing-angle strip that appears to jump to ground.
   updateProjectionPresentation();
   const globeZ=distance;
-  const viewBlend=smoothstep01(clamp(blend*1.55,0,1));
+  const viewBlend=smoothstep01(clamp(blend*4.0,0,1));
   const localZ=6.20;
   const localY=5.00;
   const cameraZ=globeZ*(1-viewBlend)+localZ*viewBlend;
