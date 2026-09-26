@@ -884,13 +884,16 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     const handoff=projectionHandoffForZoom();
     const tangentVisible=handoff>.02;
-    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.80;\n    tangentPatch.enabled=fineVisible;
+    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
+    const fineVisible=tangentVisible&&zoomState.scalar>=.80;
+    tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
       horizonSkirt.setLocalPosition(0,-.012,0);
-      const horizonNearFade=1-smoothstep01((zoomState.scalar-.92)/.07);\n      horizonSkirtMaterial.opacity=handoff*horizonNearFade;
+      const horizonNearFade=1-smoothstep01((zoomState.scalar-.92)/.07);
+      horizonSkirtMaterial.opacity=handoff*horizonNearFade;
       horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
