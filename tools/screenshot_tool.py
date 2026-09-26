@@ -8378,10 +8378,31 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         driver.set_window_size(1280,800); time.sleep(0.1)
         if frame_index == 0:
             driver.execute_script("""
-                const s=window.PlanetStage.snapshot();
-                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
-                if(!t) throw new Error('seeded land target unavailable');
-                window.PlanetStage.setViewTarget(t);
+                const stage=window.PlanetStage,seed=window.SeedSystem?.getCampaign?.()?.seed;
+                const s=stage.snapshot();
+                const candidates=[
+                  s?.featureTargets?.continent,s?.featureTargets?.mountain,s?.featureTargets?.peak,
+                  s?.featureTargets?.island,s?.featureTargets?.continuity
+                ].filter(Boolean);
+                let selected=null;
+                for(const target of candidates){
+                  stage.setViewTarget(target);
+                  const now=stage.snapshot(),surface=now?.canonicalFocus?.surfaceIdentity?.center;
+                  let settlement=null;
+                  try{settlement=window.SettlementArchetypes?.build?.(seed,now?.canonicalFocus?.worldTile,{role:'zoom-focus'})||null;}catch(_){settlement=null;}
+                  if(surface?.land===true && settlement){selected={target,settlement};break;}
+                }
+                if(!selected){
+                  const probes=[[-40,-120],[-30,-60],[-20,0],[-10,60],[0,120],[15,-150],[25,-90],[35,-30],[45,30],[55,90]];
+                  for(const [lat,lon] of probes){
+                    stage.setRotation(-lon,lat);
+                    const now=stage.snapshot(),surface=now?.canonicalFocus?.surfaceIdentity?.center;
+                    let settlement=null;
+                    try{settlement=window.SettlementArchetypes?.build?.(seed,now?.canonicalFocus?.worldTile,{role:'zoom-focus'})||null;}catch(_){settlement=null;}
+                    if(surface?.land===true && settlement){selected={probe:[lat,lon],settlement};break;}
+                  }
+                }
+                if(!selected) throw new Error('verified land + settlement target unavailable');
             """)
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
         from selenium.webdriver.support.ui import WebDriverWait
