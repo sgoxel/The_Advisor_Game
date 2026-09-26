@@ -284,7 +284,7 @@ function updateTangentPatchTexture(){
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
-  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=1.15;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=1.45;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
@@ -300,7 +300,7 @@ function updateProjectionPresentation(){
     const patchScale=2.25;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     for(const mi of tangentPatch.render.meshInstances)mi.setParameter?.("material_opacity",blend);
   }
-  planet.enabled=blend<.96;
+  planet.enabled=blend<.985;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
 }
 function applyCameraZoom(){
