@@ -8663,7 +8663,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         builds=[frame.get("runtime",{}).get("currentBuild",{}) for frame in frames[:8]]
         stages=[build.get("planetStage") or {} for build in builds]
         for index,stage in enumerate(stages, start=1):
-            if stage.get("ready") is not True or stage.get("version") != "planet-map-info-v4":
+            if stage.get("ready") is not True or stage.get("version") != "planet-ground-static-v3":
                 raise RuntimeError(f"Map-info planet renderer not ready in frame {index}: {stage}")
             inp=stage.get("input") or {}
             if abs(float(inp.get("wheelSensitivity") or 0)-0.00045)>1e-9:
