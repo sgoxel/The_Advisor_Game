@@ -558,7 +558,7 @@ function pickInspection(clientX,clientY){
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
   const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.id);inspection.selectedType=picked.type;if(!renderInspectionTooltip(picked))return null;return picked;
 }
-function updateInspectionTooltip(){if(!inspection.selectedId)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
+function updateInspectionTooltip(){if(inspection.selectedId===null)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
 function bindInput(){
   canvas.tabIndex=0;
   canvas.setAttribute("role","application");
