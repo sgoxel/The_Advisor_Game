@@ -134,6 +134,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-001",
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
+    "wp-s003-010-003-007",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -245,6 +246,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-005-001": 10,
     "wp-s003-010-003-005-002": 10,
     "wp-s003-010-003-006": 13,
+    "wp-s003-010-003-007": 7,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1644,7 +1646,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7938,7 +7940,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -8359,6 +8361,52 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-007":
+        from selenium.webdriver.support.ui import WebDriverWait
+        # Display multipliers ~= 0.54x, 0.66x, 0.75x, 0.81x, 0.88x, 0.94x and 1.00x.
+        plan=(
+            (0.8663,"local-area","desktop:0.54x-local-area"),
+            (0.9098,"local-area","desktop:0.66x-local-area"),
+            (0.9375,"settlement","desktop:0.75x-settlement"),
+            (0.9542,"settlement","desktop:0.81x-settlement"),
+            (0.9722,"near-ground","desktop:0.88x-near-ground"),
+            (0.9866,"near-ground","desktop:0.94x-near-ground"),
+            (1.0000,"ground","desktop:1.00x-ground"),
+        )
+        scalar,expected_level,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.1)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.continuityFocus || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded settlement land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        WebDriverWait(driver,30.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},w=s?.projection?.localStatic||{};
+            return Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001 &&
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   w?.active===true && w?.level===arguments[1] &&
+                   Boolean(w?.canonicalPlanId);
+        """,scalar,expected_level))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},w=s?.projection?.localStatic||{},m=s?.mapPresentation||{};
+            return {
+              scalar:s?.zoom?.scalar,zoomLabel:m?.zoomScaleLabel,band:s?.zoom?.band,
+              visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
+              level:w?.level,revealTier:w?.revealTier,fidelity:w?.fidelity,canonicalPlanId:w?.canonicalPlanId,
+              roadCount:w?.roadCount,coarseRoadCount:w?.coarseRoadCount,fullRoadCount:w?.fullRoadCount,
+              buildingCount:w?.buildingCount,coarseBuildingCount:w?.coarseBuildingCount,fullBuildingCount:w?.fullBuildingCount,
+              landmarkCount:w?.landmarkCount,coarseLandmarkCount:w?.coarseLandmarkCount,fullLandmarkCount:w?.fullLandmarkCount,
+              visiblePlanBuildingCount:w?.visiblePlanBuildingCount,visiblePlanLandmarkCount:w?.visiblePlanLandmarkCount,
+              planRoadSegmentCount:w?.planRoadSegmentCount,planBuildingCount:w?.planBuildingCount,planLandmarkCount:w?.planLandmarkCount,
+              alignmentErrorMeters:w?.alignmentErrorMeters,entityCount:w?.entityCount,drawCalls:w?.drawCallEstimate,triangles:w?.triangleEstimate,
+              buildTimeMs:w?.buildTimeMs,viewportBounded:w?.viewportBounded,fullWorldMaterialized:w?.fullWorldMaterialized,
+              pending:r?.pendingPreparationCount,resourceBuildMs:r?.lastBuildMs,swapMs:r?.lastSwapMs
+            };
+        """)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8619,6 +8667,39 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             r=(s.get("projection") or {}).get("resourceBudget") or {}
             if int(r.get("pendingPreparationCount") or 0) != 0 or int(r.get("blockingZoomBuilds") or 0) != 0:
                 raise RuntimeError(f"LOD handoff remained pending/blocking at capture: {r}")
+        return
+    if scenario == "wp-s003-010-003-007":
+        if len(frames) < 7:
+            raise RuntimeError("wp-s003-010-003-007 requires seven fixed-focus reveal frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:7]]
+        focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Settlement reveal evidence changed geographic focus: {focus}")
+        statics=[(s.get("projection") or {}).get("localStatic") or {} for s in stages]
+        plan_ids=[w.get("canonicalPlanId") for w in statics]
+        if not plan_ids[0] or len(set(plan_ids)) != 1:
+            raise RuntimeError(f"Settlement plan identity changed across LODs: {plan_ids}")
+        expected_tiers=["settlement-influence","settlement-influence","coarse-settlement","coarse-settlement","refined-settlement","refined-settlement","full-ground"]
+        tiers=[w.get("revealTier") for w in statics]
+        if tiers != expected_tiers:
+            raise RuntimeError(f"Settlement reveal tiers incorrect: {tiers}")
+        for w in statics:
+            if w.get("active") is not True or w.get("viewportBounded") is not True or w.get("fullWorldMaterialized") is not False:
+                raise RuntimeError(f"Settlement reveal was inactive/unbounded: {w}")
+            if int(w.get("roadCount") or 0)<1 or int(w.get("buildingCount") or 0)<1 or int(w.get("landmarkCount") or 0)<1:
+                raise RuntimeError(f"Settlement structure missing at accepted zoom: {w}")
+            if float(w.get("alignmentErrorMeters") or 0)!=0:
+                raise RuntimeError(f"Settlement plan drifted between representations: {w}")
+            if int(w.get("drawCallEstimate") or 0)>80:
+                raise RuntimeError(f"Settlement reveal exceeded bounded draw-call budget: {w}")
+        for w in statics[:4]:
+            if int(w.get("coarseRoadCount") or 0)<1 or int(w.get("coarseBuildingCount") or 0)<1 or int(w.get("coarseLandmarkCount") or 0)<1:
+                raise RuntimeError(f"Pre-ground coarse settlement is incomplete: {w}")
+            if int(w.get("fullBuildingCount") or 0)!=0:
+                raise RuntimeError(f"Full-detail settlement materialized too early: {w}")
+        for w in statics[4:]:
+            if int(w.get("fullRoadCount") or 0)<1 or int(w.get("fullBuildingCount") or 0)<1 or int(w.get("fullLandmarkCount") or 0)<1:
+                raise RuntimeError(f"Near-ground/full settlement refinement missing: {w}")
         return
     if scenario == "wp-s003-010-003-005-001":
         if len(frames) < 10:
@@ -14364,7 +14445,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-010-003-007", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -14372,7 +14453,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-007", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
