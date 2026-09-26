@@ -420,6 +420,21 @@ function tangentFrame(latitudeRadians,longitudeRadians){
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
 function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.50)/.34);}
+function canonicalSurfaceIdentity(){
+  if(!geography)return null;
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  const sampleOffset=(eastMeters,northMeters)=>{
+    const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
+    let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
+    const sample=geography.sampleLatLon(lat,lon);
+    return Object.freeze({land:Boolean(sample?.land),surfaceClass:String(sample?.surfaceClass||""),elevationMeters:Number((Number(sample?.elevationMeters||0)).toFixed(2))});
+  };
+  return Object.freeze({
+    center:sampleOffset(0,0),
+    ring20km:Object.freeze({north:sampleOffset(0,20000),east:sampleOffset(20000,0),south:sampleOffset(0,-20000),west:sampleOffset(-20000,0)}),
+    ring100km:Object.freeze({north:sampleOffset(0,100000),east:sampleOffset(100000,0),south:sampleOffset(0,-100000),west:sampleOffset(-100000,0)})
+  });
+}
 function updateProjectionState(){
   const raw=(zoomState.scalar-projectionState.transitionStart)/(projectionState.transitionEnd-projectionState.transitionStart);
   const blend=smoothstep01(raw);
@@ -765,16 +780,26 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
   const canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
   const ctx=canvas2d.getContext("2d",{alpha:false}),image=ctx.createImageData(size,size),data=image.data;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
-  const center=geography.sampleLatLon(lat0,lon0),forcedLand=!!center?.land;
+  const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
+  const useMicroDetail=metersPerTexel<=4;
+  const phase=seededUnit("local-texture-macro")*Math.PI*2;
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-    const east=((x+.5)/size-.5)*spanEast,north=(.5-(y+.5)/size)*spanNorth;
+    const ux=(x+.5)/size,vz=(y+.5)/size;
+    const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
     const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
     const cosLat=Math.max(.08,Math.cos(lat0));
-    let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
-    const sample=geography.sampleLatLon(lat,lon),local=localSurfaceSample(east,north,sample);
-    const displayColor=forcedLand?local.color.map(v=>clamp(v*.88,0,1)):local.color;
+    let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
+    const sample=geography.sampleLatLon(lat,lon);
+    let displayColor;
+    if(useMicroDetail){
+      displayColor=localSurfaceSample(east,north,sample).color;
+    }else{
+      const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
+      const macro=(Math.sin(ux*Math.PI*6+phase)*Math.cos(vz*Math.PI*5-phase*.63)+Math.sin((ux+vz)*Math.PI*3+phase*.37)*.45)*.018;
+      displayColor=base.map((v,i)=>clamp(v+macro*(i===2?.70:1),0,1));
+    }
     const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
-    const ux=(x+.5)/size,vz=(y+.5)/size,edgeDistance=Math.min(ux,1-ux,vz,1-vz);
+    const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
     const alpha=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
     data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=alpha;
   }
@@ -867,7 +892,7 @@ function updateProjectionPresentation(){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  planet.enabled=handoff<.995;
+  planet.enabled=handoff<.88;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
@@ -1645,7 +1670,8 @@ function snapshot(){
       screenSpaceTargetPercent:Object.freeze([50,50]),
       screenSpaceFocusDeltaPixels:0,
       authority:"rotation-derived-canonical-latlon",
-      zoomMayRelocateFocus:false
+      zoomMayRelocateFocus:false,
+      surfaceIdentity:canonicalSurfaceIdentity()
     }),
     zoom:Object.freeze({
       scalar:Number(zoomState.scalar.toFixed(6)),band:zoomState.band,
