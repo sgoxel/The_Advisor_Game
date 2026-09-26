@@ -1660,3 +1660,8 @@
 - Results sort from the current camera view, View remains camera-only, descriptor population is capped, full-world scans are forbidden, and list generation does not materialize local chunks.
 - Evidence attempt 1 run 36206188359 correctly failed on missing telemetry. Attempt 2 run 36206245343 passed functionally but direct screenshot inspection found clipped category controls. Attempt 3 run 36206350672 on head c8ce14c5c1acc2664188b5965486d506d5bf3764 passed functional evidence; six fresh screenshots were directly inspected and scored VISUAL 8.7/10 with no major layout defect.
 2026-09-26 04:00 +03:00 | WP-S003-008-005 | Completed World Destination Navigator + Nearby Places Popup after MIXED evidence passed at 8.7/10 and exact final-main GitHub Pages deployment was verified (run 36206715782).
+
+2026-09-26 04:15 +03:00 | WP-S003-009-009 | Low-Cost Ambient Life Motion + Environmental Animation — MIXED PASS / DEPLOYED
+- Reworked the single seeded planet cloud shell to use a light emissive atmospheric treatment while retaining one animated entity, estimated one draw call, deterministic 2.4°/s drift and presentation-only authority.
+- Fresh six-frame Visual Evidence run 36207611445 passed functional checks; direct screenshot inspection scored VISUAL 8/10 with no major clipping, projection, mobile-layout or dark-cloud defect.
+- Implementation commit fd1a89e8f7bf0c3940341d33569deaad9a694760 deployed successfully in GitHub Pages run 36207605115.
