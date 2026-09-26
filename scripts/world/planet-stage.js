@@ -324,11 +324,11 @@ function applyCameraZoom(){
   // point; no second map or local simulation authority is introduced.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=.72;
+  const localZ=1.15;
   const cameraZ=globeZ*(1-blend)+localZ*blend;
-  const cameraY=1.18*blend;
-  const targetZ=-.22*blend;
-  const targetY=-.08*blend;
+  const cameraY=1.05*blend;
+  const targetZ=-.08*blend;
+  const targetY=-.12*blend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   if(cameraEntity.camera)cameraEntity.camera.fov=34+16*blend;
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
@@ -356,6 +356,7 @@ function setRotation(yaw,pitch){
   yawDegrees=normalizeYaw(yaw);
   pitchDegrees=clamp(pitch,-82,82);
   applyRotation();
+  if(zoomState.scalar>projectionState.transitionStart)applyCameraZoom();
   return snapshot();
 }
 function rotateBy(deltaYaw,deltaPitch){
