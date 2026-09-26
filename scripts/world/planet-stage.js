@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v4";
+const VERSION="planet-ground-static-v5";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -81,7 +81,7 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.90,transitionEnd:.997,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
@@ -417,7 +417,13 @@ function tangentFrame(latitudeRadians,longitudeRadians){
   });
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
-function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.90)/.097);}
+function projectionHandoffForZoom(value=zoomState.scalar){
+  const span=Math.max(.0001,projectionState.transitionEnd-projectionState.transitionStart);
+  return smoothstep01((clamp(value,0,1)-projectionState.transitionStart)/span);
+}
+function projectionPresentationBlendForZoom(value=zoomState.scalar){
+  return smoothstep01(clamp(projectionHandoffForZoom(value)/.40,0,1));
+}
 function canonicalSurfaceIdentity(){
   if(!geography)return null;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
@@ -809,12 +815,30 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
   const useMicroDetail=metersPerTexel<=4;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   const contourStrength=metersPerTexel<=100?.10:metersPerTexel<=1200?.060:.026;
+  const authoritySize=Math.max(2,Math.min(size,128)),authorityCache=new Array(authoritySize*authoritySize);
+  const authorityAt=(ax,ay)=>{
+    const ix=Math.max(0,Math.min(authoritySize-1,ax)),iy=Math.max(0,Math.min(authoritySize-1,ay)),key=iy*authoritySize+ix;
+    if(authorityCache[key])return authorityCache[key];
+    const au=ix/(authoritySize-1),av=iy/(authoritySize-1);
+    const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth;
+    const alat=clamp(lat0+anorth/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
+    const cosLat=Math.max(.08,Math.cos(lat0));let alon=lon0+aeast/(WORLD_RADIUS_METERS*cosLat);alon=wrapLongitudeRadians(alon);
+    return authorityCache[key]=geography.sampleLatLon(alat,alon);
+  };
+  const mixSample=(ux,vz)=>{
+    const gx=ux*(authoritySize-1),gy=vz*(authoritySize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(authoritySize-1,x0+1),y1=Math.min(authoritySize-1,y0+1),tx=gx-x0,ty=gy-y0;
+    const a=authorityAt(x0,y0),b=authorityAt(x1,y0),c=authorityAt(x0,y1),d=authorityAt(x1,y1);
+    const bilerp=(va,vb,vc,vd)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
+    const color=[0,1,2].map(i=>bilerp(a.color?.[i],b.color?.[i],c.color?.[i],d.color?.[i]));
+    const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0);
+    return {land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters)};
+  };
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const ux=(x+.5)/size,vz=(y+.5)/size;
     const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
     const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
     const cosLat=Math.max(.08,Math.cos(lat0));let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
-    const sample=geography.sampleLatLon(lat,lon);
+    const sample=mixSample(ux,vz);
     let displayColor;
     const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
     const elevation=Number(sample?.elevationMeters||0);
@@ -931,7 +955,7 @@ function updateProjectionPresentation(){
       // Reveal the canonical tangent continuation quickly enough that the
       // settlement frame is fully owned by the same local geography, rather
       // than looking through a fading globe shell at a different surface.
-      const tangentReveal=smoothstep01(clamp(handoff/.40,0,1));
+      const tangentReveal=projectionPresentationBlendForZoom();
       horizonSkirtMaterial.opacity=tangentReveal*.92;
       horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
       horizonSkirtMaterial.depthWrite=false;
@@ -953,7 +977,7 @@ function updateProjectionPresentation(){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  const tangentReveal=smoothstep01(clamp(handoff/.40,0,1));
+  const tangentReveal=projectionPresentationBlendForZoom();
   const globeFade=tangentReveal;
   planet.enabled=globeFade<.9995;
   if(surfaceMaterial){
@@ -1013,7 +1037,8 @@ function applyCameraZoom(){
   const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
   const angleBlend=smoothstep01(orientationRaw);
   const handoff=projectionHandoffForZoom(scalar);
-  const tangentVisible=handoff>.02;
+  const representationBlend=projectionPresentationBlendForZoom(scalar);
+  const tangentVisible=representationBlend>.02;
   // The tangent patch lies in X/Z. Once it becomes the visible representation,
   // view it from above; keeping the old globe-front camera at Y~=0 makes the
   // horizontal patch appear as a horizon strip. The later gameplay oblique
@@ -1023,10 +1048,10 @@ function applyCameraZoom(){
   const tangentY=lerp(mapY,localY,angleBlend);
   // Smoothly move from the globe-front camera to the tangent-map camera.
   // Zoom alone must never cause a discrete camera relocation.
-  const cameraZ=lerp(globeZ,tangentZ,handoff);
-  const cameraY=lerp(0,tangentY,handoff);
+  const cameraZ=lerp(globeZ,tangentZ,representationBlend);
+  const cameraY=lerp(0,tangentY,representationBlend);
   const targetZ=0;
-  const targetY=lerp(0,lerp(0,-.12,angleBlend),handoff);
+  const targetY=lerp(0,lerp(0,-.12,angleBlend),representationBlend);
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   const fov=34+12*angleBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
   const lookLength=Math.max(.000001,Math.hypot(cameraY-targetY,cameraZ-targetZ));
@@ -1035,7 +1060,7 @@ function applyCameraZoom(){
   // only as the later local gameplay oblique camera is introduced.
   const mapPitchBaseline=Math.atan2(mapZ,mapY)*180/Math.PI;
   const cameraPitchDegrees=tangentVisible?Number(Math.max(0,Math.atan2(Math.abs(cameraZ-targetZ),Math.max(.000001,Math.abs(cameraY-targetY)))*180/Math.PI-mapPitchBaseline).toFixed(3)):0;
-  projectionPresentation={...projectionPresentation,viewBlend,handoff,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
+  projectionPresentation={...projectionPresentation,viewBlend,handoff,representationBlend,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
@@ -1103,7 +1128,7 @@ async function makeGeographyTexture(){
 
   let minElevation=Infinity,maxElevation=-Infinity;
   let landSamples=0,oceanSamples=0,islandSamples=0,mountainSamples=0,peakSamples=0;
-  let highest=null,deepest=null,bestIsland=null,bestMountain=null,bestContinent=null;
+  let highest=null,deepest=null,bestIsland=null,bestMountain=null,bestContinent=null,bestContinuity=null,bestContinuityScore=-Infinity;
 
   await runSlicedRange(TEXTURE_WIDTH*TEXTURE_HEIGHT,index=>{
     const py=Math.floor(index/TEXTURE_WIDTH),px=index-py*TEXTURE_WIDTH;
@@ -1127,6 +1152,10 @@ async function makeGeographyTexture(){
     if(sample.land&&sample.islandInfluence>0.22&&sample.continentInfluence<0.28&&(!bestIsland||sample.islandInfluence>bestIsland.islandInfluence))bestIsland=descriptor;
     if(sample.land&&(!bestMountain||sample.mountainInfluence>bestMountain.mountainInfluence||(sample.mountainInfluence===bestMountain.mountainInfluence&&sample.elevationMeters>bestMountain.elevationMeters)))bestMountain=descriptor;
     if(sample.land&&(!bestContinent||sample.continentInfluence>bestContinent.continentInfluence))bestContinent=descriptor;
+    if(sample.land&&Math.abs(descriptor.latitudeDegrees)<=60){
+      const continuityScore=sample.continentInfluence*3+sample.moisture*.35-Math.abs(sample.elevationMeters-650)/7000-sample.islandInfluence*.45;
+      if(continuityScore>bestContinuityScore){bestContinuityScore=continuityScore;bestContinuity=descriptor;}
+    }
   });
   ctx.putImageData(image,0,0);
 
@@ -1156,6 +1185,7 @@ async function makeGeographyTexture(){
   });
   featureTargets=Object.freeze({
     continent:bestContinent,
+    continuityFocus:bestContinuity||bestContinent,
     mountain:bestMountain||highest,
     island:bestIsland,
     peak:highest,
