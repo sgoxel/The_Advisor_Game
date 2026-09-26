@@ -566,7 +566,7 @@ function pickInspection(clientX,clientY){
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
   const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=inspectionIdText(picked.record.id);inspection.selectedType=picked.record.type;if(!renderInspectionTooltip(picked.record,picked.bounds))return null;return picked.record;
 }
-function updateInspectionTooltip(){if(inspection.selectedId===null)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
+function updateInspectionTooltip(){if(inspection.selectedId===null)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record){dismissInspection();return;}let visible=true;try{visible=record.visible?.()!==false;}catch{visible=false;}if(!visible){dismissInspection();return;}renderInspectionTooltip(record);}
 function bindInput(){
   canvas.tabIndex=0;
   canvas.setAttribute("role","application");
