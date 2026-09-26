@@ -298,3 +298,5 @@ Suggestion: when canonical WP-S006-007 destination records become available, rep
 2026-09-26 08:10 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: capture selected-NPC activity transition timing and tooltip refresh telemetry once genuine canonical local NPC presentation is active.
 2026-09-26 08:15 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: include rapid NPC-to-building and building-to-NPC selection transfer in canonical tooltip visual evidence once genuine local targets are active.
 2026-09-26 08:20 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: include an NPC/building same-ID collision scenario in inspection regression evidence once genuine local targets are available.
+
+2026-09-26 08:10 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add a focused regression test covering inspection IDs 0, empty string, null and undefined without requiring visual targets. Do not implement outside the WP evidence/test scope.
