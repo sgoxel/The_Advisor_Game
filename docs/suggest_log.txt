@@ -291,3 +291,5 @@ Suggestion: when canonical WP-S006-007 destination records become available, rep
 2026-09-26 04:59 +03:00 | WP-S003-008-006 | Phase 22 suggestion: when genuine local pickables are canonical, include a two-finger/two-pointer interaction case proving a secondary pointer cannot replace the active gesture owner or cause a false tooltip selection. Do not implement unless explicitly requested.
 
 2026-09-26 05:59 +03:00 | WP-S003-008-006 | Phase 23 suggestion: add a lightweight JavaScript syntax/parse gate for canonical runtime source files so literal escape-token corruption is caught before deployment. Do not implement unless explicitly requested.
+
+2026-09-26 07:00 +03:00 | WP-S003-008-006 | Phase 24 suggestion: add a lightweight syntax/parse validation step for canonical JavaScript runtime files before Pages deployment, covering literal escape-token corruption in exported APIs as well as object literals. Do not implement unless explicitly requested.
