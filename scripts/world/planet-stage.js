@@ -476,10 +476,28 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.92;m.update();return m;};
   localStaticMaterials={road:make("LocalRoad",.34,.25,.16),wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48)};
 }
-function addLocalStatic(name,type,material,x,y,z,sx,sy,sz){
+function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
   const e=new pc.Entity(name),mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
   e.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});e.render.meshInstances=[new pc.MeshInstance(mesh,material,e)];
-  e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);localStaticRoot.addChild(e);
+  e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);localStaticRoot.addChild(e);
+}
+function addTerrainRoad(dims,roadWidth){
+  const unit=dims.metersPerUnit,span=dims.patchHeight*.82,slices=24,positions=[],normals=[],uvs=[],indices=[];
+  for(let i=0;i<=slices;i++){
+    const t=i/slices,north=(t-.5)*span;
+    for(let lane=0;lane<3;lane++){
+      const across=lane-1,east=across*roadWidth*.5;
+      positions.push(east/unit,localGroundHeightUnits(east,north,dims)+.035,-north/unit);
+      normals.push(0,1,0);uvs.push((across+1)*.5,t);
+    }
+  }
+  for(let i=0;i<slices;i++)for(let lane=0;lane<2;lane++){
+    const a=i*3+lane,b=a+1,c=a+3,d=c+1;indices.push(a,c,b,b,c,d);
+  }
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  const e=new pc.Entity("SeedRoadRibbon");e.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  e.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.road,e)];localStaticRoot.addChild(e);
+  localStatic.roadCount=1;localStatic.triangleEstimate+=indices.length/3;
 }
 function rebuildLocalStaticPresentation(signature){
   if(!tangentPatch||!device||!geography)return;
@@ -490,16 +508,18 @@ function rebuildLocalStaticPresentation(signature){
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   if(center?.land){
-    const roadWidth=Math.max(4.5,Math.min(9,dims.visibleWidth*.10)),roadY=localGroundHeightUnits(0,0,dims)+.025;
-    addLocalStatic("SeedRoad","box",localStaticMaterials.road,0,roadY,0,roadWidth/unit,.045,dims.patchHeight*.82/unit);localStatic.roadCount=1;localStatic.triangleEstimate+=12;
+    const roadWidth=Math.max(4.5,Math.min(9,dims.visibleWidth*.10));
+    addTerrainRoad(dims,roadWidth);
     const count=dims.levelId==="ground"?6:10;
     for(let i=0;i<count;i++){
       const side=i%2===0?-1:1,row=Math.floor(i/2),north=(-.32+row*.16)*dims.patchHeight,east=side*(roadWidth*.5+5+localHash(i*17,north,31)*7);
       if(Math.abs(east)>dims.patchWidth*.43||Math.abs(north)>dims.patchHeight*.43)continue;
       const w=6.5+localHash(east,north,41)*4.5,d=6+localHash(east,north,42)*3.5,h=4.5+localHash(east,north,43)*2.8,y=localGroundHeightUnits(east,north,dims);
       addLocalStatic("SeedBuildingBody-"+i,"box",localStaticMaterials.wall,east/unit,y+h*.5/unit,-north/unit,w/unit,h/unit,d/unit);
-      addLocalStatic("SeedBuildingRoof-"+i,"box",localStaticMaterials.roof,east/unit,y+(h+.75)/unit,-north/unit,w*1.18/unit,1.5/unit,d*1.18/unit);
-      localStatic.buildingCount++;localStatic.triangleEstimate+=24;
+      const roofY=y+(h+.62)/unit,roofHalf=w*.68/unit;
+      addLocalStatic("SeedBuildingRoofL-"+i,"box",localStaticMaterials.roof,(east-w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,-24);
+      addLocalStatic("SeedBuildingRoofR-"+i,"box",localStaticMaterials.roof,(east+w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,24);
+      localStatic.buildingCount++;localStatic.triangleEstimate+=36;
     }
     const trees=dims.levelId==="ground"?14:24;
     for(let i=0;i<trees;i++){
