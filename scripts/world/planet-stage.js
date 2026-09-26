@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v6";
+const VERSION="planet-settlement-reveal-v7";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -40,7 +40,8 @@ let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
 let localStaticMaterials=null;
-let localStatic={active:false,signature:null,level:"inactive",roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,authority:"spherical-seed-focus-presentation"};
+let localStatic={active:false,signature:null,level:"inactive",revealTier:"hidden",fidelity:0,canonicalPlanId:null,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,landmarkCount:0,coarseRoadCount:0,fullRoadCount:0,coarseBuildingCount:0,fullBuildingCount:0,coarseLandmarkCount:0,fullLandmarkCount:0,planRoadSegmentCount:0,planBuildingCount:0,planLandmarkCount:0,visiblePlanBuildingCount:0,visiblePlanLandmarkCount:0,alignmentErrorMeters:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,fullWorldMaterialized:false,singlePlanAcrossLods:true,authority:"canonical-seeded-settlement-presentation"};
+let localSettlementPlanCache={key:null,value:null};
 let resizeObserver=null;
 let yawDegrees=-18;
 let pitchDegrees=-10;
@@ -677,54 +678,193 @@ function localGroundHeightUnits(eastMeters,northMeters,dims){
   const ux=eastMeters/dims.patchWidth+.5,vz=northMeters/dims.patchHeight+.5,edge=Math.min(ux,1-ux,vz,1-vz);
   return clamp(raw,-dims.maxHeightUnits,dims.maxHeightUnits)*smoothstep01(clamp(edge/.12,0,1));
 }
+function settlementPlanKey(){
+  return [String(activeSeed||""),zoomState.focusLatitudeRadians.toFixed(6),zoomState.focusLongitudeRadians.toFixed(6)].join("|");
+}
+function settlementPlanUnit(key){
+  return seededUnit("settlement-reveal|"+settlementPlanKey()+"|"+key);
+}
+function rotateSettlementOffset(east,north,headingRadians){
+  const cos=Math.cos(headingRadians),sin=Math.sin(headingRadians);
+  return Object.freeze({east:east*cos+north*sin,north:north*cos-east*sin});
+}
+function canonicalSettlementPlan(){
+  const key=settlementPlanKey();
+  if(localSettlementPlanCache.key===key&&localSettlementPlanCache.value)return localSettlementPlanCache.value;
+  const headingRadians=(settlementPlanUnit("heading")-.5)*.34;
+  const headingDegrees=headingRadians*180/Math.PI;
+  const roadWidthMeters=7.5;
+  const roads=[];
+  const mainLength=1440,mainSegments=18,mainSegmentLength=mainLength/mainSegments;
+  for(let i=0;i<mainSegments;i++){
+    const north=-mainLength*.5+(i+.5)*mainSegmentLength,p=rotateSettlementOffset(0,north,headingRadians);
+    roads.push(Object.freeze({id:"main-"+i,east:p.east,north:p.north,lengthMeters:mainSegmentLength*1.04,widthMeters:roadWidthMeters,headingDegrees,kind:"main"}));
+  }
+  const branchLength=760,branchSegments=10,branchSegmentLength=branchLength/branchSegments,branchNorth=72;
+  for(let i=0;i<branchSegments;i++){
+    const east=-branchLength*.5+(i+.5)*branchSegmentLength,p=rotateSettlementOffset(east,branchNorth,headingRadians);
+    roads.push(Object.freeze({id:"branch-"+i,east:p.east,north:p.north,lengthMeters:branchSegmentLength*1.04,widthMeters:6.2,headingDegrees:headingDegrees+90,kind:"branch"}));
+  }
+  const buildings=[];
+  const rowNorth=[-470,-360,-270,-190,-120,-60,0,60,120,190,270,360,470];
+  for(let row=0;row<rowNorth.length;row++){
+    const baseNorth=rowNorth[row];
+    for(const side of [-1,1]){
+      const central=Math.abs(baseNorth)<=125;
+      const offset=(central?14:34)+(central?settlementPlanUnit("inner-offset:"+row+":"+side)*8:settlementPlanUnit("outer-offset:"+row+":"+side)*24);
+      const east=side*offset,north=baseNorth+(settlementPlanUnit("north:"+row+":"+side)-.5)*(central?12:28);
+      const p=rotateSettlementOffset(east,north,headingRadians);
+      buildings.push(Object.freeze({
+        id:"building-"+row+"-"+(side<0?"w":"e"),east:p.east,north:p.north,
+        widthMeters:(central?9:16)+settlementPlanUnit("width:"+row+":"+side)*(central?5:13),
+        depthMeters:(central?8:14)+settlementPlanUnit("depth:"+row+":"+side)*(central?5:10),
+        heightMeters:(central?6:8)+settlementPlanUnit("height:"+row+":"+side)*(central?4:8),
+        headingDegrees
+      }));
+    }
+  }
+  const landmarkSeeds=[
+    ["center-tree",20,18],["market-grove",-92,62],["east-grove",168,108],
+    ["west-grove",-182,-112],["north-grove",72,322],["south-grove",-64,-342]
+  ];
+  const landmarks=landmarkSeeds.map(([id,east,north],index)=>{
+    const p=rotateSettlementOffset(east,north,headingRadians);
+    return Object.freeze({id,east:p.east,north:p.north,sizeMeters:index===0?11:18+settlementPlanUnit("landmark:"+id)*12,heightMeters:index===0?10:13+settlementPlanUnit("landmark-height:"+id)*7});
+  });
+  const minEast=Math.min(...buildings.map(b=>b.east-b.widthMeters*.5)),maxEast=Math.max(...buildings.map(b=>b.east+b.widthMeters*.5));
+  const minNorth=Math.min(...buildings.map(b=>b.north-b.depthMeters*.5)),maxNorth=Math.max(...buildings.map(b=>b.north+b.depthMeters*.5));
+  const id="settlement-"+Math.round((zoomState.focusLatitudeRadians+Math.PI/2)*1e6).toString(36)+"-"+Math.round((wrapLongitudeRadians(zoomState.focusLongitudeRadians)+Math.PI)*1e6).toString(36);
+  const value=Object.freeze({
+    id,key,headingRadians,headingDegrees,roadWidthMeters,
+    roads:Object.freeze(roads),buildings:Object.freeze(buildings),landmarks:Object.freeze(landmarks),
+    occupiedBounds:Object.freeze({minEast,maxEast,minNorth,maxNorth,widthMeters:maxEast-minEast,heightMeters:maxNorth-minNorth}),
+    authority:"canonical-seeded-settlement-presentation",simulationAuthority:false
+  });
+  localSettlementPlanCache={key,value};return value;
+}
+function localRevealProfile(levelId){
+  const table={
+    "local-area":Object.freeze({tier:"settlement-influence",fidelity:.25,coarseRoads:true,clusterBuildings:true,individualBuildings:false,fullBuildings:false,landmarkScale:3.8,maxBuildingGroups:8}),
+    settlement:Object.freeze({tier:"coarse-settlement",fidelity:.50,coarseRoads:true,clusterBuildings:false,individualBuildings:true,fullBuildings:false,landmarkScale:2.0,maxBuildings:22}),
+    "near-ground":Object.freeze({tier:"refined-settlement",fidelity:.75,coarseRoads:false,clusterBuildings:false,individualBuildings:true,fullBuildings:true,landmarkScale:1.2,maxBuildings:18}),
+    ground:Object.freeze({tier:"full-ground",fidelity:1,coarseRoads:false,clusterBuildings:false,individualBuildings:true,fullBuildings:true,landmarkScale:1,maxBuildings:12})
+  };
+  return table[levelId]||null;
+}
+function localAnchorVisible(anchor,dims,padding=.54){
+  return Math.abs(Number(anchor?.east)||0)<=dims.patchWidth*padding&&Math.abs(Number(anchor?.north)||0)<=dims.patchHeight*padding;
+}
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
   const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.92;m.update();return m;};
-  localStaticMaterials={road:make("LocalRoad",.34,.25,.16),wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48)};
+  localStaticMaterials={
+    road:make("LocalRoad",.34,.25,.16),coarseRoad:make("LocalCoarseRoad",.42,.30,.18),
+    footprint:make("LocalSettlementFootprint",.31,.36,.18),coarseWall:make("LocalCoarseWall",.66,.49,.27),
+    wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),
+    trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),landmark:make("LocalLandmark",.12,.32,.10),
+    water:make("LocalWater",.08,.31,.48)
+  };
 }
-function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
+function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0,shadows=true){
   const e=new pc.Entity(name),mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
-  e.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});e.render.meshInstances=[new pc.MeshInstance(mesh,material,e)];
+  e.addComponent("render",{type:"asset",castShadows:Boolean(shadows),receiveShadows:Boolean(shadows)});e.render.meshInstances=[new pc.MeshInstance(mesh,material,e)];
   e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);localStaticRoot.addChild(e);
+}
+function addCoarseRoad(plan,dims,axis){
+  const unit=dims.metersPerUnit,isMain=axis==="main",source=plan.roads.filter(r=>r.kind===axis);
+  if(!source.length)return;
+  const minAlong=isMain?Math.min(...source.map(r=>r.north)):Math.min(...source.map(r=>r.east));
+  const maxAlong=isMain?Math.max(...source.map(r=>r.north)):Math.max(...source.map(r=>r.east));
+  const center=source[Math.floor(source.length/2)],length=(maxAlong-minAlong)+(source[0]?.lengthMeters||80);
+  const visualWidth=Math.max(isMain?plan.roadWidthMeters:6.2,dims.visibleHeight*.0042);
+  const y=localGroundHeightUnits(center.east,center.north,dims)+.018;
+  addLocalStatic("CoarseRoad-"+axis,"box",localStaticMaterials.coarseRoad,center.east/unit,y,-center.north/unit,visualWidth/unit,.035,length/unit,0,center.headingDegrees,0,false);
+  localStatic.coarseRoadCount++;localStatic.roadCount++;localStatic.triangleEstimate+=12;
+}
+function buildingClusters(plan){
+  const groups=new Map();
+  for(const b of plan.buildings){
+    const side=b.east<0?"w":"e",band=b.north<-170?"south":b.north>170?"north":"center",key=band+"-"+side;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(b);
+  }
+  return Array.from(groups.entries()).map(([id,items])=>{
+    const minEast=Math.min(...items.map(b=>b.east-b.widthMeters*.5)),maxEast=Math.max(...items.map(b=>b.east+b.widthMeters*.5));
+    const minNorth=Math.min(...items.map(b=>b.north-b.depthMeters*.5)),maxNorth=Math.max(...items.map(b=>b.north+b.depthMeters*.5));
+    return Object.freeze({id,items,east:(minEast+maxEast)*.5,north:(minNorth+maxNorth)*.5,widthMeters:maxEast-minEast,depthMeters:maxNorth-minNorth});
+  });
 }
 function rebuildLocalStaticPresentation(signature){
   if(!tangentPatch||!device||!geography)return;
-  const started=performance.now(),dims=localPatchDimensions(),eligible=["near-ground","ground"].includes(dims.levelId);
+  const started=performance.now(),dims=localPatchDimensions(),profile=localRevealProfile(dims.levelId);
   localStaticRoot?.destroy?.();localStaticRoot=null;
-  localStatic={...localStatic,active:false,signature,level:dims.levelId,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0};
-  if(!eligible)return;
+  localStatic={...localStatic,active:false,signature,level:dims.levelId,revealTier:profile?.tier||"hidden",fidelity:profile?.fidelity||0,canonicalPlanId:null,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,landmarkCount:0,coarseRoadCount:0,fullRoadCount:0,coarseBuildingCount:0,fullBuildingCount:0,coarseLandmarkCount:0,fullLandmarkCount:0,planRoadSegmentCount:0,planBuildingCount:0,planLandmarkCount:0,visiblePlanBuildingCount:0,visiblePlanLandmarkCount:0,alignmentErrorMeters:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0};
+  if(!profile)return;
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   if(center?.land){
-    const roadWidth=Math.max(4.5,Math.min(9,dims.visibleWidth*.10)),roadSpan=dims.patchHeight*.82,roadSegments=14,segmentMeters=roadSpan/roadSegments;
-    for(let r=0;r<roadSegments;r++){
-      const north=-roadSpan*.5+(r+.5)*segmentMeters,y=localGroundHeightUnits(0,north,dims)+.035;
-      addLocalStatic("SeedRoad-"+r,"box",localStaticMaterials.road,0,y,north/-unit,roadWidth/unit,.055,segmentMeters*1.08/unit);
+    const plan=canonicalSettlementPlan();
+    localStatic.canonicalPlanId=plan.id;localStatic.planRoadSegmentCount=plan.roads.length;localStatic.planBuildingCount=plan.buildings.length;localStatic.planLandmarkCount=plan.landmarks.length;
+    if(profile.coarseRoads){
+      addCoarseRoad(plan,dims,"main");addCoarseRoad(plan,dims,"branch");
+    }else{
+      for(const road of plan.roads){
+        if(!localAnchorVisible(road,dims,.56))continue;
+        const y=localGroundHeightUnits(road.east,road.north,dims)+.028;
+        addLocalStatic("SeedRoad-"+road.id,"box",localStaticMaterials.road,road.east/unit,y,-road.north/unit,road.widthMeters/unit,.045,road.lengthMeters/unit,0,road.headingDegrees,0);
+        localStatic.fullRoadCount++;localStatic.roadCount++;localStatic.triangleEstimate+=12;
+      }
     }
-    localStatic.roadCount=roadSegments;localStatic.triangleEstimate+=roadSegments*12;
-    const count=dims.levelId==="ground"?6:10;
-    for(let i=0;i<count;i++){
-      const side=i%2===0?-1:1,row=Math.floor(i/2),north=(-.32+row*.16)*dims.patchHeight,east=side*(roadWidth*.5+5+localHash(i*17,north,31)*7);
-      if(Math.abs(east)>dims.patchWidth*.43||Math.abs(north)>dims.patchHeight*.43)continue;
-      const w=6.5+localHash(east,north,41)*4.5,d=6+localHash(east,north,42)*3.5,h=4.5+localHash(east,north,43)*2.8,y=localGroundHeightUnits(east,north,dims);
-      addLocalStatic("SeedBuildingBody-"+i,"box",localStaticMaterials.wall,east/unit,y+h*.5/unit,-north/unit,w/unit,h/unit,d/unit);
-      const roofY=y+(h+.65)/unit,roofHalf=w*.66/unit,roofOffset=w*.20/unit;
-      addLocalStatic("SeedBuildingRoofL-"+i,"box",localStaticMaterials.roof,(east-w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,-24);
-      addLocalStatic("SeedBuildingRoofR-"+i,"box",localStaticMaterials.roof,(east+w*.20)/unit,roofY,-north/unit,roofHalf,.55/unit,d*1.18/unit,0,0,24);
-      localStatic.buildingCount++;localStatic.triangleEstimate+=36;
+    if(profile.clusterBuildings){
+      const clusters=buildingClusters(plan).filter(cluster=>localAnchorVisible(cluster,dims,.50)).slice(0,profile.maxBuildingGroups||8);
+      const minVisual=Math.max(38,dims.visibleHeight*.014);
+      for(const cluster of clusters){
+        const width=Math.max(cluster.widthMeters+22,minVisual),depth=Math.max(cluster.depthMeters+24,minVisual*.72),height=Math.max(10,dims.visibleHeight*.006);
+        const y=localGroundHeightUnits(cluster.east,cluster.north,dims);
+        addLocalStatic("SettlementCluster-"+cluster.id,"box",localStaticMaterials.footprint,cluster.east/unit,y+height*.16/unit,-cluster.north/unit,width/unit,height*.32/unit,depth/unit,0,plan.headingDegrees,0,false);
+        addLocalStatic("SettlementMass-"+cluster.id,"box",localStaticMaterials.coarseWall,cluster.east/unit,y+height*.55/unit,-cluster.north/unit,width*.62/unit,height*.78/unit,depth*.60/unit,0,plan.headingDegrees,0,false);
+        localStatic.coarseBuildingCount++;localStatic.buildingCount++;localStatic.triangleEstimate+=24;
+      }
+    }else if(profile.individualBuildings){
+      let shown=0;
+      for(const b of plan.buildings){
+        if(shown>=(profile.maxBuildings||99)||!localAnchorVisible(b,dims,.50))continue;
+        const y=localGroundHeightUnits(b.east,b.north,dims);
+        if(profile.fullBuildings){
+          addLocalStatic("SeedBuildingBody-"+b.id,"box",localStaticMaterials.wall,b.east/unit,y+b.heightMeters*.5/unit,-b.north/unit,b.widthMeters/unit,b.heightMeters/unit,b.depthMeters/unit,0,b.headingDegrees,0);
+          const roofY=y+(b.heightMeters+.65)/unit,roofHalf=b.widthMeters*.66/unit,roofOffset=b.widthMeters*.20/unit;
+          const angle=b.headingDegrees;
+          const roofShift=rotateSettlementOffset(roofOffset,0,plan.headingRadians);
+          addLocalStatic("SeedBuildingRoofL-"+b.id,"box",localStaticMaterials.roof,(b.east-roofShift.east)/unit,roofY,-(b.north-roofShift.north)/unit,roofHalf,.55/unit,b.depthMeters*1.18/unit,0,angle, -24);
+          addLocalStatic("SeedBuildingRoofR-"+b.id,"box",localStaticMaterials.roof,(b.east+roofShift.east)/unit,roofY,-(b.north+roofShift.north)/unit,roofHalf,.55/unit,b.depthMeters*1.18/unit,0,angle, 24);
+          localStatic.fullBuildingCount++;localStatic.triangleEstimate+=36;
+        }else{
+          const scale=Math.max(1,Math.min(1.45,dims.visibleHeight/1800));
+          addLocalStatic("CoarseBuilding-"+b.id,"box",localStaticMaterials.coarseWall,b.east/unit,y+b.heightMeters*.35*scale/unit,-b.north/unit,b.widthMeters*1.12*scale/unit,b.heightMeters*.70*scale/unit,b.depthMeters*1.12*scale/unit,0,b.headingDegrees,0,false);
+          localStatic.coarseBuildingCount++;localStatic.triangleEstimate+=12;
+        }
+        shown++;localStatic.buildingCount++;
+      }
     }
-    const trees=dims.levelId==="ground"?14:24;
-    for(let i=0;i<trees;i++){
-      const east=(localHash(i*29,7,51)-.5)*dims.patchWidth*.78,north=(localHash(13,i*31,52)-.5)*dims.patchHeight*.78;
-      if(Math.abs(east)<roadWidth*.9)continue;
-      const y=localGroundHeightUnits(east,north,dims),h=3.5+localHash(east,north,53)*3;
-      addLocalStatic("SeedTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,east/unit,y+h*.25/unit,-north/unit,.7/unit,h*.5/unit,.7/unit);
-      addLocalStatic("SeedTreeCrown-"+i,"sphere",localStaticMaterials.leaf,east/unit,y+h*.72/unit,-north/unit,4.2/unit,h*.86/unit,4.2/unit);
-      localStatic.vegetationCount++;localStatic.triangleEstimate+=180;
+    localStatic.visiblePlanBuildingCount=plan.buildings.filter(b=>localAnchorVisible(b,dims,.50)).length;
+    for(const landmark of plan.landmarks){
+      if(!localAnchorVisible(landmark,dims,.50))continue;
+      const scale=profile.landmarkScale||1,size=landmark.sizeMeters*scale,height=landmark.heightMeters*scale,y=localGroundHeightUnits(landmark.east,landmark.north,dims);
+      if(profile.fidelity<.70){
+        addLocalStatic("CoarseLandmark-"+landmark.id,"sphere",localStaticMaterials.landmark,landmark.east/unit,y+height*.42/unit,-landmark.north/unit,size/unit,height*.84/unit,size/unit,0,0,0,false);
+        localStatic.coarseLandmarkCount++;localStatic.triangleEstimate+=160;
+      }else{
+        addLocalStatic("LandmarkTrunk-"+landmark.id,"cylinder",localStaticMaterials.trunk,landmark.east/unit,y+height*.24/unit,-landmark.north/unit,Math.max(1.2,size*.18)/unit,height*.48/unit,Math.max(1.2,size*.18)/unit);
+        addLocalStatic("LandmarkCrown-"+landmark.id,"sphere",localStaticMaterials.leaf,landmark.east/unit,y+height*.68/unit,-landmark.north/unit,size/unit,height*.72/unit,size/unit);
+        localStatic.fullLandmarkCount++;localStatic.triangleEstimate+=180;
+      }
+      localStatic.landmarkCount++;localStatic.vegetationCount++;
     }
+    localStatic.visiblePlanLandmarkCount=plan.landmarks.filter(l=>localAnchorVisible(l,dims,.50)).length;
+    localStatic.alignmentErrorMeters=0;
   }else{
     const y=localGroundHeightUnits(0,0,dims)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
-    localStatic.waterCount=1;localStatic.triangleEstimate+=12;
+    localStatic.waterCount=1;localStatic.triangleEstimate+=12;localStatic.revealTier="water";
   }
   localStatic.entityCount=localStaticRoot.children.length;localStatic.drawCallEstimate=localStatic.entityCount;localStatic.active=localStatic.entityCount>0;localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
 }
