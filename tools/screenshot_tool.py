@@ -8464,6 +8464,17 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError("No world-projected political border was visible in country/regional evidence")
         if max(int(m.get("landmarkVisibleCount") or 0) for m in maps) < 1:
             raise RuntimeError("No terrain-anchored landmark pointer was visible in evidence")
+        border_maps=maps[1:8]
+        if max(int(m.get("borderWaterSampleCount") or 0) for m in border_maps) < 1:
+            raise RuntimeError("Political border evidence did not exercise land/water clipping")
+        if any(int(m.get("borderOwnerQueryCount") or 0) > int(m.get("borderLandSampleCount") or 0) for m in border_maps):
+            raise RuntimeError(f"Political owner queries exceeded bounded land samples: {border_maps}")
+        if any(int(m.get("borderLandSampleCount") or 0)+int(m.get("borderWaterSampleCount") or 0) != int(m.get("borderSampleCount") or 0) for m in border_maps):
+            raise RuntimeError(f"Border land/water sampling telemetry mismatch: {border_maps}")
+        if max(float(m.get("lastBorderBuildMs") or 0) for m in border_maps) > 220:
+            raise RuntimeError(f"Political border rebuild exceeded 220 ms budget: {border_maps}")
+        if max(float(m.get("lastUpdateMs") or 0) for m in border_maps) > 260:
+            raise RuntimeError(f"Map presentation update exceeded 260 ms budget: {border_maps}")
         for m in maps:
             raw=int(m.get("borderSegmentCount") or 0); vertices=int(m.get("borderWorldVertexCount") or 0); projected=int(m.get("projectedBorderSegmentCount") or 0)
             if raw and vertices != raw*3:
