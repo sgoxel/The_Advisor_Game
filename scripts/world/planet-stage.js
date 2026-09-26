@@ -482,13 +482,22 @@ function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
   e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);localStaticRoot.addChild(e);
 }
 function addTerrainRoad(dims,roadWidth){
-  const unit=dims.metersPerUnit,span=dims.patchHeight*.82,slices=24,positions=[],normals=[],uvs=[],indices=[];
+  const unit=dims.metersPerUnit,span=dims.patchHeight*.82,slices=24,positions=[],normals=[],uvs=[],indices=[],grades=[];
   for(let i=0;i<=slices;i++){
-    const t=i/slices,north=(t-.5)*span;
+    const north=(i/slices-.5)*span;grades.push(localGroundHeightUnits(0,north,dims));
+  }
+  for(let pass=0;pass<3;pass++){
+    const src=grades.slice();
+    for(let i=1;i<slices;i++)grades[i]=(src[i-1]+src[i]*2+src[i+1])/4;
+  }
+  const maxStep=Math.max(.035,(span/slices)/unit*.08);
+  for(let i=1;i<=slices;i++)grades[i]=clamp(grades[i],grades[i-1]-maxStep,grades[i-1]+maxStep);
+  for(let i=slices-1;i>=0;i--)grades[i]=clamp(grades[i],grades[i+1]-maxStep,grades[i+1]+maxStep);
+  for(let i=0;i<=slices;i++){
+    const t=i/slices,north=(t-.5)*span,y=grades[i]+.055;
     for(let lane=0;lane<3;lane++){
       const across=lane-1,east=across*roadWidth*.5;
-      positions.push(east/unit,localGroundHeightUnits(east,north,dims)+.035,-north/unit);
-      normals.push(0,1,0);uvs.push((across+1)*.5,t);
+      positions.push(east/unit,y,-north/unit);normals.push(0,1,0);uvs.push((across+1)*.5,t);
     }
   }
   for(let i=0;i<slices;i++)for(let lane=0;lane<2;lane++){
