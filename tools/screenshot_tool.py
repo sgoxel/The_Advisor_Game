@@ -127,6 +127,7 @@ SCENARIOS = {
     "wp-s003-010-002",
     "wp-s003-010-003",
     "wp-s003-010-003-001",
+    "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -230,6 +231,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
     "wp-s003-010-003-001": 8,
+    "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -8019,6 +8021,22 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
             return "phone-portrait:ground-2m-detail"
         return "planet:full"
+    if scenario == "wp-s003-010-004":
+        plan=((1280,800,0.985,"desktop:near-ground-static"),(1280,800,1.0,"desktop:ground-static"),(844,390,1.0,"phone-landscape:ground-static"),(390,844,1.0,"phone-portrait:ground-static"))
+        viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(viewport[0],viewport[1]); time.sleep(0.2)
+        result=driver.execute_script("""
+            const api=window.PlanetStage,s=api?.snapshot?.(),t=s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak;
+            if(!api||!t) throw new Error('planet/static target unavailable');
+            api.setViewTarget(t);api.setZoomScalar(Number(arguments[0]));
+            return api.snapshot();
+        """,viewport[2])
+        local=((result or {}).get("projection") or {}).get("localStatic") or {}
+        if not local.get("active") or int(local.get("entityCount") or 0)<3 or local.get("viewportBounded") is not True or local.get("grounded") is not True:
+            raise RuntimeError(f"Ground static projection unavailable or unbounded: {local}")
+        if int(local.get("roadCount") or 0)<1 or int(local.get("buildingCount") or 0)<1:
+            raise RuntimeError(f"Land target lacks projected road/buildings: {local}")
+        return viewport[3]+f":entities={local.get('entityCount')}:buildings={local.get('buildingCount')}:trees={local.get('vegetationCount')}"
     if scenario == "wp-s003-010-003":
         # Exercise the bounded zoom-detail lifecycle: progressively refine the
         # same seeded focus, zoom out to cull fine presentation, then revisit
