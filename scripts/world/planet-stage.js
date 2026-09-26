@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v3";
+const VERSION="planet-ground-static-v4";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -87,13 +87,13 @@ const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
 const LOCAL_LOD_HYSTERESIS=0.006;
 const LOCAL_DETAIL_LEVELS=Object.freeze([
-  Object.freeze({id:"regional-overview",max:.70,visibleHeightMeters:420000,sampleSpacingMeters:24000,reliefClampMeters:7000,reliefGain:11}),
-  Object.freeze({id:"regional-detail",max:.78,visibleHeightMeters:140000,sampleSpacingMeters:8000,reliefClampMeters:7000,reliefGain:10}),
-  Object.freeze({id:"district",max:.86,visibleHeightMeters:36000,sampleSpacingMeters:2400,reliefClampMeters:6000,reliefGain:9}),
-  Object.freeze({id:"local-area",max:.92,visibleHeightMeters:8000,sampleSpacingMeters:250,reliefClampMeters:4200,reliefGain:7}),
-  Object.freeze({id:"settlement",max:.97,visibleHeightMeters:1800,sampleSpacingMeters:60,reliefClampMeters:1600,reliefGain:4}),
-  Object.freeze({id:"near-ground",max:.995,visibleHeightMeters:360,sampleSpacingMeters:12,reliefClampMeters:180,reliefGain:1.5}),
-  Object.freeze({id:"ground",max:1,visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,reliefClampMeters:10,reliefGain:.35})
+  Object.freeze({id:"regional-overview",max:.70,visibleHeightMeters:420000,sampleSpacingMeters:12000,textureSize:96,reliefClampMeters:7000,reliefGain:11}),
+  Object.freeze({id:"regional-detail",max:.78,visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:128,reliefClampMeters:7000,reliefGain:10}),
+  Object.freeze({id:"district",max:.86,visibleHeightMeters:36000,sampleSpacingMeters:1200,textureSize:192,reliefClampMeters:6000,reliefGain:9}),
+  Object.freeze({id:"local-area",max:.92,visibleHeightMeters:8000,sampleSpacingMeters:180,textureSize:256,reliefClampMeters:4200,reliefGain:7}),
+  Object.freeze({id:"settlement",max:.97,visibleHeightMeters:1800,sampleSpacingMeters:40,textureSize:320,reliefClampMeters:1600,reliefGain:4}),
+  Object.freeze({id:"near-ground",max:.995,visibleHeightMeters:360,sampleSpacingMeters:8,textureSize:384,reliefClampMeters:180,reliefGain:1.5}),
+  Object.freeze({id:"ground",max:1,visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:384,reliefClampMeters:10,reliefGain:.35})
 ]);
 const PRESENTATION_FOOTPRINT_ANCHORS=Object.freeze([
   Object.freeze({scalar:.35,heightMeters:650000}),
@@ -113,7 +113,7 @@ const PRESENTATION_FOOTPRINT_ANCHORS=Object.freeze([
   Object.freeze({scalar:.995,heightMeters:50}),
   Object.freeze({scalar:1,heightMeters:36})
 ]);
-let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
+let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,geometrySampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:0,sourceTextureWidth:0,sourceTextureHeight:0,detailMetersPerTexel:0,surroundMetersPerTexel:0,anisotropy:1,minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:0,surroundDetailBandCount:0,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 let localLodIndex=0;
 const localResourceCache=new Map();
 let localResources={activeSignature:null,requestedSignature:null,preparedSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastSwapMs:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,blockingZoomBuilds:0,surroundSpanFactor:3,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
@@ -592,9 +592,22 @@ function localPresentationCompensation(value=zoomState.scalar,index=localLodInde
   return clamp(level.visibleHeightMeters/Math.max(1,targetHeight),.02,1);
 }
 function localTextureSizeForLevel(levelId){
-  if(["regional-overview","regional-detail","district"].includes(levelId))return 64;
-  if(["local-area","settlement"].includes(levelId))return 192;
-  return 256;
+  return Number(LOCAL_DETAIL_LEVELS.find(level=>level.id===levelId)?.textureSize||256);
+}
+function localTextureAnisotropy(){
+  return Math.max(1,Math.min(4,Number(device?.maxAnisotropy||1)));
+}
+function surfaceDetailBandCount(metersPerTexel){
+  const m=Math.max(0,Number(metersPerTexel)||0);
+  return (m<=24000?1:0)+(m<=6000?1:0)+(m<=1200?1:0)+(m<=100?1:0)+(m<=4?1:0);
+}
+function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
+  let detail=0;
+  if(metersPerTexel<=24000)detail+=Math.sin(worldEastMeters/15200+phase)*Math.cos(worldNorthMeters/18400-phase*.61)*.024;
+  if(metersPerTexel<=6000)detail+=Math.sin((worldEastMeters+worldNorthMeters)/5200+phase*.37)*Math.cos(worldNorthMeters/6100+phase*.83)*.017;
+  if(metersPerTexel<=1200)detail+=Math.sin(worldEastMeters/1180-phase*.47)*Math.sin(worldNorthMeters/1460+phase*1.13)*.012;
+  if(metersPerTexel<=100)detail+=Math.cos((worldEastMeters-worldNorthMeters)/145+phase*1.71)*Math.sin(worldNorthMeters/190-phase*.92)*.008;
+  return detail;
 }
 function localPatchDimensions(){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
@@ -772,7 +785,10 @@ function activateLocalDetailResource(signature){
     const started=performance.now(),mesh=buildTangentPatchMesh(),textureSize=localTextureSizeForLevel(dims.levelId);
     const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
     const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,textureSize,false);
-    resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature,textureSize},estimatedBytes:localDetail.estimatedBytes+textureSize*textureSize*4*2};
+    const detailMetersPerTexel=Math.max(dims.patchWidth,dims.patchHeight)/Math.max(1,textureSize);
+    const surroundMetersPerTexel=detailMetersPerTexel*3;
+    const anisotropy=localTextureAnisotropy();
+    resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),geometrySampleSpacingMeters:dims.sampleSpacingMeters,anisotropy,minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel)},estimatedBytes:localDetail.estimatedBytes+textureSize*textureSize*4*2};
     localDetail={...resource.detail};
     localResourceCache.set(signature,resource);localResources.lastBuildMs=Number((performance.now()-started).toFixed(3));localResources.pendingPreparationCount=0;
     trimLocalResourceCache();
@@ -792,33 +808,37 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
   const useMicroDetail=metersPerTexel<=4;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
+  const contourStrength=metersPerTexel<=100?.10:metersPerTexel<=1200?.060:.026;
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const ux=(x+.5)/size,vz=(y+.5)/size;
     const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
     const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-    const cosLat=Math.max(.08,Math.cos(lat0));    let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
+    const cosLat=Math.max(.08,Math.cos(lat0));let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
     const sample=geography.sampleLatLon(lat,lon);
     let displayColor;
     const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
     const elevation=Number(sample?.elevationMeters||0);
     const relief=clamp(elevation/5200,0,1);
-    const macro=(Math.sin(ux*Math.PI*6+phase)*Math.cos(vz*Math.PI*5-phase*.63)+Math.sin((ux+vz)*Math.PI*3+phase*.37)*.45)*.018;
-    // Preserve the same authoritative low-frequency geography at every LOD.
-    // Land/water class and broad elevation remain visible while close LODs add
-    // deterministic micro detail instead of replacing those identity cues.
+    const worldEast=lon*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(lat));
+    const worldNorth=lat*WORLD_RADIUS_METERS;
+    const macro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
+    // World-space frequencies are anchored to latitude/longitude-derived meters,
+    // so finer LODs reveal additional source information instead of magnifying a
+    // normalized UV pattern. Land/water and elevation remain authoritative.
     const identityTint=sample?.land
       ? [relief*.075,relief*.065,relief*.035]
       : [-.012,-.004,.028];
     const contourPhase=(elevation/420)*Math.PI*2;
     const contour=(.5+.5*Math.sin(contourPhase));
-    const contourLine=Math.pow(1-contour,10)*.10;
+    const contourLine=Math.pow(1-contour,10)*contourStrength;
     const authoritative=base.map((v,i)=>clamp(v+macro*(i===2?.70:1)+identityTint[i]-contourLine*(i===2?.55:1),0,1));
     if(useMicroDetail){
       const micro=localSurfaceSample(east,north,sample).color;
       displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));
     }else{
       displayColor=authoritative;
-    }    const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
+    }
+    const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
     const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
     const alpha=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
     data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=alpha;
@@ -826,13 +846,13 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
   ctx.putImageData(image,0,0);
   const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
-  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(canvas2d);
+  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
   return texture;
 }
 function updateTangentPatchTexture(){
   if(!tangentPatchMaterial||!geography)return;
-  const dims=localPatchDimensions();
-  const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,256,true);
+  const dims=localPatchDimensions(),textureSize=localTextureSizeForLevel(dims.levelId);
+  const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
   tangentPatchMaterial.diffuseMap=detailTexture;
   tangentPatchMaterial.emissiveMap=detailTexture;
   tangentPatchMaterial.opacityMap=detailTexture;
@@ -846,7 +866,7 @@ function updateTangentPatchTexture(){
     // presentation space and sampled world space, preserving canonical coast/
     // relief bearings instead of stretching a 3x texture over a 12x plane.
     setHorizonSkirtFootprint(dims,3);
-    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,256,false);
+    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,textureSize,false);
     horizonSkirtMaterial.diffuseMap=surroundTexture;
     horizonSkirtMaterial.emissiveMap=surroundTexture;
     horizonSkirtMaterial.diffuse.set(1,1,1);

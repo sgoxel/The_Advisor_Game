@@ -132,6 +132,7 @@ SCENARIOS = {
     "wp-s003-010-003-004",
     "wp-s003-010-003-005",
     "wp-s003-010-003-005-001",
+    "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-004",
     "wp-s004-001",
@@ -242,6 +243,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-004": 12,
     "wp-s003-010-003-005": 9,
     "wp-s003-010-003-005-001": 10,
+    "wp-s003-010-003-005-002": 10,
     "wp-s003-010-003-006": 13,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
@@ -1642,7 +1644,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-006","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7936,7 +7938,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-006","wp-s003-010-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -8258,6 +8260,53 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         """)
         if not isinstance(proof,dict) or proof.get("screenDelta") != 0:
             raise RuntimeError(f"WP-S003-010-003-005-001 canonical focus proof invalid: {proof}")
+        return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-005-002":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            (0.451545,"fixed-focus:0.08x"),(0.588046,"fixed-focus:0.15x"),
+            (0.731199,"fixed-focus:0.29x"),(0.821726,"fixed-focus:0.44x"),
+            (0.866461,"fixed-focus:0.54x"),(0.899670,"fixed-focus:0.63x"),
+            (0.909559,"fixed-focus:0.66x"),(0.946047,"fixed-focus:0.78x"),
+            (0.954243,"fixed-focus:0.81x"),(1.000000,"fixed-focus:1.00x"),
+        )
+        scalar,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.15)
+        if frame_index == 0:
+            WebDriverWait(driver,30).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.ready===true"))
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continuityFocus || s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",scalar)
+        WebDriverWait(driver,30).until(
+            lambda d: d.execute_script("""
+                const target=Number(arguments[0]),s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{};
+                const overlay=document.querySelector('#planetStageRoot .planet-stage-loading');
+                const zoomOk=Math.abs(Number(s?.zoom?.scalar)-target)<1e-6;
+                const resourceOk=Number(s?.projection?.blend||0)<=0 || (
+                  Number(r?.pendingPreparationCount||0)===0 &&
+                  !!r?.activeSignature &&
+                  r?.activeSignature===r?.requestedSignature
+                );
+                return Boolean(s?.ready===true&&zoomOk&&resourceOk&&(!overlay||overlay.hidden===true));
+            """,scalar)
+        )
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),d=s?.projection?.localDetail||{},r=s?.projection?.resourceBudget||{};
+            return {
+              scalar:s?.zoom?.scalar,level:d?.level,textureSize:d?.textureSize,
+              metersPerTexel:d?.detailMetersPerTexel,surroundMetersPerTexel:d?.surroundMetersPerTexel,
+              geometrySpacing:d?.geometrySampleSpacingMeters,anisotropy:d?.anisotropy,
+              minFilter:d?.minFilter,magFilter:d?.magFilter,detailBands:d?.detailBandCount,
+              visibleFootprint:[s?.zoom?.visibleFootprintWidthMeters,s?.zoom?.visibleFootprintHeightMeters],
+              buildMs:r?.lastBuildMs,cached:r?.cachedResourceCount,offscreenFine:r?.offscreenFineDetailActive
+            };
+        """)
+        if not isinstance(proof,dict):
+            raise RuntimeError(f"WP-S003-010-003-005-002 density proof unavailable: {proof}")
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-005":
         plan=((0.772035,"desktop:0.35x",(1280,800)),(0.821721,"desktop:0.44x",(1280,800)),(0.866461,"desktop:0.54x",(1280,800)),(0.909559,"desktop:0.66x",(1280,800)),(0.954243,"desktop:0.81x",(1280,800)),(0.995000,"desktop:near-ground",(1280,800)),(1.000000,"desktop:ground",(1280,800)),(0.954243,"phone-landscape:0.81x",(844,390)),(0.954243,"phone-portrait:0.81x",(390,844)))
@@ -8586,6 +8635,40 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError("Canonical focus target moved in screen space")
         if round(float((stages[0].get("zoom") or {}).get("scalar", -1)),6) != 0 or round(float((stages[-1].get("zoom") or {}).get("scalar", -1)),6) != 0:
             raise RuntimeError("Reverse zoom did not return to globe scalar")
+        return
+    if scenario == "wp-s003-010-003-005-002":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-005-002 requires ten fixed-focus density frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        focus=[((stage.get("canonicalFocus") or {}).get("latitudeDegrees"),(stage.get("canonicalFocus") or {}).get("longitudeDegrees")) for stage in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Density evidence changed canonical focus: {focus}")
+        density=[]
+        for stage in stages:
+            d=(stage.get("projection") or {}).get("localDetail") or {}
+            r=(stage.get("projection") or {}).get("resourceBudget") or {}
+            if r.get("offscreenFineDetailActive") is not False or int(r.get("cachedResourceCount") or 0) > 4:
+                raise RuntimeError(f"Density evidence exceeded bounded resource contract: {r}")
+            if d.get("active"):
+                tex=int(d.get("textureSize") or 0)
+                mpt=float(d.get("detailMetersPerTexel") or 0)
+                spacing=float(d.get("geometrySampleSpacingMeters") or d.get("sampleSpacingMeters") or 0)
+                if tex<=0 or mpt<=0 or spacing<=0:
+                    raise RuntimeError(f"Missing source density telemetry: {d}")
+                if int(d.get("anisotropy") or 0) < 1 or d.get("minFilter")!="linear-mipmap-linear" or d.get("magFilter")!="linear":
+                    raise RuntimeError(f"Texture sampling telemetry invalid: {d}")
+                density.append((float((stage.get("zoom") or {}).get("scalar") or 0),tex,mpt,spacing,str(d.get("level") or "")))
+        if len(density) < 5:
+            raise RuntimeError(f"Too few refined LOD samples: {density}")
+        for a,b in zip(density,density[1:]):
+            if b[1] < a[1] or b[2] > a[2]*1.001 or b[3] > a[3]*1.001:
+                raise RuntimeError(f"Closer zoom lost texture/geometry density: {a} -> {b}")
+        local=(stages[5].get("projection") or {}).get("localDetail") or {}
+        settlement=(stages[7].get("projection") or {}).get("localDetail") or {}
+        if str(local.get("level"))!="local-area" or int(local.get("textureSize") or 0)<256 or int(local.get("detailBandCount") or 0)<4:
+            raise RuntimeError(f"0.63x local-area refinement insufficient: {local}")
+        if str(settlement.get("level"))!="settlement" or int(settlement.get("textureSize") or 0)<320 or int(settlement.get("detailBandCount") or 0)<4:
+            raise RuntimeError(f"0.78x settlement refinement insufficient: {settlement}")
         return
     if scenario == "wp-s003-010-003-005":
         if len(frames) < 9:
@@ -14315,7 +14398,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004", "wp-s003-010-003-005-001"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
