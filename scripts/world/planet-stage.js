@@ -706,17 +706,22 @@ function ensureLocalStaticMaterials(){
     m.update();return m;
   };
   localStaticMaterials={
-    road:make("LocalRoad",.34,.25,.16),
-    route:make("LocalRouteSilhouette",.48,.31,.12,.98),
-    footprint:make("LocalSettlementFootprint",.70,.52,.22,.46),
-    cluster:make("LocalSettlementCluster",.78,.57,.25,.98),
-    landmark:make("LocalSettlementLandmark",.90,.72,.28,1),
-    wall:make("LocalWall",.72,.55,.34),
-    roof:make("LocalRoof",.35,.12,.08),
-    trunk:make("LocalTrunk",.24,.13,.06),
-    leaf:make("LocalLeaf",.16,.39,.12),
+    road:make("LocalRoad",.46,.29,.12),
+    route:make("LocalRouteSilhouette",.82,.56,.18,.98),
+    footprint:make("LocalSettlementFootprint",.86,.64,.24,.72),
+    cluster:make("LocalSettlementCluster",.82,.38,.12,.98),
+    landmark:make("LocalSettlementLandmark",.98,.76,.22,1),
+    wall:make("LocalWall",.76,.57,.34),
+    roof:make("LocalRoof",.40,.11,.06),
+    trunk:make("LocalTrunk",.28,.14,.06),
+    leaf:make("LocalLeaf",.20,.48,.13),
     water:make("LocalWater",.08,.31,.48,.92)
   };
+  for(const material of [localStaticMaterials.route,localStaticMaterials.footprint,localStaticMaterials.cluster,localStaticMaterials.landmark]){
+    material.emissive.copy(material.diffuse);
+    material.emissiveIntensity=.45;
+    material.update();
+  }
 }
 function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
   const e=new pc.Entity(name),mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
@@ -737,22 +742,6 @@ function settlementLayoutUnit(key){
   const text=String(activeSeed||"")+"|settlement-presentation|"+String(key||"");
   for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
   return (h>>>0)/4294967295;
-}
-function settlementPresentationScale(plan,dims,tier){
-  if(!plan||!dims)return 1;
-  const targetFraction=tier==="route"?.080:tier==="coarse"?.105:tier==="refined"?.085:0;
-  if(targetFraction<=0)return 1;
-  const diameter=Math.max(1,plan.radiusMeters*2);
-  const maxScale=tier==="route"?64:tier==="coarse"?24:tier==="refined"?6:1;
-  return clamp((dims.visibleWidth*targetFraction)/diameter,1,maxScale);
-}
-function settlementPresentationPoint(plan,dims,tier,east,north){
-  const scale=settlementPresentationScale(plan,dims,tier);
-  return Object.freeze({
-    east:plan.centerEastMeters+(east-plan.centerEastMeters)*scale,
-    north:plan.centerNorthMeters+(north-plan.centerNorthMeters)*scale,
-    scale
-  });
 }
 function canonicalSettlementForFocus(){
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
@@ -849,23 +838,24 @@ function settlementPresentationPlan(){
 }
 function addSettlementRoad(plan,dims,material,tier){
   const unit=dims.metersPerUnit;
-  const broadFactor=tier==="footprint"?.0045:tier==="route"?.0035:tier==="coarse"?.0022:tier==="refined"?.0008:0;
+  const broadFactor=tier==="footprint"?.010:tier==="route"?.008:tier==="coarse"?.0045:tier==="refined"?.0015:0;
   const roadWidth=Math.max(plan.roadWidthMeters,dims.visibleWidth*broadFactor);
-  const roadSpan=Math.min(dims.patchHeight*.82,Math.max(plan.roadSpanMeters,dims.visibleHeight*(tier==="full"?.82:.11)));
+  const roadSpan=Math.min(dims.patchHeight*.82,Math.max(plan.roadSpanMeters,dims.visibleHeight*(tier==="full"?.82:tier==="refined"?.18:.15)));
   const roadSegments=tier==="full"?14:tier==="refined"?12:tier==="coarse"?10:8;
   const segmentMeters=roadSpan/roadSegments;
+  const reliefMeters=tier==="full"?1.2:Math.max(8,dims.visibleHeight*(tier==="footprint"?.0035:tier==="route"?.003:tier==="coarse"?.0016:.0008));
   for(let r=0;r<roadSegments;r++){
     const east=plan.centerEastMeters,north=plan.centerNorthMeters-roadSpan*.5+(r+.5)*segmentMeters;
-    const y=localGroundHeightUnits(east,north,dims)+.028;
-    addLocalStatic("SettlementRoad-"+tier+"-"+r,"box",material,east/unit,y,-north/unit,roadWidth/unit,.04,segmentMeters*1.08/unit);
+    const ground=localGroundHeightUnits(east,north,dims),heightUnits=reliefMeters/unit;
+    const y=ground+heightUnits*.5+.03;
+    addLocalStatic("SettlementRoad-"+tier+"-"+r,"box",material,east/unit,y,-north/unit,roadWidth/unit,heightUnits,segmentMeters*1.08/unit);
   }
   return roadSegments;
 }
 function addSettlementClusters(plan,dims,tier){
   const unit=dims.metersPerUnit,clusterCount=tier==="route"?4:6,bands=clusterCount/2;
   const pairRows=Math.max(1,Math.ceil(plan.slots.length/2));
-  const iconScale=tier==="route"?.014:.010;
-  const semanticScale=settlementPresentationScale(plan,dims,tier);
+  const iconScale=tier==="route"?.018:.012;
   let count=0;
   for(let i=0;i<clusterCount;i++){
     const side=i%2,band=Math.floor(i/2);
@@ -875,16 +865,15 @@ function addSettlementClusters(plan,dims,tier){
       return bucket===band;
     });
     if(!members.length)continue;
-    const rawEast=members.reduce((sum,item)=>sum+item.east,0)/members.length;
-    const rawNorth=members.reduce((sum,item)=>sum+item.north,0)/members.length;
-    const point=settlementPresentationPoint(plan,dims,tier,rawEast,rawNorth);
+    const east=members.reduce((sum,item)=>sum+item.east,0)/members.length;
+    const north=members.reduce((sum,item)=>sum+item.north,0)/members.length;
     const minEast=Math.min(...members.map(item=>item.east-item.width*.5)),maxEast=Math.max(...members.map(item=>item.east+item.width*.5));
     const minNorth=Math.min(...members.map(item=>item.north-item.depth*.5)),maxNorth=Math.max(...members.map(item=>item.north+item.depth*.5));
-    const width=Math.max((maxEast-minEast)*semanticScale,dims.visibleWidth*iconScale,22*semanticScale);
-    const depth=Math.max((maxNorth-minNorth)*semanticScale,dims.visibleHeight*iconScale*.78,18*semanticScale);
-    const height=Math.max(10,Math.min(160,dims.visibleHeight*(tier==="route"?.0042:.0032)));
-    const y=localGroundHeightUnits(point.east,point.north,dims)+height*.5/unit+.035;
-    addLocalStatic("SettlementCluster-"+i,"box",localStaticMaterials.cluster,point.east/unit,y,-point.north/unit,width/unit,height/unit,depth/unit);
+    const width=Math.max(maxEast-minEast,dims.visibleWidth*iconScale,22);
+    const depth=Math.max(maxNorth-minNorth,dims.visibleHeight*iconScale*.82,18);
+    const height=Math.max(10,Math.min(1200,dims.visibleHeight*(tier==="route"?.006:.004)));
+    const y=localGroundHeightUnits(east,north,dims)+height*.5/unit+.025;
+    addLocalStatic("SettlementCluster-"+i,"box",localStaticMaterials.cluster,east/unit,y,-north/unit,width/unit,height/unit,depth/unit);
     count++;
   }
   return count;
@@ -892,49 +881,36 @@ function addSettlementClusters(plan,dims,tier){
 function addSettlementLandmark(plan,dims,tier){
   if(!["route","coarse","refined","full"].includes(tier))return 0;
   const unit=dims.metersPerUnit,p=plan.landmark;
-  const point=tier==="full"?Object.freeze({east:p.east,north:p.north,scale:1}):settlementPresentationPoint(plan,dims,tier,p.east,p.north);
-  const visualHeight=Math.max(
-    p.height*point.scale,
-    tier==="route"?dims.visibleHeight*.008:tier==="coarse"?dims.visibleHeight*.006:tier==="refined"?dims.visibleHeight*.0045:0
-  );
-  const width=Math.max(5*point.scale,visualHeight*.34),y=localGroundHeightUnits(point.east,point.north,dims);
-  addLocalStatic("SettlementLandmark","box",localStaticMaterials.landmark,point.east/unit,y+visualHeight*.5/unit,-point.north/unit,width/unit,visualHeight/unit,width/unit);
+  const visualHeight=Math.max(p.height,tier==="route"?dims.visibleHeight*.010:tier==="coarse"?dims.visibleHeight*.006:tier==="refined"?dims.visibleHeight*.003:0);
+  const width=Math.max(5,visualHeight*.36),y=localGroundHeightUnits(p.east,p.north,dims);
+  addLocalStatic("SettlementLandmark","box",localStaticMaterials.landmark,p.east/unit,y+visualHeight*.5/unit,-p.north/unit,width/unit,visualHeight/unit,width/unit);
   return 1;
 }
 function addSettlementBuildings(plan,dims,tier){
   const unit=dims.metersPerUnit;
   const limit=tier==="refined"?Math.min(12,plan.slots.length):plan.slots.length;
-  const semanticScale=tier==="refined"?settlementPresentationScale(plan,dims,tier):1;
   let count=0;
   for(let i=0;i<limit;i++){
     const b=plan.slots[i];
-    const point=tier==="refined"?settlementPresentationPoint(plan,dims,tier,b.east,b.north):Object.freeze({east:b.east,north:b.north,scale:1});
-    if(Math.abs(point.east)>dims.patchWidth*.48||Math.abs(point.north)>dims.patchHeight*.48)continue;
-    const minWidth=tier==="refined"?dims.visibleWidth*.0032:0;
-    const minDepth=tier==="refined"?dims.visibleHeight*.0042:0;
-    const width=Math.max(b.width*semanticScale,minWidth),depth=Math.max(b.depth*semanticScale,minDepth);
-    const height=Math.max(b.height*semanticScale,tier==="refined"?dims.visibleHeight*.006:0);
-    const y=localGroundHeightUnits(point.east,point.north,dims);
-    addLocalStatic("SettlementBuildingBody-"+i,"box",localStaticMaterials.wall,point.east/unit,y+height*.5/unit,-point.north/unit,width/unit,height/unit,depth/unit);
-    const roofY=y+(height+Math.max(.65,semanticScale*.65))/unit,roofHalf=width*.66/unit,roofOffset=width*.20;
-    addLocalStatic("SettlementBuildingRoofL-"+i,"box",localStaticMaterials.roof,(point.east-roofOffset)/unit,roofY,-point.north/unit,roofHalf,Math.max(.55,semanticScale*.55)/unit,depth*1.18/unit,0,0,-24);
-    addLocalStatic("SettlementBuildingRoofR-"+i,"box",localStaticMaterials.roof,(point.east+roofOffset)/unit,roofY,-point.north/unit,roofHalf,Math.max(.55,semanticScale*.55)/unit,depth*1.18/unit,0,0,24);
+    if(Math.abs(b.east)>dims.patchWidth*.48||Math.abs(b.north)>dims.patchHeight*.48)continue;
+    const y=localGroundHeightUnits(b.east,b.north,dims);
+    addLocalStatic("SettlementBuildingBody-"+i,"box",localStaticMaterials.wall,b.east/unit,y+b.height*.5/unit,-b.north/unit,b.width/unit,b.height/unit,b.depth/unit);
+    const roofY=y+(b.height+.65)/unit,roofHalf=b.width*.66/unit;
+    addLocalStatic("SettlementBuildingRoofL-"+i,"box",localStaticMaterials.roof,(b.east-b.width*.20)/unit,roofY,-b.north/unit,roofHalf,.55/unit,b.depth*1.18/unit,0,0,-24);
+    addLocalStatic("SettlementBuildingRoofR-"+i,"box",localStaticMaterials.roof,(b.east+b.width*.20)/unit,roofY,-b.north/unit,roofHalf,.55/unit,b.depth*1.18/unit,0,0,24);
     count++;
   }
   return count;
 }
 function addSettlementTrees(plan,dims,tier){
   const unit=dims.metersPerUnit,limit=tier==="full"?plan.trees.length:Math.min(12,plan.trees.length);
-  const semanticScale=tier==="refined"?settlementPresentationScale(plan,dims,tier):1;
   let count=0;
   for(let i=0;i<limit;i++){
     const t=plan.trees[i];
-    const point=tier==="refined"?settlementPresentationPoint(plan,dims,tier,t.east,t.north):Object.freeze({east:t.east,north:t.north,scale:1});
-    if(Math.abs(point.east)>dims.patchWidth*.47||Math.abs(point.north)>dims.patchHeight*.47)continue;
-    const y=localGroundHeightUnits(point.east,point.north,dims),h=Math.max(t.height*semanticScale,tier==="refined"?dims.visibleHeight*.004:0);
-    const crown=Math.max(4.2*semanticScale,tier==="refined"?dims.visibleWidth*.0028:4.2);
-    addLocalStatic("SettlementTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,point.east/unit,y+h*.25/unit,-point.north/unit,Math.max(.7,semanticScale*.7)/unit,h*.5/unit,Math.max(.7,semanticScale*.7)/unit);
-    addLocalStatic("SettlementTreeCrown-"+i,"sphere",localStaticMaterials.leaf,point.east/unit,y+h*.72/unit,-point.north/unit,crown/unit,h*.86/unit,crown/unit);
+    if(Math.abs(t.east)>dims.patchWidth*.47||Math.abs(t.north)>dims.patchHeight*.47)continue;
+    const y=localGroundHeightUnits(t.east,t.north,dims);
+    addLocalStatic("SettlementTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,t.east/unit,y+t.height*.25/unit,-t.north/unit,.7/unit,t.height*.5/unit,.7/unit);
+    addLocalStatic("SettlementTreeCrown-"+i,"sphere",localStaticMaterials.leaf,t.east/unit,y+t.height*.72/unit,-t.north/unit,4.2/unit,t.height*.86/unit,4.2/unit);
     count++;
   }
   return count;
@@ -958,12 +934,14 @@ function rebuildLocalStaticPresentation(signature){
       localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
       return;
     }
-    localStatic={...localStatic,settlementId:plan.id,settlementName:plan.name,settlementClass:plan.classId,settlementPlanRevision:plan.revision,layoutSignature:plan.layoutSignature,presentationScale:Number(settlementPresentationScale(plan,dims,tier).toFixed(3)),authority:plan.authority+" + shared renderer layout",presentationOnly:true,simulationAuthority:false};
+    localStatic={...localStatic,settlementId:plan.id,settlementName:plan.name,settlementClass:plan.classId,settlementPlanRevision:plan.revision,layoutSignature:plan.layoutSignature,authority:plan.authority+" + shared renderer layout",presentationOnly:true,simulationAuthority:false};
     if(tier!=="full"){
-      const occupiedWidth=Math.max(plan.radiusMeters*1.9,dims.visibleWidth*(tier==="footprint"?.060:tier==="route"?.065:tier==="coarse"?.055:.035));
-      const occupiedDepth=Math.max(plan.radiusMeters*1.55,dims.visibleHeight*(tier==="footprint"?.050:tier==="route"?.052:tier==="coarse"?.044:.028));
-      const y=localGroundHeightUnits(plan.centerEastMeters,plan.centerNorthMeters,dims)+.018;
-      addLocalStatic("SettlementOccupiedArea","box",localStaticMaterials.footprint,plan.centerEastMeters/unit,y,-plan.centerNorthMeters/unit,occupiedWidth/unit,.025,occupiedDepth/unit);
+      const occupiedWidth=Math.max(plan.radiusMeters*1.9,dims.visibleWidth*(tier==="footprint"?.10:tier==="route"?.075:tier==="coarse"?.050:.024));
+      const occupiedDepth=Math.max(plan.radiusMeters*1.55,dims.visibleHeight*(tier==="footprint"?.085:tier==="route"?.064:tier==="coarse"?.043:.020));
+      const reliefMeters=Math.max(8,dims.visibleHeight*(tier==="footprint"?.0045:tier==="route"?.0035:tier==="coarse"?.002:.0008));
+      const heightUnits=reliefMeters/unit;
+      const y=localGroundHeightUnits(plan.centerEastMeters,plan.centerNorthMeters,dims)+heightUnits*.5+.02;
+      addLocalStatic("SettlementOccupiedArea","box",localStaticMaterials.footprint,plan.centerEastMeters/unit,y,-plan.centerNorthMeters/unit,occupiedWidth/unit,heightUnits,occupiedDepth/unit);
       localStatic.occupiedAreaCount=1;localStatic.triangleEstimate+=12;
     }
     const roadMaterial=tier==="full"?localStaticMaterials.road:localStaticMaterials.route;
@@ -977,6 +955,10 @@ function rebuildLocalStaticPresentation(signature){
     }
     localStatic.landmarkCount=addSettlementLandmark(plan,dims,tier);
     localStatic.triangleEstimate+=localStatic.landmarkCount*12;
+    if(tier==="refined"){
+      localStatic.coarseBuildingCount=addSettlementClusters(plan,dims,"coarse");
+      localStatic.triangleEstimate+=localStatic.coarseBuildingCount*12;
+    }
     if(["refined","full"].includes(tier)){
       localStatic.fullBuildingCount=addSettlementBuildings(plan,dims,tier);
       localStatic.buildingCount=localStatic.fullBuildingCount;
@@ -986,9 +968,8 @@ function rebuildLocalStaticPresentation(signature){
     }else if(tier==="coarse"){
       const coarseTrees=Math.min(4,plan.trees.length);
       for(let i=0;i<coarseTrees;i++){
-        const t=plan.trees[i],point=settlementPresentationPoint(plan,dims,tier,t.east,t.north);
-        const visual=Math.max(24*point.scale,dims.visibleWidth*.0065),y=localGroundHeightUnits(point.east,point.north,dims);
-        addLocalStatic("SettlementTreeCluster-"+i,"sphere",localStaticMaterials.leaf,point.east/unit,y+visual*.22/unit,-point.north/unit,visual/unit,visual*.44/unit,visual/unit);
+        const t=plan.trees[i],visual=Math.max(24,dims.visibleWidth*.008),y=localGroundHeightUnits(t.east,t.north,dims);
+        addLocalStatic("SettlementTreeCluster-"+i,"sphere",localStaticMaterials.leaf,t.east/unit,y+visual*.22/unit,-t.north/unit,visual/unit,visual*.44/unit,visual/unit);
       }
       localStatic.vegetationCount=coarseTrees;localStatic.triangleEstimate+=coarseTrees*160;
     }
