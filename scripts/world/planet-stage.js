@@ -81,7 +81,7 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.955,transitionEnd:.9995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.90,transitionEnd:.997,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
@@ -417,7 +417,7 @@ function tangentFrame(latitudeRadians,longitudeRadians){
   });
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
-function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.958)/.04);}
+function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.90)/.097);}
 function canonicalSurfaceIdentity(){
   if(!geography)return null;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
@@ -892,8 +892,7 @@ function updateProjectionPresentation(){
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
       horizonSkirt.setLocalPosition(0,-.012,0);
-      const horizonNearFade=1-smoothstep01((zoomState.scalar-.92)/.07);
-      horizonSkirtMaterial.opacity=handoff*horizonNearFade;
+      horizonSkirtMaterial.opacity=clamp(handoff*1.15,0,1);
       horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
@@ -914,9 +913,10 @@ function updateProjectionPresentation(){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  planet.enabled=handoff<.9995;
+  const globeFade=smoothstep01(clamp(handoff/.82,0,1));
+  planet.enabled=globeFade<.9995;
   if(surfaceMaterial){
-    surfaceMaterial.opacity=1-handoff;
+    surfaceMaterial.opacity=1-globeFade;
     surfaceMaterial.blendType=handoff>.001?pc.BLEND_NORMAL:pc.BLEND_NONE;
     surfaceMaterial.depthWrite=handoff<.55;
     surfaceMaterial.update();
@@ -927,7 +927,7 @@ function updateProjectionPresentation(){
     tangentPatchMaterial.depthWrite=false;
     tangentPatchMaterial.update();
   }
-  if(cloudLayer)cloudLayer.enabled=handoff<.35;
+  if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
 }
@@ -957,8 +957,8 @@ function applyCameraZoom(){
   // introduce the gameplay oblique view gradually across the local approach.
   // This prevents a small wheel/pinch step around 0.06x-0.08x from behaving
   // like camera rotation while preserving the same spherical focus anchor.
-  const orientationStart=.72;
-  const orientationEnd=.995;
+  const orientationStart=.94;
+  const orientationEnd=1.0;
   const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
   const angleBlend=smoothstep01(orientationRaw);
   const handoff=projectionHandoffForZoom(scalar);
