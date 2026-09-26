@@ -774,14 +774,25 @@ function applyCameraZoom(){
   const viewBlend=blend;
   const localZ=6.20;
   const localY=5.00;
-  const angleBlend=viewBlend*viewBlend;
+  // Projection flattening and camera orientation are intentionally independent.
+  // Keep map-scale zoom radial/top-down through the country/regional bands, then
+  // introduce the gameplay oblique view gradually across the local approach.
+  // This prevents a small wheel/pinch step around 0.06x-0.08x from behaving
+  // like camera rotation while preserving the same spherical focus anchor.
+  const orientationStart=.72;
+  const orientationEnd=.995;
+  const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
+  const angleBlend=smoothstep01(orientationRaw);
   const cameraZ=globeZ*(1-viewBlend)+localZ*viewBlend;
   const cameraY=localY*angleBlend;
   const targetZ=0;
   const targetY=-.12*angleBlend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   const fov=34+12*angleBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
-  projectionPresentation={...projectionPresentation,viewBlend,angleBlend,cameraY,cameraZ,fov};
+  const lookLength=Math.max(.000001,Math.hypot(cameraY-targetY,cameraZ-targetZ));
+  const lookVector=Object.freeze([0,Number(((targetY-cameraY)/lookLength).toFixed(6)),Number(((targetZ-cameraZ)/lookLength).toFixed(6))]);
+  const cameraPitchDegrees=Number((Math.atan2(cameraY-targetY,Math.max(.000001,cameraZ-targetZ))*180/Math.PI).toFixed(3));
+  projectionPresentation={...projectionPresentation,viewBlend,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
