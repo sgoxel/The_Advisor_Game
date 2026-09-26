@@ -397,8 +397,7 @@ function renderMapPresentation(){
   mapPresentation={
     active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
-    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
-    scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
+    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),    scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
     updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
   };
 }
@@ -797,8 +796,7 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
     const ux=(x+.5)/size,vz=(y+.5)/size;
     const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
     const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-    const cosLat=Math.max(.08,Math.cos(lat0));
-    let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
+    const cosLat=Math.max(.08,Math.cos(lat0));    let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
     const sample=geography.sampleLatLon(lat,lon);
     let displayColor;
     const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
@@ -811,7 +809,10 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
     const identityTint=sample?.land
       ? [relief*.075,relief*.065,relief*.035]
       : [-.012,-.004,.028];
-    const authoritative=base.map((v,i)=>clamp(v+macro*(i===2?.70:1)+identityTint[i],0,1));
+    const contourPhase=(elevation/420)*Math.PI*2;
+    const contour=(.5+.5*Math.sin(contourPhase));
+    const contourLine=Math.pow(1-contour,10)*.10;
+    const authoritative=base.map((v,i)=>clamp(v+macro*(i===2?.70:1)+identityTint[i]-contourLine*(i===2?.55:1),0,1));
     if(useMicroDetail){
       const micro=localSurfaceSample(east,north,sample).color;
       displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));
@@ -855,7 +856,7 @@ function updateTangentPatchTexture(){
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
-  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=1.08;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.72;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
@@ -884,7 +885,7 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     const handoff=projectionHandoffForZoom();
     const tangentVisible=handoff>.02;
-    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.97;\n    tangentPatch.enabled=fineVisible;
+    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.78;\n    tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
     if(horizonSkirt){
@@ -1197,8 +1198,7 @@ function buildWildernessDescriptors(){
     if(!sample.land){rejectedWater++;continue;}
     const descriptor={latitudeRadians:sample.latitudeRadians,longitudeRadians:sample.longitudeRadians,elevationMeters:sample.elevationMeters,surfaceClass:sample.surfaceClass,moisture:sample.moisture};
     const roll=wildernessHash("kind:"+lat+":"+lon)%100;
-    if(sample.elevationMeters>1450||sample.mountainInfluence>.22){if(roll<72)rocks.push(descriptor);}
-    else if(sample.moisture>.40){if(roll<78)vegetation.push(descriptor);}
+    if(sample.elevationMeters>1450||sample.mountainInfluence>.22){if(roll<72)rocks.push(descriptor);}    else if(sample.moisture>.40){if(roll<78)vegetation.push(descriptor);}
     else if(roll<48)rocks.push(descriptor);else if(roll<82)vegetation.push(descriptor);
     if(sample.moisture>.46&&sample.elevationMeters<1200&&(wildernessHash("fauna:"+lat+":"+lon)%100)<12)fauna.push(descriptor);
   }
@@ -1597,8 +1597,7 @@ async function start(){
 
     app=new pc.AppBase(canvas);
     await measuredPhase("appInitMs",async()=>app.init(options));
-    controlledWorkActive=true;
-    await measuredPhase("buildSceneMs",()=>buildScene());
+    controlledWorkActive=true;    await measuredPhase("buildSceneMs",()=>buildScene());
     controlledWorkActive=false;
     await yieldPaint();
     bindInput();
