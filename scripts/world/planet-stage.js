@@ -606,10 +606,10 @@ function bindInput(){
   canvas.addEventListener("contextmenu",event=>event.preventDefault());
   canvas.addEventListener("wheel",event=>{zoomState.wheelEvents++;zoomBy(-event.deltaY*ZOOM_WHEEL_SENSITIVITY);event.preventDefault();},{passive:false});
   canvas.addEventListener("pointerdown",event=>{
-    if(dragging||pointerId!==null)return;
     if(event.pointerType==="mouse"&&event.button!==0)return;
     activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     if(activePointers.size===2){const pts=Array.from(activePointers.values());lastPinchDistance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);dragging=false;pointerId=null;event.preventDefault();return;}
+    if(dragging||pointerId!==null){activePointers.delete(event.pointerId);return;}
     dragging=true;pointerId=event.pointerId;
     lastPointerX=event.clientX;lastPointerY=event.clientY;inspection.pointerDownX=event.clientX;inspection.pointerDownY=event.clientY;inspection.dragDistance=0;
     canvas.setPointerCapture?.(event.pointerId);
