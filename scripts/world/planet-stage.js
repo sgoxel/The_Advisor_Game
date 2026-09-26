@@ -551,8 +551,9 @@ function pickInspection(clientX,clientY){
     if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite)||b.left>b.right||b.top>b.bottom)continue;
     if(clientX>=b.left&&clientX<=b.right&&clientY>=b.top&&clientY<=b.bottom)candidates.push(record);
   }
-  const depthOf=record=>Number(typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity);
-  candidates.sort((a,b)=>Number(b.pickPriority||0)-Number(a.pickPriority||0)||depthOf(a)-depthOf(b)||String(a.id).localeCompare(String(b.id)));
+  const depthOf=record=>{const value=Number(typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity);return Number.isFinite(value)?value:Infinity;};
+  const priorityOf=record=>{const value=Number(record.pickPriority??0);return Number.isFinite(value)?value:0;};
+  candidates.sort((a,b)=>priorityOf(b)-priorityOf(a)||depthOf(a)-depthOf(b)||String(a.id).localeCompare(String(b.id)));
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
   const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.id);inspection.selectedType=picked.type;if(!renderInspectionTooltip(picked))return null;return picked;
 }
