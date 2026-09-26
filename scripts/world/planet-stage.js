@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v8";
+const VERSION="planet-ground-static-v9";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -105,11 +105,18 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
   Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:256,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
   Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:320,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
   Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:384,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
-  Object.freeze({id:"settlement-wide",band:"settlement",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:448,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
-  Object.freeze({id:"settlement",band:"settlement",visibleHeightMeters:2000,sampleSpacingMeters:44,textureSize:448,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
-  Object.freeze({id:"settlement-core",band:"settlement",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:448,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
-  Object.freeze({id:"near-ground-wide",band:"near-ground",visibleHeightMeters:500,sampleSpacingMeters:11,textureSize:352,reliefClampMeters:400,reliefGain:2.2,maxHeightUnits:.33,staticWorld:true}),
-  Object.freeze({id:"near-ground",band:"near-ground",visibleHeightMeters:200,sampleSpacingMeters:5,textureSize:384,reliefClampMeters:180,reliefGain:1.5,maxHeightUnits:.28,staticWorld:true}),
+  // These physical terrain tiers do not contain settlement geometry yet, so keep
+  // the player-facing semantic band at LOCAL AREA until a static-world resource
+  // is actually visible. This prevents the UI/ruler from claiming SETTLEMENT
+  // while the frame still contains terrain only.
+  Object.freeze({id:"settlement-wide",band:"local-area",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:448,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
+  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2000,sampleSpacingMeters:44,textureSize:448,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
+  Object.freeze({id:"settlement-core",band:"local-area",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:448,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
+  // The first two static-world tiers visibly contain the road/building layout,
+  // so they own SETTLEMENT semantics. NEAR GROUND begins only once the closer
+  // resource is ready, preserving truthfulness through asynchronous handoffs.
+  Object.freeze({id:"near-ground-wide",band:"settlement",visibleHeightMeters:500,sampleSpacingMeters:11,textureSize:352,reliefClampMeters:400,reliefGain:2.2,maxHeightUnits:.33,staticWorld:true}),
+  Object.freeze({id:"near-ground",band:"settlement",visibleHeightMeters:200,sampleSpacingMeters:5,textureSize:384,reliefClampMeters:180,reliefGain:1.5,maxHeightUnits:.28,staticWorld:true}),
   Object.freeze({id:"near-ground-close",band:"near-ground",visibleHeightMeters:80,sampleSpacingMeters:3,textureSize:384,reliefClampMeters:60,reliefGain:.9,maxHeightUnits:.22,staticWorld:true}),
   Object.freeze({id:"ground",band:"ground",visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:384,reliefClampMeters:10,reliefGain:.35,maxHeightUnits:.18,staticWorld:true})
 ]);
