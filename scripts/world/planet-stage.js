@@ -553,7 +553,10 @@ function pickInspection(clientX,clientY){
     if(record.visible?.()===false)continue;const b=record.screenBounds();
     if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite)||b.left>b.right||b.top>b.bottom)continue;
     if(clientX<b.left||clientX>b.right||clientY<b.top||clientY>b.bottom)continue;
-    if(typeof record.hitTest==="function"&&record.hitTest(clientX,clientY,b)===false)continue;
+    if(typeof record.hitTest==="function"){
+      let hit=false;try{hit=record.hitTest(clientX,clientY,b)!==false;}catch{hit=false;}
+      if(!hit)continue;
+    }
     candidates.push({record,bounds:b});
   }
   const depthOf=record=>{const value=Number(typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity);return Number.isFinite(value)?value:Infinity;};
