@@ -225,7 +225,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-010": 7,
     "wp-s003-009-011": 7,
     "wp-s003-010-001": 7,
-    "wp-s003-010-002": 7,
+    "wp-s003-010-002": 8,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -7983,9 +7983,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         driver.execute_script("window.PlanetStage.setZoomScalar(0.97)")
         return "phone-portrait:local-tangent"
     if scenario == "wp-s003-010-002":
-        # Prove that the same seeded focus passes through several physically
-        # meaningful intermediate footprints before the finest 2 m ground tier.
-        if frame_index == 0:
+        # Frame 0 is the untouched full planet. Subsequent frames keep one
+        # deterministic seeded land focus while stepping through every major
+        # representation scale down to the 2 m ground tier.
+        if frame_index == 1:
             driver.set_window_size(1280,800); time.sleep(0.2)
             driver.execute_script("""
                 const s=window.PlanetStage.snapshot();
@@ -7994,24 +7995,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 window.PlanetStage.setViewTarget(t); window.PlanetStage.setZoomScalar(0.64);
             """)
             return "desktop:regional-overview"
-        if frame_index == 1:
+        if frame_index == 2:
             driver.execute_script("window.PlanetStage.setZoomScalar(0.74)")
             return "desktop:regional-detail"
-        if frame_index == 2:
+        if frame_index == 3:
             driver.execute_script("window.PlanetStage.setZoomScalar(0.82)")
             return "desktop:district"
-        if frame_index == 3:
+        if frame_index == 4:
             driver.execute_script("window.PlanetStage.setZoomScalar(0.89)")
             return "desktop:local-area"
-        if frame_index == 4:
+        if frame_index == 5:
             driver.execute_script("window.PlanetStage.setZoomScalar(0.95)")
             return "desktop:settlement"
-        if frame_index == 5:
+        if frame_index == 6:
             driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
             return "desktop:ground-2m-detail"
-        driver.set_window_size(390,844); time.sleep(0.2)
-        driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
-        return "phone-portrait:ground-2m-detail"
+        if frame_index == 7:
+            driver.set_window_size(390,844); time.sleep(0.2)
+            driver.execute_script("window.PlanetStage.setZoomScalar(1.0)")
+            return "phone-portrait:ground-2m-detail"
+        return "planet:full"
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
