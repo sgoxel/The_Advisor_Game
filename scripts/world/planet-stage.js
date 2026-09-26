@@ -99,17 +99,25 @@ const PRESENTATION_FOOTPRINT_ANCHORS=Object.freeze([
   Object.freeze({scalar:.35,heightMeters:650000}),
   Object.freeze({scalar:.60,heightMeters:520000}),
   Object.freeze({scalar:.70,heightMeters:400000}),
-  Object.freeze({scalar:.78,heightMeters:300000}),
-  Object.freeze({scalar:.86,heightMeters:180000}),
-  Object.freeze({scalar:.92,heightMeters:80000}),
-  Object.freeze({scalar:.97,heightMeters:20000}),
-  Object.freeze({scalar:.995,heightMeters:2000}),
+  Object.freeze({scalar:.74,heightMeters:250000}),
+  Object.freeze({scalar:.78,heightMeters:140000}),
+  Object.freeze({scalar:.82,heightMeters:80000}),
+  Object.freeze({scalar:.86,heightMeters:50000}),
+  Object.freeze({scalar:.89,heightMeters:20000}),
+  Object.freeze({scalar:.92,heightMeters:10000}),
+  Object.freeze({scalar:.94,heightMeters:5000}),
+  Object.freeze({scalar:.955,heightMeters:2000}),
+  Object.freeze({scalar:.97,heightMeters:1000}),
+  Object.freeze({scalar:.98,heightMeters:500}),
+  Object.freeze({scalar:.99,heightMeters:200}),
+  Object.freeze({scalar:.995,heightMeters:50}),
   Object.freeze({scalar:1,heightMeters:36})
 ]);
 let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 let localLodIndex=0;
 const localResourceCache=new Map();
-let localResources={activeSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastEvictionReason:null};
+let localResources={activeSignature:null,requestedSignature:null,preparedSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastSwapMs:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,blockingZoomBuilds:0};
+let localPreparationToken=0;
 let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapContextCache={key:null,value:null};
 let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,builtAtMs:0};
@@ -714,8 +722,22 @@ function trimLocalResourceCache(){
     localResources.evictions++;localResources.lastEvictionReason="bounded-lru";
   }
 }
+function scheduleLocalDetailResource(signature){
+  localResources.requestedSignature=signature;
+  if(localResourceCache.has(signature)){activateLocalDetailResource(signature);return;}
+  const token=++localPreparationToken;
+  localResources.pendingPreparationCount=1;
+  localResources.lastPreparationQueuedAtMs=Number(performance.now().toFixed(3));
+  setTimeout(()=>{
+    if(token!==localPreparationToken||localResources.requestedSignature!==signature)return;
+    activateLocalDetailResource(signature);
+    localResources.preparedSignature=signature;
+    localResources.lastPreparationCompletedAtMs=Number(performance.now().toFixed(3));
+  },0);
+}
 function activateLocalDetailResource(signature){
   if(!tangentPatch?.render||!device||!tangentPatchMaterial||!horizonSkirtMaterial)return;
+  const swapStarted=performance.now();
   let resource=localResourceCache.get(signature);
   if(resource){
     localResourceCache.delete(signature);localResourceCache.set(signature,resource);localResources.cacheHits++;
@@ -733,8 +755,8 @@ function activateLocalDetailResource(signature){
   tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=1;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
   horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
-  localResources.activeSignature=signature;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
-  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
+  localResources.activeSignature=signature;localResources.preparedSignature=signature;localResources.pendingPreparationCount=0;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
+  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);localResources.lastSwapMs=Number((performance.now()-swapStarted).toFixed(3));
   rebuildLocalStaticPresentation(signature);
 }
 function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false){
@@ -811,7 +833,7 @@ function updateProjectionPresentation(){
   if(blend>0){
     ensureTangentPatch();ensureHorizonSkirt();
     const dims=localPatchDimensions(),sig=[activeSeed,zoomState.focusLatitudeRadians.toFixed(5),zoomState.focusLongitudeRadians.toFixed(5),dims.levelId,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters),Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)].join("|");
-    if(localResources.activeSignature!==sig)activateLocalDetailResource(sig);
+    if(localResources.activeSignature!==sig)scheduleLocalDetailResource(sig);
   }
   if(tangentPatch){
     const tangentVisible=blend>.055;
@@ -1676,7 +1698,7 @@ function destroy(){
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
-  for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localResources={activeSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastEvictionReason:null};
+  for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localResources={activeSignature:null,requestedSignature:null,preparedSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastSwapMs:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,blockingZoomBuilds:0};
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
   inspectionPickables.clear();
