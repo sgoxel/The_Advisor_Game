@@ -80,7 +80,7 @@ const activePointers=new Map();
 let lastPinchDistance=null;
 let projectionState={mode:"globe",blend:0,transitionStart:.72,transitionEnd:.92,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
-const LOCAL_PATCH_MARGIN=1.18;
+const LOCAL_PATCH_MARGIN=1.50;
 let localDetail={active:false,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 
 function tangentFrame(latitudeRadians,longitudeRadians){
