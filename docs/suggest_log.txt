@@ -308,3 +308,5 @@ Suggestion: when canonical WP-S006-007 destination records become available, rep
 2026-09-26 08:29 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add selected-target projection regression coverage for inverted, non-finite and missing screen bounds during movement/dematerialization. Do not implement outside the WP evidence/test scope.
 
 2026-09-26 08:35 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: extend focused inspection-ID regression coverage with whitespace-only and whitespace-padded authoritative IDs. Do not implement outside the WP evidence/test scope.
+
+2026-09-26 08:19 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add focused tooltip-label regression coverage for null, empty, whitespace-only and padded authoritative NPC/building display fields. Do not implement outside the WP evidence/test scope.
