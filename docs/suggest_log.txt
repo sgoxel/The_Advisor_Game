@@ -329,3 +329,5 @@ Suggestion: when canonical WP-S006-007 destination records become available, rep
 2026-09-26 09:43 +03:00 | WP-S003-008-006 | Phase 25 suggestion: add focused non-visual regression coverage for throwing screenBounds and screenDepth callbacks so streamed presentation transitions remain fault-isolated before genuine local visual targets return. Do not implement unless explicitly requested.
 
 2026-09-26 09:50 +03:00 | WP-S003-008-006 | Phase 26 suggestion: make the dedicated tooltip evidence scenario wait on the canonical campaign/playable transition and capture only after the loading overlay is hidden, while retaining the GameRenderer inspection contract and refusing synthetic targets. Do not implement unless explicitly requested.
+
+2026-09-26 09:56 +03:00 | WP-S003-008-006 | Phase 27 suggestion: when local NPC/building presentation is intentionally reintroduced under the planet-to-ground runtime, migrate the tooltip evidence scenario to that authoritative local-materialization transition instead of the planet startup phase. Do not fabricate local targets or implement until explicitly requested.
