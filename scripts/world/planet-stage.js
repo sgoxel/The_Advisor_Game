@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-multiscale-ground-v2";
+const VERSION="planet-multiscale-ground-v3";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -286,7 +286,12 @@ function buildTangentPatchMesh(){
       const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
       const groundDetailWeight=smoothstep01((zoomState.scalar-.90)/.10);
       const microMeters=local.microElevation*.8*groundDetailWeight;
-      const heightUnits=(macroDelta*dims.reliefGain+microMeters)/localMetersPerUnit;
+      const rawHeightUnits=(macroDelta*dims.reliefGain+microMeters)/localMetersPerUnit;
+      // Feather the outer 12% of the bounded detailed patch down to its coarse
+      // surround so the LOD boundary never presents as a cut-off rectangular slab.
+      const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
+      const edgeBlend=smoothstep01(clamp(edgeDistance/.12,0,1));
+      const heightUnits=rawHeightUnits*edgeBlend;
       positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
       normals.push(0,1,0);uvs.push(ux,vz);
     }
@@ -321,9 +326,15 @@ function updateTangentPatchTexture(){
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(canvas2d);
   tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.update();
   if(horizonSkirtMaterial){
-    const center=geography.sampleLatLon(lat0,lon0),edge=localSurfaceSample(spanEast*.46,spanNorth*.46,center);
-    const hc=(center?.land?edge.color:[.08,.20,.28]).map(v=>clamp(v*.68,0,1));
-    horizonSkirtMaterial.diffuse.set(hc[0],hc[1],hc[2]);horizonSkirtMaterial.emissive.set(hc[0]*.72,hc[1]*.72,hc[2]*.72);horizonSkirtMaterial.update();
+    // The surround uses the exact same seeded texture as the detailed patch.
+    // Its geometry is intentionally flat/coarse; only the bounded inner patch
+    // carries the higher-resolution relief.
+    horizonSkirtMaterial.diffuseMap=texture;
+    horizonSkirtMaterial.emissiveMap=texture;
+    horizonSkirtMaterial.diffuse.set(1,1,1);
+    horizonSkirtMaterial.emissive.set(1,1,1);
+    horizonSkirtMaterial.emissiveIntensity=.92;
+    horizonSkirtMaterial.update();
   }
 }
 function ensureTangentPatch(){
@@ -339,8 +350,10 @@ function ensureHorizonSkirt(){
   horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   const mesh=new pc.Mesh(device);
-  mesh.setPositions([-160,-.08,-160,160,-.08,-160,-160,-.08,160,160,-.08,160]);
-  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
+  mesh.setPositions([-48,0,-48,48,0,-48,-48,0,48,48,0,48]);
+  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);
+  mesh.setUvs(0,[0,0,1,0,0,1,1,1]);
+  mesh.setIndices([0,2,1,1,2,3]);mesh.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   horizonSkirt.render.meshInstances=[new pc.MeshInstance(mesh,horizonSkirtMaterial,horizonSkirt)];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
 }
@@ -352,14 +365,15 @@ function updateProjectionPresentation(){
     tangentPatch.enabled=blend>.02;
     ensureHorizonSkirt();
     const viewBlend=smoothstep01(clamp(blend*1.55,0,1));
-    if(horizonSkirt){horizonSkirt.enabled=viewBlend>.85;horizonSkirt.setLocalPosition(0,-.18,0);}
-    tangentPatch.setLocalPosition(0,-.08*viewBlend,0);
+    if(horizonSkirt){horizonSkirt.enabled=blend>.02;horizonSkirt.setLocalPosition(0,-.012,0);}
+    tangentPatch.setLocalPosition(0,0,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Physical footprint now changes by LOD level, so keep the presentation mesh
     // itself close to a stable viewport-filling size instead of magnifying the
     // near-ground patch during the handoff.
-    const patchScale=1.10+(1-viewBlend)*.25;
+    const patchScale=1.45+(1-viewBlend)*.35;
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    if(horizonSkirt)horizonSkirt.setLocalScale(patchScale,patchScale,patchScale);
   }
   planet.enabled=blend<.16;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
