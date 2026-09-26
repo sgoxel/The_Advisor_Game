@@ -100,7 +100,7 @@ function updateProjectionState(){
     blend,
     tangentOrigin:frame.originMeters,
     basis:Object.freeze({east:frame.east,north:frame.north,up:frame.up}),
-    cameraTarget:Object.freeze([0,Number((DISPLAY_RADIUS_UNITS*.02*blend).toFixed(6)),Number((DISPLAY_RADIUS_UNITS*blend).toFixed(6))]),
+    cameraTarget:Object.freeze([0,0,Number((DISPLAY_RADIUS_UNITS*blend).toFixed(6))]),
     continuityErrorMeters:0
   };
 }
@@ -223,11 +223,11 @@ function applyCameraZoom(){
   // The focused surface point is rotated to the front of the globe. Blend the
   // camera from orbit-to-centre into an oblique tangent view of that exact
   // point; no second map or local simulation authority is introduced.
-  const localZ=DISPLAY_RADIUS_UNITS*1.34;
+  const localZ=DISPLAY_RADIUS_UNITS*1.95;
   const cameraZ=distance*(1-blend)+localZ*blend;
-  const cameraY=DISPLAY_RADIUS_UNITS*.34*blend;
+  const cameraY=DISPLAY_RADIUS_UNITS*.55*blend;
   const targetZ=DISPLAY_RADIUS_UNITS*blend;
-  const targetY=DISPLAY_RADIUS_UNITS*.02*blend;
+  const targetY=0;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
