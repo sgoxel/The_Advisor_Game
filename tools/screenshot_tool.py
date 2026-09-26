@@ -6731,12 +6731,14 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                    Number(r?.pendingPreparationCount||0)===0;
         """,scalar))
         proof=driver.execute_script("""
-            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},p=s?.projection?.presentation||{};
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},p=s?.projection?.presentation||{},ls=s?.projection?.localStatic||{};
             return {scalar:s?.zoom?.scalar,visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
               focusLatitudeDegrees:s?.zoom?.focusLatitudeDegrees,focusLongitudeDegrees:s?.zoom?.focusLongitudeDegrees,
               centerLand:Boolean(s?.canonicalFocus?.surfaceIdentity?.center?.land),
+              visibleBand:s?.zoom?.visibleBand,requestedBand:s?.zoom?.requestedBand,
               level:s?.projection?.localDetail?.level,requested:r?.requestedSignature,prepared:r?.preparedSignature,active:r?.activeSignature,
               pending:r?.pendingPreparationCount,buildMs:r?.lastBuildMs,swapMs:r?.lastSwapMs,blockingZoomBuilds:r?.blockingZoomBuilds,
+              localStaticActive:Boolean(ls?.active),roadCount:Number(ls?.roadCount||0),buildingCount:Number(ls?.buildingCount||0),
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
@@ -7097,6 +7099,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             r=(s.get("projection") or {}).get("resourceBudget") or {}
             if int(r.get("pendingPreparationCount") or 0) != 0 or int(r.get("blockingZoomBuilds") or 0) != 0:
                 raise RuntimeError(f"LOD handoff remained pending/blocking at capture: {r}")
+        expected_bands=(
+            "regional-detail","regional-detail","district",
+            "local-area","local-area","local-area",
+            "settlement","settlement",
+            "near-ground","near-ground","near-ground",
+            "ground","ground",
+        )
+        visible_bands=tuple(str((s.get("zoom") or {}).get("visibleBand") or (s.get("zoom") or {}).get("band") or "") for s in stages)
+        if visible_bands != expected_bands:
+            raise RuntimeError(f"Semantic handoff over/under-claimed the visible representation: {visible_bands}")
+        for index in (6,7):
+            static=(stages[index].get("projection") or {}).get("localStatic") or {}
+            if static.get("active") is not True or int(static.get("roadCount") or 0) < 1 or int(static.get("buildingCount") or 0) < 1:
+                raise RuntimeError(f"SETTLEMENT band lacks visible road/building structure at frame {index+2}: {static}")
         return
     if scenario == "wp-s003-010-003-005-001":
         if len(frames) < 10:
