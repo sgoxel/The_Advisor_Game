@@ -514,7 +514,7 @@ function resize(){
 function dismissInspection(){inspection.selectedId=null;inspection.selectedType=null;inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
 function inspectionRegistryKey(type,id){return String(type)+":"+String(id);}
 function registerInspectionPickable(record){
-  if(record?.id===undefined||record.id===null||String(record.id).length===0||!["npc","building"].includes(record.type)||typeof record.screenBounds!=="function")return false;
+  if(record?.id===undefined||record.id===null||String(record.id).trim().length===0||!["npc","building"].includes(record.type)||typeof record.screenBounds!=="function")return false;
   inspectionPickables.set(inspectionRegistryKey(record.type,record.id),record);return true;
 }
 function unregisterInspectionPickable(id,type=null){
