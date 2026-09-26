@@ -524,10 +524,12 @@ function readableInspectionLines(record){
 }
 function renderInspectionTooltip(record){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
-  const started=performance.now(),bounds=record.screenBounds(),lines=readableInspectionLines(record);tip.replaceChildren();
+  const started=performance.now(),bounds=record.screenBounds();
+  if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)){dismissInspection();return false;}
+  const lines=readableInspectionLines(record);tip.replaceChildren();
   lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
   const rootRect=root.getBoundingClientRect(),x=clamp((bounds.left+bounds.right)/2-rootRect.left,12,rootRect.width-12),y=clamp(bounds.top-rootRect.top-12,12,rootRect.height-12);
-  tip.style.left=x+"px";tip.style.top=y+"px";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));
+  tip.style.left=x+"px";tip.style.top=y+"px";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
 }
 function pickInspection(clientX,clientY){
   const started=performance.now(),candidates=[];
