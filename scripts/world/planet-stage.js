@@ -250,7 +250,13 @@ function buildTangentPatchMesh(){
       let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
       const sample=geography?.sampleLatLon?.(lat,lon);
       const local=localSurfaceSample(eastMeters,northMeters,sample);
-      const elevation=Number(sample?.elevationMeters||0),heightUnits=((elevation-centerElevation)+local.microElevation*9)/localMetersPerUnit*.45;
+      const elevation=Number(sample?.elevationMeters||0);
+      // A 2 m presentation patch must preserve macro height identity without
+      // turning coarse planetary sample boundaries into local-scale cliffs.
+      // Clamp the macro delta to the bounded near-ground window and layer only
+      // subtle deterministic micro relief on top.
+      const macroDelta=clamp(elevation-centerElevation,-10,10);
+      const heightUnits=(macroDelta+local.microElevation*.8)/localMetersPerUnit*.32;
       positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
       normals.push(0,1,0);uvs.push(ux,vz);
     }
@@ -300,7 +306,7 @@ function updateProjectionPresentation(){
     tangentPatch.enabled=blend>.04;
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    const patchScale=2.25;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    const patchScale=1.65;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     for(const mi of tangentPatch.render.meshInstances)mi.setParameter?.("material_opacity",blend);
   }
   planet.enabled=blend<.96;
@@ -324,11 +330,11 @@ function applyCameraZoom(){
   // point; no second map or local simulation authority is introduced.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=1.15;
+  const localZ=1.9;
   const cameraZ=globeZ*(1-blend)+localZ*blend;
-  const cameraY=1.05*blend;
-  const targetZ=-.08*blend;
-  const targetY=-.12*blend;
+  const cameraY=1.25*blend;
+  const targetZ=-.18*blend;
+  const targetY=-.05*blend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   if(cameraEntity.camera)cameraEntity.camera.fov=34+16*blend;
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
