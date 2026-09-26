@@ -123,6 +123,7 @@ SCENARIOS = {
     "wp-s003-009-009",
     "wp-s003-009-010",
     "wp-s003-009-011",
+    "wp-s003-010-001",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -222,6 +223,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-009": 6,
     "wp-s003-009-010": 7,
     "wp-s003-009-011": 7,
+    "wp-s003-010-001": 7,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1620,7 +1622,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7952,6 +7954,32 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             time.sleep(0.2)
             return "phone-portrait:" + _pinch_gameplay(driver, 1.5)
         return "phone-portrait:" + _pinch_gameplay(driver, 2.0 / 3.0)
+    if scenario == "wp-s003-010-001":
+        # Globe -> tangent -> globe at an equatorial target, then repeat at a
+        # high latitude and finish in phone portrait. Use the public stage API
+        # so telemetry and rendered camera state are captured together.
+        if frame_index == 0:
+            driver.execute_script("window.PlanetStage.setRotation(-18,0); window.PlanetStage.setZoomScalar(0.35)")
+            return "equator:globe"
+        if frame_index == 1:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.82)")
+            return "equator:transition"
+        if frame_index == 2:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.97)")
+            return "equator:local-tangent"
+        if frame_index == 3:
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.35)")
+            return "equator:return-globe"
+        if frame_index == 4:
+            driver.execute_script("window.PlanetStage.setRotation(145,72); window.PlanetStage.setZoomScalar(0.97)")
+            return "high-latitude:local-tangent"
+        if frame_index == 5:
+            driver.set_window_size(844,390); time.sleep(0.2)
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.82)")
+            return "phone-landscape:transition"
+        driver.set_window_size(390,844); time.sleep(0.2)
+        driver.execute_script("window.PlanetStage.setZoomScalar(0.97)")
+        return "phone-portrait:local-tangent"
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
