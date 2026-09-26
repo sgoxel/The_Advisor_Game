@@ -314,3 +314,5 @@ Suggestion: when canonical WP-S006-007 destination records become available, rep
 2026-09-26 08:24 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add focused building-label precedence tests covering meaningful functionLabel, blank functionLabel with valid buildingType, and both fields blank. Do not implement outside the WP evidence/test scope.
 
 2026-09-26 08:27 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add inspection lifecycle regression coverage with authoritative IDs 0, empty rejection, dematerialization and visibility transitions. Do not implement outside the WP evidence/test scope.
+
+2026-09-26 08:31 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add focused instrumentation asserting one screenBounds projection per registered target during a click and fresh projection on subsequent selected-tooltip updates. Do not implement outside the WP evidence/test scope.
