@@ -1708,3 +1708,5 @@
 2026-09-26 08:35 +03:00 | WP-S003-008-006 | AGENT #6 | Inspection registration now rejects whitespace-only authoritative IDs while preserving valid numeric ID 0, preventing meaningless registry/selection identities. Implementation: 73acc8c2e449a2c57f276719e110d435f04ecac7.
 
 2026-09-26 08:19 +03:00 | WP-S003-008-006 | AGENT #6 | Normalized inspection tooltip labels so whitespace-only NPC name/job/activity and building function/type values use truthful readable fallbacks instead of blank lines. Implementation: d6634c0c3fb3ecc95c8a5820b763e60373a833ec.
+
+2026-09-26 08:24 +03:00 | WP-S003-008-006 | AGENT #6 | Preserved authoritative building type fallback when functionLabel is blank/whitespace, preventing valid buildingType values from collapsing to generic Building. Implementation: a4faf317e8fb67937d27d42db2dcb9b8e463d266.
