@@ -538,7 +538,8 @@ function renderInspectionTooltip(record){
 function pickInspection(clientX,clientY){
   const started=performance.now(),candidates=[];
   for(const record of inspectionPickables.values()){
-    if(record.visible?.()===false)continue;const b=record.screenBounds();if(!b)continue;
+    if(record.visible?.()===false)continue;const b=record.screenBounds();
+    if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite)||b.left>b.right||b.top>b.bottom)continue;
     if(clientX>=b.left&&clientX<=b.right&&clientY>=b.top&&clientY<=b.bottom)candidates.push(record);
   }
   candidates.sort((a,b)=>Number(b.pickPriority||0)-Number(a.pickPriority||0)||String(a.id).localeCompare(String(b.id)));
