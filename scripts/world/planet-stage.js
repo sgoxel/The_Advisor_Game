@@ -299,6 +299,11 @@ function updateTangentPatchTexture(){
   const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(canvas2d);
   tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.update();
+  if(horizonSkirtMaterial){
+    const center=geography.sampleLatLon(lat0,lon0),edge=localSurfaceSample(spanEast*.46,spanNorth*.46,center);
+    const hc=(center?.land?edge.color:[.08,.20,.28]).map(v=>clamp(v*.88,0,1));
+    horizonSkirtMaterial.diffuse.set(hc[0],hc[1],hc[2]);horizonSkirtMaterial.emissive.set(hc[0]*.9,hc[1]*.9,hc[2]*.9);horizonSkirtMaterial.update();
+  }
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
@@ -310,7 +315,7 @@ function ensureTangentPatch(){
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
   horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
-  horizonSkirtMaterial.diffuse.set(.22,.38,.18);horizonSkirtMaterial.emissive.set(.19,.33,.15);horizonSkirtMaterial.emissiveIntensity=1.02;
+  horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   const mesh=new pc.Mesh(device);
   mesh.setPositions([-28,-.08,-28,28,-.08,-28,-28,-.08,28,28,-.08,28]);
@@ -325,7 +330,7 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     tangentPatch.enabled=blend>.04;
     ensureHorizonSkirt();
-    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.055*blend,0);}
+    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.028*blend,0);}
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Expand the patch through the handoff so the viewport never collapses to a
