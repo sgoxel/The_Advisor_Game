@@ -134,6 +134,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-001",
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
+    "wp-s003-010-003-007",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -245,6 +246,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-005-001": 10,
     "wp-s003-010-003-005-002": 10,
     "wp-s003-010-003-006": 13,
+    "wp-s003-010-003-007": 10,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1644,7 +1646,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7938,7 +7940,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -8359,6 +8361,67 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-007":
+        plan=(
+            (0.540,"desktop:pre-reveal"),
+            (0.630,"desktop:occupied-footprint"),
+            (0.660,"desktop:footprint-confirm"),
+            (0.750,"desktop:route-clusters"),
+            (0.780,"desktop:problem-checkpoint"),
+            (0.810,"desktop:district-route"),
+            (0.880,"desktop:coarse-settlement"),
+            (0.940,"desktop:refined-settlement"),
+            (0.985,"desktop:full-local"),
+            (1.000,"desktop:ground"),
+        )
+        scalar,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.1)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver,30.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{};
+            return Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.000001 &&
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   (Number(arguments[0])<0.60 || String(ls?.revealTier||'none')!=='none');
+        """,scalar))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{};
+            return {
+              scalar:s?.zoom?.scalar,
+              visibleWidth:s?.zoom?.visibleFootprintWidthMeters,
+              visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
+              level:s?.projection?.localDetail?.level,
+              revealTier:ls?.revealTier,
+              settlementId:ls?.settlementId,
+              settlementName:ls?.settlementName,
+              settlementClass:ls?.settlementClass,
+              planRevision:ls?.settlementPlanRevision,
+              layoutSignature:ls?.layoutSignature,
+              occupiedAreaCount:ls?.occupiedAreaCount,
+              coarseRoadCount:ls?.coarseRoadCount,
+              coarseBuildingCount:ls?.coarseBuildingCount,
+              landmarkCount:ls?.landmarkCount,
+              fullRoadCount:ls?.fullRoadCount,
+              fullBuildingCount:ls?.fullBuildingCount,
+              vegetationCount:ls?.vegetationCount,
+              entityCount:ls?.entityCount,
+              drawCalls:ls?.drawCallEstimate,
+              triangles:ls?.triangleEstimate,
+              buildMs:ls?.buildTimeMs,
+              presentationOnly:ls?.presentationOnly,
+              simulationAuthority:ls?.simulationAuthority,
+              authority:ls?.authority,
+              pending:r?.pendingPreparationCount
+            };
+        """)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8602,6 +8665,47 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-007":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-007 requires ten fixed-focus semantic reveal frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        focus=[((s.get("canonicalFocus") or {}).get("latitudeDegrees"),(s.get("canonicalFocus") or {}).get("longitudeDegrees")) for s in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Settlement reveal evidence changed canonical focus: {focus}")
+        expected=("none","footprint","footprint","route","route","route","coarse","refined","full","full")
+        local=[(s.get("projection") or {}).get("localStatic") or {} for s in stages]
+        tiers=tuple(str(item.get("revealTier") or "none") for item in local)
+        if tiers != expected:
+            raise RuntimeError(f"Unexpected settlement reveal tiers: {tiers}")
+        active=local[1:]
+        ids=[str(item.get("settlementId") or "") for item in active]
+        layouts=[str(item.get("layoutSignature") or "") for item in active]
+        if any(not value for value in ids) or len(set(ids)) != 1:
+            raise RuntimeError(f"Settlement identity changed or missing across zoom: {ids}")
+        if any(not value for value in layouts) or len(set(layouts)) != 1:
+            raise RuntimeError(f"Settlement layout changed across zoom: {layouts}")
+        if any("SettlementArchetypes" not in str(item.get("authority") or "") for item in active):
+            raise RuntimeError(f"Settlement reveal did not use canonical SettlementArchetypes authority: {[item.get('authority') for item in active]}")
+        if any(item.get("presentationOnly") is not True or item.get("simulationAuthority") is not False for item in active):
+            raise RuntimeError("Settlement reveal crossed presentation/simulation authority boundary")
+        footprint=local[1]
+        if int(footprint.get("occupiedAreaCount") or 0) < 1 or int(footprint.get("coarseRoadCount") or 0) < 1:
+            raise RuntimeError(f"0.63x does not expose settlement footprint + route structure: {footprint}")
+        checkpoint=local[4]
+        if int(checkpoint.get("coarseBuildingCount") or 0) < 4 or int(checkpoint.get("landmarkCount") or 0) < 1:
+            raise RuntimeError(f"0.78x settlement is not structurally identifiable: {checkpoint}")
+        coarse=local[6]
+        if int(coarse.get("coarseBuildingCount") or 0) < 6 or int(coarse.get("vegetationCount") or 0) < 1:
+            raise RuntimeError(f"0.88x coarse settlement lacks building/tree structure: {coarse}")
+        refined=local[7]
+        if int(refined.get("fullBuildingCount") or 0) < 1 or int(refined.get("fullRoadCount") or 0) < 1:
+            raise RuntimeError(f"0.94x refinement did not reveal canonical buildings/roads: {refined}")
+        ground=local[9]
+        if int(ground.get("fullBuildingCount") or 0) < 1 or int(ground.get("fullRoadCount") or 0) < 1:
+            raise RuntimeError(f"Ground tier did not preserve the same settlement structure: {ground}")
+        if any(int(item.get("entityCount") or 0) > 120 or int(item.get("drawCallEstimate") or 0) > 120 for item in active):
+            raise RuntimeError("Settlement reveal exceeded bounded presentation budget")
+        return
     if scenario == "wp-s003-010-003-006":
         if len(frames) < 13:
             raise RuntimeError("wp-s003-010-003-006 requires thirteen intermediate-scale frames")
