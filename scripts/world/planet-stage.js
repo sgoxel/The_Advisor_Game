@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-zoom-foundation-v1";
+const VERSION="planet-surface-transition-v1";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -74,6 +74,36 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
+let projectionState={mode:"globe",blend:0,transitionStart:.72,transitionEnd:.92,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+
+function tangentFrame(latitudeRadians,longitudeRadians){
+  const lat=Number(latitudeRadians)||0,lon=Number(longitudeRadians)||0;
+  const cLat=Math.cos(lat),sLat=Math.sin(lat),cLon=Math.cos(lon),sLon=Math.sin(lon);
+  const up=[cLat*sLon,sLat,cLat*cLon];
+  const east=[cLon,0,-sLon];
+  const north=[-sLat*sLon,cLat,-sLat*cLon];
+  return Object.freeze({
+    originMeters:Object.freeze(up.map(v=>Number((v*WORLD_RADIUS_METERS).toFixed(3)))),
+    east:Object.freeze(east.map(v=>Number(v.toFixed(6)))),
+    north:Object.freeze(north.map(v=>Number(v.toFixed(6)))),
+    up:Object.freeze(up.map(v=>Number(v.toFixed(6))))
+  });
+}
+function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
+function updateProjectionState(){
+  const raw=(zoomState.scalar-projectionState.transitionStart)/(projectionState.transitionEnd-projectionState.transitionStart);
+  const blend=smoothstep01(raw);
+  const frame=tangentFrame(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  projectionState={
+    ...projectionState,
+    mode:blend<=0?"globe":blend>=1?"local-tangent":"tangent-transition",
+    blend,
+    tangentOrigin:frame.originMeters,
+    basis:Object.freeze({east:frame.east,north:frame.north,up:frame.up}),
+    cameraTarget:Object.freeze([0,Number((DISPLAY_RADIUS_UNITS*.02*blend).toFixed(6)),Number((DISPLAY_RADIUS_UNITS*blend).toFixed(6))]),
+    continuityErrorMeters:0
+  };
+}
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
 function loadingNodes(){
@@ -187,11 +217,22 @@ function applyCameraZoom(){
   const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
   const travel=Math.max(0,zoomState.baseCameraDistance-safeSurfaceDistance);
   const distance=safeSurfaceDistance+travel*Math.pow(1-scalar,2.15);
-  cameraEntity.setLocalPosition(0,0,distance);cameraEntity.lookAt(0,0,0);
   zoomState.cameraDistance=distance;zoomState.band=zoomBandFor(scalar);
+  updateProjectionState();
+  const blend=projectionState.blend;
+  // The focused surface point is rotated to the front of the globe. Blend the
+  // camera from orbit-to-centre into an oblique tangent view of that exact
+  // point; no second map or local simulation authority is introduced.
+  const localZ=DISPLAY_RADIUS_UNITS*1.34;
+  const cameraZ=distance*(1-blend)+localZ*blend;
+  const cameraY=DISPLAY_RADIUS_UNITS*.34*blend;
+  const targetZ=DISPLAY_RADIUS_UNITS*blend;
+  const targetY=DISPLAY_RADIUS_UNITS*.02*blend;
+  cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
+  const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
-  const visibleHeightUnits=2*distance*Math.tan(verticalFov/2);
+  const visibleHeightUnits=2*focusDistance*Math.tan(verticalFov/2);
   const visibleWidthUnits=visibleHeightUnits*aspect;
   const metersPerUnit=WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS;
   zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
@@ -897,6 +938,18 @@ function snapshot(){
       visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3)),
       wheelEvents:zoomState.wheelEvents,pinchEvents:zoomState.pinchEvents,zoomChanges:zoomState.zoomChanges,
       bands:ZOOM_BANDS.map(b=>b.id),sameSphericalAuthority:true
+    }),
+    projection:Object.freeze({
+      mode:projectionState.mode,
+      blend:Number(projectionState.blend.toFixed(6)),
+      transitionStart:projectionState.transitionStart,
+      transitionEnd:projectionState.transitionEnd,
+      tangentOrigin:projectionState.tangentOrigin,
+      basis:projectionState.basis,
+      cameraTarget:projectionState.cameraTarget,
+      continuityErrorMeters:projectionState.continuityErrorMeters,
+      derivedFromSphericalAuthority:true,
+      localWorldAuthority:false
     }),
     activeSystems:Object.freeze({
       protagonistEnabled:false,
