@@ -875,6 +875,8 @@ function destroy(){
   generatedTexture?.destroy?.();generatedTexture=null;
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;ready=false;
+  inspectionPickables.clear();
+  inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,dismissCount:0};
   geography=null;root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
