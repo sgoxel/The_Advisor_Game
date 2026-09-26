@@ -571,7 +571,8 @@ function bindInput(){
     else if(event.key==="ArrowRight")rotateBy(6,0);
     else if(event.key==="ArrowUp")rotateBy(0,-6);
     else if(event.key==="ArrowDown")rotateBy(0,6);
-    else if(event.key==="Escape"){dismissInspection();}\n    else handled=false;
+    else if(event.key==="Escape"){dismissInspection();}
+    else handled=false;
     if(handled)event.preventDefault();
   });
 }
