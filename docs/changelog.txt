@@ -1700,3 +1700,5 @@
 2026-09-26 08:10 +03:00 | WP-S003-008-006 | AGENT #6 | Fixed active inspection registration so authoritative numeric ID 0 is accepted; only missing/null/empty IDs are rejected. Implementation: 7416504ac34cd180b72ba58bdc5334c976b858b4.
 
 2026-09-26 08:17 +03:00 | WP-S003-008-006 | AGENT #6 | Hardened deterministic overlap picking: non-finite screenDepth now sorts as farthest and non-finite pickPriority falls back to zero. Implementation: d5661062041d1f72e692c46f4c35c6484ce3130f.
+
+2026-09-26 08:23 +03:00 | WP-S003-008-006 | AGENT #6 | Made equal-priority/equal-depth overlap selection deterministic across NPC/building records sharing the same raw ID by using typed type:id identity as the final tie-break. Implementation: abf2ca81f31cdc59528ca488dc1a6b7f3c5ab02b.
