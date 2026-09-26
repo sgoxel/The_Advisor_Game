@@ -249,7 +249,8 @@ function buildTangentPatchMesh(){
       const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
       let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
       const sample=geography?.sampleLatLon?.(lat,lon);
-      const local=localSurfaceSample(eastMeters,northMeters,sample);\n      const elevation=Number(sample?.elevationMeters||0),heightUnits=((elevation-centerElevation)+local.microElevation*9)/localMetersPerUnit*.45;
+      const local=localSurfaceSample(eastMeters,northMeters,sample);
+      const elevation=Number(sample?.elevationMeters||0),heightUnits=((elevation-centerElevation)+local.microElevation*9)/localMetersPerUnit*.45;
       positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
       normals.push(0,1,0);uvs.push(ux,vz);
     }
