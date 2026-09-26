@@ -550,7 +550,8 @@ function renderInspectionTooltip(record,knownBounds=null){
 function pickInspection(clientX,clientY){
   const started=performance.now(),candidates=[];
   for(const record of inspectionPickables.values()){
-    if(record.visible?.()===false)continue;const b=record.screenBounds();
+    let visible=true;try{visible=record.visible?.()!==false;}catch{visible=false;}if(!visible)continue;
+    let b=null;try{b=record.screenBounds();}catch{continue;}
     if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite)||b.left>b.right||b.top>b.bottom)continue;
     if(clientX<b.left||clientX>b.right||clientY<b.top||clientY>b.bottom)continue;
     if(typeof record.hitTest==="function"){
