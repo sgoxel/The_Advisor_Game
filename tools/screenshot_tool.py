@@ -8109,22 +8109,23 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return "phone-portrait:settlement-map-info"
         return "planet:continent-info-scale-ruler"
     if scenario == "wp-s003-010-003-002":
-        # Dense mid-zoom evidence around the reported 0.27x -> 0.46x jump.
-        # Scalars are the inverse mapping of the visible logarithmic x labels.
+        # Frame 0 is the harness's untouched full-planet proof. Frames 1..8 are
+        # the dense reported problem range; frame 9 is a ground regression check.
         plan=(
-            (0.650515,"desktop:0.20x-prehandoff"),
-            (0.690106,"desktop:0.24x-handoff"),
+            (0.650515,"desktop:0.20x"),
+            (0.690106,"desktop:0.24x"),
             (0.715682,"desktop:0.27x"),
             (0.738561,"desktop:0.30x"),
             (0.765739,"desktop:0.34x"),
             (0.789892,"desktop:0.38x"),
             (0.811625,"desktop:0.42x"),
             (0.831379,"desktop:0.46x"),
-            (0.900000,"desktop:local-reference"),
             (1.000000,"desktop:ground-reference"),
         )
-        scalar,label=plan[min(frame_index,len(plan)-1)]
         if frame_index == 0:
+            return "planet:full"
+        scalar,label=plan[min(frame_index-1,len(plan)-1)]
+        if frame_index == 1:
             driver.set_window_size(1280,800); time.sleep(0.2)
             driver.execute_script("""
                 const s=window.PlanetStage.snapshot();
@@ -8381,7 +8382,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if len(frames) < 10:
             raise RuntimeError("wp-s003-010-003-002 requires ten dense mid-zoom evidence frames")
         stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
-        dense=stages[:8]
+        dense=stages[1:9]
         focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in dense]
         if len(set(focus)) != 1:
             raise RuntimeError(f"Mid-zoom focus drifted across evidence: {focus}")
@@ -8412,8 +8413,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if any(b>=a for a,b in zip(heights,heights[1:])):
             raise RuntimeError(f"Visible footprint does not decrease monotonically: {heights}")
         ratios=[a/max(1,b) for a,b in zip(heights,heights[1:])]
-        if max(ratios)>1.85:
-            raise RuntimeError(f"Mid-zoom footprint still contains a large discrete jump: ratios={ratios}, heights={heights}")
+        if max(ratios)>1.35:
+            raise RuntimeError(f"Mid-zoom footprint still changes too abruptly for the visible x-scale: ratios={ratios}, heights={heights}")
         if any(b<=a for a,b in zip(multipliers,multipliers[1:])):
             raise RuntimeError(f"Visible x scale is not increasing monotonically: {multipliers}")
         political=dense[0].get("politicalScale") or {}
