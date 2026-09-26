@@ -318,7 +318,7 @@ function ensureHorizonSkirt(){
   horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   const mesh=new pc.Mesh(device);
-  mesh.setPositions([-28,-.08,-28,28,-.08,-28,-28,-.08,28,28,-.08,28]);
+  mesh.setPositions([-160,-.08,-160,160,-.08,-160,-160,-.08,160,160,-.08,160]);
   mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   horizonSkirt.render.meshInstances=[new pc.MeshInstance(mesh,horizonSkirtMaterial,horizonSkirt)];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
