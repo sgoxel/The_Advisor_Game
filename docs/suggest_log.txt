@@ -325,3 +325,5 @@ Suggestion: when canonical WP-S006-007 destination records become available, rep
 2026-09-26 08:40 +03:00 | WP-S003-008-006 | Phase 1 suggestion: consolidate inspection callback fault accounting into bounded telemetry if streamed object integration later needs diagnosis, without logging every pointer query. Do not implement unless explicitly requested.
 
 2026-09-26 08:41 +03:00 | WP-S003-008-006 | Phase 1 suggestion: add a bounded diagnostic counter for selected-record visibility callback failures if canonical streamed NPC/building integrations later need fault diagnosis. Do not implement unless explicitly requested.
+
+2026-09-26 09:43 +03:00 | WP-S003-008-006 | Phase 25 suggestion: add focused non-visual regression coverage for throwing screenBounds and screenDepth callbacks so streamed presentation transitions remain fault-isolated before genuine local visual targets return. Do not implement unless explicitly requested.
