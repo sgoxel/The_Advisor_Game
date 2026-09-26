@@ -2294,7 +2294,9 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     if(!component?.worldToScreen||!pc)return null;
     try{
       const screen=component.worldToScreen(new pc.Vec3(scenePoint.x,worldY,scenePoint.z),new pc.Vec3());
-      const x=Number(screen.x),y=Number(screen.y);\n      if(!Number.isFinite(x)||!Number.isFinite(y))return null;\n      return Object.freeze({x,y});
+      const x=Number(screen.x),y=Number(screen.y);
+      if(!Number.isFinite(x)||!Number.isFinite(y))return null;
+      return Object.freeze({x,y});
     }catch(_){return null}
   }
   function characterPresentationMetrics(scenePoint,feetY,baseHeight){
