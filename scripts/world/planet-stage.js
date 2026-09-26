@@ -218,6 +218,23 @@ function localPatchDimensions(){
   const visibleWidth=visibleHeight*aspect;
   return {visibleWidth,visibleHeight,patchWidth:visibleWidth*LOCAL_PATCH_MARGIN,patchHeight:visibleHeight*LOCAL_PATCH_MARGIN};
 }
+function localHash(eastMeters,northMeters,salt=0){
+  const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5);
+  let h=(Math.imul(x,374761393)^Math.imul(z,668265263)^Math.imul((activeSeed||"").length+salt,2246822519))>>>0;
+  h=Math.imul(h^(h>>>13),1274126177)>>>0;return ((h^(h>>>16))>>>0)/4294967295;
+}
+function localSurfaceSample(eastMeters,northMeters,base){
+  const coarse=localHash(eastMeters/6,northMeters/6,11),fine=localHash(eastMeters,northMeters,29);
+  const ridge=Math.abs(localHash(eastMeters/3,northMeters/3,47)-.5)*2;
+  const land=!!base?.land;
+  const microElevation=land?((coarse-.5)*5+(fine-.5)*1.6+ridge*2.2):((coarse-.5)*.7);
+  const baseColor=Array.isArray(base?.color)?base.color:[.18,.32,.22];
+  const light=(coarse-.5)*.18+(fine-.5)*.07;
+  const color=land
+    ? baseColor.map((v,i)=>clamp(v+light+(i===1?.025:0),0,1))
+    : [clamp(baseColor[0]+light*.25,0,1),clamp(baseColor[1]+light*.35,0,1),clamp(baseColor[2]+light*.55,0,1)];
+  return {microElevation,color};
+}
 function buildTangentPatchMesh(){
   const started=performance.now(),dims=localPatchDimensions();
   const columns=Math.max(2,Math.ceil(dims.patchWidth/LOCAL_SAMPLE_SPACING_METERS)+1);
@@ -232,7 +249,7 @@ function buildTangentPatchMesh(){
       const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
       let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
       const sample=geography?.sampleLatLon?.(lat,lon);
-      const elevation=Number(sample?.elevationMeters||0),heightUnits=(elevation-centerElevation)/localMetersPerUnit*.45;
+      const local=localSurfaceSample(eastMeters,northMeters,sample);\n      const elevation=Number(sample?.elevationMeters||0),heightUnits=((elevation-centerElevation)+local.microElevation*9)/localMetersPerUnit*.45;
       positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
       normals.push(0,1,0);uvs.push(ux,vz);
     }
@@ -256,7 +273,7 @@ function updateTangentPatchTexture(){
     const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
     const cosLat=Math.max(.08,Math.cos(lat0));
     let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
-    const sample=geography.sampleLatLon(lat,lon),rgba=rgbaFromColor(sample.color),i=(y*size+x)*4;
+    const sample=geography.sampleLatLon(lat,lon),local=localSurfaceSample(east,north,sample),rgba=rgbaFromColor(local.color),i=(y*size+x)*4;
     data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=255;
   }
   ctx.putImageData(image,0,0);
