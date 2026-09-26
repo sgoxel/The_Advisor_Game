@@ -275,3 +275,5 @@ Suggestion: when production environment art is refreshed, consider replacing the
 2026-09-26 03:52 +03:00 | WP-S003-008-005 | Phase 1
 Suggestion: when canonical WP-S006-007 destination records become available, replace the navigator's planet-first fallback descriptors through the existing bounded adapter while preserving camera-only navigation, query limits, category UX and deterministic ordering.
 2026-09-26 04:00 +03:00 | WP-S003-008-005 | Phase 1 | Future improvement: integrate navigator descriptors with later canonical place-name/road graph sources while preserving bounded camera-relative queries and camera-only navigation.
+
+2026-09-26 04:15 +03:00 | WP-S003-009-009 | Phase 1 | Future improvement: when the canonical ground-scale renderer is active, reuse the ambient-motion budget for context-appropriate foliage/water/smoke motion while keeping the planet-scale cloud shell batched and presentation-only. Do not implement unless explicitly requested.
