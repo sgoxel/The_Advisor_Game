@@ -512,11 +512,16 @@ function resize(){
   }
 }
 function dismissInspection(){inspection.selectedId=null;inspection.selectedType=null;inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
+function inspectionRegistryKey(type,id){return String(type)+":"+String(id);}
 function registerInspectionPickable(record){
   if(!record?.id||!["npc","building"].includes(record.type)||typeof record.screenBounds!=="function")return false;
-  inspectionPickables.set(String(record.id),record);return true;
+  inspectionPickables.set(inspectionRegistryKey(record.type,record.id),record);return true;
 }
-function unregisterInspectionPickable(id){if(inspection.selectedId===String(id))dismissInspection();return inspectionPickables.delete(String(id));}
+function unregisterInspectionPickable(id,type=null){
+  const idText=String(id),keys=type?[inspectionRegistryKey(type,idText)]:Array.from(inspectionPickables.entries()).filter(([,record])=>String(record.id)===idText).map(([key])=>key);
+  if(inspection.selectedId===idText&&(!type||inspection.selectedType===type))dismissInspection();
+  let removed=false;for(const key of keys)removed=inspectionPickables.delete(key)||removed;return removed;
+}
 function readableInspectionLines(record){
   if(record.type==="npc")return [String(record.name||"Unknown resident"),String(record.job||"Unassigned"),String(record.activity||"Activity unavailable")];
   const typeLabel=String(record.functionLabel||record.buildingType||"Building"),name=String(record.name||"").trim();
@@ -551,7 +556,7 @@ function pickInspection(clientX,clientY){
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
   const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.id);inspection.selectedType=picked.type;if(!renderInspectionTooltip(picked))return null;return picked;
 }
-function updateInspectionTooltip(){if(!inspection.selectedId)return;const record=inspectionPickables.get(inspection.selectedId);if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
+function updateInspectionTooltip(){if(!inspection.selectedId)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
 function bindInput(){
   canvas.tabIndex=0;
   canvas.setAttribute("role","application");
