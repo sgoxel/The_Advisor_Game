@@ -274,7 +274,7 @@ jobs:
             publish="${INPUT_PUBLISH:-false}"
           elif [ "$EVENT_NAME" = 'push' ]; then
             target='http://127.0.0.1:8000/'
-            scenario='wp-s003-008-005'
+            scenario='wp-s003-006-014'
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             requested_profile="$(printf '%s' "$COMMENT_BODY" | awk '{print $3}')"
