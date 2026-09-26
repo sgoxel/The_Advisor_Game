@@ -1695,3 +1695,4 @@
 2026-09-26 08:05 +03:00 | WP-S003-008-006 | Overlapping inspection candidates now resolve by explicit priority, nearest presentation depth, then stable ID; supports numeric or dynamic depth without world scans.
 2026-09-26 08:10 +03:00 | WP-S003-008-006 | Selected inspection tooltip now repositions each frame without rebuilding unchanged DOM content; authoritative text changes refresh at a bounded 250 ms cadence with telemetry.
 2026-09-26 08:15 +03:00 | WP-S003-008-006 | Selection transfer now bypasses the bounded same-object tooltip text refresh interval, preventing stale NPC/building text when rapidly selecting another object.
+2026-09-26 08:20 +03:00 | WP-S003-008-006 | Namespaced active inspection registry identities by object type and authoritative ID so NPC/building ID collisions cannot overwrite each other; selected lookup follows the same key.
