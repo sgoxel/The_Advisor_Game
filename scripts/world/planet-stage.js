@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planetary-geography-globe-v2";
+const VERSION="planet-zoom-foundation-v1";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -17,6 +17,12 @@ const LATITUDE_SEGMENTS=96;
 const LONGITUDE_SEGMENTS=160;
 const HEIGHT_EXAGGERATION=5.0;
 const OCEAN_VISUAL_DEPTH_FACTOR=0.0;
+const ZOOM_MIN=0;
+const ZOOM_MAX=1;
+const ZOOM_WHEEL_SENSITIVITY=0.0009;
+const ZOOM_PINCH_SENSITIVITY=0.006;
+const ZOOM_DISTANCE_FACTOR=0.018;
+const ZOOM_BANDS=Object.freeze([{id:"planet",max:.18},{id:"continent",max:.42},{id:"country-region",max:.66},{id:"local-area",max:.86},{id:"ground",max:1}]);
 
 let pc=null;
 let app=null;
@@ -65,6 +71,9 @@ let cloudLayer=null;
 let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
 let atmosphere={active:false,authoritativeHour:null,phase:"unbound",source:"none",dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false};
 let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClusters:0,rockClusters:0,ambientFaunaZones:0,rejectedWater:0,drawCalls:0,triangles:0,preparationMs:0,cacheReuse:false,perFrameScatter:false,simulationAuthority:false};
+let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
+const activePointers=new Map();
+let lastPinchDistance=null;
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
 function loadingNodes(){
@@ -166,9 +175,32 @@ function normalizeYaw(value){
   if(n<0)n+=360;
   return n;
 }
+function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS[ZOOM_BANDS.length-1]).id;}
+function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
+function applyCameraZoom(){
+  if(!cameraEntity||!zoomState.baseCameraDistance)return;
+  const scalar=clamp(zoomState.scalar,ZOOM_MIN,ZOOM_MAX);
+  const distance=Math.max(DISPLAY_RADIUS_UNITS*1.025,zoomState.baseCameraDistance*Math.pow(ZOOM_DISTANCE_FACTOR,scalar));
+  cameraEntity.setLocalPosition(0,0,distance);cameraEntity.lookAt(0,0,0);
+  zoomState.cameraDistance=distance;zoomState.band=zoomBandFor(scalar);
+  const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
+  const verticalFov=34*Math.PI/180;
+  const visibleHeightUnits=2*distance*Math.tan(verticalFov/2);
+  const visibleWidthUnits=visibleHeightUnits*aspect;
+  const metersPerUnit=WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS;
+  zoomState.visibleFootprintWidthMeters=Math.max(2,visibleWidthUnits*metersPerUnit);
+  zoomState.visibleFootprintHeightMeters=Math.max(2,visibleHeightUnits*metersPerUnit);
+}
+function setZoomScalar(value){
+  const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
+  if(Math.abs(next-zoomState.scalar)<1e-7)return snapshot();
+  zoomState.scalar=next;zoomState.zoomChanges++;applyCameraZoom();return snapshot();
+}
+function zoomBy(delta){return setZoomScalar(zoomState.scalar+Number(delta||0));}
 function applyRotation(){
   if(!planet)return;
   planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
+  updateZoomFocusFromRotation();
   rotationChangeCount++;
 }
 function setRotation(yaw,pitch){
@@ -507,8 +539,8 @@ function resize(){
     const maxReliefFactor=1+(7000/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION;
     const framingMargin=(height<=500&&aspect>1.7)?0.78:(aspect>1.7?1.015:1.055);
     const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*framingMargin;
-    cameraEntity.setLocalPosition(0,0,distance);
-    cameraEntity.lookAt(0,0,0);
+    zoomState.baseCameraDistance=distance;
+    applyCameraZoom();
   }
 }
 function dismissInspection(){const hadSelection=inspection.selectedId!==null||inspection.selectedType!==null||!!root?.querySelector?.(".world-inspection-tooltip");inspection.selectedId=null;inspection.selectedType=null;if(hadSelection)inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
@@ -572,9 +604,12 @@ function bindInput(){
   canvas.setAttribute("role","application");
   canvas.setAttribute("aria-label","Rotatable seeded fantasy planet. Drag to rotate.");
   canvas.addEventListener("contextmenu",event=>event.preventDefault());
+  canvas.addEventListener("wheel",event=>{zoomState.wheelEvents++;zoomBy(-event.deltaY*ZOOM_WHEEL_SENSITIVITY);event.preventDefault();},{passive:false});
   canvas.addEventListener("pointerdown",event=>{
     if(dragging||pointerId!==null)return;
     if(event.pointerType==="mouse"&&event.button!==0)return;
+    activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(activePointers.size===2){const pts=Array.from(activePointers.values());lastPinchDistance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);dragging=false;pointerId=null;event.preventDefault();return;}
     dragging=true;pointerId=event.pointerId;
     lastPointerX=event.clientX;lastPointerY=event.clientY;inspection.pointerDownX=event.clientX;inspection.pointerDownY=event.clientY;inspection.dragDistance=0;
     canvas.setPointerCapture?.(event.pointerId);
@@ -582,6 +617,8 @@ function bindInput(){
     pointerDragCount++;event.preventDefault();
   },{passive:false});
   canvas.addEventListener("pointermove",event=>{
+    if(activePointers.has(event.pointerId))activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(activePointers.size>=2){const pts=Array.from(activePointers.values()).slice(0,2),distance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);if(lastPinchDistance!==null){zoomState.pinchEvents++;zoomBy((distance-lastPinchDistance)*ZOOM_PINCH_SENSITIVITY);}lastPinchDistance=distance;event.preventDefault();return;}
     if(!dragging||event.pointerId!==pointerId)return;
     const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;
     inspection.dragDistance=Math.max(inspection.dragDistance,Math.hypot(event.clientX-inspection.pointerDownX,event.clientY-inspection.pointerDownY));
@@ -589,6 +626,7 @@ function bindInput(){
     rotateBy(dx*0.34,dy*0.26);event.preventDefault();
   },{passive:false});
   const endPointer=event=>{
+    activePointers.delete(event.pointerId);if(activePointers.size<2)lastPinchDistance=null;
     if(event.pointerId!==pointerId)return;
     dragging=false;canvas.releasePointerCapture?.(event.pointerId);pointerId=null;if(event.type==="pointerup"&&inspection.dragDistance<=6)pickInspection(event.clientX,event.clientY);
   };
@@ -600,6 +638,8 @@ function bindInput(){
     else if(event.key==="ArrowRight")rotateBy(6,0);
     else if(event.key==="ArrowUp")rotateBy(0,-6);
     else if(event.key==="ArrowDown")rotateBy(0,6);
+    else if(event.key==="+"||event.key==="=")zoomBy(.06);
+    else if(event.key==="-"||event.key==="_")zoomBy(-.06);
     else if(event.key==="Escape"){dismissInspection();}
     else handled=false;
     if(handled)event.preventDefault();
@@ -839,7 +879,18 @@ function snapshot(){
     }),
     input:Object.freeze({
       dragging,pointerDragCount,rotationChangeCount,
-      mouseDrag:true,touchDrag:true,keyboardRotation:true
+      mouseDrag:true,touchDrag:true,keyboardRotation:true,wheelZoom:true,pinchZoom:true,keyboardZoom:true
+    }),
+    zoom:Object.freeze({
+      scalar:Number(zoomState.scalar.toFixed(6)),band:zoomState.band,
+      focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
+      focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),
+      cameraDistance:Number(zoomState.cameraDistance.toFixed(6)),
+      baseCameraDistance:Number(zoomState.baseCameraDistance.toFixed(6)),
+      visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),
+      visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3)),
+      wheelEvents:zoomState.wheelEvents,pinchEvents:zoomState.pinchEvents,zoomChanges:zoomState.zoomChanges,
+      bands:ZOOM_BANDS.map(b=>b.id),sameSphericalAuthority:true
     }),
     activeSystems:Object.freeze({
       protagonistEnabled:false,
@@ -900,12 +951,12 @@ function destroy(){
   geography=null;root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setZoomScalar,zoomBy,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS
   })
 });
 const boot=()=>start().catch(()=>{});
