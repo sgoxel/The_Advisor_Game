@@ -116,7 +116,7 @@ const PRESENTATION_FOOTPRINT_ANCHORS=Object.freeze([
 let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 let localLodIndex=0;
 const localResourceCache=new Map();
-let localResources={activeSignature:null,requestedSignature:null,preparedSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastSwapMs:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,blockingZoomBuilds:0};
+let localResources={activeSignature:null,requestedSignature:null,preparedSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastSwapMs:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,blockingZoomBuilds:0,surroundSpanFactor:3,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
 let localPreparationToken=0;
 let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapContextCache={key:null,value:null};
@@ -762,14 +762,14 @@ function scheduleLocalDetailResource(signature){
 }
 function activateLocalDetailResource(signature){
   if(!tangentPatch?.render||!device||!tangentPatchMaterial||!horizonSkirtMaterial)return;
-  const swapStarted=performance.now();
+  const swapStarted=performance.now(),dims=localPatchDimensions();
   let resource=localResourceCache.get(signature);
   if(resource){
     localResourceCache.delete(signature);localResourceCache.set(signature,resource);localResources.cacheHits++;
     localDetail={...resource.detail,rebuildCount:localDetail.rebuildCount,signature};
   }else{
     localResources.cacheMisses++;localResources.pendingPreparationCount=1;
-    const started=performance.now(),mesh=buildTangentPatchMesh(),dims=localPatchDimensions(),textureSize=localTextureSizeForLevel(dims.levelId);
+    const started=performance.now(),mesh=buildTangentPatchMesh(),textureSize=localTextureSizeForLevel(dims.levelId);
     const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
     const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,textureSize,false);
     resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature,textureSize},estimatedBytes:localDetail.estimatedBytes+textureSize*textureSize*4*2};
@@ -779,6 +779,7 @@ function activateLocalDetailResource(signature){
   }
   tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=1;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  setHorizonSkirtFootprint(dims,3);
   horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
   localResources.activeSignature=signature;localResources.preparedSignature=signature;localResources.pendingPreparationCount=0;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
   localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);localResources.lastSwapMs=Number((performance.now()-swapStarted).toFixed(3));
@@ -841,9 +842,10 @@ function updateTangentPatchTexture(){
   tangentPatchMaterial.depthWrite=false;
   tangentPatchMaterial.update();
   if(horizonSkirtMaterial){
-    // The flat surround spans 12x the detailed patch in presentation space.
-    // Sample exactly 12x the physical area as well so its central texture
-    // coordinates line up with the detailed patch edges.
+    // The coarse continuation is exactly 3x the detailed patch in both
+    // presentation space and sampled world space, preserving canonical coast/
+    // relief bearings instead of stretching a 3x texture over a 12x plane.
+    setHorizonSkirtFootprint(dims,3);
     const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,256,false);
     horizonSkirtMaterial.diffuseMap=surroundTexture;
     horizonSkirtMaterial.emissiveMap=surroundTexture;
@@ -860,18 +862,32 @@ function ensureTangentPatch(){
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
 }
+function setHorizonSkirtFootprint(dims=localPatchDimensions(),spanFactor=3){
+  if(!horizonSkirt?.render||!device||!horizonSkirtMaterial)return;
+  const factor=Math.max(1,Number(spanFactor)||3);
+  const halfX=dims.patchWidth*factor*.5/dims.metersPerUnit;
+  const halfZ=dims.patchHeight*factor*.5/dims.metersPerUnit;
+  const mesh=new pc.Mesh(device);
+  mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
+  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);
+  mesh.setUvs(0,[0,0,1,0,0,1,1,1]);
+  mesh.setIndices([0,2,1,1,2,3]);mesh.update();
+  const previous=horizonSkirt.render.meshInstances?.[0]?.mesh||null;
+  horizonSkirt.render.meshInstances=[new pc.MeshInstance(mesh,horizonSkirtMaterial,horizonSkirt)];
+  previous?.destroy?.();
+  localResources.surroundSpanFactor=factor;
+  localResources.surroundWidthMeters=Number((dims.patchWidth*factor).toFixed(3));
+  localResources.surroundHeightMeters=Number((dims.patchHeight*factor).toFixed(3));
+  localResources.surroundWorldMatched=true;
+}
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
   horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
   horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
-  const mesh=new pc.Mesh(device);
-  mesh.setPositions([-48,0,-48,48,0,-48,-48,0,48,48,0,48]);
-  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);
-  mesh.setUvs(0,[0,0,1,0,0,1,1,1]);
-  mesh.setIndices([0,2,1,1,2,3]);mesh.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
-  horizonSkirt.render.meshInstances=[new pc.MeshInstance(mesh,horizonSkirtMaterial,horizonSkirt)];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
+  horizonSkirt.render.meshInstances=[];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
+  setHorizonSkirtFootprint(localPatchDimensions(),3);
 }
 function updateProjectionPresentation(){
   if(!planet)return;
