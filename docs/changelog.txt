@@ -1725,3 +1725,5 @@
 
 2026-09-26 08:41 +03:00 | WP-S003-008-006 | Fault-isolated the selected inspection tooltip visibility refresh so a throwing active-record visible() callback cleanly dismisses that selection instead of escaping into the render/update loop. Implementation commit 2b08cc376a219a62fe3a1a75493a0a026aa850ee; committed source re-read successfully. WP remains incomplete pending genuine canonical NPC/building visual evidence.
 2026-09-26 09:42 +03:00 | WP-S003-008-006 | Fault-isolated selected tooltip screenBounds and overlap screenDepth callbacks so stale/transitioning active records cannot abort inspection; WP remains open pending genuine canonical NPC/building visual evidence.
+
+2026-09-26 09:50 +03:00 | WP-S003-008-006 | Corrected dedicated evidence routing from PlanetStage to canonical GameRenderer inspection. Three evidence attempts exposed two harness routing conflicts and then timed out during world startup; final retrieved screenshot was directly inspected and showed only the 66% 'Waking the world' loading screen. VISUAL 2/10 FAIL. WP remains open; no completion claimed.
