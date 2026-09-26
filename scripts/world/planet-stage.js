@@ -553,7 +553,7 @@ function makeCloudTexture(){
   for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++){
     const u=x/source.width,v=y/source.height,lat=(v-.5)*Math.PI;
     const field=Math.sin(u*Math.PI*10+phaseA)*.34+Math.sin(u*Math.PI*22+v*Math.PI*5+phaseB)*.22+Math.cos(u*Math.PI*7-v*Math.PI*13+phaseC)*.18+Math.cos(lat*3)*.20;
-    const alpha=Math.round(clamp((field-.16)*210,0,72));const i=(y*source.width+x)*4;
+    const alpha=Math.round(clamp((field-.12)*260,0,112));const i=(y*source.width+x)*4;
     data[i]=232;data[i+1]=241;data[i+2]=246;data[i+3]=alpha;
   }
   ctx.putImageData(image,0,0);
@@ -562,13 +562,13 @@ function makeCloudTexture(){
 }
 function buildAmbientMotion(surfaceMesh){
   const material=new pc.StandardMaterial();const texture=makeCloudTexture();
-  material.name="SeededCloudLayer";material.diffuse.set(.95,.98,1);material.diffuseMap=texture;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.52;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
+  material.name="SeededCloudLayer";material.diffuse.set(.95,.98,1);material.diffuseMap=texture;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.64;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
   cloudLayer=new pc.Entity("AmbientCloudLayer");cloudLayer.setLocalScale(1.018,1.018,1.018);cloudLayer.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});cloudLayer.render.meshInstances=[new pc.MeshInstance(surfaceMesh,material,cloudLayer)];planet.addChild(cloudLayer);
   ambientMotion={...ambientMotion,cloudLayerCount:1,animatedEntityCount:1,drawCallEstimate:1};
 }
 function updateAmbientMotion(dt){
   if(!ambientMotion.enabled||!cloudLayer||dragging)return;
-  const started=performance.now();ambientMotion.cloudYawDegrees=(ambientMotion.cloudYawDegrees+Math.min(.12,Math.max(0,Number(dt)||0))*.42)%360;
+  const started=performance.now();ambientMotion.cloudYawDegrees=(ambientMotion.cloudYawDegrees+Math.min(.12,Math.max(0,Number(dt)||0))*2.4)%360;
   cloudLayer.setLocalEulerAngles(0,ambientMotion.cloudYawDegrees,0);ambientMotion.updateCount++;ambientMotion.lastUpdateMs=performance.now()-started;ambientMotion.maxUpdateMs=Math.max(ambientMotion.maxUpdateMs,ambientMotion.lastUpdateMs);
 }
 function lerp(a,b,t){return a+(b-a)*t;}
