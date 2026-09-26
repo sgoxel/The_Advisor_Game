@@ -523,8 +523,9 @@ function unregisterInspectionPickable(id,type=null){
   let removed=false;for(const key of keys)removed=inspectionPickables.delete(key)||removed;return removed;
 }
 function readableInspectionLines(record){
-  if(record.type==="npc")return [String(record.name||"Unknown resident"),String(record.job||"Unassigned"),String(record.activity||"Activity unavailable")];
-  const typeLabel=String(record.functionLabel||record.buildingType||"Building"),name=String(record.name||"").trim();
+  const readable=(value,fallback)=>{const text=String(value??"").trim();return text||fallback;};
+  if(record.type==="npc")return [readable(record.name,"Unknown resident"),readable(record.job,"Unassigned"),readable(record.activity,"Activity unavailable")];
+  const typeLabel=readable(record.functionLabel??record.buildingType,"Building"),name=String(record.name??"").trim();
   return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
 }
 function renderInspectionTooltip(record){
