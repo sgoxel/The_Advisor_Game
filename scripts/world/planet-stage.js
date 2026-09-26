@@ -81,7 +81,7 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.78,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.90,transitionEnd:.998,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
@@ -417,7 +417,7 @@ function tangentFrame(latitudeRadians,longitudeRadians){
   });
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
-function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.80)/.17);}
+function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.91)/.085);}
 function canonicalSurfaceIdentity(){
   if(!geography)return null;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
@@ -885,7 +885,7 @@ function updateProjectionPresentation(){
     const handoff=projectionHandoffForZoom();
     const tangentVisible=handoff>.02;
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
-    const fineVisible=tangentVisible&&zoomState.scalar>=.80;
+    const fineVisible=tangentVisible&&zoomState.scalar>=.91;
     tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
