@@ -93,7 +93,7 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
   Object.freeze({id:"local-area",max:.92,visibleHeightMeters:8000,sampleSpacingMeters:250,reliefClampMeters:4200,reliefGain:7}),
   Object.freeze({id:"settlement",max:.97,visibleHeightMeters:1800,sampleSpacingMeters:60,reliefClampMeters:1600,reliefGain:4}),
   Object.freeze({id:"near-ground",max:.995,visibleHeightMeters:360,sampleSpacingMeters:12,reliefClampMeters:180,reliefGain:1.5}),
-  Object.freeze({id:"ground",max:1,visibleHeightMeters:54,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,reliefClampMeters:10,reliefGain:.35})
+  Object.freeze({id:"ground",max:1,visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,reliefClampMeters:10,reliefGain:.35})
 ]);
 let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 let localLodIndex=0;
@@ -410,6 +410,7 @@ function normalizeYaw(value){
 function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS[ZOOM_BANDS.length-1]).id;}
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
 function localDetailLevelForZoom(value=zoomState.scalar){
+  if(value>=ZOOM_MAX-1e-7){localLodIndex=LOCAL_DETAIL_LEVELS.length-1;return LOCAL_DETAIL_LEVELS[localLodIndex];}
   const rawIndex=Math.max(0,LOCAL_DETAIL_LEVELS.findIndex(level=>value<=level.max));
   if(!localDetail.active){localLodIndex=rawIndex;return LOCAL_DETAIL_LEVELS[localLodIndex];}
   if(rawIndex>localLodIndex){
@@ -489,15 +490,15 @@ function rebuildLocalStaticPresentation(signature){
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   if(center?.land){
-    const roadWidth=Math.max(3.5,Math.min(8,dims.visibleWidth*.08)),roadY=localGroundHeightUnits(0,0,dims)+.025;
+    const roadWidth=Math.max(4.5,Math.min(9,dims.visibleWidth*.10)),roadY=localGroundHeightUnits(0,0,dims)+.025;
     addLocalStatic("SeedRoad","box",localStaticMaterials.road,0,roadY,0,roadWidth/unit,.045,dims.patchHeight*.82/unit);localStatic.roadCount=1;localStatic.triangleEstimate+=12;
     const count=dims.levelId==="ground"?6:10;
     for(let i=0;i<count;i++){
       const side=i%2===0?-1:1,row=Math.floor(i/2),north=(-.32+row*.16)*dims.patchHeight,east=side*(roadWidth*.5+5+localHash(i*17,north,31)*7);
       if(Math.abs(east)>dims.patchWidth*.43||Math.abs(north)>dims.patchHeight*.43)continue;
-      const w=5+localHash(east,north,41)*4,d=5+localHash(east,north,42)*3,h=3.2+localHash(east,north,43)*2.2,y=localGroundHeightUnits(east,north,dims);
+      const w=6.5+localHash(east,north,41)*4.5,d=6+localHash(east,north,42)*3.5,h=4.5+localHash(east,north,43)*2.8,y=localGroundHeightUnits(east,north,dims);
       addLocalStatic("SeedBuildingBody-"+i,"box",localStaticMaterials.wall,east/unit,y+h*.5/unit,-north/unit,w/unit,h/unit,d/unit);
-      addLocalStatic("SeedBuildingRoof-"+i,"box",localStaticMaterials.roof,east/unit,y+(h+.55)/unit,-north/unit,w*1.12/unit,1.1/unit,d*1.12/unit);
+      addLocalStatic("SeedBuildingRoof-"+i,"box",localStaticMaterials.roof,east/unit,y+(h+.75)/unit,-north/unit,w*1.18/unit,1.5/unit,d*1.18/unit);
       localStatic.buildingCount++;localStatic.triangleEstimate+=24;
     }
     const trees=dims.levelId==="ground"?14:24;
@@ -506,7 +507,7 @@ function rebuildLocalStaticPresentation(signature){
       if(Math.abs(east)<roadWidth*.9)continue;
       const y=localGroundHeightUnits(east,north,dims),h=3.5+localHash(east,north,53)*3;
       addLocalStatic("SeedTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,east/unit,y+h*.25/unit,-north/unit,.7/unit,h*.5/unit,.7/unit);
-      addLocalStatic("SeedTreeCrown-"+i,"sphere",localStaticMaterials.leaf,east/unit,y+h*.72/unit,-north/unit,3.2/unit,h*.72/unit,3.2/unit);
+      addLocalStatic("SeedTreeCrown-"+i,"sphere",localStaticMaterials.leaf,east/unit,y+h*.72/unit,-north/unit,4.2/unit,h*.86/unit,4.2/unit);
       localStatic.vegetationCount++;localStatic.triangleEstimate+=180;
     }
   }else{
