@@ -104,6 +104,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity
 - `WP-S003-010-003-006` — Continuous Intermediate Scale Ladder + Streaming-Safe LOD Handoffs
 - `WP-S003-010-003-007` — Progressive Settlement + Local Feature Reveal Before Ground
+- `WP-S003-010-003-008` — Zoom-Aware Globe Atlas Labels + Visible-Screen Culling
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips
