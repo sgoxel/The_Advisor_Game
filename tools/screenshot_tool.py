@@ -244,7 +244,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-005": 9,
     "wp-s003-010-003-005-001": 10,
     "wp-s003-010-003-005-002": 10,
-    "wp-s003-010-003-006": 13,
+    "wp-s003-010-003-006": 14,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1491,6 +1491,18 @@ def create_driver(width: int, height: int):
     options.add_argument("--hide-scrollbars")
     options.add_argument(f"--window-size={width},{height}")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
+    # Optional overrides for sandboxes that ship their own Chromium/ChromeDriver
+    # (e.g. cloud agent containers without network access to Chrome for Testing).
+    for extra_argument in os.environ.get("SCREENSHOT_CHROME_ARGS", "").split():
+        options.add_argument(extra_argument)
+    chrome_binary = os.environ.get("SCREENSHOT_CHROME_BINARY")
+    if chrome_binary:
+        options.binary_location = chrome_binary
+    driver_path = os.environ.get("SCREENSHOT_CHROMEDRIVER")
+    if driver_path:
+        from selenium.webdriver.chrome.service import Service
+        service_args = ["--disable-build-check"] if os.environ.get("SCREENSHOT_CHROMEDRIVER_SKIP_VERSION_CHECK") == "1" else []
+        return webdriver.Chrome(options=options, service=Service(executable_path=driver_path, service_args=service_args))
     return webdriver.Chrome(options=options)
 
 
@@ -8328,36 +8340,76 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             raise RuntimeError(f"WP-S003-010-003-005 bounded resource proof invalid: {proof}")
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-006":
-        plan=(
-            (0.700,"desktop:400km"),(0.740,"desktop:250km"),(0.780,"desktop:140km"),
-            (0.820,"desktop:80km"),(0.860,"desktop:50km"),(0.890,"desktop:20km"),
-            (0.920,"desktop:10km"),(0.940,"desktop:5km"),(0.955,"desktop:2km"),
-            (0.970,"desktop:1km"),(0.980,"desktop:500m"),(0.990,"desktop:200m"),
-            (1.000,"desktop:ground"),
-        )
-        scalar,label=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(1280,800); time.sleep(0.1)
-        if frame_index == 0:
-            driver.execute_script("""
-                const s=window.PlanetStage.snapshot();
-                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
-                if(!t) throw new Error('seeded land target unavailable');
-                window.PlanetStage.setViewTarget(t);
+        ladder=lambda h: float(driver.execute_script("return window.PlanetStage.scalarForFootprintHeight(arguments[0])",h))
+        plan=((0.550,"desktop:globe-handoff"),)+tuple((ladder(h),f"desktop:{lbl}") for h,lbl in (
+            (300000,"300km"),(100000,"100km"),(50000,"50km"),(20000,"20km"),(10000,"10km"),(5000,"5km"),
+            (2000,"2km"),(1000,"1km"),(500,"500m"),(200,"200m"),(50,"50m"),(36,"ground")))
+        scalar,label=plan[min(max(frame_index-1,0),len(plan)-1)]
+        sweep=None
+        if frame_index <= 1:
+            # Fixed land focus, then a continuous no-movement sweep with one
+            # zoom step per animation frame through every LOD threshold.
+            driver.set_script_timeout(240.0)
+            sweep=driver.execute_async_script("""
+                const done=arguments[arguments.length-1];
+                const P=window.PlanetStage,s0=P.snapshot();
+                const t=s0?.featureTargets?.continent || s0?.featureTargets?.mountain || s0?.featureTargets?.peak;
+                if(!t){done({error:'seeded land target unavailable'});return;}
+                P.setViewTarget(t);P.setZoomScalar(0.20);
+                const order=s0.zoom.bands, samples=[];let longest=0,observer=null;
+                try{observer=new PerformanceObserver(list=>{for(const e of list.getEntries())longest=Math.max(longest,e.duration);});observer.observe({entryTypes:['longtask']});}catch(_){}
+                let scalar=0.20,last=performance.now(),maxFrameGap=0;
+                const step=()=>{
+                  const now=performance.now();maxFrameGap=Math.max(maxFrameGap,now-last);last=now;
+                  scalar=Math.min(1,scalar+0.0025);const s=P.snapshot(),z=s.zoom,r=s.projection.resourceBudget,p=s.projection.presentation;
+                  P.setZoomScalar(scalar);
+                  const a=P.snapshot(),za=a.zoom,ra=a.projection.resourceBudget,pa=a.projection.presentation;
+                  samples.push({scalar:za.scalar,footprint:za.visibleFootprintHeightMeters,target:pa.targetHeightMeters,band:za.band,requestedBand:za.requestedBand,visibleLevel:za.visibleLevel,requestedLevel:za.requestedLevel,
+                    standIn:ra.standInActive,magnification:ra.standInMagnification,globeOpacity:pa.globeOpacity,tangentOpacity:pa.tangentOpacity,tangentActive:a.projection.tangentPatchActive,preparing:ra.preparing});
+                  if(scalar<1){requestAnimationFrame(step);return;}
+                  const settle=()=>{const r2=P.snapshot().projection.resourceBudget;if(Number(r2.pendingPreparationCount||0)===0||performance.now()-last>60000)finish();else setTimeout(settle,100);};
+                  setTimeout(settle,100);
+                };
+                const finish=()=>{
+                  observer?.disconnect?.();
+                  const rb=P.snapshot().projection.resourceBudget;
+                  let maxStepRatio=1,monotonic=true,finerThanVisible=0,blank=0,standInSteps=0,maxMag=1;
+                  for(let i=1;i<samples.length;i++){const a=samples[i-1],b=samples[i];if(b.footprint>a.footprint*1.0001)monotonic=false;maxStepRatio=Math.max(maxStepRatio,a.footprint/Math.max(1,b.footprint));}
+                  for(const x of samples){
+                    if(order.indexOf(x.band)>order.indexOf(x.requestedBand))finerThanVisible++;
+                    if(Number(x.globeOpacity||0)<0.01&&!(x.tangentActive&&Number(x.tangentOpacity||0)>0.01))blank++;
+                    if(x.standIn)standInSteps++;maxMag=Math.max(maxMag,Number(x.magnification||1));
+                  }
+                  done({steps:samples.length,monotonic,maxStepRatio:Number(maxStepRatio.toFixed(4)),bandFinerThanRequested:finerThanVisible,blankFrames:blank,standInSteps,maxStandInMagnification:Number(maxMag.toFixed(3)),
+                    longestLongTaskMs:Number(longest.toFixed(1)),maxFrameGapMs:Number(maxFrameGap.toFixed(1)),maxPreparationSliceMs:rb.maxPreparationSliceMs,maxSwapMs:rb.maxSwapMs,swapCount:rb.swapCount,
+                    blockingZoomBuilds:rb.blockingZoomBuilds,prewarmHits:rb.prewarmHits,cacheHits:rb.cacheHits,cancelledPreparations:rb.cancelledPreparations,deferredRequests:rb.deferredRequests,
+                    bandsSeen:[...new Set(samples.map(x=>x.band))],levelsSeen:[...new Set(samples.map(x=>x.visibleLevel).filter(Boolean))]});
+                };
+                requestAnimationFrame(step);
             """)
+            if not isinstance(sweep,dict) or sweep.get("error"):
+                raise RuntimeError(f"continuous LOD sweep failed: {sweep}")
+            # Leave a zoomed-out start so the first plan frame is a real zoom-in.
+            driver.execute_script("window.PlanetStage.setZoomScalar(0.2)")
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
         from selenium.webdriver.support.ui import WebDriverWait
-        WebDriverWait(driver,20.0).until(lambda d: d.execute_script("""
+        started=time.time()
+        WebDriverWait(driver,60.0).until(lambda d: d.execute_script("""
             const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
-            return Number(s?.zoom?.scalar||0)>=Number(arguments[0])-0.000001 &&
-                   Number(r?.pendingPreparationCount||0)===0;
+            return Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.000002 &&
+                   Number(r?.pendingPreparationCount||0)===0 && !r?.preparing;
         """,scalar))
+        time.sleep(0.4)
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},p=s?.projection?.presentation||{};
-            return {scalar:s?.zoom?.scalar,visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
-              level:s?.projection?.localDetail?.level,requested:r?.requestedSignature,prepared:r?.preparedSignature,active:r?.activeSignature,
-              pending:r?.pendingPreparationCount,buildMs:r?.lastBuildMs,swapMs:r?.lastSwapMs,blockingZoomBuilds:r?.blockingZoomBuilds,
-              targetHeightMeters:p?.targetHeightMeters};
+            return {scalar:s?.zoom?.scalar,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,target:p?.targetHeightMeters,band:s?.zoom?.band,requestedBand:s?.zoom?.requestedBand,
+              visibleLevel:s?.zoom?.visibleLevel,requestedLevel:s?.zoom?.requestedLevel,pending:r?.pendingPreparationCount,prepWallMs:r?.lastPreparationWallMs,prepBusyMs:r?.lastPreparationBusyMs,
+              maxSliceMs:r?.maxPreparationSliceMs,swapMs:r?.lastSwapMs,maxSwapMs:r?.maxSwapMs,cacheHits:r?.cacheHits,cacheMisses:r?.cacheMisses,prewarmHits:r?.prewarmHits,blockingZoomBuilds:r?.blockingZoomBuilds};
         """)
+        proof["readyWaitS"]=round(time.time()-started,2)
+        if sweep is not None:
+            proof["sweep"]=sweep
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "camera-pan-zoom":
         actions = (
@@ -8603,22 +8655,38 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "wp-s003-010-003-006":
-        if len(frames) < 13:
-            raise RuntimeError("wp-s003-010-003-006 requires thirteen intermediate-scale frames")
-        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:13]]
+        if len(frames) < 14:
+            raise RuntimeError("wp-s003-010-003-006 requires a start frame plus thirteen ladder frames")
+        ladder=frames[1:14]
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in ladder]
         focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in stages]
         if len(set(focus)) != 1:
             raise RuntimeError(f"Intermediate-scale evidence changed geographic focus: {focus}")
         heights=[float((s.get("zoom") or {}).get("visibleFootprintHeightMeters") or 0) for s in stages]
         if any(b >= a for a,b in zip(heights,heights[1:])):
             raise RuntimeError(f"Visible footprint did not decrease monotonically: {heights}")
-        targets=[float(((s.get("projection") or {}).get("presentation") or {}).get("targetHeightMeters") or 0) for s in stages]
-        if any(b >= a for a,b in zip(targets,targets[1:])):
-            raise RuntimeError(f"Presentation target ladder did not decrease monotonically: {targets}")
-        for s in stages:
-            r=(s.get("projection") or {}).get("resourceBudget") or {}
+        for s in stages[1:]:
+            z=s.get("zoom") or {}; r=(s.get("projection") or {}).get("resourceBudget") or {}
+            target=float(((s.get("projection") or {}).get("presentation") or {}).get("targetHeightMeters") or 0)
+            if target<=0 or abs(float(z.get("visibleFootprintHeightMeters") or 0)-target)/target>0.02:
+                raise RuntimeError(f"Ruler footprint disagrees with rendered ladder target: {z.get('scalar')} {z.get('visibleFootprintHeightMeters')} vs {target}")
+            if z.get("band")!=z.get("requestedBand"):
+                raise RuntimeError(f"Settled frame shows a coarser band than requested: {z.get('band')} vs {z.get('requestedBand')}")
             if int(r.get("pendingPreparationCount") or 0) != 0 or int(r.get("blockingZoomBuilds") or 0) != 0:
                 raise RuntimeError(f"LOD handoff remained pending/blocking at capture: {r}")
+            if float(r.get("maxSwapMs") or 0) > 50:
+                raise RuntimeError(f"LOD swap blocked the main thread: {r.get('maxSwapMs')} ms")
+        action=str(ladder[0].get("action") or "")
+        try:
+            sweep=json.loads(action.split(":",2)[2]).get("sweep") or {}
+        except Exception as exc:
+            raise RuntimeError(f"continuous sweep evidence missing: {exc}")
+        if not sweep.get("monotonic") or int(sweep.get("blankFrames",1)) or int(sweep.get("bandFinerThanRequested",1)) or int(sweep.get("blockingZoomBuilds",1)):
+            raise RuntimeError(f"Continuous sweep failed continuity/readiness rules: {sweep}")
+        if float(sweep.get("maxStepRatio") or 99) > 1.2:
+            raise RuntimeError(f"Continuous sweep has a visible scale pop: {sweep.get('maxStepRatio')}")
+        if float(sweep.get("maxPreparationSliceMs") or 999) > 60 or float(sweep.get("maxSwapMs") or 999) > 50:
+            raise RuntimeError(f"Cooperative LOD preparation exceeded its main-thread budget: {sweep}")
         return
     if scenario == "wp-s003-010-003-005-001":
         if len(frames) < 10:
