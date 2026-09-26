@@ -1670,3 +1670,8 @@
 - Added active-scene NPC/building inspection registry, click-vs-drag gating, deterministic overlap resolution, one reusable viewport-clamped tooltip, live selected-object anchoring/dismissal and pick/update telemetry.
 - Added dedicated evidence scenario and CI routing that refuses fabricated tooltip proof when canonical active NPC/building presentation targets are absent.
 - Targeted evidence run 36208072293 correctly failed because the current canonical planet-first scene exposes zero active NPC/building pick targets; no visual score or completion is claimed. Current code/CI deployment run 36208067046 succeeded.
+
+2026-09-26 04:27 +03:00 | WP-S003-008-006 | PARTIAL — real PlayCanvas local-presentation inspection binding
+- Wired resident inspection to active PlayCanvas billboard instances while retaining authoritative resident name, profession and activity/action labels from the existing local character bundle.
+- Wired building picking to authoritative local building-interior bounds/labels; added bounded resident-first overlap resolution, click-vs-drag gating, one reusable callout, live selected-object anchoring/dismissal and inspection telemetry.
+- Did not reactivate local NPC/building presentation in the current planet-first root. Automatic push visual run 36208339458 therefore exercised the unrelated default globe scenario and is not WP evidence. Implementation deployment run 36208338081 succeeded; WP remains open pending real in-game local targets and fresh directly inspectable screenshots.
