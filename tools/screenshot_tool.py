@@ -1668,27 +1668,14 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         if scenario == "wp-s003-010-003-007":
             selected=driver.execute_script("""
                 const stage=window.PlanetStage,s=stage.snapshot(),seed=s?.activeSeed;
-                const archetypes=window.SettlementArchetypes,politics=window.PoliticalGeography,profiles=window.CountryProfile;
-                if(!seed || !archetypes?.settlementsForCountry || !politics?.countryAt || !profiles?.sampleCountries){
+                const archetypes=window.SettlementArchetypes,politics=window.PoliticalGeography;
+                if(!seed || !archetypes?.settlementsForCountry || !politics?.countryAt){
                   throw new Error('canonical settlement authority unavailable');
                 }
                 const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
                 const radius=Math.max(1,Number(stage.constants?.WORLD_RADIUS_METERS||1));
-                const countries=[],countryIds=new Set();
-                const addCountry=(country)=>{
-                  if(country?.id&&!countryIds.has(country.id)&&countries.length<5){countryIds.add(country.id);countries.push(country);}
-                };
-                addCountry(politics.countryAt(seed,'0','0'));
-                for(const profile of profiles.sampleCountries(seed)||[]){
-                  addCountry(politics.countryById(seed,profile?.countryId));
-                  if(countries.length>=5)break;
-                }
-                const plans=[],planIds=new Set();
-                for(const country of countries){
-                  for(const plan of archetypes.settlementsForCountry(seed,country,4)||[]){
-                    if(plan?.id&&!planIds.has(plan.id)){planIds.add(plan.id);plans.push(plan);}
-                  }
-                }
+                const country=politics.countryAt(seed,'0','0');
+                const plans=(archetypes.settlementsForCountry(seed,country,1)||[]).slice();
                 const priority=(plan)=>plan?.role==='starting-village'?0:plan?.classId==='village'?1:plan?.classId==='hamlet'?2:plan?.classId==='town'?3:plan?.classId==='city'?4:5;
                 plans.sort((a,b)=>priority(a)-priority(b)||String(a.id).localeCompare(String(b.id)));
                 let chosen=null;
@@ -1706,7 +1693,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                     break;
                   }
                 }
-                if(!chosen) throw new Error('canonical settlement has no bounded planetary land projection: plans='+plans.length+', countries='+countries.length);
+                if(!chosen) throw new Error('origin canonical settlement has no bounded planetary land projection: plans='+plans.length);
                 stage.setZoomScalar(0.54);
                 const ready=stage.snapshot();
                 return {
