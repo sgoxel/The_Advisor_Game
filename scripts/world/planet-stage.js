@@ -78,7 +78,7 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.58,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.68,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_DETAIL_LEVELS=Object.freeze([
@@ -305,35 +305,42 @@ function rebuildTangentPatch(){
   if(!tangentPatch?.render||!device)return;
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
 }
-function updateTangentPatchTexture(){
-  if(!tangentPatchMaterial||!geography)return;
-  const dims=localPatchDimensions(),size=256,spanEast=dims.patchWidth,spanNorth=dims.patchHeight,canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
+function makeLocalSurfaceTexture(spanEast,spanNorth,size=256){
+  const canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
   const ctx=canvas2d.getContext("2d",{alpha:false}),image=ctx.createImageData(size,size),data=image.data;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
+  const center=geography.sampleLatLon(lat0,lon0),forcedLand=!!center?.land;
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const east=((x+.5)/size-.5)*spanEast,north=(.5-(y+.5)/size)*spanNorth;
     const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
     const cosLat=Math.max(.08,Math.cos(lat0));
     let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
     const sample=geography.sampleLatLon(lat,lon),local=localSurfaceSample(east,north,sample);
-    const center=geography.sampleLatLon(lat0,lon0),forcedLand=!!center?.land;
     const displayColor=forcedLand?local.color.map(v=>clamp(v*.88,0,1)):local.color;
     const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
     data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=255;
   }
   ctx.putImageData(image,0,0);
   const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
-  texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(canvas2d);
-  tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.update();
+  texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(canvas2d);
+  return texture;
+}
+function updateTangentPatchTexture(){
+  if(!tangentPatchMaterial||!geography)return;
+  const dims=localPatchDimensions();
+  const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,256);
+  tangentPatchMaterial.diffuseMap=detailTexture;tangentPatchMaterial.emissiveMap=detailTexture;tangentPatchMaterial.update();
   if(horizonSkirtMaterial){
-    // The surround uses the exact same seeded texture as the detailed patch.
-    // Its geometry is intentionally flat/coarse; only the bounded inner patch
-    // carries the higher-resolution relief.
-    horizonSkirtMaterial.diffuseMap=texture;
-    horizonSkirtMaterial.emissiveMap=texture;
+    // The flat surround spans 12x the detailed patch in presentation space.
+    // Sample exactly 12x the physical area as well so its central texture
+    // coordinates line up with the detailed patch edges.
+    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,256);
+    horizonSkirtMaterial.diffuseMap=surroundTexture;
+    horizonSkirtMaterial.emissiveMap=surroundTexture;
     horizonSkirtMaterial.diffuse.set(1,1,1);
     horizonSkirtMaterial.emissive.set(1,1,1);
-    horizonSkirtMaterial.emissiveIntensity=.92;
+    horizonSkirtMaterial.emissiveIntensity=.98;
     horizonSkirtMaterial.update();
   }
 }
