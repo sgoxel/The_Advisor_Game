@@ -36,6 +36,8 @@ let fillLight=null;
 let surfaceMaterial=null;
 let tangentPatch=null;
 let tangentPatchMaterial=null;
+let horizonSkirt=null;
+let horizonSkirtMaterial=null;
 let resizeObserver=null;
 let yawDegrees=-18;
 let pitchDegrees=-10;
@@ -305,12 +307,25 @@ function ensureTangentPatch(){
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
 }
+function ensureHorizonSkirt(){
+  if(horizonSkirt||!device)return;
+  horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
+  horizonSkirtMaterial.diffuse.set(.12,.20,.12);horizonSkirtMaterial.emissive.set(.10,.17,.10);horizonSkirtMaterial.emissiveIntensity=.82;
+  horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
+  const mesh=new pc.Mesh(device);
+  mesh.setPositions([-18,-.12,-18,18,-.12,-18,-18,-.12,18,18,-.12,18]);
+  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
+  horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+  horizonSkirt.render.meshInstances=[new pc.MeshInstance(mesh,horizonSkirtMaterial,horizonSkirt)];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
+}
 function updateProjectionPresentation(){
   if(!planet)return;
   const blend=projectionState.blend;
   if(blend>0){ensureTangentPatch();const dims=localPatchDimensions(),sig=[activeSeed,zoomState.focusLatitudeRadians.toFixed(6),zoomState.focusLongitudeRadians.toFixed(6),Math.ceil(dims.patchWidth/2),Math.ceil(dims.patchHeight/2)].join("|");if(localDetail.signature!==sig){rebuildTangentPatch();updateTangentPatchTexture();}}
   if(tangentPatch){
     tangentPatch.enabled=blend>.04;
+    ensureHorizonSkirt();
+    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.16*blend,0);}
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Expand the patch through the handoff so the viewport never collapses to a
