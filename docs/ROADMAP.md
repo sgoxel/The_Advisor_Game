@@ -80,7 +80,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-008-002-001` — Real First-Playable Loading Progress + Animated Phase Feedback — COMPLETED
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
 - `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention — COMPLETED
-- `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup
+- `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup — COMPLETED
 - `WP-S003-008-006` — Clickable NPC + Building Inspection Tooltips
 - `WP-S003-009` — Loading-Screen-Inspired Living World Visual Direction Foundation — COMPLETED
 - `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — COMPLETED
