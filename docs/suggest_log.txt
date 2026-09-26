@@ -270,3 +270,7 @@ Suggestion: when production environment art is refreshed, consider replacing the
 
 2026-09-26 02:44:00 +03:00 | WP-S003-009-011 | Phase 1 | Suggestion: when the canonical renderer exposes its ground-scale view, consume the existing deterministic wilderness descriptors there with distance LOD, biome-specific asset families and bounded ambient fauna; keep the globe view free of oversized local props. Do not implement unless explicitly requested.
 2026-09-26 02:50 +03:00 | WP-S003-008-004 | phase 3 | Future improvement: consider moving pure planetary geography sampling to a worker only if profiling shows a measurable startup benefit; preserve deterministic ordering and keep PlayCanvas commits sliced on the main thread.
+
+
+2026-09-26 03:52 +03:00 | WP-S003-008-005 | Phase 1
+Suggestion: when canonical WP-S006-007 destination records become available, replace the navigator's planet-first fallback descriptors through the existing bounded adapter while preserving camera-only navigation, query limits, category UX and deterministic ordering.
