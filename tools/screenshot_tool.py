@@ -131,6 +131,7 @@ SCENARIOS = {
     "wp-s003-010-003-003",
     "wp-s003-010-003-004",
     "wp-s003-010-003-005",
+    "wp-s003-010-003-006",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -239,6 +240,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-003": 15,
     "wp-s003-010-003-004": 12,
     "wp-s003-010-003-005": 9,
+    "wp-s003-010-003-006": 13,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1638,7 +1640,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-006","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7932,7 +7934,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
     if scenario == "static" or (
         frame_index == 0 and
-        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-004"}
+        scenario not in {"wp-s004-001","wp-s004-002","wp-s004-003","wp-s004-004","wp-s004-004-001","wp-s004-005","wp-s005-001","wp-s005-002","wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003","wp-s003-008-002-001","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-006","wp-s003-010-004"}
     ):
         return "initial"
     if scenario == "save-load":
@@ -8228,6 +8230,38 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not isinstance(proof,dict) or proof.get("offscreenFine") is not False:
             raise RuntimeError(f"WP-S003-010-003-005 bounded resource proof invalid: {proof}")
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-006":
+        plan=(
+            (0.700,"desktop:400km"),(0.740,"desktop:250km"),(0.780,"desktop:140km"),
+            (0.820,"desktop:80km"),(0.860,"desktop:50km"),(0.890,"desktop:20km"),
+            (0.920,"desktop:10km"),(0.940,"desktop:5km"),(0.955,"desktop:2km"),
+            (0.970,"desktop:1km"),(0.980,"desktop:500m"),(0.990,"desktop:200m"),
+            (1.000,"desktop:ground"),
+        )
+        scalar,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.1)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(driver,20.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
+            return Number(s?.zoom?.scalar||0)>=Number(arguments[0])-0.000001 &&
+                   Number(r?.pendingPreparationCount||0)===0;
+        """,scalar))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},p=s?.projection?.presentation||{};
+            return {scalar:s?.zoom?.scalar,visibleWidth:s?.zoom?.visibleFootprintWidthMeters,visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
+              level:s?.projection?.localDetail?.level,requested:r?.requestedSignature,prepared:r?.preparedSignature,active:r?.activeSignature,
+              pending:r?.pendingPreparationCount,buildMs:r?.lastBuildMs,swapMs:r?.lastSwapMs,blockingZoomBuilds:r?.blockingZoomBuilds,
+              targetHeightMeters:p?.targetHeightMeters};
+        """)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "camera-pan-zoom":
         actions = (
             lambda: _drag_canvas(driver, 120, 0),
@@ -8471,6 +8505,24 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-006":
+        if len(frames) < 13:
+            raise RuntimeError("wp-s003-010-003-006 requires thirteen intermediate-scale frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:13]]
+        focus=[(round(float((s.get("zoom") or {}).get("focusLatitudeDegrees") or 0),5),round(float((s.get("zoom") or {}).get("focusLongitudeDegrees") or 0),5)) for s in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"Intermediate-scale evidence changed geographic focus: {focus}")
+        heights=[float((s.get("zoom") or {}).get("visibleFootprintHeightMeters") or 0) for s in stages]
+        if any(b >= a for a,b in zip(heights,heights[1:])):
+            raise RuntimeError(f"Visible footprint did not decrease monotonically: {heights}")
+        targets=[float(((s.get("projection") or {}).get("presentation") or {}).get("targetHeightMeters") or 0) for s in stages]
+        if any(b >= a for a,b in zip(targets,targets[1:])):
+            raise RuntimeError(f"Presentation target ladder did not decrease monotonically: {targets}")
+        for s in stages:
+            r=(s.get("projection") or {}).get("resourceBudget") or {}
+            if int(r.get("pendingPreparationCount") or 0) != 0 or int(r.get("blockingZoomBuilds") or 0) != 0:
+                raise RuntimeError(f"LOD handoff remained pending/blocking at capture: {r}")
+        return
     if scenario == "wp-s003-010-003-005":
         if len(frames) < 9:
             raise RuntimeError("wp-s003-010-003-005 requires nine multi-LOD continuity frames")
