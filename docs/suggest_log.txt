@@ -302,3 +302,5 @@ Suggestion: when canonical WP-S006-007 destination records become available, rep
 2026-09-26 08:10 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add a focused regression test covering inspection IDs 0, empty string, null and undefined without requiring visual targets. Do not implement outside the WP evidence/test scope.
 
 2026-09-26 08:17 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add deterministic overlap regression coverage for finite, missing, NaN and Infinity depth/priority values. Do not implement outside the WP evidence/test scope.
+
+2026-09-26 08:23 +03:00 | WP-S003-008-006 | phase 1 | Future improvement: add overlap regression coverage where NPC and building share raw ID, priority and depth, verifying stable typed-identity selection. Do not implement outside the WP evidence/test scope.
