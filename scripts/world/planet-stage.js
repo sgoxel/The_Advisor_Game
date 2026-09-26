@@ -261,7 +261,7 @@ function updateProjectionPresentation(){
     tangentPatch.enabled=blend>.04;
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    const patchScale=1.9+.45*blend;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));\n    const coverageScale=aspect<1?4.8:3.6;\n    const patchScale=1.9+(coverageScale-1.9)*blend;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     for(const mi of tangentPatch.render.meshInstances)mi.setParameter?.("material_opacity",blend);
   }
   planet.enabled=blend<.96;
