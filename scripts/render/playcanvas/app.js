@@ -2270,7 +2270,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   }
   function renderInspectionSelection(record){
     const started=performance.now(),tip=inspectionTooltip();if(!tip||!record)return;tip.replaceChildren();let lines=[];
-    if(record.type==="npc"){const i=record.item;lines=[i.residentName||"Resident",inspectionReadableText(i.profession,"Resident"),inspectionActivityText(i)];}
+    if(record.type==="npc"){const i=record.item,name=String(i.residentName||"").trim();lines=[name||"Resident",inspectionReadableText(i.profession,"Unassigned"),inspectionActivityText(i)];}
     else{const b=record.item,typeLabel=inspectionReadableText(b.functionLabel||b.kind,"Building"),name=String(b.label||b.name||"").trim();lines=name&&name!==typeLabel?[name,typeLabel]:[typeLabel];}
     lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=String(line);tip.appendChild(el);});
     const rect=host.getBoundingClientRect(),a=record.anchor||{x:rect.width/2,y:rect.height/2};
