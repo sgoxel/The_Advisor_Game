@@ -59,6 +59,8 @@ let heartbeatTimer=null;
 let controlledWorkActive=false;
 let lastHeartbeatAt=0;
 let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
+const inspectionPickables=new Map();
+let inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,dismissCount:0};
 let cloudLayer=null;
 let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
 let atmosphere={active:false,authoritativeHour:null,phase:"unbound",source:"none",dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false};
@@ -509,6 +511,34 @@ function resize(){
     cameraEntity.lookAt(0,0,0);
   }
 }
+function dismissInspection(){inspection.selectedId=null;inspection.selectedType=null;inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
+function registerInspectionPickable(record){
+  if(!record?.id||!["npc","building"].includes(record.type)||typeof record.screenBounds!=="function")return false;
+  inspectionPickables.set(String(record.id),record);return true;
+}
+function unregisterInspectionPickable(id){if(inspection.selectedId===String(id))dismissInspection();return inspectionPickables.delete(String(id));}
+function readableInspectionLines(record){
+  if(record.type==="npc")return [String(record.name||"Unknown resident"),String(record.job||"Resident"),String(record.activity||"Idle")];
+  return [String(record.name||record.functionLabel||"Building"),String(record.functionLabel||record.buildingType||"Building")];
+}
+function renderInspectionTooltip(record){
+  let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
+  const started=performance.now(),bounds=record.screenBounds(),lines=readableInspectionLines(record);tip.replaceChildren();
+  lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
+  const rootRect=root.getBoundingClientRect(),x=clamp((bounds.left+bounds.right)/2-rootRect.left,12,rootRect.width-12),y=clamp(bounds.top-rootRect.top-12,12,rootRect.height-12);
+  tip.style.left=x+"px";tip.style.top=y+"px";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));
+}
+function pickInspection(clientX,clientY){
+  const started=performance.now(),candidates=[];
+  for(const record of inspectionPickables.values()){
+    if(record.visible?.()===false)continue;const b=record.screenBounds();if(!b)continue;
+    if(clientX>=b.left&&clientX<=b.right&&clientY>=b.top&&clientY<=b.bottom)candidates.push(record);
+  }
+  candidates.sort((a,b)=>Number(b.pickPriority||0)-Number(a.pickPriority||0)||String(a.id).localeCompare(String(b.id)));
+  inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
+  const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.id);inspection.selectedType=picked.type;renderInspectionTooltip(picked);return picked;
+}
+function updateInspectionTooltip(){if(!inspection.selectedId)return;const record=inspectionPickables.get(inspection.selectedId);if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
 function bindInput(){
   canvas.tabIndex=0;
   canvas.setAttribute("role","application");
@@ -516,7 +546,7 @@ function bindInput(){
   canvas.addEventListener("contextmenu",event=>event.preventDefault());
   canvas.addEventListener("pointerdown",event=>{
     dragging=true;pointerId=event.pointerId;
-    lastPointerX=event.clientX;lastPointerY=event.clientY;
+    lastPointerX=event.clientX;lastPointerY=event.clientY;inspection.pointerDownX=event.clientX;inspection.pointerDownY=event.clientY;inspection.dragDistance=0;
     canvas.setPointerCapture?.(event.pointerId);
     canvas.focus({preventScroll:true});
     pointerDragCount++;event.preventDefault();
@@ -529,7 +559,7 @@ function bindInput(){
   },{passive:false});
   const endPointer=event=>{
     if(event.pointerId!==pointerId)return;
-    dragging=false;canvas.releasePointerCapture?.(event.pointerId);pointerId=null;
+    dragging=false;canvas.releasePointerCapture?.(event.pointerId);pointerId=null;if(event.type==="pointerup"&&inspection.dragDistance<=6)pickInspection(event.clientX,event.clientY);
   };
   canvas.addEventListener("pointerup",endPointer);
   canvas.addEventListener("pointercancel",endPointer);
@@ -539,7 +569,7 @@ function bindInput(){
     else if(event.key==="ArrowRight")rotateBy(6,0);
     else if(event.key==="ArrowUp")rotateBy(0,-6);
     else if(event.key==="ArrowDown")rotateBy(0,6);
-    else handled=false;
+    else if(event.key==="Escape"){dismissInspection();}\n    else handled=false;
     if(handled)event.preventDefault();
   });
 }
@@ -705,7 +735,7 @@ async function start(){
     await yieldPaint();
     bindInput();
     resize();
-    app.on?.("update",dt=>{frameCount++;updateAmbientMotion(dt);});
+    app.on?.("update",dt=>{frameCount++;updateInspectionTooltip();updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
 
     if("ResizeObserver" in window){
@@ -799,7 +829,7 @@ function snapshot(){
     ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
     atmosphere:Object.freeze({...atmosphere}),
     wilderness:Object.freeze({...wilderness}),
-    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number(pitchDegrees.toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
+    inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,boundedActiveRegistry:true,fullWorldScan:false}),\n    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number(pitchDegrees.toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     startupError,
     startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
     loadingPresentation:Object.freeze({...((loadingProof||startupProgress)),loadingProofActive:Boolean(loadingProof)}),
@@ -835,7 +865,7 @@ function destroy(){
   geography=null;root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,\n  setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
