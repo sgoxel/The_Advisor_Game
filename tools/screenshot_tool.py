@@ -6258,11 +6258,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "wp-s003-008-005":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
-            ("all",None,(1280,800)),
-            ("nature",None,(1280,800)),
-            ("water",None,(1280,800)),
-            ("all",0,(1280,800)),
-            ("all",1,(844,390)),
+            ("settlements",None,(1280,800)),
+            ("cities",None,(1280,800)),
+            ("historical",None,(1280,800)),
+            ("hunting",0,(1280,800)),
+            ("fishing",0,(844,390)),
             ("all",2,(390,844)),
         )
         category,select_index,viewport=plan[min(frame_index,len(plan)-1)]
@@ -6289,8 +6289,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not isinstance(result,dict) or not isinstance(result.get("stage"),dict):
             raise RuntimeError(f"Places navigator proof failed: {result}")
         nav=result["stage"].get("destinationNavigator") or {}
+        required={"settlements","cities","historical","hunting","fishing","water","nature"}
+        categories=set(nav.get("categories") or [])
+        types=set(nav.get("types") or [])
         if nav.get("open") is not True or int(result.get("rowCount") or 0)<1 or nav.get("fullWorldScan") is not False or nav.get("cameraOnly") is not True:
             raise RuntimeError(f"Places navigator state invalid: {result}")
+        if not required.issubset(categories) or not {"village","town","city","ruin","hunting","fishing","water"}.issubset(types):
+            raise RuntimeError(f"Places navigator descriptor coverage incomplete: {result}")
+        if nav.get("boundedQuery") is not True or nav.get("localChunkMaterialization") is not False or int(nav.get("descriptorLimit") or 0)>16:
+            raise RuntimeError(f"Places navigator query budget invalid: {result}")
         rect=result.get("panelRect") or {}
         if float(rect.get("left") or -1)<0 or float(rect.get("top") or -1)<0 or float(rect.get("right") or 1)>float(viewport[0])+1 or float(rect.get("bottom") or 1)>float(viewport[1])+1:
             raise RuntimeError(f"Places navigator clipped outside viewport: {result}")
