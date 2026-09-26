@@ -1383,7 +1383,7 @@ body.planet-stage-active{
 /* WP-S003-010-003-001 — zoom-aware geographic map information */
 .planet-map-layer{position:absolute;inset:0;z-index:4;pointer-events:none;font-family:Arial,Helvetica,sans-serif;color:#edf7f8}
 .planet-map-borders{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.planet-political-border{stroke:rgba(237,207,135,.78);stroke-width:2.2;stroke-dasharray:7 7;stroke-linecap:round;vector-effect:non-scaling-stroke;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+.planet-political-border{stroke:rgba(237,207,135,.68);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
 .planet-map-labels{position:absolute;inset:0}
 .planet-map-label{position:absolute;transform:translate(-50%,-50%);display:grid;gap:2px;min-width:90px;max-width:180px;padding:6px 9px;border:1px solid rgba(180,215,220,.38);border-radius:10px;background:rgba(7,17,27,.78);box-shadow:0 5px 16px rgba(0,0,0,.28);backdrop-filter:blur(7px);text-align:center}
 .planet-map-label small{font:700 8px/1 Arial,sans-serif;letter-spacing:.14em;color:#82b8c5}
@@ -1405,7 +1405,7 @@ body.planet-stage-active{
 .planet-scale-line{position:relative;height:7px;min-width:72px;max-width:190px;border-left:2px solid rgba(235,246,246,.88);border-right:2px solid rgba(235,246,246,.88);border-bottom:2px solid rgba(235,246,246,.88)}
 .planet-scale-line i{position:absolute;left:50%;bottom:-2px;width:1px;height:5px;background:rgba(235,246,246,.66)}
 .planet-scale-ruler small{font:700 9px/1 ui-monospace,SFMono-Regular,Consolas,monospace;color:#b8cdd2}
-@media(max-width:520px){.planet-map-context{top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));width:min(230px,calc(100vw - 90px));border-radius:13px}.planet-map-context-head{padding:8px 9px 6px}.planet-map-context-names{padding:4px 6px 6px}.planet-map-context-names>div{grid-template-columns:54px;min-height:24px;gap:6px}.planet-map-context-names strong{font-size:10px}.planet-map-label{min-width:74px;max-width:128px;padding:5px 7px}.planet-map-label strong{font-size:9px}.planet-scale-ruler{left:max(8px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom));padding:7px 8px}.planet-scale-line{max-width:135px}}
+@media(max-width:520px){.planet-map-context{top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));width:min(292px,calc(100vw - 90px));border-radius:13px}.planet-map-context-head{padding:8px 9px 6px}.planet-map-context-names{padding:4px 6px 6px}.planet-map-context-names>div{grid-template-columns:54px;min-height:24px;gap:6px}.planet-map-context-names strong{font-size:10px}.planet-map-label{min-width:74px;max-width:128px;padding:5px 7px}.planet-map-label strong{font-size:9px}.planet-scale-ruler{left:max(8px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom));padding:7px 8px}.planet-scale-line{max-width:135px}}
 @media(max-height:430px) and (orientation:landscape){.planet-map-context{top:8px;left:8px;width:220px}.planet-map-context-head{padding:6px 8px 4px}.planet-map-context-names{grid-template-columns:1fr 1fr;padding:3px 5px 5px}.planet-map-context-names>div{grid-template-columns:46px minmax(0,1fr);min-height:21px;gap:4px;padding:2px 4px}.planet-map-context-names span{font-size:7px}.planet-map-context-names strong{font-size:9px}.planet-scale-ruler{left:8px;bottom:8px;padding:6px 8px}.planet-map-label{padding:4px 6px}.planet-map-label small{font-size:7px}.planet-map-label strong{font-size:9px}}
 
 
