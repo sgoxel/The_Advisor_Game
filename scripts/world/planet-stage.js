@@ -330,7 +330,7 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     tangentPatch.enabled=blend>.04;
     ensureHorizonSkirt();
-    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.028*blend,0);}
+    if(horizonSkirt){horizonSkirt.enabled=blend>.16;horizonSkirt.setLocalPosition(0,-.24*blend,0);}
     tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Expand the patch through the handoff so the viewport never collapses to a
