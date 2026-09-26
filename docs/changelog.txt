@@ -1677,3 +1677,4 @@
 - Did not reactivate local NPC/building presentation in the current planet-first root. Automatic push visual run 36208339458 therefore exercised the unrelated default globe scenario and is not WP evidence. Implementation deployment run 36208338081 succeeded; WP remains open pending real in-game local targets and fresh directly inspectable screenshots.
 2026-09-26 04:35 +03:00 | WP-S003-008-006 | Corrected inspection tooltip edge clamping using measured tooltip dimensions and above/below placement; final main deployment verified.
 2026-09-26 04:45 +03:00 | WP-S003-008-006 | Normalized inspection tooltip profession/activity/building labels into readable player-facing text while retaining authoritative source values; deployment verified.
+2026-09-26 04:55 +03:00 | WP-S003-008-006 | Wired selected-only inspection refresh into the PlayCanvas update loop so callouts follow camera/NPC movement, refresh live authoritative state, and dismiss when targets dematerialize.
