@@ -131,6 +131,7 @@ SCENARIOS = {
     "wp-s003-010-003-003",
     "wp-s003-010-003-004",
     "wp-s003-010-003-005",
+    "wp-s003-010-003-005-001",
     "wp-s003-010-003-006",
     "wp-s003-010-004",
     "wp-s004-001",
@@ -240,6 +241,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-003": 15,
     "wp-s003-010-003-004": 12,
     "wp-s003-010-003-005": 9,
+    "wp-s003-010-003-005-001": 10,
     "wp-s003-010-003-006": 13,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
@@ -8211,6 +8213,34 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not isinstance(proof,dict) or proof.get("bounded") is not True or proof.get("fullWorldScan") is not False:
             raise RuntimeError(f"WP-S003-010-003-004 map budget/projection proof invalid: {proof}")
         return label
+    if scenario == "wp-s003-010-003-005-001":
+        plan=(
+            (0.000000,"fixed-focus:0.01x"),(0.349485,"fixed-focus:0.05x"),
+            (0.451545,"fixed-focus:0.08x"),(0.588046,"fixed-focus:0.15x"),
+            (0.731199,"fixed-focus:0.29x"),(0.821726,"fixed-focus:0.44x"),
+            (0.899670,"fixed-focus:0.63x"),(0.946047,"fixed-focus:0.78x"),
+            (1.000000,"fixed-focus:1.00x"),(0.000000,"reverse:0.01x"),
+        )
+        scalar,label=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(1280,800); time.sleep(0.15)
+        if frame_index == 0:
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                if(!t) throw new Error('seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        proof=driver.execute_script("""
+            window.PlanetStage.setZoomScalar(arguments[0]);
+            const s=window.PlanetStage.snapshot(),f=s?.canonicalFocus||{};
+            return {scalar:s?.zoom?.scalar,focus:[f?.latitudeDegrees,f?.longitudeDegrees],
+              vector:f?.sphericalVector,tangentOrigin:f?.tangentOriginMeters,lodOrigin:f?.activeLodOriginMeters,
+              worldTile:f?.worldTile,screenTarget:f?.screenSpaceTargetPercent,screenDelta:f?.screenSpaceFocusDeltaPixels,
+              handoff:s?.projection?.presentation?.handoff,mode:s?.projection?.mode};
+        """,scalar)
+        if not isinstance(proof,dict) or proof.get("screenDelta") != 0:
+            raise RuntimeError(f"WP-S003-010-003-005-001 canonical focus proof invalid: {proof}")
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-005":
         plan=((0.772035,"desktop:0.35x",(1280,800)),(0.821721,"desktop:0.44x",(1280,800)),(0.866461,"desktop:0.54x",(1280,800)),(0.909559,"desktop:0.66x",(1280,800)),(0.954243,"desktop:0.81x",(1280,800)),(0.995000,"desktop:near-ground",(1280,800)),(1.000000,"desktop:ground",(1280,800)),(0.954243,"phone-landscape:0.81x",(844,390)),(0.954243,"phone-portrait:0.81x",(390,844)))
         scalar,label,size=plan[min(frame_index,len(plan)-1)]
@@ -8522,6 +8552,22 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             r=(s.get("projection") or {}).get("resourceBudget") or {}
             if int(r.get("pendingPreparationCount") or 0) != 0 or int(r.get("blockingZoomBuilds") or 0) != 0:
                 raise RuntimeError(f"LOD handoff remained pending/blocking at capture: {r}")
+        return
+    if scenario == "wp-s003-010-003-005-001":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-005-001 requires ten fixed-focus zoom frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        focus=[(stage.get("canonicalFocus") or {}).get("worldTile") for stage in stages]
+        focus_keys=[json.dumps(item,sort_keys=True) for item in focus]
+        if len(set(focus_keys)) != 1:
+            raise RuntimeError(f"Zoom-only sequence relocated canonical world focus: {focus}")
+        coords=[((stage.get("canonicalFocus") or {}).get("latitudeDegrees"),(stage.get("canonicalFocus") or {}).get("longitudeDegrees")) for stage in stages]
+        if len(set(coords)) != 1:
+            raise RuntimeError(f"Zoom-only sequence changed canonical lat/lon: {coords}")
+        if any(float((stage.get("canonicalFocus") or {}).get("screenSpaceFocusDeltaPixels") or 0) != 0 for stage in stages):
+            raise RuntimeError("Canonical focus target moved in screen space")
+        if round(float((stages[0].get("zoom") or {}).get("scalar") or -1),6) != 0 or round(float((stages[-1].get("zoom") or {}).get("scalar") or -1),6) != 0:
+            raise RuntimeError("Reverse zoom did not return to globe scalar")
         return
     if scenario == "wp-s003-010-003-005":
         if len(frames) < 9:
