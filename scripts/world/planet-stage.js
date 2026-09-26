@@ -799,7 +799,7 @@ function applyCameraZoom(){
   const lookVector=Object.freeze([0,Number(((targetY-cameraY)/lookLength).toFixed(6)),Number(((targetZ-cameraZ)/lookLength).toFixed(6))]);
   // Presentation pitch is 0 degrees for radial/top-down map viewing and grows
   // only as the later local gameplay oblique camera is introduced.
-  const cameraPitchDegrees=tangentVisible?Number((Math.atan2(Math.abs(cameraZ-targetZ),Math.max(.000001,Math.abs(cameraY-targetY)))*180/Math.PI).toFixed(3)):0;
+  const mapPitchBaseline=Math.atan2(mapZ,mapY)*180/Math.PI;\n  const cameraPitchDegrees=tangentVisible?Number(Math.max(0,Math.atan2(Math.abs(cameraZ-targetZ),Math.max(.000001,Math.abs(cameraY-targetY)))*180/Math.PI-mapPitchBaseline).toFixed(3)):0;
   projectionPresentation={...projectionPresentation,viewBlend,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
