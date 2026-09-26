@@ -274,7 +274,10 @@ function updateTangentPatchTexture(){
     const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
     const cosLat=Math.max(.08,Math.cos(lat0));
     let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
-    const sample=geography.sampleLatLon(lat,lon),local=localSurfaceSample(east,north,sample),rgba=rgbaFromColor(local.color),i=(y*size+x)*4;
+    const sample=geography.sampleLatLon(lat,lon),local=localSurfaceSample(east,north,sample);
+    const center=geography.sampleLatLon(lat0,lon0),forcedLand=!!center?.land;
+    const displayColor=forcedLand?[clamp(local.color[0]+.16,0,1),clamp(local.color[1]+.28,0,1),clamp(local.color[2]-.04,0,1)]:local.color;
+    const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
     data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=255;
   }
   ctx.putImageData(image,0,0);
@@ -300,7 +303,7 @@ function updateProjectionPresentation(){
     const patchScale=2.25;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     for(const mi of tangentPatch.render.meshInstances)mi.setParameter?.("material_opacity",blend);
   }
-  planet.enabled=blend<.985;
+  planet.enabled=blend<.96;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
 }
 function applyCameraZoom(){
