@@ -419,6 +419,7 @@ function tangentFrame(latitudeRadians,longitudeRadians){
   });
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
+function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.50)/.34);}
 function updateProjectionState(){
   const raw=(zoomState.scalar-projectionState.transitionStart)/(projectionState.transitionEnd-projectionState.transitionStart);
   const blend=smoothstep01(raw);
@@ -583,7 +584,8 @@ function localPatchDimensions(){
   // Presentation compensation keeps apparent scale continuous when the cached
   // physical LOD switches to the next smaller footprint.
   const metersPerUnit=Math.max(1,Math.max(patchWidth,patchHeight)/8);
-  return {levelId:level.id,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,metersPerUnit,presentationCompensation:localPresentationCompensation()};
+  const maxHeightUnits=({"regional-overview":.95,"regional-detail":.80,district:.65,"local-area":.55,settlement:.42,"near-ground":.28,ground:.18})[level.id]??.55;
+  return {levelId:level.id,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,maxHeightUnits,metersPerUnit,presentationCompensation:localPresentationCompensation()};
 }
 function localHash(eastMeters,northMeters,salt=0){
   const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5);
@@ -618,7 +620,7 @@ function localGroundHeightUnits(eastMeters,northMeters,dims){
   const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
   const weight=smoothstep01((zoomState.scalar-.90)/.10),raw=(macroDelta*dims.reliefGain+local.microElevation*.8*weight)/dims.metersPerUnit;
   const ux=eastMeters/dims.patchWidth+.5,vz=northMeters/dims.patchHeight+.5,edge=Math.min(ux,1-ux,vz,1-vz);
-  return raw*smoothstep01(clamp(edge/.12,0,1));
+  return clamp(raw,-dims.maxHeightUnits,dims.maxHeightUnits)*smoothstep01(clamp(edge/.12,0,1));
 }
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
@@ -699,7 +701,7 @@ function buildTangentPatchMesh(){
       // surround so the LOD boundary never presents as a cut-off rectangular slab.
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
       const edgeBlend=smoothstep01(clamp(edgeDistance/.12,0,1));
-      const heightUnits=rawHeightUnits*edgeBlend;
+      const heightUnits=clamp(rawHeightUnits,-dims.maxHeightUnits,dims.maxHeightUnits)*edgeBlend;
       positions.push(eastMeters/localMetersPerUnit,heightUnits,-northMeters/localMetersPerUnit);
       normals.push(0,1,0);uvs.push(ux,vz);
     }
@@ -836,12 +838,19 @@ function updateProjectionPresentation(){
     if(localResources.activeSignature!==sig)scheduleLocalDetailResource(sig);
   }
   if(tangentPatch){
-    const handoff=smoothstep01((blend-.02)/.20);
-    const tangentVisible=handoff>0;
+    const handoff=projectionHandoffForZoom();
+    const tangentVisible=handoff>.02;
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.97;\n    tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
-    if(horizonSkirt){horizonSkirt.enabled=tangentVisible;horizonSkirt.setLocalPosition(0,-.012,0);}
+    if(horizonSkirt){
+      horizonSkirt.enabled=tangentVisible;
+      horizonSkirt.setLocalPosition(0,-.012,0);
+      horizonSkirtMaterial.opacity=handoff;
+      horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
+      horizonSkirtMaterial.depthWrite=false;
+      horizonSkirtMaterial.update();
+    }
     tangentPatch.setLocalPosition(0,0,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
     // Match each finer cached LOD's apparent scale to the prior LOD at entry,
@@ -857,7 +866,7 @@ function updateProjectionPresentation(){
   // above the patch, making a fixed geographic focus look like a new location.
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
-  const handoff=smoothstep01((blend-.02)/.20);
+  const handoff=projectionHandoffForZoom();
   planet.enabled=handoff<.995;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
@@ -893,8 +902,8 @@ function applyCameraZoom(){
   const orientationEnd=.995;
   const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
   const angleBlend=smoothstep01(orientationRaw);
-  const handoff=smoothstep01((viewBlend-.02)/.20);
-  const tangentVisible=handoff>0;
+  const handoff=projectionHandoffForZoom(scalar);
+  const tangentVisible=handoff>.02;
   // The tangent patch lies in X/Z. Once it becomes the visible representation,
   // view it from above; keeping the old globe-front camera at Y~=0 makes the
   // horizontal patch appear as a horizon strip. The later gameplay oblique
