@@ -4382,9 +4382,13 @@ def _drag_canvas_and_wait(driver, dx: int, dy: int, timeout: float = 10.0) -> st
 def _wheel_canvas(driver, delta_y: int) -> str:
     from selenium.webdriver.common.by import By
 
-    elements = driver.find_elements(By.ID, "gameCanvas")
+    elements = driver.find_elements(By.ID, "planetCanvas")
     target = elements[0] if elements else None
-    target_name = "gameCanvas"
+    target_name = "planetCanvas"
+    if target is None:
+        elements = driver.find_elements(By.ID, "gameCanvas")
+        target = elements[0] if elements else None
+        target_name = "gameCanvas"
     if target is None:
         current = driver.find_elements(By.ID, "gameplayArea")
         target = current[0] if current else None
