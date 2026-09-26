@@ -783,15 +783,23 @@ function applyCameraZoom(){
   const orientationEnd=.995;
   const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
   const angleBlend=smoothstep01(orientationRaw);
-  const cameraZ=globeZ*(1-viewBlend)+localZ*viewBlend;
-  const cameraY=localY*angleBlend;
+  const tangentVisible=viewBlend>.055;
+  // The tangent patch lies in X/Z. Once it becomes the visible representation,
+  // view it from above; keeping the old globe-front camera at Y~=0 makes the
+  // horizontal patch appear as a horizon strip. The later gameplay oblique
+  // transition is independent and begins only at orientationStart.
+  const mapY=8.0,mapZ=.35;
+  const cameraZ=tangentVisible?lerp(mapZ,localZ,angleBlend):globeZ;
+  const cameraY=tangentVisible?lerp(mapY,localY,angleBlend):0;
   const targetZ=0;
-  const targetY=-.12*angleBlend;
+  const targetY=tangentVisible?lerp(0,-.12,angleBlend):0;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   const fov=34+12*angleBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
   const lookLength=Math.max(.000001,Math.hypot(cameraY-targetY,cameraZ-targetZ));
   const lookVector=Object.freeze([0,Number(((targetY-cameraY)/lookLength).toFixed(6)),Number(((targetZ-cameraZ)/lookLength).toFixed(6))]);
-  const cameraPitchDegrees=Number((Math.atan2(cameraY-targetY,Math.max(.000001,cameraZ-targetZ))*180/Math.PI).toFixed(3));
+  // Presentation pitch is 0 degrees for radial/top-down map viewing and grows
+  // only as the later local gameplay oblique camera is introduced.
+  const cameraPitchDegrees=tangentVisible?Number((Math.atan2(Math.abs(cameraZ-targetZ),Math.max(.000001,Math.abs(cameraY-targetY)))*180/Math.PI).toFixed(3)):0;
   projectionPresentation={...projectionPresentation,viewBlend,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
