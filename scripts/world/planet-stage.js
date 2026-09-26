@@ -81,6 +81,8 @@ let lastPinchDistance=null;
 let projectionState={mode:"globe",blend:0,transitionStart:.68,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
+const LOCAL_RESOURCE_CACHE_LIMIT=4;
+const LOCAL_LOD_HYSTERESIS=0.006;
 const LOCAL_DETAIL_LEVELS=Object.freeze([
   Object.freeze({id:"regional-overview",max:.70,visibleHeightMeters:420000,sampleSpacingMeters:12000,reliefClampMeters:7000,reliefGain:11}),
   Object.freeze({id:"regional-detail",max:.78,visibleHeightMeters:140000,sampleSpacingMeters:4000,reliefClampMeters:7000,reliefGain:10}),
@@ -91,6 +93,9 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
   Object.freeze({id:"ground",max:1,visibleHeightMeters:54,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,reliefClampMeters:10,reliefGain:.35})
 ]);
 let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
+let localLodIndex=0;
+const localResourceCache=new Map();
+let localResources={activeSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastEvictionReason:null};
 
 function tangentFrame(latitudeRadians,longitudeRadians){
   const lat=Number(latitudeRadians)||0,lon=Number(longitudeRadians)||0;
@@ -224,7 +229,17 @@ function normalizeYaw(value){
 function zoomBandFor(value){return (ZOOM_BANDS.find(b=>value<=b.max)||ZOOM_BANDS[ZOOM_BANDS.length-1]).id;}
 function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
 function localDetailLevelForZoom(value=zoomState.scalar){
-  return LOCAL_DETAIL_LEVELS.find(level=>value<=level.max)||LOCAL_DETAIL_LEVELS[LOCAL_DETAIL_LEVELS.length-1];
+  const rawIndex=Math.max(0,LOCAL_DETAIL_LEVELS.findIndex(level=>value<=level.max));
+  if(!localDetail.active){localLodIndex=rawIndex;return LOCAL_DETAIL_LEVELS[localLodIndex];}
+  if(rawIndex>localLodIndex){
+    const boundary=LOCAL_DETAIL_LEVELS[localLodIndex]?.max??1;
+    if(value<boundary+LOCAL_LOD_HYSTERESIS)return LOCAL_DETAIL_LEVELS[localLodIndex];
+  }else if(rawIndex<localLodIndex){
+    const boundary=LOCAL_DETAIL_LEVELS[rawIndex]?.max??0;
+    if(value>boundary-LOCAL_LOD_HYSTERESIS)return LOCAL_DETAIL_LEVELS[localLodIndex];
+  }
+  localLodIndex=rawIndex;
+  return LOCAL_DETAIL_LEVELS[localLodIndex];
 }
 function localPatchDimensions(){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
@@ -301,9 +316,39 @@ function buildTangentPatchMesh(){
   localDetail={active:true,level:dims.levelId,sampleSpacingMeters:dims.sampleSpacingMeters,visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns,rows,vertices:positions.length/3,triangles:indices.length/3,estimatedBytes:positions.length*4+normals.length*4+uvs.length*4+indices.length*4,buildTimeMs:Number((performance.now()-started).toFixed(3)),rebuildCount:localDetail.rebuildCount+1,activePatchCount:1,signature:[activeSeed,lat0.toFixed(6),lon0.toFixed(6),dims.levelId,columns,rows].join("|")};
   return mesh;
 }
-function rebuildTangentPatch(){
-  if(!tangentPatch?.render||!device)return;
-  tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
+function destroyCachedLocalResource(resource){
+  if(!resource)return;
+  resource.mesh?.destroy?.();localResources.destroyedMeshes++;
+  resource.detailTexture?.destroy?.();resource.surroundTexture?.destroy?.();localResources.destroyedTextures+=2;
+}
+function trimLocalResourceCache(){
+  while(localResourceCache.size>LOCAL_RESOURCE_CACHE_LIMIT){
+    const oldestKey=localResourceCache.keys().next().value;
+    const resource=localResourceCache.get(oldestKey);
+    localResourceCache.delete(oldestKey);destroyCachedLocalResource(resource);
+    localResources.evictions++;localResources.lastEvictionReason="bounded-lru";
+  }
+}
+function activateLocalDetailResource(signature){
+  if(!tangentPatch?.render||!device||!tangentPatchMaterial||!horizonSkirtMaterial)return;
+  let resource=localResourceCache.get(signature);
+  if(resource){
+    localResourceCache.delete(signature);localResourceCache.set(signature,resource);localResources.cacheHits++;
+    localDetail={...resource.detail,rebuildCount:localDetail.rebuildCount,signature};
+  }else{
+    localResources.cacheMisses++;localResources.pendingPreparationCount=1;
+    const started=performance.now(),mesh=buildTangentPatchMesh(),dims=localPatchDimensions();
+    const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,256,true);
+    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,256,false);
+    resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature},estimatedBytes:localDetail.estimatedBytes+256*256*4*2};
+    localResourceCache.set(signature,resource);localResources.lastBuildMs=Number((performance.now()-started).toFixed(3));localResources.pendingPreparationCount=0;
+    trimLocalResourceCache();
+  }
+  tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
+  tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=1;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
+  localResources.activeSignature=signature;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
+  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
 }
 function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false){
   const canvas2d=document.createElement("canvas");canvas2d.width=size;canvas2d.height=size;
@@ -376,7 +421,11 @@ function ensureHorizonSkirt(){
 function updateProjectionPresentation(){
   if(!planet)return;
   const blend=projectionState.blend;
-  if(blend>0){ensureTangentPatch();const dims=localPatchDimensions(),sig=[activeSeed,zoomState.focusLatitudeRadians.toFixed(6),zoomState.focusLongitudeRadians.toFixed(6),dims.levelId,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters),Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)].join("|");if(localDetail.signature!==sig){rebuildTangentPatch();updateTangentPatchTexture();}}
+  if(blend>0){
+    ensureTangentPatch();ensureHorizonSkirt();
+    const dims=localPatchDimensions(),sig=[activeSeed,zoomState.focusLatitudeRadians.toFixed(5),zoomState.focusLongitudeRadians.toFixed(5),dims.levelId,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters),Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)].join("|");
+    if(localResources.activeSignature!==sig)activateLocalDetailResource(sig);
+  }
   if(tangentPatch){
     tangentPatch.enabled=blend>.02;
     ensureHorizonSkirt();
@@ -393,6 +442,8 @@ function updateProjectionPresentation(){
   }
   planet.enabled=blend<=.02;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
+  localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
+  if(blend<=.02){localResources.activeResourceCount=0;localResources.activeSignature=null;}
 }
 function applyCameraZoom(){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
@@ -1152,7 +1203,8 @@ function snapshot(){
       tangentPatchActive:Boolean(tangentPatch?.enabled),
       tangentPatchDerivedFromFocus:true,
       tangentPatchSpanMeters:Math.max(localDetail.patchWidthMeters,localDetail.patchHeightMeters),
-      localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false})
+      localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false}),
+      resourceBudget:Object.freeze({...localResources,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,lodHysteresis:LOCAL_LOD_HYSTERESIS,offscreenFineDetailActive:false,viewportPriority:true})
     }),
     activeSystems:Object.freeze({
       protagonistEnabled:false,
@@ -1206,6 +1258,7 @@ function destroy(){
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
+  for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localResources={activeSignature:null,cacheHits:0,cacheMisses:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,lastBuildMs:0,lastEvictionReason:null};
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;ready=false;
   inspectionPickables.clear();
@@ -1218,7 +1271,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
   })
 });
 const boot=()=>start().catch(()=>{});
