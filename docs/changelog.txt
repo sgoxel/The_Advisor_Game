@@ -1653,3 +1653,9 @@
 - Added dedicated fixed-SEED evidence coverage across six globe orientations plus compact landscape/portrait framing. Attempt 1 passed functional evidence but showed needle-like silhouette artifacts; attempt 2 flattened the geometry and removed that defect.
 - Direct screenshot inspection after attempt 2: VISUAL 6.0/10 — FAIL for this WP. At current globe-only scale, local wilderness detail is intentionally too small to prove grassland/forest/wet/rocky scene richness. Props were not falsely enlarged to planetary scale. WP remains incomplete and ROADMAP is unchanged.
 2026-09-26 02:50 +03:00 — WP-S003-008-004: bounded deterministic planet startup geography/mesh preparation with cooperative browser yields; added mesh staging/upload phase telemetry. Repeated controlled evidence runs 36202427880 and 36202487872 passed.
+
+
+2026-09-26 03:52 +03:00 | WP-S003-008-005 | World Destination Navigator + Nearby Places Popup — IMPLEMENTED / AWAITING DEPLOYMENT VERIFICATION
+- Expanded the planet-first navigator from five macro landmarks to a bounded deterministic descriptor set covering settlement, town/city, ruin/historical, hunting, fishing, water and nature categories without reactivating tile/NPC/local-settlement simulation authority.
+- Results sort from the current camera view, View remains camera-only, descriptor population is capped, full-world scans are forbidden, and list generation does not materialize local chunks.
+- Evidence attempt 1 run 36206188359 correctly failed on missing telemetry. Attempt 2 run 36206245343 passed functionally but direct screenshot inspection found clipped category controls. Attempt 3 run 36206350672 on head c8ce14c5c1acc2664188b5965486d506d5bf3764 passed functional evidence; six fresh screenshots were directly inspected and scored VISUAL 8.7/10 with no major layout defect.
