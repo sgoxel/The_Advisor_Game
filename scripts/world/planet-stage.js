@@ -542,7 +542,7 @@ function pickInspection(clientX,clientY){
     if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite)||b.left>b.right||b.top>b.bottom)continue;
     if(clientX>=b.left&&clientX<=b.right&&clientY>=b.top&&clientY<=b.bottom)candidates.push(record);
   }
-  candidates.sort((a,b)=>Number(b.pickPriority||0)-Number(a.pickPriority||0)||String(a.id).localeCompare(String(b.id)));
+  candidates.sort((a,b)=>Number(b.pickPriority||0)-Number(a.pickPriority||0)||Number(a.screenDepth?.()??a.screenDepth??Infinity)-Number(b.screenDepth?.()??b.screenDepth??Infinity)||String(a.id).localeCompare(String(b.id)));
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
   const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.id);inspection.selectedType=picked.type;if(!renderInspectionTooltip(picked))return null;return picked;
 }
