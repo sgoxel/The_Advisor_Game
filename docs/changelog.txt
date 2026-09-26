@@ -1682,3 +1682,4 @@
 2026-09-26 05:15 +03:00 | WP-S003-008-006 | Removed raw resident-ID and internal building-source fallbacks from inspection callouts; missing identity/type now uses truthful player-facing semantic fallbacks only.
 2026-09-26 04:46 +03:00 | WP-S003-008-006 | Removed duplicate type line from unnamed building inspection callouts; named buildings still show authoritative name + type while unnamed buildings show the type once.
 2026-09-26 04:54 +03:00 | WP-S003-008-006 | NPC inspection now trims authoritative display names and uses truthful `Unassigned` profession fallback instead of presenting `Resident` as a profession.
+2026-09-26 05:03 +03:00 | WP-S003-008-006 | Hardened inspection pointer lifecycle: stale press state is cleared on pointer cancellation, lost capture, and button-up canvas leave so later pointer releases cannot become false inspection clicks.
