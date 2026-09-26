@@ -695,7 +695,7 @@ function canonicalSettlementPlan(){
   const headingDegrees=headingRadians*180/Math.PI;
   const roadWidthMeters=7.5;
   const roads=[];
-  const mainLength=1440,mainSegments=18,mainSegmentLength=mainLength/mainSegments;
+  const mainLength=1440,mainSegments=19,mainSegmentLength=mainLength/mainSegments;
   for(let i=0;i<mainSegments;i++){
     const north=-mainLength*.5+(i+.5)*mainSegmentLength,p=rotateSettlementOffset(0,north,headingRadians);
     roads.push(Object.freeze({id:"main-"+i,east:p.east,north:p.north,lengthMeters:mainSegmentLength*1.04,widthMeters:roadWidthMeters,headingDegrees,kind:"main"}));
