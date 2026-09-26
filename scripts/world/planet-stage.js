@@ -85,29 +85,32 @@ let projectionState={mode:"globe",blend:0,transitionStart:.90,transitionEnd:.997
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
-const LOCAL_LOD_HYSTERESIS=0.001;
+const LOCAL_LOD_HYSTERESIS=0.006;
 const LOCAL_DETAIL_LEVELS=Object.freeze([
-  Object.freeze({id:"regional-overview",max:.92,visibleHeightMeters:420000,sampleSpacingMeters:24000,reliefClampMeters:7000,reliefGain:11}),
-  Object.freeze({id:"regional-detail",max:.95,visibleHeightMeters:140000,sampleSpacingMeters:8000,reliefClampMeters:7000,reliefGain:10}),
-  Object.freeze({id:"district",max:.97,visibleHeightMeters:36000,sampleSpacingMeters:2400,reliefClampMeters:6000,reliefGain:9}),
-  Object.freeze({id:"local-area",max:.985,visibleHeightMeters:8000,sampleSpacingMeters:250,reliefClampMeters:4200,reliefGain:7}),
-  Object.freeze({id:"settlement",max:.993,visibleHeightMeters:1800,sampleSpacingMeters:60,reliefClampMeters:1600,reliefGain:4}),
-  Object.freeze({id:"near-ground",max:.998,visibleHeightMeters:360,sampleSpacingMeters:12,reliefClampMeters:180,reliefGain:1.5}),
+  Object.freeze({id:"regional-overview",max:.70,visibleHeightMeters:420000,sampleSpacingMeters:24000,reliefClampMeters:7000,reliefGain:11}),
+  Object.freeze({id:"regional-detail",max:.78,visibleHeightMeters:140000,sampleSpacingMeters:8000,reliefClampMeters:7000,reliefGain:10}),
+  Object.freeze({id:"district",max:.86,visibleHeightMeters:36000,sampleSpacingMeters:2400,reliefClampMeters:6000,reliefGain:9}),
+  Object.freeze({id:"local-area",max:.92,visibleHeightMeters:8000,sampleSpacingMeters:250,reliefClampMeters:4200,reliefGain:7}),
+  Object.freeze({id:"settlement",max:.97,visibleHeightMeters:1800,sampleSpacingMeters:60,reliefClampMeters:1600,reliefGain:4}),
+  Object.freeze({id:"near-ground",max:.995,visibleHeightMeters:360,sampleSpacingMeters:12,reliefClampMeters:180,reliefGain:1.5}),
   Object.freeze({id:"ground",max:1,visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,reliefClampMeters:10,reliefGain:.35})
 ]);
 const PRESENTATION_FOOTPRINT_ANCHORS=Object.freeze([
   Object.freeze({scalar:.35,heightMeters:650000}),
-  Object.freeze({scalar:.60,heightMeters:600000}),
-  Object.freeze({scalar:.70,heightMeters:580000}),
-  Object.freeze({scalar:.82,heightMeters:570000}),
-  Object.freeze({scalar:.89,heightMeters:565000}),
-  Object.freeze({scalar:.90,heightMeters:560000}),
-  Object.freeze({scalar:.92,heightMeters:420000}),
-  Object.freeze({scalar:.95,heightMeters:140000}),
-  Object.freeze({scalar:.97,heightMeters:36000}),
-  Object.freeze({scalar:.985,heightMeters:8000}),
-  Object.freeze({scalar:.993,heightMeters:1800}),
-  Object.freeze({scalar:.998,heightMeters:360}),
+  Object.freeze({scalar:.60,heightMeters:520000}),
+  Object.freeze({scalar:.70,heightMeters:400000}),
+  Object.freeze({scalar:.74,heightMeters:250000}),
+  Object.freeze({scalar:.78,heightMeters:140000}),
+  Object.freeze({scalar:.82,heightMeters:80000}),
+  Object.freeze({scalar:.86,heightMeters:50000}),
+  Object.freeze({scalar:.89,heightMeters:20000}),
+  Object.freeze({scalar:.92,heightMeters:10000}),
+  Object.freeze({scalar:.94,heightMeters:5000}),
+  Object.freeze({scalar:.955,heightMeters:2000}),
+  Object.freeze({scalar:.97,heightMeters:1000}),
+  Object.freeze({scalar:.98,heightMeters:500}),
+  Object.freeze({scalar:.99,heightMeters:200}),
+  Object.freeze({scalar:.995,heightMeters:50}),
   Object.freeze({scalar:1,heightMeters:36})
 ]);
 let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
