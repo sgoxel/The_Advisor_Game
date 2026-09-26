@@ -95,6 +95,17 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
   Object.freeze({id:"near-ground",max:.995,visibleHeightMeters:360,sampleSpacingMeters:12,reliefClampMeters:180,reliefGain:1.5}),
   Object.freeze({id:"ground",max:1,visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,reliefClampMeters:10,reliefGain:.35})
 ]);
+const PRESENTATION_FOOTPRINT_ANCHORS=Object.freeze([
+  Object.freeze({scalar:.35,heightMeters:650000}),
+  Object.freeze({scalar:.60,heightMeters:520000}),
+  Object.freeze({scalar:.70,heightMeters:400000}),
+  Object.freeze({scalar:.78,heightMeters:300000}),
+  Object.freeze({scalar:.86,heightMeters:180000}),
+  Object.freeze({scalar:.92,heightMeters:80000}),
+  Object.freeze({scalar:.97,heightMeters:20000}),
+  Object.freeze({scalar:.995,heightMeters:2000}),
+  Object.freeze({scalar:1,heightMeters:36})
+]);
 let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 let localLodIndex=0;
 const localResourceCache=new Map();
@@ -102,7 +113,7 @@ let localResources={activeSignature:null,cacheHits:0,cacheMisses:0,evictions:0,d
 let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,borderVisible:false,borderSampleCount:0,borderSegmentCount:0,politicalOwnerCount:0,scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapContextCache={key:null,value:null};
 let mapBorderCache={key:null,segments:[],sampleCount:0,ownerCount:0,builtAtMs:0};
-let projectionPresentation={viewBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34};
+let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
 let politicalScaleEvidenceCache=null;
 
 function wrapLongitudeRadians(value){
@@ -450,19 +461,22 @@ function localDetailLevelForZoom(value=zoomState.scalar){
   localLodIndex=rawIndex;
   return LOCAL_DETAIL_LEVELS[localLodIndex];
 }
-function localLevelPresentationProgress(value=zoomState.scalar,index=localLodIndex){
-  const start=index===0?projectionState.transitionStart:(LOCAL_DETAIL_LEVELS[index-1].max+LOCAL_LOD_HYSTERESIS);
-  const end=LOCAL_DETAIL_LEVELS[index]?.max??1;
-  if(end<=start)return 1;
-  return clamp((value-start)/(end-start),0,1);
+function presentationTargetHeightMeters(value=zoomState.scalar){
+  const scalar=clamp(value,0,1),anchors=PRESENTATION_FOOTPRINT_ANCHORS;
+  if(scalar<=anchors[0].scalar)return anchors[0].heightMeters;
+  for(let i=1;i<anchors.length;i++){
+    const a=anchors[i-1],b=anchors[i];
+    if(scalar<=b.scalar){
+      const t=clamp((scalar-a.scalar)/(b.scalar-a.scalar),0,1);
+      return Math.exp(Math.log(a.heightMeters)*(1-t)+Math.log(b.heightMeters)*t);
+    }
+  }
+  return anchors[anchors.length-1].heightMeters;
 }
 function localPresentationCompensation(value=zoomState.scalar,index=localLodIndex){
   const level=LOCAL_DETAIL_LEVELS[index]||LOCAL_DETAIL_LEVELS[0];
-  const previousHeight=index===0?520000:(LOCAL_DETAIL_LEVELS[index-1]?.visibleHeightMeters||level.visibleHeightMeters);
-  const progress=localLevelPresentationProgress(value,index);
-  const logEffective=Math.log(Math.max(1,previousHeight))*(1-progress)+Math.log(Math.max(1,level.visibleHeightMeters))*progress;
-  const effectiveHeight=Math.exp(logEffective);
-  return clamp(level.visibleHeightMeters/effectiveHeight,.08,1);
+  const targetHeight=presentationTargetHeightMeters(value);
+  return clamp(level.visibleHeightMeters/Math.max(1,targetHeight),.02,1);
 }
 function localTextureSizeForLevel(levelId){
   if(["regional-overview","regional-detail","district"].includes(levelId))return 128;
@@ -730,7 +744,7 @@ function updateProjectionPresentation(){
     // then ease toward its native scale across the band.
     const dims=localPatchDimensions(),basePatchScale=1.45+(1-viewBlend)*.35;
     const patchScale=basePatchScale*dims.presentationCompensation;
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale};
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,targetHeightMeters:presentationTargetHeightMeters()};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     if(horizonSkirt)horizonSkirt.setLocalScale(patchScale,patchScale,patchScale);
   }
@@ -760,13 +774,14 @@ function applyCameraZoom(){
   const viewBlend=blend;
   const localZ=6.20;
   const localY=5.00;
+  const angleBlend=viewBlend*viewBlend;
   const cameraZ=globeZ*(1-viewBlend)+localZ*viewBlend;
-  const cameraY=localY*viewBlend;
+  const cameraY=localY*angleBlend;
   const targetZ=0;
-  const targetY=-.12*viewBlend;
+  const targetY=-.12*angleBlend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
-  const fov=34+12*viewBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
-  projectionPresentation={...projectionPresentation,viewBlend,cameraY,cameraZ,fov};
+  const fov=34+12*angleBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
+  projectionPresentation={...projectionPresentation,viewBlend,angleBlend,cameraY,cameraZ,fov};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
@@ -1565,7 +1580,7 @@ function destroy(){
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
   inspectionPickables.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
-  geography=null;politicalScaleEvidenceCache=null;projectionPresentation={viewBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34};root?.replaceChildren?.();
+  geography=null;politicalScaleEvidenceCache=null;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,rotationForLatLon,setZoomScalar,zoomBy,setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
@@ -1573,7 +1588,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS,PRESENTATION_FOOTPRINT_ANCHORS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
   })
 });
 const boot=()=>start().catch(()=>{});
