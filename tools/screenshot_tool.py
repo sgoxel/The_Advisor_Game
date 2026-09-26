@@ -8214,6 +8214,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             raise RuntimeError(f"WP-S003-010-003-004 map budget/projection proof invalid: {proof}")
         return label
     if scenario == "wp-s003-010-003-005-001":
+        from selenium.webdriver.support.ui import WebDriverWait
         plan=(
             (0.000000,"fixed-focus:0.01x"),(0.349485,"fixed-focus:0.05x"),
             (0.451545,"fixed-focus:0.08x"),(0.588046,"fixed-focus:0.15x"),
@@ -8224,22 +8225,37 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         scalar,label=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(1280,800); time.sleep(0.15)
         if frame_index == 0:
-            from selenium.webdriver.support.ui import WebDriverWait
-            WebDriverWait(driver, 20).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.ready===true"))
+            WebDriverWait(driver, 30).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.ready===true"))
             driver.execute_script("""
                 const s=window.PlanetStage.snapshot();
-                const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
+                const t=s?.featureTargets?.continuityFocus || s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
                 if(!t) throw new Error('seeded land target unavailable');
                 window.PlanetStage.setViewTarget(t);
             """)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",scalar)
+        WebDriverWait(driver,30).until(
+            lambda d: d.execute_script("""
+                const target=Number(arguments[0]),s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{};
+                const overlay=document.querySelector('#planetStageRoot .planet-stage-loading');
+                const zoomOk=Math.abs(Number(s?.zoom?.scalar)-target)<1e-6;
+                const resourceOk=Number(s?.projection?.blend||0)<=0 || (
+                  Number(r?.pendingPreparationCount||0)===0 &&
+                  !!r?.activeSignature &&
+                  r?.activeSignature===r?.requestedSignature
+                );
+                const groundOk=target<.995 || s?.projection?.localStatic?.active===true;
+                return Boolean(s?.ready===true&&zoomOk&&resourceOk&&groundOk&&(!overlay||overlay.hidden===true));
+            """,scalar)
+        )
         proof=driver.execute_script("""
-            window.PlanetStage.setZoomScalar(arguments[0]);
-            const s=window.PlanetStage.snapshot(),f=s?.canonicalFocus||{};
+            const s=window.PlanetStage.snapshot(),f=s?.canonicalFocus||{},r=s?.projection?.resourceBudget||{};
             return {scalar:s?.zoom?.scalar,focus:[f?.latitudeDegrees,f?.longitudeDegrees],
               vector:f?.sphericalVector,tangentOrigin:f?.tangentOriginMeters,lodOrigin:f?.activeLodOriginMeters,
               worldTile:f?.worldTile,screenTarget:f?.screenSpaceTargetPercent,screenDelta:f?.screenSpaceFocusDeltaPixels,
-              handoff:s?.projection?.presentation?.handoff,mode:s?.projection?.mode};
-        """,scalar)
+              surfaceIdentity:f?.surfaceIdentity,handoff:s?.projection?.presentation?.handoff,mode:s?.projection?.mode,
+              activeSignature:r?.activeSignature,requestedSignature:r?.requestedSignature,pending:r?.pendingPreparationCount,
+              visibleFootprint:[s?.zoom?.visibleFootprintWidthMeters,s?.zoom?.visibleFootprintHeightMeters]};
+        """)
         if not isinstance(proof,dict) or proof.get("screenDelta") != 0:
             raise RuntimeError(f"WP-S003-010-003-005-001 canonical focus proof invalid: {proof}")
         return label+":"+json.dumps(proof,sort_keys=True)
