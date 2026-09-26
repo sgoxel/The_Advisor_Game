@@ -1727,3 +1727,5 @@
 2026-09-26 09:42 +03:00 | WP-S003-008-006 | Fault-isolated selected tooltip screenBounds and overlap screenDepth callbacks so stale/transitioning active records cannot abort inspection; WP remains open pending genuine canonical NPC/building visual evidence.
 
 2026-09-26 09:50 +03:00 | WP-S003-008-006 | Corrected dedicated evidence routing from PlanetStage to canonical GameRenderer inspection. Three evidence attempts exposed two harness routing conflicts and then timed out during world startup; final retrieved screenshot was directly inspected and showed only the 66% 'Waking the world' loading screen. VISUAL 2/10 FAIL. WP remains open; no completion claimed.
+
+2026-09-26 09:56 +03:00 | WP-S003-008-006 | Continued canonical tooltip evidence startup work. Added 180s cold-WebGL allowance plus real Retry Startup recovery for the WP evidence path in 6f3f7d7b1230f6b2e4249faa9e75abe459438f73. Fresh run 36225165898 still reached only the canonical planet-first loading phase; retrieved screenshot directly inspected at 68% 'Painting planetary surface and relief'. No local NPC/building tooltip evidence exists, so WP remains open and no completion is claimed.
