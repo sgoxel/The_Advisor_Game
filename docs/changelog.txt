@@ -1712,3 +1712,5 @@
 2026-09-26 08:24 +03:00 | WP-S003-008-006 | AGENT #6 | Preserved authoritative building type fallback when functionLabel is blank/whitespace, preventing valid buildingType values from collapsing to generic Building. Implementation: a4faf317e8fb67937d27d42db2dcb9b8e463d266.
 
 2026-09-26 08:27 +03:00 | WP-S003-008-006 | AGENT #6 | Fixed selected-tooltip lifecycle for valid authoritative ID 0 by testing the null selection sentinel explicitly; zero-ID selections now continue per-frame visibility/projection updates and clean dismissal. Implementation: 80dad8c27c9a81762b28a85eeb3dd9be15b1c1a2.
+
+2026-09-26 08:31 +03:00 | WP-S003-008-006 | AGENT #6 | Removed duplicate winning-target screen projection from inspection clicks by carrying the already validated pick bounds into initial tooltip rendering; steady-state updates still project fresh bounds. Implementation: bfddf8350a6891c2698d6a660b48abe07edf773b.
