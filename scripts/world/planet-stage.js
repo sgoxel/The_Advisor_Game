@@ -528,9 +528,9 @@ function readableInspectionLines(record){
   const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim();
   return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
 }
-function renderInspectionTooltip(record){
+function renderInspectionTooltip(record,knownBounds=null){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
-  const started=performance.now(),bounds=record.screenBounds();
+  const started=performance.now(),bounds=knownBounds??record.screenBounds();
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
   const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f"),recordKey=record.type+":"+String(record.id);
   const selectionChanged=tip.dataset.recordKey!==recordKey;
@@ -550,13 +550,13 @@ function pickInspection(clientX,clientY){
   for(const record of inspectionPickables.values()){
     if(record.visible?.()===false)continue;const b=record.screenBounds();
     if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite)||b.left>b.right||b.top>b.bottom)continue;
-    if(clientX>=b.left&&clientX<=b.right&&clientY>=b.top&&clientY<=b.bottom)candidates.push(record);
+    if(clientX>=b.left&&clientX<=b.right&&clientY>=b.top&&clientY<=b.bottom)candidates.push({record,bounds:b});
   }
   const depthOf=record=>{const value=Number(typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity);return Number.isFinite(value)?value:Infinity;};
   const priorityOf=record=>{const value=Number(record.pickPriority??0);return Number.isFinite(value)?value:0;};
-  candidates.sort((a,b)=>priorityOf(b)-priorityOf(a)||depthOf(a)-depthOf(b)||inspectionRegistryKey(a.type,a.id).localeCompare(inspectionRegistryKey(b.type,b.id)));
+  candidates.sort((a,b)=>priorityOf(b.record)-priorityOf(a.record)||depthOf(a.record)-depthOf(b.record)||inspectionRegistryKey(a.record.type,a.record.id).localeCompare(inspectionRegistryKey(b.record.type,b.record.id)));
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
-  const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.id);inspection.selectedType=picked.type;if(!renderInspectionTooltip(picked))return null;return picked;
+  const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.record.id);inspection.selectedType=picked.record.type;if(!renderInspectionTooltip(picked.record,picked.bounds))return null;return picked.record;
 }
 function updateInspectionTooltip(){if(inspection.selectedId===null)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
 function bindInput(){
