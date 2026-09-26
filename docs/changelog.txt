@@ -1691,3 +1691,4 @@
 2026-09-26 05:59 +03:00 | WP-S003-008-006 | Fixed a canonical JavaScript parse defect in planet-stage snapshot telemetry: removed a literal \\n token between inspection and destinationNavigator fields. Implementation commit 7ece27e5f44c98bc0ce5c0e3dba11619fd455e5b. Source/diff re-read successfully; WP remains incomplete pending genuine NPC/building visual evidence and verified deployment.
 
 2026-09-26 07:00 +03:00 | WP-S003-008-006 | Fixed canonical JavaScript parse defect in PlanetStage public inspection API: removed a literal \\n token between pickInspection and setPlacesCategory. Implementation commit 22dcdf19aafc130b99813e29be781e1aba553014. WP remains incomplete pending genuine NPC/building visual evidence and final deployment verification.
+2026-09-26 08:00 +03:00 | WP-S003-008-006 | Cleared inspection pick registry and selection telemetry during planet-stage destroy so restart cannot retain stale NPC/building projection callbacks.
