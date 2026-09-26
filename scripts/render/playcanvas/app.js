@@ -2247,14 +2247,15 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const out=[];for(const item of lastCharacterState.instances||[]){if(item.role!=="resident")continue;
       const center=projectedScreenPoint(item.scene,Number(item.centerY||item.feetY||0));if(!center)continue;
       const h=Math.max(24,Number(item.renderedPixelHeight||item.targetPixelHeight||32)),w=Math.max(18,h*Number(item.aspectRatio||.75));
-      if(x>=center.x-w*.5&&x<=center.x+w*.5&&y>=center.y-h*.5&&y<=center.y+h*.5)out.push({type:"npc",id:item.id,priority:3,item,anchor:{x:center.x,y:center.y-h*.5}});
+      if(x>=center.x-w*.5&&x<=center.x+w*.5&&y>=center.y-h*.5&&y<=center.y+h*.5)out.push({type:"npc",id:item.id,item,anchor:{x:center.x,y:center.y-h*.5},depth:inspectionCameraDepth(item.scene,Number(item.feetY||0))});
     }return out;
   }
   function buildingInspectionRecord(building){
     if(!building?.bounds)return null;const b=building.bounds,corners=[[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]];const pts=[];
     for(const pair of corners){const scene=characterScenePoint({x:pair[0],y:pair[1]}),screen=projectedScreenPoint(scene,0);if(screen)pts.push(screen);}if(!pts.length)return null;
     const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),lift=Math.max(24,Number(lastModel?.tileSize||64)*.55),left=Math.min(...xs)-8,right=Math.max(...xs)+8,bottom=Math.max(...ys)+8,top=Math.min(...ys)-lift;
-    return {type:"building",id:String(building.id),priority:2,item:building,bounds:{left,right,top,bottom},anchor:{x:(left+right)/2,y:top}};
+    const centerWorld={x:(Number(b.minX)+Number(b.maxX))/2,y:(Number(b.minY)+Number(b.maxY))/2},centerScene=characterScenePoint(centerWorld);
+    return {type:"building",id:String(building.id),item:building,bounds:{left,right,top,bottom},anchor:{x:(left+right)/2,y:top},depth:inspectionCameraDepth(centerScene,0)};
   }
   function inspectionBuildingCandidates(x,y){const out=[];for(const building of lastRawBuildingInteriors||[]){const r=buildingInspectionRecord(building);if(r&&x>=r.bounds.left&&x<=r.bounds.right&&y>=r.bounds.top&&y<=r.bounds.bottom)out.push(r);}return out;}
   function inspectionReadableText(value,fallback){
@@ -2281,7 +2282,11 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     tip.style.top=(placeBelow?clamp(Number(a.y)+gap,edge,Math.max(edge,rect.height-edge-tipHeight)):clamp(Number(a.y)-gap,edge+tipHeight,Math.max(edge+tipHeight,rect.height-edge)))+"px";
     inspectionTelemetry.tooltipUpdates++;inspectionTelemetry.lastTooltipMs=Number((performance.now()-started).toFixed(3));
   }
-  function pickInspection(x,y){const started=performance.now(),candidates=[...inspectionCharacterCandidates(x,y),...inspectionBuildingCandidates(x,y)];candidates.sort((a,b)=>b.priority-a.priority||String(a.id).localeCompare(String(b.id)));inspectionTelemetry.pickQueries++;inspectionTelemetry.lastCandidateCount=candidates.length;inspectionTelemetry.lastPickMs=Number((performance.now()-started).toFixed(3));if(!candidates.length){dismissInspection();return null;}inspectionSelection=candidates[0];renderInspectionSelection(inspectionSelection);return inspectionSelection;}
+  function inspectionCameraDepth(scenePoint,worldY){
+    if(!camera||!scenePoint)return Number.POSITIVE_INFINITY;const p=camera.getPosition?.();if(!p)return Number.POSITIVE_INFINITY;
+    const dx=Number(scenePoint.x)-Number(p.x),dy=Number(worldY||0)-Number(p.y),dz=Number(scenePoint.z)-Number(p.z);return dx*dx+dy*dy+dz*dz;
+  }
+  function pickInspection(x,y){const started=performance.now(),candidates=[...inspectionCharacterCandidates(x,y),...inspectionBuildingCandidates(x,y)];candidates.sort((a,b)=>Number(a.depth??Infinity)-Number(b.depth??Infinity)||String(a.type).localeCompare(String(b.type))||String(a.id).localeCompare(String(b.id)));inspectionTelemetry.pickQueries++;inspectionTelemetry.lastCandidateCount=candidates.length;inspectionTelemetry.lastPickMs=Number((performance.now()-started).toFixed(3));if(!candidates.length){dismissInspection();return null;}inspectionSelection=candidates[0];renderInspectionSelection(inspectionSelection);return inspectionSelection;}
   function refreshInspectionSelection(){if(!inspectionSelection)return;if(inspectionSelection.type==="npc"){const item=(lastCharacterState.instances||[]).find(x=>x.id===inspectionSelection.id);if(!item){dismissInspection();return;}const center=projectedScreenPoint(item.scene,Number(item.centerY||item.feetY||0));inspectionSelection={...inspectionSelection,item,anchor:center?{x:center.x,y:center.y-Math.max(24,Number(item.renderedPixelHeight||32))*.5}:inspectionSelection.anchor};}else{const b=(lastRawBuildingInteriors||[]).find(x=>String(x.id)===inspectionSelection.id);const record=b?buildingInspectionRecord(b):null;if(!record){dismissInspection();return;}inspectionSelection=record;}renderInspectionSelection(inspectionSelection);}
   function bindInspectionInput(){if(!canvas||canvas._advisorInspectionBound)return;canvas._advisorInspectionBound=true;canvas.addEventListener("pointerdown",e=>{inspectionPointer={id:e.pointerId,x:e.clientX,y:e.clientY,moved:0};});canvas.addEventListener("pointermove",e=>{if(!inspectionPointer||inspectionPointer.id!==e.pointerId)return;inspectionPointer.moved=Math.max(inspectionPointer.moved,Math.hypot(e.clientX-inspectionPointer.x,e.clientY-inspectionPointer.y));});canvas.addEventListener("pointerup",e=>{if(!inspectionPointer||inspectionPointer.id!==e.pointerId)return;const p=inspectionPointer;inspectionPointer=null;if(p.moved>6)return;const r=canvas.getBoundingClientRect();pickInspection(e.clientX-r.left,e.clientY-r.top);});canvas.addEventListener("pointercancel",()=>{inspectionPointer=null;});}
   function projectedScreenPoint(scenePoint,worldY){
