@@ -13953,9 +13953,18 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             focus=[((p.get("zoom") or {}).get("focusLatitudeDegrees"),(p.get("zoom") or {}).get("focusLongitudeDegrees")) for p in planet_stages]
             if len(set(focus)) != 1:
                 raise RuntimeError(f"planet zoom lost spherical focus anchor: {focus}")
-            footprints=[float((p.get("zoom") or {}).get("visibleFootprintWidthMeters") or 0) for p in planet_stages]
-            if not (footprints[1] < footprints[0] and footprints[3] < footprints[2]):
-                raise RuntimeError(f"planet zoom footprint did not shrink on zoom-in: {footprints}")
+            # Use geometric-mean footprint span so the zoom assertion remains
+            # valid when this scenario deliberately switches aspect ratio
+            # between landscape and portrait. Raw width alone is not comparable
+            # across those viewport classes.
+            footprint_spans=[]
+            for p in planet_stages:
+                z=p.get("zoom") or {}
+                width=max(0.0,float(z.get("visibleFootprintWidthMeters") or 0))
+                height=max(0.0,float(z.get("visibleFootprintHeightMeters") or 0))
+                footprint_spans.append((width*height)**0.5)
+            if not (footprint_spans[1] < footprint_spans[0] and footprint_spans[3] < footprint_spans[2]):
+                raise RuntimeError(f"planet zoom footprint did not shrink on zoom-in: {footprint_spans}")
             if any(int(p.get("canvasCount") or 0)!=1 for p in planet_stages):
                 raise RuntimeError(f"planet zoom changed active canvas count: {[p.get('canvasCount') for p in planet_stages]}")
         else:
