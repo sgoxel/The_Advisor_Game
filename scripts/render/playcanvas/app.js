@@ -2266,7 +2266,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     const label=String(item?.activityLabel||"").trim();if(label)return label;
     const raw=String(item?.activity||"").trim().toLowerCase();
     const known={idle:"Idle",working:"Working",work:"Working",walking:"Walking",traveling:"Traveling",travelling:"Traveling",eating:"Eating",resting:"Resting",sleeping:"Sleeping",socializing:"Socializing",sitting:"Sitting",home:"Going home",going_home:"Going home",goinghome:"Going home"};
-    return known[raw]||inspectionReadableText(raw,"Idle");
+    return known[raw]||inspectionReadableText(raw,"Activity unavailable");
   }
   function renderInspectionSelection(record){
     const started=performance.now(),tip=inspectionTooltip();if(!tip||!record)return;tip.replaceChildren();let lines=[];
