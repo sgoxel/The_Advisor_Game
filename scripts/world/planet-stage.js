@@ -554,6 +554,7 @@ function bindInput(){
   canvas.addEventListener("pointermove",event=>{
     if(!dragging||event.pointerId!==pointerId)return;
     const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;
+    inspection.dragDistance=Math.max(inspection.dragDistance,Math.hypot(event.clientX-inspection.pointerDownX,event.clientY-inspection.pointerDownY));
     lastPointerX=event.clientX;lastPointerY=event.clientY;
     rotateBy(dx*0.34,dy*0.26);event.preventDefault();
   },{passive:false});
