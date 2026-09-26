@@ -211,7 +211,7 @@ function projectMapLabel(descriptor){
 }
 function buildMapBorderSegments(){
   const band=zoomState.band;
-  const visible=["country-region","regional-overview","regional-detail","district"].includes(band);
+  const visible=["country-region","regional-overview","regional-detail"].includes(band);
   if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,ownerCount:0,built:false};
   const quantizedScalar=Math.round(zoomState.scalar*20)/20;
   const key=[activeSeed,band,quantizedScalar,Math.round(zoomState.focusLatitudeRadians*180/Math.PI*2)/2,Math.round(zoomState.focusLongitudeRadians*180/Math.PI*2)/2,Math.round((canvas?.clientWidth||1)/(canvas?.clientHeight||1)*10)/10].join("|");
@@ -232,11 +232,21 @@ function buildMapBorderSegments(){
     owners.push(row);
   }
   const segments=[],sx=1000/(cols-1),sy=1000/(rows-1);
-  for(let r=0;r<rows;r++)for(let col=0;col<cols-1;col++)if(owners[r][col]!==owners[r][col+1]){
-    const x=(col+.5)*sx,y=r*sy;segments.push({x1:x,y1:Math.max(0,y-sy*.48),x2:x,y2:Math.min(1000,y+sy*.48)});
-  }
-  for(let r=0;r<rows-1;r++)for(let col=0;col<cols;col++)if(owners[r][col]!==owners[r+1][col]){
-    const x=col*sx,y=(r+.5)*sy;segments.push({x1:Math.max(0,x-sx*.48),y1:y,x2:Math.min(1000,x+sx*.48),y2:y});
+  // March each owner cell and connect edge crossings inside the cell. This
+  // preserves the bounded 13x9 political query budget while avoiding a visible
+  // rectangular sampling grid in the presentation.
+  for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
+    const a=owners[r][col],b=owners[r][col+1],c=owners[r+1][col+1],d=owners[r+1][col];
+    const x=col*sx,y=r*sy,crossings=[];
+    if(a!==b)crossings.push({x:x+sx*.5,y});
+    if(b!==c)crossings.push({x:x+sx,y:y+sy*.5});
+    if(d!==c)crossings.push({x:x+sx*.5,y:y+sy});
+    if(a!==d)crossings.push({x,y:y+sy*.5});
+    if(crossings.length===2)segments.push({x1:crossings[0].x,y1:crossings[0].y,x2:crossings[1].x,y2:crossings[1].y});
+    else if(crossings.length===4){
+      segments.push({x1:crossings[0].x,y1:crossings[0].y,x2:crossings[1].x,y2:crossings[1].y});
+      segments.push({x1:crossings[2].x,y1:crossings[2].y,x2:crossings[3].x,y2:crossings[3].y});
+    }
   }
   mapBorderCache={key,segments,sampleCount:cols*rows,ownerCount:ownerIds.size,builtAtMs:Number((performance.now()-started).toFixed(3))};
   return {segments,sampleCount:cols*rows,ownerCount:ownerIds.size,built:true};
