@@ -885,7 +885,7 @@ function updateProjectionPresentation(){
     const handoff=projectionHandoffForZoom();
     const tangentVisible=handoff>.02;
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
-    const fineVisible=tangentVisible&&zoomState.scalar>=.958;
+    const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
     tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
