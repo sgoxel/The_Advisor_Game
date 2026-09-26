@@ -512,13 +512,14 @@ function resize(){
   }
 }
 function dismissInspection(){inspection.selectedId=null;inspection.selectedType=null;inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
-function inspectionRegistryKey(type,id){return String(type)+":"+String(id);}
+function inspectionIdText(id){return String(id).trim();}
+function inspectionRegistryKey(type,id){return String(type)+":"+inspectionIdText(id);}
 function registerInspectionPickable(record){
-  if(record?.id===undefined||record.id===null||String(record.id).trim().length===0||!["npc","building"].includes(record.type)||typeof record.screenBounds!=="function")return false;
+  if(record?.id===undefined||record.id===null||inspectionIdText(record.id).length===0||!["npc","building"].includes(record.type)||typeof record.screenBounds!=="function")return false;
   inspectionPickables.set(inspectionRegistryKey(record.type,record.id),record);return true;
 }
 function unregisterInspectionPickable(id,type=null){
-  const idText=String(id),keys=type?[inspectionRegistryKey(type,idText)]:Array.from(inspectionPickables.entries()).filter(([,record])=>String(record.id)===idText).map(([key])=>key);
+  const idText=inspectionIdText(id),keys=type?[inspectionRegistryKey(type,idText)]:Array.from(inspectionPickables.entries()).filter(([,record])=>inspectionIdText(record.id)===idText).map(([key])=>key);
   if(inspection.selectedId===idText&&(!type||inspection.selectedType===type))dismissInspection();
   let removed=false;for(const key of keys)removed=inspectionPickables.delete(key)||removed;return removed;
 }
@@ -532,7 +533,7 @@ function renderInspectionTooltip(record,knownBounds=null){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
   const started=performance.now(),bounds=knownBounds??record.screenBounds();
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
-  const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f"),recordKey=record.type+":"+String(record.id);
+  const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f"),recordKey=inspectionRegistryKey(record.type,record.id);
   const selectionChanged=tip.dataset.recordKey!==recordKey;
   if(tip.dataset.contentKey!==contentKey&&(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250)){
     tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
@@ -556,7 +557,7 @@ function pickInspection(clientX,clientY){
   const priorityOf=record=>{const value=Number(record.pickPriority??0);return Number.isFinite(value)?value:0;};
   candidates.sort((a,b)=>priorityOf(b.record)-priorityOf(a.record)||depthOf(a.record)-depthOf(b.record)||inspectionRegistryKey(a.record.type,a.record.id).localeCompare(inspectionRegistryKey(b.record.type,b.record.id)));
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
-  const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=String(picked.record.id);inspection.selectedType=picked.record.type;if(!renderInspectionTooltip(picked.record,picked.bounds))return null;return picked.record;
+  const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=inspectionIdText(picked.record.id);inspection.selectedType=picked.record.type;if(!renderInspectionTooltip(picked.record,picked.bounds))return null;return picked.record;
 }
 function updateInspectionTooltip(){if(inspection.selectedId===null)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record||record.visible?.()===false){dismissInspection();return;}renderInspectionTooltip(record);}
 function bindInput(){
