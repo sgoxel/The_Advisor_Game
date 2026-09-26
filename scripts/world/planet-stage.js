@@ -81,7 +81,7 @@ let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClus
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
-let projectionState={mode:"globe",blend:0,transitionStart:.56,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+let projectionState={mode:"globe",blend:0,transitionStart:.78,transitionEnd:.995,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=4;
@@ -417,7 +417,7 @@ function tangentFrame(latitudeRadians,longitudeRadians){
   });
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
-function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.66)/.29);}
+function projectionHandoffForZoom(value=zoomState.scalar){return smoothstep01((clamp(value,0,1)-.80)/.17);}
 function canonicalSurfaceIdentity(){
   if(!geography)return null;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
@@ -497,8 +497,7 @@ function yieldBrowser(){
 async function runSlicedRange(total,step){
   startupScheduler.firstPlayableWorkUnits+=total;
   let sliceStarted=performance.now();
-  for(let i=0;i<total;i++){
-    step(i);
+  for(let i=0;i<total;i++){    step(i);
     startupScheduler.completedFirstPlayableWorkUnits++;
     const elapsed=performance.now()-sliceStarted;
     if(elapsed>=STARTUP_SLICE_BUDGET_MS&&i+1<total){
@@ -885,13 +884,13 @@ function updateProjectionPresentation(){
   if(tangentPatch){
     const handoff=projectionHandoffForZoom();
     const tangentVisible=handoff>.02;
-    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.84;\n    tangentPatch.enabled=fineVisible;
+    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.80;\n    tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
       horizonSkirt.setLocalPosition(0,-.012,0);
-      horizonSkirtMaterial.opacity=handoff;
+      const horizonNearFade=1-smoothstep01((zoomState.scalar-.92)/.07);\n      horizonSkirtMaterial.opacity=handoff*horizonNearFade;
       horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
@@ -912,8 +911,20 @@ function updateProjectionPresentation(){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  planet.enabled=handoff<.985;
-  if(cloudLayer)cloudLayer.enabled=planet.enabled;
+  planet.enabled=handoff<.9995;
+  if(surfaceMaterial){
+    surfaceMaterial.opacity=1-handoff;
+    surfaceMaterial.blendType=handoff>.001?pc.BLEND_NORMAL:pc.BLEND_NONE;
+    surfaceMaterial.depthWrite=handoff<.55;
+    surfaceMaterial.update();
+  }
+  if(tangentPatchMaterial){
+    tangentPatchMaterial.opacity=handoff;
+    tangentPatchMaterial.blendType=pc.BLEND_NORMAL;
+    tangentPatchMaterial.depthWrite=false;
+    tangentPatchMaterial.update();
+  }
+  if(cloudLayer)cloudLayer.enabled=handoff<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
 }
@@ -997,8 +1008,7 @@ function applyRotation(){
   if(!planet)return;
   planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
   updateZoomFocusFromRotation();
-  rotationChangeCount++;
-  if(zoomState.scalar<=projectionState.transitionStart)updateMapPresentation();
+  rotationChangeCount++;  if(zoomState.scalar<=projectionState.transitionStart)updateMapPresentation();
 }
 function setRotation(yaw,pitch){
   yawDegrees=normalizeYaw(yaw);
@@ -1497,8 +1507,7 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
   atmosphere={active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false,keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3)))};
   return snapshot();
 }
-async function buildScene(){
-  const started=performance.now();
+async function buildScene(){  const started=performance.now();
   setStartupProgress("geography","Generating continents, oceans and islands…",52);
   if(!window.PlanetGeography)throw new Error("PlanetGeography is unavailable");
   activeSeed=window.PlanetGeography.resolveSeed();
