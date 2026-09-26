@@ -224,15 +224,21 @@ function localHash(eastMeters,northMeters,salt=0){
   h=Math.imul(h^(h>>>13),1274126177)>>>0;return ((h^(h>>>16))>>>0)/4294967295;
 }
 function localSurfaceSample(eastMeters,northMeters,base){
-  const coarse=localHash(eastMeters/6,northMeters/6,11),fine=localHash(eastMeters,northMeters,29);
-  const ridge=Math.abs(localHash(eastMeters/3,northMeters/3,47)-.5)*2;
+  const phase=seededUnit("local-ground")*Math.PI*2;
+  const broad=Math.sin(eastMeters*.085+phase)*Math.cos(northMeters*.073-phase*.61);
+  const medium=Math.sin((eastMeters+northMeters)*.19+phase*.37)*.55;
+  const fine=Math.cos(eastMeters*.41-northMeters*.33+phase*.83)*.22;
+  const field=(broad+medium+fine)/1.77;
   const land=!!base?.land;
-  const microElevation=land?((coarse-.5)*5+(fine-.5)*1.6+ridge*2.2):((coarse-.5)*.7);
+  const microElevation=land?field*4.8:field*.45;
   const baseColor=Array.isArray(base?.color)?base.color:[.18,.32,.22];
-  const light=(coarse-.5)*.18+(fine-.5)*.07;
+  const light=field*.11;
+  const high=Number(base?.elevationMeters||0)>2600;
   const color=land
-    ? baseColor.map((v,i)=>clamp(v+light+(i===1?.025:0),0,1))
-    : [clamp(baseColor[0]+light*.25,0,1),clamp(baseColor[1]+light*.35,0,1),clamp(baseColor[2]+light*.55,0,1)];
+    ? (high
+      ? [clamp(.34+light,0,1),clamp(.38+light,0,1),clamp(.30+light*.7,0,1)]
+      : [clamp(baseColor[0]*.48+.16+light,0,1),clamp(baseColor[1]*.48+.28+light,0,1),clamp(baseColor[2]*.40+.10+light*.6,0,1)])
+    : [clamp(baseColor[0]*.45+.04+light*.15,0,1),clamp(baseColor[1]*.55+.12+light*.2,0,1),clamp(baseColor[2]*.7+.28+light*.28,0,1)];
   return {microElevation,color};
 }
 function buildTangentPatchMesh(){
@@ -293,7 +299,7 @@ function updateTangentPatchTexture(){
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
-  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=1.45;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=1.08;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
