@@ -836,7 +836,8 @@ function updateProjectionPresentation(){
     if(localResources.activeSignature!==sig)scheduleLocalDetailResource(sig);
   }
   if(tangentPatch){
-    const tangentVisible=blend>.055;
+    const handoff=smoothstep01((blend-.02)/.20);
+    const tangentVisible=handoff>0;
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.\n    const fineVisible=tangentVisible&&zoomState.scalar>=.97;\n    tangentPatch.enabled=fineVisible;
     ensureHorizonSkirt();
     const viewBlend=blend;
@@ -851,7 +852,13 @@ function updateProjectionPresentation(){
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     if(horizonSkirt)horizonSkirt.setLocalScale(patchScale,patchScale,patchScale);
   }
-  planet.enabled=blend<=.06;
+  // Keep both representations alive during the projection handoff. The old
+  // threshold disabled the globe almost exactly when the tangent camera jumped
+  // above the patch, making a fixed geographic focus look like a new location.
+  // The overlap lets camera motion remain continuous while both surfaces are
+  // still derived from the same canonical lat/lon focus.
+  const handoff=smoothstep01((blend-.02)/.20);
+  planet.enabled=handoff<.995;
   if(cloudLayer)cloudLayer.enabled=planet.enabled;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
@@ -886,16 +893,21 @@ function applyCameraZoom(){
   const orientationEnd=.995;
   const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
   const angleBlend=smoothstep01(orientationRaw);
-  const tangentVisible=viewBlend>.055;
+  const handoff=smoothstep01((viewBlend-.02)/.20);
+  const tangentVisible=handoff>0;
   // The tangent patch lies in X/Z. Once it becomes the visible representation,
   // view it from above; keeping the old globe-front camera at Y~=0 makes the
   // horizontal patch appear as a horizon strip. The later gameplay oblique
   // transition is independent and begins only at orientationStart.
   const mapY=8.0,mapZ=.35;
-  const cameraZ=tangentVisible?lerp(mapZ,localZ,angleBlend):globeZ;
-  const cameraY=tangentVisible?lerp(mapY,localY,angleBlend):0;
+  const tangentZ=lerp(mapZ,localZ,angleBlend);
+  const tangentY=lerp(mapY,localY,angleBlend);
+  // Smoothly move from the globe-front camera to the tangent-map camera.
+  // Zoom alone must never cause a discrete camera relocation.
+  const cameraZ=lerp(globeZ,tangentZ,handoff);
+  const cameraY=lerp(0,tangentY,handoff);
   const targetZ=0;
-  const targetY=tangentVisible?lerp(0,-.12,angleBlend):0;
+  const targetY=lerp(0,lerp(0,-.12,angleBlend),handoff);
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   const fov=34+12*angleBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
   const lookLength=Math.max(.000001,Math.hypot(cameraY-targetY,cameraZ-targetZ));
@@ -904,7 +916,7 @@ function applyCameraZoom(){
   // only as the later local gameplay oblique camera is introduced.
   const mapPitchBaseline=Math.atan2(mapZ,mapY)*180/Math.PI;
   const cameraPitchDegrees=tangentVisible?Number(Math.max(0,Math.atan2(Math.abs(cameraZ-targetZ),Math.max(.000001,Math.abs(cameraY-targetY)))*180/Math.PI-mapPitchBaseline).toFixed(3)):0;
-  projectionPresentation={...projectionPresentation,viewBlend,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
+  projectionPresentation={...projectionPresentation,viewBlend,handoff,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   const verticalFov=34*Math.PI/180;
