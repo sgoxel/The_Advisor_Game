@@ -397,8 +397,7 @@ function renderMapPresentation(){
   mapPresentation={
     active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
-    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
-    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
+    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
     scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
     updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
   };
@@ -429,10 +428,21 @@ function canonicalSurfaceIdentity(){
     const sample=geography.sampleLatLon(lat,lon);
     return Object.freeze({land:Boolean(sample?.land),surfaceClass:String(sample?.surfaceClass||""),elevationMeters:Number((Number(sample?.elevationMeters||0)).toFixed(2))});
   };
+  const ring20km=Object.freeze({north:sampleOffset(0,20000),east:sampleOffset(20000,0),south:sampleOffset(0,-20000),west:sampleOffset(-20000,0)});
+  const ring100km=Object.freeze({north:sampleOffset(0,100000),east:sampleOffset(100000,0),south:sampleOffset(0,-100000),west:sampleOffset(-100000,0)});
+  const center=sampleOffset(0,0);
+  const samples=[center,...Object.values(ring20km),...Object.values(ring100km)];
+  const landCount=samples.filter(s=>s.land).length;
+  const elevations=samples.map(s=>s.elevationMeters);
   return Object.freeze({
-    center:sampleOffset(0,0),
-    ring20km:Object.freeze({north:sampleOffset(0,20000),east:sampleOffset(20000,0),south:sampleOffset(0,-20000),west:sampleOffset(-20000,0)}),
-    ring100km:Object.freeze({north:sampleOffset(0,100000),east:sampleOffset(100000,0),south:sampleOffset(0,-100000),west:sampleOffset(-100000,0)})
+    center,ring20km,ring100km,
+    macroDescriptor:Object.freeze({
+      landSampleCount:landCount,
+      waterSampleCount:samples.length-landCount,
+      elevationRangeMeters:Number((Math.max(...elevations)-Math.min(...elevations)).toFixed(2)),
+      identitySource:"canonical-geography-samples",
+      localLodPreservesMacroIdentity:true
+    })
   });
 }
 function updateProjectionState(){
@@ -791,14 +801,23 @@ function makeLocalSurfaceTexture(spanEast,spanNorth,size=256,featherEdges=false)
     let lon=lon0+east/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
     const sample=geography.sampleLatLon(lat,lon);
     let displayColor;
+    const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
+    const elevation=Number(sample?.elevationMeters||0);
+    const relief=clamp(elevation/5200,0,1);
+    const macro=(Math.sin(ux*Math.PI*6+phase)*Math.cos(vz*Math.PI*5-phase*.63)+Math.sin((ux+vz)*Math.PI*3+phase*.37)*.45)*.018;
+    // Preserve the same authoritative low-frequency geography at every LOD.
+    // Land/water class and broad elevation remain visible while close LODs add
+    // deterministic micro detail instead of replacing those identity cues.
+    const identityTint=sample?.land
+      ? [relief*.075,relief*.065,relief*.035]
+      : [-.012,-.004,.028];
+    const authoritative=base.map((v,i)=>clamp(v+macro*(i===2?.70:1)+identityTint[i],0,1));
     if(useMicroDetail){
-      displayColor=localSurfaceSample(east,north,sample).color;
+      const micro=localSurfaceSample(east,north,sample).color;
+      displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));
     }else{
-      const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
-      const macro=(Math.sin(ux*Math.PI*6+phase)*Math.cos(vz*Math.PI*5-phase*.63)+Math.sin((ux+vz)*Math.PI*3+phase*.37)*.45)*.018;
-      displayColor=base.map((v,i)=>clamp(v+macro*(i===2?.70:1),0,1));
-    }
-    const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
+      displayColor=authoritative;
+    }    const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
     const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
     const alpha=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
     data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=alpha;
@@ -1197,8 +1216,7 @@ function buildWildernessMesh(items,size){
     const vx=d.y*uz-d.z*uy,vy=d.z*ux-d.x*uz,vz=d.x*uy-d.y*ux;
     const start=positions.length/3,half=size*.90;
     positions.push(base.x+ux*half,base.y+uy*half,base.z+uz*half,base.x-ux*half,base.y-uy*half,base.z-uz*half,base.x+vx*half,base.y+vy*half,base.z+vz*half,base.x+d.x*size*.28,base.y+d.y*size*.28,base.z+d.z*size*.28);
-    for(let i=0;i<4;i++)normals.push(d.x,d.y,d.z);
-    indices.push(start,start+1,start+3,start+1,start+2,start+3,start+2,start,start+3);
+    for(let i=0;i<4;i++)normals.push(d.x,d.y,d.z);    indices.push(start,start+1,start+3,start+1,start+2,start+3,start+2,start,start+3);
   }
   if(!positions.length)return null;
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();wilderness.triangles+=indices.length/3;return mesh;
@@ -1597,8 +1615,7 @@ async function start(){
     setStartupProgress("ready","First playable planet ready",100,"ready");
     startupProgress.gameplayReadyAtMs=Date.now();
     startupScheduler.backgroundPreparationCompleteAtMs=startupProgress.gameplayReadyAtMs;
-    startupScheduler.optionalPostReadyWorkCount=0;
-    endResponsivenessTelemetry();
+    startupScheduler.optionalPostReadyWorkCount=0;    endResponsivenessTelemetry();
     await yieldPaint();
     root.dataset.ready="true";
     root.dataset.seed=activeSeed;
