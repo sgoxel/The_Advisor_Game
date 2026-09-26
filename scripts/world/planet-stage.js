@@ -641,13 +641,13 @@ function fantasyHourFromStamp(stamp){
 }
 function paletteForHour(hour){
   const stops=[
-    {h:0,phase:"night",key:[.34,.43,.72],fill:[.12,.18,.38],ambient:[.075,.09,.18],sky:[.008,.016,.052],keyI:.48,fillI:.48,emissive:.028},
-    {h:5,phase:"dawn",key:[1,.55,.32],fill:[.28,.30,.52],ambient:[.20,.18,.25],sky:[.09,.07,.15],keyI:.78,fillI:.60,emissive:.018},
+    {h:0,phase:"night",key:[.46,.56,.86],fill:[.20,.28,.54],ambient:[.14,.17,.29],sky:[.012,.024,.072],keyI:.68,fillI:.62,emissive:.038},
+    {h:5,phase:"dawn",key:[1,.62,.38],fill:[.34,.38,.62],ambient:[.28,.24,.30],sky:[.12,.075,.14],keyI:1.02,fillI:.72,emissive:.026},
     {h:8,phase:"day",key:[1,.93,.72],fill:[.32,.50,.78],ambient:[.36,.40,.48],sky:[.018,.045,.09],keyI:1.30,fillI:.82,emissive:.004},
     {h:12,phase:"day",key:[1,.97,.90],fill:[.30,.44,.72],ambient:[.34,.37,.43],sky:[.004,.008,.018],keyI:1.42,fillI:.86,emissive:.002},
-    {h:17,phase:"late-day",key:[1,.70,.40],fill:[.36,.32,.56],ambient:[.28,.25,.32],sky:[.07,.045,.10],keyI:1.08,fillI:.68,emissive:.008},
-    {h:20,phase:"night",key:[.48,.52,.82],fill:[.15,.22,.46],ambient:[.11,.13,.24],sky:[.012,.018,.06],keyI:.58,fillI:.52,emissive:.024},
-    {h:24,phase:"night",key:[.34,.43,.72],fill:[.12,.18,.38],ambient:[.075,.09,.18],sky:[.008,.016,.052],keyI:.48,fillI:.48,emissive:.028}
+    {h:17,phase:"late-day",key:[1,.74,.46],fill:[.40,.38,.64],ambient:[.32,.28,.36],sky:[.085,.052,.105],keyI:1.18,fillI:.76,emissive:.014},
+    {h:20,phase:"night",key:[.56,.62,.92],fill:[.22,.31,.60],ambient:[.18,.20,.32],sky:[.018,.03,.082],keyI:.78,fillI:.66,emissive:.034},
+    {h:24,phase:"night",key:[.46,.56,.86],fill:[.20,.28,.54],ambient:[.14,.17,.29],sky:[.012,.024,.072],keyI:.68,fillI:.62,emissive:.038}
   ];
   let a=stops[0],b=stops[1];for(let i=0;i<stops.length-1;i++){if(hour>=stops[i].h&&hour<=stops[i+1].h){a=stops[i];b=stops[i+1];break;}}
   const t=clamp((hour-a.h)/Math.max(.001,b.h-a.h),0,1),phase=(t<.5?a.phase:b.phase);
