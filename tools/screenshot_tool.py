@@ -8292,7 +8292,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             layout=stage.get("geographyLayout") or {}
             if stage.get("ready") is not True or stage.get("stage") != "seeded-planetary-geography":
                 raise RuntimeError(f"Seeded planet stage not ready in frame {index}: {stage}")
-            if stage.get("version") != "planetary-geography-globe-v2":
+            if stage.get("version") != "planet-multiscale-ground-v3":
                 raise RuntimeError(f"Unexpected planet renderer version in frame {index}: {stage}")
             if stage.get("geographyVersion") != "planetary-geography-v4":
                 raise RuntimeError(f"Unexpected geography version in frame {index}: {stage}")
