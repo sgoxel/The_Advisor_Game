@@ -531,7 +531,7 @@ function readableInspectionLines(record){
 }
 function renderInspectionTooltip(record,knownBounds=null){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
-  const started=performance.now(),bounds=knownBounds??record.screenBounds();
+  const started=performance.now();let bounds=knownBounds;try{if(bounds===null)bounds=record.screenBounds();}catch{bounds=null;}
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
   const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f"),recordKey=inspectionRegistryKey(record.type,record.id);
   const selectionChanged=tip.dataset.recordKey!==recordKey;
@@ -560,7 +560,7 @@ function pickInspection(clientX,clientY){
     }
     candidates.push({record,bounds:b});
   }
-  const depthOf=record=>{const value=Number(typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity);return Number.isFinite(value)?value:Infinity;};
+  const depthOf=record=>{let raw=Infinity;try{raw=typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity;}catch{return Infinity;}const value=Number(raw);return Number.isFinite(value)?value:Infinity;};
   const priorityOf=record=>{const value=Number(record.pickPriority??0);return Number.isFinite(value)?value:0;};
   candidates.sort((a,b)=>priorityOf(b.record)-priorityOf(a.record)||depthOf(a.record)-depthOf(b.record)||inspectionRegistryKey(a.record.type,a.record.id).localeCompare(inspectionRegistryKey(b.record.type,b.record.id)));
   inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
