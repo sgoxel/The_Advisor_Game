@@ -474,7 +474,7 @@ function localGroundHeightUnits(eastMeters,northMeters,dims){
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
   const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.92;m.update();return m;};
-  localStaticMaterials={road:make("LocalRoad",.34,.25,.16),wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48)};
+  localStaticMaterials={road:make("LocalRoad",.42,.30,.17),wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48)};
 }
 function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
   const e=new pc.Entity(name),mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
@@ -492,7 +492,7 @@ function addTerrainRoad(dims,roadWidth){
     }
   }
   for(let i=0;i<slices;i++)for(let lane=0;lane<2;lane++){
-    const a=i*3+lane,b=a+1,c=a+3,d=c+1;indices.push(a,c,b,b,c,d);
+    const a=i*3+lane,b=a+1,c=a+3,d=c+1;indices.push(a,b,c,b,d,c);
   }
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
   const e=new pc.Entity("SeedRoadRibbon");e.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
