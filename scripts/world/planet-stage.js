@@ -771,7 +771,7 @@ function activateLocalDetailResource(signature){
     localResources.cacheMisses++;localResources.pendingPreparationCount=1;
     const started=performance.now(),mesh=buildTangentPatchMesh(),dims=localPatchDimensions(),textureSize=localTextureSizeForLevel(dims.levelId);
     const detailTexture=makeLocalSurfaceTexture(dims.patchWidth,dims.patchHeight,textureSize,true);
-    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,textureSize,false);
+    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,textureSize,false);
     resource={mesh,detailTexture,surroundTexture,detail:{...localDetail,signature,textureSize},estimatedBytes:localDetail.estimatedBytes+textureSize*textureSize*4*2};
     localDetail={...resource.detail};
     localResourceCache.set(signature,resource);localResources.lastBuildMs=Number((performance.now()-started).toFixed(3));localResources.pendingPreparationCount=0;
@@ -844,7 +844,7 @@ function updateTangentPatchTexture(){
     // The flat surround spans 12x the detailed patch in presentation space.
     // Sample exactly 12x the physical area as well so its central texture
     // coordinates line up with the detailed patch edges.
-    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*12,dims.patchHeight*12,256,false);
+    const surroundTexture=makeLocalSurfaceTexture(dims.patchWidth*3,dims.patchHeight*3,256,false);
     horizonSkirtMaterial.diffuseMap=surroundTexture;
     horizonSkirtMaterial.emissiveMap=surroundTexture;
     horizonSkirtMaterial.diffuse.set(1,1,1);
@@ -892,7 +892,7 @@ function updateProjectionPresentation(){
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
       horizonSkirt.setLocalPosition(0,-.012,0);
-      horizonSkirtMaterial.opacity=clamp(handoff*1.15,0,1);
+      horizonSkirtMaterial.opacity=clamp(handoff*.75,0,.85);
       horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
@@ -922,7 +922,7 @@ function updateProjectionPresentation(){
     surfaceMaterial.update();
   }
   if(tangentPatchMaterial){
-    tangentPatchMaterial.opacity=handoff;
+    tangentPatchMaterial.opacity=smoothstep01(clamp(handoff*1.35,0,1));
     tangentPatchMaterial.blendType=pc.BLEND_NORMAL;
     tangentPatchMaterial.depthWrite=false;
     tangentPatchMaterial.update();
