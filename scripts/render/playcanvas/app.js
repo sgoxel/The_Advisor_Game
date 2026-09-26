@@ -2262,7 +2262,13 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
     if(record.type==="npc"){const i=record.item;lines=[i.residentName||i.residentId||"Resident",i.profession||"Resident",i.activityLabel||i.activity||"Idle"];}
     else{const b=record.item;lines=[b.label||b.name||b.kind||"Building",b.functionLabel||b.kind||b.source||"Building"];}
     lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=String(line);tip.appendChild(el);});
-    const rect=host.getBoundingClientRect(),a=record.anchor||{x:rect.width/2,y:rect.height/2};tip.style.left=clamp(Number(a.x),12,Math.max(12,rect.width-12))+"px";tip.style.top=clamp(Number(a.y)-10,12,Math.max(12,rect.height-12))+"px";
+    const rect=host.getBoundingClientRect(),a=record.anchor||{x:rect.width/2,y:rect.height/2};
+    const tipWidth=Math.max(1,Number(tip.offsetWidth||tip.getBoundingClientRect?.().width||148)),tipHeight=Math.max(1,Number(tip.offsetHeight||tip.getBoundingClientRect?.().height||48)),edge=8,gap=10;
+    const half=Math.min(tipWidth/2,Math.max(0,rect.width/2-edge)),x=clamp(Number(a.x),edge+half,Math.max(edge+half,rect.width-edge-half));
+    const placeBelow=Number(a.y)-gap-tipHeight<edge;
+    tip.dataset.placement=placeBelow?"below":"above";
+    tip.style.left=x+"px";
+    tip.style.top=(placeBelow?clamp(Number(a.y)+gap,edge,Math.max(edge,rect.height-edge-tipHeight)):clamp(Number(a.y)-gap,edge+tipHeight,Math.max(edge+tipHeight,rect.height-edge)))+"px";
     inspectionTelemetry.tooltipUpdates++;inspectionTelemetry.lastTooltipMs=Number((performance.now()-started).toFixed(3));
   }
   function pickInspection(x,y){const started=performance.now(),candidates=[...inspectionCharacterCandidates(x,y),...inspectionBuildingCandidates(x,y)];candidates.sort((a,b)=>b.priority-a.priority||String(a.id).localeCompare(String(b.id)));inspectionTelemetry.pickQueries++;inspectionTelemetry.lastCandidateCount=candidates.length;inspectionTelemetry.lastPickMs=Number((performance.now()-started).toFixed(3));if(!candidates.length){dismissInspection();return null;}inspectionSelection=candidates[0];renderInspectionSelection(inspectionSelection);return inspectionSelection;}
