@@ -8224,6 +8224,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         scalar,label=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(1280,800); time.sleep(0.15)
         if frame_index == 0:
+            from selenium.webdriver.support.ui import WebDriverWait
+            WebDriverWait(driver, 20).until(lambda d: d.execute_script("return window.PlanetStage?.snapshot?.()?.ready===true"))
             driver.execute_script("""
                 const s=window.PlanetStage.snapshot();
                 const t=s?.featureTargets?.continent || s?.featureTargets?.mountain || s?.featureTargets?.peak;
@@ -8566,7 +8568,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Zoom-only sequence changed canonical lat/lon: {coords}")
         if any(float((stage.get("canonicalFocus") or {}).get("screenSpaceFocusDeltaPixels") or 0) != 0 for stage in stages):
             raise RuntimeError("Canonical focus target moved in screen space")
-        if round(float((stages[0].get("zoom") or {}).get("scalar") or -1),6) != 0 or round(float((stages[-1].get("zoom") or {}).get("scalar") or -1),6) != 0:
+        if round(float((stages[0].get("zoom") or {}).get("scalar", -1)),6) != 0 or round(float((stages[-1].get("zoom") or {}).get("scalar", -1)),6) != 0:
             raise RuntimeError("Reverse zoom did not return to globe scalar")
         return
     if scenario == "wp-s003-010-003-005":
@@ -14271,7 +14273,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
