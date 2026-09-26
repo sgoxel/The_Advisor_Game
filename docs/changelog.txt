@@ -1,3 +1,12 @@
+2026-09-26 11:08 +03:00 | WP-S003-010 | Continuous Planet-to-Ground Zoom + Multi-Scale Focus Foundation — VISUAL PASS, DEPLOYMENT VERIFICATION PENDING
+- Classification: MIXED. Fixed planet wheel evidence targeting so real WheelEvent input reaches #planetCanvas, and fixed two-pointer ownership so a second touch pointer can form a real pinch gesture instead of being rejected by the single-pointer drag guard.
+- Replaced the globe camera's near-surface hard clamp with a continuous safe-distance curve that remains outside the displaced planetary mesh. This removed blank/inverted close-zoom frames while preserving the same SEED world and stable focus anchor.
+- Extended camera-zoom evidence to desktop landscape, 844x390 phone landscape, and 390x844 phone portrait while exercising real wheel and two-pointer input paths.
+- Final Visual Evidence run 36228811879 passed on exact head a8a1ab0b997f8b081c5181adec550a650105c737. Artifact 10902131055 contains five fresh screenshots plus runtime evidence (641,051 bytes; sha256:30f80deaf79ae932d19a880a3af81d54e5baddbd954ec55a89ad364c2353e5fd).
+- Direct inspection of all five final screenshots: VISUAL 8.3/10 PASS. Full-planet, phone-landscape close zoom, return, phone-portrait pinch zoom, and return remain coherent with no blank/inverted frame, major clipping, projection break, or control overlap.
+- Runtime evidence keeps one planet canvas and focus latitude/longitude fixed at -10/18 degrees. Wheel changes 0.000x -> 0.450x -> 0.000x; pinch changes 0.000x -> 0.300x -> 0.100x, with same-viewport footprint decreasing on zoom-in and increasing on zoom-out.
+- WP is not marked COMPLETED and Issue #98 remains open until the final main commit is independently verified as deployed on GitHub Pages.
+
 2026-09-25 08:35 +03:00 | WP-S003-009-008 | Large-Scale Terrain Variation + Semantic Wear Zones — VISUAL PASS
 - Classification: VISUAL. Implemented deterministic renderer-only large-scale terrain variation directly in the existing PlayCanvas terrain mesh through global-coordinate vertex colors plus semantic proximity wear. No decal layer, per-tile entity system, extra material family, additional texture, or extra terrain geometry was introduced.
 - Broad macro variation is SEED-stable and continuous across chunks. Semantic wear uses already-prepared chunk cells only, with a bounded edge fade so the renderer performs zero extra TerrainFoundation authority queries while road/building/moisture/forest influence remains context-aware.
