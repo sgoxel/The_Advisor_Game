@@ -454,14 +454,15 @@ function localLevelPresentationProgress(value=zoomState.scalar,index=localLodInd
   const start=index===0?projectionState.transitionStart:(LOCAL_DETAIL_LEVELS[index-1].max+LOCAL_LOD_HYSTERESIS);
   const end=LOCAL_DETAIL_LEVELS[index]?.max??1;
   if(end<=start)return 1;
-  return smoothstep01((value-start)/(end-start));
+  return clamp((value-start)/(end-start),0,1);
 }
 function localPresentationCompensation(value=zoomState.scalar,index=localLodIndex){
   const level=LOCAL_DETAIL_LEVELS[index]||LOCAL_DETAIL_LEVELS[0];
   const previousHeight=index===0?520000:(LOCAL_DETAIL_LEVELS[index-1]?.visibleHeightMeters||level.visibleHeightMeters);
-  const entryRatio=clamp(level.visibleHeightMeters/Math.max(1,previousHeight),.08,1);
   const progress=localLevelPresentationProgress(value,index);
-  return entryRatio+(1-entryRatio)*progress;
+  const logEffective=Math.log(Math.max(1,previousHeight))*(1-progress)+Math.log(Math.max(1,level.visibleHeightMeters))*progress;
+  const effectiveHeight=Math.exp(logEffective);
+  return clamp(level.visibleHeightMeters/effectiveHeight,.08,1);
 }
 function localTextureSizeForLevel(levelId){
   if(["regional-overview","regional-detail","district"].includes(levelId))return 128;
