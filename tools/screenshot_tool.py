@@ -109,6 +109,7 @@ SCENARIOS = {
     "wp-s003-008-003",
     "wp-s003-008-004",
     "wp-s003-008-005",
+    "wp-s003-008-006",
     "wp-s003-009-001",
     "wp-s003-009-002",
     "wp-s003-009-003",
@@ -207,6 +208,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-003": 8,
     "wp-s003-008-004": 6,
     "wp-s003-008-005": 6,
+    "wp-s003-008-006": 6,
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
     "wp-s003-009-003": 9,
@@ -6255,6 +6257,22 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-008-006":
+        proof=driver.execute_script("""
+          const api=window.PlanetStage;
+          if(!api?.snapshot)return null;
+          const stage=api.snapshot(),inspection=stage.inspection||{};
+          return {inspection,hasRegister:typeof api.registerInspectionPickable==='function',hasDismiss:typeof api.dismissInspection==='function'};
+        """)
+        if not isinstance(proof,dict) or proof.get("hasRegister") is not True or proof.get("hasDismiss") is not True:
+            raise RuntimeError(f"Inspection API unavailable: {proof}")
+        inspection=proof.get("inspection") or {}
+        if inspection.get("boundedActiveRegistry") is not True or inspection.get("fullWorldScan") is not False:
+            raise RuntimeError(f"Inspection registry budget invalid: {proof}")
+        if int(inspection.get("activeNpcCount") or 0)<1 or int(inspection.get("activeBuildingCount") or 0)<1:
+            raise RuntimeError("WP-S003-008-006 cannot pass visual evidence: canonical scene has no active NPC/building presentation targets; refusing fabricated tooltip evidence.")
+        return f"inspection:npc={inspection.get('activeNpcCount')}:building={inspection.get('activeBuildingCount')}:selected={inspection.get('selectedId')}"
+
     if scenario == "wp-s003-008-005":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
