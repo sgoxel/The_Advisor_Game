@@ -518,8 +518,9 @@ function registerInspectionPickable(record){
 }
 function unregisterInspectionPickable(id){if(inspection.selectedId===String(id))dismissInspection();return inspectionPickables.delete(String(id));}
 function readableInspectionLines(record){
-  if(record.type==="npc")return [String(record.name||"Unknown resident"),String(record.job||"Resident"),String(record.activity||"Idle")];
-  return [String(record.name||record.functionLabel||"Building"),String(record.functionLabel||record.buildingType||"Building")];
+  if(record.type==="npc")return [String(record.name||"Unknown resident"),String(record.job||"Unassigned"),String(record.activity||"Activity unavailable")];
+  const typeLabel=String(record.functionLabel||record.buildingType||"Building"),name=String(record.name||"").trim();
+  return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
 }
 function renderInspectionTooltip(record){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
