@@ -908,7 +908,11 @@ function updateProjectionPresentation(){
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
       horizonSkirt.setLocalPosition(0,-.012,0);
-      horizonSkirtMaterial.opacity=clamp(handoff*.75,0,.85);
+      // Reveal the canonical tangent continuation quickly enough that the
+      // settlement frame is fully owned by the same local geography, rather
+      // than looking through a fading globe shell at a different surface.
+      const tangentReveal=smoothstep01(clamp(handoff/.40,0,1));
+      horizonSkirtMaterial.opacity=tangentReveal*.92;
       horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
@@ -929,20 +933,31 @@ function updateProjectionPresentation(){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  const globeFade=smoothstep01(clamp(handoff/.82,0,1));
+  const tangentReveal=smoothstep01(clamp(handoff/.40,0,1));
+  const globeFade=tangentReveal;
   planet.enabled=globeFade<.9995;
   if(surfaceMaterial){
     surfaceMaterial.opacity=1-globeFade;
     surfaceMaterial.blendType=handoff>.001?pc.BLEND_NORMAL:pc.BLEND_NONE;
-    surfaceMaterial.depthWrite=handoff<.55;
+    // The tangent patch is geometrically inside the globe. Once the handoff
+    // starts, a depth-writing sphere would mask the canonical tangent surface
+    // even while its color is fading. Stop writing depth almost immediately
+    // and let opacity alone perform the representation crossfade.
+    surfaceMaterial.depthWrite=handoff<.02;
     surfaceMaterial.update();
   }
   if(tangentPatchMaterial){
-    tangentPatchMaterial.opacity=smoothstep01(clamp(handoff*1.35,0,1));
+    tangentPatchMaterial.opacity=tangentReveal;
     tangentPatchMaterial.blendType=pc.BLEND_NORMAL;
     tangentPatchMaterial.depthWrite=false;
     tangentPatchMaterial.update();
   }
+  projectionPresentation={...projectionPresentation,
+    globeOpacity:Number((1-globeFade).toFixed(6)),
+    tangentOpacity:Number(tangentReveal.toFixed(6)),
+    horizonOpacity:Number((tangentReveal*.92).toFixed(6)),
+    globeDepthWrite:Boolean(handoff<.02)
+  };
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.activeSignature=null;}
