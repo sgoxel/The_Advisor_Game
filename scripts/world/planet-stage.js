@@ -22,7 +22,7 @@ const ZOOM_MAX=1;
 const ZOOM_WHEEL_SENSITIVITY=0.0009;
 const ZOOM_PINCH_SENSITIVITY=0.006;
 const ZOOM_DISTANCE_FACTOR=0.018;
-const ZOOM_BANDS=Object.freeze([{id:"planet",max:.18},{id:"continent",max:.42},{id:"country-region",max:.66},{id:"local-area",max:.86},{id:"ground",max:1}]);
+const ZOOM_BANDS=Object.freeze([{id:"planet",max:.18},{id:"continent",max:.38},{id:"country-region",max:.58},{id:"regional-overview",max:.70},{id:"regional-detail",max:.78},{id:"district",max:.86},{id:"local-area",max:.92},{id:"settlement",max:.97},{id:"near-ground",max:.995},{id:"ground",max:1}]);
 
 let pc=null;
 let app=null;
