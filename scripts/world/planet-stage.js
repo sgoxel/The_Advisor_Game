@@ -244,11 +244,11 @@ function updateTangentPatchTexture(){
   ctx.putImageData(image,0,0);
   const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(canvas2d);
-  tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.update();
+  tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.update();
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
-  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.82;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   tangentPatch.render.meshInstances=[new pc.MeshInstance(buildTangentPatchMesh(),tangentPatchMaterial,tangentPatch)];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
@@ -259,9 +259,9 @@ function updateProjectionPresentation(){
   if(blend>0){ensureTangentPatch();updateTangentPatchTexture();}
   if(tangentPatch){
     tangentPatch.enabled=blend>.04;
-    tangentPatch.setLocalPosition(0,-.32*blend,0);
+    tangentPatch.setLocalPosition(0,-.12*blend,0);
     tangentPatch.setLocalEulerAngles(0,0,0);
-    const patchScale=.72+.28*blend;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    const patchScale=1.15+.35*blend;tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     for(const mi of tangentPatch.render.meshInstances)mi.setParameter?.("material_opacity",blend);
   }
   planet.enabled=blend<.96;
@@ -285,11 +285,11 @@ function applyCameraZoom(){
   // point; no second map or local simulation authority is introduced.
   updateProjectionPresentation();
   const globeZ=distance;
-  const localZ=1.48;
+  const localZ=.72;
   const cameraZ=globeZ*(1-blend)+localZ*blend;
-  const cameraY=.72*blend;
-  const targetZ=0;
-  const targetY=-.20*blend;
+  const cameraY=1.18*blend;
+  const targetZ=-.22*blend;
+  const targetY=-.08*blend;
   cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
   if(cameraEntity.camera)cameraEntity.camera.fov=34+16*blend;
   const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
