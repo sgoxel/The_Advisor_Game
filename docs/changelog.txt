@@ -1956,3 +1956,10 @@
 - Extended WP-012 evidence to 12 frames including 1/2500 origin -> canonical nearby-city navigation -> exact return. Run 36351719289 PASSED on head 9ae15f1bdb6e8418e529ab32665a11b32c243dc0: citySpacingPass=true, one readable city label in each reported-scale frame, city candidate minimum separation 30,006.001 m >= 20,480 m required, bounded city query, and identical visible city ID after return.
 - Fresh screenshots were directly inspected. The city-density/navigation regression is visually corrected with no label overlap/clipping or center-marker drift; MIXED visual score 8.1/10. GitHub Pages deployed implementation head 9ae15f1bdb6e8418e529ab32665a11b32c243dc0 successfully in run 36351557018.
 
+
+2026-09-28 01:01 +03:00 | WP-S003-010-003-013 | Final bounded SSE/canonical-cell acceptance stopped below gate
+- Implemented projected screen-space-error LOD selection, deterministic SEED-coordinate quadtree cell identity/bounds/parentage, bounded 3x3 requested-cell overscan, prepared-parent/ready-child handoff telemetry, and viewport-independent canonical cell anchoring.
+- Added steady-state native source magnification telemetry/guard and canonical anchor coverage proof; tightened canonical cell span so every cell-centered resource covers any focus inside its cell without camera/viewport-derived identity.
+- Final run 36353605703 on implementation head 818d671a259a77b4bfa1c57d1d4ba679560567d7 captured 16 frames. Functional acceptance FAILED at frame 7 because requestedNativeMagnification=1.62649 exceeded the 1.5 contract.
+- All 16 fresh screenshots were directly inspected: VISUAL 5.6/10 FAIL. The previous large rectangular coverage seam is removed, but 1/2500–1/5000 remains heavily blurred/washed out and 1/10000 ground remains flat gray/sparse with weak terrain-road-building integration, including phone portrait.
+- The three-attempt visual/improvement limit is exhausted. ROADMAP remains IN PROGRESS / NOT COMPLETED and Issue #168 stays open. No fourth implementation/test loop was started.
