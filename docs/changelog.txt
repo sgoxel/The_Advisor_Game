@@ -1905,3 +1905,7 @@
 - Added deterministic WP evidence covering all ten forward scales, reverse zoom, equal-pixel drag at all scales, two independent SEEDs, static JS parsing, browser startup and fresh screenshots.
 - Acceptance passed in run 36346377293 (artifact 10940592423): 13 screenshots, 10 drag states, 9 reverse states, primary SEED The_Advisor_Game_Planet_001, secondary SEED AGENT6-PURE-ZOOM-B, max ruler truth error 0.0 m.
 - Fresh screenshots were directly inspected. VISUAL: 8/10 — scale labels/ruler are readable and the same geographic focus enlarges without orbit, tilt, horizon reveal, clipping, black frames or visible focus jumps. Intermediate/local terrain art remains coarse but not a major WP-blocking visual defect.
+
+2026-09-27 23:09 +03:00 | WP-S003-010-003-011 | Deployment verification
+- Main implementation commit 32a71241212831e1f8ab8638a6c778ced8b2b3fe completed GitHub Pages run 36346855001 successfully.
+- Post-deployment cleanup repointed the WP evidence workflow from the temporary AGENT #6 branch to main; no gameplay implementation changed after the passing evidence run.
