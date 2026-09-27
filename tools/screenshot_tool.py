@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -6807,15 +6808,21 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return "atlas:"+label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-005":
         from selenium.webdriver.support.ui import WebDriverWait
-        forward=(0.05,0.07,0.08,0.10,0.13,0.15,0.19,0.23,0.29,0.35,0.44,0.54,0.66,0.81,1.00)
-        reverse=(0.81,0.54,0.29,0.08,0.05)
-        plan=[("forward",value,(1280,800)) for value in forward]
-        plan += [("reverse",value,(1280,800)) for value in reverse]
+        # Issue #146 specifies DISPLAYED zoom multipliers, while PlanetStage's
+        # canonical scalar is logarithmic: multiplier = 10 ** (-2 + 2*scalar).
+        # Capture the requested 0.05x..1.00x UX checkpoints by converting each
+        # displayed multiplier to its canonical scalar instead of mistakenly
+        # treating the multiplier itself as the scalar.
+        forward_display=(0.05,0.07,0.08,0.10,0.13,0.15,0.19,0.23,0.29,0.35,0.44,0.54,0.66,0.81,1.00)
+        reverse_display=(0.81,0.54,0.29,0.08,0.05)
+        scalar_for_display=lambda value:(math.log10(float(value))+2.0)/2.0
+        plan=[("forward",value,scalar_for_display(value),(1280,800)) for value in forward_display]
+        plan += [("reverse",value,scalar_for_display(value),(1280,800)) for value in reverse_display]
         plan += [
-            ("phone-landscape",0.81,(844,390)),
-            ("phone-portrait",1.00,(390,844)),
+            ("phone-landscape",0.81,scalar_for_display(0.81),(844,390)),
+            ("phone-portrait",1.00,scalar_for_display(1.00),(390,844)),
         ]
-        direction,scalar,viewport=plan[min(frame_index,len(plan)-1)]
+        direction,display_multiplier,scalar,viewport=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(int(viewport[0]),int(viewport[1]))
         driver.execute_async_script("""
             const done=arguments[arguments.length-1];
@@ -6869,7 +6876,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               mapUpdateMs:m.lastUpdateMs,labelBuildMs:m.labelQueryBuildMs
             };
         """)
-        return "zoom-e2e:"+direction+":"+format(float(scalar),".2f")+":"+json.dumps(proof,sort_keys=True)
+        return "zoom-e2e:"+direction+":"+format(float(display_multiplier),".2f")+"x:scalar="+format(float(scalar),".6f")+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-004":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -7330,10 +7337,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if len(frames) < 22:
             raise RuntimeError("wp-s003-010-005 requires 22 fixed-focus forward/reverse/mobile frames")
         stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:22]]
-        expected=[0.05,0.07,0.08,0.10,0.13,0.15,0.19,0.23,0.29,0.35,0.44,0.54,0.66,0.81,1.00,0.81,0.54,0.29,0.08,0.05,0.81,1.00]
+        displayed=[0.05,0.07,0.08,0.10,0.13,0.15,0.19,0.23,0.29,0.35,0.44,0.54,0.66,0.81,1.00,0.81,0.54,0.29,0.08,0.05,0.81,1.00]
+        expected=[(math.log10(value)+2.0)/2.0 for value in displayed]
         scalars=[float((s.get("zoom") or {}).get("scalar") or -1) for s in stages]
         if any(abs(a-b)>0.000001 for a,b in zip(scalars,expected)):
-            raise RuntimeError(f"WP-005 scalar sequence mismatch: {scalars}")
+            raise RuntimeError(f"WP-005 scalar sequence mismatch for displayed multipliers {displayed}: {scalars}")
+        actual_displayed=[float((s.get("mapPresentation") or {}).get("zoomScaleMultiplier") or -1) for s in stages]
+        if any(abs(a-b)>0.001 for a,b in zip(actual_displayed,displayed)):
+            raise RuntimeError(f"WP-005 displayed multiplier sequence mismatch: expected={displayed} actual={actual_displayed}")
         focus=[(round(float((s.get("canonicalFocus") or {}).get("latitudeDegrees") or 0),6),round(float((s.get("canonicalFocus") or {}).get("longitudeDegrees") or 0),6)) for s in stages]
         if len(set(focus)) != 1:
             raise RuntimeError(f"WP-005 zoom-only run relocated focus: {focus}")
@@ -7387,27 +7398,27 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             za,zb=sa.get("zoom") or {},sb.get("zoom") or {}
             pa,pb=sa.get("projection") or {},sb.get("projection") or {}
             if za.get("visibleBand")!=zb.get("visibleBand") or pa.get("mode")!=pb.get("mode"):
-                raise RuntimeError(f"WP-005 reverse zoom semantic/projection mismatch at scalar {expected[a]}: forward={za.get('visibleBand')}/{pa.get('mode')} reverse={zb.get('visibleBand')}/{pb.get('mode')}")
+                raise RuntimeError(f"WP-005 reverse zoom semantic/projection mismatch at displayed {displayed[a]}x: forward={za.get('visibleBand')}/{pa.get('mode')} reverse={zb.get('visibleBand')}/{pb.get('mode')}")
             ha,hb=float(za.get("visibleFootprintHeightMeters") or 0),float(zb.get("visibleFootprintHeightMeters") or 0)
             if ha<=0 or hb<=0 or abs(ha-hb)/max(ha,hb)>.02:
-                raise RuntimeError(f"WP-005 reverse zoom physical footprint mismatch at scalar {expected[a]}: forward={ha}m reverse={hb}m")
+                raise RuntimeError(f"WP-005 reverse zoom physical footprint mismatch at displayed {displayed[a]}x: forward={ha}m reverse={hb}m")
             lsa,lsb=pa.get("localStatic") or {},pb.get("localStatic") or {}
             if bool(lsa.get("active")) or bool(lsb.get("active")):
                 psa,psb=float(lsa.get("presentationScale") or 0),float(lsb.get("presentationScale") or 0)
                 if abs(psa-psb)>max(.02,.02*max(abs(psa),abs(psb),1)):
-                    raise RuntimeError(f"WP-005 reverse zoom settlement presentation mismatch at scalar {expected[a]}: forward={psa} reverse={psb}")
+                    raise RuntimeError(f"WP-005 reverse zoom settlement presentation mismatch at displayed {displayed[a]}x: forward={psa} reverse={psb}")
             ra,rb=pa.get("resourceBudget") or {},pb.get("resourceBudget") or {}
             aa,ab=int(ra.get("activeResourceCount") or 0),int(rb.get("activeResourceCount") or 0)
             if aa!=ab:
-                raise RuntimeError(f"WP-005 reverse zoom active LOD count mismatch at scalar {expected[a]}: forward={aa} reverse={ab}")
+                raise RuntimeError(f"WP-005 reverse zoom active LOD count mismatch at displayed {displayed[a]}x: forward={aa} reverse={ab}")
             # Cached/prepared LOD metadata may remain after zooming back to globe scale,
             # but an inactive cache is not visible world detail. Enforce LOD symmetry
             # only while a local terrain resource is actually active on screen.
             if aa>0:
                 if str(ra.get("requestedLevel") or "")!=str(rb.get("requestedLevel") or ""):
-                    raise RuntimeError(f"WP-005 reverse zoom requested LOD mismatch at scalar {expected[a]}: forward={ra.get('requestedLevel')} reverse={rb.get('requestedLevel')}")
+                    raise RuntimeError(f"WP-005 reverse zoom requested LOD mismatch at displayed {displayed[a]}x: forward={ra.get('requestedLevel')} reverse={rb.get('requestedLevel')}")
                 if str(ra.get("visibleLevel") or "")!=str(rb.get("visibleLevel") or ""):
-                    raise RuntimeError(f"WP-005 reverse zoom visible LOD mismatch at scalar {expected[a]}: forward={ra.get('visibleLevel')} reverse={rb.get('visibleLevel')}")
+                    raise RuntimeError(f"WP-005 reverse zoom visible LOD mismatch at displayed {displayed[a]}x: forward={ra.get('visibleLevel')} reverse={rb.get('visibleLevel')}")
         phone_landscape=frames[20].get("runtime",{}).get("viewport",{})
         phone_portrait=frames[21].get("runtime",{}).get("viewport",{})
         if int(phone_landscape.get("width") or 0)>900 or int(phone_landscape.get("height") or 0)>430:
