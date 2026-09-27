@@ -8410,6 +8410,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-013 canonical requested cell missing in frame {index}: {cell}")
             if int(lod.get("overscanCellCount") or 0)!=9:
                 raise RuntimeError(f"WP-013 overscan must remain bounded to 3x3 cells in frame {index}: {lod.get('overscanCellIds')}")
+            if lod.get("canonicalAnchorCoveragePass") is not True:
+                raise RuntimeError(f"WP-013 canonical cell-centered resource cannot cover requested focus in frame {index}: offset={lod.get('requestedAnchorOffsetMeters')} margin={lod.get('requestedPatchMarginMeters')} cell={cell}")
             max_mag=float(lod.get("maxNativeMagnification") or 0)
             requested_mag=float(lod.get("requestedNativeMagnification") or 999)
             if max_mag<=0 or requested_mag>max_mag+0.011:
