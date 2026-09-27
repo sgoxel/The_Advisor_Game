@@ -1345,9 +1345,11 @@ function ensureLocalNpcMaterials(){
   localNpcMaterials={body:make("LocalResidentBody",.19,.42,.72),head:make("LocalResidentHead",.86,.68,.50)};
 }
 function registerCanonicalBuildingInspection(record,entities){
-  const typeLabel=readableTitle(record?.function||record?.kind||record?.type,"Building"),name=String(record?.label||record?.name||"").trim();
+  const typeLabel=readableTitle(record?.function||record?.kind||record?.type,"Building");
+  const explicitName=String(record?.label||record?.name||"").trim();
+  const name=explicitName||typeLabel+" "+String(record?.id||"").trim();
   registerLocalInspection({
-    id:String(record.id),type:"building",name,functionLabel:typeLabel,buildingType:typeLabel,
+    id:String(record.id),type:"building",name,functionLabel:typeLabel,buildingType:typeLabel,pickPriority:1,
     authority:Object.freeze({buildingId:String(record.id),kind:record?.kind||null,function:record?.function||null}),
     visible:()=>entities.some(entity=>entity?.enabled&&entity.parent),
     screenBounds:()=>inspectionEntityBounds(entities,6),
@@ -1372,7 +1374,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
     const entities=[body,head];
     registerLocalInspection({
-      id:resident.id,type:"npc",residentId:resident.id,
+      id:resident.id,type:"npc",residentId:resident.id,pickPriority:3,
       authority:Object.freeze({residentId:resident.id,identitySource:"DailyActivity",professionSource:"ResidentAssignments",activitySource:"DailyActivity.resolveActionTarget"}),
       inspect:()=>residentInspectionState(resident.id),
       visible:()=>entities.some(entity=>entity?.enabled&&entity.parent),
