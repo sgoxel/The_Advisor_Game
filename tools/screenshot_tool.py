@@ -140,7 +140,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
-    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013","wp-s003-010-003-014",
+    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013","wp-s003-010-003-014","wp-s003-010-003-015",
     "wp-s003-010-004",
     "wp-s003-010-005",
     "wp-s004-001",
@@ -264,6 +264,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-012": 12,
     "wp-s003-010-003-013": 16,
     "wp-s003-010-003-014": 16,
+    "wp-s003-010-003-015": 12,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -1699,7 +1700,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-015"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-015"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7352,6 +7353,135 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         proof.update(auxiliary)
         return label+"|"+json.dumps(proof,sort_keys=True)
 
+    if scenario == "wp-s003-010-003-015":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("seed-a-overview-1-500",5,(1280,800),"scale"),
+            ("seed-a-10km-1-1000",6,(1280,800),"scale"),
+            ("seed-a-settlement-1-2500",7,(1280,800),"scale"),
+            ("seed-a-approach-east",6,(1280,800),"approach-east"),
+            ("seed-a-approach-west",6,(1280,800),"approach-west"),
+            ("seed-a-cache-regenerate",6,(1280,800),"regenerate"),
+            ("seed-a-dense-region",6,(1280,800),"dense"),
+            ("seed-a-sparse-region",6,(1280,800),"sparse"),
+            ("seed-a-phone-portrait",6,(390,844),"phone"),
+            ("seed-b-10km-1-1000",6,(1280,800),"seed-b"),
+            ("seed-b-dense-region",6,(1280,800),"dense"),
+            ("seed-b-sparse-region",6,(1280,800),"sparse"),
+        )
+        label,scale_index,viewport,mode=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*viewport); time.sleep(.12)
+        if frame_index in (0,9):
+            seed="WP_S003_010_003_015_A" if frame_index==0 else "WP_S003_010_003_015_B"
+            base=driver.current_url.split("?",1)[0]
+            driver.get(base+"?seed="+seed)
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.(),api=window.SettlementArchetypes;
+                return Boolean(
+                  s?.ready===true&&s?.mapPresentation?.active===true&&
+                  api?.canonicalHierarchySnapshot&&api?.canonicalSettlementAtCell&&
+                  api?.HIERARCHY_CLASS_SPECS?.city&&api?.HIERARCHY_CLASS_SPECS?.town&&api?.HIERARCHY_CLASS_SPECS?.village
+                );
+            """))
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            time.sleep(.25)
+
+        def settle(index, timeout=90.0):
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",index)
+            WebDriverWait(driver,timeout).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},m=s?.mapPresentation||{};
+                const local=Number(s?.zoom?.scaleIndex||0)>=4;
+                return Number(s?.zoom?.scaleIndex??-1)===Number(arguments[0]) &&
+                  (!local || Number(r?.pendingPreparationCount||0)===0) &&
+                  (!m?.semanticEligibleLabelKinds?.some(k=>['city','town','village'].includes(k)) || m?.settlementHierarchyBounded===true);
+            """,index))
+            time.sleep(.14)
+
+        auxiliary={}
+        if mode=="scale":
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index)
+        elif mode in ("approach-east","approach-west"):
+            offset="24000" if mode=="approach-east" else "-24000"
+            before=driver.execute_script("""
+                const seed=window.PlanetStage.snapshot()?.activeSeed;
+                return window.SettlementArchetypes.canonicalHierarchySnapshot(seed,"0","0",50000);
+            """)
+            driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],'0')",offset)
+            settle(scale_index);time.sleep(.15)
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index);time.sleep(.2)
+            after=driver.execute_script("""
+                const seed=window.PlanetStage.snapshot()?.activeSeed;
+                return window.SettlementArchetypes.canonicalHierarchySnapshot(seed,"0","0",50000);
+            """)
+            auxiliary["approach"]={"direction":mode,"beforeSignature":before.get("signature") if isinstance(before,dict) else None,"afterSignature":after.get("signature") if isinstance(after,dict) else None}
+        elif mode=="regenerate":
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index)
+            regen=driver.execute_script("""
+                const seed=window.PlanetStage.snapshot()?.activeSeed,api=window.SettlementArchetypes;
+                const before=api.canonicalHierarchySnapshot(seed,"0","0",50000);
+                api.clearCanonicalHierarchyCache();
+                const after=api.canonicalHierarchySnapshot(seed,"0","0",50000);
+                return {beforeSignature:before.signature,afterSignature:after.signature,
+                  beforeIds:before.settlements.map(x=>x.id),afterIds:after.settlements.map(x=>x.id)};
+            """)
+            auxiliary["regeneration"]=regen
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index)
+        elif mode in ("dense","sparse"):
+            target=driver.execute_script("""
+                const mode=arguments[0],stage=window.PlanetStage,api=window.SettlementArchetypes,seed=stage.snapshot()?.activeSeed;
+                const offsets=[-60000,-30000,0,30000,60000],candidates=[];
+                for(const y of offsets)for(const x of offsets){
+                  const snap=api.canonicalHierarchySnapshot(seed,String(x),String(y),6000);
+                  if(!snap.centerLand)continue;
+                  const counts=snap.classCounts||{};
+                  const score=Number(snap.densityScore||0)+Number(snap.settlementCount||0)*0.035+
+                    Number(counts['major-city']||0)*0.12+Number(counts.city||0)*0.09+Number(counts.town||0)*0.05;
+                  candidates.push({x:String(x),y:String(y),score,snapshot:snap});
+                }
+                candidates.sort((a,b)=>a.score-b.score||a.y.localeCompare(b.y)||a.x.localeCompare(b.x));
+                if(!candidates.length)throw new Error('no bounded land density targets');
+                const chosen=mode==='dense'?candidates[candidates.length-1]:candidates[0];
+                stage.setWorldTileFocus(chosen.x,chosen.y);
+                return {x:chosen.x,y:chosen.y,score:chosen.score,snapshot:chosen.snapshot,
+                  candidateCount:candidates.length,minScore:candidates[0].score,maxScore:candidates[candidates.length-1].score};
+            """,mode)
+            settle(scale_index);time.sleep(.25)
+            auxiliary["densityTarget"]=target
+        elif mode=="phone":
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index);time.sleep(.3)
+        elif mode=="seed-b":
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index)
+
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{},f=s?.canonicalFocus?.worldTile||{},api=window.SettlementArchetypes;
+            const hierarchy=api.canonicalHierarchySnapshot(s.activeSeed,String(f.x),String(f.y),50000);
+            const local10km=api.canonicalHierarchySnapshot(s.activeSeed,String(f.x),String(f.y),5000);
+            const classMinimums=Object.fromEntries(Object.entries(api.HIERARCHY_CLASS_SPECS||{}).map(([k,v])=>[k,Number(v.minSameClassMeters||0)]));
+            const visibleSettlementLabels=(m.visibleLabels||[]).filter(x=>['city','town','village'].includes(x.entityType)).map(x=>({
+              id:x.canonicalEntityId,type:x.entityType,name:x.authoritativeName,x:x.screenX,y:x.screenY
+            }));
+            return {
+              seed:s.activeSeed,scaleIndex:s?.zoom?.scaleIndex,scaleLabel:s?.zoom?.scaleLabel,
+              focus:{x:String(f.x),y:String(f.y)},visibleFootprintWidthMeters:s?.zoom?.visibleFootprintWidthMeters,
+              visibleFootprintHeightMeters:s?.zoom?.visibleFootprintHeightMeters,
+              hierarchy,local10km,classMinimums,visibleSettlementLabels,
+              mapHierarchyRevision:m.settlementHierarchyRevision,mapHierarchySignature:m.settlementHierarchySignature,
+              mapHierarchyClassCounts:m.settlementHierarchyClassCounts,mapHierarchyQueryCellCount:m.settlementHierarchyQueryCellCount,
+              mapHierarchyBounded:m.settlementHierarchyBounded,mapHierarchyFullWorldScan:m.settlementHierarchyFullWorldScan,
+              mapCitySpacingPass:m.citySpacingPass,mapCityMinSeparationMeters:m.cityMinSeparationMeters,
+              mapCityRequiredMinSeparationMeters:m.cityRequiredMinSeparationMeters,
+              fullWorldScan:m.fullWorldScan
+            };
+        """)
+        proof.update(auxiliary)
+        return label+"|"+json.dumps(proof,sort_keys=True)
+
     if scenario == "wp-s003-010-003-013":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -8535,6 +8665,87 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S003-015 phone landscape frame unexpected: {landscape}")
         if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
             raise RuntimeError(f"WP-S003-015 phone portrait frame unexpected: {portrait}")
+        return
+
+    if scenario == "wp-s003-010-003-015":
+        if len(frames) < 12:
+            raise RuntimeError("wp-s003-010-003-015 requires twelve settlement-hierarchy evidence frames")
+        proofs=[]
+        for index,frame in enumerate(frames[:12],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split("|",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-015 frame {index} lacks settlement hierarchy proof: {action}") from exc
+            proofs.append(proof)
+            hierarchy=proof.get("hierarchy") or {}
+            if hierarchy.get("seedOnly") is not True or hierarchy.get("cameraIndependent") is not True or hierarchy.get("viewportIndependent") is not True or hierarchy.get("lodIndependent") is not True or hierarchy.get("streamingOrderIndependent") is not True:
+                raise RuntimeError(f"WP-015 hierarchy identity depends on presentation/streaming in frame {index}: {hierarchy}")
+            if hierarchy.get("bounded") is not True or hierarchy.get("fullWorldScan") is not False or proof.get("fullWorldScan") is not False:
+                raise RuntimeError(f"WP-015 hierarchy query lost bounded/no-full-world contract in frame {index}: {proof}")
+            if hierarchy.get("cityClassSpacingPass") is not True or int(hierarchy.get("duplicateNearCount") or 0)!=0:
+                raise RuntimeError(f"WP-015 city spacing/duplicate contract failed in frame {index}: {hierarchy}")
+            if proof.get("mapHierarchyBounded") is not True or proof.get("mapHierarchyFullWorldScan") is not False:
+                raise RuntimeError(f"WP-015 atlas is not consuming bounded canonical hierarchy in frame {index}: {proof}")
+            settlements=hierarchy.get("settlements") or []
+            ids=set()
+            for item in settlements:
+                sid=str(item.get("id") or "")
+                if not sid or sid in ids:
+                    raise RuntimeError(f"WP-015 duplicate/empty settlement id in frame {index}: {item}")
+                ids.add(sid)
+                if item.get("seedOnly") is not True or item.get("cameraIndependent") is not True or item.get("lodIndependent") is not True or item.get("streamingOrderIndependent") is not True:
+                    raise RuntimeError(f"WP-015 settlement authority invalid in frame {index}: {item}")
+                if (item.get("terrainValidity") or {}).get("land") is not True or (item.get("terrainValidity") or {}).get("ownerMatch") is not True:
+                    raise RuntimeError(f"WP-015 settlement terrain/ownership invalid in frame {index}: {item}")
+                cell=item.get("generationCell") or {}
+                if not str(cell.get("id") or "").startswith(("HSC|","CAP|")):
+                    raise RuntimeError(f"WP-015 settlement missing canonical generation cell in frame {index}: {item}")
+                cls=str(item.get("classId") or "")
+                nearest=item.get("nearestSameClassMeters")
+                minimum=float((proof.get("classMinimums") or {}).get(cls) or 0)
+                if nearest is not None and minimum>0 and float(nearest)+2<minimum:
+                    raise RuntimeError(f"WP-015 same-class spacing failed in frame {index}: class={cls} nearest={nearest} min={minimum}")
+            for label in proof.get("visibleSettlementLabels") or []:
+                if label.get("id") not in ids:
+                    raise RuntimeError(f"WP-015 rendered settlement label is not from canonical hierarchy in frame {index}: {label}")
+            local=proof.get("local10km") or {}
+            if int(local.get("cityClassCount") or 0)>1:
+                raise RuntimeError(f"WP-015 ~10km area contains multiple independent city-class settlements in frame {index}: {local}")
+
+        origin=proofs[:6]
+        signatures=[(p.get("hierarchy") or {}).get("signature") for p in origin]
+        focuses=[p.get("focus") for p in origin]
+        if len(set(signatures))!=1 or any(f!={"x":"0","y":"0"} for f in focuses):
+            raise RuntimeError(f"WP-015 same origin changed settlement identity across scale/approach/cache paths: signatures={signatures} focuses={focuses}")
+        if len({proofs[i].get("scaleIndex") for i in (0,1,2)})<3:
+            raise RuntimeError("WP-015 zoom evidence did not cover three distinct canonical scales")
+        for i in (3,4):
+            approach=proofs[i].get("approach") or {}
+            if approach.get("beforeSignature")!=approach.get("afterSignature") or approach.get("afterSignature")!=signatures[0]:
+                raise RuntimeError(f"WP-015 approach-direction traversal changed canonical hierarchy: {approach}")
+        regen=proofs[5].get("regeneration") or {}
+        if regen.get("beforeSignature")!=regen.get("afterSignature") or regen.get("beforeIds")!=regen.get("afterIds"):
+            raise RuntimeError(f"WP-015 cache clear/regeneration changed settlements: {regen}")
+
+        dense_a=proofs[6].get("densityTarget") or {};sparse_a=proofs[7].get("densityTarget") or {}
+        dense_b=proofs[10].get("densityTarget") or {};sparse_b=proofs[11].get("densityTarget") or {}
+        for label,dense,sparse in (("A",dense_a,sparse_a),("B",dense_b,sparse_b)):
+            if not dense or not sparse or (dense.get("x"),dense.get("y"))==(sparse.get("x"),sparse.get("y")):
+                raise RuntimeError(f"WP-015 seed {label} dense/sparse targets were not distinct: dense={dense} sparse={sparse}")
+            if float(dense.get("score") or 0)<=float(sparse.get("score") or 0)+0.01:
+                raise RuntimeError(f"WP-015 seed {label} geography-aware density did not differ: dense={dense} sparse={sparse}")
+        if proofs[0].get("seed")==proofs[9].get("seed") or (proofs[0].get("hierarchy") or {}).get("signature")==(proofs[9].get("hierarchy") or {}).get("signature"):
+            raise RuntimeError("WP-015 second SEED did not produce an independent canonical settlement hierarchy")
+        combined_counts={}
+        for p in (proofs[0],proofs[6],proofs[9],proofs[10]):
+            for k,v in ((p.get("hierarchy") or {}).get("classCounts") or {}).items():
+                combined_counts[k]=combined_counts.get(k,0)+int(v or 0)
+        if combined_counts.get("city",0)+combined_counts.get("major-city",0)<1 or combined_counts.get("town",0)<1 or combined_counts.get("village",0)<1:
+            raise RuntimeError(f"WP-015 evidence lacks city/town/village hierarchy coverage: {combined_counts}")
+        viewport=frames[8].get("runtime",{}).get("viewport",{})
+        if int(viewport.get("width") or 0)>430 or int(viewport.get("height") or 0)<700:
+            raise RuntimeError(f"WP-015 phone portrait frame unexpected: {viewport}")
         return
 
     if scenario == "wp-s003-010-003-014":
@@ -15078,7 +15289,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-015", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -15086,7 +15297,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:

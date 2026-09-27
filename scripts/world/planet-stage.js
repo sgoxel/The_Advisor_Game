@@ -911,6 +911,41 @@ function atlasTownEntitiesForFocus(){
   }
   return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)).slice(0,24));
 }
+function atlasSettlementHierarchyQuery(spec){
+  const classes=spec.kinds.filter(kind=>kind==="city"||kind==="town"||kind==="village");
+  const api=window.SettlementArchetypes;
+  if(!classes.length||!activeSeed||!api?.canonicalSettlementsInBounds)return null;
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2)),cosLat=Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  const halfXTiles=Math.ceil((Math.max(1,zoomState.visibleFootprintWidthMeters)*.62)/(2*tileMeters*cosLat));
+  const halfYTiles=Math.ceil((Math.max(1,zoomState.visibleFootprintHeightMeters)*.62)/(2*tileMeters));
+  const minX=(BigInt(focusTile.x)-BigInt(halfXTiles)).toString(),maxX=(BigInt(focusTile.x)+BigInt(halfXTiles)).toString();
+  const minY=(BigInt(focusTile.y)-BigInt(halfYTiles)).toString(),maxY=(BigInt(focusTile.y)+BigInt(halfYTiles)).toString();
+  let query=null;try{query=api.canonicalSettlementsInBounds(activeSeed,{minX,maxX,minY,maxY},classes);}catch(_){query=null;}
+  if(!query)return null;
+  const entities=[];
+  for(const record of query.settlements||[]){
+    const type=record.classId==="city"?"city":record.classId==="town"?"town":record.classId==="village"?"village":null;
+    if(!type||!classes.includes(type))continue;
+    const anchor={x:String(record.center.x),y:String(record.center.y)},surface=atlasPlanetSurfaceForTile(anchor.x,anchor.y);
+    if(!surface.sample?.land)continue;
+    const entity=atlasEntityBase(record.id,type,record.name,anchor,"SettlementArchetypes.canonicalSettlementsInBounds:seed-hierarchy",{
+      countryId:record.countryId||null,regionId:record.regionId||null,settlementClass:record.classId,
+      importanceClass:record.importanceClass||record.classId,settlementRole:record.role||null,
+      generationCellId:record.generationCell?.id||null,generationCellX:record.generationCell?.cellX??null,generationCellY:record.generationCell?.cellY??null,
+      hierarchyRevision:query.diagnostics?.revision||null,hierarchySignature:record.cacheRegenerationSignature||null,
+      carryingCapacity:Number(record.carryingCapacity||0),candidateRank:Number(record.candidateRank||0),
+      nearestSameClassMeters:record.nearestSameClassMeters??null,nearestHigherClassMeters:record.nearestHigherClassMeters??null,
+      importance:record.importanceClass==="major-city"?6:record.classId==="city"?4:record.classId==="town"?2:0
+    });
+    if(entity)entities.push(entity);
+  }
+  return Object.freeze({
+    key:[query.diagnostics?.revision,query.diagnostics?.signature,minX,maxX,minY,maxY,classes.join(",")].join(":"),
+    entities:Object.freeze(entities.sort((a,b)=>String(a.id).localeCompare(String(b.id)))),
+    diagnostics:query.diagnostics
+  });
+}
 function atlasBandSpec(_band,portrait){return currentSemanticLayerPolicy(portrait);}
 function atlasQuerySamples(spec){
   const globe=spec.queryMode==="globe";
@@ -929,7 +964,7 @@ function atlasQuerySamples(spec){
 }
 function atlasFocusEntityIds(spec){
   const tile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),ids={},needed=new Set(spec.kinds);
-  let countryEntity=null,regionEntity=null,village=null;
+  let countryEntity=null,regionEntity=null;
   if(needed.has("country")||needed.has("capital")){
     const key=atlasAuthorityKey("country",tile);
     if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("country",tile);
@@ -940,7 +975,6 @@ function atlasFocusEntityIds(spec){
     if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("region",tile);
     regionEntity=atlasAuthorityIndex.get(key)||null;
   }
-  if(needed.has("village"))try{village=window.GeographyFoundation?.nearestVillage?.(activeSeed,tile.x,tile.y,false)||null;}catch(_){}
   if(needed.has("continent")){
     const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
     ids.continent=surface.sample?.land?(surface.sample?.continentId||null):null;
@@ -948,35 +982,30 @@ function atlasFocusEntityIds(spec){
   if(needed.has("country"))ids.country=countryEntity?.id||null;
   if(needed.has("capital"))ids.capital=countryEntity?.capital?.id||null;
   if(needed.has("region"))ids.region=regionEntity?.id||null;
-  if(needed.has("city")){
-    const cell=atlasCellForTile(tile,atlasCityCellSize()),city=window.GeographyFoundation?.cityAtCell?.(activeSeed,cell.x,cell.y)||null;
-    ids.city=city?atlasCellId("CITY",cell):null;
+  for(const kind of ["city","town","village"]){
+    if(!needed.has(kind))continue;
+    let record=null;try{record=window.SettlementArchetypes?.canonicalSettlementAtPoint?.(activeSeed,kind,tile.x,tile.y)||null;}catch(_){record=null;}
+    ids[kind]=record?.id||null;
   }
   if(needed.has("district"))ids.district=atlasCellId("DIST",atlasCellForTile(tile,256));
-  if(needed.has("village"))ids.village=village?atlasCellId("VIL",Object.freeze({x:BigInt(village.cellX),y:BigInt(village.cellY)})):null;
   return {tile,ids,primaryId:ids[spec.focusKind]||null};
 }
 function atlasQueryCandidates(spec){
   const precision=spec.queryMode==="globe"?(spec.index<=1?1:2):4;
-  const cityQuery=spec.kinds.includes("city")?atlasCityQuery():null;
-  const key=[activeSeed,spec.id,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),Math.round(Math.log10(Math.max(1,zoomState.visibleFootprintWidthMeters))*20),spec.kinds.join(","),cityQuery?.key||"no-city"].join("|");
+  const settlementHierarchy=(spec.kinds.includes("city")||spec.kinds.includes("town")||spec.kinds.includes("village"))?atlasSettlementHierarchyQuery(spec):null;
+  const key=[activeSeed,spec.id,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),
+    Math.round(Math.log10(Math.max(1,zoomState.visibleFootprintWidthMeters))*20),spec.kinds.join(","),settlementHierarchy?.key||"no-settlement-hierarchy"].join("|");
   if(atlasLabelCache.key===key)return atlasLabelCache;
   const started=performance.now(),samples=atlasQuerySamples(spec),unique=new Map(),focus=atlasFocusEntityIds(spec);
-  const townEntities=spec.kinds.includes("town")?atlasTownEntitiesForFocus():Object.freeze([]);
-  for(const entity of townEntities)if(entity&&!unique.has(entity.id))unique.set(entity.id,entity);
-  if(cityQuery){
-    for(const tile of cityQuery.tiles){
-      let entity=null;try{entity=atlasCanonicalEntityForKind("city",tile);}catch(_){entity=null;}
-      if(entity&&!unique.has(entity.id))unique.set(entity.id,entity);
-    }
+  if(settlementHierarchy){
+    for(const entity of settlementHierarchy.entities||[])if(entity&&!unique.has(entity.id))unique.set(entity.id,entity);
   }
   for(const [sampleIndex,point] of samples.entries()){
     let surface=null;try{surface=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){surface=null;}if(!surface)continue;
     const tile=mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
     for(const kind of spec.kinds){
-      if(kind==="landmark"||kind==="town"||kind==="city"&&cityQuery)continue;
+      if(kind==="landmark"||(settlementHierarchy&&["city","town","village"].includes(kind)))continue;
       if(samples.length>9&&["country","region","capital"].includes(kind)&&sampleIndex%3!==1)continue;
-      if(samples.length>9&&kind==="city"&&sampleIndex%2!==0)continue;
       if(kind==="ocean"){if(surface.land)continue;}else if(!surface.land)continue;
       let entity=null;try{entity=atlasCanonicalEntityForKind(kind,tile);}catch(_){entity=null;}if(!entity)continue;
       if(!unique.has(entity.id))unique.set(entity.id,entity);
@@ -997,7 +1026,8 @@ function atlasQueryCandidates(spec){
   const typePriority={continent:100,ocean:96,country:90,landmark:84,region:82,capital:78,city:72,town:70,village:68,district:60};
   const candidates=[...unique.values()].map(entity=>Object.freeze({...entity,currentFocus:entity.id===focus.primaryId,priority:(entity.id===focus.primaryId?1000:0)+(typePriority[entity.type]||0)+Number(entity.importance||0)}))
     .sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
-  atlasLabelCache={key,candidates,queryCellCount:samples.length+Number(cityQuery?.tiles?.length||0),cityQuery,buildMs:Number((performance.now()-started).toFixed(3)),focus};
+  atlasLabelCache={key,candidates,queryCellCount:samples.length+Number(settlementHierarchy?.diagnostics?.queryCellCount||0),
+    cityQuery:null,settlementHierarchy,buildMs:Number((performance.now()-started).toFixed(3)),focus};
   return atlasLabelCache;
 }
 function atlasResolvedIdentity(entity){
@@ -1018,6 +1048,12 @@ function atlasResolvedIdentity(entity){
       const country=atlasAuthorityIndex.get(atlasAuthorityKey("country",tile))||null;ids.country=country?.id||null;resolvedId=country?.capital?.id||null;resolvedName=country?.capital?.name||null;
     }else if(entity.type==="region"){
       const region=atlasAuthorityIndex.get(atlasAuthorityKey("region",tile))||null;ids.region=region?.id||null;ids.country=region?.countryId||null;resolvedId=region?.id||null;resolvedName=region?.name||null;
+    }else if(["city","town","village"].includes(entity.type)&&entity.generationCellX!=null&&entity.generationCellY!=null){
+      const record=window.SettlementArchetypes?.canonicalSettlementAtCell?.(
+        activeSeed,entity.settlementClass||entity.type,entity.generationCellX,entity.generationCellY
+      )||null;
+      ids[entity.type]=record?.id||null;ids.country=record?.countryId||entity.countryId||null;ids.region=record?.regionId||entity.regionId||null;
+      resolvedId=record?.id||null;resolvedName=record?.name||null;
     }else if(entity.type==="city"){
       const cell=atlasCellForTile(tile,atlasCityCellSize()),city=window.GeographyFoundation?.cityAtCell?.(activeSeed,cell.x,cell.y)||null;
       ids.city=city?atlasCellId("CITY",cell):null;resolvedId=ids.city;resolvedName=city?.name||null;
@@ -1603,8 +1639,14 @@ function renderMapPresentation(){
     semanticUnsupportedEntityClasses:semantic.unsupportedEntityClasses,semanticPolicySignature:atlasHashText([semantic.id,semantic.kinds.join(","),semantic.borderClasses.join(","),semantic.routeClasses.join(","),semantic.settlementLayers.join(",")].join("|")),
     cityCandidateCount:cityCandidates.length,cityVisibleCount:cityVisible.length,
     cityMinSeparationMeters:cityMinSeparationMeters==null?null:Number(cityMinSeparationMeters.toFixed(3)),citySpacingPass,
-    cityQueryCellCount:Number(atlas.query.cityQuery?.tiles?.length||0),cityRequiredMinSeparationMeters:requiredCitySeparation,
+    cityQueryCellCount:Number(atlas.query.settlementHierarchy?.diagnostics?.queryCellCount||atlas.query.cityQuery?.tiles?.length||0),cityRequiredMinSeparationMeters:requiredCitySeparation,
     cityVisibleIds:cityVisible.map(item=>item.canonicalEntityId),
+    settlementHierarchyRevision:atlas.query.settlementHierarchy?.diagnostics?.revision||null,
+    settlementHierarchySignature:atlas.query.settlementHierarchy?.diagnostics?.signature||null,
+    settlementHierarchyClassCounts:atlas.query.settlementHierarchy?.diagnostics?.classCounts||{},
+    settlementHierarchyQueryCellCount:Number(atlas.query.settlementHierarchy?.diagnostics?.queryCellCount||0),
+    settlementHierarchyBounded:atlas.query.settlementHierarchy?atlas.query.settlementHierarchy.diagnostics?.bounded===true:null,
+    settlementHierarchyFullWorldScan:atlas.query.settlementHierarchy?atlas.query.settlementHierarchy.diagnostics?.fullWorldScan===true:null,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
     borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
     borderTopologySignature:border.topologySignature,borderGraphRevision:border.graphRevision,borderGraphNodeCount:border.graphNodeCount,borderGraphEdgeCount:border.graphEdgeCount,
