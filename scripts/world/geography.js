@@ -4,6 +4,10 @@
 const TILE_METERS=WorldStandards.TILE_METERS;
 const VILLAGE_CELL_SIZE=WorldStandards.VILLAGE_CELL_SIZE_TILES;
 const VILLAGE_JITTER=WorldStandards.VILLAGE_JITTER_TILES;
+const CITY_CELL_SIZE=WorldStandards.CITY_CELL_SIZE_TILES;
+const CITY_JITTER=WorldStandards.CITY_JITTER_TILES;
+const CITY_LAND_SEARCH_STEP=WorldStandards.CITY_LAND_SEARCH_STEP_TILES;
+const CITY_LAND_SEARCH_RINGS=WorldStandards.CITY_LAND_SEARCH_RINGS;
 const MIN_VILLAGE_WALK_MINUTES=WorldStandards.MIN_VILLAGE_WALK_MINUTES;
 const MAX_WALK_SPEED_KMH=WorldStandards.FASTEST_NORMAL_WALK_KMH;
 const MAIN_ROAD_WALK_SPEED_KMH=WorldStandards.WALK_SPEED_KMH.road;
@@ -101,6 +105,62 @@ function broadCell(x,y,size){
   return Object.freeze({x:floorDiv(toBig(x),s),y:floorDiv(toBig(y),s)});
 }
 
+const CITY_CACHE_LIMIT=4096;
+const cityCache=new Map();
+function cityCellFor(x,y){return broadCell(x,y,CITY_CELL_SIZE)}
+function cityLandAt(seed,x,y){
+  const pg=window.PlanetGeography;
+  if(!pg?.create)return null;
+  try{
+    const instance=pg.create(seed),radius=Math.max(1,Number(pg.DEFAULT_WORLD_RADIUS_METERS||637100));
+    const geo=instance.worldLatLonForTile(String(x),String(y),TILE_METERS,radius);
+    return Boolean(instance.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians)?.land);
+  }catch(_){return false;}
+}
+function cacheCity(key,value){
+  cityCache.set(key,value);
+  while(cityCache.size>CITY_CACHE_LIMIT)cityCache.delete(cityCache.keys().next().value);
+  return value;
+}
+function cityAtCell(seed,cxValue,cyValue){
+  const cx=BigInt(String(cxValue)),cy=BigInt(String(cyValue)),key=String(seed)+"|"+cellKey(cx,cy);
+  if(cityCache.has(key))return cityCache.get(key);
+  const size=BigInt(CITY_CELL_SIZE),half=BigInt(Math.floor(CITY_CELL_SIZE/2));
+  const jx=BigInt(integer(seed,"city:jx:"+cellKey(cx,cy),-CITY_JITTER,CITY_JITTER));
+  const jy=BigInt(integer(seed,"city:jy:"+cellKey(cx,cy),-CITY_JITTER,CITY_JITTER));
+  const baseX=cx*size+half+jx,baseY=cy*size+half+jy;
+  const pgReady=Boolean(window.PlanetGeography?.create);
+  const candidates=[[0,0]];
+  const phase=PRNG.foundationUint32(seed,"city:land-phase:"+cellKey(cx,cy))%16;
+  for(let ring=1;ring<=CITY_LAND_SEARCH_RINGS;ring++){
+    const radius=ring*CITY_LAND_SEARCH_STEP;
+    for(let spoke=0;spoke<16;spoke++){
+      const angle=(phase+spoke)*Math.PI*2/16;
+      candidates.push([Math.round(Math.cos(angle)*radius),Math.round(Math.sin(angle)*radius)]);
+    }
+  }
+  for(const [ox,oy] of candidates){
+    const x=baseX+BigInt(ox),y=baseY+BigInt(oy);
+    const cell=cityCellFor(x,y);
+    if(cell.x!==cx||cell.y!==cy)continue;
+    const land=cityLandAt(seed,x,y);
+    if(land===false)continue;
+    if(land===null&&!pgReady)break;
+    return cacheCity(key,Object.freeze({
+      x:x.toString(),y:y.toString(),cellX:cx.toString(),cellY:cy.toString(),
+      name:generatedName(seed,"city:"+cellKey(cx,cy),"City"),
+      landValidated:land===true
+    }));
+  }
+  if(!pgReady){
+    return Object.freeze({
+      x:baseX.toString(),y:baseY.toString(),cellX:cx.toString(),cellY:cy.toString(),
+      name:generatedName(seed,"city:"+cellKey(cx,cy),"City"),landValidated:false
+    });
+  }
+  return cacheCity(key,null);
+}
+
 function smoothstep(value){
   const t=Math.max(0,Math.min(1,value));
   return t*t*(3-2*t);
@@ -156,7 +216,7 @@ function hierarchyName(seed,kind,x,y){
     return window.RegionProfile?.at?.(seed,x,y)?.name||generatedName(seed,"region:"+cellKey(cell.x,cell.y),"Region");
   }
   if(kind==="city"){
-    const cell=broadCell(x,y,1024);
+    const cell=cityCellFor(x,y);
     return generatedName(seed,"city:"+cellKey(cell.x,cell.y),"City");
   }
   if(kind==="district"){
@@ -601,10 +661,11 @@ function location(seed,x,y){
 }
 
 window.GeographyFoundation=Object.freeze({
-  TILE_METERS,VILLAGE_CELL_SIZE,MIN_VILLAGE_WALK_MINUTES,MAX_WALK_SPEED_KMH,
+  TILE_METERS,VILLAGE_CELL_SIZE,CITY_CELL_SIZE,MIN_VILLAGE_WALK_MINUTES,MAX_WALK_SPEED_KMH,
   MAIN_ROAD_WALK_SPEED_KMH,MAX_BRIDGE_WALK_MINUTES,MAX_BRIDGE_TILES,ROAD_WIDTH_POLICY,
   hierarchy,hierarchyName,environment,getTerrainType,location,
   mainRoadInfo,mainRoadProof,roadWidthForContext,bridgeRunAt,
-  villageCenter,villageAtCell,nearestVillage,villageSpacingProof,estimateWalkRoute
+  villageCenter,villageAtCell,nearestVillage,villageSpacingProof,estimateWalkRoute,
+  cityCellFor,cityAtCell
 });
 })();
