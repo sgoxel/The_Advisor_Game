@@ -7257,7 +7257,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                     diagnostic["browserLogError"]=str(log_exc)
                 raise RuntimeError("WP-013 startup readiness failed: "+json.dumps(diagnostic,sort_keys=True)) from exc
             driver.execute_script("""
-                const stage=window.PlanetStage,s=stage.snapshot(),target=s?.featureTargets?.peak||s?.featureTargets?.mountain||s?.featureTargets?.continent;
+                const stage=window.PlanetStage,s=stage.snapshot(),target=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak;
                 if(!target)throw new Error('WP-013 canonical focus target unavailable');
                 stage.setViewTarget(target);
             """)
@@ -7277,7 +7277,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if mode=="scale":
             if label=="seed-a-phone-portrait":
                 driver.execute_script("""
-                    const stage=window.PlanetStage,s=stage.snapshot(),target=s?.featureTargets?.peak||s?.featureTargets?.mountain||s?.featureTargets?.continent;
+                    const stage=window.PlanetStage,s=stage.snapshot(),target=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak;
                     if(!target)throw new Error('WP-013 canonical phone focus target unavailable');
                     stage.setViewTarget(target);
                 """)
