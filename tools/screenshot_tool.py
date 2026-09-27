@@ -7663,6 +7663,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     raise RuntimeError(f"WP-009 identity mismatch in frame {index}: {item}")
                 if float(item.get("roundTripErrorTiles") or 0)>1.0:
                     raise RuntimeError(f"WP-009 label round-trip error in frame {index}: {item}")
+                if item.get("renderedClipped") is True:
+                    raise RuntimeError(f"WP-009 rendered atlas label clipped in frame {index}: {item}")
+                if float(item.get("renderedPlacementErrorPixels") or 0)>2.0:
+                    raise RuntimeError(f"WP-009 rendered atlas label diverged from its computed placement in frame {index}: {item}")
                 entity_type=str(item.get("entityType") or "")
                 if entity_type not in {"ocean","landmark"} and item.get("planetLand") is not True:
                     raise RuntimeError(f"WP-009 land label anchored off generated land in frame {index}: {item}")
