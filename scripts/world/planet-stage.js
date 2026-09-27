@@ -896,7 +896,7 @@ function borderSignature(segments){
   return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
 }
 function buildMapBorderSegments(){
-  const band=zoomState.band,visible=["country-region","regional-overview","regional-detail"].includes(band);
+  const band=zoomState.band,visible=["country-region","regional-overview","regional-detail","district"].includes(band);
   if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],built:false};
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   const bucketSize=16384n,fx=BigInt(focusTile.x),fy=BigInt(focusTile.y);
@@ -2866,6 +2866,11 @@ async function buildScene(){  const started=performance.now();
   if(!window.PlanetGeography)throw new Error("PlanetGeography is unavailable");
   activeSeed=window.PlanetGeography.resolveSeed();
   geography=window.PlanetGeography.create(activeSeed);
+  worldProjectionAnchorCache=null;
+  politicalScaleEvidenceCache=null;
+  mapContextCache={key:null,value:null};
+  mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],builtAtMs:0};
+  atlasEntityCache.clear();atlasIdentityCache.clear();atlasStickyEntities.clear();atlasLabelPlacementCache.clear();
   geographySignature=geography.signature();
   geographyVerification=null;
   setStartupProgress("surface","Painting planetary surface and relief…",68);
