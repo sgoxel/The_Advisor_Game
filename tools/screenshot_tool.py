@@ -6808,21 +6808,44 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         plan=(
             ("landscape-near-ground",0.985,(1280,800)),
             ("landscape-ground",1.000,(1280,800)),
-            ("portrait-ground",1.000,(390,844)),
+            ("portrait-full-local",0.970,(390,844)),
             ("landscape-repeat",1.000,(1280,800)),
         )
         label,scalar,viewport=plan[min(frame_index,len(plan)-1)]
-        driver.set_window_size(int(viewport[0]),int(viewport[1])); time.sleep(0.15)
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        driver.execute_async_script("""
+            const done=arguments[arguments.length-1];
+            requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+        """)
         focus=driver.execute_script("return window.PlanetStage?.setWorldTileFocus?.('0','0') || null")
         if not isinstance(focus,dict):
             raise RuntimeError(f"WP-004 canonical world-tile focus API unavailable: {focus}")
-        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
-        WebDriverWait(driver,90.0).until(lambda d: d.execute_script("""
+        # Re-enter the target scalar after ResizeObserver has applied the new
+        # viewport. The tiny nudge forces aspect-dependent patch dimensions to
+        # be requested for this exact viewport instead of capturing a stand-in
+        # prepared for the previous orientation.
+        driver.execute_script("""
+            const stage=window.PlanetStage;
+            const target=Number(arguments[0]);
+            stage.setZoomScalar(Math.max(0,target-0.0005));
+            stage.setZoomScalar(target);
+        """,scalar)
+        WebDriverWait(driver,120.0).until(lambda d: d.execute_script("""
             const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{};
             return s?.ready===true &&
                    Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.000001 &&
-                   Number(r?.pendingPreparationCount||0)===0;
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   String(r?.activeSignature||'')===String(r?.requestedSignature||'');
         """,scalar))
+        driver.execute_async_script("""
+            const done=arguments[arguments.length-1];
+            requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+        """)
+        WebDriverWait(driver,10.0).until(lambda d: d.execute_script("""
+            const r=window.PlanetStage?.snapshot?.()?.projection?.resourceBudget||{};
+            return Number(r?.pendingPreparationCount||0)===0 &&
+                   String(r?.activeSignature||'')===String(r?.requestedSignature||'');
+        """))
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},ld=s?.projection?.localDetail||{},wp=s?.projection?.worldTileProjection||{};
             return {
