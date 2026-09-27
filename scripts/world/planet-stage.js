@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v11";
+const VERSION="planet-ground-static-v12";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -186,7 +186,8 @@ function freshLocalResources(){
 }
 let localResources=freshLocalResources();
 let localPreparationToken=0;
-let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
+let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,labelQueryBuildMs:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
+let atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
 let mapContextCache={key:null,value:null};
 let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,builtAtMs:0};
 let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
@@ -253,7 +254,7 @@ function setWorldTileFocus(xValue,yValue){
 }
 function mapGeneratedName(kind,latitudeRadians,longitudeRadians){
   const stems=["Alder","Amber","Ashen","Bright","Cedar","Dawn","Elder","Falcon","Golden","Green","Grey","High","Iron","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"];
-  const tails={continent:["Reach","Land","March"],country:["Realm","Kingdom","March"],region:["Vale","Reach","Province"],city:["Hold","Gate","Court"],district:["Ward","Shire","Zone"],village:["Ford","Stead","Wick"]};
+  const tails={continent:["Reach","Land","March"],ocean:["Ocean","Sea","Deep"],country:["Realm","Kingdom","March"],region:["Vale","Reach","Province"],city:["Hold","Gate","Court"],district:["Ward","Shire","Zone"],village:["Ford","Stead","Wick"]};
   const lat=Math.round((Number(latitudeRadians)||0)*180/Math.PI*8),lon=Math.round((Number(longitudeRadians)||0)*180/Math.PI*8);
   let h=2166136261>>>0;for(const ch of String(activeSeed)+"|map:"+kind+"|"+lat+"|"+lon){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
   return stems[h%stems.length]+" "+(tails[kind]||["Reach"])[(h>>>8)%(tails[kind]||["Reach"]).length];
@@ -291,14 +292,18 @@ function mapContextForFocus(){
   const tile=mapWorldTileAt(lat,lon);
   let hierarchy=null;
   try{hierarchy=window.GeographyFoundation?.hierarchy?.(activeSeed,tile.x,tile.y)||null;}catch(_){hierarchy=null;}
+  const entities={};
+  for(const kind of ["continent","country","region","city","district","village"]){
+    try{entities[kind]=atlasCanonicalEntityForKind(kind,tile)||null;}catch(_){entities[kind]=null;}
+  }
   const context=Object.freeze({
-    continent:String(hierarchy?.continent||mapGeneratedName("continent",lat,lon)),
-    country:String(hierarchy?.country||mapGeneratedName("country",lat,lon)),
-    region:String(hierarchy?.region||mapGeneratedName("region",lat,lon)),
-    city:String(hierarchy?.city||mapGeneratedName("city",lat,lon)),
-    district:String(hierarchy?.district||mapGeneratedName("district",lat,lon)),
-    village:String(hierarchy?.village||mapGeneratedName("village",lat,lon)),
-    tileX:tile.x,tileY:tile.y
+    continent:String(entities.continent?.name||hierarchy?.continent||mapGeneratedName("continent",lat,lon)),
+    country:String(entities.country?.name||hierarchy?.country||mapGeneratedName("country",lat,lon)),
+    region:String(entities.region?.name||hierarchy?.region||mapGeneratedName("region",lat,lon)),
+    city:String(entities.city?.name||hierarchy?.city||mapGeneratedName("city",lat,lon)),
+    district:String(entities.district?.name||hierarchy?.district||mapGeneratedName("district",lat,lon)),
+    village:String(entities.village?.name||hierarchy?.village||mapGeneratedName("village",lat,lon)),
+    entities:Object.freeze(entities),tileX:tile.x,tileY:tile.y
   });
   mapContextCache={key,value:context};return context;
 }
@@ -410,6 +415,226 @@ function mapLandmarkKindsForBand(band){
   };
   return table[band]||[];
 }
+
+function atlasHashText(value){
+  let h=2166136261>>>0;for(const ch of String(value)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
+}
+function atlasFloorDiv(value,size){
+  const v=BigInt(String(value)),s=BigInt(size);let q=v/s,r=v%s;if(r!==0n&&v<0n)q-=1n;return q;
+}
+function atlasCellForTile(tile,size){
+  return Object.freeze({x:atlasFloorDiv(tile.x,size),y:atlasFloorDiv(tile.y,size)});
+}
+function atlasCellId(prefix,cell){return prefix+"|"+cell.x.toString()+"|"+cell.y.toString()+"|"+atlasHashText(activeSeed+"|"+prefix+"|"+cell.x+"|"+cell.y).slice(0,8);}
+function atlasPlanetSurfaceForTile(x,y){
+  const geo=worldLatLonForTile(x,y);let sample=null;try{sample=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)||null;}catch(_){}
+  return {geo,sample};
+}
+function atlasRepresentativeTile(baseX,baseY,step,wantLand,validator){
+  const bx=BigInt(String(baseX)),by=BigInt(String(baseY)),s=BigInt(Math.max(1,Math.round(step||1)));
+  const offsets=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2]];
+  for(const [ox,oy] of offsets){
+    const x=(bx+BigInt(ox)*s).toString(),y=(by+BigInt(oy)*s).toString();
+    let valid=true;try{valid=validator?validator(x,y):true;}catch(_){valid=false;}if(!valid)continue;
+    const {sample}=atlasPlanetSurfaceForTile(x,y);if(!sample||Boolean(sample.land)!==Boolean(wantLand))continue;
+    return Object.freeze({x,y});
+  }
+  return null;
+}
+function atlasEntityBase(id,type,name,anchorTile,authority,extra={}){
+  if(!id||!name||!anchorTile)return null;const geo=worldLatLonForTile(anchorTile.x,anchorTile.y);
+  return Object.freeze({id:String(id),type:String(type),name:String(name),authority:String(authority),anchorTile:Object.freeze({x:String(anchorTile.x),y:String(anchorTile.y)}),
+    latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,latitudeDegrees:geo.latitudeDegrees,longitudeDegrees:geo.longitudeDegrees,...extra});
+}
+function atlasCanonicalEntityForKind(kind,tile){
+  if(!activeSeed||!tile)return null;
+  if(kind==="continent"){
+    const size=131072,cell=atlasCellForTile(tile,size),half=BigInt(Math.floor(size/2));
+    const base={x:(cell.x*BigInt(size)+half).toString(),y:(cell.y*BigInt(size)+half).toString()};
+    const anchor=atlasRepresentativeTile(base.x,base.y,Math.floor(size*.22),true,(x,y)=>{const cc=atlasCellForTile({x,y},size);return cc.x===cell.x&&cc.y===cell.y;});
+    if(!anchor)return null;const name=window.GeographyFoundation?.hierarchy?.(activeSeed,anchor.x,anchor.y)?.continent;if(!name)return null;
+    return atlasEntityBase(atlasCellId("CONT",cell),"continent",name,anchor,"GeographyFoundation.hierarchy");
+  }
+  if(kind==="ocean"){
+    const size=196608,cell=atlasCellForTile(tile,size),half=BigInt(Math.floor(size/2));
+    const base={x:(cell.x*BigInt(size)+half).toString(),y:(cell.y*BigInt(size)+half).toString()};
+    const anchor=atlasRepresentativeTile(base.x,base.y,Math.floor(size*.20),false,null);if(!anchor)return null;
+    const geo=worldLatLonForTile(anchor.x,anchor.y),name=mapGeneratedName("ocean",geo.latitudeRadians,geo.longitudeRadians);
+    return atlasEntityBase(atlasCellId("OCEAN",cell),"ocean",name,anchor,"PlanetGeography+deterministic-water-cell");
+  }
+  if(kind==="country"||kind==="capital"){
+    const country=window.PoliticalGeography?.countryAt?.(activeSeed,tile.x,tile.y);if(!country)return null;
+    if(kind==="capital"){
+      const capital=country.capital,exact=atlasPlanetSurfaceForTile(capital.x,capital.y);if(!exact.sample?.land)return null;
+      return atlasEntityBase(capital.id,"capital",capital.name,{x:capital.x,y:capital.y},"PoliticalGeography.capital",{countryId:country.id});
+    }
+    const step=Math.max(4096,Math.floor(Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608)*.12));
+    const anchor=atlasRepresentativeTile(country.politicalCenter.x,country.politicalCenter.y,step,true,(x,y)=>window.PoliticalGeography.ownerAt(activeSeed,x,y)?.id===country.id);
+    if(!anchor)return null;
+    return atlasEntityBase(country.id,"country",country.name,anchor,"PoliticalGeography.countryAt");
+  }
+  if(kind==="region"){
+    const region=window.RegionProfile?.at?.(activeSeed,tile.x,tile.y);if(!region)return null;
+    const anchor=atlasRepresentativeTile(region.administrativeSeat.x,region.administrativeSeat.y,2048,true,(x,y)=>window.RegionProfile.at(activeSeed,x,y)?.id===region.id);
+    if(!anchor)return null;
+    return atlasEntityBase(region.id,"region",region.name,anchor,"RegionProfile.at",{countryId:region.parentCountryId});
+  }
+  if(kind==="city"||kind==="district"){
+    const size=kind==="city"?1024:256,cell=atlasCellForTile(tile,size),half=BigInt(Math.floor(size/2));
+    const base={x:(cell.x*BigInt(size)+half).toString(),y:(cell.y*BigInt(size)+half).toString()};
+    const anchor=atlasRepresentativeTile(base.x,base.y,Math.max(16,Math.floor(size*.2)),true,(x,y)=>{const cc=atlasCellForTile({x,y},size);return cc.x===cell.x&&cc.y===cell.y;});
+    if(!anchor)return null;const hierarchy=window.GeographyFoundation?.hierarchy?.(activeSeed,anchor.x,anchor.y),name=hierarchy?.[kind];if(!name)return null;
+    return atlasEntityBase(atlasCellId(kind==="city"?"CITY":"DIST",cell),kind,name,anchor,"GeographyFoundation.hierarchy");
+  }
+  if(kind==="village"){
+    const v=window.GeographyFoundation?.nearestVillage?.(activeSeed,tile.x,tile.y,false);if(!v)return null;
+    const surface=atlasPlanetSurfaceForTile(v.x,v.y);if(!surface.sample?.land)return null;
+    const cell=Object.freeze({x:BigInt(v.cellX),y:BigInt(v.cellY)});
+    return atlasEntityBase(atlasCellId("VIL",cell),"village",v.name,{x:v.x,y:v.y},"GeographyFoundation.villageCenter");
+  }
+  return null;
+}
+function atlasBandSpec(band,portrait){
+  const table={
+    planet:{kinds:["continent","ocean"],focusKind:"continent",budget:portrait?4:7,latSpan:68,lonSpan:118},
+    continent:{kinds:["continent","ocean","country"],focusKind:"continent",budget:portrait?5:9,latSpan:48,lonSpan:78},
+    "country-region":{kinds:["country","region","capital","landmark"],focusKind:"country",budget:portrait?6:10,latSpan:28,lonSpan:44},
+    "regional-overview":{kinds:["country","region","capital","city","landmark"],focusKind:"region",budget:portrait?7:11},
+    "regional-detail":{kinds:["country","region","capital","city","landmark"],focusKind:"region",budget:portrait?7:12},
+    district:{kinds:["region","city","village","landmark"],focusKind:"city",budget:portrait?7:12},
+    "local-area":{kinds:["region","city","village","district","landmark"],focusKind:"village",budget:portrait?7:12},
+    settlement:{kinds:["city","village","district","landmark"],focusKind:"village",budget:portrait?7:10},
+    "near-ground":{kinds:["village","district","landmark"],focusKind:"village",budget:portrait?6:8},
+    ground:{kinds:["village","district","landmark"],focusKind:"village",budget:portrait?5:7}
+  };
+  return table[band]||table.planet;
+}
+function atlasQuerySamples(spec){
+  const globe=zoomState.band==="planet"||zoomState.band==="continent"||zoomState.band==="country-region";
+  const out=[];
+  if(globe){
+    const rows=5,cols=7,latSpan=Number(spec.latSpan||28)*Math.PI/180,lonSpan=Number(spec.lonSpan||44)*Math.PI/180;
+    for(let r=0;r<rows;r++)for(let col=0;col<cols;col++){
+      const fy=rows===1?0:(r/(rows-1)-.5)*2,fx=cols===1?0:(col/(cols-1)-.5)*2;
+      out.push(Object.freeze({latitudeRadians:clamp(zoomState.focusLatitudeRadians-fy*latSpan,-Math.PI*.499999,Math.PI*.499999),longitudeRadians:wrapLongitudeRadians(zoomState.focusLongitudeRadians+fx*lonSpan)}));
+    }
+  }else{
+    const rows=5,cols=5,width=Math.max(1,zoomState.visibleFootprintWidthMeters*.92),height=Math.max(1,zoomState.visibleFootprintHeightMeters*.92);
+    for(let r=0;r<rows;r++)for(let col=0;col<cols;col++)out.push(geoPointFromViewportGrid(col,r,cols,rows,width,height));
+  }
+  return out;
+}
+function atlasFocusEntityIds(spec){
+  const tile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),ids={};
+  for(const kind of spec.kinds)if(kind!=="landmark")try{ids[kind]=atlasCanonicalEntityForKind(kind,tile)?.id||null;}catch(_){ids[kind]=null;}
+  return {tile,ids,primaryId:ids[spec.focusKind]||null};
+}
+function atlasQueryCandidates(spec){
+  const precision=(zoomState.band==="planet"||zoomState.band==="continent")?1:2;
+  const key=[activeSeed,zoomState.band,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),Math.round(zoomState.visibleFootprintWidthMeters/Math.max(1,zoomState.visibleFootprintWidthMeters*.05)),spec.kinds.join(",")].join("|");
+  if(atlasLabelCache.key===key)return atlasLabelCache;
+  const started=performance.now(),samples=atlasQuerySamples(spec),unique=new Map(),focus=atlasFocusEntityIds(spec);
+  for(const point of samples){
+    let surface=null;try{surface=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){surface=null;}if(!surface)continue;
+    const tile=mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
+    for(const kind of spec.kinds){
+      if(kind==="landmark")continue;
+      if(kind==="ocean"){if(surface.land)continue;}else if(!surface.land)continue;
+      let entity=null;try{entity=atlasCanonicalEntityForKind(kind,tile);}catch(_){entity=null;}if(!entity)continue;
+      if(!unique.has(entity.id))unique.set(entity.id,entity);
+    }
+  }
+  if(spec.kinds.includes("landmark")){
+    for(const d of destinationNavigator.descriptors){
+      if(!["peak","mountain","island","ruin","water"].includes(d.type))continue;
+      const tile=mapWorldTileAt(d.latitudeRadians,d.longitudeRadians);
+      const entity=atlasEntityBase(d.id,"landmark",d.name,tile,"DestinationNavigatorDescriptor",{landmarkType:d.type,importance:Number(d.importance||0),latitudeRadians:Number(d.latitudeRadians)||0,longitudeRadians:Number(d.longitudeRadians)||0,latitudeDegrees:Number(d.latitudeDegrees)||0,longitudeDegrees:Number(d.longitudeDegrees)||0});
+      if(entity&&!unique.has(entity.id))unique.set(entity.id,entity);
+    }
+  }
+  const typePriority={continent:100,ocean:96,country:90,region:82,capital:78,city:72,village:68,district:60,landmark:52};
+  const candidates=[...unique.values()].map(entity=>Object.freeze({...entity,currentFocus:entity.id===focus.primaryId,priority:(entity.id===focus.primaryId?1000:0)+(typePriority[entity.type]||0)+Number(entity.importance||0)}))
+    .sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
+  atlasLabelCache={key,candidates,queryCellCount:samples.length,buildMs:Number((performance.now()-started).toFixed(3)),focus};
+  return atlasLabelCache;
+}
+function atlasResolvedIdentity(entity){
+  const tile=entity.anchorTile,hierarchy=window.GeographyFoundation?.hierarchy?.(activeSeed,tile.x,tile.y)||{},country=window.PoliticalGeography?.countryAt?.(activeSeed,tile.x,tile.y)||null,region=window.RegionProfile?.at?.(activeSeed,tile.x,tile.y)||null,village=window.GeographyFoundation?.nearestVillage?.(activeSeed,tile.x,tile.y,false)||null;
+  const continentCell=atlasCellForTile(tile,131072),cityCell=atlasCellForTile(tile,1024),districtCell=atlasCellForTile(tile,256),villageCell=village?Object.freeze({x:BigInt(village.cellX),y:BigInt(village.cellY)}):null;
+  const ids={
+    continent:atlasCellId("CONT",continentCell),country:country?.id||null,region:region?.id||null,
+    city:atlasCellId("CITY",cityCell),district:atlasCellId("DIST",districtCell),village:villageCell?atlasCellId("VIL",villageCell):null
+  };
+  let resolvedName=null,resolvedId=null;
+  if(entity.type==="continent"){resolvedName=hierarchy.continent;resolvedId=ids.continent;}
+  else if(entity.type==="country"){resolvedName=country?.name;resolvedId=country?.id;}
+  else if(entity.type==="region"){resolvedName=region?.name;resolvedId=region?.id;}
+  else if(entity.type==="capital"){resolvedName=country?.capital?.name;resolvedId=country?.capital?.id;}
+  else if(entity.type==="city"){resolvedName=hierarchy.city;resolvedId=ids.city;}
+  else if(entity.type==="district"){resolvedName=hierarchy.district;resolvedId=ids.district;}
+  else if(entity.type==="village"){resolvedName=village?.name;resolvedId=ids.village;}
+  else if(entity.type==="ocean"){const s=atlasPlanetSurfaceForTile(tile.x,tile.y);resolvedName=s.sample?.land?null:entity.name;resolvedId=s.sample?.land?null:entity.id;}
+  else if(entity.type==="landmark"){resolvedName=entity.name;resolvedId=entity.id;}
+  return Object.freeze({ids:Object.freeze(ids),resolvedName:resolvedName||null,resolvedId:resolvedId||null,identityMatch:String(resolvedId||"")===String(entity.id)&&String(resolvedName||"")===String(entity.name)});
+}
+function atlasProjectCandidate(entity){
+  const scene=geographicScenePoint(entity.latitudeRadians,entity.longitudeRadians,entity.type==="landmark"?8:5);if(!scene)return {reason:"outside-footprint"};
+  if(scene.mode==="globe"&&planet){
+    const center=planet.getPosition(),normal=scene.world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(scene.world);
+    if(normal.dot(toCamera)<=0)return {reason:"hidden-hemisphere"};
+  }
+  const screen=cameraEntity.camera.worldToScreen(scene.world),rect=canvas.getBoundingClientRect();
+  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z)||screen.z<0)return {reason:"behind-camera"};
+  const x=screen.x/Math.max(1,rect.width)*100,y=screen.y/Math.max(1,rect.height)*100;
+  if(x<2||x>98||y<3||y>97)return {reason:"offscreen"};
+  return {projection:{x,y,screenX:screen.x,screenY:screen.y,depth:screen.z,mode:scene.mode}};
+}
+function atlasLabelBox(entity,p,portrait){
+  const nameLen=Math.max(5,String(entity.name).length),scale=portrait?.82:1;
+  const base={continent:210,ocean:190,country:170,region:150,capital:142,city:130,village:126,district:118,landmark:138}[entity.type]||128;
+  const width=Math.min(base*scale,Math.max(88,46+nameLen*6.4)*scale),height=(entity.type==="continent"||entity.type==="ocean"?46:38)*scale;
+  return {left:p.screenX-width/2,right:p.screenX+width/2,top:p.screenY-height/2,bottom:p.screenY+height/2};
+}
+function atlasBoxesOverlap(a,b,gap){return !(a.right+gap<b.left||b.right+gap<a.left||a.bottom+gap<b.top||b.bottom+gap<a.top);}
+function renderAtlasLabels(labelsLayer,portrait,spec){
+  const query=atlasQueryCandidates(spec),occupied=[],visible=[],visibleLandmarks=[];
+  let hidden=0,behind=0,offscreen=0,occluded=0,overlap=0;
+  const rect=canvas.getBoundingClientRect();
+  for(const entity of query.candidates){
+    if(visible.length>=spec.budget)break;
+    const projected=atlasProjectCandidate(entity);
+    if(!projected.projection){
+      if(projected.reason==="hidden-hemisphere"){hidden++;occluded++;}
+      else if(projected.reason==="behind-camera")behind++;
+      else offscreen++;
+      continue;
+    }
+    const p=projected.projection;
+    if((p.x<30&&p.y<31)||(p.x>80&&p.y<16)||(p.x<27&&p.y>84)){offscreen++;continue;}
+    const box=atlasLabelBox(entity,p,portrait);
+    if(occupied.some(other=>atlasBoxesOverlap(box,other,portrait?6:9))){overlap++;continue;}
+    const identity=atlasResolvedIdentity(entity);if(!identity.identityMatch)continue;
+    const tag=document.createElement("div");
+    tag.className=entity.type==="landmark"?"planet-map-landmark":"planet-atlas-label";
+    tag.dataset.kind=entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type;
+    tag.dataset.focus=String(entity.currentFocus===true);
+    tag.style.left=p.x.toFixed(2)+"%";tag.style.top=p.y.toFixed(2)+"%";
+    tag.innerHTML="<small></small><strong></strong>";
+    tag.querySelector("small").textContent=(entity.type==="landmark"?String(entity.landmarkType||"landmark"):entity.type).toUpperCase();
+    tag.querySelector("strong").textContent=entity.name;
+    labelsLayer.appendChild(tag);occupied.push(box);
+    const record=Object.freeze({
+      canonicalEntityId:entity.id,entityType:entity.type,displayClass:entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type,
+      authoritativeName:entity.name,authority:entity.authority,currentFocus:Boolean(entity.currentFocus),
+      anchorLatitudeDegrees:Number(entity.latitudeDegrees.toFixed(5)),anchorLongitudeDegrees:Number(entity.longitudeDegrees.toFixed(5)),
+      anchorWorldTile:entity.anchorTile,resolvedHierarchyIds:identity.ids,identityMatch:identity.identityMatch,
+      screenX:Number(p.screenX.toFixed(2)),screenY:Number(p.screenY.toFixed(2)),projection:p.mode
+    });
+    visible.push(record);if(entity.type==="landmark")visibleLandmarks.push(Object.freeze({id:entity.id,name:entity.name,type:entity.landmarkType||"landmark",latitudeDegrees:record.anchorLatitudeDegrees,longitudeDegrees:record.anchorLongitudeDegrees,screenX:record.screenX,screenY:record.screenY,projection:record.projection}));
+  }
+  return {query,visible,visibleLandmarks,hidden,behind,offscreen,occluded,overlap,viewport:Object.freeze({width:rect.width,height:rect.height})};
+}
+
 function geoPointFromViewportGrid(gx,gy,cols,rows,width,height){
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
   const east=(gx/(cols-1)-.5)*width,north=(.5-gy/(rows-1))*height;
@@ -488,33 +713,24 @@ function renderMapPresentation(){
   svg.hidden=projectedBorderSegmentCount===0;
 
   const labelsLayer=layer.querySelector(".planet-map-labels");labelsLayer.replaceChildren();
-  const rect=canvas?.getBoundingClientRect?.(),portrait=(rect?.height||1)>(rect?.width||1),maxLandmarkCount=portrait?3:4;
-  const landmarkKinds=mapLandmarkKindsForBand(zoomState.band),landmarkCandidates=destinationNavigator.descriptors.filter(d=>landmarkKinds.includes(d.type)).sort((a,b)=>(b.importance||0)-(a.importance||0));
-  const occupied=[],landmarkIds=new Set(),visibleLandmarks=[];
-  for(const d of landmarkCandidates){
-    if(visibleLandmarks.length>=maxLandmarkCount)break;
-    const p=projectGeographicAnchor(d,{surfaceOffsetMeters:8});if(!p||p.x<5||p.x>95||p.y<10||p.y>93)continue;
-    if((p.x<30&&p.y<30)||(p.x>78&&p.y<18))continue;
-    if(occupied.some(o=>Math.hypot(o.x-p.screenX,o.y-p.screenY)<(portrait?100:118)))continue;
-    const tag=document.createElement("div");tag.className="planet-map-landmark";tag.dataset.kind=d.type;tag.style.left=p.x.toFixed(2)+"%";tag.style.top=p.y.toFixed(2)+"%";tag.innerHTML="<small></small><strong></strong>";tag.querySelector("small").textContent=d.type.toUpperCase();tag.querySelector("strong").textContent=d.name;labelsLayer.appendChild(tag);
-    landmarkIds.add(d.id);occupied.push({x:p.screenX,y:p.screenY});
-    visibleLandmarks.push(Object.freeze({id:d.id,name:d.name,type:d.type,latitudeDegrees:Number((d.latitudeRadians*180/Math.PI).toFixed(5)),longitudeDegrees:Number((d.longitudeRadians*180/Math.PI).toFixed(5)),screenX:Number(p.screenX.toFixed(2)),screenY:Number(p.screenY.toFixed(2)),projection:p.mode}));
-  }
-
-  let labelCount=0;
-  const candidates=destinationNavigator.descriptors.filter(d=>placeKinds.includes(d.type)&&!landmarkIds.has(d.id)).sort((a,b)=>(b.importance||0)-(a.importance||0));
-  for(const d of candidates){
-    if(labelCount>=5)break;const p=projectMapLabel(d);if(!p||p.x<7||p.x>93||p.y<9||p.y>91)continue;
-    if(occupied.some(o=>Math.hypot(o.x-p.screenX,o.y-p.screenY)<(portrait?92:108)))continue;
-    const tag=document.createElement("div");tag.className="planet-map-label";tag.dataset.kind=d.type;tag.style.left=p.x.toFixed(2)+"%";tag.style.top=p.y.toFixed(2)+"%";tag.innerHTML="<small></small><strong></strong>";tag.querySelector("small").textContent=d.type.toUpperCase();tag.querySelector("strong").textContent=d.name;labelsLayer.appendChild(tag);occupied.push({x:p.screenX,y:p.screenY});labelCount++;
-  }
-
+  const rect=canvas?.getBoundingClientRect?.(),portrait=(rect?.height||1)>(rect?.width||1),spec=atlasBandSpec(zoomState.band,portrait);
+  const atlas=renderAtlasLabels(labelsLayer,portrait,spec),visible=atlas.visible,visibleLandmarks=atlas.visibleLandmarks;
+  const hierarchyVisible=visible.filter(item=>item.entityType!=="landmark"),legacyLabelCount=Math.min(6,hierarchyVisible.length);
+  const visibleClasses=Array.from(new Set(visible.map(item=>item.displayClass)));
+  const landmarkCandidates=atlas.query.candidates.filter(item=>item.type==="landmark");
+  const maxLandmarkCount=spec.budget;
   const multiplier=mapZoomScaleMultiplier(),scaleMeters=niceScaleDistanceMeters(zoomState.visibleFootprintWidthMeters),barPx=clamp(scaleMeters/Math.max(1,zoomState.visibleFootprintWidthMeters)*(rect?.width||1),72,190);
   const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=formatZoomScale(multiplier);scale.querySelector(".planet-scale-meta span").textContent=zoomState.band.replaceAll("-"," ");scale.querySelector(".planet-scale-line").style.width=Math.round(barPx)+"px";scale.querySelector("small").textContent=formatDistanceMeters(scaleMeters);
   mapPresentation={
-    active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount,
+    active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount:legacyLabelCount,
+    atlasVisibleLabelCount:visible.length,atlasCandidateCount:atlas.query.candidates.length,atlasQueryCellCount:atlas.query.queryCellCount,
+    hiddenHemisphereCulledCount:atlas.hidden,behindCameraCulledCount:atlas.behind,offscreenCulledCount:atlas.offscreen,
+    occludedCulledCount:atlas.occluded,overlapRejectedCount:atlas.overlap,visibleLabelClasses:visibleClasses,visibleLabels:visible,
+    maxLabelBudget:spec.budget,labelQueryBuildMs:atlas.query.buildMs,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
-    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),    scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
+    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
+    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
+    scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
     updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
   };
 }
@@ -2380,7 +2596,7 @@ function destroy(){
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
   inspectionPickables.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
-  geography=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+  geography=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,setWorldTileFocus,worldLatLonForTile,rotationForLatLon,setZoomScalar,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
