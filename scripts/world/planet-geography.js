@@ -225,10 +225,10 @@ function create(seedValue){
       for(const la of continentGroups[a].lobes){
         for(const lb of continentGroups[b].lobes){
           const angle=Math.acos(clamp(dot(la.center,lb.center),-1,1));
-          // Only merge generator groups when their continental lobes overlap deeply.
-          // Bounding-radius contact alone was over-merging distinct landmasses into one
-          // planet-spanning identity, which then left the one canonical label anchor off-screen.
-          if(angle<(la.radius+lb.radius)*0.62){overlaps=true;break;}
+          // Merge only strong lobe overlaps. 0.78 is still below simple radius contact,
+          // but prevents one visibly continuous continental shelf from being split into
+          // multiple canonical IDs merely because its generator groups differ.
+          if(angle<(la.radius+lb.radius)*0.78){overlaps=true;break;}
         }
         if(overlaps)break;
       }
