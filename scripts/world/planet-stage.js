@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v14";
+const VERSION="planet-ground-static-v15";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -95,7 +95,9 @@ let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=5;
-const LOCAL_LOD_HYSTERESIS=0.006;
+// Keep adjacent-tier stabilization narrow enough that the same physical footprint
+// resolves to the same canonical LOD after forward or reverse zoom settles.
+const LOCAL_LOD_HYSTERESIS=0.003;
 // Every physical LOD is native at its band's upper scalar and covers at most
 // ~2.5x of visible-footprint range, so presentation compensation never has to
 // shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
