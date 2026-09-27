@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-inspection-v1";
+const VERSION="planet-registration-v1";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -245,14 +245,21 @@ function atlasDrainAuthorityQueue(deadline){
       if(job.kind==="country"){
         const c=window.PoliticalGeography?.countryAt?.(activeSeed,job.tile.x,job.tile.y)||null;
         if(c){
-          const anchor={x:String(c.politicalCenter?.x??job.tile.x),y:String(c.politicalCenter?.y??job.tile.y)};
-          value=atlasEntityBase(c.id,"country",c.name,anchor,"PoliticalGeography.countryAt:indexed",{countryId:c.id,capital:c.capital||null});
+          const anchor={x:String(c.mapAnchor?.x??c.politicalCenter?.x??job.tile.x),y:String(c.mapAnchor?.y??c.politicalCenter?.y??job.tile.y)};
+          const surface=atlasPlanetSurfaceForTile(anchor.x,anchor.y);
+          let owner=null;try{owner=window.PoliticalGeography?.ownerAt?.(activeSeed,anchor.x,anchor.y)||null;}catch(_){owner=null;}
+          if(surface.sample?.land&&owner?.id===c.id)value=atlasEntityBase(c.id,"country",c.name,anchor,"PoliticalGeography.countryAt:canonical-owned-land",{countryId:c.id,capital:c.capital||null});
         }
       }else{
         const r=window.RegionProfile?.at?.(activeSeed,job.tile.x,job.tile.y)||null;
         if(r){
-          const anchor={x:String(r.administrativeSeat?.x??job.tile.x),y:String(r.administrativeSeat?.y??job.tile.y)};
-          value=atlasEntityBase(r.id,"region",r.name,anchor,"RegionProfile.at:indexed",{countryId:r.parentCountryId});
+          const requested={x:String(r.administrativeSeat?.x??job.tile.x),y:String(r.administrativeSeat?.y??job.tile.y)};
+          const regionSize=Number(window.RegionProfile?.REGION_CELL_SIZE||8192);
+          const anchor=atlasStableLandAnchor(requested,Math.max(128,Math.floor(regionSize*.28)),(x,y)=>{
+            const rr=window.RegionProfile?.at?.(activeSeed,x,y)||null;
+            return rr?.id===r.id;
+          });
+          if(anchor)value=atlasEntityBase(r.id,"region",r.name,anchor,"RegionProfile.at:canonical-owned-land",{countryId:r.parentCountryId});
         }
       }
     }catch(_){}
@@ -278,53 +285,37 @@ function wrapLongitudeRadians(value){
 }
 function planetWorldAnchor(){
   if(worldProjectionAnchorCache)return worldProjectionAnchorCache;
-  let best=null;
-  if(geography){
-    for(let latDeg=-48;latDeg<=48;latDeg+=8){
-      const lat=latDeg*Math.PI/180;
-      for(let lonDeg=-176;lonDeg<180;lonDeg+=8){
-        const lon=lonDeg*Math.PI/180;
-        const sample=geography.sampleLatLon(lat,lon);
-        if(!sample?.land)continue;
-        const elevation=Number(sample.elevationMeters||0);
-        const score=Number(sample.continentInfluence||0)*3.2+Number(sample.moisture||0)*.28-
-          Math.abs(elevation-650)/6500-Number(sample.islandInfluence||0)*.42-Math.abs(latDeg)/420;
-        if(!best||score>best.score)best={score,lat,lon,sample};
-      }
-    }
-  }
-  if(!best){
-    const sample=geography?.sampleLatLon?.(0,0)||null;
-    best={score:0,lat:0,lon:0,sample};
-  }
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  const geo=geography?.worldLatLonForTile?.("0","0",tileMeters,WORLD_RADIUS_METERS)||
+    window.PlanetGeography?.worldLatLonForTile?.(activeSeed,"0","0",tileMeters,WORLD_RADIUS_METERS)||null;
+  let sample=null;try{sample=geo?geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians):null;}catch(_){sample=null;}
   worldProjectionAnchorCache=Object.freeze({
-    latitudeRadians:best.lat,longitudeRadians:best.lon,
-    latitudeDegrees:Number((best.lat*180/Math.PI).toFixed(6)),
-    longitudeDegrees:Number((best.lon*180/Math.PI).toFixed(6)),
-    land:Boolean(best.sample?.land),surfaceClass:String(best.sample?.surfaceClass||"unknown"),
-    elevationMeters:Number(best.sample?.elevationMeters||0),
-    authority:"PlanetGeography deterministic land anchor",
+    latitudeRadians:Number(geo?.latitudeRadians||0),longitudeRadians:Number(geo?.longitudeRadians||0),
+    latitudeDegrees:Number(geo?.latitudeDegrees||0),longitudeDegrees:Number(geo?.longitudeDegrees||0),
+    land:Boolean(sample?.land),surfaceClass:String(sample?.surfaceClass||"unknown"),
+    elevationMeters:Number(sample?.elevationMeters||0),
+    continentId:sample?.continentId||null,continentName:sample?.continentName||null,
+    authority:"PlanetGeography seed-fixed spherical registration",
     worldTileOrigin:Object.freeze({x:"0",y:"0"})
   });
   return worldProjectionAnchorCache;
 }
 function mapWorldTileAt(latitudeRadians,longitudeRadians){
-  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  const anchor=planetWorldAnchor(),cosAnchor=Math.max(.08,Math.cos(anchor.latitudeRadians));
-  const eastMeters=wrapLongitudeRadians(Number(longitudeRadians)-anchor.longitudeRadians)*WORLD_RADIUS_METERS*cosAnchor;
-  const northMeters=(clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999)-anchor.latitudeRadians)*WORLD_RADIUS_METERS;
-  return Object.freeze({
-    x:String(Math.round(eastMeters/tileMeters)),
-    y:String(Math.round(northMeters/tileMeters))
-  });
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  const tile=geography?.worldTileForLatLon?.(latitudeRadians,longitudeRadians,tileMeters,WORLD_RADIUS_METERS)||
+    window.PlanetGeography?.worldTileForLatLon?.(activeSeed,latitudeRadians,longitudeRadians,tileMeters,WORLD_RADIUS_METERS);
+  return Object.freeze({x:String(tile?.x??"0"),y:String(tile?.y??"0")});
 }
 function worldLatLonForTile(xValue,yValue){
-  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  const anchor=planetWorldAnchor(),cosAnchor=Math.max(.08,Math.cos(anchor.latitudeRadians));
-  const x=Number(BigInt(String(xValue??"0"))),y=Number(BigInt(String(yValue??"0")));
-  const lat=clamp(anchor.latitudeRadians+y*tileMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-  const lon=wrapLongitudeRadians(anchor.longitudeRadians+x*tileMeters/(WORLD_RADIUS_METERS*cosAnchor));
-  return Object.freeze({latitudeRadians:lat,longitudeRadians:lon,latitudeDegrees:Number((lat*180/Math.PI).toFixed(6)),longitudeDegrees:Number((lon*180/Math.PI).toFixed(6)),worldTile:Object.freeze({x:String(xValue??"0"),y:String(yValue??"0")})});
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  const geo=geography?.worldLatLonForTile?.(xValue,yValue,tileMeters,WORLD_RADIUS_METERS)||
+    window.PlanetGeography?.worldLatLonForTile?.(activeSeed,xValue,yValue,tileMeters,WORLD_RADIUS_METERS);
+  if(geo)return Object.freeze({
+    latitudeRadians:Number(geo.latitudeRadians)||0,longitudeRadians:Number(geo.longitudeRadians)||0,
+    latitudeDegrees:Number(geo.latitudeDegrees)||0,longitudeDegrees:Number(geo.longitudeDegrees)||0,
+    worldTile:Object.freeze({x:String(geo.worldTile?.x??xValue??"0"),y:String(geo.worldTile?.y??yValue??"0")})
+  });
+  return Object.freeze({latitudeRadians:0,longitudeRadians:0,latitudeDegrees:0,longitudeDegrees:0,worldTile:Object.freeze({x:String(xValue??"0"),y:String(yValue??"0")})});
 }
 function setWorldTileFocus(xValue,yValue){
   return setViewTarget(worldLatLonForTile(xValue,yValue));
@@ -368,6 +359,10 @@ function mapContextForFocus(){
   if(mapContextCache.key===key&&mapContextCache.value)return mapContextCache.value;
   const tile=mapWorldTileAt(lat,lon),needed=new Set(kinds),name=(kind,fallback)=>{
     try{
+      if(kind==="continent"){
+        const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
+        return surface.sample?.land?(surface.sample?.continentName||fallback):fallback;
+      }
       if(kind==="country"){
         const key=atlasAuthorityKey("country",tile);
         if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("country",tile);
@@ -527,6 +522,23 @@ function atlasRepresentativeTile(baseX,baseY,step,wantLand,validator){
   }
   return null;
 }
+function atlasStableLandAnchor(base,step,validator){
+  if(!base)return null;
+  const bx=BigInt(String(base.x)),by=BigInt(String(base.y)),stride=BigInt(Math.max(1,Math.round(step||1)));
+  const offsets=[[0,0]];
+  for(let ring=1;ring<=6;ring++)for(let spoke=0;spoke<16;spoke++){
+    const angle=Math.PI*2*spoke/16;
+    offsets.push([Math.round(Math.cos(angle)*ring),Math.round(Math.sin(angle)*ring)]);
+  }
+  const seen=new Set();
+  for(const [ox,oy] of offsets){
+    const x=(bx+BigInt(ox)*stride).toString(),y=(by+BigInt(oy)*stride).toString(),key=x+"|"+y;
+    if(seen.has(key))continue;seen.add(key);
+    let valid=true;try{valid=validator?validator(x,y):true;}catch(_){valid=false;}if(!valid)continue;
+    const surface=atlasPlanetSurfaceForTile(x,y);if(surface.sample?.land)return Object.freeze({x,y});
+  }
+  return null;
+}
 function atlasEntityBase(id,type,name,anchorTile,authority,extra={}){
   if(!id||!name||!anchorTile)return null;const geo=worldLatLonForTile(anchorTile.x,anchorTile.y);
   return Object.freeze({id:String(id),type:String(type),name:String(name),authority:String(authority),anchorTile:Object.freeze({x:String(anchorTile.x),y:String(anchorTile.y)}),
@@ -535,12 +547,15 @@ function atlasEntityBase(id,type,name,anchorTile,authority,extra={}){
 function atlasCanonicalEntityForKind(kind,tile){
   if(!activeSeed||!tile)return null;
   if(kind==="continent"){
-    const size=131072,cell=atlasCellForTile(tile,size),id=atlasCellId("CONT",cell),cacheKey=activeSeed+"|"+id;
+    const surface=atlasPlanetSurfaceForTile(tile.x,tile.y),continentId=surface.sample?.continentId||null;
+    if(!surface.sample?.land||!continentId)return null;
+    const cacheKey=activeSeed+"|"+continentId;
     if(atlasEntityCache.has(cacheKey))return atlasEntityCache.get(cacheKey);
-    const half=BigInt(Math.floor(size/2)),base={x:(cell.x*BigInt(size)+half).toString(),y:(cell.y*BigInt(size)+half).toString()};
-    const anchor=atlasRepresentativeTile(base.x,base.y,Math.floor(size*.22),true,(x,y)=>{const cc=atlasCellForTile({x,y},size);return cc.x===cell.x&&cc.y===cell.y;});
-    if(!anchor){atlasEntityCache.set(cacheKey,null);return null;}const name=window.GeographyFoundation?.hierarchyName?.(activeSeed,"continent",anchor.x,anchor.y);if(!name){atlasEntityCache.set(cacheKey,null);return null;}
-    const entity=atlasEntityBase(id,"continent",name,anchor,"GeographyFoundation.hierarchy");atlasEntityCache.set(cacheKey,entity);return entity;
+    const descriptor=geography?.continentById?.(continentId)||null;
+    if(!descriptor){atlasEntityCache.set(cacheKey,null);return null;}
+    const anchor=mapWorldTileAt(descriptor.latitudeRadians,descriptor.longitudeRadians);
+    const entity=atlasEntityBase(continentId,"continent",descriptor.name,anchor,"PlanetGeography.continentById",{continentId});
+    atlasEntityCache.set(cacheKey,entity);return entity;
   }
   if(kind==="ocean"){
     const size=196608,cell=atlasCellForTile(tile,size),id=atlasCellId("OCEAN",cell),cacheKey=activeSeed+"|"+id;
@@ -558,7 +573,10 @@ function atlasCanonicalEntityForKind(kind,tile){
     const capital=countryEntity.capital;if(!capital)return null;
     const capKey=activeSeed+"|"+String(capital.id);
     if(atlasEntityCache.has(capKey))return atlasEntityCache.get(capKey);
-    const entity=atlasEntityBase(capital.id,"capital",capital.name,{x:capital.x,y:capital.y},"PoliticalGeography.capital:indexed",{countryId:countryEntity.id});
+    const surface=atlasPlanetSurfaceForTile(capital.x,capital.y);
+    let owner=null;try{owner=window.PoliticalGeography?.ownerAt?.(activeSeed,capital.x,capital.y)||null;}catch(_){owner=null;}
+    if(!surface.sample?.land||owner?.id!==countryEntity.id){atlasEntityCache.set(capKey,null);return null;}
+    const entity=atlasEntityBase(capital.id,"capital",capital.name,{x:capital.x,y:capital.y},"PoliticalGeography.capital:canonical-owned-land",{countryId:countryEntity.id,parentCountryMatch:true});
     atlasEntityCache.set(capKey,entity);return entity;
   }
   if(kind==="region"){
@@ -627,7 +645,10 @@ function atlasFocusEntityIds(spec){
     regionEntity=atlasAuthorityIndex.get(key)||null;
   }
   if(needed.has("village"))try{village=window.GeographyFoundation?.nearestVillage?.(activeSeed,tile.x,tile.y,false)||null;}catch(_){}
-  if(needed.has("continent"))ids.continent=atlasCellId("CONT",atlasCellForTile(tile,131072));
+  if(needed.has("continent")){
+    const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
+    ids.continent=surface.sample?.land?(surface.sample?.continentId||null):null;
+  }
   if(needed.has("country"))ids.country=countryEntity?.id||null;
   if(needed.has("capital"))ids.capital=countryEntity?.capital?.id||null;
   if(needed.has("region"))ids.region=regionEntity?.id||null;
@@ -641,17 +662,6 @@ function atlasQueryCandidates(spec){
   const key=[activeSeed,zoomState.band,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),Math.round(Math.log10(Math.max(1,zoomState.visibleFootprintWidthMeters))*20),spec.kinds.join(",")].join("|");
   if(atlasLabelCache.key===key)return atlasLabelCache;
   const started=performance.now(),samples=atlasQuerySamples(spec),unique=new Map(),focus=atlasFocusEntityIds(spec);
-  if(spec.kinds.includes("country")&&focus.ids.country){
-    const indexed=atlasAuthorityIndex.get(atlasAuthorityKey("country",focus.tile))||null;
-    if(indexed){
-      const anchored=atlasEntityBase(
-        indexed.id,"country",indexed.name,focus.tile,
-        "PoliticalGeography.countryAt:indexed-focus-anchor",
-        {countryId:indexed.id,capital:indexed.capital||null}
-      );
-      if(anchored)unique.set(anchored.id,anchored);
-    }
-  }
   for(const [sampleIndex,point] of samples.entries()){
     let surface=null;try{surface=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){surface=null;}if(!surface)continue;
     const tile=mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
@@ -689,8 +699,9 @@ function atlasResolvedIdentity(entity){
   let resolvedName=null,resolvedId=null;
   try{
     if(entity.type==="continent"){
-      const cell=atlasCellForTile(tile,131072);ids.continent=atlasCellId("CONT",cell);resolvedId=ids.continent;
-      resolvedName=window.GeographyFoundation?.hierarchyName?.(activeSeed,"continent",tile.x,tile.y)||null;
+      const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
+      ids.continent=surface.sample?.land?(surface.sample?.continentId||null):null;resolvedId=ids.continent;
+      resolvedName=surface.sample?.continentName||null;
     }else if(entity.type==="ocean"){
       const s=atlasPlanetSurfaceForTile(tile.x,tile.y);resolvedName=s.sample?.land?null:entity.name;resolvedId=s.sample?.land?null:entity.id;
     }else if(entity.type==="country"){
