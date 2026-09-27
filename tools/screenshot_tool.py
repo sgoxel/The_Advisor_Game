@@ -6524,6 +6524,13 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 raise RuntimeError(f"Camera drag incorrectly issued selection pick: {proof}")
             return f"drag-rejected-selection:kept={proof.get('after',{}).get('selectedId')}"
         if frame_index == 7:
+            driver.set_window_size(1280,800)
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0");window.PlanetStage.setZoomScalar(1);')
+            WebDriverWait(driver,60.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),f=s.canonicalFocus?.worldTile||{},ls=s.projection?.localStatic||{},i=s.inspection||{};
+                return String(f.x)==='0'&&String(f.y)==='0'&&ls.revealTier==='full'&&Number(i.activePickableCount||0)>0;
+            """))
+            time.sleep(0.25)
             proof=driver.execute_script("""
                 const stage=window.PlanetStage,targets=stage.inspectionTargets(),rect=document.querySelector('#planetCanvas').getBoundingClientRect();
                 const inside=(x,y,b)=>x>=b.left&&x<=b.right&&y>=b.top&&y<=b.bottom;
