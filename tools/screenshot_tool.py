@@ -8417,7 +8417,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if max_mag<=0 or requested_mag>max_mag+0.011:
                 raise RuntimeError(f"WP-013 steady-state source magnification exceeds contract in frame {index}: requested={requested_mag} max={max_mag} lod={lod}")
             level_index=int(lod.get("requestedLevelIndex") if lod.get("requestedLevelIndex") is not None else -1)
-            if level_index<11 and float(lod.get("requestedProjectedPixelError") or 999)>9.01:
+            refine_guard=float(lod.get("refinePixelError") or 0)
+            if refine_guard<=0 or (level_index<11 and float(lod.get("requestedProjectedPixelError") or 999)>refine_guard+0.011):
                 raise RuntimeError(f"WP-013 requested SSE exceeds refine guard in frame {index}: {lod}")
 
         canonical=proofs[:10]
