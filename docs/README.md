@@ -232,6 +232,16 @@ Scale, ruler calculation and navigation sensitivity are presentation/control beh
 
 The world is a **finite continuous sphere**, not an unbounded planar tile grid. No tile is authoritative world state. Future local terrain and LOD systems may use bounded render patches or caches, but those patches must sample planet-space world data and remain disposable presentation/performance structures rather than defining world truth.
 
+### Canonical SEED Coordinate Fabric
+
+At campaign creation/load, Campaign-SEED code establishes one canonical planet coordinate fabric for the fixed world foundation. Every fixed spatial entity and structure—terrain, coasts, rivers, countries, regions, borders, capitals, cities, towns, villages, roads, paths, bridges, buildings, landmarks, POIs and later fixed actor/object spawn positions—must resolve through that same SEED-generated spatial authority.
+
+The coordinate fabric must provide stable reversible mapping among spherical latitude/longitude, planet-space meters, stable global spatial IDs/cells, local tangent coordinates and render projection. Lazy streaming may materialize only the required cells/detail, but it must address them by those same canonical global coordinates. Camera position, zoom, viewport, render bucket, loading order, device state and frame timing must never assign or alter foundation coordinates.
+
+The currently active gameplay-area center must be visibly identifiable on the sphere/map by a world-anchored center marker and concise coordinate readout. Pure zoom changes only scale/detail and never changes that center world coordinate.
+
+Important landmark labels must appear at the scale tiers where they are intended to be discoverable. When text is displaced for decluttering, a small visible arrow/leader must point to the exact canonical landmark anchor. Landmark text may disappear only because its scale tier, hemisphere/occlusion, or viewport visibility makes it genuinely ineligible—not because an unrelated label consumed the shared placement budget.
+
 For Stage 1, protagonist, NPC, settlement, building and local-terrain systems are deliberately dormant. Later stages will add planetary geography first, then progressively finer detail while preserving the same canonical planet scale.
 
 
