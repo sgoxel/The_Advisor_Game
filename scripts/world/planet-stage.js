@@ -138,6 +138,11 @@ const SSE_COARSEN_PIXELS=6.5;
 // a coarse parent across a closer physical scale.
 const SSE_MAX_NATIVE_MAGNIFICATION=1.5;
 const SPATIAL_OVERSCAN_CELL_RADIUS=1;
+// The world-matched tangent continuation must cover large temporary focus
+// offsets and child preparation without exposing the clear-color rectangle.
+// Keep it bounded to one shared quad/texture while sampling a wider canonical
+// SEED footprint; this adds no draw calls or alternate geography authority.
+const LOCAL_SURROUND_SPAN_FACTOR=6;
 // Every physical LOD is native at its band's upper scalar and covers at most
 // ~2.5x of visible-footprint range, so presentation compensation never has to
 // shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
@@ -224,7 +229,7 @@ function freshLocalResources(){
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
-    surroundSpanFactor:3,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
+    surroundSpanFactor:LOCAL_SURROUND_SPAN_FACTOR,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
 }
 let localResources=freshLocalResources();
 let localPreparationToken=0;
@@ -2770,7 +2775,7 @@ function* localResourceSteps(job){
   const meshData=yield* tangentMeshSteps(job);
   const size=LOCAL_DETAIL_LEVELS[job.levelIndex].textureSize;
   const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true);
-  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*3,job.dims.patchHeight*3,size,false);
+  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false);
   return {meshData,detail,surround};
 }
 function textureFromPixels(pixels){
@@ -2782,7 +2787,7 @@ function textureFromPixels(pixels){
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
   return texture;
 }
-function skirtMeshForDims(dims,spanFactor=3){
+function skirtMeshForDims(dims,spanFactor=LOCAL_SURROUND_SPAN_FACTOR){
   const halfX=dims.patchWidth*spanFactor*.5/dims.metersPerUnit,halfZ=dims.patchHeight*spanFactor*.5/dims.metersPerUnit,mesh=new pc.Mesh(device);
   mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
   mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setUvs(0,[0,1,1,1,0,0,1,0]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
@@ -2792,7 +2797,7 @@ function finalizeLocalResource(job,result){
   const started=performance.now(),dims=job.dims,{meshData,detail,surround}=result;
   const mesh=new pc.Mesh(device);mesh.setPositions(meshData.positions);mesh.setNormals(meshData.normals);mesh.setUvs(0,meshData.uvs);mesh.setIndices(meshData.indices);mesh.update();
   mesh.incRefCount();// owned by the LRU cache, not by whichever MeshInstance shows it
-  const skirtMesh=skirtMeshForDims(dims,3);skirtMesh.incRefCount();
+  const skirtMesh=skirtMeshForDims(dims,LOCAL_SURROUND_SPAN_FACTOR);skirtMesh.incRefCount();
   const detailTexture=textureFromPixels(detail),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
   const detailMetersPerTexel=detail.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
@@ -2960,7 +2965,7 @@ function activateLocalDetailResource(signature,fromCache){
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
   if(horizonSkirt?.render){
     horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
-    localResources.surroundSpanFactor=3;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*3).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*3).toFixed(3));localResources.surroundWorldMatched=true;
+    localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
   }
   horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
   rebuildLocalStaticPresentation(resource);
@@ -3075,7 +3080,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     if(standInActive&&displayResource){
       const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
       const visibleHeightMeters=shownHeightMeters,visibleWidthMeters=visibleHeightMeters*aspect;
-      const surroundWidthMeters=displayResource.dims.patchWidth*3,surroundHeightMeters=displayResource.dims.patchHeight*3;
+      const surroundWidthMeters=displayResource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,surroundHeightMeters=displayResource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR;
       const safeEast=Math.max(0,(surroundWidthMeters-visibleWidthMeters)/2);
       const safeNorth=Math.max(0,(surroundHeightMeters-visibleHeightMeters)/2);
       const bounded={east:clamp(rawOffset.east,-safeEast,safeEast),north:clamp(rawOffset.north,-safeNorth,safeNorth)};
@@ -4224,7 +4229,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,SSE_MAX_NATIVE_MAGNIFICATION
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
   })
 });
 const boot=()=>start().catch(()=>{});
