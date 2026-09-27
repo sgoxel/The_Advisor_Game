@@ -252,7 +252,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-005-002": 10,
     "wp-s003-010-003-006": 14,
     "wp-s003-010-003-007": 10,
-    "wp-s003-010-003-008": 10,
+    "wp-s003-010-003-008": 14,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -6973,20 +6973,24 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "wp-s003-010-003-008":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
-            ("globe",0.050,(1280,800),False),
-            ("continent",0.280,(1280,800),False),
-            ("country",0.500,(1280,800),False),
-            ("regional-overview","height:400000",(1280,800),False),
-            ("regional-detail","height:140000",(1280,800),False),
-            ("local","height:10000",(1280,800),False),
-            ("ground",1.000,(1280,800),False),
-            ("rotated-backside",0.120,(1280,800),True),
-            ("phone-landscape",0.500,(844,390),False),
-            ("phone-portrait",0.280,(390,844),False),
+            ("globe",0.050,(1280,800),0),
+            ("globe-rotate-12",0.050,(1280,800),12),
+            ("globe-rotate-24",0.050,(1280,800),12),
+            ("globe-rotate-36",0.050,(1280,800),12),
+            ("globe-rotate-48",0.050,(1280,800),12),
+            ("continent",0.280,(1280,800),0),
+            ("country",0.500,(1280,800),0),
+            ("regional-overview","height:400000",(1280,800),0),
+            ("regional-detail","height:140000",(1280,800),0),
+            ("local","height:10000",(1280,800),0),
+            ("ground",1.000,(1280,800),0),
+            ("rotated-backside",0.120,(1280,800),155),
+            ("phone-landscape",0.500,(844,390),0),
+            ("phone-portrait",0.280,(390,844),0),
         )
-        label,target,viewport,rotate=plan[min(frame_index,len(plan)-1)]
+        label,target,viewport,rotation_delta=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(int(viewport[0]),int(viewport[1])); time.sleep(0.18)
-        if frame_index in (0,8,9):
+        if frame_index in (0,5,11,12,13):
             result=driver.execute_script("return window.PlanetStage?.setWorldTileFocus?.('0','0') || null")
             if not isinstance(result,dict):
                 raise RuntimeError(f"Atlas canonical focus API unavailable: {result}")
@@ -6996,8 +7000,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         else:
             scalar=float(target)
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
-        if rotate:
-            driver.execute_script("window.PlanetStage.rotateBy(155,0)")
+        if rotation_delta:
+            driver.execute_script("window.PlanetStage.rotateBy(arguments[0],0)",float(rotation_delta))
         WebDriverWait(driver,150.0).until(lambda d: d.execute_script("""
             const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{};
             return s?.ready===true &&
@@ -7480,9 +7484,9 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
     if scenario == "wp-s003-010-003-008":
-        if len(frames) < 10:
-            raise RuntimeError("wp-s003-010-003-008 requires ten canonical atlas frames")
-        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        if len(frames) < 14:
+            raise RuntimeError("wp-s003-010-003-008 requires fourteen atlas frames including gradual rotation stability")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:14]]
         maps=[stage.get("mapPresentation") or {} for stage in stages]
         for index,m in enumerate(maps, start=1):
             if m.get("bounded") is not True or m.get("fullWorldScan") is not False:
@@ -7517,8 +7521,18 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 context_name=str(context.get(str(item.get("entityType") or "")) or "")
                 if context_name and context_name!=str(item.get("authoritativeName") or ""):
                     raise RuntimeError(f"Focus label/context name mismatch in frame {index}: {item} vs {context_name}")
-        # Zoom LOD progression must be semantic, not just more labels.
-        classes=[set(m.get("visibleLabelClasses") or []) for m in maps]
+        rotation_maps=maps[:5]
+        if any(int(m.get("overlapRejectedCount") or 0)!=0 for m in rotation_maps):
+            raise RuntimeError(f"Gradual globe rotation still hides visible labels because of overlap rejection: {[m.get('overlapRejectedCount') for m in rotation_maps]}")
+        rotation_ids=sorted({str(item.get("canonicalEntityId") or "") for m in rotation_maps for item in (m.get("visibleLabels") or []) if item.get("canonicalEntityId")})
+        for entity_id in rotation_ids:
+            presence=[any(str(item.get("canonicalEntityId") or "")==entity_id for item in (m.get("visibleLabels") or [])) for m in rotation_maps]
+            visible_indices=[i for i,present in enumerate(presence) if present]
+            if visible_indices and visible_indices[-1]-visible_indices[0]+1 != len(visible_indices):
+                raise RuntimeError(f"Atlas label flickered off/on during monotonic globe rotation for {entity_id}: {presence}")
+        semantic_indices=(0,5,6,7,8,9,10)
+        semantic_maps=[maps[i] for i in semantic_indices]
+        classes=[set(m.get("visibleLabelClasses") or []) for m in semantic_maps]
         if not classes[0].issubset({"continent","ocean"}) or "continent" not in classes[0]:
             raise RuntimeError(f"Far globe label classes are not continent/ocean-only: {classes[0]}")
         if "country" not in classes[1] and "country" not in classes[2]:
@@ -7531,26 +7545,26 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Ground view retained distant atlas classes: {classes[6]}")
         if not (classes[6] & {"village","district","landmark"}):
             raise RuntimeError(f"Ground view lacks locally relevant label class: {classes[6]}")
-        if int(maps[7].get("hiddenHemisphereCulledCount") or 0)<1 or int(maps[7].get("occludedCulledCount") or 0)<1:
-            raise RuntimeError(f"Rotated globe did not prove backside/globe-occlusion culling: {maps[7]}")
+        if int(maps[11].get("hiddenHemisphereCulledCount") or 0)<1 or int(maps[11].get("occludedCulledCount") or 0)<1:
+            raise RuntimeError(f"Rotated globe did not prove backside/globe-occlusion culling: {maps[11]}")
         if max(int(m.get("offscreenCulledCount") or 0) for m in maps)<1:
             raise RuntimeError("Atlas evidence never exercised off-screen/frustum culling")
-        # Same canonical entity must never silently rename while zooming at the fixed focus.
         identity_names={}
-        for m in maps[:7]:
+        for m in semantic_maps:
             for item in m.get("visibleLabels") or []:
                 key=str(item.get("canonicalEntityId") or "")
                 name=str(item.get("authoritativeName") or "")
                 if key in identity_names and identity_names[key]!=name:
                     raise RuntimeError(f"Canonical atlas entity renamed across zoom: {key}: {identity_names[key]} -> {name}")
                 identity_names[key]=name
-        landscape=frames[8].get("runtime",{}).get("viewport",{})
-        portrait=frames[9].get("runtime",{}).get("viewport",{})
+        landscape=frames[12].get("runtime",{}).get("viewport",{})
+        portrait=frames[13].get("runtime",{}).get("viewport",{})
         if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>430:
             raise RuntimeError(f"Phone landscape atlas frame has unexpected viewport: {landscape}")
         if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
             raise RuntimeError(f"Phone portrait atlas frame has unexpected viewport: {portrait}")
         return
+
     if scenario == "wp-s003-010-005":
         if len(frames) < 22:
             raise RuntimeError("wp-s003-010-005 requires 22 fixed-focus forward/reverse/mobile frames")
