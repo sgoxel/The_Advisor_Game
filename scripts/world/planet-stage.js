@@ -54,6 +54,17 @@ let localFaunaRoot=null;
 let localFaunaActors=[];
 let localFaunaClock=0;
 let localWildernessEnabled=true;
+let localBuildingActivityRoot=null;
+let localBuildingActivityContext=null;
+let buildingActivity={
+  active:false,authoritativeHour:null,timeBand:"unknown",buildingCount:0,activeBuildingCount:0,
+  occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,
+  smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,
+  drawCallEstimate:0,dynamicLightCount:0,particleEmitterCount:0,sharedMaterialCount:0,
+  updateCount:0,lastUpdateMs:0,maxUpdateMs:0,lastSignature:null,buildings:[],
+  activitySource:"DailyActivity.resolveActionTarget",occupancySource:"ResidentMovement.get when available",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false
+};
 let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
@@ -1768,6 +1779,11 @@ function ensureLocalStaticMaterials(){
     wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.54,.42,.18,.46),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
+    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.52,.12);m.__activityEmissiveBoost=.82;return m;})(),
+    activityOpen:(()=>{const m=make("LocalActivityOpen",.32,.72,.20);m.__activityEmissiveBoost=.34;return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",1,.20,.035);m.__activityEmissiveBoost=.92;return m;})(),
+    activitySmoke:make("LocalActivitySmoke",.42,.43,.42,.48),
+    activityProp:make("LocalActivityProp",.39,.24,.10),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
 }
@@ -1999,6 +2015,130 @@ function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed
   registerCanonicalBuildingInspection(record,entities);
   return entities.length;
 }
+
+function clearLocalBuildingActivity(){
+  localBuildingActivityRoot?.destroy?.();localBuildingActivityRoot=null;
+}
+function buildingActivityTimeBand(hour){
+  const h=((Number(hour)||0)%24+24)%24;
+  if(h<6)return "night";
+  if(h<8)return "morning";
+  if(h<18)return "day";
+  if(h<20)return "evening";
+  return "night";
+}
+function canonicalBuildingActivityState(reveal){
+  if(!reveal||!window.DailyActivity?.build||!window.DailyActivity?.resolveActionTarget)return null;
+  const started=performance.now(),stamp=inspectionFantasyStamp(),hour=Number(stamp.hour)+Number(stamp.minute||0)/60;
+  const byBuilding=new Map();
+  const ensure=id=>{
+    const key=String(id||"");if(!key)return null;
+    if(!byBuilding.has(key))byBuilding.set(key,{scheduledResidentCount:0,occupiedResidentCount:0,workCount:0,homeCount:0,socialCount:0,states:new Set()});
+    return byBuilding.get(key);
+  };
+  const residents=window.DailyActivity.build(activeSeed)||[];
+  for(const resident of residents){
+    let scheduled=null;try{scheduled=window.DailyActivity.resolveActionTarget(activeSeed,resident,stamp)||null;}catch(_){scheduled=null;}
+    const scheduledId=String(scheduled?.buildingId||"");
+    if(scheduledId){
+      const stats=ensure(scheduledId),state=String(scheduled?.state||scheduled?.kind||"");
+      stats.scheduledResidentCount++;stats.states.add(state);
+      if(state==="work")stats.workCount++;
+      if(["sleep","prepare","breakfast","return-home"].includes(state))stats.homeCount++;
+      if(["lunch","social"].includes(state))stats.socialCount++;
+    }
+    let movement=null;try{movement=window.ResidentMovement?.get?.(resident.id)||null;}catch(_){movement=null;}
+    if(movement?.occupiesBuilding&&movement?.buildingId){
+      const stats=ensure(movement.buildingId);stats.occupiedResidentCount++;
+    }
+  }
+  const records=[...(reveal.houses||[]),...(reveal.specialLots||[])],night=hour>=19||hour<6;
+  const buildings=records.map(record=>{
+    const id=String(record.id),fn=String(record.function||"home"),stats=byBuilding.get(id)||{scheduledResidentCount:0,occupiedResidentCount:0,workCount:0,homeCount:0,socialCount:0,states:new Set()};
+    const workActive=stats.workCount>0,homeActive=fn==="home"&&stats.homeCount>0,socialActive=stats.socialCount>0;
+    const active=stats.occupiedResidentCount>0||workActive||homeActive||socialActive;
+    let cue=null;
+    if(active&&night&&(fn==="home"||fn==="lodging"||fn==="civic"))cue="warm-window";
+    else if(fn==="market"&&workActive)cue="open-sign";
+    else if(fn==="craft"&&workActive)cue="forge-glow";
+    else if(active&&["home","lodging","farm"].includes(fn))cue="chimney-smoke";
+    else if(active)cue="work-prop";
+    return Object.freeze({
+      id,label:String(record.label||record.name||id),kind:String(record.kind||"building"),function:fn,
+      active,workActive,homeActive,socialActive,scheduledResidentCount:stats.scheduledResidentCount,
+      occupiedResidentCount:stats.occupiedResidentCount,states:Object.freeze([...stats.states].sort()),cue
+    });
+  });
+  const signature="BA|"+revealHashText([activeSeed,Math.floor(hour*4),...buildings.map(x=>[x.id,x.active?1:0,x.cue||"-",x.scheduledResidentCount,x.occupiedResidentCount].join(":"))].join("|"));
+  return Object.freeze({
+    stamp:Object.freeze({...stamp}),hour:Number(hour.toFixed(3)),timeBand:buildingActivityTimeBand(hour),signature,
+    residentsEvaluated:residents.length,occupancySourceAvailable:Boolean(window.ResidentMovement?.get),
+    buildings:Object.freeze(buildings),buildMs:Number((performance.now()-started).toFixed(4))
+  });
+}
+function activityBuildingGeometry(record,presentationScale,unit,frame,lift){
+  const b=record?.bounds;if(!b)return null;
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+  const w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
+  const east=cx*tileMeters,north=cy*tileMeters,ground=localGroundHeightUnits(east,north,frame)+lift;
+  const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
+  return {east,north,w,d,ground,height:physicalHeight,presentationScale,unit};
+}
+function addBuildingActivityCue(record,state,context,index){
+  const g=activityBuildingGeometry(record,context.presentationScale,context.unit,context.frame,context.lift);if(!g||!state?.cue)return 0;
+  const s=g.presentationScale/g.unit,x=g.east*s,z=-g.north*s,h=g.height*s,frontZ=-(g.north+g.d*.505)*s;
+  const name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
+  if(state.cue==="warm-window"){
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityWarm,x,g.ground+h*.53,frontZ,Math.max(.035,1.8*s),Math.max(.035,1.25*s),Math.max(.018,.14*s));
+  }else if(state.cue==="open-sign"){
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityOpen,x+g.w*.28*s,g.ground+h*.68,frontZ,Math.max(.04,1.4*s),Math.max(.04,1.0*s),Math.max(.02,.18*s));
+  }else if(state.cue==="forge-glow"){
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityForge,x,g.ground+h*.45,frontZ,Math.max(.04,1.7*s),Math.max(.04,1.2*s),Math.max(.02,.16*s));
+  }else if(state.cue==="chimney-smoke"){
+    addLocalPrimitive(localBuildingActivityRoot,name,"sphere",localStaticMaterials.activitySmoke,x+g.w*.20*s,g.ground+h+Math.max(.06,1.05*s),z,Math.max(.05,1.35*s),Math.max(.07,1.8*s),Math.max(.05,1.35*s));
+  }else{
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityProp,x+g.w*.22*s,g.ground+Math.max(.025,.42*s),frontZ-Math.max(.02,.5*s),Math.max(.04,.9*s),Math.max(.04,.84*s),Math.max(.04,.9*s));
+  }
+  return 1;
+}
+function rebuildCanonicalBuildingActivityPresentation(reason="settlement-rebuild"){
+  const context=localBuildingActivityContext,started=performance.now();clearLocalBuildingActivity();
+  if(!context||!["refined","full"].includes(context.tier)||!tangentPatch){
+    buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastUpdateMs:Number((performance.now()-started).toFixed(4)),lastSignature:null};
+    return;
+  }
+  ensureLocalStaticMaterials();
+  const state=canonicalBuildingActivityState(context.reveal);
+  if(!state)return;
+  localBuildingActivityRoot=new pc.Entity("CanonicalBuildingActivity");tangentPatch.addChild(localBuildingActivityRoot);
+  const records=[...(context.reveal.houses||[]),...(context.reveal.specialLots||[])],recordById=new Map(records.map(x=>[String(x.id),x]));
+  let cueCount=0;
+  for(let i=0;i<state.buildings.length;i++){
+    const item=state.buildings[i],record=recordById.get(item.id);if(item.cue&&record)cueCount+=addBuildingActivityCue(record,item,context,i);
+  }
+  const count=cue=>state.buildings.filter(x=>x.cue===cue).length;
+  const active=state.buildings.filter(x=>x.active);
+  const elapsed=performance.now()-started;
+  buildingActivity={
+    active:cueCount>0,authoritativeHour:state.hour,timeBand:state.timeBand,buildingCount:state.buildings.length,
+    activeBuildingCount:active.length,occupiedBuildingCount:state.buildings.filter(x=>x.occupiedResidentCount>0).length,
+    activeWorkplaceCount:state.buildings.filter(x=>x.workActive).length,activeHomeCount:state.buildings.filter(x=>x.homeActive).length,
+    warmWindowCount:count("warm-window"),smokeCueCount:count("chimney-smoke"),openMarketCount:count("open-sign"),
+    forgeGlowCount:count("forge-glow"),workPropCount:count("work-prop"),cueCount,drawCallEstimate:cueCount,
+    dynamicLightCount:0,particleEmitterCount:0,sharedMaterialCount:5,
+    updateCount:Number(buildingActivity.updateCount||0)+1,lastUpdateMs:Number(elapsed.toFixed(4)),
+    maxUpdateMs:Math.max(Number(buildingActivity.maxUpdateMs||0),Number(elapsed.toFixed(4))),
+    lastSignature:state.signature,buildings:state.buildings,residentsEvaluated:state.residentsEvaluated,
+    occupancySourceAvailable:state.occupancySourceAvailable,activitySource:"DailyActivity.resolveActionTarget",
+    occupancySource:"ResidentMovement.get when available",updateReason:String(reason),
+    presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false
+  };
+}
+function refreshCanonicalBuildingActivityPresentation(){
+  if(localBuildingActivityContext)rebuildCanonicalBuildingActivityPresentation("authoritative-time-change");
+}
+
 function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
   const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104));
@@ -2052,6 +2192,8 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const wild=renderLocalWilderness(resource,frame,reveal);
   rebuildCanonicalNpcPresentation(reveal,tier,frame,scale,unit,lift,false);
+  localBuildingActivityContext={reveal,tier,frame,presentationScale:scale,unit,lift};
+  rebuildCanonicalBuildingActivityPresentation("settlement-rebuild");
   const entityCount=localStaticRoot.children.length;
   triangles+=roadCount*12+(coarseBuildings*12)+(fullBuildings*36);
   localStatic={
@@ -2075,6 +2217,8 @@ function rebuildLocalStaticPresentation(resource){
   const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
   clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);
   localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
+  clearLocalBuildingActivity();localBuildingActivityContext=null;
+  buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
   clearLocalFauna();
   localStaticRoot?.destroy?.();localStaticRoot=null;
   const tier=settlementRevealTierForScalar();
@@ -3247,7 +3391,8 @@ function gradeAtmosphereLocalMaterial(material,tint,emissiveStrength=0){
   const base=material.__atmosphereBaseDiffuse||[material.diffuse?.r??1,material.diffuse?.g??1,material.diffuse?.b??1];
   material.__atmosphereBaseDiffuse=base;
   material.diffuse.set(base[0]*tint[0],base[1]*tint[1],base[2]*tint[2]);
-  material.emissive.set(base[0]*tint[0]*emissiveStrength,base[1]*tint[1]*emissiveStrength,base[2]*tint[2]*emissiveStrength);
+  const effectiveEmissive=Math.max(Number(emissiveStrength)||0,Number(material.__activityEmissiveBoost)||0);
+  material.emissive.set(base[0]*tint[0]*effectiveEmissive,base[1]*tint[1]*effectiveEmissive,base[2]*tint[2]*effectiveEmissive);
   material.emissiveIntensity=1;
   material.update();return true;
 }
@@ -3285,6 +3430,7 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
     groundPaletteIntegrated:true,postProcess:false,weatherSimulation:false
   };
   refreshCanonicalNpcPresentation();
+  refreshCanonicalBuildingActivityPresentation();
   if(inspection.selectedId!==null){
     inspection.lastContentRefreshAtMs=Number.NEGATIVE_INFINITY;
     updateInspectionTooltip();
@@ -3586,6 +3732,7 @@ function snapshot(){
     wilderness:Object.freeze({...wilderness}),
     inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
+    buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     mapPresentation:Object.freeze({...mapPresentation}),
     politicalScale:politicalScaleEvidence(),
@@ -3629,7 +3776,10 @@ function destroy(){
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();
   app?.destroy?.();
-  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localWildernessEnabled=true;localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
+  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localWildernessEnabled=true;
+  clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
+  buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
+  localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
   inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
