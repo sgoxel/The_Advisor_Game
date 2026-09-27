@@ -1794,7 +1794,7 @@ function localWildernessFamily(biome,roll){
   const r=clamp(Number(roll)||0,0,.999999);
   // Keep one deterministic global-cell scatter, but give each biome a
   // stronger silhouette vocabulary so terrain identity reads at gameplay zoom.
-  if(biome==="rocky")return r<.46?"rock":r<.64?"outcrop":r<.76?"grass":r<.86?"bush":r<.93?"stump":"flower";
+  if(biome==="rocky")return r<.52?"rock":r<.63?"outcrop":r<.76?"grass":r<.86?"bush":r<.93?"stump":"flower";
   if(biome==="wet")return r<.38?"reed":r<.52?"bush":r<.68?"driftwood":r<.76?"rock":r<.90?"grass":"flower";
   if(biome==="wooded")return r<.28?"bush":r<.49?"sapling":r<.64?"log":r<.73?"stump":r<.83?"rock":r<.92?"grass":"flower";
   return r<.24?"grass":r<.45?"flower":r<.62?"bush":r<.75?"rock":r<.86?"log":r<.93?"stump":"sapling";
@@ -1839,8 +1839,8 @@ function prepareLocalWildernessPlan(job){
     const biome=localWildernessBiome(sample,nearWater),density=biome==="wooded"?.76:biome==="wet"?.72:biome==="rocky"?.62:.68;
     if(u>density)continue;
     const roll=(localWildernessHashInt(gx,gy,salt+71)>>>0)/4294967295,family=localWildernessFamily(biome,roll);
-    const baseScale=.90+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.90;
-    const reliefScale=family==="outcrop"?1.18:(family==="rock"&&biome==="rocky"?1.18:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
+    const baseScale=.78+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.62;
+    const reliefScale=family==="outcrop"?1.10:(family==="rock"&&biome==="rocky"?1.06:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
     const scale=baseScale*reliefScale;
     const rotation=((localWildernessHashInt(gx,gy,salt+109)>>>0)/4294967295)*Math.PI*2;
     const priority=localWildernessHashInt(gx,gy,salt+191)>>>0;
@@ -1873,7 +1873,7 @@ function localWildernessManaged(item,reveal){
 }
 function wildernessColor(family,biome){
   const colors={
-    grass:[.27,.50,.12,255],flower:[.88,.38,.10,255],bush:[.10,.31,.07,255],rock:[.25,.24,.21,255],outcrop:[.30,.28,.23,255],
+    grass:[.27,.50,.12,255],flower:[.88,.38,.10,255],bush:[.10,.31,.07,255],rock:[.34,.33,.30,255],outcrop:[.31,.30,.28,255],
     log:[.26,.13,.05,255],driftwood:[.36,.25,.13,255],stump:[.24,.12,.04,255],sapling:[.13,.39,.08,255],reed:[.30,.44,.11,255]
   };
   const base=colors[family]||[.25,.45,.15,255];
@@ -1889,8 +1889,8 @@ function buildLocalWildernessMesh(plan,frame,reveal){
   for(const item of plan.items){
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,color=wildernessColor(item.family,item.biome);
-    const m=(item.family==="outcrop"?2.8:item.family==="rock"?1.35:item.family==="log"||item.family==="driftwood"?1.50:item.family==="sapling"?1.25:item.family==="bush"?1.15:item.family==="stump"?.90:.75)*item.scale/unit;
-    const h=(item.family==="outcrop"?2.65:item.family==="sapling"?4.5:item.family==="reed"?1.9:item.family==="bush"?1.45:item.family==="stump"?.95:item.family==="rock"?1.10:item.family==="log"||item.family==="driftwood"?.65:item.family==="flower"?.85:1.05)*item.scale/unit;
+    const m=(item.family==="outcrop"?1.25:item.family==="rock"?.62:item.family==="log"||item.family==="driftwood"?1.20:item.family==="sapling"?1.08:item.family==="bush"?.92:item.family==="stump"?.72:.62)*item.scale/unit;
+    const h=(item.family==="outcrop"?1.45:item.family==="sapling"?4.2:item.family==="reed"?1.75:item.family==="bush"?1.18:item.family==="stump"?.74:item.family==="rock"?.62:item.family==="log"||item.family==="driftwood"?.55:item.family==="flower"?.78:.92)*item.scale/unit;
     const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
     if(!["grass","flower"].includes(item.family)){
       const patch=item.biome==="wet"?[.07,.20,.17]:item.biome==="rocky"?[.17,.16,.14]:item.biome==="wooded"?[.10,.20,.06]:[.23,.29,.08];
