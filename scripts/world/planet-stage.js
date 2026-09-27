@@ -990,6 +990,18 @@ function buildMapBorderSegments(){
     const tile={x:((ax+bx)/2n).toString(),y:((ay+by)/2n).toString()},geo=worldLatLonForTile(tile.x,tile.y);
     return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
   };
+  const coastLandPoint=(a,b)=>{
+    const land=a.land?a:b,water=a.land?b:a;
+    let landGeo={latitudeRadians:land.geo.latitudeRadians,longitudeRadians:land.geo.longitudeRadians};
+    let waterGeo={latitudeRadians:water.geo.latitudeRadians,longitudeRadians:water.geo.longitudeRadians};
+    for(let i=0;i<6;i++){
+      const mid=interpolateGeoPoint(landGeo,waterGeo,.5);
+      let sample=null;try{sample=geography?.sampleLatLon?.(mid.latitudeRadians,mid.longitudeRadians)||null;}catch(_){sample=null;}
+      if(sample?.land)landGeo=mid;else waterGeo=mid;
+    }
+    const tile=mapWorldTileAt(landGeo.latitudeRadians,landGeo.longitudeRadians);
+    return Object.freeze({latitudeRadians:landGeo.latitudeRadians,longitudeRadians:landGeo.longitudeRadians,tile});
+  };
   const crossing=(a,b)=>a.land&&b.land&&a.owner!=="none"&&b.owner!=="none"&&a.owner!==b.owner;
   const segmentOnLand=(a,b)=>{
     for(const t of [.2,.4,.6,.8]){
@@ -1001,10 +1013,10 @@ function buildMapBorderSegments(){
   };
   const segments=[];let waterClippedCount=0;
   for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
-    const a=nodes[r][col],b=nodes[r][col+1],c=nodes[r+1][col+1],d=nodes[r+1][col],edges=[],coastPoints=[];
+    const a=nodes[r][col],b=nodes[r][col+1],c=nodes[r+1][col+1],d=nodes[r+1][col],edges=[],coastPairs=[];
     const pairs=[[a,b],[b,c],[d,c],[a,d]];
     for(const [left,right] of pairs){
-      if(left.land!==right.land){waterClippedCount++;coastPoints.push(edgePoint(left,right));continue;}
+      if(left.land!==right.land){waterClippedCount++;coastPairs.push([left,right]);continue;}
       if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
     }
     if(edges.length){
@@ -1026,11 +1038,13 @@ function buildMapBorderSegments(){
         centerPoint=land?Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)}):null;
         return centerPoint;
       };
+      let solvedCoastPoints;
       const nearestCoastPoint=point=>{
-        if(!coastPoints.length)return null;
+        if(!coastPairs.length)return null;
+        if(!solvedCoastPoints)solvedCoastPoints=coastPairs.map(pair=>coastLandPoint(pair[0],pair[1]));
         const px=BigInt(point.tile.x),py=BigInt(point.tile.y);
         let best=null,bestDistance=Infinity;
-        for(const coast of coastPoints){
+        for(const coast of solvedCoastPoints){
           const dx=Number(BigInt(coast.tile.x)-px),dy=Number(BigInt(coast.tile.y)-py),distance=dx*dx+dy*dy;
           if(distance<bestDistance){best=coast;bestDistance=distance;}
         }
@@ -1099,10 +1113,21 @@ function renderMapPresentation(){
       svg.appendChild(line);projectedBorderSegmentCount++;run=[];
     };
     for(let i=0;i<chain.points.length;i++){
-      const point=chain.points[i],projected=projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
-      if(!projected){flush();continue;}
-      if(i>0&&!borderPathLandSafe(chain.points[i-1],point)){flush();run=[projected];continue;}
-      run.push(projected);
+      const point=chain.points[i];
+      if(i===0){
+        const projected=projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+        if(projected)run.push(projected);
+        continue;
+      }
+      const previous=chain.points[i-1];
+      if(!borderPathLandSafe(previous,point)){flush();continue;}
+      for(let step=1;step<=4;step++){
+        const densePoint=interpolateGeoPoint(previous,point,step/4);
+        let sample=null;try{sample=geography?.sampleLatLon?.(densePoint.latitudeRadians,densePoint.longitudeRadians)||null;}catch(_){sample=null;}
+        if(!sample?.land){flush();continue;}
+        const projected=projectGeographicAnchor(densePoint,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+        if(projected)run.push(projected);else flush();
+      }
     }
     flush();
   }
