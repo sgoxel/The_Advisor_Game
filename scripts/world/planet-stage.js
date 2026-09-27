@@ -993,8 +993,8 @@ function buildMapBorderSegments(){
 
   const crossing=(a,b)=>a.land&&b.land&&a.owner!=="none"&&b.owner!=="none"&&a.owner!==b.owner;
   const segmentOnLand=(a,b)=>{
-    for(const t of [.2,.4,.6,.8]){
-      const point=interpolateGeoPoint(a,b,t);
+    for(let step=0;step<=8;step++){
+      const point=interpolateGeoPoint(a,b,step/8);
       let sample=null;try{sample=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){sample=null;}
       if(!sample?.land)return false;
     }
@@ -1008,6 +1008,11 @@ function buildMapBorderSegments(){
       if(left.land!==right.land){waterClippedCount++;coastPairs.push([left,right]);continue;}
       if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
     }
+    // A mixed land/water marching cell is a coastline cell. Do not join
+    // political crossings through its interior: that chord can shortcut across
+    // a bay or strait even when both crossing edge midpoints are on land.
+    // The adjacent fully-land cell owns the final visible border segment.
+    if(coastPairs.length)continue;
     if(edges.length){
       const byPair=new Map();
       for(const edge of edges){
