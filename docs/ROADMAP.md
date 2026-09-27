@@ -33,7 +33,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 - `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference — COMPLETED
 
-# Stage 3 — TOP PRIORITY BLOCKER: Pure Zoom-Only Magnification + PlayCanvas 3D World
+# Stage 3 — TOP PRIORITY BLOCKER: Pure Zoom + Canonical 1/N Scale + Scale-Aware Navigation
 
 - `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
 - `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
@@ -109,7 +109,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
-- `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom-Only Magnification + Progressive Detail Reveal
+- `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
