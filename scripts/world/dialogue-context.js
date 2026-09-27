@@ -117,7 +117,31 @@ function knowledgeFor(seed,residentId,topic){
   );
   return ranked[0]?.entry||null;
 }
-function responseText(tone,activity,topic,knowledge){
+function recognitionFor(seed,residentId){
+  return scope().CharacterMemory?.recognition?.(seed,residentId)||Object.freeze({
+    metBefore:false,meaningfulEncounterCount:0,familiarity:"stranger",lastTopic:null,lastMeetingAt:null,lastMeetingLocation:null,lastMeaningfulEvent:null,
+    storedEntryCount:0,storedInteractionEntryCount:0,bounded:true,globalScan:false
+  });
+}
+function recognitionReferenceFor(seed,residentId,topic){
+  return scope().CharacterMemory?.recognitionReference?.(seed,residentId,topic)||null;
+}
+function recognitionTone(baseTone,social,recognition){
+  if(baseTone!=="neutral")return baseTone;
+  if(recognition?.metBefore&&Number(social?.trust||0)>=.58&&Number(social?.suspicion||0)<=.45)return "friendly";
+  return baseTone;
+}
+function familiarityPreamble(recognition){
+  if(!recognition?.metBefore)return "";
+  if(recognition.familiarity==="known")return "We've spoken many times; ";
+  if(recognition.familiarity==="familiar")return "Good to see you again; ";
+  return "I remember our last meeting; ";
+}
+function topicRepeated(topic,recognition){
+  const a=topicTokens(topic).filter(token=>token.length>2),b=topicTokens(recognition?.lastTopic||"").filter(token=>token.length>2);
+  return a.some(token=>b.includes(token));
+}
+function responseText(tone,activity,topic,knowledge,recognition,priorReference){
   const prefix={
     friendly:"I'm glad you asked. ",
     neutral:"I'll answer as far as I can. ",
@@ -127,12 +151,17 @@ function responseText(tone,activity,topic,knowledge){
     private:"This is a private moment; keep this quiet. ",
     guarded:"I'll be careful about what I say here. "
   }[tone]||"";
-  if(activity.kind==="sleeping"&&!knowledge)return prefix+"I cannot confirm anything about "+topic+" right now.";
-  if(!knowledge)return prefix+"I do not have reliable knowledge to confirm anything about "+topic+".";
+  const familiar=familiarityPreamble(recognition);
+  const past=priorReference&&priorReference.summary
+    ?("I remember our earlier interaction: "+priorReference.summary+" ")
+    :"";
+  const repeated=topicRepeated(topic,recognition);
+  if(activity.kind==="sleeping"&&!knowledge)return familiar+prefix+past+"I cannot confirm anything about "+topic+" right now.";
+  if(!knowledge)return familiar+prefix+past+"I do not have reliable knowledge to confirm anything about "+topic+".";
   if(knowledge.uncertain){
-    return prefix+"I only know this as uncertain information: "+knowledge.summary;
+    return familiar+prefix+past+(repeated?"As we discussed before, ":"")+"I only know this as uncertain information: "+knowledge.summary;
   }
-  return prefix+"What I know: "+knowledge.summary;
+  return familiar+prefix+past+(repeated?"As we discussed before, ":"")+"What I know: "+knowledge.summary;
 }
 function resolve(seedValue,configValue){
   const seed=normalizeSeed(seedValue);
@@ -149,15 +178,17 @@ function resolve(seedValue,configValue){
   const social=normalizeSocial(config.social??persistentSocial?.values);
   const socialSource=config.social!=null?"provided-context-snapshot":persistentSocial?.source||"default-context";
   const urgency=clamp01(config.urgency,0);
-  const tone=chooseTone(location,activity,social,urgency);
   const topic=String(config.topic||"the current situation").trim()||"the current situation";
+  const recognition=recognitionFor(seed,residentId);
+  const priorReference=recognitionReferenceFor(seed,residentId,topic);
+  const tone=recognitionTone(chooseTone(location,activity,social,urgency),social,recognition);
   const knowledge=knowledgeFor(seed,residentId,topic);
   const interactionKind=config.interactionKind==="advice-response"?"advice-response":"conversation";
-  const response=responseText(tone,activity,topic,knowledge);
+  const response=responseText(tone,activity,topic,knowledge,recognition,priorReference);
   const identity=[
     seed,residentId,"protagonist",activity.timestamp,location.kind,activity.kind,
     SOCIAL_KEYS.map(key=>social[key].toFixed(3)).join(","),urgency.toFixed(3),topic,interactionKind,
-    knowledge?.id||"none",tone,response
+    knowledge?.id||"none",recognition.meaningfulEncounterCount,priorReference?.id||"none",tone,response
   ].join("|");
   return Object.freeze({
     id:"DLG-"+hashText(identity),
@@ -177,6 +208,15 @@ function resolve(seedValue,configValue){
     urgency,
     tone,
     response,
+    recognition:Object.freeze({
+      metBefore:Boolean(recognition.metBefore),meaningfulEncounterCount:Number(recognition.meaningfulEncounterCount||0),
+      familiarity:recognition.familiarity||"stranger",lastMeetingAt:recognition.lastMeetingAt||null,
+      lastMeetingLocation:recognition.lastMeetingLocation||null,lastTopic:recognition.lastTopic||null,
+      repeatedTopic:topicRepeated(topic,recognition),referenceId:priorReference?.id||null,
+      referenceType:priorReference?.type||null,referenceSummary:priorReference?.summary||null,
+      storedInteractionEntryCount:Number(recognition.storedInteractionEntryCount||0),
+      bounded:recognition.bounded!==false,globalScan:Boolean(recognition.globalScan)
+    }),
     knowledge:Object.freeze({
       grounded:Boolean(knowledge),
       memoryId:knowledge?.id||null,
@@ -184,8 +224,9 @@ function resolve(seedValue,configValue){
       reliability:knowledge?.reliability||null,
       uncertain:Boolean(knowledge?.uncertain)
     }),
-    authority:"presentation-only",
-    worldMutation:false
+    authority:"presentation-only + persisted CharacterMemory recognition",
+    worldMutation:false,
+    memoryMutation:false
   });
 }
 function caseConfigs(seedValue,residentIdValue){
@@ -237,10 +278,11 @@ function proof(seedValue,residentIdValue){
   const deterministic=JSON.stringify(results)===JSON.stringify(repeats);
   const knowledgeGrounded=results.every(item=>item.knowledge.grounded&&Boolean(item.knowledge.memoryId));
   const noInventedFacts=results.every(item=>item.knowledge.grounded||item.response.includes("do not have reliable knowledge")||item.response.includes("cannot confirm"));
+  const recognitionReadOnly=results.every(item=>item.memoryMutation===false&&item.recognition?.bounded===true&&item.recognition?.globalScan===false);
   return Object.freeze({
-    pass:identitiesPresent&&contextComplete&&socialComplete&&tonesExpected&&statesMeaningful&&deterministic&&knowledgeGrounded&&noInventedFacts,
+    pass:identitiesPresent&&contextComplete&&socialComplete&&tonesExpected&&statesMeaningful&&deterministic&&knowledgeGrounded&&noInventedFacts&&recognitionReadOnly,
     campaignSeed:seed,residentId,caseCount:results.length,
-    identitiesPresent,contextComplete,socialComplete,tonesExpected,statesMeaningful,deterministic,knowledgeGrounded,noInventedFacts,
+    identitiesPresent,contextComplete,socialComplete,tonesExpected,statesMeaningful,deterministic,knowledgeGrounded,noInventedFacts,recognitionReadOnly,
     relationshipPersistenceIntroduced:false,
     worldMutationApi:false,
     factsCreatedByDialogue:false,
@@ -314,8 +356,12 @@ function renderDebugPanel(seedValue,residentIdValue,caseIdValue,rootNode){
   return Object.freeze({selectedCase:selected.id,result,verification});
 }
 
+function recordInteraction(seedValue,residentIdValue,configValue){
+  if(!scope().CharacterMemory?.recordInteraction)throw new Error("CharacterMemory interaction API unavailable");
+  return scope().CharacterMemory.recordInteraction(normalizeSeed(seedValue),String(residentIdValue||""),configValue||{});
+}
 const api=Object.freeze({
-  TONES,SOCIAL_KEYS,CASE_IDS,normalizeSocial,resolve,caseConfigs,proof,renderDebugPanel
+  TONES,SOCIAL_KEYS,CASE_IDS,normalizeSocial,resolve,recordInteraction,caseConfigs,proof,renderDebugPanel
 });
 scope().DialogueContext=api;
 })();
