@@ -368,13 +368,14 @@ function mapContextForFocus(){
       return window.GeographyFoundation?.hierarchyName?.(activeSeed,kind,tile.x,tile.y)||fallback;
     }catch(_){return fallback;}
   };
+  const displayName=(kind,fallback)=>{const resolved=name(kind,fallback);return resolved==null?null:String(resolved);};
   const context=Object.freeze({
-    continent:needed.has("continent")?String(name("continent",mapGeneratedName("continent",lat,lon))):null,
-    country:needed.has("country")?String(name("country",mapGeneratedName("country",lat,lon))):null,
-    region:needed.has("region")?String(name("region",mapGeneratedName("region",lat,lon))):null,
-    city:needed.has("city")?String(name("city",mapGeneratedName("city",lat,lon))):null,
-    district:needed.has("district")?String(name("district",mapGeneratedName("district",lat,lon))):null,
-    village:needed.has("village")?String(name("village",mapGeneratedName("village",lat,lon))):null,
+    continent:needed.has("continent")?displayName("continent",mapGeneratedName("continent",lat,lon)):null,
+    country:needed.has("country")?displayName("country",null):null,
+    region:needed.has("region")?displayName("region",null):null,
+    city:needed.has("city")?displayName("city",mapGeneratedName("city",lat,lon)):null,
+    district:needed.has("district")?displayName("district",mapGeneratedName("district",lat,lon)):null,
+    village:needed.has("village")?displayName("village",mapGeneratedName("village",lat,lon)):null,
     tileX:tile.x,tileY:tile.y
   });
   mapContextCache={key,value:context};return context;
