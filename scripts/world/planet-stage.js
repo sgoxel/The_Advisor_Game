@@ -24,6 +24,7 @@ const ZOOM_PINCH_SENSITIVITY=0.003;
 const ZOOM_DISTANCE_FACTOR=0.018;
 const SCALE_LADDER=Object.freeze(["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]);
 const SCALE_DENOMINATORS=Object.freeze([10,20,50,100,250,500,1000,2500,5000,10000]);
+const SCALE_FOOTPRINT_PROGRESS_EXPONENT=1.6;
 // One continuous footprint ladder drives every representation:
 // - up to LADDER_START_SCALAR it is the true surface footprint of the globe
 //   camera (it depends on viewport framing, so it is computed, not tabled);
@@ -502,8 +503,12 @@ function scaleTargetFootprintHeightMeters(index){
   const first=Math.max(1,SCALE_DENOMINATORS[0]),last=Math.max(first+1,SCALE_DENOMINATORS[SCALE_DENOMINATORS.length-1]);
   const denominator=Math.max(first,SCALE_DENOMINATORS[i]||first);
   const progress=clamp(Math.log(denominator/first)/Math.log(last/first),0,1);
+  // Reserve enough physical footprint for the penultimate scales to remain
+  // distinct near-ground refinement tiers. A linear log-denominator curve
+  // collapsed 1/5000 into the same 36 m ground LOD as 1/10000.
+  const physicalProgress=Math.pow(progress,SCALE_FOOTPRINT_PROGRESS_EXPONENT);
   const startHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(0));
-  return startHeight*Math.exp(Math.log(GROUND_FOOTPRINT_HEIGHT_METERS/startHeight)*progress);
+  return startHeight*Math.exp(Math.log(GROUND_FOOTPRINT_HEIGHT_METERS/startHeight)*physicalProgress);
 }
 function scaleIndexForScalar(value=zoomState.scalar){
   const height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(clamp(value,0,1)));
@@ -4325,7 +4330,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,SCALE_FOOTPRINT_PROGRESS_EXPONENT,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
   })
 });
 const boot=()=>start().catch(()=>{});
