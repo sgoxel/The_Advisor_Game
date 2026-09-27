@@ -196,7 +196,7 @@ function freshLocalResources(){
 }
 let localResources=freshLocalResources();
 let localPreparationToken=0;
-let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,labelQueryBuildMs:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
+let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
 let atlasStickyBand=null;
 const atlasStickyEntities=new Map();
@@ -273,7 +273,7 @@ function atlasDrainAuthorityQueue(deadline){
   }
 }
 let mapContextCache={key:null,value:null};
-let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,builtAtMs:0};
+let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],builtAtMs:0};
 let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
 let worldProjectionAnchorCache=null;
 let settlementRevealCache={key:null,value:null};
@@ -753,16 +753,17 @@ function atlasPlacementFits(box,rect,reserved,occupied,margin,gap){
 }
 function atlasFindLabelPlacement(entity,p,portrait,rect,reserved,occupied){
   const base=atlasLabelBox(entity,p,portrait),width=Math.max(1,base.right-base.left),height=Math.max(1,base.bottom-base.top);
-  const margin=portrait?6:8,gap=portrait?5:7,seen=new Set(),candidates=[];
+  const margin=portrait?6:8,gap=portrait?5:7,seen=new Set(),candidates=[],maxDisplacement=portrait?58:82;
   const remember=(dx,dy)=>{
+    if(Math.hypot(dx,dy)>maxDisplacement+.01)return;
     const key=Math.round(dx)+"|"+Math.round(dy);
     if(seen.has(key))return;seen.add(key);candidates.push({dx,dy});
   };
   const previous=atlasLabelPlacementCache.get(entity.id);
   if(previous)remember(previous.dx,previous.dy);
   remember(0,0);
-  const stepX=Math.max(30,Math.min(118,width*.34)),stepY=Math.max(24,Math.min(68,height*.82));
-  for(let ring=1;ring<=5;ring++){
+  const stepX=Math.max(22,Math.min(42,width*.18)),stepY=Math.max(20,Math.min(34,height*.70));
+  for(let ring=1;ring<=2;ring++){
     const dx=stepX*ring,dy=stepY*ring;
     remember(0,-dy);remember(0,dy);remember(-dx,0);remember(dx,0);
     remember(-dx,-dy);remember(dx,-dy);remember(-dx,dy);remember(dx,dy);
@@ -771,23 +772,19 @@ function atlasFindLabelPlacement(entity,p,portrait,rect,reserved,occupied){
     const minX=margin+width/2,maxX=Math.max(minX,rect.width-margin-width/2);
     const minY=margin+height/2,maxY=Math.max(minY,rect.height-margin-height/2);
     const screenX=clamp(p.screenX+dx,minX,maxX),screenY=clamp(p.screenY+dy,minY,maxY);
+    const actualDx=screenX-p.screenX,actualDy=screenY-p.screenY,displacement=Math.hypot(actualDx,actualDy);
+    if(displacement>maxDisplacement+.01)return null;
+    if(p.mode==="globe"){
+      const cx=rect.width*.5,cy=rect.height*.5;
+      const anchorRadius=Math.hypot(p.screenX-cx,p.screenY-cy),placedRadius=Math.hypot(screenX-cx,screenY-cy);
+      if(placedRadius>anchorRadius+4)return null;
+    }
     const placed={...p,screenX,screenY,x:screenX/Math.max(1,rect.width)*100,y:screenY/Math.max(1,rect.height)*100};
     const box=atlasLabelBox(entity,placed,portrait);
     if(!atlasPlacementFits(box,rect,reserved,occupied,margin,gap))return null;
-    return {projection:placed,box,dx:screenX-p.screenX,dy:screenY-p.screenY};
+    return {projection:placed,box,dx:actualDx,dy:actualDy,displacement,maxDisplacement};
   };
   for(const candidate of candidates){
-    const placed=tryCandidate(candidate);
-    if(placed)return placed;
-  }
-  const gridStepX=Math.max(28,Math.min(72,width*.36)),gridStepY=Math.max(24,Math.min(54,height*.92)),grid=[];
-  for(let y=margin+height/2;y<=rect.height-margin-height/2;y+=gridStepY){
-    for(let x=margin+width/2;x<=rect.width-margin-width/2;x+=gridStepX){
-      grid.push({dx:x-p.screenX,dy:y-p.screenY,d2:(x-p.screenX)**2+(y-p.screenY)**2});
-    }
-  }
-  grid.sort((a,b)=>a.d2-b.d2);
-  for(const candidate of grid){
     const placed=tryCandidate(candidate);
     if(placed)return placed;
   }
@@ -843,7 +840,20 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     tag.innerHTML="<small></small><strong></strong>";
     tag.querySelector("small").textContent=(entity.type==="landmark"?String(entity.landmarkType||"landmark"):entity.type).toUpperCase();
     tag.querySelector("strong").textContent=entity.name;
+    const displacement=Math.hypot(placed.dx,placed.dy),leaderVisible=displacement>=18;
+    if(leaderVisible){
+      const leader=document.createElement("i");leader.className="planet-atlas-leader";
+      leader.style.left=anchor.x.toFixed(2)+"%";leader.style.top=anchor.y.toFixed(2)+"%";
+      leader.style.width=displacement.toFixed(1)+"px";
+      leader.style.transform="rotate("+Math.atan2(placed.dy,placed.dx).toFixed(5)+"rad)";
+      labelsLayer.appendChild(leader);
+    }
     labelsLayer.appendChild(tag);occupied.push(box);
+    const anchorSurface=atlasPlanetSurfaceForTile(entity.anchorTile.x,entity.anchorTile.y);
+    const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2));
+    const roundTrip=geography?.registrationRoundTrip?.(entity.anchorTile.x,entity.anchorTile.y,tileMeters,WORLD_RADIUS_METERS)||null;
+    let politicalOwner=null;
+    if(["country","region","capital"].includes(entity.type))try{politicalOwner=window.PoliticalGeography?.ownerAt?.(activeSeed,entity.anchorTile.x,entity.anchorTile.y)||null;}catch(_){politicalOwner=null;}
     const record=Object.freeze({
       canonicalEntityId:entity.id,entityType:entity.type,displayClass:entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type,
       authoritativeName:entity.name,authority:entity.authority,currentFocus:Boolean(entity.currentFocus),
@@ -851,7 +861,12 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
       anchorWorldTile:entity.anchorTile,resolvedHierarchyIds:identity.ids,identityMatch:identity.identityMatch,
       anchorScreenX:Number(anchor.screenX.toFixed(2)),anchorScreenY:Number(anchor.screenY.toFixed(2)),
       screenX:Number(p.screenX.toFixed(2)),screenY:Number(p.screenY.toFixed(2)),
-      placementDx:Number(placed.dx.toFixed(2)),placementDy:Number(placed.dy.toFixed(2)),projection:p.mode
+      placementDx:Number(placed.dx.toFixed(2)),placementDy:Number(placed.dy.toFixed(2)),
+      displacementPixels:Number(displacement.toFixed(2)),leaderVisible,
+      planetLand:Boolean(anchorSurface.sample?.land),planetSurfaceClass:String(anchorSurface.sample?.surfaceClass||"unknown"),
+      continentId:anchorSurface.sample?.continentId||null,continentName:anchorSurface.sample?.continentName||null,
+      politicalOwnerId:politicalOwner?.id||null,parentCountryMatch:entity.type==="capital"?Boolean(politicalOwner?.id&&politicalOwner.id===entity.countryId):null,
+      roundTripErrorTiles:Number(roundTrip?.errorTiles??0),projection:p.mode
     });
     visible.push(record);if(entity.type==="landmark")visibleLandmarks.push(Object.freeze({id:entity.id,name:entity.name,type:entity.landmarkType||"landmark",latitudeDegrees:record.anchorLatitudeDegrees,longitudeDegrees:record.anchorLongitudeDegrees,screenX:record.screenX,screenY:record.screenY,anchorScreenX:record.anchorScreenX,anchorScreenY:record.anchorScreenY,projection:record.projection}));
   }
@@ -870,47 +885,76 @@ function interpolateGeoPoint(a,b,t){
   const dLon=wrapLongitudeRadians(b.longitudeRadians-a.longitudeRadians);
   return {latitudeRadians:a.latitudeRadians+(b.latitudeRadians-a.latitudeRadians)*t,longitudeRadians:wrapLongitudeRadians(a.longitudeRadians+dLon*t)};
 }
+function borderSignature(segments){
+  let h=2166136261>>>0;
+  const rows=segments.map(seg=>{
+    const pair=[seg.ownerA,seg.ownerB].sort().join("~");
+    const a=seg.aTile,b=seg.bTile;
+    return pair+"|"+a.x+","+a.y+"|"+b.x+","+b.y;
+  }).sort();
+  for(const row of rows)for(const ch of row){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
+}
 function buildMapBorderSegments(){
   const band=zoomState.band,visible=["country-region","regional-overview","regional-detail"].includes(band);
-  if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,built:false};
-  const quantizedScalar=Math.round(zoomState.scalar*20)/20;
-  const key=[activeSeed,band,quantizedScalar,Math.round(zoomState.focusLatitudeRadians*180/Math.PI*4)/4,Math.round(zoomState.focusLongitudeRadians*180/Math.PI*4)/4,Math.round((canvas?.clientWidth||1)/(canvas?.clientHeight||1)*10)/10].join("|");
+  if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],built:false};
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const bucketSize=16384n,fx=BigInt(focusTile.x),fy=BigInt(focusTile.y);
+  const bucketX=atlasFloorDiv(fx,bucketSize),bucketY=atlasFloorDiv(fy,bucketSize);
+  const centerX=bucketX*bucketSize+bucketSize/2n,centerY=bucketY*bucketSize+bucketSize/2n;
+  const key=[activeSeed,bucketX.toString(),bucketY.toString()].join("|");
   if(mapBorderCache.key===key)return {
     segments:mapBorderCache.segments,sampleCount:mapBorderCache.sampleCount,landSampleCount:mapBorderCache.landSampleCount,waterSampleCount:mapBorderCache.waterSampleCount,
-    ownerQueryCount:mapBorderCache.ownerQueryCount,ownerCount:mapBorderCache.ownerCount,worldVertexCount:mapBorderCache.worldVertexCount,built:false
+    ownerQueryCount:mapBorderCache.ownerQueryCount,ownerCount:mapBorderCache.ownerCount,worldVertexCount:mapBorderCache.worldVertexCount,
+    topologySignature:mapBorderCache.topologySignature,waterClippedCount:mapBorderCache.waterClippedCount,diagnostics:mapBorderCache.diagnostics,built:false
   };
-  const started=performance.now(),cols=21,rows=13,owners=[],ownerIds=new Set();
+  const started=performance.now(),cols=29,rows=19,countrySize=Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608);
+  const halfSpanX=Math.round(countrySize*1.15),halfSpanY=Math.round(countrySize*.72),nodes=[],ownerIds=new Set();
   let landSampleCount=0,waterSampleCount=0,ownerQueryCount=0;
-  const width=Math.max(1,zoomState.visibleFootprintWidthMeters),height=Math.max(1,zoomState.visibleFootprintHeightMeters);
-  for(let r=0;r<rows;r++){
-    const row=[];
-    for(let col=0;col<cols;col++){
-      const point=geoPointFromViewportGrid(col,r,cols,rows,width,height);
-      let surface=null;try{surface=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){surface=null;}
-      if(!surface?.land){waterSampleCount++;row.push("water");continue;}
-      landSampleCount++;
-      const tile=mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
-      let owner=null;try{owner=window.PoliticalGeography.ownerAt(activeSeed,tile.x,tile.y);ownerQueryCount++;}catch(_){owner=null;}
-      const id=String(owner?.id||"none");if(id!=="none")ownerIds.add(id);row.push(id);
+  const nodeAt=(col,row)=>{
+    const rawX=centerX+BigInt(Math.round(-halfSpanX+(halfSpanX*2)*col/(cols-1)));
+    const rawY=centerY+BigInt(Math.round(-halfSpanY+(halfSpanY*2)*row/(rows-1)));
+    const geo=worldLatLonForTile(rawX.toString(),rawY.toString()),tile=mapWorldTileAt(geo.latitudeRadians,geo.longitudeRadians);
+    let surface=null;try{surface=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)||null;}catch(_){surface=null;}
+    if(!surface?.land){waterSampleCount++;return Object.freeze({land:false,owner:"water",tile,geo});}
+    landSampleCount++;
+    let owner=null;try{owner=window.PoliticalGeography.ownerAt(activeSeed,tile.x,tile.y);ownerQueryCount++;}catch(_){owner=null;}
+    const id=String(owner?.id||"none");if(id!=="none")ownerIds.add(id);
+    return Object.freeze({land:true,owner:id,tile,geo});
+  };
+  for(let r=0;r<rows;r++){const row=[];for(let col=0;col<cols;col++)row.push(nodeAt(col,r));nodes.push(row);}
+  const edgePoint=(a,b)=>{
+    const ax=BigInt(a.tile.x),ay=BigInt(a.tile.y),bx=BigInt(b.tile.x),by=BigInt(b.tile.y);
+    const tile={x:((ax+bx)/2n).toString(),y:((ay+by)/2n).toString()},geo=worldLatLonForTile(tile.x,tile.y);
+    return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
+  };
+  const crossing=(a,b)=>a.land&&b.land&&a.owner!=="none"&&b.owner!=="none"&&a.owner!==b.owner;
+  const segments=[];let waterClippedCount=0;
+  for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
+    const a=nodes[r][col],b=nodes[r][col+1],c=nodes[r+1][col+1],d=nodes[r+1][col],edges=[];
+    const pairs=[[a,b],[b,c],[d,c],[a,d]];
+    for(const [left,right] of pairs){
+      if(left.land!==right.land){waterClippedCount++;continue;}
+      if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
     }
-    owners.push(row);
-  }
-  const segments=[],centerOwner=owners[Math.floor(rows/2)][Math.floor(cols/2)];
-  const crossesFocusedBorder=(left,right)=>left!=="water"&&right!=="water"&&left!=="none"&&right!=="none"&&(left===centerOwner)!==(right===centerOwner);
-  if(centerOwner!=="water"&&centerOwner!=="none"){
-    for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
-      const a=owners[r][col],b=owners[r][col+1],c=owners[r+1][col+1],d=owners[r+1][col],crossings=[];
-      if(crossesFocusedBorder(a,b))crossings.push(geoPointFromViewportGrid(col+.5,r,cols,rows,width,height));
-      if(crossesFocusedBorder(b,c))crossings.push(geoPointFromViewportGrid(col+1,r+.5,cols,rows,width,height));
-      if(crossesFocusedBorder(d,c))crossings.push(geoPointFromViewportGrid(col+.5,r+1,cols,rows,width,height));
-      if(crossesFocusedBorder(a,d))crossings.push(geoPointFromViewportGrid(col,r+.5,cols,rows,width,height));
-      if(crossings.length===2)segments.push({a:crossings[0],b:crossings[1]});
-      else if(crossings.length===4){segments.push({a:crossings[0],b:crossings[1]});segments.push({a:crossings[2],b:crossings[3]});}
+    if(edges.length===2){
+      const e0=edges[0],e1=edges[1],owners=[e0.ownerA,e0.ownerB].sort();
+      segments.push({a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,ownerA:owners[0],ownerB:owners[1]});
+    }else if(edges.length===4){
+      for(const [i,j] of [[0,1],[2,3]]){
+        const e0=edges[i],e1=edges[j],owners=[e0.ownerA,e0.ownerB].sort();
+        segments.push({a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,ownerA:owners[0],ownerB:owners[1]});
+      }
     }
   }
-  const worldVertexCount=segments.length*3;
-  mapBorderCache={key,segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,builtAtMs:Number((performance.now()-started).toFixed(3))};
-  return {segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,built:true};
+  const topologySignature=borderSignature(segments),worldVertexCount=segments.length*3;
+  const diagnostics=segments.slice(0,24).map(seg=>Object.freeze({
+    ownerPair:Object.freeze([seg.ownerA,seg.ownerB]),
+    aTile:seg.aTile,bTile:seg.bTile,
+    aLand:true,bLand:true
+  }));
+  mapBorderCache={key,segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,topologySignature,waterClippedCount,diagnostics,builtAtMs:Number((performance.now()-started).toFixed(3))};
+  return {segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,topologySignature,waterClippedCount,diagnostics,built:true};
 }
 function renderMapPresentation(){
   const layer=ensureMapPresentationDom();if(!layer)return;
@@ -952,6 +996,9 @@ function renderMapPresentation(){
     maxLabelBudget:spec.budget,labelQueryBuildMs:atlas.query.buildMs,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
     borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
+    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,
+    maxLabelDisplacementPixels:visible.reduce((max,item)=>Math.max(max,Number(item.displacementPixels||0)),0),
+    registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
     projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
     scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
     updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
@@ -3031,7 +3078,7 @@ function snapshot(){
       continuityErrorMeters:projectionState.continuityErrorMeters,
       derivedFromSphericalAuthority:true,
       localWorldAuthority:false,
-      worldTileProjection:Object.freeze({...planetWorldAnchor(),roundTripOrigin:mapWorldTileAt(worldLatLonForTile("0","0").latitudeRadians,worldLatLonForTile("0","0").longitudeRadians),tileMeters:Number(window.WorldStandards?.TILE_METERS||2)}),
+      worldTileProjection:Object.freeze({...planetWorldAnchor(),roundTripOrigin:mapWorldTileAt(worldLatLonForTile("0","0").latitudeRadians,worldLatLonForTile("0","0").longitudeRadians),tileMeters:Number(window.WorldStandards?.TILE_METERS||2),registrationRoundTrip:geography?.registrationRoundTrip?.("0","0",Number(window.WorldStandards?.TILE_METERS||2),WORLD_RADIUS_METERS)||null,authority:"PlanetGeography.seed-fixed-spherical-frame"}),
       tangentPatchActive:Boolean(tangentPatch?.enabled),
       tangentPatchDerivedFromFocus:true,
       tangentPatchSpanMeters:Math.max(localDetail.patchWidthMeters,localDetail.patchHeightMeters),
