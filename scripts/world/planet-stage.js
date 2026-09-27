@@ -123,6 +123,16 @@ const LOCAL_RESOURCE_CACHE_LIMIT=5;
 // Keep adjacent-tier stabilization narrow enough that the same physical footprint
 // resolves to the same canonical LOD after forward or reverse zoom settles.
 const LOCAL_LOD_HYSTERESIS=0.003;
+// Hierarchical local detail selection is driven by projected screen-space
+// error, not by zoom-band identity.  The quadtree root is larger than the
+// complete 10%-Earth circumference, so every streamed local cell has stable
+// SEED-coordinate ancestry independent of camera/viewport/load order.
+const SPATIAL_LOD_ROOT_CELL_METERS=4_194_304;
+const SPATIAL_LOD_MAX_DEPTH=20;
+const SSE_TARGET_PIXELS=8;
+const SSE_REFINE_PIXELS=9;
+const SSE_COARSEN_PIXELS=6.5;
+const SPATIAL_OVERSCAN_CELL_RADIUS=1;
 // Every physical LOD is native at its band's upper scalar and covers at most
 // ~2.5x of visible-footprint range, so presentation compensation never has to
 // shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
@@ -205,7 +215,7 @@ let localFrameStats={lastFrameMs:0,recent:[],maxDuringPreparationMs:0};
 const localSharedPrimitives={};
 const localResourceCache=new Map();
 function freshLocalResources(){
-  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
+  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,requestedCellId:null,activeCellId:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
@@ -1666,9 +1676,27 @@ function normalizeYaw(value){
   if(n<0)n+=360;
   return n;
 }
+function viewportPixelHeight(){
+  const rect=canvas?.getBoundingClientRect?.();
+  return Math.max(1,Number(rect?.height||canvas?.height||720));
+}
+function worldSpaceErrorForLevel(index){
+  const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
+  const geometricError=Math.max(.05,Number(level.sampleSpacingMeters||1)*.125);
+  const sourceError=Math.max(.05,Number(level.visibleHeightMeters||1)/Math.max(1,Number(level.textureSize||1))*.5);
+  return Math.max(geometricError,sourceError);
+}
+function metersPerScreenPixelForZoom(value=zoomState.scalar){
+  return Math.max(.001,presentationTargetHeightMeters(value)/viewportPixelHeight());
+}
+function projectedPixelErrorForLevel(index,value=zoomState.scalar){
+  return worldSpaceErrorForLevel(index)/metersPerScreenPixelForZoom(value);
+}
 function rawLodIndexForZoom(value){
-  const max=ladderState().levelMax,index=max.findIndex(m=>value<=m);
-  return index<0?LOCAL_DETAIL_LEVELS.length-1:index;
+  for(let index=0;index<LOCAL_DETAIL_LEVELS.length;index++){
+    if(projectedPixelErrorForLevel(index,value)<=SSE_TARGET_PIXELS)return index;
+  }
+  return LOCAL_DETAIL_LEVELS.length-1;
 }
 function zoomBandFor(value){
   if(value<=SEMANTIC_LOCAL_BAND_START)return (ZOOM_BANDS.find(b=>b.max!==null&&value<=b.max)||ZOOM_BANDS[2]).id;
@@ -1704,11 +1732,12 @@ function requestedLodIndexForZoom(value=zoomState.scalar){
   // Multi-tier moves must immediately request the raw target tier.
   if(Math.abs(rawIndex-requestedLodIndex)>1)return requestedLodIndex=rawIndex;
   if(rawIndex>requestedLodIndex){
-    const boundary=levelMaxScalar(requestedLodIndex);
-    if(value<boundary+lodHysteresisAt(requestedLodIndex+1))return requestedLodIndex;
+    // Refine only after the current prepared/requested tier clearly exceeds the
+    // visible-error budget.  This prevents boundary flutter around one pixel.
+    if(projectedPixelErrorForLevel(requestedLodIndex,value)<SSE_REFINE_PIXELS)return requestedLodIndex;
   }else if(rawIndex<requestedLodIndex){
-    const boundary=levelMaxScalar(rawIndex);
-    if(value>boundary-lodHysteresisAt(rawIndex+1))return requestedLodIndex;
+    // Coarsen only once the candidate parent is comfortably below the target.
+    if(projectedPixelErrorForLevel(rawIndex,value)>SSE_COARSEN_PIXELS)return requestedLodIndex;
   }
   return requestedLodIndex=rawIndex;
 }
@@ -2758,7 +2787,7 @@ function finalizeLocalResource(job,result){
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
   const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+textureSize*textureSize*4*2;
   const wildernessPlan=prepareLocalWildernessPlan(job);
-  const resource={signature:job.signature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,mesh,skirtMesh,detailTexture,surroundTexture,wildernessPlan,estimatedBytes,
+  const resource={signature:job.signature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,mesh,skirtMesh,detailTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
@@ -2781,15 +2810,42 @@ function trimLocalResourceCache(){
     localResources.evictions++;localResources.lastEvictionReason="bounded-lru";
   }
 }
+function spatialDepthForLevel(index){
+  const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
+  const desiredCoverage=Math.max(1,Number(level.visibleHeightMeters||1)*LOCAL_PATCH_MARGIN);
+  return clamp(Math.floor(Math.log2(SPATIAL_LOD_ROOT_CELL_METERS/desiredCoverage)),0,SPATIAL_LOD_MAX_DEPTH);
+}
+function spatialCellAtDepth(depth,registered){
+  const d=clamp(Math.round(depth),0,SPATIAL_LOD_MAX_DEPTH),size=SPATIAL_LOD_ROOT_CELL_METERS/Math.pow(2,d);
+  const x=Math.floor(Number(registered.eastMeters||0)/size),y=Math.floor(Number(registered.northMeters||0)/size);
+  const revision=coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate";
+  const id=["SLOD",revision,d,x,y].join("|");
+  const minEast=x*size,minNorth=y*size,maxEast=minEast+size,maxNorth=minNorth+size;
+  const centerRegistered={eastMeters:minEast+size*.5,northMeters:minNorth+size*.5};
+  const ll=coordinateFabricAuthority()?.latLonForRegisteredMeters?.(centerRegistered.eastMeters,centerRegistered.northMeters)||null;
+  return Object.freeze({id,depth:d,cellX:x,cellY:y,cellSizeMeters:Number(size.toFixed(3)),
+    worldBounds:Object.freeze({minEastMeters:Number(minEast.toFixed(3)),maxEastMeters:Number(maxEast.toFixed(3)),minNorthMeters:Number(minNorth.toFixed(3)),maxNorthMeters:Number(maxNorth.toFixed(3))}),
+    centerRegisteredMeters:Object.freeze({east:Number(centerRegistered.eastMeters.toFixed(3)),north:Number(centerRegistered.northMeters.toFixed(3))}),
+    centerLatitudeRadians:Number(ll?.latitudeRadians||0),centerLongitudeRadians:Number(ll?.longitudeRadians||0)});
+}
+function canonicalSpatialCellFor(index,lat,lon){
+  const registered=canonicalRegisteredMetersForLatLon(lat,lon),depth=spatialDepthForLevel(index),cell=spatialCellAtDepth(depth,registered);
+  const parent=depth>0?spatialCellAtDepth(depth-1,registered):null;
+  const renderParent=index>0?spatialCellAtDepth(spatialDepthForLevel(index-1),registered):null;
+  return Object.freeze({...cell,parentId:parent?.id||null,renderParentId:renderParent?.id||null,
+    levelIndex:index,levelId:LOCAL_DETAIL_LEVELS[index]?.id||null,
+    registeredFocus:Object.freeze({east:Number(registered.eastMeters.toFixed(3)),north:Number(registered.northMeters.toFixed(3))})});
+}
 function localSignatureFor(index,lat,lon){
-  const d=patchDimensionsForLevel(index),tile=mapWorldTileAt(lat,lon),revision=coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate";
-  return [activeSeed,revision,tile.x,tile.y,d.levelId,Math.ceil(d.patchWidth/d.sampleSpacingMeters),Math.ceil(d.patchHeight/d.sampleSpacingMeters)].join("|");
+  const d=patchDimensionsForLevel(index),cell=canonicalSpatialCellFor(index,lat,lon),revision=coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate";
+  return [activeSeed,revision,cell.id,d.levelId,Math.ceil(d.patchWidth/d.sampleSpacingMeters),Math.ceil(d.patchHeight/d.sampleSpacingMeters)].join("|");
 }
 function startLocalJob(index,lat,lon,signature,prewarm){
-  const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize;
+  const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize,spatialCell=canonicalSpatialCellFor(index,lat,lon);
+  const anchorLat=spatialCell.centerLatitudeRadians,anchorLon=spatialCell.centerLongitudeRadians;
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
-  const biomeCoordinateProof=localBiomeCoordinateProof(lat,lon);
-  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:lat,lon0:lon,prewarm,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(lat,lon)?.elevationMeters||0),biomeCoordinateProof,
+  const biomeCoordinateProof=localBiomeCoordinateProof(anchorLat,anchorLon);
+  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:anchorLat,lon0:anchorLon,requestedLat0:lat,requestedLon0:lon,spatialCell,prewarm,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(anchorLat,anchorLon)?.elevationMeters||0),biomeCoordinateProof,
     totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
   job.iterator=localResourceSteps(job);
   localJob=job;localResources.cacheMisses+=prewarm?0:1;
@@ -2853,8 +2909,8 @@ function pumpLocalPreparation(){
 // Called from the zoom/rotation path: records the request and at most swaps
 // an already-prepared resource. It never generates geometry or textures.
 function requestLocalDetailResource(index){
-  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,signature=localSignatureFor(index,lat,lon);
-  localResources.requestedSignature=signature;localResources.requestedLevel=LOCAL_DETAIL_LEVELS[index].id;
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,cell=canonicalSpatialCellFor(index,lat,lon),signature=localSignatureFor(index,lat,lon);
+  localResources.requestedSignature=signature;localResources.requestedLevel=LOCAL_DETAIL_LEVELS[index].id;localResources.requestedCellId=cell.id;
   if(displayResource?.signature===signature){localResources.pendingPreparationCount=0;return;}
   localResources.pendingPreparationCount=1;
   if(localResourceCache.has(signature)){activateLocalDetailResource(signature,true);return;}
@@ -2899,7 +2955,7 @@ function activateLocalDetailResource(signature,fromCache){
   rebuildLocalStaticPresentation(resource);
   if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);
   trimLocalResourceCache();
-  localResources.activeSignature=signature;localResources.visibleLevel=resource.dims.levelId;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
+  localResources.activeSignature=signature;localResources.visibleLevel=resource.dims.levelId;localResources.activeCellId=resource.spatialCell?.id||null;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
   localResources.pendingPreparationCount=localResources.requestedSignature===signature?0:1;
   localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
   const swapMs=performance.now()-swapStarted;localResources.lastSwapMs=Number(swapMs.toFixed(3));localResources.maxSwapMs=Math.max(localResources.maxSwapMs,localResources.lastSwapMs);localResources.swapCount++;
@@ -3949,6 +4005,35 @@ function canonicalScreenFocusTelemetry(){
   const x=Number(screen?.x),y=Number(screen?.y),valid=Number.isFinite(x)&&Number.isFinite(y);
   return Object.freeze({valid,screenX:valid?Number(x.toFixed(3)):null,screenY:valid?Number(y.toFixed(3)):null,centerX:Number(centerX.toFixed(3)),centerY:Number(centerY.toFixed(3)),deltaPixels:valid?Number(Math.hypot(x-centerX,y-centerY).toFixed(3)):null,facingDot:facingDot===null?null:Number(facingDot.toFixed(6)),source:"canonical-sphere-transform"});
 }
+function spatialLodDiagnostics(){
+  const requestedIndex=requestedLodIndexForZoom(zoomState.scalar);
+  const requestedCell=canonicalSpatialCellFor(requestedIndex,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const visibleIndex=displayResource?.levelIndex??null,visibleCell=displayResource?.spatialCell||null;
+  const bounds=visibleCell?.worldBounds||null;
+  const registered=canonicalRegisteredMetersForLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const visibleContainsFocus=Boolean(bounds&&registered.eastMeters>=bounds.minEastMeters&&registered.eastMeters<=bounds.maxEastMeters&&registered.northMeters>=bounds.minNorthMeters&&registered.northMeters<=bounds.maxNorthMeters);
+  const parentFallbackActive=Boolean(localResources.standInActive&&visibleCell&&visibleIndex!==null&&visibleIndex<requestedIndex&&visibleContainsFocus);
+  const overscanCells=[];
+  for(let dy=-SPATIAL_OVERSCAN_CELL_RADIUS;dy<=SPATIAL_OVERSCAN_CELL_RADIUS;dy++)for(let dx=-SPATIAL_OVERSCAN_CELL_RADIUS;dx<=SPATIAL_OVERSCAN_CELL_RADIUS;dx++){
+    const size=requestedCell.cellSizeMeters,x=requestedCell.cellX+dx,y=requestedCell.cellY+dy;
+    overscanCells.push(["SLOD",coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate",requestedCell.depth,x,y].join("|"));
+  }
+  return {
+    selectionMode:"screen-space-error",canonicalHierarchy:"SEED-coordinate-quadtree",
+    targetPixelError:SSE_TARGET_PIXELS,refinePixelError:SSE_REFINE_PIXELS,coarsenPixelError:SSE_COARSEN_PIXELS,
+    metersPerScreenPixel:Number(metersPerScreenPixelForZoom().toFixed(6)),
+    requestedLevelIndex:requestedIndex,requestedLevel:LOCAL_DETAIL_LEVELS[requestedIndex]?.id||null,
+    requestedWorldSpaceErrorMeters:Number(worldSpaceErrorForLevel(requestedIndex).toFixed(6)),
+    requestedProjectedPixelError:Number(projectedPixelErrorForLevel(requestedIndex).toFixed(6)),
+    visibleLevelIndex:visibleIndex,visibleLevel:visibleIndex===null?null:LOCAL_DETAIL_LEVELS[visibleIndex]?.id||null,
+    visibleWorldSpaceErrorMeters:visibleIndex===null?null:Number(worldSpaceErrorForLevel(visibleIndex).toFixed(6)),
+    visibleProjectedPixelError:visibleIndex===null?null:Number(projectedPixelErrorForLevel(visibleIndex).toFixed(6)),
+    requestedCell,visibleCell,parentFallbackActive,readyChildHandoff:Boolean(!localResources.standInActive&&visibleCell?.id===requestedCell.id),
+    visibleContainsFocus,overscanCellIds:Object.freeze(overscanCells),overscanCellCount:overscanCells.length,
+    rootCellMeters:SPATIAL_LOD_ROOT_CELL_METERS,maxDepth:SPATIAL_LOD_MAX_DEPTH,
+    hysteresis:true,viewportBounded:true,fullWorldScan:false,cameraAssignsIdentity:false,viewportAssignsIdentity:false
+  };
+}
 function snapshot(){
   return Object.freeze({
     version:VERSION,
@@ -4038,6 +4123,7 @@ function snapshot(){
       tangentPatchDerivedFromFocus:true,
       tangentPatchSpanMeters:Math.max(localDetail.patchWidthMeters,localDetail.patchHeightMeters),
       localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false}),
+      spatialLod:Object.freeze(spatialLodDiagnostics()),
       localStatic:Object.freeze({...localStatic,focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3))}),
       resourceBudget:Object.freeze({...localResources,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,lodHysteresis:LOCAL_LOD_HYSTERESIS,offscreenFineDetailActive:false,viewportPriority:true}),
       presentation:Object.freeze({...projectionPresentation})
@@ -4124,7 +4210,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS
   })
 });
 const boot=()=>start().catch(()=>{});
