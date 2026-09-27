@@ -111,7 +111,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
 - `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation — COMPLETED
 - `WP-S003-010-003-012` — TOP PRIORITY BUG: SEED Coordinate Fabric + Gameplay-Center Marker + Landmark Callouts — COMPLETED
-- `WP-S003-010-003-013` — Screen-Space-Error Hierarchical Spatial LOD + Canonical Cell Refinement — IN PROGRESS / NOT COMPLETED (final bounded acceptance: VISUAL 5.6/10; native magnification 1.62649x > 1.5x contract)
+- `WP-S003-010-003-013` — Screen-Space-Error Hierarchical Spatial LOD + Canonical Cell Refinement — ACCEPTED / DEPLOYMENT BOOKKEEPING (run 36355207161; VISUAL 8.1/10; functional PASS; implementation head `6990b26578ccf27b4463ddb4f1c5dc21d63ec543`)
 - `WP-S003-010-003-014` — Physical-Scale Semantic Layer Ladder + Stable Label/Border/Route Decluttering
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch
