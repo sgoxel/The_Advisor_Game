@@ -1122,6 +1122,44 @@ function borderPathLandSafe(a,b){
   }
   return true;
 }
+function borderEndpointNearCoast(point){
+  if(!point||!geography)return false;
+  const lat=Number(point.latitudeRadians)||0,lon=Number(point.longitudeRadians)||0,cosLat=Math.max(.08,Math.cos(lat));
+  // Roughly one contour sample spacing. A real land-border endpoint may stop at
+  // a coast/lake shore, but an isolated endpoint surrounded by land is a
+  // presentation/topology defect and must not be rendered as a dangling stub.
+  const radiusMeters=32000;
+  const offsets=[[radiusMeters,0],[-radiusMeters,0],[0,radiusMeters],[0,-radiusMeters],
+    [radiusMeters*.707,radiusMeters*.707],[-radiusMeters*.707,radiusMeters*.707],
+    [radiusMeters*.707,-radiusMeters*.707],[-radiusMeters*.707,-radiusMeters*.707]];
+  for(const [east,north] of offsets){
+    const sampleLat=clamp(lat+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
+    const sampleLon=wrapLongitudeRadians(lon+east/(WORLD_RADIUS_METERS*cosLat));
+    let sample=null;try{sample=geography.sampleLatLon(sampleLat,sampleLon);}catch(_){sample=null;}
+    if(sample&&!sample.land)return true;
+  }
+  return false;
+}
+function borderEndpointNearGlobeHorizon(point){
+  if(point?.mode!=="globe"||!planet||!cameraEntity)return false;
+  const center=planet.getPosition(),cameraPos=cameraEntity.getPosition();
+  const nx=Number(point.worldX)-center.x,ny=Number(point.worldY)-center.y,nz=Number(point.worldZ)-center.z;
+  const tx=cameraPos.x-Number(point.worldX),ty=cameraPos.y-Number(point.worldY),tz=cameraPos.z-Number(point.worldZ);
+  const denom=Math.max(1e-6,Math.hypot(nx,ny,nz)*Math.hypot(tx,ty,tz));
+  return (nx*tx+ny*ty+nz*tz)/denom<.12;
+}
+function borderEndpointJustified(point){
+  if(!point)return false;
+  if(point.x<=2.5||point.x>=97.5||point.y<=2.5||point.y>=97.5)return true;
+  return borderEndpointNearGlobeHorizon(point)||borderEndpointNearCoast(point);
+}
+function borderRunClosed(run){
+  if(!Array.isArray(run)||run.length<3)return false;
+  const a=run[0],b=run[run.length-1],latDelta=(Number(a.latitudeRadians)-Number(b.latitudeRadians))*WORLD_RADIUS_METERS;
+  const meanLat=(Number(a.latitudeRadians)+Number(b.latitudeRadians))*.5;
+  const lonDelta=wrapLongitudeRadians(Number(a.longitudeRadians)-Number(b.longitudeRadians))*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(meanLat));
+  return Math.hypot(latDelta,lonDelta)<4000;
+}
 function renderMapPresentation(){
   const layer=ensureMapPresentationDom();if(!layer)return;
   const started=performance.now(),context=mapContextForFocus(),contextKinds=mapContextKindsForBand(zoomState.band),placeKinds=mapPlaceKindsForBand(zoomState.band);
@@ -1132,7 +1170,7 @@ function renderMapPresentation(){
   for(const kind of contextKinds){const row=document.createElement("div");row.innerHTML="<span></span><strong></strong>";row.querySelector("span").textContent=labels[kind]||kind.toUpperCase();row.querySelector("strong").textContent=String(context?.[kind]||"—");names.appendChild(row);}info.appendChild(names);
 
   const border=buildMapBorderSegments(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();
-  let projectedBorderSegmentCount=0;
+  let projectedBorderSegmentCount=0,rejectedInteriorBorderStubCount=0;
   const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
   const borderLines=stitchMapBorderSegments(border.segments);
   for(const chain of borderLines){
@@ -1144,6 +1182,14 @@ function renderMapPresentation(){
       let pixelLength=0;
       for(let i=1;i<run.length;i++)pixelLength+=Math.hypot(run[i].screenX-run[i-1].screenX,run[i].screenY-run[i-1].screenY);
       if(pixelLength<32){run=[];return;}
+      // Open border components may leave the visible frame or terminate at a
+      // proven coast. Otherwise both ends must continue: rendering a component
+      // that simply stops on uninterrupted land creates the exact dangling
+      // political-border stubs this WP is intended to eliminate. Closed loops
+      // remain valid for genuine enclaves/exclaves.
+      if(!borderRunClosed(run)&&(!borderEndpointJustified(run[0])||!borderEndpointJustified(run[run.length-1]))){
+        rejectedInteriorBorderStubCount++;run=[];return;
+      }
       const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");
       line.setAttribute("points",run.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
       line.setAttribute("class","planet-political-border");
@@ -1213,7 +1259,7 @@ function renderMapPresentation(){
     maxLabelBudget:spec.budget,labelQueryBuildMs:atlas.query.buildMs,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
     borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
-    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,
+    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,rejectedInteriorBorderStubCount,
     maxLabelDisplacementPixels:visible.reduce((max,item)=>Math.max(max,Number(item.displacementPixels||0)),0),
     registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
     projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
