@@ -8577,6 +8577,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Atmosphere authority failed in frame {index}: {atmosphere}")
             if atmosphere.get("phase")!=phase or int(atmosphere.get("dynamicLightCount") or 0)!=2 or int(atmosphere.get("drawCallImpact",-1))!=0:
                 raise RuntimeError(f"Atmosphere phase/light budget failed in frame {index}: {atmosphere}")
+            if atmosphere.get("groundPaletteIntegrated") is not True or atmosphere.get("postProcess") is not False or atmosphere.get("weatherSimulation") is not False:
+                raise RuntimeError(f"Atmosphere integration/scope contract failed in frame {index}: {atmosphere}")
+            if int(atmosphere.get("materialCount") or 0)<12:
+                raise RuntimeError(f"Atmosphere shared-material coverage too low in frame {index}: {atmosphere}")
             if float(atmosphere.get("keyIntensity") or 0)<=0 or float(atmosphere.get("fillIntensity") or 0)<=0:
                 raise RuntimeError(f"Atmosphere light intensity invalid in frame {index}: {atmosphere}")
             sky=tuple(atmosphere.get("sky") or [])
