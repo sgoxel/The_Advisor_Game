@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-ground-static-v15";
+const VERSION="planet-inspection-v1";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -50,6 +50,12 @@ let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
 let localStaticMaterials=null;
+let localNpcRoot=null;
+let localNpcMaterials=null;
+let localNpcContext=null;
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity.resolveActionTarget",presentationOnly:true,simulationAuthority:false};
+const localBuildingInspectionKeys=new Set();
+const localNpcInspectionKeys=new Set();
 let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,authority:"spherical-seed-focus-presentation"};
 let resizeObserver=null;
 let yawDegrees=-18;
@@ -1183,10 +1189,13 @@ function sharedLocalPrimitive(type){
   mesh.incRefCount();// keep alive across static-world rebuilds
   return localSharedPrimitives[type]=mesh;
 }
-function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
+function addLocalPrimitive(parent,name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
   const e=new pc.Entity(name);
   e.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});e.render.meshInstances=[new pc.MeshInstance(sharedLocalPrimitive(type),material,e)];
-  e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);localStaticRoot.addChild(e);
+  e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);parent.addChild(e);return e;
+}
+function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
+  return addLocalPrimitive(localStaticRoot,name,type,material,x,y,z,sx,sy,sz,rx,ry,rz);
 }
 function revealHashText(value){
   let h=2166136261>>>0;
@@ -1256,25 +1265,149 @@ function addCanonicalRoadSegment(name,x1,y1,x2,y2,widthMeters,presentationScale,
   const ground=localGroundHeightUnits(centerEast,centerNorth,frame)+lift+.028;
   addLocalStatic(name,"box",material,centerEast*presentationScale/unit,ground,-centerNorth*presentationScale/unit,widthMeters*presentationScale/unit,.058,length/unit,0,angle,0);
 }
+function clearInspectionKeySet(keys,preserveSelected=false){
+  const selectedKey=inspection.selectedId===null?null:inspectionRegistryKey(inspection.selectedType,inspection.selectedId);
+  for(const key of keys)inspectionPickables.delete(key);
+  keys.clear();
+  if(!preserveSelected&&selectedKey&&!inspectionPickables.has(selectedKey))dismissInspection();
+}
+function registerLocalInspection(record,keys){
+  if(!registerInspectionPickable(record))return false;
+  keys.add(inspectionRegistryKey(record.type,record.id));return true;
+}
+function inspectionEntityBounds(entities,padding=5){
+  if(!cameraEntity?.camera||!canvas||!device||!pc)return null;
+  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(device.width||canvas.width||rect.width)),sourceH=Math.max(1,Number(device.height||canvas.height||rect.height));
+  let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity,seen=0;
+  const project=world=>{
+    const p=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
+    if(!p||![p.x,p.y,p.z].every(Number.isFinite)||p.z<=0)return;
+    const x=rect.left+p.x*(rect.width/sourceW),y=rect.top+p.y*(rect.height/sourceH);
+    left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);seen++;
+  };
+  for(const entity of entities||[]){
+    if(!entity?.enabled||!entity.parent)continue;
+    for(const meshInstance of entity.render?.meshInstances||[]){
+      const aabb=meshInstance.aabb,c=aabb?.center,h=aabb?.halfExtents;if(!c||!h)continue;
+      for(const dx of [-1,1])for(const dy of [-1,1])for(const dz of [-1,1])project(new pc.Vec3(c.x+h.x*dx,c.y+h.y*dy,c.z+h.z*dz));
+    }
+  }
+  if(!seen)return null;
+  return {left:left-padding,right:right+padding,top:top-padding,bottom:bottom+padding};
+}
+function inspectionEntityDepth(entities){
+  const camera=cameraEntity?.getPosition?.();if(!camera)return Infinity;let best=Infinity;
+  for(const entity of entities||[]){if(!entity?.enabled||!entity.parent)continue;const p=entity.getPosition();best=Math.min(best,(p.x-camera.x)**2+(p.y-camera.y)**2+(p.z-camera.z)**2);}
+  return best;
+}
+function readableTitle(value,fallback){
+  const text=String(value??"").trim();if(!text)return fallback;
+  return text.replace(/[-_]+/g," ").replace(/\b\w/g,ch=>ch.toUpperCase());
+}
+function inspectionFantasyStamp(){
+  const hour=Number.isFinite(Number(atmosphere.authoritativeHour))?Number(atmosphere.authoritativeHour):12.5;
+  const whole=Math.floor(hour),minute=Math.round((hour-whole)*60);
+  return Object.freeze({year:1100,month:1,day:1,hour:whole,minute:Math.min(59,minute),second:0});
+}
+function residentInspectionState(residentId){
+  const resident=window.DailyActivity?.build?.(activeSeed)?.find(item=>item.id===String(residentId))||null;
+  if(!resident)return null;
+  const scheduled=window.DailyActivity?.resolveActionTarget?.(activeSeed,resident,inspectionFantasyStamp())||null;
+  const movement=window.ResidentMovement?.get?.(resident.id)||null;
+  const executing=window.ActionExecutor?.get?.("resident",resident.id)||movement?.actionExecution||null;
+  let activity=executing?.label||scheduled?.label||"Idle";
+  if(movement?.status==="moving"){
+    const state=String(scheduled?.state||"");
+    activity=state==="return-home"?"Going home":state==="work"?"Walking to work":"Traveling";
+  }else if(executing?.status==="active")activity=executing.label||"Working";
+  return Object.freeze({
+    residentId:resident.id,
+    displayName:String(resident.displayName||resident.name||"Resident"),
+    profession:readableTitle(resident.profession,"Unassigned"),
+    activity:readableTitle(activity,"Idle"),
+    scheduled,
+    movement,
+    authority:Object.freeze({identityId:resident.id,homeId:resident.homePlanId||null,workplaceId:resident.workplaceId||null,scheduleTimestamp:scheduled?.timestamp||null})
+  });
+}
+function residentPresentationState(resident){
+  const movement=window.ResidentMovement?.presentation?.(resident.id)||null;
+  const movementState=window.ResidentMovement?.get?.(resident.id)||null;
+  const scheduled=window.DailyActivity?.resolveActionTarget?.(activeSeed,resident,inspectionFantasyStamp())||null;
+  const point=movement?.point||scheduled?.target||null;if(!point)return null;
+  const offset=movement?.offset||{x:0,y:0};
+  const indoors=movementState?Boolean(movementState.occupiesBuilding):scheduled?.targetSource==="interior-interaction";
+  return Object.freeze({x:Number(point.x)+Number(offset.x||0),y:Number(point.y)+Number(offset.y||0),indoors,scheduled,movementState});
+}
+function ensureLocalNpcMaterials(){
+  if(localNpcMaterials||!pc)return;
+  const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.88;m.metalness=0;m.update();return m;};
+  localNpcMaterials={body:make("LocalResidentBody",.19,.42,.72),head:make("LocalResidentHead",.86,.68,.50)};
+}
+function registerCanonicalBuildingInspection(record,entities){
+  const typeLabel=readableTitle(record?.function||record?.kind||record?.type,"Building"),name=String(record?.label||record?.name||"").trim();
+  registerLocalInspection({
+    id:String(record.id),type:"building",name,functionLabel:typeLabel,buildingType:typeLabel,
+    authority:Object.freeze({buildingId:String(record.id),kind:record?.kind||null,function:record?.function||null}),
+    visible:()=>entities.some(entity=>entity?.enabled&&entity.parent),
+    screenBounds:()=>inspectionEntityBounds(entities,6),
+    screenDepth:()=>inspectionEntityDepth(entities)
+  },localBuildingInspectionKeys);
+}
+function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,unit,lift=0,preserveSelection=false){
+  const started=performance.now(),selectedNpc=inspection.selectedType==="npc"?inspection.selectedId:null;
+  clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;
+  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
+  localNpcContext={reveal,tier,frame,presentationScale,unit,lift};
+  if(!["refined","full"].includes(tier)||!window.DailyActivity?.build)return;
+  ensureLocalNpcMaterials();localNpcRoot=new pc.Entity("CanonicalResidents");tangentPatch.addChild(localNpcRoot);
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),roster=window.DailyActivity.build(activeSeed)||[];
+  let activeCount=0,entityCount=0;
+  for(const resident of roster){
+    const state=residentPresentationState(resident);if(!state||state.indoors)continue;
+    const east=state.x*tileMeters,north=state.y*tileMeters,ground=localGroundHeightUnits(east,north,frame)+lift+.015;
+    const bodyHeight=Math.max(.10,1.18*presentationScale/unit),bodyWidth=Math.max(.045,.48*presentationScale/unit),headSize=Math.max(.045,.44*presentationScale/unit);
+    const x=east*presentationScale/unit,z=-north*presentationScale/unit;
+    const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",localNpcMaterials.body,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
+    const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
+    const entities=[body,head];
+    registerLocalInspection({
+      id:resident.id,type:"npc",residentId:resident.id,
+      authority:Object.freeze({residentId:resident.id,identitySource:"DailyActivity",professionSource:"ResidentAssignments",activitySource:"DailyActivity.resolveActionTarget"}),
+      inspect:()=>residentInspectionState(resident.id),
+      visible:()=>entities.some(entity=>entity?.enabled&&entity.parent),
+      screenBounds:()=>inspectionEntityBounds(entities,5),
+      screenDepth:()=>inspectionEntityDepth(entities)
+    },localNpcInspectionKeys);
+    activeCount++;entityCount+=2;
+  }
+  localNpcPresentation={...localNpcPresentation,active:activeCount>0,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp()};
+  if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
+}
+function refreshCanonicalNpcPresentation(){
+  if(!localNpcContext)return;
+  const c=localNpcContext;rebuildCanonicalNpcPresentation(c.reveal,c.tier,c.frame,c.presentationScale,c.unit,c.lift,true);
+}
 function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed,landmark,lift=0){
-  const b=record.bounds,tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const b=record.bounds,tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),entities=[];
   const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
   const w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
   const east=cx*tileMeters,north=cy*tileMeters,ground=localGroundHeightUnits(east,north,frame)+lift;
   const wall=landmark?localStaticMaterials.landmark:localStaticMaterials.wall;
   if(!detailed){
     const h=Math.max(.045,Math.min(.16,3.2*presentationScale/unit));
-    addLocalStatic("CanonicalBlock-"+record.id,"box",wall,east*presentationScale/unit,ground+h*.5,-north*presentationScale/unit,w*presentationScale/unit,h,d*presentationScale/unit);
-    return 1;
+    entities.push(addLocalStatic("CanonicalBlock-"+record.id,"box",wall,east*presentationScale/unit,ground+h*.5,-north*presentationScale/unit,w*presentationScale/unit,h,d*presentationScale/unit));
+    return entities.length;
   }
   const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
   const h=Math.max(.08,physicalHeight*presentationScale/unit);
-  addLocalStatic("CanonicalBody-"+record.id,"box",wall,east*presentationScale/unit,ground+h*.5,-north*presentationScale/unit,w*presentationScale/unit,h,d*presentationScale/unit);
+  entities.push(addLocalStatic("CanonicalBody-"+record.id,"box",wall,east*presentationScale/unit,ground+h*.5,-north*presentationScale/unit,w*presentationScale/unit,h,d*presentationScale/unit));
   const roofMat=landmark?localStaticMaterials.landmark:localStaticMaterials.roof;
   const roofY=ground+h+.025;
-  addLocalStatic("CanonicalRoofL-"+record.id,"box",roofMat,(east-w*.20)*presentationScale/unit,roofY,-north*presentationScale/unit,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,-24);
-  addLocalStatic("CanonicalRoofR-"+record.id,"box",roofMat,(east+w*.20)*presentationScale/unit,roofY,-north*presentationScale/unit,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,24);
-  return 3;
+  entities.push(addLocalStatic("CanonicalRoofL-"+record.id,"box",roofMat,(east-w*.20)*presentationScale/unit,roofY,-north*presentationScale/unit,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,-24));
+  entities.push(addLocalStatic("CanonicalRoofR-"+record.id,"box",roofMat,(east+w*.20)*presentationScale/unit,roofY,-north*presentationScale/unit,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,24));
+  registerCanonicalBuildingInspection(record,entities);
+  return entities.length;
 }
 function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
@@ -1327,6 +1460,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,east*scale/unit,ground+h*.78,-north*scale/unit,3.8*scale/unit,Math.max(.06,h*.82),3.8*scale/unit);
     vegetation++;triangles+=180;
   }
+  rebuildCanonicalNpcPresentation(reveal,tier,frame,scale,unit,lift,false);
   const entityCount=localStaticRoot.children.length;
   triangles+=roadCount*12+(coarseBuildings*12)+(fullBuildings*36);
   localStatic={
@@ -1348,6 +1482,8 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
 function rebuildLocalStaticPresentation(resource){
   if(!tangentPatch||!device||!geography||!resource)return;
   const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
+  clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);
+  localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
   localStaticRoot?.destroy?.();localStaticRoot=null;
   const tier=settlementRevealTierForScalar();
   localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,presentationOnly:true,simulationAuthority:false};
@@ -2305,7 +2441,10 @@ function unregisterInspectionPickable(id,type=null){
 }
 function readableInspectionLines(record){
   const readable=(value,fallback)=>{const text=String(value??"").trim();return text||fallback;};
-  if(record.type==="npc")return [readable(record.name,"Unknown resident"),readable(record.job,"Unassigned"),readable(record.activity,"Activity unavailable")];
+  if(record.type==="npc"){
+    let live=null;try{live=typeof record.inspect==="function"?record.inspect():null;}catch{live=null;}
+    return [readable(live?.displayName||record.name,"Unknown resident"),readable(live?.profession||record.job,"Unassigned"),readable(live?.activity||record.activity,"Activity unavailable")];
+  }
   const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim();
   return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
 }
@@ -2313,11 +2452,14 @@ function renderInspectionTooltip(record,knownBounds=null){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
   const started=performance.now();let bounds=knownBounds;try{if(bounds===null)bounds=record.screenBounds();}catch{bounds=null;}
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
-  const now=performance.now(),lines=readableInspectionLines(record),contentKey=lines.join("\u001f"),recordKey=inspectionRegistryKey(record.type,record.id);
-  const selectionChanged=tip.dataset.recordKey!==recordKey;
-  if(tip.dataset.contentKey!==contentKey&&(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250)){
-    tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
-    tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;inspection.lastContentRefreshAtMs=now;
+  const now=performance.now(),recordKey=inspectionRegistryKey(record.type,record.id),selectionChanged=tip.dataset.recordKey!==recordKey;
+  if(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250){
+    const lines=readableInspectionLines(record),contentKey=lines.join("\u001f");
+    if(tip.dataset.contentKey!==contentKey){
+      tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
+      tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;
+    }
+    inspection.lastContentRefreshAtMs=now;
   }
   if(selectionChanged)tip.dataset.recordKey=recordKey;
   const rootRect=root.getBoundingClientRect(),anchorX=(bounds.left+bounds.right)/2-rootRect.left,anchorY=bounds.top-rootRect.top;
@@ -2325,7 +2467,7 @@ function renderInspectionTooltip(record,knownBounds=null){
   const tipRect=tip.getBoundingClientRect(),halfWidth=Math.min(rootRect.width/2,tipRect.width/2),margin=12;
   const x=clamp(anchorX,margin+halfWidth,Math.max(margin+halfWidth,rootRect.width-margin-halfWidth));
   const placeBelow=anchorY-tipRect.height-margin<margin,y=placeBelow?clamp(anchorY+margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin)):clamp(anchorY-tipRect.height-margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin));
-  tip.classList.toggle("below-anchor",placeBelow);tip.style.left=x+"px";tip.style.top=y+"px";tip.style.visibility="";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
+  tip.classList.toggle("below-anchor",placeBelow);tip.dataset.placement=placeBelow?"below":"above";tip.style.left=x+"px";tip.style.top=y+"px";tip.style.visibility="";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
 }
 function pickInspection(clientX,clientY){
   const started=performance.now(),candidates=[];
@@ -2447,6 +2589,7 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
   keyLight.light.color.set(...p.key);keyLight.light.intensity=p.keyI;fillLight.light.color.set(...p.fill);fillLight.light.intensity=p.fillI;
   app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);const emissiveTint=p.phase==="night"?[.52,.72,1]:p.phase==="dawn"?[1,.66,.42]:p.phase==="late-day"?[1,.58,.34]:[1,.96,.84];surfaceMaterial.emissive.set(p.emissive*emissiveTint[0],p.emissive*emissiveTint[1],p.emissive*emissiveTint[2]);surfaceMaterial.update();
   atmosphere={active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false,keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3)))};
+  refreshCanonicalNpcPresentation();
   return snapshot();
 }
 async function buildScene(){  const started=performance.now();
@@ -2676,7 +2819,7 @@ function snapshot(){
     }),
     activeSystems:Object.freeze({
       protagonistEnabled:false,
-      npcEnabled:false,
+      npcEnabled:Boolean(localNpcPresentation.activeCount>0),
       tileSystemActive:false,
       localTerrainActive:Boolean(tangentPatch?.enabled),
       settlementGenerationActive:false,
@@ -2694,7 +2837,8 @@ function snapshot(){
     ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
     atmosphere:Object.freeze({...atmosphere}),
     wilderness:Object.freeze({...wilderness}),
-    inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,boundedActiveRegistry:true,fullWorldScan:false}),
+    inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
+    npcPresentation:Object.freeze({...localNpcPresentation}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number(pitchDegrees.toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     mapPresentation:Object.freeze({...mapPresentation}),
     politicalScale:politicalScaleEvidence(),
@@ -2703,6 +2847,13 @@ function snapshot(){
     loadingPresentation:Object.freeze({...((loadingProof||startupProgress)),loadingProofActive:Boolean(loadingProof)}),
     startupScheduler:Object.freeze({...startupScheduler,progressMonotonic:true,sharedCooperativeScheduler:true,criticalPathOnly:true})
   });
+}
+function inspectionTargets(){
+  return Object.freeze(Array.from(inspectionPickables.values()).map(record=>{
+    let bounds=null;try{bounds=record.screenBounds?.()||null;}catch{bounds=null;}
+    if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite))return null;
+    return Object.freeze({id:String(record.id),type:record.type,bounds:Object.freeze({...bounds}),authority:record.authority||null});
+  }).filter(Boolean));
 }
 function verify(){
   const stage=snapshot();
@@ -2730,13 +2881,13 @@ function destroy(){
   generatedTexture?.destroy?.();generatedTexture=null;
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   app?.destroy?.();
-  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;ready=false;
-  inspectionPickables.clear();
+  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
+  inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   geography=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasEntityCache.clear();atlasIdentityCache.clear();localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,setWorldTileFocus,worldLatLonForTile,rotationForLatLon,setZoomScalar,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,setWorldTileFocus,worldLatLonForTile,rotationForLatLon,setZoomScalar,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,

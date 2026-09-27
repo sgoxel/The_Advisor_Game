@@ -7,6 +7,12 @@ const RESIDENT_NAMES=Object.freeze([
   "Mara","Neri","Oren","Pella","Quin","Rhea",
   "Soren","Tala","Ulric","Vela","Wren","Yara"
 ]);
+const RESIDENT_SURNAMES=Object.freeze([
+  "Ashford","Briar","Cinder","Dale","Ember","Farrow",
+  "Glen","Hearth","Ironwood","Juniper","Kestrel","Lark",
+  "Morrow","Nightingale","Oakley","Pike","Quarry","Reed",
+  "Stone","Thorne","Umber","Vale","Willow","Yarrow"
+]);
 const RESIDENT_BIRTH_YEAR_MIN=1056;
 const RESIDENT_BIRTH_YEAR_SPAN=52;
 const PROFESSIONS=Object.freeze([
@@ -23,6 +29,11 @@ function pad2(value){return String(value).padStart(2,"0")}
 function identityName(seed,index){
   const offset=Number(PRNG.foundationUint32(seed,"resident-roster:name-offset"))%RESIDENT_NAMES.length;
   return RESIDENT_NAMES[(offset+index)%RESIDENT_NAMES.length];
+}
+function identitySurname(seed,index){
+  const offset=Number(PRNG.foundationUint32(seed,"resident-roster:surname-offset"))%RESIDENT_SURNAMES.length;
+  const stride=1+(Number(PRNG.foundationUint32(seed,"resident-roster:surname-stride"))%(RESIDENT_SURNAMES.length-1));
+  return RESIDENT_SURNAMES[(offset+index*stride)%RESIDENT_SURNAMES.length];
 }
 function identityGender(seed,index){
   return Number(PRNG.foundationUint32(seed,"resident-roster:gender:"+index))%2===0?"female":"male";
@@ -51,10 +62,13 @@ function ageAtBirthDate(birthDate,when){
   return age;
 }
 function identityForIndex(seed,index){
-  const birthplace=identityBirthplace(seed);
+  const birthplace=identityBirthplace(seed),firstName=identityName(seed,index),surname=identitySurname(seed,index);
   return Object.freeze({
     id:`R${String(index+1).padStart(2,"0")}`,
-    name:identityName(seed,index),
+    name:firstName,
+    firstName,
+    surname,
+    displayName:firstName+" "+surname,
     gender:identityGender(seed,index),
     birthDate:identityBirthDate(seed,index),
     birthplace:birthplace.name,
@@ -369,6 +383,9 @@ function buildResident(seed,index){
   const resident=Object.freeze({
     id:identity.id,
     name:identity.name,
+    firstName:identity.firstName,
+    surname:identity.surname,
+    displayName:identity.displayName,
     gender:identity.gender,
     birthDate:identity.birthDate,
     birthplace:identity.birthplace,
@@ -411,7 +428,7 @@ function resolveDayActivity(seed,resident,when){
   if(!block)return null;
   return Object.freeze({
     residentId:targetResident.id,
-    residentName:targetResident.name,
+    residentName:targetResident.displayName||targetResident.name,
     state:block.state,
     action:block.intendedAction,
     intendedAction:block.intendedAction,
@@ -445,6 +462,9 @@ function residentIdentityView(seedValue,when){
   return Object.freeze(build(seed).map(resident=>Object.freeze({
     id:resident.id,
     name:resident.name,
+    firstName:resident.firstName||resident.name,
+    surname:resident.surname||"",
+    displayName:resident.displayName||resident.name,
     gender:resident.gender,
     birthDate:resident.birthDate,
     birthplace:resident.birthplace,
@@ -456,6 +476,9 @@ function identityOnly(resident){
   return Object.freeze({
     id:resident.id,
     name:resident.name,
+    firstName:resident.firstName||resident.name,
+    surname:resident.surname||"",
+    displayName:resident.displayName||resident.name,
     gender:resident.gender,
     birthDate:resident.birthDate,
     birthplace:resident.birthplace,
@@ -646,7 +669,7 @@ function resolveActionTarget(seedValue,residentValue,when){
 
 function identityAssignmentSignature(resident){
   return Object.freeze({
-    id:resident.id,name:resident.name,gender:resident.gender,birthDate:resident.birthDate,
+    id:resident.id,name:resident.name,firstName:resident.firstName||resident.name,surname:resident.surname||"",displayName:resident.displayName||resident.name,gender:resident.gender,birthDate:resident.birthDate,
     birthplace:resident.birthplace,homePlanId:resident.homePlanId,homeTarget:resident.homeTarget,
     profession:resident.profession,workFunction:resident.workFunction,
     workplaceId:resident.workplaceId,workplaceTarget:resident.workplaceTarget
