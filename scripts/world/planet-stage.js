@@ -1114,16 +1114,41 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   const eligibleCountsByClass={},renderedCountsByClass={};
   for(const entity of query.candidates)eligibleCountsByClass[entity.type]=(eligibleCountsByClass[entity.type]||0)+1;
   const rect=canvas.getBoundingClientRect();
+  const projectedById=new Map(),identityById=new Map(),validCandidates=[],seenDisplayNames=new Set();
+  const projectionFor=entity=>{
+    if(projectedById.has(entity.id))return projectedById.get(entity.id);
+    const projected=atlasProjectCandidate(entity);projectedById.set(entity.id,projected);return projected;
+  };
+  // A candidate may consume semantic density only after it is actually eligible
+  // for this frame. Projection/occlusion and canonical identity come before the
+  // bounded class/global budgets; otherwise offscreen high-priority entities can
+  // starve visible lower-priority entities and create an empty map.
+  for(const entity of query.candidates){
+    const projected=projectionFor(entity);
+    if(!projected.projection){
+      if(projected.reason==="hidden-hemisphere"){hidden++;occluded++;hiddenReasons.hiddenHemisphere++;}
+      else if(projected.reason==="behind-camera"){behind++;hiddenReasons.behindCamera++;}
+      else if(projected.reason==="outside-footprint"){offscreen++;hiddenReasons.outsideFootprint++;}
+      else {offscreen++;hiddenReasons.offscreen++;}
+      continue;
+    }
+    const identity=atlasResolvedIdentity(entity);identityById.set(entity.id,identity);
+    if(!identity.identityMatch){hiddenReasons.identityMismatch++;continue;}
+    const displayKey=entity.type+"|"+String(entity.name).trim().toLocaleLowerCase();
+    if(seenDisplayNames.has(displayKey)){hiddenReasons.duplicateName++;continue;}
+    seenDisplayNames.add(displayKey);validCandidates.push(entity);
+  }
+  const validIds=new Set(validCandidates.map(entity=>entity.id));
   if(atlasStickyBand!==spec.id){
     atlasStickyBand=spec.id;
     atlasStickyEntities.clear();
     atlasLabelPlacementCache.clear();
   }
-  for(const entity of query.candidates){
+  for(const entity of validCandidates){
     if(atlasStickyEntities.has(entity.id))atlasStickyEntities.set(entity.id,entity);
   }
   for(const [id,entity] of [...atlasStickyEntities.entries()]){
-    if(!spec.kinds.includes(entity.type)){atlasStickyEntities.delete(id);atlasLabelPlacementCache.delete(id);}
+    if(!spec.kinds.includes(entity.type)||!validIds.has(id)){atlasStickyEntities.delete(id);atlasLabelPlacementCache.delete(id);}
   }
   const classCount=type=>[...atlasStickyEntities.values()].filter(item=>item.type===type).length;
   const canAdd=entity=>{
@@ -1137,9 +1162,8 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   // bounded quota so hierarchy labels cannot consume the entire sticky budget.
   const landmarkReserve=spec.kinds.includes("landmark")?Math.min(spec.budget,portrait?2:3,Number(spec.classBudgets?.landmark??3)):0;
   const viewportCenter=Object.freeze({x:rect.width*.5,y:rect.height*.5});
-  const preferredLandmarks=query.candidates.filter(entity=>entity.type==="landmark")
-    .map(entity=>{const projected=atlasProjectCandidate(entity).projection;return projected?{entity,projected,distance:Math.hypot(projected.screenX-viewportCenter.x,projected.screenY-viewportCenter.y)}:null;})
-    .filter(Boolean)
+  const preferredLandmarks=validCandidates.filter(entity=>entity.type==="landmark")
+    .map(entity=>{const projected=projectionFor(entity).projection;return {entity,projected,distance:Math.hypot(projected.screenX-viewportCenter.x,projected.screenY-viewportCenter.y)};})
     .sort((a,b)=>a.distance-b.distance||Number(b.entity.importance||0)-Number(a.entity.importance||0)||a.entity.id.localeCompare(b.entity.id))
     .slice(0,landmarkReserve)
     .map(item=>item.entity);
@@ -1153,33 +1177,21 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     }
     canAdd(entity);
   }
-  for(const entity of query.candidates)canAdd(entity);
-  const typePriority={continent:100,ocean:96,country:90,landmark:84,region:82,capital:78,city:72,village:68,district:60};
+  for(const entity of validCandidates)canAdd(entity);
+  const typePriority={continent:100,ocean:96,country:90,landmark:84,region:82,capital:78,city:72,town:70,village:68,district:60};
   const rankedCandidates=[...atlasStickyEntities.values()].map(entity=>({
     ...entity,
     currentFocus:entity.id===query.focus?.primaryId,
     priority:(entity.id===query.focus?.primaryId?1000:0)+(typePriority[entity.type]||0)+Number(entity.importance||0)
   })).sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
-  const candidates=[],seenDisplayNames=new Set();
-  for(const entity of rankedCandidates){
-    const displayKey=entity.type+"|"+String(entity.name).trim().toLocaleLowerCase();
-    if(seenDisplayNames.has(displayKey)){hiddenReasons.duplicateName++;continue;}
-    seenDisplayNames.add(displayKey);candidates.push(entity);
-  }
+  const candidates=rankedCandidates;
   const reservedSelectors=[".planet-map-context",".planet-places-button",".planet-scale-ruler",".planet-world-center"];
   const reserved=reservedSelectors.map(selector=>root?.querySelector?.(selector)?.getBoundingClientRect?.()).filter(Boolean).map(r=>({left:r.left-rect.left,right:r.right-rect.left,top:r.top-rect.top,bottom:r.bottom-rect.top}));
   for(const entity of candidates){
-    const projected=atlasProjectCandidate(entity);
-    if(!projected.projection){
-      atlasStickyEntities.delete(entity.id);atlasLabelPlacementCache.delete(entity.id);
-      if(projected.reason==="hidden-hemisphere"){hidden++;occluded++;hiddenReasons.hiddenHemisphere++;}
-      else if(projected.reason==="behind-camera"){behind++;hiddenReasons.behindCamera++;}
-      else if(projected.reason==="outside-footprint"){offscreen++;hiddenReasons.outsideFootprint++;}
-      else {offscreen++;hiddenReasons.offscreen++;}
-      continue;
-    }
-    const identity=atlasResolvedIdentity(entity);
-    if(!identity.identityMatch){atlasStickyEntities.delete(entity.id);atlasLabelPlacementCache.delete(entity.id);hiddenReasons.identityMismatch++;continue;}
+    const projected=projectionFor(entity);
+    if(!projected.projection)continue;
+    const identity=identityById.get(entity.id)||atlasResolvedIdentity(entity);
+    if(!identity.identityMatch)continue;
     const anchor=projected.projection,placed=atlasFindLabelPlacement(entity,anchor,portrait,rect,reserved,occupied);
     if(!placed){overlap++;hiddenReasons.overlap++;continue;}
     atlasLabelPlacementCache.set(entity.id,{dx:placed.dx,dy:placed.dy});
