@@ -93,6 +93,7 @@ let inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,
 let cloudLayer=null;
 let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
 let atmosphere={active:false,authoritativeHour:null,phase:"unbound",source:"none",dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false};
+let atmospherePalette=null;
 let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClusters:0,rockClusters:0,ambientFaunaZones:0,rejectedWater:0,drawCalls:0,triangles:0,preparationMs:0,cacheReuse:false,perFrameScatter:false,simulationAuthority:false};
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
@@ -1248,7 +1249,7 @@ function localGroundHeightUnits(eastMeters,northMeters,frame=localDisplayFrame()
 }
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
-  const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
+  const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   localStaticMaterials={
     road:make("LocalRoad",.34,.25,.16),square:make("LocalSquare",.47,.39,.27),
     wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),
@@ -1414,7 +1415,7 @@ function residentPresentationState(resident){
 }
 function ensureLocalNpcMaterials(){
   if(localNpcMaterials||!pc)return;
-  const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.roughness=.88;m.metalness=0;m.update();return m;};
+  const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.88;m.metalness=0;m.update();return m;};
   localNpcMaterials={body:make("LocalResidentBody",.19,.42,.72),head:make("LocalResidentHead",.86,.68,.50)};
 }
 function registerCanonicalBuildingInspection(record,entities){
@@ -1914,6 +1915,7 @@ function activateLocalDetailResource(signature,fromCache){
   }
   horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
   rebuildLocalStaticPresentation(resource);
+  if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);
   trimLocalResourceCache();
   localResources.activeSignature=signature;localResources.visibleLevel=resource.dims.levelId;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
   localResources.pendingPreparationCount=localResources.requestedSignature===signature?0:1;
@@ -1956,7 +1958,7 @@ function recordLocalFrame(dt){
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
-  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.72;tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.72;tangentPatchMaterial.__atmosphereBaseDiffuse=[1,1,1];tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   // Empty until the first cooperatively prepared resource is swapped in.
   tangentPatch.render.meshInstances=[];
@@ -1965,7 +1967,7 @@ function ensureTangentPatch(){
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
   horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
-  horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;
+  horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;horizonSkirtMaterial.__atmosphereBaseDiffuse=[.2,.34,.17];
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   horizonSkirt.render.meshInstances=[];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
@@ -2677,7 +2679,7 @@ function makeCloudTexture(){
 }
 function buildAmbientMotion(surfaceMesh){
   const material=new pc.StandardMaterial();const texture=makeCloudTexture();
-  material.name="SeededCloudLayer";material.diffuse.set(1,1,1);material.emissive.set(.72,.78,.84);material.emissiveMap=texture;material.emissiveIntensity=.9;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.58;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
+  material.name="SeededCloudLayer";material.diffuse.set(1,1,1);material.emissive.set(.72,.78,.84);material.__atmosphereBaseDiffuse=[1,1,1];material.emissiveMap=texture;material.emissiveIntensity=.9;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.58;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
   cloudLayer=new pc.Entity("AmbientCloudLayer");cloudLayer.setLocalScale(1.018,1.018,1.018);cloudLayer.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});cloudLayer.render.meshInstances=[new pc.MeshInstance(surfaceMesh,material,cloudLayer)];planet.addChild(cloudLayer);
   ambientMotion={...ambientMotion,cloudLayerCount:1,animatedEntityCount:1,drawCallEstimate:1};
 }
@@ -2694,24 +2696,65 @@ function fantasyHourFromStamp(stamp){
 }
 function paletteForHour(hour){
   const stops=[
-    {h:0,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090},
-    {h:5,phase:"dawn",key:[1,.68,.42],fill:[.40,.44,.68],ambient:[.36,.30,.34],sky:[.12,.075,.14],keyI:1.18,fillI:.82,emissive:.080},
-    {h:8,phase:"day",key:[1,.93,.72],fill:[.36,.54,.82],ambient:[.42,.46,.54],sky:[.018,.045,.09],keyI:1.38,fillI:.90,emissive:.025},
-    {h:12,phase:"day",key:[1,.97,.90],fill:[.34,.50,.78],ambient:[.40,.43,.50],sky:[.004,.008,.018],keyI:1.50,fillI:.94,emissive:.022},
-    {h:17,phase:"late-day",key:[1,.78,.48],fill:[.46,.42,.70],ambient:[.38,.32,.40],sky:[.085,.052,.105],keyI:1.30,fillI:.86,emissive:.070},
-    {h:20,phase:"night",key:[.60,.68,.98],fill:[.27,.38,.70],ambient:[.24,.27,.40],sky:[.018,.03,.082],keyI:.88,fillI:.76,emissive:.085},
-    {h:24,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090}
+    {h:0,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090,worldTint:[.72,.80,1],terrainTint:[.58,.70,1],localTint:[.72,.82,1],terrainI:.58,localE:.045,cloudTint:[.60,.70,.92],cloudI:.72},
+    {h:5,phase:"dawn",key:[1,.68,.42],fill:[.40,.44,.68],ambient:[.36,.30,.34],sky:[.12,.075,.14],keyI:1.18,fillI:.82,emissive:.080,worldTint:[1,.86,.72],terrainTint:[1,.76,.58],localTint:[1,.88,.76],terrainI:.73,localE:.025,cloudTint:[1,.80,.76],cloudI:.80},
+    {h:8,phase:"day",key:[1,.93,.72],fill:[.36,.54,.82],ambient:[.42,.46,.54],sky:[.018,.045,.09],keyI:1.38,fillI:.90,emissive:.025,worldTint:[1,.97,.88],terrainTint:[1,.95,.84],localTint:[1,.98,.90],terrainI:.76,localE:.008,cloudTint:[.92,.96,1],cloudI:.90},
+    {h:12,phase:"day",key:[1,.97,.90],fill:[.34,.50,.78],ambient:[.40,.43,.50],sky:[.004,.008,.018],keyI:1.50,fillI:.94,emissive:.022,worldTint:[1,1,.98],terrainTint:[1,1,.96],localTint:[1,1,.96],terrainI:.78,localE:.006,cloudTint:[.96,.98,1],cloudI:.94},
+    {h:17,phase:"late-day",key:[1,.78,.48],fill:[.46,.42,.70],ambient:[.38,.32,.40],sky:[.085,.052,.105],keyI:1.30,fillI:.86,emissive:.070,worldTint:[1,.84,.68],terrainTint:[1,.72,.52],localTint:[1,.85,.70],terrainI:.70,localE:.026,cloudTint:[1,.78,.70],cloudI:.82},
+    {h:20,phase:"night",key:[.60,.68,.98],fill:[.27,.38,.70],ambient:[.24,.27,.40],sky:[.018,.03,.082],keyI:.88,fillI:.76,emissive:.085,worldTint:[.76,.82,1],terrainTint:[.60,.72,1],localTint:[.74,.82,1],terrainI:.60,localE:.040,cloudTint:[.64,.72,.94],cloudI:.74},
+    {h:24,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090,worldTint:[.72,.80,1],terrainTint:[.58,.70,1],localTint:[.72,.82,1],terrainI:.58,localE:.045,cloudTint:[.60,.70,.92],cloudI:.72}
   ];
   let a=stops[0],b=stops[1];for(let i=0;i<stops.length-1;i++){if(hour>=stops[i].h&&hour<=stops[i+1].h){a=stops[i];b=stops[i+1];break;}}
   const t=clamp((hour-a.h)/Math.max(.001,b.h-a.h),0,1),phase=(t<.5?a.phase:b.phase);
-  return {phase,key:mixRgb(a.key,b.key,t),fill:mixRgb(a.fill,b.fill,t),ambient:mixRgb(a.ambient,b.ambient,t),sky:mixRgb(a.sky,b.sky,t),keyI:lerp(a.keyI,b.keyI,t),fillI:lerp(a.fillI,b.fillI,t),emissive:lerp(a.emissive,b.emissive,t)};
+  return {
+    phase,key:mixRgb(a.key,b.key,t),fill:mixRgb(a.fill,b.fill,t),ambient:mixRgb(a.ambient,b.ambient,t),sky:mixRgb(a.sky,b.sky,t),
+    keyI:lerp(a.keyI,b.keyI,t),fillI:lerp(a.fillI,b.fillI,t),emissive:lerp(a.emissive,b.emissive,t),
+    worldTint:mixRgb(a.worldTint,b.worldTint,t),terrainTint:mixRgb(a.terrainTint,b.terrainTint,t),localTint:mixRgb(a.localTint,b.localTint,t),
+    terrainI:lerp(a.terrainI,b.terrainI,t),localE:lerp(a.localE,b.localE,t),cloudTint:mixRgb(a.cloudTint,b.cloudTint,t),cloudI:lerp(a.cloudI,b.cloudI,t)
+  };
+}
+function gradeAtmosphereLocalMaterial(material,tint,emissiveStrength=0){
+  if(!material)return false;
+  const base=material.__atmosphereBaseDiffuse||[material.diffuse?.r??1,material.diffuse?.g??1,material.diffuse?.b??1];
+  material.__atmosphereBaseDiffuse=base;
+  material.diffuse.set(base[0]*tint[0],base[1]*tint[1],base[2]*tint[2]);
+  material.emissive.set(base[0]*tint[0]*emissiveStrength,base[1]*tint[1]*emissiveStrength,base[2]*tint[2]*emissiveStrength);
+  material.emissiveIntensity=1;
+  material.update();return true;
+}
+function applyAtmosphereMaterialPalette(p){
+  if(!p)return 0;
+  let materialCount=0;
+  if(surfaceMaterial){
+    surfaceMaterial.diffuse.set(...p.worldTint);
+    surfaceMaterial.emissive.set(p.emissive*p.worldTint[0],p.emissive*p.worldTint[1],p.emissive*p.worldTint[2]);
+    surfaceMaterial.update();materialCount++;
+  }
+  if(tangentPatchMaterial){
+    tangentPatchMaterial.diffuse.set(...p.terrainTint);tangentPatchMaterial.emissive.set(...p.terrainTint);tangentPatchMaterial.emissiveIntensity=p.terrainI;tangentPatchMaterial.update();materialCount++;
+  }
+  if(horizonSkirtMaterial){
+    horizonSkirtMaterial.diffuse.set(...p.terrainTint);horizonSkirtMaterial.emissive.set(...p.terrainTint);horizonSkirtMaterial.emissiveIntensity=p.terrainI*.96;horizonSkirtMaterial.update();materialCount++;
+  }
+  if(localStaticMaterials)for(const material of Object.values(localStaticMaterials)){if(gradeAtmosphereLocalMaterial(material,p.localTint,p.localE))materialCount++;}
+  if(localNpcMaterials)for(const material of Object.values(localNpcMaterials)){if(gradeAtmosphereLocalMaterial(material,p.localTint,p.localE*1.35))materialCount++;}
+  const cloudMaterial=cloudLayer?.render?.meshInstances?.[0]?.material;
+  if(cloudMaterial){cloudMaterial.emissive.set(...p.cloudTint);cloudMaterial.emissiveIntensity=p.cloudI;cloudMaterial.update();materialCount++;}
+  return materialCount;
 }
 function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"){
   const hour=fantasyHourFromStamp(stamp);if(hour===null||!keyLight||!fillLight||!surfaceMaterial||!cameraEntity)return snapshot();
-  const p=paletteForHour(hour);
+  const p=paletteForHour(hour);atmospherePalette=p;
   keyLight.light.color.set(...p.key);keyLight.light.intensity=p.keyI;fillLight.light.color.set(...p.fill);fillLight.light.intensity=p.fillI;
-  app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);const emissiveTint=p.phase==="night"?[.52,.72,1]:p.phase==="dawn"?[1,.66,.42]:p.phase==="late-day"?[1,.58,.34]:[1,.96,.84];surfaceMaterial.emissive.set(p.emissive*emissiveTint[0],p.emissive*emissiveTint[1],p.emissive*emissiveTint[2]);surfaceMaterial.update();
-  atmosphere={active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false,keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3)))};
+  app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);
+  const materialCount=applyAtmosphereMaterialPalette(p);
+  atmosphere={
+    active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount,drawCallImpact:0,simulationAuthority:false,
+    keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3))),
+    worldTint:p.worldTint.map(v=>Number(v.toFixed(3))),terrainTint:p.terrainTint.map(v=>Number(v.toFixed(3))),localTint:p.localTint.map(v=>Number(v.toFixed(3))),
+    terrainEmissiveIntensity:Number(p.terrainI.toFixed(3)),localEmissiveStrength:Number(p.localE.toFixed(3)),cloudTint:p.cloudTint.map(v=>Number(v.toFixed(3))),cloudIntensity:Number(p.cloudI.toFixed(3)),
+    groundPaletteIntegrated:true,postProcess:false,weatherSimulation:false
+  };
   refreshCanonicalNpcPresentation();
   if(inspection.selectedId!==null){
     inspection.lastContentRefreshAtMs=Number.NEGATIVE_INFINITY;
