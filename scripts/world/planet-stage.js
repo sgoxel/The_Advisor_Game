@@ -132,6 +132,11 @@ const SPATIAL_LOD_MAX_DEPTH=20;
 const SSE_TARGET_PIXELS=8;
 const SSE_REFINE_PIXELS=9;
 const SSE_COARSEN_PIXELS=6.5;
+// A representation may shrink to cover a wider view, but once it would need
+// to be magnified beyond this ratio it is no longer an acceptable steady-state
+// source. Refinement must select a finer canonical child instead of stretching
+// a coarse parent across a closer physical scale.
+const SSE_MAX_NATIVE_MAGNIFICATION=1.5;
 const SPATIAL_OVERSCAN_CELL_RADIUS=1;
 // Every physical LOD is native at its band's upper scalar and covers at most
 // ~2.5x of visible-footprint range, so presentation compensation never has to
@@ -1692,9 +1697,15 @@ function metersPerScreenPixelForZoom(value=zoomState.scalar){
 function projectedPixelErrorForLevel(index,value=zoomState.scalar){
   return worldSpaceErrorForLevel(index)/metersPerScreenPixelForZoom(value);
 }
+function nativeMagnificationForLevel(index,value=zoomState.scalar){
+  const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
+  return Number(level.visibleHeightMeters||1)/Math.max(1,presentationTargetHeightMeters(value));
+}
 function rawLodIndexForZoom(value){
   for(let index=0;index<LOCAL_DETAIL_LEVELS.length;index++){
-    if(projectedPixelErrorForLevel(index,value)<=SSE_TARGET_PIXELS)return index;
+    const errorOk=projectedPixelErrorForLevel(index,value)<=SSE_TARGET_PIXELS;
+    const nativeScaleOk=nativeMagnificationForLevel(index,value)<=SSE_MAX_NATIVE_MAGNIFICATION;
+    if(errorOk&&nativeScaleOk)return index;
   }
   return LOCAL_DETAIL_LEVELS.length-1;
 }
@@ -4025,9 +4036,12 @@ function spatialLodDiagnostics(){
     requestedLevelIndex:requestedIndex,requestedLevel:LOCAL_DETAIL_LEVELS[requestedIndex]?.id||null,
     requestedWorldSpaceErrorMeters:Number(worldSpaceErrorForLevel(requestedIndex).toFixed(6)),
     requestedProjectedPixelError:Number(projectedPixelErrorForLevel(requestedIndex).toFixed(6)),
+    requestedNativeMagnification:Number(nativeMagnificationForLevel(requestedIndex).toFixed(6)),
+    maxNativeMagnification:SSE_MAX_NATIVE_MAGNIFICATION,
     visibleLevelIndex:visibleIndex,visibleLevel:visibleIndex===null?null:LOCAL_DETAIL_LEVELS[visibleIndex]?.id||null,
     visibleWorldSpaceErrorMeters:visibleIndex===null?null:Number(worldSpaceErrorForLevel(visibleIndex).toFixed(6)),
     visibleProjectedPixelError:visibleIndex===null?null:Number(projectedPixelErrorForLevel(visibleIndex).toFixed(6)),
+    visibleNativeMagnification:visibleIndex===null?null:Number(nativeMagnificationForLevel(visibleIndex).toFixed(6)),
     requestedCell,visibleCell,parentFallbackActive,readyChildHandoff:Boolean(!localResources.standInActive&&visibleCell?.id===requestedCell.id),
     visibleContainsFocus,overscanCellIds:Object.freeze(overscanCells),overscanCellCount:overscanCells.length,
     rootCellMeters:SPATIAL_LOD_ROOT_CELL_METERS,maxDepth:SPATIAL_LOD_MAX_DEPTH,
@@ -4210,7 +4224,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,SSE_MAX_NATIVE_MAGNIFICATION
   })
 });
 const boot=()=>start().catch(()=>{});
