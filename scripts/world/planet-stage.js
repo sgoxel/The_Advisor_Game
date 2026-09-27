@@ -1696,7 +1696,7 @@ function prepareLocalWildernessPlan(job){
     const item=Object.freeze({east,north,worldX,worldY,worldTile:Object.freeze({x:tx,y:ty}),family,biome,scale,rotation,elevationMeters:Number(sample.elevationMeters||0),moisture:Number(sample.moisture||0),mountainInfluence:Number(sample.mountainInfluence||0),nearWater});
     items.push(item);familyCounts[family]=(familyCounts[family]||0)+1;biomeCounts[biome]=(biomeCounts[biome]||0)+1;
     const faunaRoll=(localWildernessHashInt(gx,gy,salt+157)>>>0)/4294967295;
-    if(fauna.length<4&&faunaRoll<(biome==="wooded"?.055:biome==="grassland"?.04:biome==="wet"?.025:.012)){
+    if(fauna.length<4&&faunaRoll<(biome==="wooded"?.085:biome==="grassland"?.075:biome==="wet"?.06:.025)){
       fauna.push(Object.freeze({...item,kind:biome==="wet"?"waterbird":biome==="wooded"?"hare":biome==="grassland"?"deer":"bird"}));
     }
   }
@@ -2114,7 +2114,11 @@ function rebuildLocalStaticPresentation(resource){
     rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame);
     return;
   }
-  if(!eligible)return;
+  if(!eligible){
+    rebuildLocalFauna(null,frame,null);
+    wilderness={...wilderness,localActive:false,localSignature:null,localLevel:dims.levelId,localBiome:null,localCandidateCount:0,localAcceptedStaticProps:0,localAmbientFaunaActiveCount:0,localRejectedWater:0,localRejectedManaged:0,localRejectedRoad:0,localFamilyCounts:{},localBiomeCounts:{},localDrawCalls:0,localTriangles:0,localPreparationMs:0,localPlanCached:false,localLayoutSignature:null,localFullWorldScan:false,localDeterministicGlobalCells:true};
+    return;
+  }
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(resource.lat0,resource.lon0);
   if(center?.land){
