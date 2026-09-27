@@ -6494,21 +6494,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         targets=driver.execute_script("""
             const stage=window.PlanetStage,s=stage.snapshot(),geo=window.PlanetGeography?.create?.(s.activeSeed),radius=stage.constants.WORLD_RADIUS_METERS;
             if(!geo)throw new Error('PlanetGeography unavailable');
-            const out={};
-            const nearWater=(lat,lon)=>{
-              const d=64/radius,c=Math.max(.08,Math.cos(lat));
+            const out={},scores={grassland:-Infinity,rocky:-Infinity,wooded:-Infinity,wet:-Infinity};
+            const nearWater=(lat,lon,distanceMeters=64)=>{
+              const d=distanceMeters/radius,c=Math.max(.08,Math.cos(lat));
               return !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat+d)),lon).land||
                      !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat-d)),lon).land||
                      !geo.sampleLatLon(lat,lon+d/c).land||!geo.sampleLatLon(lat,lon-d/c).land;
             };
             for(let lat=-68;lat<=68;lat+=4)for(let lon=-176;lon<180;lon+=4){
               const la=lat*Math.PI/180,lo=lon*Math.PI/180,g=geo.sampleLatLon(la,lo);if(!g.land)continue;
-              const wet=nearWater(la,lo)||g.surfaceClass==='coast'||Number(g.moisture)>.68;
-              const rocky=!wet&&(Number(g.elevationMeters)>1550||Number(g.mountainInfluence)>.22);
-              const wooded=!wet&&!rocky&&Number(g.moisture)>.49;
-              const grass=!wet&&!rocky&&!wooded;
-              const key=wet?'wet':rocky?'rocky':wooded?'wooded':grass?'grassland':null;
-              if(key&&!out[key])out[key]={lat:la,lon:lo,elevation:g.elevationMeters,moisture:g.moisture,surfaceClass:g.surfaceClass};
+              const moisture=Number(g.moisture||0),elevation=Number(g.elevationMeters||0),mountain=Number(g.mountainInfluence||0);
+              const coast64=nearWater(la,lo,64)||g.surfaceClass==='coast',inland750=!nearWater(la,lo,750);
+              const candidates=[];
+              if(coast64||moisture>.74)candidates.push(["wet",(coast64?4:0)+moisture*3-Math.max(0,elevation)/5000]);
+              if(inland750&&moisture<.62&&(elevation>1550||mountain>.22))candidates.push(["rocky",elevation/900+mountain*5-moisture*2]);
+              if(inland750&&moisture>.52&&moisture<.67&&elevation<1550&&mountain<=.22)candidates.push(["wooded",moisture*5-Math.max(0,elevation)/5000]);
+              if(inland750&&moisture<.46&&elevation<1450&&mountain<=.20)candidates.push(["grassland",(1-moisture)*4-Math.max(0,elevation)/6000]);
+              for(const [key,score] of candidates)if(score>scores[key]){
+                scores[key]=score;out[key]={lat:la,lon:lo,elevation,moisture,surfaceClass:g.surfaceClass,mountainInfluence:mountain,score};
+              }
             }
             return out;
         """)
@@ -6599,6 +6603,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               cacheReuse:w.cacheReuse,enabled:w.localEnabled,active:w.localActive,fullWorldScan:w.localFullWorldScan,
               deterministicGlobalCells:w.localDeterministicGlobalCells,pending:r.pendingPreparationCount,localStatic:ls};
         """,label)
+        if enabled and key!="village" and "far-lod" not in label and "mid-lod" not in label and str(proof.get("biome") or "")!=key:
+            raise RuntimeError(f"Wilderness evidence target mismatch for {label}: expected {key}, got {proof.get('biome')}; target={target}, proof={proof}")
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-012":
         from selenium.webdriver.support.ui import WebDriverWait
