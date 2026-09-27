@@ -1696,7 +1696,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-015"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
