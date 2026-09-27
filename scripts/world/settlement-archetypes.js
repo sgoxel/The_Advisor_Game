@@ -765,7 +765,10 @@ function satelliteCenter(seed,country,region,index){
   const radius=480+Math.round(unit(seed,"settlement:satellite-radius:"+key)*1050);
   return Object.freeze({
     x:(BigInt(seat.x)+BigInt(Math.round(Math.cos(angle)*radius))).toString(),
-    y:(BigInt(seat.y)+BigInt(Math.round(Math.sifunction settlementsForCountry(seedValue,countryValue,radiusValue){
+    y:(BigInt(seat.y)+BigInt(Math.round(Math.sin(angle)*radius))).toString()
+  });
+}
+function settlementsForCountry(seedValue,countryValue,radiusValue){
   const seed=String(seedValue==null?"":seedValue);
   const country=countryFromInput(seed,countryValue);
   if(!country)return Object.freeze([]);
@@ -809,13 +812,11 @@ function satelliteCenter(seed,country,region,index){
     }
   }catch(_){}
 
-  const frozen=Object.freeze(out.sort((a,b)=>{
-    const priority={"national-capital":0,city:1,town:2,village:3,hamlet:4};
-    return (priority[a.classId]??9)-(priority[b.classId]??9)||a.id.localeCompare(b.id);
-  }));
+  const priority={"national-capital":0,city:1,town:2,village:3,hamlet:4};
+  const frozen=Object.freeze(out.sort((a,b)=>
+    (priority[a.classId]??9)-(priority[b.classId]??9)||a.id.localeCompare(b.id)
+  ));
   catalogCache.set(cacheKey,frozen);
-  return frozen;
-}t(cacheKey,frozen);
   return frozen;
 }
 function sampleCatalog(seed){
