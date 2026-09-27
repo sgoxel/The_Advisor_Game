@@ -140,7 +140,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
-    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013",
+    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013","wp-s003-010-003-014",
     "wp-s003-010-004",
     "wp-s003-010-005",
     "wp-s004-001",
@@ -263,6 +263,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-010": 12,
     "wp-s003-010-003-012": 12,
     "wp-s003-010-003-013": 16,
+    "wp-s003-010-003-014": 16,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -7202,6 +7203,154 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-014":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("scale-1-10",0,(1280,800),"scale"),
+            ("scale-1-20",1,(1280,800),"scale"),
+            ("scale-1-50",2,(1280,800),"scale"),
+            ("scale-1-100",3,(1280,800),"scale"),
+            ("scale-1-250",4,(1280,800),"scale"),
+            ("scale-1-500",5,(1280,800),"scale"),
+            ("scale-1-1000",6,(1280,800),"scale"),
+            ("scale-1-2500",7,(1280,800),"scale"),
+            ("scale-1-5000",8,(1280,800),"scale"),
+            ("scale-1-10000",9,(1280,800),"scale"),
+            ("local-network-pan-small",5,(1280,800),"pan-small"),
+            ("local-network-pan-farther",5,(1280,800),"pan-farther"),
+            ("local-network-return",5,(1280,800),"return"),
+            ("semantic-threshold-hysteresis",5,(1280,800),"oscillate"),
+            ("phone-portrait-local-network",5,(390,844),"phone"),
+            ("deterministic-repeat",5,(1280,800),"repeat"),
+        )
+        label,scale_index,viewport,mode=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*viewport);time.sleep(.12)
+        if frame_index==0:
+            base=driver.current_url.split("?",1)[0]
+            driver.get(base+"?seed=WP_S003_010_003_014_A")
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.();
+                return Boolean(s?.ready===true&&s?.mapPresentation?.active===true&&
+                  Array.isArray(window.PlanetStage?.constants?.SEMANTIC_LAYER_SPECS)&&
+                  window.PlanetStage.constants.SEMANTIC_LAYER_SPECS.length===10);
+            """))
+            driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),
+                  target=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak;
+                if(!target)throw new Error('WP-014 canonical focus target unavailable');
+                window.__WP014_ORIGIN={latitudeRadians:Number(target.latitudeRadians),longitudeRadians:Number(target.longitudeRadians)};
+                stage.setViewTarget(target);
+            """)
+            time.sleep(.15)
+
+        def settle(index, timeout=90.0):
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",index)
+            WebDriverWait(driver,timeout).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},m=s?.mapPresentation||{};
+                const local=Number(s?.zoom?.scaleIndex||0)>=4;
+                return Number(s?.zoom?.scaleIndex??-1)===Number(arguments[0]) &&
+                  Number(m?.semanticScaleIndex??-1)===Number(arguments[0]) &&
+                  (!local || Number(r?.pendingPreparationCount||0)===0);
+            """,index))
+            time.sleep(.12)
+
+        auxiliary={}
+        if mode=="scale":
+            settle(scale_index)
+        elif mode=="pan-small":
+            settle(scale_index)
+            before=driver.execute_script("""
+                const m=window.PlanetStage.snapshot()?.mapPresentation||{};
+                return {ids:(m.visibleLabels||[]).map(x=>x.canonicalEntityId),signature:m.semanticOrderingSignature};
+            """)
+            driver.execute_script("window.PlanetStage.rotateByScreenPixels(42,0)")
+            time.sleep(.2)
+            after=driver.execute_script("""
+                const m=window.PlanetStage.snapshot()?.mapPresentation||{};
+                return {ids:(m.visibleLabels||[]).map(x=>x.canonicalEntityId),signature:m.semanticOrderingSignature};
+            """)
+            auxiliary["pan"]={"before":before,"after":after,"pixels":42}
+        elif mode=="pan-farther":
+            settle(scale_index)
+            driver.execute_script("window.PlanetStage.rotateByScreenPixels(110,0)")
+            time.sleep(.2)
+            auxiliary["pan"]={"pixels":110}
+        elif mode=="return":
+            settle(scale_index)
+            driver.execute_script("""
+                const o=window.__WP014_ORIGIN;
+                if(!o)throw new Error('WP-014 origin missing');
+                window.PlanetStage.setViewTarget(o);
+            """)
+            time.sleep(.25)
+        elif mode=="oscillate":
+            settle(scale_index)
+            sequence=driver.execute_async_script("""
+                const done=arguments[arguments.length-1],stage=window.PlanetStage;
+                (async()=>{
+                  const a=stage.constants.SEMANTIC_LAYER_SPECS[5],b=stage.constants.SEMANTIC_LAYER_SPECS[6];
+                  const h1=stage.snapshot()?.zoom?.visibleFootprintHeightMeters||1;
+                  const s5=stage.snapshot()?.zoom?.scalar||0;
+                  stage.setScaleIndex(6);
+                  await new Promise(r=>setTimeout(r,120));
+                  const s6=stage.snapshot()?.zoom?.scalar||0;
+                  const mid=(Number(s5)+Number(s6))*.5,delta=Math.max(.00002,Math.abs(Number(s6)-Number(s5))*.015);
+                  const values=[mid-delta,mid+delta,mid-delta,mid+delta,mid-delta];
+                  const out=[];
+                  for(const v of values){
+                    stage.setZoomScalar(v);
+                    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(r,35))));
+                    const snap=stage.snapshot(),m=snap?.mapPresentation||{};
+                    out.push({scalar:snap?.zoom?.scalar,scaleIndex:snap?.zoom?.scaleIndex,semanticScaleIndex:m.semanticScaleIndex,
+                      policy:m.semanticPolicyId,labels:(m.visibleLabels||[]).map(x=>x.canonicalEntityId),signature:m.semanticOrderingSignature});
+                  }
+                  done({values:out,from:s5,to:s6,sourceHeight:h1});
+                })().catch(e=>done({error:String(e)}));
+            """)
+            auxiliary["hysteresis"]=sequence
+            settle(scale_index)
+        elif mode=="phone":
+            driver.execute_script("""
+                const o=window.__WP014_ORIGIN;
+                if(o)window.PlanetStage.setViewTarget(o);
+            """)
+            settle(scale_index)
+        elif mode=="repeat":
+            driver.execute_script("""
+                const o=window.__WP014_ORIGIN;
+                if(!o)throw new Error('WP-014 origin missing');
+                window.PlanetStage.setViewTarget(o);
+            """)
+            settle(scale_index)
+
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{},ls=s?.projection?.localStatic||{},r=s?.projection?.resourceBudget||{};
+            return {
+              seed:s?.activeSeed,scaleIndex:s?.zoom?.scaleIndex,scaleLabel:s?.zoom?.scaleLabel,
+              visibleFootprintWidthMeters:s?.zoom?.visibleFootprintWidthMeters,visibleFootprintHeightMeters:s?.zoom?.visibleFootprintHeightMeters,
+              focusLatitudeDegrees:s?.canonicalFocus?.latitudeDegrees,focusLongitudeDegrees:s?.canonicalFocus?.longitudeDegrees,
+              semanticPolicyId:m.semanticPolicyId,semanticScaleIndex:m.semanticScaleIndex,semanticScaleLabel:m.semanticScaleLabel,
+              semanticDisplayBand:m.semanticDisplayBand,semanticRequestedScaleIndex:m.semanticRequestedScaleIndex,
+              eligibleKinds:m.semanticEligibleLabelKinds,classBudgets:m.semanticClassBudgets,
+              eligibleCounts:m.semanticEligibleCountsByClass,renderedCounts:m.semanticRenderedCountsByClass,
+              hiddenReasons:m.semanticHiddenReasonCounts,orderingSignature:m.semanticOrderingSignature,
+              displacedCount:m.semanticDisplacedLabelCount,leaderCount:m.semanticLeaderCount,
+              borderEligible:m.semanticBorderClassesEligible,borderRendered:m.semanticBorderClassesRendered,
+              routeEligible:m.semanticRouteClassesEligible,routeRendered:m.semanticRouteClassesRendered,routeStatus:m.semanticRouteClassStatus,
+              settlementEligible:m.semanticSettlementLayersEligible,settlementRendered:m.semanticSettlementLayersRendered,settlementStatus:m.semanticSettlementLayerStatus,
+              unsupportedEntityClasses:m.semanticUnsupportedEntityClasses,
+              visibleLabels:(m.visibleLabels||[]).map(x=>({id:x.canonicalEntityId,type:x.entityType,name:x.authoritativeName,
+                x:x.screenX,y:x.screenY,anchorX:x.anchorScreenX,anchorY:x.anchorScreenY,displacement:x.displacementPixels,
+                leader:x.leaderVisible,clipped:x.renderedClipped})),
+              maxLabelBudget:m.maxLabelBudget,overlapRejected:m.overlapRejectedCount,fullWorldScan:m.fullWorldScan,
+              hysteresisRatio:m.semanticHysteresisRatio,hysteresisChanges:m.semanticHysteresisChanges,hysteresisHolds:m.semanticHysteresisHolds,
+              localStatic:{revealTier:ls.revealTier,roadCount:ls.roadCount,buildingCount:ls.buildingCount,occupiedAreaCount:ls.occupiedAreaCount},
+              pending:r.pendingPreparationCount
+            };
+        """)
+        proof.update(auxiliary)
+        return label+"|"+json.dumps(proof,sort_keys=True)
+
     if scenario == "wp-s003-010-003-013":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -8385,6 +8534,76 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S003-015 phone landscape frame unexpected: {landscape}")
         if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
             raise RuntimeError(f"WP-S003-015 phone portrait frame unexpected: {portrait}")
+        return
+
+    if scenario == "wp-s003-010-003-014":
+        if len(frames) < 16:
+            raise RuntimeError("wp-s003-010-003-014 requires sixteen semantic-ladder evidence frames")
+        proofs=[]
+        for index,frame in enumerate(frames[:16],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split("|",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-014 frame {index} lacks semantic proof: {action}") from exc
+            proofs.append(proof)
+            if proof.get("fullWorldScan") is not False:
+                raise RuntimeError(f"WP-014 frame {index} performed a full-world presentation scan: {proof}")
+            if int(proof.get("semanticScaleIndex") if proof.get("semanticScaleIndex") is not None else -1)!=int(proof.get("scaleIndex") if proof.get("scaleIndex") is not None else -2):
+                raise RuntimeError(f"WP-014 physical scale/semantic policy mismatch frame {index}: {proof}")
+            visible=proof.get("visibleLabels") or []
+            if len(visible)>int(proof.get("maxLabelBudget") or 0):
+                raise RuntimeError(f"WP-014 global label budget exceeded frame {index}: {proof}")
+            for item in visible:
+                if item.get("clipped") is True:
+                    raise RuntimeError(f"WP-014 rendered clipped label frame {index}: {item}")
+                if float(item.get("displacement") or 0)>1 and item.get("leader") is not True and float(item.get("displacement") or 0)>=18:
+                    raise RuntimeError(f"WP-014 displaced label lacks leader frame {index}: {item}")
+            rendered=proof.get("renderedCounts") or {};budgets=proof.get("classBudgets") or {}
+            for kind,count in rendered.items():
+                if int(count or 0)>int(budgets.get(kind,proof.get("maxLabelBudget") or 0)):
+                    raise RuntimeError(f"WP-014 class budget exceeded frame {index}: {kind}={count} budget={budgets.get(kind)}")
+        canonical=proofs[:10]
+        labels=["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]
+        lat0=float(canonical[0].get("focusLatitudeDegrees") or 0);lon0=float(canonical[0].get("focusLongitudeDegrees") or 0)
+        previous_index=-1
+        for i,(proof,label) in enumerate(zip(canonical,labels),start=1):
+            if proof.get("scaleLabel")!=label or proof.get("semanticScaleLabel")!=label:
+                raise RuntimeError(f"WP-014 scale ladder mismatch frame {i}: expected {label}, got scale={proof.get('scaleLabel')} semantic={proof.get('semanticScaleLabel')}")
+            if int(proof.get("semanticScaleIndex") or 0)<previous_index:
+                raise RuntimeError(f"WP-014 semantic ladder regressed at frame {i}: {proof}")
+            if abs(float(proof.get("focusLatitudeDegrees") or 0)-lat0)>1e-5 or abs(float(proof.get("focusLongitudeDegrees") or 0)-lon0)>1e-5:
+                raise RuntimeError(f"WP-014 canonical scale sequence moved focus frame {i}: {proof}")
+            previous_index=int(proof.get("semanticScaleIndex") or 0)
+        if (canonical[0].get("eligibleKinds") or [])!=["continent","ocean"]:
+            raise RuntimeError(f"WP-014 1/10 broad semantic set is not sparse: {canonical[0]}")
+        if "city" in (canonical[0].get("eligibleKinds") or []) or "village" in (canonical[2].get("eligibleKinds") or []):
+            raise RuntimeError(f"WP-014 broad scale exposes lower-priority settlements: {canonical[:3]}")
+        if "city" not in (canonical[5].get("eligibleKinds") or []) or "village" not in (canonical[5].get("eligibleKinds") or []):
+            raise RuntimeError(f"WP-014 ~local-network scale lacks settlement distinction: {canonical[5]}")
+        if (canonical[0].get("borderEligible") or []) or "national" not in (canonical[2].get("borderEligible") or []):
+            raise RuntimeError(f"WP-014 national border eligibility does not progress with physical scale: {canonical[:3]}")
+        if (canonical[0].get("routeEligible") or []) or "primary" not in (canonical[3].get("routeEligible") or []) or "local" not in (canonical[7].get("routeEligible") or []):
+            raise RuntimeError(f"WP-014 route eligibility ladder invalid: {[p.get('routeEligible') for p in canonical]}")
+        if (canonical[0].get("settlementEligible") or []) or "settlement-footprint" not in (canonical[6].get("settlementEligible") or []) or "buildings" not in (canonical[8].get("settlementEligible") or []):
+            raise RuntimeError(f"WP-014 settlement detail eligibility ladder invalid: {[p.get('settlementEligible') for p in canonical]}")
+        pan=(proofs[10].get("pan") or {})
+        before=set((pan.get("before") or {}).get("ids") or []);after=set((pan.get("after") or {}).get("ids") or [])
+        if before and after and not (before&after):
+            raise RuntimeError(f"WP-014 small pan replaced every visible label despite same eligibility tier: {pan}")
+        returned=proofs[12]
+        repeated=proofs[15]
+        if returned.get("orderingSignature")!=repeated.get("orderingSignature"):
+            raise RuntimeError(f"WP-014 identical visible state produced non-deterministic decluttering: return={returned.get('orderingSignature')} repeat={repeated.get('orderingSignature')}")
+        hysteresis=(proofs[13].get("hysteresis") or {})
+        if hysteresis.get("error"):
+            raise RuntimeError(f"WP-014 hysteresis script failed: {hysteresis}")
+        seq=hysteresis.get("values") or []
+        if len(seq)!=5 or len({item.get("semanticScaleIndex") for item in seq})!=1 or len({item.get("policy") for item in seq})!=1:
+            raise RuntimeError(f"WP-014 small threshold oscillation blinked semantic policy: {seq}")
+        viewport=frames[14].get("runtime",{}).get("viewport",{})
+        if int(viewport.get("width") or 0)>430 or int(viewport.get("height") or 0)<700:
+            raise RuntimeError(f"WP-014 phone portrait frame unexpected: {viewport}")
         return
 
     if scenario == "wp-s003-010-003-013":
