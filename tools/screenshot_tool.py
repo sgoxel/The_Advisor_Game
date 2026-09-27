@@ -1699,14 +1699,12 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
             lambda d: d.execute_script(
                 """
                 const s=window.PlanetStage?.snapshot?.();
+                if(!(s?.ready===true &&
+                     s?.stage==='seeded-planetary-geography' &&
+                     s?.geographyVersion==='planetary-geography-v5' &&
+                     Number(s?.canvasCount||0)===1)) return false;
                 const v=window.PlanetStage?.verify?.();
-                return Boolean(
-                  s?.ready===true &&
-                  s?.stage==='seeded-planetary-geography' &&
-                  s?.geographyVersion==='planetary-geography-v5' &&
-                  Number(s?.canvasCount||0)===1 &&
-                  v?.pass===true
-                );
+                return Boolean(v?.pass===true);
                 """
             )
         )
