@@ -145,7 +145,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S005-003` — Local Dialogue, Social Context + Trust Framing — COMPLETED
 - `WP-S005-004` — Advice Acceptance, Rejection + Influence Resolution — COMPLETED
 - `WP-S005-005` — Relationship, Reputation + Duty State Foundation — COMPLETED
-- `WP-S005-006` — NPC Recognition + Personal Interaction Memory
+- `WP-S005-006` — NPC Recognition + Personal Interaction Memory — COMPLETED
 - `WP-S005-007` — Local Rumors, Knowledge Exchange + Discoverable Leads
 
 # Stage 6 — Political Geography + Settlement Diversity Foundation
