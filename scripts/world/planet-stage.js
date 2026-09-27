@@ -1150,21 +1150,46 @@ function renderMapPresentation(){
       line.dataset.ownerA=chain.ownerA;line.dataset.ownerB=chain.ownerB;
       svg.appendChild(line);projectedBorderSegmentCount++;run=[];
     };
+    const isLandPoint=point=>{
+      try{return Boolean(geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)?.land);}catch(_){return false;}
+    };
+    const coastBoundary=(landPoint,waterPoint)=>{
+      let land=landPoint,water=waterPoint;
+      for(let refine=0;refine<14;refine++){
+        const mid=interpolateGeoPoint(land,water,.5);
+        if(isLandPoint(mid))land=mid;else water=mid;
+      }
+      return land;
+    };
     for(let i=0;i<chain.points.length;i++){
       const point=chain.points[i];
       if(i===0){
-        const projected=projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
-        if(projected)run.push(projected);
+        if(isLandPoint(point)){
+          const projected=projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);
+        }
         continue;
       }
       const previous=chain.points[i-1];
-      if(!borderPathLandSafe(previous,point)){flush();continue;}
-      for(let step=1;step<=4;step++){
-        const densePoint=interpolateGeoPoint(previous,point,step/4);
-        let sample=null;try{sample=geography?.sampleLatLon?.(densePoint.latitudeRadians,densePoint.longitudeRadians)||null;}catch(_){sample=null;}
-        if(!sample?.land){flush();continue;}
-        const projected=projectGeographicAnchor(densePoint,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
-        if(projected)run.push(projected);else flush();
+      let samplePoint=previous,sampleLand=isLandPoint(previous);
+      for(let step=1;step<=8;step++){
+        const densePoint=interpolateGeoPoint(previous,point,step/8),denseLand=isLandPoint(densePoint);
+        if(sampleLand&&!denseLand){
+          const coast=coastBoundary(samplePoint,densePoint);
+          const projected=projectGeographicAnchor(coast,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);
+          flush();
+        }else if(!sampleLand&&denseLand){
+          const coast=coastBoundary(densePoint,samplePoint);
+          const coastProjected=projectGeographicAnchor(coast,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(coastProjected)run.push(coastProjected);
+          const projected=projectGeographicAnchor(densePoint,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);else flush();
+        }else if(denseLand){
+          const projected=projectGeographicAnchor(densePoint,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);else flush();
+        }
+        samplePoint=densePoint;sampleLand=denseLand;
       }
     }
     flush();
