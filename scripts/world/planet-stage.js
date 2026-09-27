@@ -1048,6 +1048,12 @@ function requestedLodIndexForZoom(value=zoomState.scalar){
   if(value>=ZOOM_MAX-1e-7)return requestedLodIndex=levels.length-1;
   const rawIndex=rawLodIndexForZoom(value);
   if(!displayResource)return requestedLodIndex=rawIndex;
+  // Hysteresis may stabilize only one adjacent LOD boundary. If zoom jumps
+  // across multiple physical tiers (for example ground -> local-area), keeping
+  // the old fine requested tier would make the ready ground resource stand in
+  // at the wrong physical scale until a much coarser threshold is crossed.
+  // Multi-tier moves must immediately request the raw target tier.
+  if(Math.abs(rawIndex-requestedLodIndex)>1)return requestedLodIndex=rawIndex;
   if(rawIndex>requestedLodIndex){
     const boundary=levelMaxScalar(requestedLodIndex);
     if(value<boundary+lodHysteresisAt(requestedLodIndex+1))return requestedLodIndex;
