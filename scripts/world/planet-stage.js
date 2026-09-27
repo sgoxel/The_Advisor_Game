@@ -936,7 +936,7 @@ function atlasFindLabelPlacement(entity,p,portrait,rect,reserved,occupied){
     const screenX=clamp(p.screenX+dx,minX,maxX),screenY=clamp(p.screenY+dy,minY,maxY);
     const actualDx=screenX-p.screenX,actualDy=screenY-p.screenY,displacement=Math.hypot(actualDx,actualDy);
     if(displacement>maxDisplacement+.01)return null;
-    if(p.mode==="globe"){
+    if(p.mode==="globe"&&entity.type!=="landmark"){
       const cx=rect.width*.5,cy=rect.height*.5;
       const anchorRadius=Math.hypot(p.screenX-cx,p.screenY-cy),placedRadius=Math.hypot(screenX-cx,screenY-cy);
       if(placedRadius>anchorRadius+4)return null;
