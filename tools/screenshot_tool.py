@@ -7244,7 +7244,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             WebDriverWait(driver,timeout).until(lambda d:d.execute_script("""
                 const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},lod=s?.projection?.spatialLod||{};
                 const local=Number(s?.zoom?.scaleIndex||0)>=4;
-                return Number(s?.zoom?.scaleIndex||-1)===Number(arguments[0]) &&
+                return Number(s?.zoom?.scaleIndex ?? -1)===Number(arguments[0]) &&
                   lod?.selectionMode==='screen-space-error' &&
                   (!local || Number(r?.pendingPreparationCount||0)===0);
             """,index))
