@@ -3612,9 +3612,17 @@ function entityTransformTelemetry(entity){
 }
 function canonicalScreenFocusTelemetry(){
   const rect=canvas?.getBoundingClientRect?.(),centerX=(rect?.width||0)*.5,centerY=(rect?.height||0)*.5;
-  const projected=projectGeographicAnchor({latitudeRadians:zoomState.focusLatitudeRadians,longitudeRadians:zoomState.focusLongitudeRadians},{allowOffscreen:true});
-  const x=Number(projected?.screenX),y=Number(projected?.screenY),valid=Number.isFinite(x)&&Number.isFinite(y);
-  return Object.freeze({valid,screenX:valid?Number(x.toFixed(3)):null,screenY:valid?Number(y.toFixed(3)):null,centerX:Number(centerX.toFixed(3)),centerY:Number(centerY.toFixed(3)),deltaPixels:valid?Number(Math.hypot(x-centerX,y-centerY).toFixed(3)):null});
+  const direction=window.PlanetGeography?.directionFromLatLon?.(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  let screen=null,facingDot=null;
+  if(direction&&planet&&cameraEntity?.camera&&pc){
+    const local=new pc.Vec3(direction.x*DISPLAY_RADIUS_UNITS,direction.y*DISPLAY_RADIUS_UNITS,direction.z*DISPLAY_RADIUS_UNITS);
+    const world=planet.getWorldTransform().transformPoint(local,new pc.Vec3());
+    const center=planet.getPosition(),normal=world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(world);
+    facingDot=normal.dot(toCamera);
+    screen=cameraEntity.camera.worldToScreen(world);
+  }
+  const x=Number(screen?.x),y=Number(screen?.y),valid=Number.isFinite(x)&&Number.isFinite(y);
+  return Object.freeze({valid,screenX:valid?Number(x.toFixed(3)):null,screenY:valid?Number(y.toFixed(3)):null,centerX:Number(centerX.toFixed(3)),centerY:Number(centerY.toFixed(3)),deltaPixels:valid?Number(Math.hypot(x-centerX,y-centerY).toFixed(3)):null,facingDot:facingDot===null?null:Number(facingDot.toFixed(6)),source:"canonical-sphere-transform"});
 }
 function snapshot(){
   return Object.freeze({
