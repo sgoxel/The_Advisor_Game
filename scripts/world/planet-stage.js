@@ -186,7 +186,7 @@ let localFrameStats={lastFrameMs:0,recent:[],maxDuringPreparationMs:0};
 const localSharedPrimitives={};
 const localResourceCache=new Map();
 function freshLocalResources(){
-  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,
+  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInOffsetClamped:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
@@ -2009,19 +2009,39 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
     projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
-    // A stand-in prepared for a slightly different focus (after a pan) is
-    // offset by the exact east/north delta so geography stays world-anchored.
-    const offset=displayResource?localFocusOffsetMeters(displayResource):{east:0,north:0};
+    // A prepared stand-in normally remains exactly world-anchored while a new
+    // focus resource is built. At ground scale a small pointer drag can request
+    // a focus many kilometres away, which would translate the old 3x surround
+    // completely outside the viewport and expose the clear color. Preserve the
+    // exact offset while the old surround still covers the requested viewport;
+    // otherwise clamp only the temporary stand-in translation to the coverage
+    // margin. The requested focus remains authoritative and the new resource is
+    // still swapped atomically as soon as preparation completes.
+    const rawOffset=displayResource?localFocusOffsetMeters(displayResource):{east:0,north:0};
+    const standInActive=Boolean(displayResource)&&localResources.requestedSignature!==displayResource.signature;
+    let offset={east:rawOffset.east,north:rawOffset.north},standInOffsetClamped=false;
+    if(standInActive&&displayResource){
+      const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
+      const visibleHeightMeters=shownHeightMeters,visibleWidthMeters=visibleHeightMeters*aspect;
+      const surroundWidthMeters=displayResource.dims.patchWidth*3,surroundHeightMeters=displayResource.dims.patchHeight*3;
+      const safeEast=Math.max(0,(surroundWidthMeters-visibleWidthMeters)/2);
+      const safeNorth=Math.max(0,(surroundHeightMeters-visibleHeightMeters)/2);
+      offset={east:clamp(rawOffset.east,-safeEast,safeEast),north:clamp(rawOffset.north,-safeNorth,safeNorth)};
+      standInOffsetClamped=Math.abs(offset.east-rawOffset.east)>.001||Math.abs(offset.north-rawOffset.north)>.001;
+    }
     tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,0,-offset.north/dims.metersPerUnit*patchScale);
     const requestedIndex=requestedLodIndex,visibleIndex=displayResource?.levelIndex??requestedIndex;
-    localResources.standInActive=Boolean(displayResource)&&localResources.requestedSignature!==displayResource.signature;
+    localResources.standInActive=standInActive;
+    localResources.standInOffsetClamped=standInOffsetClamped;
+    localResources.standInRawOffsetMeters={east:Number(rawOffset.east.toFixed(3)),north:Number(rawOffset.north.toFixed(3))};
+    localResources.standInAppliedOffsetMeters={east:Number(offset.east.toFixed(3)),north:Number(offset.north.toFixed(3))};
     localResources.standInMagnification=Number(Math.max(1,dims.presentationCompensation).toFixed(4));
     localResources.visibleLevel=displayResource?.dims.levelId??null;
     localResources.requestedLevelIndex=requestedIndex;localResources.visibleLevelIndex=displayResource?visibleIndex:null;
     if(horizonSkirt){
-      // The 3x world-matched continuation shares the patch scale so coast and
-      // relief bearings line up; stand-in shrink is bounded (1/3) so it still
-      // covers the viewport.
+      // The 3x world-matched continuation shares the patch scale. During a
+      // large focus jump the bounded stand-in offset guarantees that this last
+      // valid terrain representation still covers the viewport until swap.
       const surroundScale=patchScale;
       horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
       horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,-.012,-offset.north/dims.metersPerUnit*surroundScale);
