@@ -225,7 +225,10 @@ function create(seedValue){
       for(const la of continentGroups[a].lobes){
         for(const lb of continentGroups[b].lobes){
           const angle=Math.acos(clamp(dot(la.center,lb.center),-1,1));
-          if(angle<(la.radius+lb.radius)*1.08){overlaps=true;break;}
+          // Only merge generator groups when their continental lobes overlap deeply.
+          // Bounding-radius contact alone was over-merging distinct landmasses into one
+          // planet-spanning identity, which then left the one canonical label anchor off-screen.
+          if(angle<(la.radius+lb.radius)*0.62){overlaps=true;break;}
         }
         if(overlaps)break;
       }
@@ -430,21 +433,32 @@ function create(seedValue){
   function continentById(idValue){
     const parts=String(idValue||"").split("|");if(parts.length!==2||parts[0]!=="CONT")return null;
     const root=Number(parts[1]);if(!Number.isInteger(root)||!continentComponents.has(root))return null;
+    const component=continentComponents.get(root);
+    const centroidRaw=component.reduce((sum,group)=>({
+      x:sum.x+group.center.x,y:sum.y+group.center.y,z:sum.z+group.center.z
+    }),{x:0,y:0,z:0});
+    const centroid=Math.hypot(centroidRaw.x,centroidRaw.y,centroidRaw.z)>1e-6
+      ?normalize(centroidRaw.x,centroidRaw.y,centroidRaw.z)
+      :component[0].center;
     let best=null;
-    for(const group of continentComponents.get(root)){
+    for(const group of component){
       for(const candidateDirection of [group.center,...group.lobes.map(item=>item.center)]){
         const sample=sampleDirection(candidateDirection);
-        if(sample.land&&sample.continentId===String(idValue)&&(!best||sample.continentInfluence>best.sample.continentInfluence))best={direction:candidateDirection,sample};
+        if(!sample.land||sample.continentId!==String(idValue))continue;
+        const centrality=dot(candidateDirection,centroid);
+        const score=centrality*4+sample.continentInfluence;
+        if(!best||score>best.score)best={direction:candidateDirection,sample,score};
       }
     }
     if(!best)return null;
     const geo=latLonFromDirection(best.direction);
     return Object.freeze({
       id:String(idValue),name:continentNameForRoot(root),componentRoot:root,
-      groupIds:Object.freeze(continentComponents.get(root).map(group=>group.id)),
+      groupIds:Object.freeze(component.map(group=>group.id)),
       latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,
       latitudeDegrees:Number((geo.latitudeRadians*180/Math.PI).toFixed(6)),
-      longitudeDegrees:Number((geo.longitudeRadians*180/Math.PI).toFixed(6))
+      longitudeDegrees:Number((geo.longitudeRadians*180/Math.PI).toFixed(6)),
+      representativeAuthority:"component-interior-centroid"
     });
   }
   function signature(){
