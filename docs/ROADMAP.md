@@ -108,7 +108,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
-- `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement
+- `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
