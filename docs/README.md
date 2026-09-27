@@ -318,6 +318,16 @@ Two deterministic modes are used:
 
 **World foundation generation** — terrain, environment, initial NPC generation and other fixed starting-world generation use Campaign-SEED-based deterministic randomness and do **not** use fantasy time. Stable structural locations or slots may be used to address a deterministic SEED-based sample, such as tile coordinates or an NPC generation slot.
 
+### Authoritative SEED-Only Foundation Rule
+
+Every authoritative **initial or fixed world-foundation value** must be assigned by Campaign-SEED code. No other runtime source is allowed to assign or alter those foundation values.
+
+Stable coordinates, hierarchy IDs, generation slots, terrain facts, political borders, settlement affiliations and similar inputs may be consumed by later foundation generators only when they are themselves deterministic outputs/addresses of the same Campaign SEED process. They are not independent authorities and must never introduce camera-, viewport-, timing-, device-, cache-, loading-order- or navigation-dependent values.
+
+In particular, camera position, zoom, viewport size, render bucket, FPS, frame timing, device state, loading/streaming order, wall-clock time and user navigation must never decide terrain, borders, political ownership, settlement positions, building positions, roads, resources, NPC foundation values or any other fixed generated-world value.
+
+The only permitted non-foundation change path is **live Simulation action over fantasy time**. Such changes use the deterministic live-action rule below and may modify campaign state/history, but they do not rewrite the original SEED-generated foundation.
+
 **Live simulation actions** — NPC actions, decisions, dynamic events and other changing behavior use:
 
 **Random(Campaign SEED, Fantasy Game Timestamp)**
