@@ -194,6 +194,7 @@ const atlasAuthorityIndex=new Map();
 const atlasAuthorityQueue=[];
 const atlasAuthorityQueued=new Set();
 let atlasAuthorityWorkerScheduled=false;
+let atlasAuthorityRefreshScheduled=false;
 function atlasAuthorityKey(kind,tile){
   if(!tile)return null;
   const size=kind==="country"?Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608):8192;
@@ -210,9 +211,20 @@ function atlasQueueAuthority(kind,tile){
     schedule(atlasDrainAuthorityQueue,{timeout:120});
   }
 }
+function atlasScheduleAuthorityRefresh(){
+  atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
+  mapContextCache={key:null,value:null};
+  if(atlasAuthorityRefreshScheduled)return;
+  atlasAuthorityRefreshScheduled=true;
+  requestAnimationFrame(()=>{
+    atlasAuthorityRefreshScheduled=false;
+    if(ready&&root&&canvas&&activeSeed)updateMapPresentation();
+  });
+}
 function atlasDrainAuthorityQueue(deadline){
   atlasAuthorityWorkerScheduled=false;
   const started=performance.now();
+  let changed=false;
   while(atlasAuthorityQueue.length&&((deadline?.timeRemaining?.()||0)>1||performance.now()-started<3)){
     const job=atlasAuthorityQueue.shift();atlasAuthorityQueued.delete(job.key);
     let value=null;
@@ -231,8 +243,9 @@ function atlasDrainAuthorityQueue(deadline){
         }
       }
     }catch(_){}
-    atlasAuthorityIndex.set(job.key,value);
+    atlasAuthorityIndex.set(job.key,value);changed=true;
   }
+  if(changed)atlasScheduleAuthorityRefresh();
   if(atlasAuthorityQueue.length&&!atlasAuthorityWorkerScheduled){
     atlasAuthorityWorkerScheduled=true;
     const schedule=window.requestIdleCallback||((cb)=>setTimeout(()=>cb({timeRemaining:()=>4,didTimeout:false}),0));
@@ -342,8 +355,16 @@ function mapContextForFocus(){
   if(mapContextCache.key===key&&mapContextCache.value)return mapContextCache.value;
   const tile=mapWorldTileAt(lat,lon),needed=new Set(kinds),name=(kind,fallback)=>{
     try{
-      if(kind==="country")return window.PoliticalGeography?.countryAt?.(activeSeed,tile.x,tile.y)?.name||fallback;
-      if(kind==="region")return window.RegionProfile?.at?.(activeSeed,tile.x,tile.y)?.name||fallback;
+      if(kind==="country"){
+        const key=atlasAuthorityKey("country",tile);
+        if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("country",tile);
+        return atlasAuthorityIndex.get(key)?.name||null;
+      }
+      if(kind==="region"){
+        const key=atlasAuthorityKey("region",tile);
+        if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("region",tile);
+        return atlasAuthorityIndex.get(key)?.name||null;
+      }
       return window.GeographyFoundation?.hierarchyName?.(activeSeed,kind,tile.x,tile.y)||fallback;
     }catch(_){return fallback;}
   };
