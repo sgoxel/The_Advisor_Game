@@ -297,6 +297,14 @@ let worldProjectionAnchorCache=null;
 let settlementRevealCache={key:null,value:null};
 let localStaticRefreshScheduled=false;
 let politicalScaleEvidenceCache=null;
+let coordinateFabric=null;
+function coordinateFabricAuthority(){
+  if(!activeSeed||!window.SeedCoordinateFabric)return null;
+  if(!coordinateFabric||coordinateFabric.seed!==activeSeed){
+    coordinateFabric=window.SeedCoordinateFabric.create(activeSeed,{radiusMeters:WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+  }
+  return coordinateFabric;
+}
 
 function wrapLongitudeRadians(value){
   let lon=Number(value)||0;lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return lon;
@@ -319,19 +327,23 @@ function planetWorldAnchor(){
   return worldProjectionAnchorCache;
 }
 function mapWorldTileAt(latitudeRadians,longitudeRadians){
+  const fabric=coordinateFabricAuthority();
+  if(fabric)return fabric.worldTileForLatLon(latitudeRadians,longitudeRadians);
   const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
   const tile=geography?.worldTileForLatLon?.(latitudeRadians,longitudeRadians,tileMeters,WORLD_RADIUS_METERS)||
     window.PlanetGeography?.worldTileForLatLon?.(activeSeed,latitudeRadians,longitudeRadians,tileMeters,WORLD_RADIUS_METERS);
   return Object.freeze({x:String(tile?.x??"0"),y:String(tile?.y??"0")});
 }
 function worldLatLonForTile(xValue,yValue){
+  const fabric=coordinateFabricAuthority(),geo=fabric?.worldLatLonForTile?.(xValue,yValue);
+  if(geo)return geo;
   const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
-  const geo=geography?.worldLatLonForTile?.(xValue,yValue,tileMeters,WORLD_RADIUS_METERS)||
+  const legacy=geography?.worldLatLonForTile?.(xValue,yValue,tileMeters,WORLD_RADIUS_METERS)||
     window.PlanetGeography?.worldLatLonForTile?.(activeSeed,xValue,yValue,tileMeters,WORLD_RADIUS_METERS);
-  if(geo)return Object.freeze({
-    latitudeRadians:Number(geo.latitudeRadians)||0,longitudeRadians:Number(geo.longitudeRadians)||0,
-    latitudeDegrees:Number(geo.latitudeDegrees)||0,longitudeDegrees:Number(geo.longitudeDegrees)||0,
-    worldTile:Object.freeze({x:String(geo.worldTile?.x??xValue??"0"),y:String(geo.worldTile?.y??yValue??"0")})
+  if(legacy)return Object.freeze({
+    latitudeRadians:Number(legacy.latitudeRadians)||0,longitudeRadians:Number(legacy.longitudeRadians)||0,
+    latitudeDegrees:Number(legacy.latitudeDegrees)||0,longitudeDegrees:Number(legacy.longitudeDegrees)||0,
+    worldTile:Object.freeze({x:String(legacy.worldTile?.x??xValue??"0"),y:String(legacy.worldTile?.y??yValue??"0")})
   });
   return Object.freeze({latitudeRadians:0,longitudeRadians:0,latitudeDegrees:0,longitudeDegrees:0,worldTile:Object.freeze({x:String(xValue??"0"),y:String(yValue??"0")})});
 }
@@ -1287,17 +1299,19 @@ function renderMapPresentation(){
 function updateMapPresentation(){if(!root||!canvas||!activeSeed)return;renderMapPresentation();}
 
 function tangentFrame(latitudeRadians,longitudeRadians){
-  const lat=Number(latitudeRadians)||0,lon=Number(longitudeRadians)||0;
-  const cLat=Math.cos(lat),sLat=Math.sin(lat),cLon=Math.cos(lon),sLon=Math.sin(lon);
-  const up=[cLat*sLon,sLat,cLat*cLon];
-  const east=[cLon,0,-sLon];
-  const north=[-sLat*sLon,cLat,-sLat*cLon];
-  return Object.freeze({
-    originMeters:Object.freeze(up.map(v=>Number((v*WORLD_RADIUS_METERS).toFixed(3)))),
-    east:Object.freeze(east.map(v=>Number(v.toFixed(6)))),
-    north:Object.freeze(north.map(v=>Number(v.toFixed(6)))),
-    up:Object.freeze(up.map(v=>Number(v.toFixed(6))))
-  });
+  const fabric=coordinateFabricAuthority(),described=fabric?.describeLatLon?.(latitudeRadians,longitudeRadians);
+  if(described?.tangentBasis){
+    const basis=described.tangentBasis,planet=described.planetMeters;
+    return Object.freeze({
+      originMeters:Object.freeze([Number(planet.x.toFixed(3)),Number(planet.y.toFixed(3)),Number(planet.z.toFixed(3))]),
+      east:Object.freeze([basis.east.x,basis.east.y,basis.east.z].map(v=>Number(v.toFixed(6)))),
+      north:Object.freeze([basis.north.x,basis.north.y,basis.north.z].map(v=>Number(v.toFixed(6)))),
+      up:Object.freeze([basis.up.x,basis.up.y,basis.up.z].map(v=>Number(v.toFixed(6))))
+    });
+  }
+  const lat=Number(latitudeRadians)||0,lon=Number(longitudeRadians)||0,cLat=Math.cos(lat),sLat=Math.sin(lat),cLon=Math.cos(lon),sLon=Math.sin(lon);
+  const up=[cLat*sLon,sLat,cLat*cLon],east=[cLon,0,-sLon],north=[-sLat*sLon,cLat,-sLat*cLon];
+  return Object.freeze({originMeters:Object.freeze(up.map(v=>Number((v*WORLD_RADIUS_METERS).toFixed(3)))),east:Object.freeze(east.map(v=>Number(v.toFixed(6)))),north:Object.freeze(north.map(v=>Number(v.toFixed(6)))),up:Object.freeze(up.map(v=>Number(v.toFixed(6))))});
 }
 function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
 function projectionHandoffForZoom(value=zoomState.scalar){
