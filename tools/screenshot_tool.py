@@ -6440,15 +6440,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             if(!geo)throw new Error('PlanetGeography unavailable');
             const out={};
             const nearWater=(lat,lon)=>{
-              const d=32000/radius,c=Math.max(.08,Math.cos(lat));
+              const d=64/radius,c=Math.max(.08,Math.cos(lat));
               return !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat+d)),lon).land||
                      !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat-d)),lon).land||
                      !geo.sampleLatLon(lat,lon+d/c).land||!geo.sampleLatLon(lat,lon-d/c).land;
             };
             for(let lat=-68;lat<=68;lat+=4)for(let lon=-176;lon<180;lon+=4){
               const la=lat*Math.PI/180,lo=lon*Math.PI/180,g=geo.sampleLatLon(la,lo);if(!g.land)continue;
-              const wet=g.surfaceClass==='coast'||Number(g.moisture)>.70;
-              const rocky=Number(g.elevationMeters)>1550||Number(g.mountainInfluence)>.22;
+              const wet=nearWater(la,lo)||g.surfaceClass==='coast'||Number(g.moisture)>.68;
+              const rocky=!wet&&(Number(g.elevationMeters)>1550||Number(g.mountainInfluence)>.22);
               const wooded=!wet&&!rocky&&Number(g.moisture)>.49;
               const grass=!wet&&!rocky&&!wooded;
               const key=wet?'wet':rocky?'rocky':wooded?'wooded':grass?'grassland':null;
@@ -6467,9 +6467,9 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("wooded-local","wooded","height:80",(1280,800),True),
             ("wet-local","wet","height:80",(1280,800),True),
             ("fauna-ground","grassland",1.0,(1280,800),True),
-            ("grassland-repeat","grassland","height:80",(1280,800),True),
             ("mid-lod-1000m","grassland","height:1000",(1280,800),True),
             ("far-lod-5000m","grassland","height:5000",(1280,800),True),
+            ("grassland-repeat","grassland","height:80",(1280,800),True),
             ("phone-landscape","grassland","height:80",(844,390),True),
             ("phone-portrait","wooded","height:80",(390,844),True),
             ("grassland-baseline-disabled","grassland","height:80",(1280,800),False),
