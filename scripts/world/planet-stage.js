@@ -1440,7 +1440,7 @@ function zoomBandFor(value){
   if(value<=SEMANTIC_LOCAL_BAND_START)return (ZOOM_BANDS.find(b=>b.max!==null&&value<=b.max)||ZOOM_BANDS[2]).id;
   return LOCAL_DETAIL_LEVELS[rawLodIndexForZoom(value)].band;
 }
-function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=-pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
+function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
 function lodHysteresisAt(index){
   const max=levelMaxScalar(index),previousMax=index>0?levelMaxScalar(index-1):projectionState.transitionStart;
   return Math.min(LOCAL_LOD_HYSTERESIS,Math.max(.0005,(max-previousMax)*.2));
@@ -2824,7 +2824,7 @@ function rotateBy(deltaYaw,deltaPitch){
 function rotationForLatLon(latitudeRadians,longitudeRadians){
   return Object.freeze({
     yawDegrees:normalizeYaw(-longitudeRadians*180/Math.PI),
-    pitchDegrees:clamp(-latitudeRadians*180/Math.PI,-78,78)
+    pitchDegrees:clamp(latitudeRadians*180/Math.PI,-78,78)
   });
 }
 function setViewTarget(target){
