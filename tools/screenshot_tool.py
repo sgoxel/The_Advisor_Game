@@ -7248,14 +7248,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         scalar=(math.log10(float(display_multiplier))+2.0)/2.0
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
         landmark_required=frame_index in (0,3,5,6,7,8)
-        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
-            const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{},c=s?.coordinateFabric||{};
-            const requireLandmark=Boolean(arguments[1]);
-            return s?.ready===true&&Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001&&
-                   Number(r?.pendingPreparationCount||0)===0&&Boolean(c?.revisionSignature)&&c?.fullWorldScan===false&&
-                   m?.centerMarker?.visible===true&&m?.centerMarker?.worldAnchored===true&&
-                   (!requireLandmark||Number(m?.landmarkVisibleCount||0)>=1);
-        """,float(scalar),bool(landmark_required)))
+        try:
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{},c=s?.coordinateFabric||{};
+                const requireLandmark=Boolean(arguments[1]);
+                return s?.ready===true&&Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001&&
+                       Number(r?.pendingPreparationCount||0)===0&&Boolean(c?.revisionSignature)&&c?.fullWorldScan===false&&
+                       m?.centerMarker?.visible===true&&m?.centerMarker?.worldAnchored===true&&
+                       (!requireLandmark||Number(m?.landmarkVisibleCount||0)>=1);
+            """,float(scalar),bool(landmark_required)))
+        except Exception as exc:
+            diagnostic=driver.execute_script("""
+                const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{},r=s.projection?.resourceBudget||{},c=s.coordinateFabric||{};
+                return {ready:s.ready,seed:s.activeSeed,scalar:s.zoom?.scalar,band:s.zoom?.visibleBand,pending:r.pendingPreparationCount,
+                  coordinateRevision:c.revisionSignature,centerMarker:m.centerMarker,landmarkVisibleCount:m.landmarkVisibleCount,
+                  visibleLandmarks:m.visibleLandmarks,visibleClasses:m.visibleLabelClasses,atlasVisible:m.atlasVisibleLabelCount,
+                  atlasCandidates:m.atlasCandidateCount,atlasBudget:m.maxLabelBudget,overlap:m.overlapRejectedCount,
+                  fullWorldScan:m.fullWorldScan,bounded:m.bounded};
+            """)
+            raise RuntimeError(f"WP-012 readiness timeout for {label}: {diagnostic}") from exc
         stream_proof=None
         if frame_index==4:
             stream_proof=driver.execute_script("""
@@ -14455,7 +14466,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-015", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-012", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
