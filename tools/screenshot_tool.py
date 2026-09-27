@@ -137,6 +137,7 @@ SCENARIOS = {
     "wp-s003-010-003-007",
     "wp-s003-010-003-008",
     "wp-s003-010-004",
+    "wp-s003-010-005",
     "wp-s004-001",
     "wp-s004-002",
     "wp-s004-003",
@@ -250,6 +251,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-007": 10,
     "wp-s003-010-003-008": 10,
     "wp-s003-010-004": 4,
+    "wp-s003-010-005": 22,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
     "wp-s004-003": 4,
@@ -1648,7 +1650,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-004","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6803,6 +6805,71 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             };
         """)
         return "atlas:"+label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-005":
+        from selenium.webdriver.support.ui import WebDriverWait
+        forward=(0.05,0.07,0.08,0.10,0.13,0.15,0.19,0.23,0.29,0.35,0.44,0.54,0.66,0.81,1.00)
+        reverse=(0.81,0.54,0.29,0.08,0.05)
+        plan=[("forward",value,(1280,800)) for value in forward]
+        plan += [("reverse",value,(1280,800)) for value in reverse]
+        plan += [
+            ("phone-landscape",0.81,(844,390)),
+            ("phone-portrait",1.00,(390,844)),
+        ]
+        direction,scalar,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]))
+        driver.execute_async_script("""
+            const done=arguments[arguments.length-1];
+            requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+        """)
+        if frame_index == 0:
+            focus=driver.execute_script("return window.PlanetStage?.setWorldTileFocus?.('0','0') || null")
+            if not isinstance(focus,dict):
+                raise RuntimeError(f"WP-005 canonical fixed-focus API unavailable: {focus}")
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
+        WebDriverWait(driver,150.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{},m=s?.mapPresentation||{},ls=s?.projection?.localStatic||{};
+            const target=Number(arguments[0]);
+            const localExpected=target>=0.63;
+            const fullExpected=target>=0.985;
+            return s?.ready===true &&
+                   Math.abs(Number(s?.zoom?.scalar||0)-target)<0.000001 &&
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   Number(r?.blockingZoomBuilds||0)===0 &&
+                   m?.bounded===true && m?.fullWorldScan===false &&
+                   Number(m?.atlasVisibleLabelCount||0)>0 &&
+                   (!localExpected || (s?.projection?.tangentPatchActive===true && ls?.active===true)) &&
+                   (!fullExpected || String(ls?.revealTier||'')==='full');
+        """,float(scalar)))
+        driver.execute_async_script("""
+            const done=arguments[arguments.length-1];
+            requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+        """)
+        WebDriverWait(driver,15.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{},m=s?.mapPresentation||{};
+            return Number(r?.pendingPreparationCount||0)===0 &&
+                   Number(r?.blockingZoomBuilds||0)===0 &&
+                   m?.bounded===true && m?.fullWorldScan===false &&
+                   Number(m?.atlasVisibleLabelCount||0)>0;
+        """))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),z=s?.zoom||{},p=s?.projection||{},r=p?.resourceBudget||{},ld=p?.localDetail||{},ls=p?.localStatic||{},m=s?.mapPresentation||{},pp=p?.presentation||{};
+            return {
+              scalar:z.scalar,requestedBand:z.requestedBand,visibleBand:z.visibleBand,
+              focus:s?.canonicalFocus,rotation:s?.rotation,
+              camera:{distance:z.cameraDistance,baseDistance:z.baseCameraDistance,target:p.cameraTarget,fov:pp.fov,cameraY:pp.cameraY,cameraZ:pp.cameraZ,targetHeightMeters:pp.targetHeightMeters},
+              projection:{mode:p.mode,blend:p.blend,continuityErrorMeters:p.continuityErrorMeters,tangentOrigin:p.tangentOrigin},
+              footprint:[z.visibleFootprintWidthMeters,z.visibleFootprintHeightMeters],
+              scale:{meters:m.scaleDistanceMeters,label:m.scaleLabel,multiplier:m.zoomScaleMultiplier,zoomLabel:m.zoomScaleLabel},
+              borders:{projectedSegments:m.projectedBorderSegmentCount,worldVertices:m.borderWorldVertexCount,owners:m.politicalOwnerCount},
+              landmarks:{visible:m.landmarkVisibleCount,kinds:m.landmarkKinds},
+              atlas:{visible:m.atlasVisibleLabelCount,candidates:m.atlasCandidateCount,queryCells:m.atlasQueryCellCount,hidden:m.hiddenHemisphereCulledCount,offscreen:m.offscreenCulledCount,overlap:m.overlapRejectedCount,classes:m.visibleLabelClasses,labels:m.visibleLabels},
+              terrain:{level:ld.level,sampleSpacingMeters:ld.geometrySampleSpacingMeters,metersPerTexel:ld.detailMetersPerTexel,vertices:ld.vertices,triangles:ld.triangles,fullWorldMaterialized:ld.fullWorldMaterialized},
+              static:{tier:ls.revealTier,id:ls.settlementId,name:ls.settlementName,layout:ls.layoutSignature,presentationScale:ls.presentationScale,roads:ls.roadCount,buildings:ls.buildingCount,vegetation:ls.vegetationCount,drawCalls:ls.drawCallEstimate,triangles:ls.triangleEstimate,active:ls.active,viewportBounded:ls.viewportBounded},
+              resources:{requested:r.requestedSignature,active:r.activeSignature,prepared:r.preparedSignature,pending:r.pendingPreparationCount,cached:r.cachedResourceCount,activeCount:r.activeResourceCount,culled:r.culledOuterRepresentations,evictions:r.evictions,bytes:r.estimatedCacheBytes,buildMs:r.lastBuildMs,swapMs:r.lastSwapMs,maxSliceMs:r.maxPreparationSliceMs,recentMaxFrameMs:r.recentMaxFrameMs,frameMs:r.lastFrameMs,blockingZoomBuilds:r.blockingZoomBuilds,offscreenFineDetailActive:r.offscreenFineDetailActive},
+              mapUpdateMs:m.lastUpdateMs,labelBuildMs:m.labelQueryBuildMs
+            };
+        """)
+        return "zoom-e2e:"+direction+":"+format(float(scalar),".2f")+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-004":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -7258,6 +7325,73 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone landscape atlas frame has unexpected viewport: {landscape}")
         if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
             raise RuntimeError(f"Phone portrait atlas frame has unexpected viewport: {portrait}")
+        return
+    if scenario == "wp-s003-010-005":
+        if len(frames) < 22:
+            raise RuntimeError("wp-s003-010-005 requires 22 fixed-focus forward/reverse/mobile frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:22]]
+        expected=[0.05,0.07,0.08,0.10,0.13,0.15,0.19,0.23,0.29,0.35,0.44,0.54,0.66,0.81,1.00,0.81,0.54,0.29,0.08,0.05,0.81,1.00]
+        scalars=[float((s.get("zoom") or {}).get("scalar") or -1) for s in stages]
+        if any(abs(a-b)>0.000001 for a,b in zip(scalars,expected)):
+            raise RuntimeError(f"WP-005 scalar sequence mismatch: {scalars}")
+        focus=[(round(float((s.get("canonicalFocus") or {}).get("latitudeDegrees") or 0),6),round(float((s.get("canonicalFocus") or {}).get("longitudeDegrees") or 0),6)) for s in stages]
+        if len(set(focus)) != 1:
+            raise RuntimeError(f"WP-005 zoom-only run relocated focus: {focus}")
+        rotations=[(round(float((s.get("rotation") or {}).get("yawDegrees") or 0),3),round(float((s.get("rotation") or {}).get("pitchDegrees") or 0),3)) for s in stages]
+        if len(set(rotations)) != 1:
+            raise RuntimeError(f"WP-005 zoom-only run rotated camera: {rotations}")
+        for i,s in enumerate(stages):
+            cf=s.get("canonicalFocus") or {}; tile=cf.get("worldTile") or {}
+            z=s.get("zoom") or {}; p=s.get("projection") or {}; r=p.get("resourceBudget") or {}; m=s.get("mapPresentation") or {}; ld=p.get("localDetail") or {}; ls=p.get("localStatic") or {}
+            if str(tile.get("x"))!="0" or str(tile.get("y"))!="0" or float(cf.get("screenSpaceFocusDeltaPixels") or 0)!=0:
+                raise RuntimeError(f"WP-005 canonical focus drift at frame {i+1}: {cf}")
+            if m.get("bounded") is not True or m.get("fullWorldScan") is not False or int(m.get("atlasVisibleLabelCount") or 0)<1:
+                raise RuntimeError(f"WP-005 map/atlas not bounded and visible at frame {i+1}: {m}")
+            if int(r.get("pendingPreparationCount") or 0)!=0 or int(r.get("blockingZoomBuilds") or 0)!=0 or r.get("offscreenFineDetailActive") is not False:
+                raise RuntimeError(f"WP-005 streaming budget failed at frame {i+1}: {r}")
+            if ld and ld.get("fullWorldMaterialized") is not False:
+                raise RuntimeError(f"WP-005 local LOD materialized full world at frame {i+1}: {ld}")
+            if float(z.get("scalar") or 0)>=0.63 and (p.get("tangentPatchActive") is not True or ls.get("active") is not True):
+                raise RuntimeError(f"WP-005 local world missing at frame {i+1}: projection={p.get('mode')} static={ls}")
+        heights=[float((s.get("zoom") or {}).get("visibleFootprintHeightMeters") or 0) for s in stages[:15]]
+        if any(heights[i+1]>=heights[i] for i in range(len(heights)-1)):
+            raise RuntimeError(f"WP-005 forward physical footprint is not strictly refining: {heights}")
+        reverse_heights=[float((s.get("zoom") or {}).get("visibleFootprintHeightMeters") or 0) for s in stages[15:20]]
+        if any(reverse_heights[i+1]<=reverse_heights[i] for i in range(len(reverse_heights)-1)):
+            raise RuntimeError(f"WP-005 reverse physical footprint is not expanding: {reverse_heights}")
+        surface=[(s.get("canonicalFocus") or {}).get("surfaceIdentity") or {} for s in stages]
+        center_ids=[(bool((x.get("center") or {}).get("land")),str((x.get("center") or {}).get("surfaceClass") or ""),round(float((x.get("center") or {}).get("elevationMeters") or 0),2)) for x in surface]
+        if len(set(center_ids)) != 1:
+            raise RuntimeError(f"WP-005 canonical surface identity changed across LODs: {center_ids}")
+        identity_names={}
+        for i,s in enumerate(stages):
+            for item in (s.get("mapPresentation") or {}).get("visibleLabels") or []:
+                key=str(item.get("canonicalEntityId") or "")
+                name=str(item.get("authoritativeName") or "")
+                if not key or not name:
+                    continue
+                if key in identity_names and identity_names[key]!=name:
+                    raise RuntimeError(f"WP-005 atlas entity renamed across zoom at frame {i+1}: {key}: {identity_names[key]} -> {name}")
+                identity_names[key]=name
+        reveal=[(s.get("projection") or {}).get("localStatic") or {} for s in stages]
+        if str(reveal[12].get("revealTier") or "") not in {"footprint","route","coarse","refined","full"}:
+            raise RuntimeError(f"WP-005 0.66x did not reveal settlement structure: {reveal[12]}")
+        if str(reveal[13].get("revealTier") or "") not in {"route","coarse","refined","full"} or int(reveal[13].get("roadCount") or 0)<1 or int(reveal[13].get("buildingCount") or 0)<1:
+            raise RuntimeError(f"WP-005 0.81x settlement structure is not readable: {reveal[13]}")
+        ground=reveal[14]
+        if str(ground.get("revealTier") or "")!="full" or int(ground.get("roadCount") or 0)<3 or int(ground.get("buildingCount") or 0)<6 or abs(float(ground.get("presentationScale") or 0)-1.0)>0.001:
+            raise RuntimeError(f"WP-005 ground did not preserve canonical full settlement: {ground}")
+        forward_reverse=((13,15),(11,16),(8,17),(2,18),(0,19))
+        for a,b in forward_reverse:
+            sa,sb=stages[a],stages[b]
+            if (sa.get("zoom") or {}).get("visibleBand")!=(sb.get("zoom") or {}).get("visibleBand") or (sa.get("projection") or {}).get("mode")!=(sb.get("projection") or {}).get("mode"):
+                raise RuntimeError(f"WP-005 reverse zoom semantic/projection mismatch at scalar {expected[a]}: forward={(sa.get('zoom') or {}).get('visibleBand')}/{(sa.get('projection') or {}).get('mode')} reverse={(sb.get('zoom') or {}).get('visibleBand')}/{(sb.get('projection') or {}).get('mode')}")
+        phone_landscape=frames[20].get("runtime",{}).get("viewport",{})
+        phone_portrait=frames[21].get("runtime",{}).get("viewport",{})
+        if int(phone_landscape.get("width") or 0)>900 or int(phone_landscape.get("height") or 0)>430:
+            raise RuntimeError(f"WP-005 phone landscape viewport invalid: {phone_landscape}")
+        if int(phone_portrait.get("width") or 0)>430 or int(phone_portrait.get("height") or 0)<700:
+            raise RuntimeError(f"WP-005 phone portrait viewport invalid: {phone_portrait}")
         return
     if scenario == "wp-s003-010-004":
         if len(frames) < 4:
@@ -13144,7 +13278,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008", "wp-s003-010-004", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
@@ -13170,7 +13304,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004", "wp-s003-010-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
