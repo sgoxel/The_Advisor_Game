@@ -111,7 +111,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
-- `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette
+- `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette — COMPLETED
 - `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna
 - `WP-S003-014` — Reactive Ambient Wildlife Behavior
 - `WP-S003-015` — Contextual Building Activity Indicators
