@@ -126,6 +126,7 @@ SCENARIOS = {
     "wp-s003-009-010",
     "wp-s003-012",
     "wp-s003-009-011",
+    "wp-s003-013",
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
@@ -242,6 +243,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-010": 7,
     "wp-s003-012": 8,
     "wp-s003-009-011": 7,
+    "wp-s003-013": 12,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -1691,7 +1693,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6430,6 +6432,98 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-013":
+        from selenium.webdriver.support.ui import WebDriverWait
+        # Find bounded canonical land samples with distinct biome identities.
+        targets=driver.execute_script("""
+            const stage=window.PlanetStage,s=stage.snapshot(),geo=window.PlanetGeography?.create?.(s.activeSeed),radius=stage.constants.WORLD_RADIUS_METERS;
+            if(!geo)throw new Error('PlanetGeography unavailable');
+            const out={};
+            const nearWater=(lat,lon)=>{
+              const d=32000/radius,c=Math.max(.08,Math.cos(lat));
+              return !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat+d)),lon).land||
+                     !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat-d)),lon).land||
+                     !geo.sampleLatLon(lat,lon+d/c).land||!geo.sampleLatLon(lat,lon-d/c).land;
+            };
+            for(let lat=-68;lat<=68;lat+=4)for(let lon=-176;lon<180;lon+=4){
+              const la=lat*Math.PI/180,lo=lon*Math.PI/180,g=geo.sampleLatLon(la,lo);if(!g.land)continue;
+              const wet=nearWater(la,lo)||g.surfaceClass==='coast'||Number(g.moisture)>.68;
+              const rocky=Number(g.elevationMeters)>1550||Number(g.mountainInfluence)>.22;
+              const wooded=!wet&&!rocky&&Number(g.moisture)>.49;
+              const grass=!wet&&!rocky&&!wooded;
+              const key=wet?'wet':rocky?'rocky':wooded?'wooded':grass?'grassland':null;
+              if(key&&!out[key])out[key]={lat:la,lon:lo,elevation:g.elevationMeters,moisture:g.moisture,surfaceClass:g.surfaceClass};
+            }
+            return out;
+        """)
+        required={"grassland","rocky","wooded","wet"}
+        if not required.issubset(set(targets or {})):
+            raise RuntimeError(f"Unable to find bounded wilderness biome targets: {targets}")
+        plan=(
+            ("village-edge","village",0.849485,(1280,800),True),
+            ("grassland-0.50x","grassland",0.849485,(1280,800),True),
+            ("grassland-1.00x","grassland",1.0,(1280,800),True),
+            ("rocky-0.50x","rocky",0.849485,(1280,800),True),
+            ("wooded-0.50x","wooded",0.849485,(1280,800),True),
+            ("wet-0.50x","wet",0.849485,(1280,800),True),
+            ("fauna-ground","grassland",1.0,(1280,800),True),
+            ("grassland-repeat","grassland",0.849485,(1280,800),True),
+            ("far-lod","grassland",0.70,(1280,800),True),
+            ("phone-landscape","grassland",0.849485,(844,390),True),
+            ("phone-portrait","wooded",0.849485,(390,844),True),
+            ("grassland-baseline-disabled","grassland",0.849485,(1280,800),False),
+        )
+        label,key,scalar,viewport,enabled=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
+        driver.execute_script("window.PlanetStage.setWildernessEnabled(arguments[0])",bool(enabled))
+        if key=="village":
+            # ~120 m east of the canonical village center: enough room for the
+            # managed-edge density ramp while preserving the village transition.
+            driver.execute_script("window.PlanetStage.setWorldTileFocus('60','0')")
+        else:
+            target=targets[key]
+            driver.execute_script("window.PlanetStage.setViewTarget({latitudeRadians:arguments[0],longitudeRadians:arguments[1]})",float(target["lat"]),float(target["lon"]))
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
+        if "fauna-ground" in label:
+            # Search nearby deterministic cells until one of the bounded fauna
+            # suitability zones is active; this moves camera only.
+            found=False
+            base=targets["grassland"]
+            for dy in (0.0,.002,-.002,.004,-.004):
+                for dx in (0.0,.002,-.002,.004,-.004):
+                    driver.execute_script("window.PlanetStage.setViewTarget({latitudeRadians:arguments[0],longitudeRadians:arguments[1]});window.PlanetStage.setZoomScalar(1)",float(base["lat"]+dy),float(base["lon"]+dx))
+                    try:
+                        WebDriverWait(driver,18.0).until(lambda d:d.execute_script("""
+                            const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},w=s.wilderness||{};
+                            return Number(r.pendingPreparationCount||0)===0&&Number(w.localAmbientFaunaActiveCount||0)>0;
+                        """))
+                        found=True;break
+                    except Exception:
+                        pass
+                if found: break
+            if not found:
+                raise RuntimeError("No bounded ambient fauna zone found near grassland evidence target")
+        else:
+            WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},w=s.wilderness||{};
+                const far=Boolean(arguments[1]),enabled=Boolean(arguments[2]);
+                if(Math.abs(Number(s.zoom?.scalar||0)-Number(arguments[0]))>.00001||Number(r.pendingPreparationCount||0)!==0)return false;
+                if(far)return w.localActive!==true;
+                if(!enabled)return w.localEnabled===false&&w.localActive!==true;
+                return w.localEnabled===true&&Number(w.localAcceptedStaticProps||0)>=8;
+            """,float(scalar),"far-lod" in label,bool(enabled)))
+        time.sleep(.25)
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),w=s.wilderness||{},ls=s.projection?.localStatic||{},r=s.projection?.resourceBudget||{};
+            return {label:arguments[0],scalar:s.zoom?.scalar,focus:s.canonicalFocus?.worldTile,level:s.projection?.localDetail?.level,
+              biome:w.localBiome,biomeCounts:w.localBiomeCounts,families:w.localFamilyCounts,accepted:w.localAcceptedStaticProps,
+              fauna:w.localAmbientFaunaActiveCount,candidates:w.localCandidateCount,rejectedWater:w.localRejectedWater,
+              rejectedManaged:w.localRejectedManaged,rejectedRoad:w.localRejectedRoad,drawCalls:w.localDrawCalls,triangles:w.localTriangles,
+              prepMs:w.localPreparationMs,updateMs:w.localFrameUpdateMs,maxUpdateMs:w.localMaxFrameUpdateMs,layout:w.localLayoutSignature,
+              cacheReuse:w.cacheReuse,enabled:w.localEnabled,active:w.localActive,fullWorldScan:w.localFullWorldScan,
+              deterministicGlobalCells:w.localDeterministicGlobalCells,pending:r.pendingPreparationCount,localStatic:ls};
+        """,label)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-012":
         from selenium.webdriver.support.ui import WebDriverWait
         configs = (
@@ -8738,6 +8832,59 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             signatures.add((wild.get("acceptedStaticProps"),wild.get("vegetationClusters"),wild.get("rockClusters"),wild.get("ambientFaunaZones")))
         if len(signatures)!=1:
             raise RuntimeError(f"Wilderness deterministic counts changed across views: {signatures}")
+        return
+
+    if scenario == "wp-s003-013":
+        if len(frames) < 12:
+            raise RuntimeError("wp-s003-013 requires twelve local biome-wilderness evidence frames")
+        enabled=frames[:11]
+        local_signatures={}
+        seen_biomes=set()
+        fauna_frames=0
+        mobile_frames=0
+        for index,frame in enumerate(enabled, start=1):
+            stage=(frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {})
+            wild=stage.get("wilderness") or {}
+            resources=(stage.get("projection") or {}).get("resourceBudget") or {}
+            if wild.get("generated") is not True or wild.get("perFrameScatter") is not False or wild.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Wilderness authority failed in frame {index}: {wild}")
+            if wild.get("localFullWorldScan") is not False or wild.get("localDeterministicGlobalCells") is not True:
+                raise RuntimeError(f"Local wilderness bounded/deterministic contract failed in frame {index}: {wild}")
+            action=str(frame.get("action") or "")
+            if "far-lod" not in action:
+                if wild.get("localEnabled") is not True or int(resources.get("pendingPreparationCount") or 0)!=0:
+                    raise RuntimeError(f"Local wilderness readiness failed in frame {index}: wild={wild} resources={resources}")
+            if "far-lod" in action:
+                if wild.get("localActive") is True:
+                    raise RuntimeError(f"Far LOD failed to cull local wilderness in frame {index}: {wild}")
+            elif int(wild.get("localAcceptedStaticProps") or 0)<8:
+                raise RuntimeError(f"Local wilderness scene too sparse in frame {index}: {wild}")
+            if int(wild.get("localDrawCalls") or 0)>9 or float(wild.get("localMaxFrameUpdateMs") or 0)>4.0:
+                raise RuntimeError(f"Local wilderness draw/update budget failed in frame {index}: {wild}")
+            if float(wild.get("localPreparationMs") or 0)>40:
+                raise RuntimeError(f"Local wilderness preparation exceeded bounded budget in frame {index}: {wild}")
+            for key,value in (wild.get("localBiomeCounts") or {}).items():
+                if int(value or 0)>0: seen_biomes.add(str(key))
+            if int(wild.get("localAmbientFaunaActiveCount") or 0)>0: fauna_frames+=1
+            viewport=frame.get("runtime",{}).get("viewport",{})
+            if int(viewport.get("width") or 0)<900: mobile_frames+=1
+            sig=wild.get("localLayoutSignature")
+            if "grassland-repeat" in action:
+                local_signatures["repeat"]=sig
+            elif "grassland-" in action and "repeat" not in action and "baseline" not in action:
+                local_signatures.setdefault("initial",sig)
+        if not {"grassland","wooded","rocky","wet"}.issubset(seen_biomes):
+            raise RuntimeError(f"Wilderness biome coverage incomplete: {sorted(seen_biomes)}")
+        if fauna_frames<1:
+            raise RuntimeError("No active ambient fauna visible in WP-S003-013 evidence")
+        if mobile_frames<2:
+            raise RuntimeError(f"Mobile wilderness evidence incomplete: frames={mobile_frames}")
+        if not local_signatures.get("initial") or local_signatures.get("initial")!=local_signatures.get("repeat"):
+            raise RuntimeError(f"Repeated grassland layout changed: {local_signatures}")
+        baseline=frames[11]
+        bw=((baseline.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {}).get("wilderness") or {})
+        if bw.get("localEnabled") is not False or bw.get("localActive") is True or int(bw.get("localAcceptedStaticProps") or 0)!=0:
+            raise RuntimeError(f"Wilderness-disabled baseline hook failed: {bw}")
         return
 
     if scenario == "wp-s003-012":
@@ -13809,7 +13956,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
