@@ -6756,28 +6756,40 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             (1.000,"desktop:ground"),
         )
         scalar,label=plan[min(frame_index,len(plan)-1)]
+        expected_tiers=("none","footprint","footprint","route","route","route","coarse","refined","full","full")
+        expected_tier=expected_tiers[min(frame_index,len(expected_tiers)-1)]
         driver.set_window_size(1280,800); time.sleep(0.1)
+        if frame_index == 0:
+            focus=driver.execute_script("return window.PlanetStage.setWorldTileFocus?.('0','0') || null")
+            if not isinstance(focus,dict):
+                raise RuntimeError(f"Canonical starting-village focus API unavailable: {focus}")
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
         from selenium.webdriver.support.ui import WebDriverWait
-        WebDriverWait(driver,30.0).until(lambda d: d.execute_script("""
+        WebDriverWait(driver,45.0).until(lambda d: d.execute_script("""
             const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{};
             return Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.000001 &&
                    Number(r?.pendingPreparationCount||0)===0 &&
-                   (Number(arguments[0])<0.60 || String(ls?.revealTier||'none')!=='none');
-        """,scalar))
+                   String(ls?.revealTier||'none')===String(arguments[1]);
+        """,scalar,expected_tier))
         proof=driver.execute_script("""
-            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{};
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},wp=s?.projection?.worldTileProjection||{};
             return {
               scalar:s?.zoom?.scalar,
               visibleWidth:s?.zoom?.visibleFootprintWidthMeters,
               visibleHeight:s?.zoom?.visibleFootprintHeightMeters,
               level:s?.projection?.localDetail?.level,
+              focusWorldTile:s?.canonicalFocus?.worldTile,
+              projectionAnchorLand:wp?.land,
+              projectionAnchorClass:wp?.surfaceClass,
+              projectionRoundTripOrigin:wp?.roundTripOrigin,
               revealTier:ls?.revealTier,
               settlementId:ls?.settlementId,
               settlementName:ls?.settlementName,
               settlementClass:ls?.settlementClass,
               planRevision:ls?.settlementPlanRevision,
               layoutSignature:ls?.layoutSignature,
+              canonicalCenterTile:ls?.canonicalCenterTile,
+              presentationScale:ls?.presentationScale,
               occupiedAreaCount:ls?.occupiedAreaCount,
               coarseRoadCount:ls?.coarseRoadCount,
               coarseBuildingCount:ls?.coarseBuildingCount,
@@ -7046,6 +7058,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         focus=[((s.get("canonicalFocus") or {}).get("latitudeDegrees"),(s.get("canonicalFocus") or {}).get("longitudeDegrees")) for s in stages]
         if len(set(focus)) != 1:
             raise RuntimeError(f"Settlement reveal evidence changed canonical focus: {focus}")
+        tiles=[(s.get("canonicalFocus") or {}).get("worldTile") or {} for s in stages]
+        if any(str(tile.get("x"))!="0" or str(tile.get("y"))!="0" for tile in tiles):
+            raise RuntimeError(f"Settlement reveal did not stay on canonical Starting Village tile 0,0: {tiles}")
+        for s in stages:
+            projection=(s.get("projection") or {}).get("worldTileProjection") or {}
+            origin=projection.get("roundTripOrigin") or {}
+            if projection.get("land") is not True or str(origin.get("x"))!="0" or str(origin.get("y"))!="0":
+                raise RuntimeError(f"Planet/world projection anchor is not a land-safe exact origin: {projection}")
         expected=("none","footprint","footprint","route","route","route","coarse","refined","full","full")
         local=[(s.get("projection") or {}).get("localStatic") or {} for s in stages]
         tiers=tuple(str(item.get("revealTier") or "none") for item in local)
@@ -7058,8 +7078,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Settlement identity changed or missing across zoom: {ids}")
         if any(not value for value in layouts) or len(set(layouts)) != 1:
             raise RuntimeError(f"Settlement layout changed across zoom: {layouts}")
-        if any("SettlementArchetypes" not in str(item.get("authority") or "") for item in active):
-            raise RuntimeError(f"Settlement reveal did not use canonical SettlementArchetypes authority: {[item.get('authority') for item in active]}")
+        if any("SettlementArchetypes" not in str(item.get("authority") or "") or "StartingVillage" not in str(item.get("authority") or "") for item in active):
+            raise RuntimeError(f"Settlement reveal did not use canonical settlement + physical layout authorities: {[item.get('authority') for item in active]}")
+        centers=[item.get("canonicalCenterTile") or {} for item in active]
+        if any(str(item.get("x"))!="0" or str(item.get("y"))!="0" for item in centers):
+            raise RuntimeError(f"Settlement reveal canonical physical center changed: {centers}")
         if any(item.get("presentationOnly") is not True or item.get("simulationAuthority") is not False for item in active):
             raise RuntimeError("Settlement reveal crossed presentation/simulation authority boundary")
         footprint=local[1]
@@ -7075,8 +7098,12 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(refined.get("fullBuildingCount") or 0) < 1 or int(refined.get("roadCount") or 0) < 1:
             raise RuntimeError(f"0.94x refinement did not reveal canonical buildings/roads: {refined}")
         ground=local[9]
-        if int(ground.get("fullBuildingCount") or 0) < 1 or int(ground.get("fullRoadCount") or 0) < 1:
-            raise RuntimeError(f"Ground tier did not preserve the same settlement structure: {ground}")
+        if int(ground.get("fullBuildingCount") or 0) < 6 or int(ground.get("fullRoadCount") or 0) < 3:
+            raise RuntimeError(f"Ground tier did not preserve the same canonical settlement structure: {ground}")
+        if abs(float(ground.get("presentationScale") or 0)-1.0) > 0.001:
+            raise RuntimeError(f"Ground tier did not converge to physical 1:1 settlement scale: {ground.get('presentationScale')}")
+        if float(local[1].get("presentationScale") or 0) <= 1.0:
+            raise RuntimeError("Early settlement reveal did not use bounded screen-readable presentation scaling")
         if any(int(item.get("entityCount") or 0) > 120 or int(item.get("drawCallEstimate") or 0) > 120 for item in active):
             raise RuntimeError("Settlement reveal exceeded bounded presentation budget")
         return
