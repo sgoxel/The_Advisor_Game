@@ -1082,6 +1082,14 @@ function buildMapBorderSegments(){
         const dx=Number(BigInt(a.tile.x)-BigInt(b.tile.x)),dy=Number(BigInt(a.tile.y)-BigInt(b.tile.y));
         return dx*dx+dy*dy;
       };
+      // A lone unmatched crossing in an all-land cell is sampling ambiguity,
+      // not proof that a political border legitimately terminates inland.
+      // Only use the cell centre when two or more focused owner-pairs share the
+      // same all-land cell, which proves a visible multi-country junction.
+      const interiorOddGroups=[...byPair.values()].filter(group=>
+        (!focusOwnerId||group.owners.includes(focusOwnerId))&&group.edges.length%2===1
+      );
+      const sharedInteriorJunction=coastTerminals.length===0&&interiorOddGroups.length>=2;
       for(const group of byPair.values()){
         let i=0;
         for(;i+1<group.edges.length;i+=2)addSegment(group.edges[i],group.edges[i+1].point,group.owners);
@@ -1091,7 +1099,7 @@ function buildMapBorderSegments(){
           if(coastTerminals.length){
             const ordered=coastTerminals.slice().sort((a,b)=>tileDistanceSq(edge.point,a)-tileDistanceSq(edge.point,b));
             terminal=ordered.find(candidate=>segmentOnLand(edge.point,candidate))||null;
-          }else terminal=cellCenterPoint();
+          }else if(sharedInteriorJunction) terminal=cellCenterPoint();
           addSegment(edge,terminal,group.owners);
         }
       }
@@ -2470,6 +2478,7 @@ async function makeGeographyTexture(){
   let minElevation=Infinity,maxElevation=-Infinity;
   let landSamples=0,oceanSamples=0,islandSamples=0,mountainSamples=0,peakSamples=0;
   let highest=null,deepest=null,bestIsland=null,bestMountain=null,bestContinent=null,bestContinuity=null,bestContinuityScore=-Infinity;
+  const polarReferenceByRow=new Map(),polarBlendStart=80*Math.PI/180,polarBlendSpan=10*Math.PI/180;
 
   await runSlicedRange(TEXTURE_WIDTH*TEXTURE_HEIGHT,index=>{
     const py=Math.floor(index/TEXTURE_WIDTH),px=index-py*TEXTURE_WIDTH;
@@ -2478,7 +2487,15 @@ async function makeGeographyTexture(){
     const u=(px+0.5)/TEXTURE_WIDTH;
     const lon=(u-0.5)*Math.PI*2;
     const sample=geography.sampleLatLon(lat,lon);
-    const rgba=rgbaFromColor(sample.color);
+    let renderColor=sample.color;
+    const absLat=Math.abs(lat);
+    if(absLat>polarBlendStart){
+      let reference=polarReferenceByRow.get(py);
+      if(!reference){reference=geography.sampleLatLon(lat,0).color;polarReferenceByRow.set(py,reference);}
+      const t=smoothstep01((absLat-polarBlendStart)/polarBlendSpan);
+      renderColor=sample.color.map((value,channel)=>lerp(value,reference[channel],t));
+    }
+    const rgba=rgbaFromColor(renderColor);
     const dataIndex=index*4;
     data[dataIndex]=rgba[0];data[dataIndex+1]=rgba[1];data[dataIndex+2]=rgba[2];data[dataIndex+3]=255;
     minElevation=Math.min(minElevation,sample.elevationMeters);
@@ -2684,7 +2701,10 @@ async function buildPlanetMesh(){
       const visualMeters=visualElevationMeters(sample);
       const radius=DISPLAY_RADIUS_UNITS*(1+(visualMeters/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION);
       positions.push(direction.x*radius,direction.y*radius,direction.z*radius);
-      uvs.push(u,1-v);normals.push(0,0,0);
+      // Every longitude collapses to one geometric point at each pole. Give
+      // those duplicate pole vertices one canonical U so the equirectangular
+      // texture cannot create a radial seam/fan at the singularity.
+      uvs.push((latIndex===0||latIndex===LATITUDE_SEGMENTS)?.5:u,1-v);normals.push(0,0,0);
     }
   });
   await runSlicedRange(LATITUDE_SEGMENTS,lat=>{
