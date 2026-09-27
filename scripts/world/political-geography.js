@@ -15,6 +15,9 @@ const COUNTRY_WORDS_B=Object.freeze([
   "reach","ridge","stead","vale","watch","wick","wood"
 ]);
 const COUNTRY_FORMS=Object.freeze(["Realm","Kingdom","Principality","March","Dominion"]);
+const PLANET_ANCHOR_CACHE=new Map();
+const PLANET_TILE_METERS=2;
+const PLANET_RADIUS_METERS=637100;
 
 function toBig(value){return BigInt(WorldCoordinates.normalize(value))}
 function floorDiv(value,divisor){
@@ -156,46 +159,125 @@ function resolveWinner(seed,xValue,yValue,mode){
     candidateCount:(CANDIDATE_RADIUS*2+1)**2
   });
 }
-function capitalForCandidate(seed,candidate){
+function planetSurfaceAt(seed,xValue,yValue){
+  const pg=window.PlanetGeography;
+  if(!pg?.create)return null;
+  try{
+    const instance=pg.create(seed);
+    const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||pg.DEFAULT_TILE_METERS||PLANET_TILE_METERS));
+    const radius=Math.max(1,Number(pg.DEFAULT_WORLD_RADIUS_METERS||PLANET_RADIUS_METERS));
+    const geo=instance.worldLatLonForTile(xValue,yValue,tileMeters,radius);
+    const sample=instance.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians);
+    return Object.freeze({geo,sample});
+  }catch(_){return null;}
+}
+function deterministicCountryLandAnchor(seed,candidate){
+  const key=String(seed)+"|"+candidate.id;
+  if(PLANET_ANCHOR_CACHE.has(key))return PLANET_ANCHOR_CACHE.get(key);
   const baseX=toBig(candidate.politicalCenter.x),baseY=toBig(candidate.politicalCenter.y);
-  const rotation=unit(seed,"country-capital:rotation:"+candidate.key)*Math.PI*2;
-  const options=[Object.freeze({x:baseX,y:baseY})];
-  for(let ring=1;ring<=3;ring++){
-    const radius=BigInt(480*ring);
-    for(let spoke=0;spoke<8;spoke++){
-      const angle=rotation+(Math.PI*2*spoke/8);
-      const dx=BigInt(Math.round(Math.cos(angle)*Number(radius)));
-      const dy=BigInt(Math.round(Math.sin(angle)*Number(radius)));
-      options.push(Object.freeze({x:baseX+dx,y:baseY+dy}));
+  const phase=unit(seed,"country-planet-anchor:phase:"+candidate.key)*Math.PI*2;
+  const step=Math.max(1024,Math.floor(COUNTRY_CELL_SIZE/12));
+  const options=[{x:baseX,y:baseY,ring:0,spoke:0}];
+  for(let ring=1;ring<=7;ring++){
+    const radius=step*ring;
+    for(let spoke=0;spoke<16;spoke++){
+      const angle=phase+Math.PI*2*spoke/16;
+      options.push({
+        x:baseX+BigInt(Math.round(Math.cos(angle)*radius)),
+        y:baseY+BigInt(Math.round(Math.sin(angle)*radius)),
+        ring,spoke
+      });
     }
   }
-  let fallback=options[0];
+  let best=null;
   for(const option of options){
     const x=option.x.toString(),y=option.y.toString();
-    const terrain=GeographyFoundation.getTerrainType(seed,x,y);
-    const env=GeographyFoundation.environment(seed,x,y);
-    if(terrain!=="water"&&env.elevationMeters<1550){
-      return Object.freeze({x,y,terrain,elevationMeters:env.elevationMeters});
-    }
-    if(terrain!=="water")fallback=option;
+    let winner=null;try{winner=resolveWinner(seed,x,y,"full").best?.candidate||null;}catch(_){winner=null;}
+    if(!winner||winner.id!==candidate.id)continue;
+    const surface=planetSurfaceAt(seed,x,y);
+    if(!surface?.sample?.land)continue;
+    const elevation=Number(surface.sample.elevationMeters||0);
+    const score=option.ring*100+Math.abs(elevation-420)/4000+option.spoke*.0001;
+    if(!best||score<best.score)best={
+      score,x,y,ring:option.ring,spoke:option.spoke,
+      latitudeRadians:surface.geo.latitudeRadians,longitudeRadians:surface.geo.longitudeRadians,
+      surfaceClass:surface.sample.surfaceClass,elevationMeters:elevation,
+      continentId:surface.sample.continentId||null,continentName:surface.sample.continentName||null
+    };
   }
-  const x=fallback.x.toString(),y=fallback.y.toString();
-  const env=GeographyFoundation.environment(seed,x,y);
-  return Object.freeze({x,y,terrain:GeographyFoundation.getTerrainType(seed,x,y),elevationMeters:env.elevationMeters});
+  const result=best?Object.freeze({
+    x:best.x,y:best.y,searchRing:best.ring,searchSpoke:best.spoke,
+    latitudeRadians:best.latitudeRadians,longitudeRadians:best.longitudeRadians,
+    surfaceClass:best.surfaceClass,elevationMeters:Number(best.elevationMeters.toFixed(2)),
+    continentId:best.continentId,continentName:best.continentName,
+    authority:"PoliticalGeography+PlanetGeography owned-land anchor"
+  }):null;
+  PLANET_ANCHOR_CACHE.set(key,result);
+  return result;
+}
+function capitalForCandidate(seed,candidate){
+  const mapAnchor=deterministicCountryLandAnchor(seed,candidate);
+  if(mapAnchor){
+    const baseX=toBig(mapAnchor.x),baseY=toBig(mapAnchor.y);
+    const rotation=unit(seed,"country-capital:rotation:"+candidate.key)*Math.PI*2;
+    const options=[Object.freeze({x:baseX,y:baseY,ring:0})];
+    for(let ring=1;ring<=4;ring++){
+      const radius=BigInt(384*ring);
+      for(let spoke=0;spoke<12;spoke++){
+        const angle=rotation+(Math.PI*2*spoke/12);
+        options.push(Object.freeze({
+          x:baseX+BigInt(Math.round(Math.cos(angle)*Number(radius))),
+          y:baseY+BigInt(Math.round(Math.sin(angle)*Number(radius))),
+          ring
+        }));
+      }
+    }
+    for(const option of options){
+      const x=option.x.toString(),y=option.y.toString();
+      let winner=null;try{winner=resolveWinner(seed,x,y,"full").best?.candidate||null;}catch(_){winner=null;}
+      if(!winner||winner.id!==candidate.id)continue;
+      const surface=planetSurfaceAt(seed,x,y);
+      if(!surface?.sample?.land)continue;
+      const terrain=GeographyFoundation.getTerrainType(seed,x,y);
+      const env=GeographyFoundation.environment(seed,x,y);
+      return Object.freeze({
+        x,y,terrain,elevationMeters:env.elevationMeters,
+        planetLand:true,planetSurfaceClass:surface.sample.surfaceClass,
+        latitudeRadians:surface.geo.latitudeRadians,longitudeRadians:surface.geo.longitudeRadians,
+        parentCountryMatch:true,authority:"PoliticalGeography+PlanetGeography owned-land capital"
+      });
+    }
+  }
+  const baseX=toBig(candidate.politicalCenter.x),baseY=toBig(candidate.politicalCenter.y);
+  const x=baseX.toString(),y=baseY.toString(),env=GeographyFoundation.environment(seed,x,y);
+  return Object.freeze({
+    x,y,terrain:GeographyFoundation.getTerrainType(seed,x,y),elevationMeters:env.elevationMeters,
+    planetLand:false,planetSurfaceClass:null,latitudeRadians:null,longitudeRadians:null,
+    parentCountryMatch:resolveWinner(seed,x,y,"full").best?.candidate?.id===candidate.id,
+    authority:"legacy fallback: no owned PlanetGeography land found"
+  });
 }
 function countryFromCandidate(seed,candidate,scoreValue){
+  const mapAnchor=deterministicCountryLandAnchor(seed,candidate);
   const capital=capitalForCandidate(seed,candidate);
   return Object.freeze({
     id:candidate.id,
     name:candidate.name,
     cellX:candidate.cellX,cellY:candidate.cellY,
     politicalCenter:candidate.politicalCenter,
+    mapAnchor:mapAnchor||candidate.politicalCenter,
     capital:Object.freeze({
       id:"CAP|"+candidate.id,
       name:candidate.name+" Capital",
       x:capital.x,y:capital.y,
       terrain:capital.terrain,
-      elevationMeters:capital.elevationMeters
+      elevationMeters:capital.elevationMeters,
+      planetLand:Boolean(capital.planetLand),
+      planetSurfaceClass:capital.planetSurfaceClass||null,
+      latitudeRadians:capital.latitudeRadians,
+      longitudeRadians:capital.longitudeRadians,
+      parentCountryMatch:Boolean(capital.parentCountryMatch),
+      authority:capital.authority
     }),
     ownership:"country",
     foundation:"campaign-seed",
@@ -363,6 +445,8 @@ function proof(seedValue){
   const borders=borderEvidence(seed,origin);
   const sampleCountries=[origin,...neighbors.slice(0,5).map(item=>countryById(seed,item.id)).filter(Boolean)];
   const capitalInside=sampleCountries.every(country=>ownerAt(seed,country.capital.x,country.capital.y).id===country.id);
+  const capitalPlanetLand=sampleCountries.every(country=>country.capital.planetLand===true);
+  const mapAnchorsPlanetLand=sampleCountries.every(country=>planetSurfaceAt(seed,country.mapAnchor.x,country.mapAnchor.y)?.sample?.land===true);
   const neighborIds=neighbors.map(item=>item.id);
   const neighborIdsRepeat=nearbyCountries(seed,origin).map(item=>item.id);
   const borderSamplePass=borders.length>0&&borders.every(border=>border.sideSamplesPass)&&neighbors.length===borders.length;
@@ -382,7 +466,7 @@ function proof(seedValue){
   const pass=Boolean(
     deterministic&&neighborsStable&&timeIndependent&&terrainAuthorityPreserved&&hierarchyIntegrated&&
     origin.id&&origin.name&&origin.capital&&neighbors.length>=2&&borders.length>=1&&
-    capitalInside&&borderSamplePass&&naturalFeatureInfluence&&nonRectangular
+    capitalInside&&capitalPlanetLand&&mapAnchorsPlanetLand&&borderSamplePass&&naturalFeatureInfluence&&nonRectangular
   );
   return Object.freeze({
     pass,campaignSeed:seed,
@@ -390,7 +474,7 @@ function proof(seedValue){
     lazyQueryable,fullWorldMaterialized,candidateCountPerLookup:(CANDIDATE_RADIUS*2+1)**2,
     countryCellSize:COUNTRY_CELL_SIZE,regionCellSizeReference:8192,countryRegionLinearRatio:COUNTRY_CELL_SIZE/8192,
     countryCountMaterialized:sampleCountries.length,
-    capitalInside,borderSamplePass,naturalFeatureInfluence,nonRectangular,
+    capitalInside,capitalPlanetLand,mapAnchorsPlanetLand,borderSamplePass,naturalFeatureInfluence,nonRectangular,
     origin,neighbors:Object.freeze(neighbors),borders,
     authority:"political-foundation-only",
     liveBorderChanges:false,terrainMutation:false,renderDependency:false
@@ -485,7 +569,8 @@ function renderDebugPanel(seedValue,borderIndexValue,rootNode){
 
 const api=Object.freeze({
   COUNTRY_CELL_SIZE,COUNTRY_JITTER,CANDIDATE_RADIUS,
-  politicalCellFor,countryAt,ownerAt,countryForCell,countryById,nearbyCountries,borderEvidence,proof,renderDebugPanel
+  politicalCellFor,countryAt,ownerAt,countryForCell,countryById,nearbyCountries,borderEvidence,proof,renderDebugPanel,
+  planetSurfaceAt,deterministicCountryLandAnchor
 });
 window.PoliticalGeography=api;
 window.CountryTerritories=api;
