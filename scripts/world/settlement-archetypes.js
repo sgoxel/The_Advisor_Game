@@ -869,6 +869,44 @@ function settlementsForCountry(seedValue,countryValue,radiusValue){
   catalogCache.set(cacheKey,frozen);
   return frozen;
 }
+function canonicalConsumerProof(seedValue,countryValue,radiusValue){
+  const seed=String(seedValue==null?"":seedValue),country=countryFromInput(seed,countryValue);
+  if(!country)return Object.freeze({pass:false,reason:"country-unavailable"});
+  const records=canonicalSettlementsForCountry(seed,country,radiusValue),plans=settlementsForCountry(seed,country,radiusValue);
+  const byId=new Map(records.map(record=>[record.id,record]));
+  const aligned=plans.every(plan=>{
+    const record=byId.get(plan.id);
+    return Boolean(
+      record&&
+      String(plan.center.x)===String(record.center.x)&&String(plan.center.y)===String(record.center.y)&&
+      String(plan.countryId)===String(record.countryId)&&String(plan.regionId)===String(record.regionId)&&
+      String(plan.classId)===String(record.classId)&&
+      String(plan.roadNetworkRole)===String(record.roadNetworkRole)&&
+      plan.foundation?.canonicalSettlementHierarchy===true
+    );
+  });
+  const replayStable=plans.every(plan=>{
+    const g=plan.generation||{};
+    const replay=build(seed,g.desiredCenter,{countryId:g.countryId,role:g.role,classHint:g.classHint,nameHint:g.nameHint});
+    return Boolean(replay&&replay.id===plan.id&&String(replay.center.x)===String(plan.center.x)&&String(replay.center.y)===String(plan.center.y));
+  });
+  const noLegacyIds=plans.every(plan=>!String(plan.id).startsWith("SET|"));
+  const originCountry=PoliticalGeography.countryAt(seed,"0","0");
+  const requiresStartingVillage=originCountry?.id===country.id;
+  const startingVillage=plans.find(plan=>plan.role==="starting-village")||null;
+  const startingVillageCanonical=!requiresStartingVillage||Boolean(
+    startingVillage&&startingVillage.canonicalSettlementId===startingVillage.id&&
+    String(startingVillage.center.x)==="0"&&String(startingVillage.center.y)==="0"
+  );
+  return Object.freeze({
+    pass:Boolean(plans.length>0&&aligned&&replayStable&&noLegacyIds&&startingVillageCanonical),
+    seed,countryId:country.id,recordCount:records.length,planCount:plans.length,
+    aligned,replayStable,noLegacyIds,startingVillageCanonical,
+    ids:Object.freeze(plans.map(plan=>plan.id)),
+    authority:"canonical settlement hierarchy -> gameplay settlement plans"
+  });
+}
+
 function sampleCatalog(seed){
   const origin=PoliticalGeography.countryAt(seed,"0","0");
   const countries=[origin];
@@ -1079,7 +1117,7 @@ function renderDebugPanel(seedValue,planIndexValue,rootNode){
 const api=Object.freeze({
   VERSION,SUPPORTED_CLASSES,CLASS_SCALE,build,settlementsForCountry,representatives,proof,renderDebugPanel,
   HIERARCHY_VERSION,HIERARCHY_CLASS_ORDER,HIERARCHY_CLASS_SPECS,
-  canonicalSettlementAtCell,canonicalSettlementAtPoint,canonicalSettlementsInBounds,canonicalSettlementsForCountry,
+  canonicalSettlementAtCell,canonicalSettlementAtPoint,canonicalSettlementsInBounds,canonicalSettlementsForCountry,canonicalConsumerProof,
   canonicalHierarchySnapshot,canonicalHierarchyProof,clearCanonicalHierarchyCache
 });
 window.SettlementArchetypes=api;
