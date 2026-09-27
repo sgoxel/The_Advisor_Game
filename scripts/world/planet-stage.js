@@ -358,6 +358,22 @@ function canonicalRegisteredMetersForLatLon(latitudeRadians,longitudeRadians){
     authority:"canonical-world-tile-fallback"
   });
 }
+function canonicalRegisteredDeltaMeters(originLatitudeRadians,originLongitudeRadians,targetLatitudeRadians,targetLongitudeRadians){
+  const fabric=coordinateFabricAuthority(),delta=fabric?.registeredDeltaMeters?.(originLatitudeRadians,originLongitudeRadians,targetLatitudeRadians,targetLongitudeRadians);
+  if(delta)return delta;
+  const origin=canonicalRegisteredMetersForLatLon(originLatitudeRadians,originLongitudeRadians),target=canonicalRegisteredMetersForLatLon(targetLatitudeRadians,targetLongitudeRadians);
+  const period=Math.PI*2*WORLD_RADIUS_METERS,half=period*.5;let east=Number(target.eastMeters||0)-Number(origin.eastMeters||0);
+  if(east>half)east-=period;else if(east<-half)east+=period;
+  return Object.freeze({eastMeters:east,northMeters:Number(target.northMeters||0)-Number(origin.northMeters||0),authority:"canonical-registered-meter-fallback"});
+}
+function canonicalLatLonForLocalOffset(originLatitudeRadians,originLongitudeRadians,eastMeters,northMeters){
+  const fabric=coordinateFabricAuthority(),origin=canonicalRegisteredMetersForLatLon(originLatitudeRadians,originLongitudeRadians);
+  const inverse=fabric?.latLonForRegisteredMeters?.(Number(origin.eastMeters||0)+Number(eastMeters||0),Number(origin.northMeters||0)+Number(northMeters||0));
+  if(inverse)return inverse;
+  const lat=clamp(Number(originLatitudeRadians||0)+Number(northMeters||0)/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999),cosLat=Math.max(.08,Math.cos(originLatitudeRadians));
+  const lon=wrapLongitudeRadians(Number(originLongitudeRadians||0)+Number(eastMeters||0)/(WORLD_RADIUS_METERS*cosLat));
+  return Object.freeze({latitudeRadians:lat,longitudeRadians:lon,authority:"legacy-local-offset-fallback"});
+}
 function setWorldTileFocus(xValue,yValue){
   return setViewTarget(worldLatLonForTile(xValue,yValue));
 }
@@ -531,8 +547,8 @@ function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMete
   // dominant rendered representation.
   const tangentActive=Boolean(tangentPatch?.enabled&&displayResource&&Number(projectionPresentation?.representationBlend||0)>=.5);
   if(tangentActive){
-    const frame=localDisplayFrame(),dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,cosLat=Math.max(.08,Math.cos(lat0));
-    const north=(lat-lat0)*WORLD_RADIUS_METERS,east=wrapLongitudeRadians(lon-lon0)*WORLD_RADIUS_METERS*cosLat;
+    const frame=localDisplayFrame(),dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,delta=canonicalRegisteredDeltaMeters(lat0,lon0,lat,lon);
+    const north=Number(delta.northMeters||0),east=Number(delta.eastMeters||0);
     const insideDetail=Math.abs(east)<=dims.patchWidth*.52&&Math.abs(north)<=dims.patchHeight*.52;
     // The visible local map is the detailed 1x patch plus a canonical 3x
     // surround. Projecting overlays only against the 1x patch made valid
@@ -1444,9 +1460,7 @@ function canonicalSurfaceIdentity(){
   if(!geography)return null;
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
   const sampleOffset=(eastMeters,northMeters)=>{
-    const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-    let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
-    const sample=geography.sampleLatLon(lat,lon);
+    const geo=canonicalLatLonForLocalOffset(lat0,lon0,eastMeters,northMeters),sample=geography.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians);
     return Object.freeze({land:Boolean(sample?.land),surfaceClass:String(sample?.surfaceClass||""),elevationMeters:Number((Number(sample?.elevationMeters||0)).toFixed(2))});
   };
   const ring20km=Object.freeze({north:sampleOffset(0,20000),east:sampleOffset(20000,0),south:sampleOffset(0,-20000),west:sampleOffset(-20000,0)});
@@ -1744,9 +1758,8 @@ function localBiomeCoordinateProof(latitudeRadians,longitudeRadians){
   });
 }
 function localGroundHeightUnits(eastMeters,northMeters,frame=localDisplayFrame()){
-  const dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,cosLat=Math.max(.08,Math.cos(lat0));
-  const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-  let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
+  const dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,geo=canonicalLatLonForLocalOffset(lat0,lon0,eastMeters,northMeters);
+  const lat=geo.latitudeRadians,lon=geo.longitudeRadians;
   const sample=geography?.sampleLatLon?.(lat,lon),centerElevation=frame.centerElevation??Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
   const registered=canonicalRegisteredMetersForLatLon(lat,lon),local=localSurfaceSample(registered.eastMeters,registered.northMeters,sample),elevation=Number(sample?.elevationMeters||0);
   const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
@@ -2570,7 +2583,6 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
   const centerRegistered=job.biomeCoordinateProof?.registeredMeters||canonicalRegisteredMetersForLatLon(lat0,lon0);
   const centerRegisteredEast=Number(centerRegistered.east??centerRegistered.eastMeters??0),registeredPeriod=Math.PI*2*WORLD_RADIUS_METERS;
   const authoritySize=Math.max(2,Math.min(size,128)),authorityCache=new Array(authoritySize*authoritySize);
-  const cosLat0=Math.max(.08,Math.cos(lat0));
   const unwrapRegisteredEast=value=>{
     const delta=Number(value||0)-centerRegisteredEast;
     return centerRegisteredEast+(delta-Math.round(delta/registeredPeriod)*registeredPeriod);
@@ -2579,9 +2591,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
     const ix=Math.max(0,Math.min(authoritySize-1,ax)),iy=Math.max(0,Math.min(authoritySize-1,ay)),key=iy*authoritySize+ix;
     if(authorityCache[key])return authorityCache[key];
     const au=ix/(authoritySize-1),av=iy/(authoritySize-1);
-    const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth;
-    const alat=clamp(lat0+anorth/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-    const alon=wrapLongitudeRadians(lon0+aeast/(WORLD_RADIUS_METERS*cosLat0));
+    const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,aeast,anorth);
+    const alat=geo.latitudeRadians,alon=geo.longitudeRadians;
     const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
     return authorityCache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
   };
@@ -3028,8 +3039,8 @@ function visibleBandFor(requestedBand,tangentOwnsView){
 }
 function refreshZoomPresentation(){if(cameraEntity&&zoomState.baseCameraDistance)applyCameraZoom();}
 function localFocusOffsetMeters(resource){
-  const cosLat=Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
-  return {east:wrapLongitudeRadians(resource.lon0-zoomState.focusLongitudeRadians)*WORLD_RADIUS_METERS*cosLat,north:(resource.lat0-zoomState.focusLatitudeRadians)*WORLD_RADIUS_METERS};
+  const delta=canonicalRegisteredDeltaMeters(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,resource.lat0,resource.lon0);
+  return {east:Number(delta.eastMeters||0),north:Number(delta.northMeters||0)};
 }
 function setZoomScalar(value){
   const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
