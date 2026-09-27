@@ -970,8 +970,13 @@ function buildMapBorderSegments(){
     ownerQueryCount:mapBorderCache.ownerQueryCount,ownerCount:mapBorderCache.ownerCount,worldVertexCount:mapBorderCache.worldVertexCount,
     topologySignature:mapBorderCache.topologySignature,waterClippedCount:mapBorderCache.waterClippedCount,diagnostics:mapBorderCache.diagnostics,built:false
   };
-  const started=performance.now(),cols=29,rows=19,countrySize=Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608);
-  const halfSpanX=Math.round(countrySize*1.15),halfSpanY=Math.round(countrySize*.72),nodes=[],ownerIds=new Set();
+  const started=performance.now(),countrySize=Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608);
+  // Keep one zoom-invariant bounded field large enough for the widest tested
+  // desktop/phone footprint. The old shallow 29x19 window could end inside a
+  // portrait viewport and make valid country contours look like broken slivers.
+  // 35x35 preserves roughly the previous ~32 km cell spacing while adding
+  // symmetric viewport margin without turning border work into a full-world scan.
+  const cols=35,rows=35,halfSpanX=Math.round(countrySize*1.35),halfSpanY=Math.round(countrySize*1.35),nodes=[],ownerIds=new Set();
   let landSampleCount=0,waterSampleCount=0,ownerQueryCount=0;
   const nodeAt=(col,row)=>{
     const rawX=centerX+BigInt(Math.round(-halfSpanX+(halfSpanX*2)*col/(cols-1)));
@@ -988,6 +993,19 @@ function buildMapBorderSegments(){
   const edgePoint=(a,b)=>{
     const ax=BigInt(a.tile.x),ay=BigInt(a.tile.y),bx=BigInt(b.tile.x),by=BigInt(b.tile.y);
     const tile={x:((ax+bx)/2n).toString(),y:((ay+by)/2n).toString()},geo=worldLatLonForTile(tile.x,tile.y);
+    return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
+  };
+  const coastEdgePoint=(a,b)=>{
+    const land=a.land?a:b,water=a.land?b:a;
+    let lx=BigInt(land.tile.x),ly=BigInt(land.tile.y),wx=BigInt(water.tile.x),wy=BigInt(water.tile.y);
+    for(let step=0;step<18;step++){
+      const mx=(lx+wx)/2n,my=(ly+wy)/2n;
+      if((mx===lx&&my===ly)||(mx===wx&&my===wy))break;
+      const geo=worldLatLonForTile(mx.toString(),my.toString());
+      let sample=null;try{sample=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)||null;}catch(_){sample=null;}
+      if(sample?.land){lx=mx;ly=my;}else{wx=mx;wy=my;}
+    }
+    const tile={x:lx.toString(),y:ly.toString()},geo=worldLatLonForTile(tile.x,tile.y);
     return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
   };
 
@@ -1008,11 +1026,10 @@ function buildMapBorderSegments(){
       if(left.land!==right.land){waterClippedCount++;coastPairs.push([left,right]);continue;}
       if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
     }
-    // A mixed land/water marching cell is a coastline cell. Do not join
-    // political crossings through its interior: that chord can shortcut across
-    // a bay or strait even when both crossing edge midpoints are on land.
-    // The adjacent fully-land cell owns the final visible border segment.
-    if(coastPairs.length)continue;
+    // Mixed land/water cells are allowed only as terminal cells. A political
+    // crossing may enter such a cell, but it must end at the last authoritative
+    // land sample on a real land/water edge rather than stopping one coarse cell
+    // inland or shortcutting across a bay.
     if(edges.length){
       const byPair=new Map();
       for(const edge of edges){
@@ -1046,11 +1063,21 @@ function buildMapBorderSegments(){
           ownerA:owners[0],ownerB:owners[1],stitchKey
         });
       };
+      const coastTerminals=coastPairs.map(pair=>coastEdgePoint(pair[0],pair[1])).filter(Boolean);
+      const tileDistanceSq=(a,b)=>{
+        const dx=Number(BigInt(a.tile.x)-BigInt(b.tile.x)),dy=Number(BigInt(a.tile.y)-BigInt(b.tile.y));
+        return dx*dx+dy*dy;
+      };
       for(const group of byPair.values()){
         let i=0;
         for(;i+1<group.edges.length;i+=2)addSegment(group.edges[i],group.edges[i+1].point,group.owners);
-        if(i<group.edges.length&&coastPairs.length===0){
-          const edge=group.edges[i],terminal=cellCenterPoint();
+        if(i<group.edges.length){
+          const edge=group.edges[i];
+          let terminal=null;
+          if(coastTerminals.length){
+            const ordered=coastTerminals.slice().sort((a,b)=>tileDistanceSq(edge.point,a)-tileDistanceSq(edge.point,b));
+            terminal=ordered.find(candidate=>segmentOnLand(edge.point,candidate))||null;
+          }else terminal=cellCenterPoint();
           addSegment(edge,terminal,group.owners);
         }
       }
