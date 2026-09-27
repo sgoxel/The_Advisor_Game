@@ -1609,10 +1609,12 @@ function localWildernessBiome(sample,nearWater=false){
 }
 function localWildernessFamily(biome,roll){
   const r=clamp(Number(roll)||0,0,.999999);
-  if(biome==="rocky")return r<.36?"rock":r<.54?"outcrop":r<.68?"grass":r<.80?"bush":r<.91?"stump":"flower";
-  if(biome==="wet")return r<.34?"reed":r<.52?"bush":r<.64?"driftwood":r<.75?"rock":r<.88?"grass":"flower";
-  if(biome==="wooded")return r<.26?"bush":r<.42?"sapling":r<.56?"log":r<.67?"stump":r<.80?"rock":r<.91?"grass":"flower";
-  return r<.26?"grass":r<.48?"flower":r<.64?"bush":r<.78?"rock":r<.88?"log":r<.95?"stump":"sapling";
+  // Keep one deterministic global-cell scatter, but give each biome a
+  // stronger silhouette vocabulary so terrain identity reads at gameplay zoom.
+  if(biome==="rocky")return r<.40?"rock":r<.68?"outcrop":r<.78?"grass":r<.86?"bush":r<.93?"stump":"flower";
+  if(biome==="wet")return r<.38?"reed":r<.52?"bush":r<.68?"driftwood":r<.76?"rock":r<.90?"grass":"flower";
+  if(biome==="wooded")return r<.28?"bush":r<.49?"sapling":r<.64?"log":r<.73?"stump":r<.83?"rock":r<.92?"grass":"flower";
+  return r<.24?"grass":r<.45?"flower":r<.62?"bush":r<.75?"rock":r<.86?"log":r<.93?"stump":"sapling";
 }
 function localWildernessSpacing(dims){
   const h=Number(dims?.visibleHeight||dims?.visibleHeightMeters||500);
@@ -1654,7 +1656,9 @@ function prepareLocalWildernessPlan(job){
     const biome=localWildernessBiome(sample,nearWater),density=biome==="wooded"?.76:biome==="wet"?.72:biome==="rocky"?.62:.68;
     if(u>density)continue;
     const roll=(localWildernessHashInt(gx,gy,salt+71)>>>0)/4294967295,family=localWildernessFamily(biome,roll);
-    const scale=.82+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.82;
+    const baseScale=.90+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.90;
+    const reliefScale=family==="outcrop"?1.42:(family==="rock"&&biome==="rocky"?1.24:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
+    const scale=baseScale*reliefScale;
     const rotation=((localWildernessHashInt(gx,gy,salt+109)>>>0)/4294967295)*Math.PI*2;
     const priority=localWildernessHashInt(gx,gy,salt+191)>>>0;
     const faunaRoll=(localWildernessHashInt(gx,gy,salt+157)>>>0)/4294967295;
@@ -1702,17 +1706,25 @@ function buildLocalWildernessMesh(plan,frame,reveal){
   for(const item of plan.items){
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,color=wildernessColor(item.family,item.biome);
-    const m=(item.family==="outcrop"?3.2:item.family==="rock"?1.15:item.family==="log"||item.family==="driftwood"?1.35:item.family==="sapling"?1.1:item.family==="bush"?1.0:item.family==="stump"?.8:.65)*item.scale/unit;
-    const h=(item.family==="outcrop"?2.0:item.family==="sapling"?3.6:item.family==="reed"?1.4:item.family==="bush"?1.2:item.family==="stump"?.8:item.family==="rock"?.85:item.family==="log"||item.family==="driftwood"?.55:item.family==="flower"?.65:.8)*item.scale/unit;
+    const m=(item.family==="outcrop"?4.0:item.family==="rock"?1.45:item.family==="log"||item.family==="driftwood"?1.50:item.family==="sapling"?1.25:item.family==="bush"?1.15:item.family==="stump"?.90:.75)*item.scale/unit;
+    const h=(item.family==="outcrop"?3.2:item.family==="sapling"?4.5:item.family==="reed"?1.9:item.family==="bush"?1.45:item.family==="stump"?.95:item.family==="rock"?1.10:item.family==="log"||item.family==="driftwood"?.65:item.family==="flower"?.85:1.05)*item.scale/unit;
     const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
     if(!["grass","reed","flower"].includes(item.family)){
-      const patch=item.biome==="wet"?[.13,.23,.09]:item.biome==="rocky"?[.20,.19,.16]:item.biome==="wooded"?[.14,.22,.07]:[.25,.29,.09];
-      const pr=m*(item.family==="outcrop"?1.35:1.65),py=y+.002;
+      const patch=item.biome==="wet"?[.07,.20,.17]:item.biome==="rocky"?[.17,.16,.14]:item.biome==="wooded"?[.10,.20,.06]:[.23,.29,.08];
+      const pr=m*(item.family==="outcrop"?1.65:1.48),py=y+.002;
       const pa=push(x-pr,py,z,patch),pb=push(x,py,z-pr*.72,patch),pcv=push(x+pr,py,z,patch),pd=push(x,py,z+pr*.72,patch);quad(pa,pb,pcv,pd);
     }
     if(item.family==="rock"||item.family==="outcrop"){
-      const a=push(x-m,y,z-m*.75,color),b=push(x+m,y,z-m*.65,color),c=push(x+m*.7,y,z+m,color),d=push(x-m*.75,y,z+m*.8,color),e=push(x+m*.15,y+h,z-m*.05,color);
+      const a=push(x-m,y,z-m*.75,color),b=push(x+m,y,z-m*.65,color),c=push(x+m*.7,y,z+m,color),d=push(x-m*.75,y,z+m*.8,color),e=push(x-m*.12,y+h,z-m*.08,color);
       tri(a,b,e);tri(b,c,e);tri(c,d,e);tri(d,a,e);quad(a,d,c,b);
+      if(item.family==="outcrop"){
+        // A second offset peak stays inside the same batch/draw call, turning
+        // the old flat diamond into a readable rocky ridge/outcrop silhouette.
+        const shade=[color[0]*.82,color[1]*.82,color[2]*.82,255],rm=m*.62,rh=h*.72,ox=m*.58,oz=m*.22;
+        const aa=push(x+ox-rm,y+.01,z+oz-rm*.58,shade),bb=push(x+ox+rm,y+.01,z+oz-rm*.52,shade);
+        const cc=push(x+ox+rm*.55,y+.01,z+oz+rm*.72,shade),dd=push(x+ox-rm*.62,y+.01,z+oz+rm*.66,shade),ee=push(x+ox*.78,y+rh,z+oz,shade);
+        tri(aa,bb,ee);tri(bb,cc,ee);tri(cc,dd,ee);tri(dd,aa,ee);quad(aa,dd,cc,bb);
+      }
     }else if(item.family==="log"||item.family==="driftwood"){
       const dx=ca*m,dz=sa*m,px=-sa*h*.42,pz=ca*h*.42,top=y+h*.58;
       const a=push(x-dx+px,y,z-dz+pz,color),b=push(x+dx+px,y,z+dz+pz,color),cc=push(x+dx-px,y,z+dz-pz,color),d=push(x-dx-px,y,z-dz-pz,color);
@@ -1723,10 +1735,13 @@ function buildLocalWildernessMesh(plan,frame,reveal){
       const e=push(x-m*.7,y+h,z-m*.7,color),ff=push(x+m*.7,y+h,z-m*.7,color),g=push(x+m*.7,y+h,z+m*.7,color),hh=push(x-m*.7,y+h,z+m*.7,color);
       quad(a,b,ff,e);quad(b,cc,g,ff);quad(cc,d,hh,g);quad(d,a,e,hh);quad(e,ff,g,hh);
     }else if(item.family==="bush"){
-      const top=push(x,y+h,z,color),bottom=push(x,y+h*.08,z,color),ring=[
+      const top=push(x-m*.18,y+h,z+m*.06,color),bottom=push(x,y+h*.08,z,color),ring=[
         push(x-m,y+h*.48,z,color),push(x,y+h*.48,z-m,color),push(x+m,y+h*.48,z,color),push(x,y+h*.48,z+m,color)
       ];
       for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+      const side=[color[0]*.88,color[1]*.94,color[2]*.86,255],sm=m*.58,sx=x+m*.46,sz=z-m*.18,st=push(sx,y+h*.78,sz,side),sb=push(sx,y+h*.12,sz,side);
+      const sr=[push(sx-sm,y+h*.38,sz,side),push(sx,y+h*.38,sz-sm,side),push(sx+sm,y+h*.38,sz,side),push(sx,y+h*.38,sz+sm,side)];
+      for(let k=0;k<4;k++){const n=(k+1)%4;tri(st,sr[k],sr[n]);tri(sb,sr[n],sr[k]);}
     }else if(item.family==="sapling"){
       const trunk=[.31,.18,.07],tw=m*.16,th=h*.58;
       const a=push(x-tw,y,z,trunk),b=push(x+tw,y,z,trunk),cc=push(x+tw,y+th,z,trunk),d=push(x-tw,y+th,z,trunk);quad(a,b,cc,d);
@@ -1736,10 +1751,10 @@ function buildLocalWildernessMesh(plan,frame,reveal){
       ];
       for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
     }else{
-      const stem=item.family==="flower"?[.25,.55,.12]:color,w=m*(item.family==="flower"?.28:.28);
-      for(let k=0;k<3;k++){
-        const a=item.rotation+k*Math.PI/3,dx=Math.cos(a)*w,dz=Math.sin(a)*w,lean=(k-1)*w*.55;
-        const p=push(x-dz,y,z+dx,stem),q=push(x+dz,y,z-dx,stem),r=push(x+lean,y+h*(.82+k*.08),z-lean*.35,stem);tri(p,q,r);
+      const stem=item.family==="flower"?[.25,.55,.12]:color,w=m*.28,blades=item.family==="reed"?5:3;
+      for(let k=0;k<blades;k++){
+        const a=item.rotation+k*Math.PI/blades,dx=Math.cos(a)*w,dz=Math.sin(a)*w,lean=(k-(blades-1)/2)*w*.38;
+        const p=push(x-dz,y,z+dx,stem),q=push(x+dz,y,z-dx,stem),r=push(x+lean,y+h*(.78+k*.055),z-lean*.35,stem);tri(p,q,r);
       }
       if(item.family==="flower"){
         const bloom=[.98,.68,.12],center=push(x,y+h,z,bloom),petal=m*.46;
@@ -1796,7 +1811,7 @@ function rebuildLocalFauna(plan,frame,reveal){
   const unit=frame.dims.metersPerUnit;
   for(const item of plan.fauna){
     if(localFaunaActors.length>=4||localWildernessManaged(item,reveal).reject)continue;
-    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?2.0:item.kind==="waterbird"?.95:item.kind==="bird"?.78:1.12)*item.scale;
+    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?2.45:item.kind==="waterbird"?1.18:item.kind==="bird"?.98:1.38)*item.scale;
     const built=buildLocalFaunaMesh(item.kind,size,unit),actor=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actor);
     actor.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actor.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actor)];
     const x=item.east/unit,z=-item.north/unit;actor.setLocalPosition(x,y,z);
