@@ -1748,21 +1748,47 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     const m=(item.family==="outcrop"?3.2:item.family==="rock"?1.15:item.family==="log"||item.family==="driftwood"?1.35:item.family==="sapling"?1.1:item.family==="bush"?1.0:item.family==="stump"?.8:.65)*item.scale/unit;
     const h=(item.family==="outcrop"?2.0:item.family==="sapling"?3.6:item.family==="reed"?1.4:item.family==="bush"?1.2:item.family==="stump"?.8:item.family==="rock"?.85:item.family==="log"||item.family==="driftwood"?.55:item.family==="flower"?.65:.8)*item.scale/unit;
     const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
+    if(!["grass","reed","flower"].includes(item.family)){
+      const patch=item.biome==="wet"?[.18,.28,.12]:item.biome==="rocky"?[.31,.29,.24]:item.biome==="wooded"?[.20,.27,.10]:[.34,.35,.13];
+      const pr=m*(item.family==="outcrop"?1.35:1.65),py=y+.002;
+      const pa=push(x-pr,py,z,patch),pb=push(x,py,z-pr*.72,patch),pcv=push(x+pr,py,z,patch),pd=push(x,py,z+pr*.72,patch);quad(pa,pb,pcv,pd);
+    }
     if(item.family==="rock"||item.family==="outcrop"){
       const a=push(x-m,y,z-m*.75,color),b=push(x+m,y,z-m*.65,color),c=push(x+m*.7,y,z+m,color),d=push(x-m*.75,y,z+m*.8,color),e=push(x+m*.15,y+h,z-m*.05,color);
       tri(a,b,e);tri(b,c,e);tri(c,d,e);tri(d,a,e);quad(a,d,c,b);
     }else if(item.family==="log"||item.family==="driftwood"){
-      const dx=ca*m,dz=sa*m,px=-sa*h*.32,pz=ca*h*.32;
-      const a=push(x-dx+px,y+h*.26,z-dz+pz,color),b=push(x+dx+px,y+h*.26,z+dz+pz,color),c=push(x+dx-px,y+h*.26,z+dz-pz,color),d=push(x-dx-px,y+h*.26,z-dz-pz,color);quad(a,b,c,d);
+      const dx=ca*m,dz=sa*m,px=-sa*h*.42,pz=ca*h*.42,top=y+h*.58;
+      const a=push(x-dx+px,y,z-dz+pz,color),b=push(x+dx+px,y,z+dz+pz,color),cc=push(x+dx-px,y,z+dz-pz,color),d=push(x-dx-px,y,z-dz-pz,color);
+      const e=push(x-dx+px,top,z-dz+pz,color),ff=push(x+dx+px,top,z+dz+pz,color),g=push(x+dx-px,top,z+dz-pz,color),hh=push(x-dx-px,top,z-dz-pz,color);
+      quad(a,b,ff,e);quad(b,cc,g,ff);quad(cc,d,hh,g);quad(d,a,e,hh);quad(e,ff,g,hh);
     }else if(item.family==="stump"){
-      const a=push(x-m,y,z-m,color),b=push(x+m,y,z-m,color),c=push(x+m,y,z+m,color),d=push(x-m,y,z+m,color);
-      const e=push(x-m*.7,y+h,z-m*.7,color),f=push(x+m*.7,y+h,z-m*.7,color),g=push(x+m*.7,y+h,z+m*.7,color),hh=push(x-m*.7,y+h,z+m*.7,color);
-      quad(a,b,f,e);quad(b,c,g,f);quad(c,d,hh,g);quad(d,a,e,hh);quad(e,f,g,hh);
+      const a=push(x-m,y,z-m,color),b=push(x+m,y,z-m,color),cc=push(x+m,y,z+m,color),d=push(x-m,y,z+m,color);
+      const e=push(x-m*.7,y+h,z-m*.7,color),ff=push(x+m*.7,y+h,z-m*.7,color),g=push(x+m*.7,y+h,z+m*.7,color),hh=push(x-m*.7,y+h,z+m*.7,color);
+      quad(a,b,ff,e);quad(b,cc,g,ff);quad(cc,d,hh,g);quad(d,a,e,hh);quad(e,ff,g,hh);
+    }else if(item.family==="bush"){
+      const top=push(x,y+h,z,color),bottom=push(x,y+h*.08,z,color),ring=[
+        push(x-m,y+h*.48,z,color),push(x,y+h*.48,z-m,color),push(x+m,y+h*.48,z,color),push(x,y+h*.48,z+m,color)
+      ];
+      for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+    }else if(item.family==="sapling"){
+      const trunk=[.31,.18,.07],tw=m*.16,th=h*.58;
+      const a=push(x-tw,y,z,trunk),b=push(x+tw,y,z,trunk),cc=push(x+tw,y+th,z,trunk),d=push(x-tw,y+th,z,trunk);quad(a,b,cc,d);
+      const e=push(x,y,z-tw,trunk),ff=push(x,y,z+tw,trunk),g=push(x,y+th,z+tw,trunk),hh=push(x,y+th,z-tw,trunk);quad(e,ff,g,hh);
+      const cy=y+h*.72,top=push(x,y+h*1.08,z,color),bottom=push(x,cy-h*.22,z,color),ring=[
+        push(x-m,cy,z,color),push(x,cy,z-m,color),push(x+m,cy,z,color),push(x,cy,z+m,color)
+      ];
+      for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
     }else{
-      const w=m*(item.family==="flower"?.40:item.family==="grass"||item.family==="reed"?.36:1);
-      const a=push(x-w,y,z,color),b=push(x+w,y,z,color),c=push(x+w,y+h,z,color),d=push(x-w,y+h,z,color);quad(a,b,c,d);
-      const e=push(x,y,z-w,color),f=push(x,y,z+w,color),g=push(x,y+h,z+w,color),hh=push(x,y+h,z-w,color);quad(e,f,g,hh);
-      if(item.family==="flower"){const bloom=[.96,.72,.16,255],p=push(x-w*.75,y+h*.90,z,bloom),q=push(x+w*.75,y+h*.90,z,bloom),r=push(x+w*.75,y+h*1.15,z,bloom),s=push(x-w*.75,y+h*1.15,z,bloom);quad(p,q,r,s);}
+      const stem=item.family==="flower"?[.25,.55,.12]:color,w=m*(item.family==="flower"?.28:.28);
+      for(let k=0;k<3;k++){
+        const a=item.rotation+k*Math.PI/3,dx=Math.cos(a)*w,dz=Math.sin(a)*w,lean=(k-1)*w*.55;
+        const p=push(x-dz,y,z+dx,stem),q=push(x+dz,y,z-dx,stem),r=push(x+lean,y+h*(.82+k*.08),z-lean*.35,stem);tri(p,q,r);
+      }
+      if(item.family==="flower"){
+        const bloom=[.98,.68,.12],center=push(x,y+h,z,bloom),petal=m*.46;
+        const p0=push(x-petal,y+h,z,bloom),p1=push(x,y+h+.03,z-petal,bloom),p2=push(x+petal,y+h,z,bloom),p3=push(x,y+h+.03,z+petal,bloom);
+        tri(center,p0,p1);tri(center,p1,p2);tri(center,p2,p3);tri(center,p3,p0);
+      }
     }
     accepted++;familyCounts[item.family]=(familyCounts[item.family]||0)+1;biomeCounts[item.biome]=(biomeCounts[item.biome]||0)+1;
   }
@@ -3703,6 +3729,7 @@ function destroy(){
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
+  clearLocalFauna();
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localWildernessEnabled=true;localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
   inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();
