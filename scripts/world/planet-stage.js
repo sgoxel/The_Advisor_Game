@@ -347,6 +347,17 @@ function worldLatLonForTile(xValue,yValue){
   });
   return Object.freeze({latitudeRadians:0,longitudeRadians:0,latitudeDegrees:0,longitudeDegrees:0,worldTile:Object.freeze({x:String(xValue??"0"),y:String(yValue??"0")})});
 }
+function canonicalRegisteredMetersForLatLon(latitudeRadians,longitudeRadians){
+  const fabric=coordinateFabricAuthority(),registered=fabric?.registeredMetersForLatLon?.(latitudeRadians,longitudeRadians);
+  if(registered)return registered;
+  const tile=mapWorldTileAt(latitudeRadians,longitudeRadians);
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  return Object.freeze({
+    eastMeters:Number(BigInt(tile.x))*tileMeters,
+    northMeters:Number(BigInt(tile.y))*tileMeters,
+    authority:"canonical-world-tile-fallback"
+  });
+}
 function setWorldTileFocus(xValue,yValue){
   return setViewTarget(worldLatLonForTile(xValue,yValue));
 }
@@ -1634,6 +1645,12 @@ function surfaceDetailBandCount(metersPerTexel){
   const m=Math.max(0,Number(metersPerTexel)||0);
   return (m<=24000?1:0)+(m<=6000?1:0)+(m<=1200?1:0)+(m<=100?1:0)+(m<=30?1:0)+(m<=4?1:0);
 }
+function seededHash32(label){
+  let h=2166136261>>>0;
+  for(const ch of String(activeSeed||"")+"|"+String(label||"")){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  h^=h>>>13;h=Math.imul(h,0x5bd1e995)>>>0;h^=h>>>15;
+  return h>>>0;
+}
 function surfaceHash2(ix,iy,salt){
   let h=(Math.imul(ix|0,374761393)^Math.imul(iy|0,668265263)^(salt|0))|0;
   h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;
@@ -1684,15 +1701,15 @@ function groundDetailWeightForLevel(index){
   return smoothstep01(Math.log(15000/h)/Math.log(15000/GROUND_FOOTPRINT_HEIGHT_METERS));
 }
 function localHash(eastMeters,northMeters,salt=0){
-  const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5);
-  let h=(Math.imul(x,374761393)^Math.imul(z,668265263)^Math.imul((activeSeed||"").length+salt,2246822519))>>>0;
+  const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5),seedSalt=(seededHash32("local-hash")^(salt|0))|0;
+  let h=(Math.imul(x,374761393)^Math.imul(z,668265263)^Math.imul(seedSalt,2246822519))>>>0;
   h=Math.imul(h^(h>>>13),1274126177)>>>0;return ((h^(h>>>16))>>>0)/4294967295;
 }
-function localSurfaceSample(eastMeters,northMeters,base){
+function localSurfaceSample(registeredEastMeters,registeredNorthMeters,base){
   const salt=((seededUnit("local-ground")*1e9)|0)^0x51f15e;
-  const broad=surfaceValueNoise(eastMeters,northMeters,34,salt+11)*1.15;
-  const medium=surfaceValueNoise(eastMeters,northMeters,12,salt+29)*.72;
-  const fine=surfaceValueNoise(eastMeters,northMeters,4.2,salt+47)*.38;
+  const broad=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,34,salt+11)*1.15;
+  const medium=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,12,salt+29)*.72;
+  const fine=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,4.2,salt+47)*.38;
   const field=(broad+medium+fine)/2.25;
   const land=!!base?.land;
   const microElevation=land?field*5.2:field*.45;
@@ -1706,19 +1723,40 @@ function localSurfaceSample(eastMeters,northMeters,base){
     : [clamp(baseColor[0]*.45+.04+light*.15,0,1),clamp(baseColor[1]*.55+.12+light*.2,0,1),clamp(baseColor[2]*.7+.28+light*.28,0,1)];
   return {microElevation,color};
 }
+function localBiomeCoordinateProof(latitudeRadians,longitudeRadians){
+  const tile=mapWorldTileAt(latitudeRadians,longitudeRadians),registered=canonicalRegisteredMetersForLatLon(latitudeRadians,longitudeRadians);
+  const sample=geography?.sampleLatLon?.(latitudeRadians,longitudeRadians)||null;
+  const local=localSurfaceSample(registered.eastMeters,registered.northMeters,sample);
+  const signature="BIO-"+seededHash32([
+    tile.x,tile.y,
+    Number(registered.eastMeters||0).toFixed(3),Number(registered.northMeters||0).toFixed(3),
+    sample?.surfaceClass||"",Number(sample?.elevationMeters||0).toFixed(3),Number(sample?.moisture||0).toFixed(6),Number(sample?.mountainInfluence||0).toFixed(6),
+    Number(local.microElevation||0).toFixed(6),(local.color||[]).map(v=>Number(v||0).toFixed(6)).join(",")
+  ].join("|")).toString(16).toUpperCase().padStart(8,"0");
+  return Object.freeze({
+    signature,worldTile:Object.freeze({x:String(tile.x),y:String(tile.y)}),
+    registeredMeters:Object.freeze({east:Number(Number(registered.eastMeters||0).toFixed(3)),north:Number(Number(registered.northMeters||0).toFixed(3))}),
+    surfaceClass:sample?.surfaceClass||null,land:Boolean(sample?.land),elevationMeters:Number(sample?.elevationMeters||0),
+    moisture:Number(sample?.moisture||0),mountainInfluence:Number(sample?.mountainInfluence||0),
+    microElevationMeters:Number(Number(local.microElevation||0).toFixed(6)),
+    coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
+    authority:"Campaign-SEED + SeedCoordinateFabric registered coordinates + PlanetGeography"
+  });
+}
 function localGroundHeightUnits(eastMeters,northMeters,frame=localDisplayFrame()){
   const dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,cosLat=Math.max(.08,Math.cos(lat0));
   const lat=clamp(lat0+northMeters/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
   let lon=lon0+eastMeters/(WORLD_RADIUS_METERS*cosLat);lon=wrapLongitudeRadians(lon);
   const sample=geography?.sampleLatLon?.(lat,lon),centerElevation=frame.centerElevation??Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
-  const local=localSurfaceSample(eastMeters,northMeters,sample),elevation=Number(sample?.elevationMeters||0);
+  const registered=canonicalRegisteredMetersForLatLon(lat,lon),local=localSurfaceSample(registered.eastMeters,registered.northMeters,sample),elevation=Number(sample?.elevationMeters||0);
   const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
   const raw=(macroDelta*dims.reliefGain+local.microElevation*.8*frame.groundDetailWeight)/dims.metersPerUnit;
   const ux=eastMeters/dims.patchWidth+.5,vz=northMeters/dims.patchHeight+.5,edge=Math.min(ux,1-ux,vz,1-vz);
   return clamp(raw,-dims.maxHeightUnits,dims.maxHeightUnits)*smoothstep01(clamp(edge/.12,0,1));
 }
 function localWildernessHashInt(x,y,salt=0){
-  let h=(Math.imul(x|0,374761393)^Math.imul(y|0,668265263)^Math.imul(((activeSeed||"").length+salt)|0,2246822519))>>>0;
+  const seedSalt=(seededHash32("local-wilderness")^(salt|0))|0;
+  let h=(Math.imul(x|0,374761393)^Math.imul(y|0,668265263)^Math.imul(seedSalt,2246822519))>>>0;
   h=Math.imul(h^(h>>>13),1274126177)>>>0;return (h^(h>>>16))>>>0;
 }
 function localWildernessBiome(sample,nearWater=false){
@@ -2526,11 +2564,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
   const flatShade=light[2];
-  // Continuous (unwrapped) world meters: no seam where the patch crosses the
-  // +/-180 degree meridian.
-  const worldEastOrigin=lon0*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(lat0)),worldNorthOrigin=lat0*WORLD_RADIUS_METERS;
+  // Fine terrain/biome detail is sampled in the Campaign-SEED registered
+  // coordinate frame. Patch recentering, viewport changes and LOD changes may
+  // change presentation, but never the world-space inputs to the detail field.
+  const centerRegistered=job.biomeCoordinateProof?.registeredMeters||canonicalRegisteredMetersForLatLon(lat0,lon0);
+  const centerRegisteredEast=Number(centerRegistered.east??centerRegistered.eastMeters??0),registeredPeriod=Math.PI*2*WORLD_RADIUS_METERS;
   const authoritySize=Math.max(2,Math.min(size,128)),authorityCache=new Array(authoritySize*authoritySize);
   const cosLat0=Math.max(.08,Math.cos(lat0));
+  const unwrapRegisteredEast=value=>{
+    const delta=Number(value||0)-centerRegisteredEast;
+    return centerRegisteredEast+(delta-Math.round(delta/registeredPeriod)*registeredPeriod);
+  };
   const authorityAt=(ax,ay)=>{
     const ix=Math.max(0,Math.min(authoritySize-1,ax)),iy=Math.max(0,Math.min(authoritySize-1,ay)),key=iy*authoritySize+ix;
     if(authorityCache[key])return authorityCache[key];
@@ -2538,38 +2582,43 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
     const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth;
     const alat=clamp(lat0+anorth/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
     const alon=wrapLongitudeRadians(lon0+aeast/(WORLD_RADIUS_METERS*cosLat0));
-    return authorityCache[key]=geography.sampleLatLon(alat,alon);
+    const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
+    return authorityCache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
   };
   const mixSample=(ux,vz)=>{
     const gx=ux*(authoritySize-1),gy=vz*(authoritySize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(authoritySize-1,x0+1),y1=Math.min(authoritySize-1,y0+1),tx=gx-x0,ty=gy-y0;
-    const a=authorityAt(x0,y0),b=authorityAt(x1,y0),c=authorityAt(x0,y1),d=authorityAt(x1,y1);
+    const aa=authorityAt(x0,y0),bb=authorityAt(x1,y0),cc=authorityAt(x0,y1),dd=authorityAt(x1,y1);
+    const a=aa.natural,b=bb.natural,c=cc.natural,d=dd.natural;
     const bilerp=(va,vb,vc,vd)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
     const color=[0,1,2].map(i=>bilerp(a.color?.[i],b.color?.[i],c.color?.[i],d.color?.[i]));
     const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0);
-    return {land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters)};
+    return {
+      land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters),
+      registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters),
+      registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
+    };
   };
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
-      const lat=clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
-      const lon=wrapLongitudeRadians(lon0+east/(WORLD_RADIUS_METERS*cosLat0));
       const sample=mixSample(ux,vz);
       const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
-      // World-space frequencies are anchored to continuous world meters, so
-      // finer LODs reveal more source information instead of magnifying a
-      // normalized UV pattern. Land/water and elevation remain authoritative.
-      const worldEast=worldEastOrigin+east,worldNorth=worldNorthOrigin+north;
+      // Detail frequencies are anchored to canonical SEED-registered meters.
+      // Rebuilding the same coordinates from a different patch/LOD therefore
+      // reveals the same field instead of rolling a new patch-relative pattern.
+      const worldEast=sample.registeredEastMeters,worldNorth=sample.registeredNorthMeters;
       const macro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
       let shade=1,cover=[0,0,0];
       if(sample?.land){
         // Hillshade of authoritative elevation + scale-appropriate detail relief.
         const step=metersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
+        const sx=mixSample(Math.min(1,ux+dux),vz),sy=mixSample(ux,Math.max(0,vz-dvz));
         const h0=elevation+terrainDetailHeight(worldEast,worldNorth,metersPerTexel,detailSalt);
-        const hx=Number(mixSample(Math.min(1,ux+dux),vz).elevationMeters||0)+terrainDetailHeight(worldEast+step,worldNorth,metersPerTexel,detailSalt);
-        const hy=Number(mixSample(ux,Math.max(0,vz-dvz)).elevationMeters||0)+terrainDetailHeight(worldEast,worldNorth+step,metersPerTexel,detailSalt);
+        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,metersPerTexel,detailSalt);
+        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,metersPerTexel,detailSalt);
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
         shade=clamp(1+(lit-flatShade)*1.25,.62,1.32);
@@ -2580,14 +2629,19 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
       const contourLine=Math.pow(1-contour,10)*contourStrength;
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i]-contourLine*(i===2?.55:1))*shade,0,1));
       let displayColor=authoritative;
-      if(useMicroDetail){const micro=localSurfaceSample(east,north,sample).color;displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));}
+      if(useMicroDetail){const micro=localSurfaceSample(worldEast,worldNorth,sample).color;displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));}
       const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
       data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
     }
     yield 1;
   }
-  return {data,size,metersPerTexel};
+  return {
+    data,size,metersPerTexel,
+    coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
+    coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
+    patchRelativeBiomeNoise:false
+  };
 }
 function* localResourceSteps(job){
   const meshData=yield* tangentMeshSteps(job);
@@ -2621,8 +2675,9 @@ function finalizeLocalResource(job,result){
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
   const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+textureSize*textureSize*4*2;
   const wildernessPlan=prepareLocalWildernessPlan(job);
-  const resource={signature:job.signature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,builtAsPrewarm:job.prewarm,mesh,skirtMesh,detailTexture,surroundTexture,wildernessPlan,estimatedBytes,
+  const resource={signature:job.signature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,mesh,skirtMesh,detailTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
+      coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
   trimLocalResourceCache();
@@ -2644,13 +2699,14 @@ function trimLocalResourceCache(){
   }
 }
 function localSignatureFor(index,lat,lon){
-  const d=patchDimensionsForLevel(index);
-  return [activeSeed,lat.toFixed(5),lon.toFixed(5),d.levelId,Math.ceil(d.patchWidth/d.sampleSpacingMeters),Math.ceil(d.patchHeight/d.sampleSpacingMeters)].join("|");
+  const d=patchDimensionsForLevel(index),tile=mapWorldTileAt(lat,lon),revision=coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate";
+  return [activeSeed,revision,tile.x,tile.y,d.levelId,Math.ceil(d.patchWidth/d.sampleSpacingMeters),Math.ceil(d.patchHeight/d.sampleSpacingMeters)].join("|");
 }
 function startLocalJob(index,lat,lon,signature,prewarm){
   const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize;
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
-  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:lat,lon0:lon,prewarm,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(lat,lon)?.elevationMeters||0),
+  const biomeCoordinateProof=localBiomeCoordinateProof(lat,lon);
+  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:lat,lon0:lon,prewarm,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(lat,lon)?.elevationMeters||0),biomeCoordinateProof,
     totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
   job.iterator=localResourceSteps(job);
   localJob=job;localResources.cacheMisses+=prewarm?0:1;
