@@ -1648,7 +1648,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-004","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6803,6 +6803,66 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             };
         """)
         return "atlas:"+label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-004":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("landscape-near-ground",0.985,(1280,800)),
+            ("landscape-ground",1.000,(1280,800)),
+            ("portrait-ground",1.000,(390,844)),
+            ("landscape-repeat",1.000,(1280,800)),
+        )
+        label,scalar,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1])); time.sleep(0.15)
+        focus=driver.execute_script("return window.PlanetStage?.setWorldTileFocus?.('0','0') || null")
+        if not isinstance(focus,dict):
+            raise RuntimeError(f"WP-004 canonical world-tile focus API unavailable: {focus}")
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
+        WebDriverWait(driver,90.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},wp=s?.projection?.worldTileProjection||{};
+            const tile=s?.canonicalFocus?.worldTile||{},origin=wp?.roundTripOrigin||{};
+            return s?.ready===true &&
+                   Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.000001 &&
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   s?.projection?.mode==='local-tangent' &&
+                   s?.projection?.tangentPatchActive===true &&
+                   s?.projection?.localDetail?.active===true &&
+                   ls?.active===true && ls?.grounded===true && ls?.viewportBounded===true &&
+                   Number(ls?.roadCount||0)>0 && Number(ls?.buildingCount||0)>0 &&
+                   String(tile.x)==='0' && String(tile.y)==='0' &&
+                   wp?.land===true && String(origin.x)==='0' && String(origin.y)==='0';
+        """,scalar))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},ld=s?.projection?.localDetail||{},wp=s?.projection?.worldTileProjection||{};
+            return {
+              seed:s?.activeSeed,
+              scalar:s?.zoom?.scalar,
+              focusLatitudeDegrees:s?.zoom?.focusLatitudeDegrees,
+              focusLongitudeDegrees:s?.zoom?.focusLongitudeDegrees,
+              visibleFootprintWidthMeters:s?.zoom?.visibleFootprintWidthMeters,
+              visibleFootprintHeightMeters:s?.zoom?.visibleFootprintHeightMeters,
+              projectionMode:s?.projection?.mode,
+              tangentOrigin:s?.projection?.tangentOrigin,
+              worldTile:s?.canonicalFocus?.worldTile,
+              worldTileProjection:wp,
+              localLevel:ld?.level,
+              geometrySampleSpacingMeters:ld?.geometrySampleSpacingMeters,
+              detailMetersPerTexel:ld?.detailMetersPerTexel,
+              vertices:ld?.vertices,
+              triangles:ld?.triangles,
+              localStatic:ls,
+              pending:r?.pendingPreparationCount,
+              cachedResourceCount:r?.cachedResourceCount,
+              activeResourceCount:r?.activeResourceCount,
+              culledOuterRepresentations:r?.culledOuterRepresentations,
+              buildMs:r?.lastBuildMs,
+              swapMs:r?.lastSwapMs,
+              staticBuildMs:ls?.buildTimeMs,
+              frameMs:r?.lastFrameMs,
+              recentMaxFrameMs:r?.recentMaxFrameMs,
+              blockingZoomBuilds:r?.blockingZoomBuilds
+            };
+        """)
+        return "ground-static:"+label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-007":
         plan=(
             (0.540,"desktop:pre-reveal"),
@@ -7183,6 +7243,44 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Phone landscape atlas frame has unexpected viewport: {landscape}")
         if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
             raise RuntimeError(f"Phone portrait atlas frame has unexpected viewport: {portrait}")
+        return
+    if scenario == "wp-s003-010-004":
+        if len(frames) < 4:
+            raise RuntimeError("wp-s003-010-004 requires four real local-static frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:4]]
+        ids=[];layouts=[];signatures=[]
+        for s in stages:
+            projection=s.get("projection") or {}
+            local=projection.get("localStatic") or {}
+            detail=projection.get("localDetail") or {}
+            budget=projection.get("resourceBudget") or {}
+            tile=(s.get("canonicalFocus") or {}).get("worldTile") or {}
+            wp=projection.get("worldTileProjection") or {}
+            origin=wp.get("roundTripOrigin") or {}
+            if str(tile.get("x"))!="0" or str(tile.get("y"))!="0":
+                raise RuntimeError(f"WP-004 focus left canonical Starting Village tile: {tile}")
+            if wp.get("land") is not True or str(origin.get("x"))!="0" or str(origin.get("y"))!="0":
+                raise RuntimeError(f"WP-004 world/planet anchor is not land-safe exact origin: {wp}")
+            if projection.get("mode")!="local-tangent" or projection.get("tangentPatchActive") is not True:
+                raise RuntimeError(f"WP-004 local tangent projection is not active: {projection.get('mode')}")
+            if detail.get("active") is not True or float(detail.get("visibleHeightMeters") or 1e9)>80:
+                raise RuntimeError(f"WP-004 fine local terrain is not active/ground-scale: {detail}")
+            if local.get("active") is not True or local.get("grounded") is not True or local.get("viewportBounded") is not True:
+                raise RuntimeError(f"WP-004 local static world is not active/grounded/bounded: {local}")
+            if int(local.get("roadCount") or 0)<1 or int(local.get("buildingCount") or 0)<1:
+                raise RuntimeError(f"WP-004 requires visible roads and buildings: {local}")
+            if local.get("simulationAuthority") is not False:
+                raise RuntimeError(f"WP-004 presentation became simulation authority: {local}")
+            if int(budget.get("pendingPreparationCount") or 0)!=0 or int(budget.get("blockingZoomBuilds") or 0)!=0:
+                raise RuntimeError(f"WP-004 local resource pipeline not settled/bounded: {budget}")
+            ids.append(str(local.get("settlementId") or ""))
+            layouts.append(str(local.get("layoutSignature") or ""))
+            signatures.append(str(local.get("signature") or ""))
+        if any(not value for value in ids) or len(set(ids))!=1 or any(not value for value in layouts) or len(set(layouts))!=1:
+            raise RuntimeError(f"WP-004 canonical static identity changed across captures: ids={ids}, layouts={layouts}")
+        portrait=frames[2].get("runtime",{}).get("viewport",{})
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"WP-004 portrait frame has unexpected viewport: {portrait}")
         return
     if scenario == "wp-s003-010-003-007":
         if len(frames) < 10:
