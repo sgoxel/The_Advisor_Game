@@ -7298,17 +7298,40 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             auxiliary["oscillation"]=sequence
             WebDriverWait(driver,60.0).until(lambda d:d.execute_script("return Number(window.PlanetStage.snapshot()?.projection?.resourceBudget?.pendingPreparationCount||0)===0"))
         elif mode=="handoff":
+            # Move to a fresh canonical cell before requesting the child. Earlier
+            # scale-ladder frames intentionally visited ground at the original
+            # focus, so reusing that focus would prove a cache hit rather than
+            # the required prepared-parent fallback during real child work.
             settle(5)
+            fresh=driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),fabric=window.SeedCoordinateFabric.create(s.activeSeed,{
+                  radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+                const lod=s?.projection?.spatialLod||{},cell=lod.requestedCell;
+                if(!cell?.worldBounds)throw new Error('WP-013 handoff source cell bounds unavailable');
+                const shift=Math.max(12000,Number(cell.cellSizeMeters||0)*1.25);
+                const reg=fabric.registeredMetersForLatLon(
+                  Number(s.canonicalFocus.latitudeDegrees)*Math.PI/180,
+                  Number(s.canonicalFocus.longitudeDegrees)*Math.PI/180);
+                const ll=fabric.latLonForRegisteredMeters(Number(reg.eastMeters)+shift,Number(reg.northMeters)+shift*.37);
+                stage.setViewTarget({latitudeDegrees:Number(ll.latitudeRadians)*180/Math.PI,longitudeDegrees:Number(ll.longitudeRadians)*180/Math.PI});
+                return {sourceCellId:cell.id,shiftMeters:shift};
+            """)
+            auxiliary["handoffFreshFocus"]=fresh
+            WebDriverWait(driver,75.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
+                return Number(r?.pendingPreparationCount||0)===0&&r?.visibleLevel==='local-area-wide';
+            """))
             immediate=driver.execute_script("""
                 const stage=window.PlanetStage;
                 stage.setScaleIndex(9);
                 const s=stage.snapshot(),lod=s?.projection?.spatialLod||{},r=s?.projection?.resourceBudget||{};
-                return {lod,pending:r.pendingPreparationCount,standInActive:r.standInActive,visibleLevel:r.visibleLevel,requestedLevel:r.requestedLevel};
+                return {lod,pending:r.pendingPreparationCount,standInActive:r.standInActive,visibleLevel:r.visibleLevel,requestedLevel:r.requestedLevel,
+                  cacheHits:r.cacheHits,activeCellId:r.activeCellId,requestedCellId:r.requestedCellId};
             """)
             auxiliary["fallback"]=immediate
             WebDriverWait(driver,90.0).until(lambda d:d.execute_script("""
                 const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},lod=s?.projection?.spatialLod||{};
-                return Number(s?.zoom?.scaleIndex||-1)===9&&Number(r?.pendingPreparationCount||0)===0&&lod?.readyChildHandoff===true;
+                return Number(s?.zoom?.scaleIndex??-1)===9&&Number(r?.pendingPreparationCount||0)===0&&lod?.readyChildHandoff===true;
             """))
         elif mode=="boundary":
             settle(scale_index)
