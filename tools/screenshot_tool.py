@@ -7227,11 +7227,34 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             seed="WP_S003_010_003_013_A" if frame_index==0 else "WP_S003_010_003_013_B"
             base=driver.current_url.split("?",1)[0]
             driver.get(base+"?seed="+seed)
-            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
-                const s=window.PlanetStage?.snapshot?.();
-                return Boolean(s?.ready===true&&s?.projection?.spatialLod?.selectionMode==='screen-space-error'&&
-                    s?.coordinateFabric?.revisionSignature&&s?.coordinateFabric?.fullWorldScan===false);
-            """))
+            try:
+                WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                    const s=window.PlanetStage?.snapshot?.();
+                    return Boolean(s?.ready===true&&s?.projection?.spatialLod?.selectionMode==='screen-space-error'&&
+                        s?.coordinateFabric?.revisionSignature&&s?.coordinateFabric?.fullWorldScan===false);
+                """))
+            except Exception as exc:
+                diagnostic=driver.execute_script("""
+                    const root=document.querySelector('#planetStageRoot');
+                    let snapshot=null,snapshotError=null;
+                    try{snapshot=window.PlanetStage?.snapshot?.()||null;}catch(error){snapshotError=String(error?.stack||error);}
+                    return {
+                      documentReadyState:document.readyState,
+                      planetStageType:typeof window.PlanetStage,
+                      seedFabricType:typeof window.SeedCoordinateFabric,
+                      rootReady:root?.dataset?.ready||null,
+                      rootError:root?.dataset?.error||null,
+                      rootText:(root?.textContent||'').slice(0,800),
+                      snapshotReady:snapshot?.ready??null,
+                      snapshotStartupError:snapshot?.startupError||null,
+                      snapshotError
+                    };
+                """)
+                try:
+                    diagnostic["browserLog"]=driver.get_log("browser")[-20:]
+                except Exception as log_exc:
+                    diagnostic["browserLogError"]=str(log_exc)
+                raise RuntimeError("WP-013 startup readiness failed: "+json.dumps(diagnostic,sort_keys=True)) from exc
             driver.execute_script("""
                 const stage=window.PlanetStage,s=stage.snapshot(),target=s?.featureTargets?.peak||s?.featureTargets?.mountain||s?.featureTargets?.continent;
                 if(!target)throw new Error('WP-013 canonical focus target unavailable');
