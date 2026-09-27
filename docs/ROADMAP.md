@@ -110,7 +110,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
 - `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation — COMPLETED
-- `WP-S003-010-003-012` — TOP PRIORITY BUG: SEED Coordinate Fabric + Gameplay-Center Marker + Landmark Callouts — IN PROGRESS (3-attempt acceptance cap reached 2026-09-28; fresh visual 6.5/10; marker/callouts fixed, evidence harness zero-value validator defect remains; NOT COMPLETED)
+- `WP-S003-010-003-012` — TOP PRIORITY BUG: SEED Coordinate Fabric + Gameplay-Center Marker + Landmark Callouts — IN PROGRESS (3-attempt cap reached 2026-09-28; corrected Attempt-3 functional evidence PASS, fresh visual 6.5/10 FAIL due unfinished 1/10000 ground presentation; NOT COMPLETED)
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
