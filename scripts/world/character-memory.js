@@ -1,8 +1,14 @@
 (function(){
 "use strict";
 
-const STORAGE_PREFIX="theAdvisorGame.characterMemory.v1";
-const VERSION=1;
+const STORAGE_PREFIX="theAdvisorGame.characterMemory.v2";
+const VERSION=2;
+const MAX_ENTRIES_PER_ACTOR=64;
+const MAX_INTERACTION_ENTRIES=16;
+const MAX_RECENT_INTERACTIONS=8;
+const MAX_SALIENT_INTERACTIONS=8;
+const INTERACTION_TYPES=Object.freeze(["conversation","help","insult","refusal","debt","warning","cooperation","promise","advice","outcome"]);
+const SALIENT_INTERACTION_TYPES=new Set(["help","insult","refusal","debt","warning","cooperation","promise","advice","outcome"]);
 const VALID_ACTOR_KINDS=Object.freeze(["protagonist","resident"]);
 const VALID_KINDS=Object.freeze(["memory","observation","fact"]);
 const VALID_CATEGORIES=Object.freeze(["people","places","promises","warnings","plans","rumors","outcomes","advice","general"]);
@@ -171,6 +177,98 @@ function freezeEntry(entry){
     externalRef:entry.externalRef?Object.freeze({...entry.externalRef}):null
   });
 }
+function blankRecognition(){
+  return {
+    meaningfulEncounterCount:0,firstMeetingAt:null,lastMeetingAt:null,lastMeetingLocation:null,lastTopic:null,lastInteractionType:null,
+    salientEventCount:0,lastMeaningfulEvent:null,recentInteractions:[],salientInteractions:[]
+  };
+}
+function normalizeInteractionRef(value){
+  if(!value||typeof value!=="object")return null;
+  const type=INTERACTION_TYPES.includes(String(value.type||"").toLowerCase())?String(value.type).toLowerCase():"conversation";
+  const id=String(value.id||"").trim();if(!id)return null;
+  return {
+    id,type,topic:String(value.topic||"").trim().slice(0,160)||null,
+    summary:String(value.summary||"").trim().replace(/\s+/g," ").slice(0,240)||null,
+    timestamp:normalizeTimestamp(value.timestamp),
+    location:String(value.location||"").trim().slice(0,160)||null,
+    memoryId:String(value.memoryId||"").trim()||null
+  };
+}
+function normalizeRecognition(value){
+  const source=value&&typeof value==="object"?value:{},base=blankRecognition();
+  const recent=(Array.isArray(source.recentInteractions)?source.recentInteractions:[]).map(normalizeInteractionRef).filter(Boolean).slice(-MAX_RECENT_INTERACTIONS);
+  const salient=(Array.isArray(source.salientInteractions)?source.salientInteractions:[]).map(normalizeInteractionRef).filter(Boolean).slice(-MAX_SALIENT_INTERACTIONS);
+  const count=Math.max(0,Math.floor(Number(source.meaningfulEncounterCount)||0));
+  return {
+    meaningfulEncounterCount:count,
+    firstMeetingAt:source.firstMeetingAt?normalizeTimestamp(source.firstMeetingAt):null,
+    lastMeetingAt:source.lastMeetingAt?normalizeTimestamp(source.lastMeetingAt):null,
+    lastMeetingLocation:String(source.lastMeetingLocation||"").trim().slice(0,160)||null,
+    lastTopic:String(source.lastTopic||"").trim().slice(0,160)||null,
+    lastInteractionType:INTERACTION_TYPES.includes(String(source.lastInteractionType||"").toLowerCase())?String(source.lastInteractionType).toLowerCase():null,
+    salientEventCount:Math.max(0,Math.floor(Number(source.salientEventCount)||salient.length)),
+    lastMeaningfulEvent:normalizeInteractionRef(source.lastMeaningfulEvent)||salient[salient.length-1]||null,
+    recentInteractions:recent,
+    salientInteractions:salient
+  };
+}
+function recognitionFromEntries(entries){
+  const refs=(entries||[]).filter(entry=>entry.externalRef?.type==="interaction").map(entry=>normalizeInteractionRef({
+    id:entry.externalRef.id,type:entry.fact?.predicate||"conversation",topic:entry.fact?.subject||null,summary:entry.summary,
+    timestamp:entry.timestamp,location:entry.scene?.location||null,memoryId:entry.id
+  })).filter(Boolean);
+  const recognition=blankRecognition();
+  for(const ref of refs){
+    recognition.meaningfulEncounterCount++;
+    recognition.firstMeetingAt=recognition.firstMeetingAt||ref.timestamp;
+    recognition.lastMeetingAt=ref.timestamp;recognition.lastMeetingLocation=ref.location;recognition.lastTopic=ref.topic;recognition.lastInteractionType=ref.type;
+    recognition.recentInteractions.push(ref);if(recognition.recentInteractions.length>MAX_RECENT_INTERACTIONS)recognition.recentInteractions.shift();
+    if(SALIENT_INTERACTION_TYPES.has(ref.type)){
+      recognition.salientEventCount++;recognition.lastMeaningfulEvent=ref;recognition.salientInteractions.push(ref);
+      if(recognition.salientInteractions.length>MAX_SALIENT_INTERACTIONS)recognition.salientInteractions.shift();
+    }
+  }
+  return recognition;
+}
+function interactionImportance(entry){
+  let score=Number(entry?.relevance||0);
+  if(entry?.authority==="simulation-truth")score+=4;
+  if(entry?.externalRef?.type==="interaction")score+=SALIENT_INTERACTION_TYPES.has(String(entry?.fact?.predicate||""))?2.5:.3;
+  if(entry?.category==="promises"||entry?.category==="warnings"||entry?.category==="outcomes"||entry?.category==="advice")score+=1.2;
+  return score;
+}
+function compactEntries(entries){
+  const source=[...(entries||[])];
+  if(source.length<=MAX_ENTRIES_PER_ACTOR)return source;
+  const newest=source.slice().sort((a,b)=>Number(b.sequence||0)-Number(a.sequence||0)).slice(0,24);
+  const keep=new Map(newest.map(entry=>[entry.id,entry]));
+  const ranked=source.filter(entry=>!keep.has(entry.id)).sort((a,b)=>
+    interactionImportance(b)-interactionImportance(a)||Number(b.sequence||0)-Number(a.sequence||0)||String(a.id).localeCompare(String(b.id))
+  );
+  for(const entry of ranked){if(keep.size>=MAX_ENTRIES_PER_ACTOR)break;keep.set(entry.id,entry)}
+  return [...keep.values()].sort((a,b)=>Number(a.sequence||0)-Number(b.sequence||0)||String(a.id).localeCompare(String(b.id)));
+}
+function compactInteractionEntries(entries){
+  const interactions=(entries||[]).filter(entry=>entry.externalRef?.type==="interaction");
+  if(interactions.length<=MAX_INTERACTION_ENTRIES)return entries;
+  const keepInteractions=interactions.slice().sort((a,b)=>
+    interactionImportance(b)-interactionImportance(a)||Number(b.sequence||0)-Number(a.sequence||0)||String(a.id).localeCompare(String(b.id))
+  ).slice(0,MAX_INTERACTION_ENTRIES);
+  const ids=new Set(keepInteractions.map(entry=>entry.id));
+  return (entries||[]).filter(entry=>entry.externalRef?.type!=="interaction"||ids.has(entry.id));
+}
+function freezeRecognition(value){
+  const r=normalizeRecognition(value);
+  return Object.freeze({
+    ...r,metBefore:r.meaningfulEncounterCount>0,
+    familiarity:r.meaningfulEncounterCount===0?"stranger":r.meaningfulEncounterCount===1?"met":r.meaningfulEncounterCount<5?"familiar":"known",
+    recentInteractions:Object.freeze(r.recentInteractions.map(item=>Object.freeze({...item}))),
+    salientInteractions:Object.freeze(r.salientInteractions.map(item=>Object.freeze({...item}))),
+    lastMeaningfulEvent:r.lastMeaningfulEvent?Object.freeze({...r.lastMeaningfulEvent}):null,
+    bounded:true,maxStoredEntries:MAX_ENTRIES_PER_ACTOR,maxInteractionEntries:MAX_INTERACTION_ENTRIES
+  });
+}
 function blankRecord(seedValue){
   return {version:VERSION,campaignSeed:normalizeSeed(seedValue),actors:{}};
 }
@@ -221,9 +319,11 @@ function readRecord(seedValue){
     for(const [key,ledger] of Object.entries(parsed.actors)){
       const actor=normalizeActor(ledger?.actor||key.split(":")[0],ledger?.actor?.id||key.slice(key.indexOf(":")+1));
       const entries=Array.isArray(ledger?.entries)?ledger.entries:[];
+      const normalizedEntries=entries.map((entry,index)=>normalizeEntry(entry,seed,actor,index));
       record.actors[actorKey(actor)]={
         actor,
-        entries:entries.map((entry,index)=>normalizeEntry(entry,seed,actor,index))
+        entries:compactEntries(compactInteractionEntries(normalizedEntries)),
+        recognition:normalizeRecognition(ledger?.recognition||recognitionFromEntries(normalizedEntries))
       };
     }
     return record;
@@ -237,9 +337,11 @@ function writeRecord(seedValue,record){
   const normalized=blankRecord(seed);
   for(const ledger of Object.values(record?.actors||{})){
     const actor=normalizeActor(ledger?.actor);
+    const entries=(ledger?.entries||[]).map((entry,index)=>normalizeEntry(entry,seed,actor,index));
     normalized.actors[actorKey(actor)]={
       actor,
-      entries:(ledger?.entries||[]).map((entry,index)=>normalizeEntry(entry,seed,actor,index))
+      entries:compactEntries(compactInteractionEntries(entries)),
+      recognition:normalizeRecognition(ledger?.recognition||recognitionFromEntries(entries))
     };
   }
   const storage=store();
@@ -261,8 +363,8 @@ function recordMemory(seedValue,actorValue,configValue,idValue){
   const config=configValue&&typeof configValue==="object"?configValue:{summary:configValue};
   const record=readRecord(seed);
   const key=actorKey(actor);
-  const ledger=record.actors[key]||{actor,entries:[]};
-  const sequence=ledger.entries.length+1;
+  const ledger=record.actors[key]||{actor,entries:[],recognition:blankRecognition()};
+  const sequence=ledger.entries.reduce((max,entry)=>Math.max(max,Number(entry.sequence)||0),0)+1;
   const source=normalizeSource(config.source);
   const confidence=clamp01(config.confidence,defaultConfidence(source.type));
   const reliability=normalizeReliability(config.reliability,source.type);
@@ -290,6 +392,8 @@ function recordMemory(seedValue,actorValue,configValue,idValue){
   };
   const entry={id:nextId(seed,actor,sequence,base),...base};
   ledger.entries.push(entry);
+  ledger.entries=compactEntries(compactInteractionEntries(ledger.entries));
+  ledger.recognition=normalizeRecognition(ledger.recognition||recognitionFromEntries(ledger.entries));
   record.actors[key]=ledger;
   writeRecord(seed,record);
   return freezeEntry(entry);
@@ -318,6 +422,114 @@ function recordAdviceReference(seedValue,actorValue,adviceId,configValue,idValue
     externalRef:{type:"advice",id:advice.id}
   });
 }
+function normalizeInteractionType(value){
+  const type=String(value||"conversation").trim().toLowerCase();
+  return INTERACTION_TYPES.includes(type)?type:"conversation";
+}
+function interactionCategory(type){
+  if(type==="promise"||type==="debt")return "promises";
+  if(type==="warning")return "warnings";
+  if(type==="advice")return "advice";
+  if(type==="outcome"||type==="help"||type==="insult"||type==="refusal"||type==="cooperation")return "outcomes";
+  return "people";
+}
+function interactionSummary(type,topic,config){
+  if(config?.summary)return normalizeSummary(config.summary).slice(0,240);
+  const subject=String(topic||"the conversation").trim()||"the conversation";
+  return ("Interaction with the protagonist: "+type+" — "+subject).slice(0,240);
+}
+function interactionId(seed,residentId,type,timestamp,topic,location,config){
+  const explicit=String(config?.interactionId||config?.eventId||"").trim();
+  return explicit||("INT-"+hashText([seed,residentId,type,timestamp,topic||"",location||""].join("|")));
+}
+function recordInteraction(seedValue,residentIdValue,configValue){
+  const seed=normalizeSeed(seedValue),residentId=String(residentIdValue||"").trim();
+  if(!residentId)throw new Error("Resident ID is required for interaction memory.");
+  const config=configValue&&typeof configValue==="object"?configValue:{topic:configValue};
+  if(config.meaningful===false)return recognition(seed,residentId);
+  const actor=normalizeActor({kind:"resident",id:residentId});
+  const type=normalizeInteractionType(config.type||config.eventType);
+  const timestamp=normalizeTimestamp(config.timestamp);
+  const topic=String(config.topic||"").trim().replace(/\s+/g," ").slice(0,160)||null;
+  const location=String(config.location||config.scene?.location||"").trim().replace(/\s+/g," ").slice(0,160)||null;
+  const id=interactionId(seed,residentId,type,timestamp,topic,location,config);
+  const record=readRecord(seed),key=actorKey(actor),ledger=record.actors[key]||{actor,entries:[],recognition:blankRecognition()};
+  const duplicate=ledger.entries.find(entry=>entry.externalRef?.type==="interaction"&&entry.externalRef.id===id);
+  if(duplicate)return Object.freeze({entry:freezeEntry(duplicate),recognition:freezeRecognition(ledger.recognition),duplicate:true});
+  const sequence=ledger.entries.reduce((max,entry)=>Math.max(max,Number(entry.sequence)||0),0)+1;
+  const summary=interactionSummary(type,topic,config);
+  const source=normalizeSource(config.source||{type:"direct-observation",id:"interaction:"+id,label:"Personal interaction"});
+  const confidence=clamp01(config.confidence,defaultConfidence(source.type)),reliability=normalizeReliability(config.reliability,source.type);
+  const base={
+    sequence,actor,kind:"memory",category:interactionCategory(type),summary,timestamp,source,confidence,
+    relevance:clamp01(config.relevance,SALIENT_INTERACTION_TYPES.has(type)?.9:.62),reliability,
+    uncertain:uncertaintyFor(source,reliability,confidence),authority:authorityFor(source,reliability),
+    fact:normalizeFact({subject:topic||"interaction",predicate:type,value:config.value==null?true:config.value}),
+    scene:normalizeScene({location,event:config.eventId||id,subjectId:"protagonist"}),
+    externalRef:{type:"interaction",id}
+  };
+  // Interaction records are knowledge/memory, never a Simulation truth write.
+  base.kind="fact";
+  const entry={id:nextId(seed,actor,sequence,base),...base};
+  ledger.entries.push(entry);
+  const recognitionState=normalizeRecognition(ledger.recognition||recognitionFromEntries(ledger.entries));
+  const ref=normalizeInteractionRef({id,type,topic,summary,timestamp,location,memoryId:entry.id});
+  recognitionState.meaningfulEncounterCount++;
+  recognitionState.firstMeetingAt=recognitionState.firstMeetingAt||timestamp;
+  recognitionState.lastMeetingAt=timestamp;recognitionState.lastMeetingLocation=location;recognitionState.lastTopic=topic;recognitionState.lastInteractionType=type;
+  recognitionState.recentInteractions.push(ref);if(recognitionState.recentInteractions.length>MAX_RECENT_INTERACTIONS)recognitionState.recentInteractions.shift();
+  if(SALIENT_INTERACTION_TYPES.has(type)){
+    recognitionState.salientEventCount++;recognitionState.lastMeaningfulEvent=ref;recognitionState.salientInteractions.push(ref);
+    if(recognitionState.salientInteractions.length>MAX_SALIENT_INTERACTIONS)recognitionState.salientInteractions.shift();
+  }
+  ledger.recognition=recognitionState;
+  ledger.entries=compactEntries(compactInteractionEntries(ledger.entries));
+  record.actors[key]=ledger;writeRecord(seed,record);
+  return Object.freeze({entry:freezeEntry(entry),recognition:freezeRecognition(recognitionState),duplicate:false});
+}
+function recognition(seedValue,residentIdValue){
+  const seed=normalizeSeed(seedValue),actor=normalizeActor({kind:"resident",id:String(residentIdValue||"").trim()||"unknown-resident"});
+  const ledger=readRecord(seed).actors[actorKey(actor)];
+  const entries=ledger?.entries||[],state=ledger?.recognition||recognitionFromEntries(entries);
+  return Object.freeze({...freezeRecognition(state),residentId:actor.id,storedEntryCount:entries.length,
+    storedInteractionEntryCount:entries.filter(entry=>entry.externalRef?.type==="interaction").length,
+    scannedEntryCount:entries.length,globalScan:false});
+}
+function recognitionReference(seedValue,residentIdValue,topicValue){
+  const state=recognition(seedValue,residentIdValue),tokens=String(topicValue||"").toLowerCase().match(/[a-z0-9]+/g)||[];
+  const candidates=[...state.salientInteractions].reverse();
+  const match=candidates.find(item=>{
+    const text=((item.topic||"")+" "+(item.summary||"")).toLowerCase();
+    return tokens.filter(token=>token.length>2).some(token=>text.includes(token));
+  })||state.lastMeaningfulEvent;
+  return match?Object.freeze({...match}):null;
+}
+function recognitionProof(seedValue){
+  const seed=normalizeSeed(seedValue)+"__WP_S005_006_PROOF",residentId="R03";
+  clear(seed);
+  const first=recordInteraction(seed,residentId,{interactionId:"proof-first",type:"conversation",topic:"the mill",summary:"First discussion about the mill.",timestamp:"1200-01-01 09:00:00",location:"Village square"});
+  const helped=recordInteraction(seed,residentId,{interactionId:"proof-help",type:"help",topic:"the mill gate",summary:"The protagonist helped repair the mill gate.",timestamp:"1200-01-02 10:00:00",location:"Mill",relevance:1});
+  const repeated=recordInteraction(seed,residentId,{interactionId:"proof-repeat",type:"conversation",topic:"the mill",summary:"Follow-up discussion about the mill.",timestamp:"1200-01-03 11:00:00",location:"Market"});
+  for(let i=0;i<80;i++)recordInteraction(seed,residentId,{
+    interactionId:"proof-low-"+i,type:"conversation",topic:"routine greeting "+i,summary:"Routine greeting "+i,
+    timestamp:"1200-02-"+String(1+(i%28)).padStart(2,"0")+" "+String(i%24).padStart(2,"0")+":00:00",location:"Village path",relevance:.2
+  });
+  const restored=recognition(seed,residentId),reference=recognitionReference(seed,residentId,"mill gate");
+  const duplicate=recordInteraction(seed,residentId,{interactionId:"proof-help",type:"help",topic:"the mill gate",summary:"The protagonist helped repair the mill gate.",timestamp:"1200-01-02 10:00:00",location:"Mill",relevance:1});
+  const afterDuplicate=recognition(seed,residentId);
+  const verification=verify(seed);
+  const result=Object.freeze({
+    pass:first.recognition.metBefore===true&&first.recognition.meaningfulEncounterCount===1&&
+      repeated.recognition.meaningfulEncounterCount===3&&restored.meaningfulEncounterCount===83&&
+      restored.storedEntryCount<=MAX_ENTRIES_PER_ACTOR&&restored.storedInteractionEntryCount<=MAX_INTERACTION_ENTRIES&&
+      reference?.id==="proof-help"&&duplicate.duplicate===true&&afterDuplicate.meaningfulEncounterCount===83&&verification.pass===true,
+    proofSeed:seed,residentId,firstMeeting:first.recognition,familiarAfterRepeat:repeated.recognition,
+    restored,reference,duplicateSuppressed:duplicate.duplicate,memoryVerify:verification,
+    localStorageRoundTrip:true,bounded:true,globalScan:false
+  });
+  clear(seed);
+  return result;
+}
 function clear(seedValue){
   const storage=store();
   if(storage)storage.removeItem(storageKey(seedValue));
@@ -328,7 +540,8 @@ function snapshot(seedValue){
   const record=readRecord(seed);
   const actors=Object.values(record.actors).sort((a,b)=>actorKey(a.actor).localeCompare(actorKey(b.actor))).map(ledger=>Object.freeze({
     actor:Object.freeze({...ledger.actor}),
-    entries:Object.freeze(ledger.entries.map(freezeEntry))
+    entries:Object.freeze(ledger.entries.map(freezeEntry)),
+    recognition:freezeRecognition(ledger.recognition||recognitionFromEntries(ledger.entries))
   }));
   return Object.freeze({version:VERSION,campaignSeed:seed,actors:Object.freeze(actors)});
 }
@@ -344,7 +557,8 @@ function verify(seedValue){
   const ids=entries.map(entry=>entry.id);
   const sharedRecordFormat=entries.every(sameSchema);
   const uniqueIds=new Set(ids).size===ids.length;
-  const sequenceStable=first.actors.every(ledger=>ledger.entries.every((entry,index)=>entry.sequence===index+1));
+  const sequenceStable=first.actors.every(ledger=>ledger.entries.every((entry,index)=>index===0||entry.sequence>ledger.entries[index-1].sequence));
+  const bounded=first.actors.every(ledger=>ledger.entries.length<=MAX_ENTRIES_PER_ACTOR&&ledger.entries.filter(entry=>entry.externalRef?.type==="interaction").length<=MAX_INTERACTION_ENTRIES);
   const deterministicIds=entries.every(entry=>entry.id===nextId(seed,entry.actor,entry.sequence,entry));
   const traceable=entries.every(entry=>
     typeof entry.timestamp==="string"&&
@@ -363,13 +577,14 @@ function verify(seedValue){
   const adviceRefsTraceable=entries.filter(entry=>entry.source.type==="advice").every(entry=>entry.externalRef?.type==="advice"&&Boolean(entry.externalRef?.id));
   const storageRoundTrip=JSON.stringify(first)===JSON.stringify(second);
   return Object.freeze({
-    pass:sharedRecordFormat&&uniqueIds&&sequenceStable&&deterministicIds&&traceable&&uncertainPreserved&&authoritySafe&&adviceRefsTraceable&&storageRoundTrip,
+    pass:sharedRecordFormat&&uniqueIds&&sequenceStable&&bounded&&deterministicIds&&traceable&&uncertainPreserved&&authoritySafe&&adviceRefsTraceable&&storageRoundTrip,
     campaignSeed:seed,
     actorCount:first.actors.length,
     entryCount:entries.length,
     sharedRecordFormat,
     uniqueIds,
     sequenceStable,
+    bounded,
     deterministicIds,
     traceable,
     uncertainPreserved,
@@ -377,6 +592,7 @@ function verify(seedValue){
     adviceRefsTraceable,
     storageRoundTrip,
     worldMutationApi:false,
+    maxEntriesPerActor:MAX_ENTRIES_PER_ACTOR,maxInteractionEntries:MAX_INTERACTION_ENTRIES,
     schema:Object.freeze(ENTRY_SCHEMA.slice()),
     actors:first.actors
   });
@@ -457,7 +673,9 @@ function renderDebugPanel(seedValue,actorValue,idValue,rootNode){
 
 const api=Object.freeze({
   STORAGE_PREFIX,VERSION,VALID_ACTOR_KINDS,VALID_KINDS,VALID_CATEGORIES,VALID_SOURCE_TYPES,VALID_RELIABILITY,ENTRY_SCHEMA,
-  storageKey,normalizeActor,list,snapshot,recordMemory,recordFact,recordObservation,recordAdviceReference,clear,verify,renderDebugPanel
+  MAX_ENTRIES_PER_ACTOR,MAX_INTERACTION_ENTRIES,INTERACTION_TYPES,
+  storageKey,normalizeActor,list,snapshot,recordMemory,recordFact,recordObservation,recordAdviceReference,
+  recordInteraction,recognition,recognitionReference,recognitionProof,clear,verify,renderDebugPanel
 });
 scope().CharacterMemory=api;
 scope().MemoryLedger=api;
