@@ -7193,9 +7193,20 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 if(!graph?.signature||!graph.edges?.length)throw new Error("canonical boundary graph unavailable");
                 const coastPoint=graph.edges.flatMap(edge=>[edge.a,edge.b]).find(point=>point.classification==="coastline")||null;
                 const junctionPoint=graph.edges.flatMap(edge=>[edge.a,edge.b]).find(point=>point.classification==="junction")||null;
-                window.__wp010={countryId:country.id,path,coastPoint,junctionPoint,graphSignature:graph.signature};
+                const inward=point=>{
+                  if(!point)return null;
+                  const px=BigInt(point.x),py=BigInt(point.y),cx=BigInt(country.politicalCenter.x),cy=BigInt(country.politicalCenter.y);
+                  const dx=Number(cx-px),dy=Number(cy-py),len=Math.max(1,Math.hypot(dx,dy));
+                  for(const distance of [2000,5000,10000,18000]){
+                    const q={x:(px+BigInt(Math.round(dx/len*distance))).toString(),y:(py+BigInt(Math.round(dy/len*distance))).toString()};
+                    if(politics.ownerAt(seed,q.x,q.y)?.id===country.id&&politics.planetSurfaceAt(seed,q.x,q.y)?.sample?.land===true)return q;
+                  }
+                  return path[0];
+                };
+                const coastFocus=inward(coastPoint),junctionFocus=inward(junctionPoint);
+                window.__wp010={countryId:country.id,path,coastPoint,junctionPoint,coastFocus,junctionFocus,graphSignature:graph.signature};
                 stage.setWorldTileFocus(path[0].x,path[0].y);
-                return {countryId:country.id,path,coastPoint,junctionPoint,signature:graph.signature};
+                return {countryId:country.id,path,coastPoint,junctionPoint,coastFocus,junctionFocus,signature:graph.signature};
             """)
             if not isinstance(setup,dict) or not setup.get("countryId") or len(setup.get("path") or [])<4:
                 raise RuntimeError(f"WP-010 canonical setup failed: {setup}")
@@ -7203,8 +7214,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         target=driver.execute_script("""
             const state=window.__wp010;if(!state)return null;
             const kind=String(arguments[0]),index=Number(arguments[1])||0;
-            if(kind==="coast"&&state.coastPoint)return state.coastPoint;
-            if(kind==="junction"&&state.junctionPoint)return state.junctionPoint;
+            if(kind==="coast"&&state.coastFocus)return state.coastFocus;
+            if(kind==="junction"&&state.junctionFocus)return state.junctionFocus;
             return state.path[Math.max(0,Math.min(state.path.length-1,index))]||state.path[0];
         """,target_kind,target_index)
         if not isinstance(target,dict):
@@ -7221,7 +7232,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                    m?.borderGraphRevision==="CBG-1"&&
                    String(m?.borderTopologySignature||"")===String(state.graphSignature||"")&&
                    Number(m?.borderGraphEdgeCount||0)>0;
-        """,float(scalar))
+        """,float(scalar)))
         proof=driver.execute_script("""
             const stage=window.PlanetStage,s=stage.snapshot(),m=s.mapPresentation||{},seed=s.activeSeed;
             const politics=window.PoliticalGeography,state=window.__wp010||{};
