@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION=1;
+const VERSION=2;
 const SUPPORTED_CLASSES=Object.freeze(["hamlet","village","town","city","national-capital"]);
 const CLASS_SCALE=Object.freeze({
   hamlet:Object.freeze({population:[35,140],road:0.26,publicSpace:0.18,market:0.16,defense:0.18}),
@@ -55,9 +55,22 @@ function countryFromInput(seed,countryValue){
   if(countryValue&&typeof countryValue==="object"&&countryValue.x!=null&&countryValue.y!=null)return PoliticalGeography.countryAt(seed,countryValue.x,countryValue.y);
   return PoliticalGeography.countryAt(seed,"0","0");
 }
-function legalCenter(seed,country,desired){
+function placementClearanceForOptions(options){
+  if(options?.role==="national-capital"||options?.classHint==="national-capital")return 640;
+  if(options?.role==="regional-seat")return 448;
+  if(options?.role==="starting-village")return 384;
+  return 320;
+}
+function legalCenter(seed,country,desired,options){
   const baseX=BigInt(desired.x),baseY=BigInt(desired.y);
-  const offsets=[[0,0],[24,0],[-24,0],[0,24],[0,-24],[48,24],[-48,24],[48,-24],[-48,-24],[96,0],[-96,0],[0,96],[0,-96]];
+  const offsets=[[0,0]];
+  for(const radius of [96,192,384,768,1536,3072]){
+    for(let spoke=0;spoke<12;spoke++){
+      const angle=Math.PI*2*spoke/12;
+      offsets.push([Math.round(Math.cos(angle)*radius),Math.round(Math.sin(angle)*radius)]);
+    }
+  }
+  const clearance=placementClearanceForOptions(options);
   let best=null;
   for(const [dx,dy] of offsets){
     const x=(baseX+BigInt(dx)).toString(),y=(baseY+BigInt(dy)).toString();
@@ -65,44 +78,45 @@ function legalCenter(seed,country,desired){
     if(!owner||owner.id!==country.id)continue;
     const terrain=GeographyFoundation.getTerrainType(seed,x,y);
     if(terrain==="water")continue;
+    const placement=PoliticalGeography.validatePlacement?.(seed,{x,y,countryId:country.id,clearanceTiles:clearance,footprintRadiusTiles:192})||null;
+    if(placement&&placement.valid!==true)continue;
     const env=GeographyFoundation.environment(seed,x,y);
     const terrainPenalty=terrain==="rock"?0.22:terrain==="mud"?0.15:0;
     const elevationPenalty=Math.min(0.22,Number(env.elevationMeters||0)/9000);
     const roadBonus=(terrain==="road"||terrain==="bridge")?-0.12:0;
-    const score=terrainPenalty+elevationPenalty+roadBonus+(Math.abs(dx)+Math.abs(dy))/4000;
-    if(!best||score<best.score)best={score,x,y,terrain,environment:env};
+    const score=terrainPenalty+elevationPenalty+roadBonus+(Math.abs(dx)+Math.abs(dy))/12000;
+    if(!best||score<best.score)best={score,x,y,terrain,environment:env,placement};
   }
   if(!best)return null;
-  return Object.freeze({x:best.x,y:best.y,terrain:best.terrain,environment:best.environment});
+  return Object.freeze({x:best.x,y:best.y,terrain:best.terrain,environment:best.environment,placement:best.placement||null});
 }
 function borderContext(seed,country,center){
-  const borders=PoliticalGeography.borderEvidence(seed,country);
-  let nearest=null;
-  for(const border of borders){
-    const d=distance(center,border);
-    if(!nearest||d<nearest.distance)nearest={border,distance:d};
-  }
+  const nearest=PoliticalGeography.nearestBorder?.(seed,center.x,center.y,country.id)||null;
   if(!nearest)return Object.freeze({
     nearBorder:false,proximity:0,distanceTiles:null,neighborCountryId:null,
-    relationId:null,relationRevision:null,tradeAccess:0.3,militaryTension:0.2,borderOpenness:0.2,warState:false
+    relationId:null,relationRevision:null,tradeAccess:0.3,militaryTension:0.2,borderOpenness:0.2,warState:false,
+    graphRevision:null,graphSignature:null
   });
-  const border=nearest.border;
-  const neighborId=border.countryA.id===country.id?border.countryB.id:border.countryA.id;
-  const relation=window.CountryRelations?.build?.(seed,country.id,neighborId)||null;
-  const proximity=clamp01(1-nearest.distance/5200);
+  const pair=nearest.ownerPair||[];
+  const neighborId=pair[0]===country.id?pair[1]:pair[0];
+  const relation=neighborId?window.CountryRelations?.build?.(seed,country.id,neighborId)||null:null;
+  const proximity=clamp01(1-Number(nearest.distanceTiles||0)/5200);
+  const point=nearest.nearestPoint||center;
   return Object.freeze({
     nearBorder:proximity>=0.42,
     proximity:round(proximity),
-    distanceTiles:Math.round(nearest.distance),
-    neighborCountryId:neighborId,
-    borderId:border.id,
-    borderTerrain:border.terrain,
+    distanceTiles:Math.round(Number(nearest.distanceTiles||0)),
+    neighborCountryId:neighborId||null,
+    borderId:nearest.borderId||null,
+    borderEdgeId:nearest.edgeId||null,
+    borderTerrain:GeographyFoundation.getTerrainType(seed,point.x,point.y),
     relationId:relation?.id||null,
     relationRevision:relation?.revision||null,
     tradeAccess:round(relation?.shared?.tradeAccess??0.3),
     militaryTension:round(relation?.shared?.militaryTension??0.2),
     borderOpenness:round(relation?.shared?.borderOpenness??0.2),
-    warState:Boolean(relation?.shared?.warState)
+    warState:Boolean(relation?.shared?.warState),
+    graphRevision:nearest.graphRevision||null,graphSignature:nearest.graphSignature||null
   });
 }
 function localContext(seed,country,center,region){
@@ -209,7 +223,7 @@ function build(seedValue,centerValue,optionsValue){
   const desired=Object.freeze({x:String(centerValue?.x??"0"),y:String(centerValue?.y??"0")});
   const country=countryFromInput(seed,options.countryId?String(options.countryId):desired);
   if(!country)return null;
-  const center=legalCenter(seed,country,desired);
+  const center=legalCenter(seed,country,desired,options);
   if(!center)return null;
   const region=RegionProfile.at(seed,center.x,center.y);
   const countryProfile=CountryProfile.build(seed,country.id);
@@ -222,6 +236,12 @@ function build(seedValue,centerValue,optionsValue){
   if(cache.has(cacheKey))return cache.get(cacheKey);
   const classId=classFor(seed,key,countryProfile,region,local,border,options);
   const subtypes=subtypeWeights(countryProfile,region,local,border,classId);
+  const footprintRadius={hamlet:40,village:72,town:112,city:160,"national-capital":240}[classId]||96;
+  const placement=PoliticalGeography.validatePlacement?.(seed,{
+    x:center.x,y:center.y,countryId:country.id,
+    clearanceTiles:footprintRadius+96,footprintRadiusTiles:footprintRadius
+  })||Object.freeze({valid:true,parentOwnerMatch:true,footprintCrossesBorder:false,borderDistanceTiles:null,reason:"validator-unavailable"});
+  if(placement.valid!==true)return null;
   const prosperityValue=clamp01(
     countryProfile.wealth.value*0.46+(countryProfile.wealth.value+region.prosperity.modifier)*0.24+
     local.routeAccess*0.12+subtypes.weights.trade*0.08+unit(seed,"settlement:prosperity:"+key)*0.10
@@ -241,6 +261,7 @@ function build(seedValue,centerValue,optionsValue){
     name:planName(seed,country,region,classId,subtypes,key,options),
     countryId:country.id,countryName:country.name,regionId:region.id,regionName:region.name,
     center:Object.freeze({x:center.x,y:center.y,terrain:center.terrain}),
+    placement:Object.freeze({...placement,authority:"PoliticalGeography.validatePlacement"}),
     role,classId,
     subtypes,
     population,
@@ -266,6 +287,7 @@ function build(seedValue,centerValue,optionsValue){
       }),
       local,
       border,
+      placement:Object.freeze({...placement}),
       role,
       precedence:Object.freeze(["CountryProfile","RegionProfile","local fixed geography/resources"])
     }),
@@ -273,6 +295,8 @@ function build(seedValue,centerValue,optionsValue){
       source:"campaign-seed + country-profile + region-profile + local-geography + route/border context",
       immutable:true,fantasyTimeDependent:false,lazy:true,renderIndependent:true,
       countryAuthority:"PoliticalGeography",countryProfileAuthority:"CountryProfile",regionAuthority:"RegionProfile",
+      politicalBoundaryAuthority:"PoliticalGeography.canonicalBoundaryGraph",
+      placementAuthority:"PoliticalGeography.validatePlacement",
       localTerrainAuthority:"GeographyFoundation",diplomacyAuthority:"CountryRelations",
       terrainMutation:false,resourceMutation:false,npcPopulationCreated:false,physicalLayoutCreated:false,
       dynamicOverlayCompatible:true
@@ -380,6 +404,9 @@ function proof(seedValue){
   const geographyValid=plans.every(plan=>
     plan.center.terrain!=="water"&&PoliticalGeography.ownerAt(seed,plan.center.x,plan.center.y).id===plan.countryId
   );
+  const borderPlacementValid=plans.every(plan=>
+    plan.placement?.valid===true&&plan.placement?.parentOwnerMatch===true&&plan.placement?.footprintCrossesBorder===false
+  );
   const physicalConstraints=plans.every(plan=>
     plan.inputs.local.coastalAccess||plan.subtypes.weights.port===0
   );
@@ -409,13 +436,13 @@ function proof(seedValue){
   const evidenceReasons=new Set(reps.map(item=>item.reason));
   const representativeCoverage=["agricultural","mining","trade","frontier-fortified","capital"].every(reason=>evidenceReasons.has(reason));
   const pass=Boolean(
-    plans.length>=12&&reps.length===5&&deterministic&&timeIndependent&&numericValid&&geographyValid&&physicalConstraints&&classSupport&&
+    plans.length>=12&&reps.length===5&&deterministic&&timeIndependent&&numericValid&&geographyValid&&borderPlacementValid&&physicalConstraints&&classSupport&&
     classCount>=3&&subtypeCount>=4&&capitalScale&&contextComplete&&countryRegionTerrainInfluence&&cloneAvoidance&&genericPlanner&&
     lazyQueryable&&authorityPreserved&&representativeCoverage
   );
   const result=Object.freeze({
     pass,campaignSeed:seed,planCount:plans.length,representativeCount:reps.length,
-    deterministic,timeIndependent,numericValid,geographyValid,physicalConstraints,classSupport,
+    deterministic,timeIndependent,numericValid,geographyValid,borderPlacementValid,physicalConstraints,classSupport,
     classCount,subtypeCount,capitalScale,contextComplete,countryRegionTerrainInfluence,cloneAvoidance,genericPlanner,
     lazyQueryable,authorityPreserved,representativeCoverage,
     supportedClasses:SUPPORTED_CLASSES,representatives:reps,
