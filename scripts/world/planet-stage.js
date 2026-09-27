@@ -186,7 +186,7 @@ let localFrameStats={lastFrameMs:0,recent:[],maxDuringPreparationMs:0};
 const localSharedPrimitives={};
 const localResourceCache=new Map();
 function freshLocalResources(){
-  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInOffsetClamped:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
+  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
@@ -2026,13 +2026,19 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       const surroundWidthMeters=displayResource.dims.patchWidth*3,surroundHeightMeters=displayResource.dims.patchHeight*3;
       const safeEast=Math.max(0,(surroundWidthMeters-visibleWidthMeters)/2);
       const safeNorth=Math.max(0,(surroundHeightMeters-visibleHeightMeters)/2);
-      offset={east:clamp(rawOffset.east,-safeEast,safeEast),north:clamp(rawOffset.north,-safeNorth,safeNorth)};
-      standInOffsetClamped=Math.abs(offset.east-rawOffset.east)>.001||Math.abs(offset.north-rawOffset.north)>.001;
+      const bounded={east:clamp(rawOffset.east,-safeEast,safeEast),north:clamp(rawOffset.north,-safeNorth,safeNorth)};
+      standInOffsetClamped=Math.abs(bounded.east-rawOffset.east)>.001||Math.abs(bounded.north-rawOffset.north)>.001;
+      // Once exact world anchoring would move any requested viewport beyond the
+      // prepared 3x surround, center the last valid representation instead of
+      // parking the camera on its edge. This is presentation-only and lasts
+      // only until the authoritative requested-focus resource atomically swaps.
+      offset=standInOffsetClamped?{east:0,north:0}:bounded;
     }
     tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,0,-offset.north/dims.metersPerUnit*patchScale);
     const requestedIndex=requestedLodIndex,visibleIndex=displayResource?.levelIndex??requestedIndex;
     localResources.standInActive=standInActive;
     localResources.standInOffsetClamped=standInOffsetClamped;
+    localResources.standInPinnedToViewport=standInActive&&standInOffsetClamped;
     localResources.standInRawOffsetMeters={east:Number(rawOffset.east.toFixed(3)),north:Number(rawOffset.north.toFixed(3))};
     localResources.standInAppliedOffsetMeters={east:Number(offset.east.toFixed(3)),north:Number(offset.north.toFixed(3))};
     localResources.standInMagnification=Number(Math.max(1,dims.presentationCompensation).toFixed(4));
@@ -2560,12 +2566,31 @@ function renderInspectionTooltip(record,knownBounds=null){
   const rootRect=root.getBoundingClientRect(),anchorX=(bounds.left+bounds.right)/2-rootRect.left,anchorY=bounds.top-rootRect.top;
   tip.style.visibility="hidden";tip.style.left="0px";tip.style.top="0px";
   const tipRect=tip.getBoundingClientRect(),halfWidth=Math.min(rootRect.width/2,tipRect.width/2),margin=12;
-  const x=clamp(anchorX,margin+halfWidth,Math.max(margin+halfWidth,rootRect.width-margin-halfWidth));
-  const placeBelow=anchorY-tipRect.height-margin<margin;
-  const y=placeBelow
-    ?clamp(anchorY+margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin))
-    :clamp(anchorY-margin,margin+tipRect.height,Math.max(margin+tipRect.height,rootRect.height-margin));
-  tip.classList.toggle("below-anchor",placeBelow);tip.dataset.placement=placeBelow?"below":"above";tip.style.left=x+"px";tip.style.top=y+"px";tip.style.visibility="";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
+  const clampX=value=>clamp(value,margin+halfWidth,Math.max(margin+halfWidth,rootRect.width-margin-halfWidth));
+  const clampY=(value,below)=>below
+    ?clamp(value,margin,Math.max(margin,rootRect.height-tipRect.height-margin))
+    :clamp(value,margin+tipRect.height,Math.max(margin+tipRect.height,rootRect.height-margin));
+  const boxFor=(x,y,below)=>({left:x-halfWidth,right:x+halfWidth,top:below?y:y-tipRect.height,bottom:below?y+tipRect.height:y});
+  const overlaps=(a,b)=>!(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top);
+  const reserved=[".planet-map-context",".planet-places-button",".planet-scale-ruler"].map(selector=>root.querySelector?.(selector)?.getBoundingClientRect?.()).filter(Boolean).map(r=>({left:r.left-rootRect.left-margin/2,right:r.right-rootRect.left+margin/2,top:r.top-rootRect.top-margin/2,bottom:r.bottom-rootRect.top+margin/2}));
+  const preferredBelow=anchorY-tipRect.height-margin<margin,candidates=[];
+  const addCandidate=(x,y,below)=>{
+    const cx=clampX(x),cy=clampY(y,below),box=boxFor(cx,cy,below);
+    if(reserved.some(r=>overlaps(box,r)))return;
+    const centerY=below?cy+tipRect.height/2:cy-tipRect.height/2;
+    candidates.push({x:cx,y:cy,below,score:Math.hypot(cx-anchorX,centerY-anchorY)+(below===preferredBelow?0:8)});
+  };
+  for(const below of [preferredBelow,!preferredBelow]){
+    const anchorYForSide=below?anchorY+margin:anchorY-margin;
+    addCandidate(anchorX,anchorYForSide,below);
+    for(const r of reserved){
+      addCandidate(r.right+margin+halfWidth,anchorYForSide,below);
+      addCandidate(r.left-margin-halfWidth,anchorYForSide,below);
+      addCandidate(anchorX,below?r.bottom+margin:r.top-margin,below);
+    }
+  }
+  const chosen=(candidates.sort((a,b)=>a.score-b.score)[0])||{x:clampX(anchorX),y:clampY(preferredBelow?anchorY+margin:anchorY-margin,preferredBelow),below:preferredBelow};
+  tip.classList.toggle("below-anchor",chosen.below);tip.dataset.placement=chosen.below?"below":"above";tip.style.left=chosen.x+"px";tip.style.top=chosen.y+"px";tip.style.visibility="";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
 }
 function pickInspection(clientX,clientY){
   const started=performance.now(),candidates=[];
