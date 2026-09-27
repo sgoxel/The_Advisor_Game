@@ -7203,18 +7203,20 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-012":
         from selenium.webdriver.support.ui import WebDriverWait
+        # Exact scale-ladder indices are authoritative.  In particular index 9
+        # is the real 1/10000 ground view; never infer it from the retired x-zoom.
         plan=(
-            ("seed-a-landmark",0.12,(1280,800),"origin"),
-            ("seed-a-zoom-0.15",0.15,(1280,800),"origin"),
-            ("seed-a-zoom-0.20",0.20,(1280,800),"origin"),
-            ("seed-a-zoom-back",0.12,(1280,800),"origin"),
-            ("seed-a-stream-away",0.12,(1280,800),"away"),
-            ("seed-a-revisit",0.12,(1280,800),"origin"),
-            ("seed-a-phone-landscape",0.12,(844,390),"origin"),
-            ("seed-a-phone-portrait",0.12,(390,844),"origin"),
-            ("seed-b-landmark",0.12,(1280,800),"origin"),
+            ("seed-a-landmark",5,(1280,800),"origin"),
+            ("seed-a-closer",6,(1280,800),"origin"),
+            ("seed-a-ground-1-10000",9,(1280,800),"origin"),
+            ("seed-a-zoom-back",5,(1280,800),"origin"),
+            ("seed-a-stream-away-ground",9,(1280,800),"away"),
+            ("seed-a-revisit-ground",9,(1280,800),"origin"),
+            ("seed-a-phone-landscape",5,(844,390),"origin"),
+            ("seed-a-phone-portrait",5,(390,844),"origin"),
+            ("seed-b-ground-1-10000",9,(1280,800),"origin"),
         )
-        label,display_multiplier,viewport,target_kind=plan[min(frame_index,len(plan)-1)]
+        label,scale_index,viewport,target_kind=plan[min(frame_index,len(plan)-1)]
         if frame_index in (0,8):
             seed="WP_S003_010_003_012_A" if frame_index==0 else "WP_S003_010_003_012_B"
             base=driver.current_url.split("?",1)[0]
@@ -7222,6 +7224,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
                 const s=window.PlanetStage?.snapshot?.();
                 return Boolean(s?.ready===true&&window.SeedCoordinateFabric?.VERSION==='seed-coordinate-fabric-v1'&&
+                  typeof window.SeedCoordinateFabric?.create?.(s.activeSeed)?.registeredMetersForLatLon==='function'&&
                   s?.coordinateFabric?.revisionSignature&&s?.coordinateFabric?.fullWorldScan===false);
             """))
             setup=driver.execute_script("""
@@ -7232,7 +7235,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
                 const first=fabric.materializeCell(origin,256);
                 const away={x:(BigInt(origin.x)+32000n).toString(),y:(BigInt(origin.y)+18000n).toString()};
-                window.__wp012={seed:after.activeSeed,origin,away,originCellId:first.id,originStreamSignature:first.signature,revision:fabric.revisionSignature};
+                window.__wp012={seed:after.activeSeed,origin,away,originCellId:first.id,originStreamSignature:first.signature,revision:fabric.revisionSignature,groundOriginProof:null};
                 return window.__wp012;
             """)
             if not isinstance(setup,dict) or not setup.get("originCellId") or not setup.get("revision"):
@@ -7245,26 +7248,22 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not isinstance(target,dict):
             raise RuntimeError(f"WP-012 target unavailable for {label}: {target}")
         driver.execute_script("window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]))",target.get("x"),target.get("y"))
-        scalar=(math.log10(float(display_multiplier))+2.0)/2.0
-        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
-        landmark_required=frame_index in (0,3,5,6,7,8)
+        driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",int(scale_index))
         try:
             WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
-                const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{},c=s?.coordinateFabric||{};
-                const requireLandmark=Boolean(arguments[1]);
-                return s?.ready===true&&Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001&&
-                       Number(r?.pendingPreparationCount||0)===0&&Boolean(c?.revisionSignature)&&c?.fullWorldScan===false&&
-                       m?.centerMarker?.visible===true&&m?.centerMarker?.worldAnchored===true&&
-                       (!requireLandmark||Number(m?.landmarkVisibleCount||0)>=1);
-            """,float(scalar),bool(landmark_required)))
+                const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{},c=s?.coordinateFabric||{};
+                return s?.ready===true&&Number(s?.zoom?.scaleIndex)===Number(arguments[0])&&
+                       Number(r?.pendingPreparationCount||0)===0&&Boolean(c?.revisionSignature)&&c?.fullWorldScan===false;
+            """,int(scale_index)))
         except Exception as exc:
             diagnostic=driver.execute_script("""
-                const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{},r=s.projection?.resourceBudget||{},c=s.coordinateFabric||{};
-                return {ready:s.ready,seed:s.activeSeed,scalar:s.zoom?.scalar,band:s.zoom?.visibleBand,pending:r.pendingPreparationCount,
-                  coordinateRevision:c.revisionSignature,centerMarker:m.centerMarker,landmarkVisibleCount:m.landmarkVisibleCount,
+                const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{},r=s.projection?.resourceBudget||{},c=s.coordinateFabric||{},d=s.projection?.localDetail||{};
+                return {ready:s.ready,seed:s.activeSeed,scalar:s.zoom?.scalar,scaleIndex:s.zoom?.scaleIndex,scaleLabel:s.zoom?.scaleLabel,band:s.zoom?.visibleBand,
+                  pending:r.pendingPreparationCount,coordinateRevision:c.revisionSignature,centerMarker:m.centerMarker,landmarkVisibleCount:m.landmarkVisibleCount,
                   visibleLandmarks:m.visibleLandmarks,visibleClasses:m.visibleLabelClasses,atlasVisible:m.atlasVisibleLabelCount,
                   atlasCandidates:m.atlasCandidateCount,atlasBudget:m.maxLabelBudget,overlap:m.overlapRejectedCount,
-                  fullWorldScan:m.fullWorldScan,bounded:m.bounded};
+                  localLevel:d.level,coordinateAuthority:d.coordinateAuthority,patchRelativeBiomeNoise:d.patchRelativeBiomeNoise,
+                  biomeCoordinateProof:d.biomeCoordinateProof,fullWorldScan:m.fullWorldScan,bounded:m.bounded};
             """)
             raise RuntimeError(f"WP-012 readiness timeout for {label}: {diagnostic}") from exc
         stream_proof=None
@@ -7279,6 +7278,33 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             """)
             if not isinstance(stream_proof,dict) or stream_proof.get("stable") is not True:
                 raise RuntimeError(f"WP-012 streamed cell regeneration is unstable: {stream_proof}")
+        ground_proof=None
+        if scale_index==9:
+            ground_proof=driver.execute_script("""
+                const s=window.PlanetStage.snapshot(),d=s?.projection?.localDetail||{},w=s?.wilderness||{},state=window.__wp012||{};
+                const proof={
+                  scaleIndex:s?.zoom?.scaleIndex,scaleLabel:s?.zoom?.scaleLabel,visibleHeightMeters:s?.zoom?.visibleFootprintHeightMeters,
+                  localLevel:d.level,coordinateAuthority:d.coordinateAuthority,coordinateRevision:d.coordinateRevision,
+                  patchRelativeBiomeNoise:d.patchRelativeBiomeNoise,biomeCoordinateProof:d.biomeCoordinateProof||null,
+                  localLayoutSignature:w.localLayoutSignature||null,localBiomeCounts:w.localBiomeCounts||null,
+                  localDeterministicGlobalCells:w.localDeterministicGlobalCells,localFullWorldScan:w.localFullWorldScan
+                };
+                if(arguments[0]===2)state.groundOriginProof=proof;
+                proof.revisitMatches=arguments[0]===5?Boolean(
+                  state.groundOriginProof&&proof.biomeCoordinateProof?.signature===state.groundOriginProof.biomeCoordinateProof?.signature&&
+                  proof.biomeCoordinateProof?.worldTile?.x===state.groundOriginProof.biomeCoordinateProof?.worldTile?.x&&
+                  proof.biomeCoordinateProof?.worldTile?.y===state.groundOriginProof.biomeCoordinateProof?.worldTile?.y
+                ):null;
+                return proof;
+            """,int(frame_index))
+            if not isinstance(ground_proof,dict) or ground_proof.get("scaleLabel")!="1/10000":
+                raise RuntimeError(f"WP-012 ground scale proof failed: {ground_proof}")
+            if "SeedCoordinateFabric" not in str(ground_proof.get("coordinateAuthority") or "") or ground_proof.get("patchRelativeBiomeNoise") is not False:
+                raise RuntimeError(f"WP-012 ground biome coordinate authority failed: {ground_proof}")
+            if not isinstance(ground_proof.get("biomeCoordinateProof"),dict) or not ground_proof["biomeCoordinateProof"].get("signature"):
+                raise RuntimeError(f"WP-012 ground biome signature unavailable: {ground_proof}")
+            if frame_index==5 and ground_proof.get("revisitMatches") is not True:
+                raise RuntimeError(f"WP-012 ground biome changed after stream-away/revisit: {ground_proof}")
         time.sleep(.28)
         proof=driver.execute_script("""
             const stage=window.PlanetStage,s=stage.snapshot(),m=s.mapPresentation||{},c=s.coordinateFabric||{},state=window.__wp012||{};
@@ -7295,7 +7321,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             const verify=fabric.verify();
             const alternate=window.SeedCoordinateFabric.create(s.activeSeed+'__WP012_SECOND',{radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
             return {
-              label:arguments[0],seed:s.activeSeed,scalar:s.zoom?.scalar,scaleLabel:s.zoom?.scaleLabel,
+              label:arguments[0],seed:s.activeSeed,scalar:s.zoom?.scalar,scaleIndex:s.zoom?.scaleIndex,scaleLabel:s.zoom?.scaleLabel,
               focus:s.canonicalFocus?.worldTile,focusLat:s.canonicalFocus?.latitudeDegrees,focusLon:s.canonicalFocus?.longitudeDegrees,
               coordinateRevision:c.revisionSignature,coordinateSeed:c.seed,coordinateCenter:c.center,consumerKinds:c.consumerKinds,
               consumers:c.consumers,maxRoundTripErrorMeters:c.maxRoundTripErrorMeters,sameSeedSpatialAuthority:c.sameSeedSpatialAuthority,
@@ -7311,6 +7337,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         """,label)
         if stream_proof is not None:
             proof["streamProof"]=stream_proof
+        if ground_proof is not None:
+            proof["groundBiomeProof"]=ground_proof
         return "coordinate-fabric|"+label+"|"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-010":
         from selenium.webdriver.support.ui import WebDriverWait
