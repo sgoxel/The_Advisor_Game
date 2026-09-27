@@ -6818,18 +6818,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             raise RuntimeError(f"WP-004 canonical world-tile focus API unavailable: {focus}")
         driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",scalar)
         WebDriverWait(driver,90.0).until(lambda d: d.execute_script("""
-            const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},wp=s?.projection?.worldTileProjection||{};
-            const tile=s?.canonicalFocus?.worldTile||{},origin=wp?.roundTripOrigin||{};
+            const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{};
             return s?.ready===true &&
                    Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.000001 &&
-                   Number(r?.pendingPreparationCount||0)===0 &&
-                   s?.projection?.mode==='local-tangent' &&
-                   s?.projection?.tangentPatchActive===true &&
-                   s?.projection?.localDetail?.active===true &&
-                   ls?.active===true && ls?.grounded===true && ls?.viewportBounded===true &&
-                   Number(ls?.roadCount||0)>0 && Number(ls?.buildingCount||0)>0 &&
-                   String(tile.x)==='0' && String(tile.y)==='0' &&
-                   wp?.land===true && String(origin.x)==='0' && String(origin.y)==='0';
+                   Number(r?.pendingPreparationCount||0)===0;
         """,scalar))
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},ld=s?.projection?.localDetail||{},wp=s?.projection?.worldTileProjection||{};
