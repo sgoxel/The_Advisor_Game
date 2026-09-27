@@ -7649,6 +7649,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:14]]
         maps=[stage.get("mapPresentation") or {} for stage in stages]
         continent_names={}
+        continent_ids_by_name={}
+        country_ids_by_name={}
         for index,(stage,m) in enumerate(zip(stages,maps),start=1):
             if m.get("bounded") is not True or m.get("fullWorldScan") is not False:
                 raise RuntimeError(f"WP-009 lost bounded/no-full-world contract in frame {index}: {m}")
@@ -7680,6 +7682,18 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     if scoped_cid in continent_names and continent_names[scoped_cid]!=cname:
                         raise RuntimeError(f"WP-009 continent renamed within one seed: {scoped_cid}: {continent_names[scoped_cid]} -> {cname}")
                     continent_names[scoped_cid]=cname
+                    scoped_name=seed_key+"|"+cname
+                    if scoped_name in continent_ids_by_name and continent_ids_by_name[scoped_name]!=cid:
+                        raise RuntimeError(f"WP-009 distinct continents share one displayed name: {scoped_name}: {continent_ids_by_name[scoped_name]} vs {cid}")
+                    continent_ids_by_name[scoped_name]=cid
+                if entity_type=="country":
+                    country_id=str(item.get("canonicalEntityId") or "")
+                    country_name=str(item.get("authoritativeName") or "")
+                    if country_id and country_name:
+                        scoped_country_name=seed_key+"|"+country_name
+                        if scoped_country_name in country_ids_by_name and country_ids_by_name[scoped_country_name]!=country_id:
+                            raise RuntimeError(f"WP-009 distinct countries share one displayed name: {scoped_country_name}: {country_ids_by_name[scoped_country_name]} vs {country_id}")
+                        country_ids_by_name[scoped_country_name]=country_id
         topology=[str(maps[i].get("borderTopologySignature") or "") for i in (4,5,6,7)]
         if not all(topology) or len(set(topology))!=1:
             raise RuntimeError(f"WP-009 border topology changed across 0.06x/0.08x/0.12x/0.15x: {topology}")
