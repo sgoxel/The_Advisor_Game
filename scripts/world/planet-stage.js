@@ -2459,6 +2459,10 @@ async function makeGeographyTexture(){
     mipmaps:true
   });
   texture.name="SeededPlanetGeography";
+  // Mesh UVs use north at v=1 and south at v=0. Canvas sources are top-origin,
+  // so make the upload flip explicit; otherwise the visible coastline is
+  // north/south mirrored relative to canonical PlanetGeography coordinates.
+  texture.flipY=true;
   texture.addressU=pc.ADDRESS_REPEAT;
   texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
