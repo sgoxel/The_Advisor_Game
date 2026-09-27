@@ -970,9 +970,13 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   // Landmarks are independently eligible at their scale tier. Reserve a small
   // bounded quota so hierarchy labels cannot consume the entire sticky budget.
   const landmarkReserve=spec.kinds.includes("landmark")?Math.min(spec.budget,portrait?2:3):0;
+  const viewportCenter=Object.freeze({x:rect.width*.5,y:rect.height*.5});
   const preferredLandmarks=query.candidates.filter(entity=>entity.type==="landmark")
-    .sort((a,b)=>Number(b.importance||0)-Number(a.importance||0)||a.id.localeCompare(b.id))
-    .slice(0,landmarkReserve);
+    .map(entity=>{const projected=atlasProjectCandidate(entity).projection;return projected?{entity,projected,distance:Math.hypot(projected.screenX-viewportCenter.x,projected.screenY-viewportCenter.y)}:null;})
+    .filter(Boolean)
+    .sort((a,b)=>a.distance-b.distance||Number(b.entity.importance||0)-Number(a.entity.importance||0)||a.entity.id.localeCompare(b.entity.id))
+    .slice(0,landmarkReserve)
+    .map(item=>item.entity);
   for(const entity of preferredLandmarks){
     if(atlasStickyEntities.has(entity.id)){atlasStickyEntities.set(entity.id,entity);continue;}
     while(atlasStickyEntities.size>=spec.budget){
