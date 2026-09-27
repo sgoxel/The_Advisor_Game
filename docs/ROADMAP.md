@@ -115,7 +115,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
 - `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette — COMPLETED
-- `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna
+- `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna — IN PROGRESS (3-attempt acceptance cap reached 2026-09-27; latest fresh visual 7.7/10; NOT COMPLETED)
 - `WP-S003-014` — Reactive Ambient Wildlife Behavior
 - `WP-S003-015` — Contextual Building Activity Indicators — IN PROGRESS (3-attempt acceptance cap reached 2026-09-27; implementation present, latest visual 6.5/10, evidence harness zero-value validator defect remains; NOT COMPLETED)
 - `WP-S003-016` — Local Environmental Reaction Effects
