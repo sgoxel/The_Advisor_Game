@@ -138,7 +138,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
-    "wp-s003-010-003-008",
+    "wp-s003-010-003-008","wp-s003-010-003-009",
     "wp-s003-010-004",
     "wp-s003-010-005",
     "wp-s004-001",
@@ -255,6 +255,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-006": 14,
     "wp-s003-010-003-007": 10,
     "wp-s003-010-003-008": 14,
+    "wp-s003-010-003-009": 14,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -1690,7 +1691,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -1702,7 +1703,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 return Boolean(
                   s?.ready===true &&
                   s?.stage==='seeded-planetary-geography' &&
-                  s?.geographyVersion==='planetary-geography-v4' &&
+                  s?.geographyVersion==='planetary-geography-v5' &&
                   Number(s?.canvasCount||0)===1 &&
                   v?.pass===true
                 );
@@ -7025,6 +7026,101 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-009":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("seed-a-globe",None,0.050,(1280,800),0),
+            ("seed-a-rotate-14",None,0.050,(1280,800),14),
+            ("seed-a-rotate-28",None,0.050,(1280,800),14),
+            ("seed-a-rotate-52",None,0.050,(1280,800),24),
+            ("country-0.06x",0.06,None,(1280,800),0),
+            ("country-0.08x",0.08,None,(1280,800),0),
+            ("country-0.12x",0.12,None,(1280,800),0),
+            ("regional-0.15x",0.15,None,(1280,800),0),
+            ("coast-0.12x",0.12,None,(1280,800),0),
+            ("handoff-0.35x",0.35,None,(1280,800),0),
+            ("phone-landscape-0.12x",0.12,None,(844,390),0),
+            ("phone-portrait-0.08x",0.08,None,(390,844),0),
+            ("seed-b-globe",None,0.050,(1280,800),0),
+            ("seed-b-country-0.12x",0.12,None,(1280,800),0),
+        )
+        label,display_multiplier,direct_scalar,viewport,rotation_delta=plan[min(frame_index,len(plan)-1)]
+        if frame_index in (0,12):
+            seed="WP_S003_010_003_009_A" if frame_index==0 else "WP_S003_010_003_009_B"
+            base=driver.current_url.split("?",1)[0]
+            driver.get(base+"?seed="+seed)
+            WebDriverWait(driver,120.0).until(lambda d: d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.(),v=window.PlanetStage?.verify?.();
+                return Boolean(s?.ready===true&&s?.geographyVersion==='planetary-geography-v5'&&v?.pass===true);
+            """))
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent||s?.featureTargets?.mountain;
+                if(!t) throw new Error('WP-009 seeded land target unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        if frame_index in (4,9,10,11,13):
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot();
+                const t=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent||s?.featureTargets?.mountain;
+                if(!t) throw new Error('WP-009 canonical land focus unavailable');
+                window.PlanetStage.setViewTarget(t);
+            """)
+        if frame_index==8:
+            coast=driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),seed=s.activeSeed,pg=window.PlanetGeography.create(seed);
+                const t=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent;
+                if(!t) return null;
+                stage.setViewTarget(t);
+                const base=stage.snapshot().canonicalFocus.worldTile, bx=BigInt(base.x),by=BigInt(base.y);
+                const tileMeters=Number(window.WorldStandards?.TILE_METERS||2),radius=Number(window.PlanetGeography.DEFAULT_WORLD_RADIUS_METERS||637100);
+                const surface=(x,y)=>{const g=pg.worldLatLonForTile(String(x),String(y),tileMeters,radius);return pg.sampleLatLon(g.latitudeRadians,g.longitudeRadians);};
+                const origin=surface(bx,by);if(!origin?.land)return null;
+                for(let ring=1;ring<=20;ring++){
+                  const rr=BigInt(ring*9000);
+                  for(let spoke=0;spoke<24;spoke++){
+                    const a=Math.PI*2*spoke/24,x=bx+BigInt(Math.round(Math.cos(a)*Number(rr))),y=by+BigInt(Math.round(Math.sin(a)*Number(rr)));
+                    const sample=surface(x,y);if(!sample?.land)continue;
+                    const probe=4500n,around=[[probe,0n],[-probe,0n],[0n,probe],[0n,-probe]];
+                    if(around.some(([dx,dy])=>!surface(x+dx,y+dy)?.land)){
+                      window.__wp009CoastTile={x:String(x),y:String(y)};
+                      stage.setWorldTileFocus(String(x),String(y));
+                      return window.__wp009CoastTile;
+                    }
+                  }
+                }
+                return null;
+            """)
+            if not isinstance(coast,dict):
+                raise RuntimeError(f"WP-009 could not resolve deterministic coast focus: {coast}")
+        driver.set_window_size(int(viewport[0]),int(viewport[1])); time.sleep(0.18)
+        scalar=(math.log10(float(display_multiplier))+2.0)/2.0 if display_multiplier is not None else float(direct_scalar)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
+        if rotation_delta:
+            driver.execute_script("window.PlanetStage.rotateBy(arguments[0],0)",float(rotation_delta))
+        WebDriverWait(driver,150.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{};
+            return s?.ready===true &&
+                   Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001 &&
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   m?.bounded===true && m?.fullWorldScan===false &&
+                   Number(m?.atlasVisibleLabelCount||0)>0;
+        """,float(scalar)))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{},p=s?.projection||{},r=p?.resourceBudget||{};
+            return {
+              seed:s?.activeSeed,scalar:s?.zoom?.scalar,band:s?.zoom?.visibleBand,focus:s?.canonicalFocus,
+              projection:m?.projectionMode,projectionBlend:m?.projectionBlend,worldTileProjection:p?.worldTileProjection,
+              visible:m?.atlasVisibleLabelCount,classes:m?.visibleLabelClasses,labels:m?.visibleLabels,context:m?.context,
+              maxDisplacement:m?.maxLabelDisplacementPixels,roundTripError:m?.registrationMaxRoundTripErrorTiles,
+              borderVisible:m?.borderVisible,borderSegments:m?.borderSegmentCount,projectedBorders:m?.projectedBorderSegmentCount,
+              borderTopologySignature:m?.borderTopologySignature,waterClippedBorders:m?.waterClippedBorderCount,
+              borderDiagnostics:m?.borderDiagnostics,borderLand:m?.borderLandSampleCount,borderWater:m?.borderWaterSampleCount,
+              hidden:m?.hiddenHemisphereCulledCount,offscreen:m?.offscreenCulledCount,overlap:m?.overlapRejectedCount,
+              bounded:m?.bounded,fullWorldScan:m?.fullWorldScan,pending:r?.pendingPreparationCount
+            };
+        """)
+        return "registration:"+label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-008":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -7538,6 +7634,57 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-009":
+        if len(frames) < 14:
+            raise RuntimeError("wp-s003-010-003-009 requires fourteen registration frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:14]]
+        maps=[stage.get("mapPresentation") or {} for stage in stages]
+        continent_names={}
+        for index,(stage,m) in enumerate(zip(stages,maps),start=1):
+            if m.get("bounded") is not True or m.get("fullWorldScan") is not False:
+                raise RuntimeError(f"WP-009 lost bounded/no-full-world contract in frame {index}: {m}")
+            if float(m.get("registrationMaxRoundTripErrorTiles") or 0)>1.0:
+                raise RuntimeError(f"WP-009 registration round-trip exceeded one tile in frame {index}: {m}")
+            max_allowed=58.1 if index==12 else 82.1
+            if float(m.get("maxLabelDisplacementPixels") or 0)>max_allowed:
+                raise RuntimeError(f"WP-009 label displacement exceeded bound in frame {index}: {m.get('maxLabelDisplacementPixels')}")
+            labels=m.get("visibleLabels") or []
+            for item in labels:
+                if item.get("identityMatch") is not True:
+                    raise RuntimeError(f"WP-009 identity mismatch in frame {index}: {item}")
+                if float(item.get("roundTripErrorTiles") or 0)>1.0:
+                    raise RuntimeError(f"WP-009 label round-trip error in frame {index}: {item}")
+                entity_type=str(item.get("entityType") or "")
+                if entity_type not in {"ocean","landmark"} and item.get("planetLand") is not True:
+                    raise RuntimeError(f"WP-009 land label anchored off generated land in frame {index}: {item}")
+                if entity_type=="capital" and (item.get("parentCountryMatch") is not True or item.get("planetLand") is not True):
+                    raise RuntimeError(f"WP-009 capital is not on parent-country land in frame {index}: {item}")
+                cid=str(item.get("continentId") or "")
+                cname=str(item.get("continentName") or "")
+                if cid and cname:
+                    if cid in continent_names and continent_names[cid]!=cname:
+                        raise RuntimeError(f"WP-009 continent renamed across frames: {cid}: {continent_names[cid]} -> {cname}")
+                    continent_names[cid]=cname
+        topology=[str(maps[i].get("borderTopologySignature") or "") for i in (4,5,6,7)]
+        if not all(topology) or len(set(topology))!=1:
+            raise RuntimeError(f"WP-009 border topology changed across 0.06x/0.08x/0.12x/0.15x: {topology}")
+        if max(int(maps[i].get("borderSegmentCount") or 0) for i in (4,5,6,7))<1:
+            raise RuntimeError("WP-009 country zoom checkpoints did not produce political border geometry")
+        coast=maps[8]
+        if int(coast.get("borderWaterSampleCount") or 0)<1 or int(coast.get("waterClippedBorderCount") or 0)<1:
+            raise RuntimeError(f"WP-009 coast frame did not prove water clipping: {coast}")
+        seed_a=str(stages[0].get("activeSeed") or "")
+        seed_b=str(stages[12].get("activeSeed") or "")
+        if not seed_a or not seed_b or seed_a==seed_b:
+            raise RuntimeError(f"WP-009 second-seed evidence invalid: {seed_a!r}, {seed_b!r}")
+        landscape=frames[10].get("runtime",{}).get("viewport",{})
+        portrait=frames[11].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>430:
+            raise RuntimeError(f"WP-009 phone landscape frame unexpected: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"WP-009 phone portrait frame unexpected: {portrait}")
+        return
+
     if scenario == "wp-s003-010-003-008":
         if len(frames) < 14:
             raise RuntimeError("wp-s003-010-003-008 requires fourteen atlas frames including gradual rotation stability")
@@ -8115,7 +8262,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Seeded planet stage not ready in frame {index}: {stage}")
             if stage.get("version") != "planet-map-info-v4":
                 raise RuntimeError(f"Unexpected planet renderer version in frame {index}: {stage}")
-            if stage.get("geographyVersion") != "planetary-geography-v4":
+            if stage.get("geographyVersion") != "planetary-geography-v5":
                 raise RuntimeError(f"Unexpected geography version in frame {index}: {stage}")
             if abs(float(stage.get("worldScaleFraction") or 0)-0.10)>1e-9:
                 raise RuntimeError(f"Planet scale fraction is not 10% in frame {index}: {stage}")
@@ -13641,7 +13788,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
