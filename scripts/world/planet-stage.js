@@ -1955,10 +1955,6 @@ function textureFromPixels(pixels){
   const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
   const ctx=canvas2d.getContext("2d",{alpha:false});ctx.putImageData(new ImageData(pixels.data,pixels.size,pixels.size),0,0);
   const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
-  // Tangent mesh UVs also use south at v=0 and north at v=1 while the
-  // generated canvas stores north in row 0. Keep local/surround textures in
-  // the same canonical orientation as the globe texture.
-  texture.flipY=true;
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
   return texture;
@@ -2463,10 +2459,6 @@ async function makeGeographyTexture(){
     mipmaps:true
   });
   texture.name="SeededPlanetGeography";
-  // Mesh UVs use north at v=1 and south at v=0. Canvas sources are top-origin,
-  // so make the upload flip explicit; otherwise the visible coastline is
-  // north/south mirrored relative to canonical PlanetGeography coordinates.
-  texture.flipY=true;
   texture.addressU=pc.ADDRESS_REPEAT;
   texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
