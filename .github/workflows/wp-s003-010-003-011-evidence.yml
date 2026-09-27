@@ -28,10 +28,10 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: Checkout AGENT #6 WP branch
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
-          ref: agent6/wp-s003-010-003-011
+          ref: main
           fetch-depth: 1
 
       - name: Set up Python
