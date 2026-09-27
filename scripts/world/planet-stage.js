@@ -361,7 +361,7 @@ function mapContextForFocus(){
     try{
       if(kind==="continent"){
         const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
-        return surface.sample?.land?(surface.sample?.continentName||fallback):fallback;
+        return surface.sample?.land?(surface.sample?.continentName||fallback):null;
       }
       if(kind==="country"){
         const key=atlasAuthorityKey("country",tile);
@@ -737,7 +737,7 @@ function atlasProjectCandidate(entity){
   return {projection:{x,y,screenX:screen.x,screenY:screen.y,depth:screen.z,mode:scene.mode}};
 }
 function atlasLabelBox(entity,p,portrait){
-  const nameLen=Math.max(5,String(entity.name).length),scale=portrait?.82:1;
+  const nameLen=Math.max(5,String(entity.name).length),scale=(portrait?.82:1)*.75;
   const perChar={continent:15.5,ocean:11.5,country:11.0,region:8.2,capital:7.8,city:7.4,village:7.0,district:6.6,landmark:7.4}[entity.type]||7.4;
   const minWidth={continent:180,ocean:140,country:150,region:115,capital:110,city:104,village:100,district:96,landmark:112}[entity.type]||100;
   const maxWidth={continent:360,ocean:260,country:300,region:230,capital:220,city:200,village:190,district:180,landmark:220}[entity.type]||200;
