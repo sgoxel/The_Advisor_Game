@@ -7405,7 +7405,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             offset="24000" if mode=="approach-east" else "-24000"
             before=driver.execute_script("""
                 const seed=window.PlanetStage.snapshot()?.activeSeed;
-                return window.SettlementArchetypes.canonicalHierarchySnapshot(seed,"0","0",50000);
+                return window.SettlementArchetypes.canonicalHierarchySnapshot(seed,"0","0",30000);
             """)
             driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],'0')",offset)
             settle(scale_index);time.sleep(.15)
@@ -7413,7 +7413,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             settle(scale_index);time.sleep(.2)
             after=driver.execute_script("""
                 const seed=window.PlanetStage.snapshot()?.activeSeed;
-                return window.SettlementArchetypes.canonicalHierarchySnapshot(seed,"0","0",50000);
+                return window.SettlementArchetypes.canonicalHierarchySnapshot(seed,"0","0",30000);
             """)
             auxiliary["approach"]={"direction":mode,"beforeSignature":before.get("signature") if isinstance(before,dict) else None,"afterSignature":after.get("signature") if isinstance(after,dict) else None}
         elif mode=="regenerate":
@@ -7421,9 +7421,9 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             settle(scale_index)
             regen=driver.execute_script("""
                 const seed=window.PlanetStage.snapshot()?.activeSeed,api=window.SettlementArchetypes;
-                const before=api.canonicalHierarchySnapshot(seed,"0","0",50000);
+                const before=api.canonicalHierarchySnapshot(seed,"0","0",30000);
                 api.clearCanonicalHierarchyCache();
-                const after=api.canonicalHierarchySnapshot(seed,"0","0",50000);
+                const after=api.canonicalHierarchySnapshot(seed,"0","0",30000);
                 return {beforeSignature:before.signature,afterSignature:after.signature,
                   beforeIds:before.settlements.map(x=>x.id),afterIds:after.settlements.map(x=>x.id)};
             """)
@@ -7433,20 +7433,32 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         elif mode in ("dense","sparse"):
             target=driver.execute_script("""
                 const mode=arguments[0],stage=window.PlanetStage,api=window.SettlementArchetypes,seed=stage.snapshot()?.activeSeed;
-                const offsets=[-60000,-30000,0,30000,60000],candidates=[];
-                for(const y of offsets)for(const x of offsets){
-                  const snap=api.canonicalHierarchySnapshot(seed,String(x),String(y),6000);
+                const probes=[[0,0],[60000,0],[-60000,0],[0,60000],[0,-60000],[42000,42000],[-42000,42000],[42000,-42000],[-42000,-42000]];
+                const candidates=[];
+                for(const [x,y] of probes){
+                  let terrain='water';try{terrain=window.GeographyFoundation.getTerrainType(seed,String(x),String(y));}catch(_){}
+                  if(terrain==='water')continue;
+                  const snap=api.canonicalHierarchySnapshot(seed,String(x),String(y),5000);
                   if(!snap.centerLand)continue;
                   const counts=snap.classCounts||{};
-                  const score=Number(snap.densityScore||0)+Number(snap.settlementCount||0)*0.035+
-                    Number(counts['major-city']||0)*0.12+Number(counts.city||0)*0.09+Number(counts.town||0)*0.05;
-                  candidates.push({x:String(x),y:String(y),score,snapshot:snap});
+                  let region=null;try{region=window.RegionProfile.at(seed,String(x),String(y));}catch(_){}
+                  const identity=region?.identity||{};
+                  const geography={
+                    terrain,regionId:region?.id||null,
+                    agriculturalSuitability:Number(identity.agriculturalSuitability||0),
+                    waterAccess:Number(identity.waterAccess||0),
+                    transportAccessibility:Number(identity.transportAccessibility||0)
+                  };
+                  const score=Number(snap.densityScore||0)+Number(snap.settlementCount||0)*0.055+
+                    Number(counts['major-city']||0)*0.16+Number(counts.city||0)*0.11+Number(counts.town||0)*0.06;
+                  candidates.push({x:String(x),y:String(y),score,snapshot:snap,geography});
+                  if(candidates.length>=5)break;
                 }
                 candidates.sort((a,b)=>a.score-b.score||a.y.localeCompare(b.y)||a.x.localeCompare(b.x));
-                if(!candidates.length)throw new Error('no bounded land density targets');
+                if(candidates.length<2)throw new Error('insufficient bounded land density targets');
                 const chosen=mode==='dense'?candidates[candidates.length-1]:candidates[0];
                 stage.setWorldTileFocus(chosen.x,chosen.y);
-                return {x:chosen.x,y:chosen.y,score:chosen.score,snapshot:chosen.snapshot,
+                return {x:chosen.x,y:chosen.y,score:chosen.score,snapshot:chosen.snapshot,geography:chosen.geography,
                   candidateCount:candidates.length,minScore:candidates[0].score,maxScore:candidates[candidates.length-1].score};
             """,mode)
             settle(scale_index);time.sleep(.25)
@@ -7460,7 +7472,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{},f=s?.canonicalFocus?.worldTile||{},api=window.SettlementArchetypes;
-            const hierarchy=api.canonicalHierarchySnapshot(s.activeSeed,String(f.x),String(f.y),50000);
+            const hierarchy=api.canonicalHierarchySnapshot(s.activeSeed,String(f.x),String(f.y),30000);
             const local10km=api.canonicalHierarchySnapshot(s.activeSeed,String(f.x),String(f.y),5000);
             const classMinimums=Object.fromEntries(Object.entries(api.HIERARCHY_CLASS_SPECS||{}).map(([k,v])=>[k,Number(v.minSameClassMeters||0)]));
             const visibleSettlementLabels=(m.visibleLabels||[]).filter(x=>['city','town','village'].includes(x.entityType)).map(x=>({
@@ -8735,6 +8747,11 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-015 seed {label} dense/sparse targets were not distinct: dense={dense} sparse={sparse}")
             if float(dense.get("score") or 0)<=float(sparse.get("score") or 0)+0.01:
                 raise RuntimeError(f"WP-015 seed {label} geography-aware density did not differ: dense={dense} sparse={sparse}")
+            dense_snap=dense.get("snapshot") or {};sparse_snap=sparse.get("snapshot") or {}
+            if int(dense_snap.get("settlementCount") or 0)<int(sparse_snap.get("settlementCount") or 0):
+                raise RuntimeError(f"WP-015 seed {label} dense target has fewer actual local settlements: dense={dense_snap} sparse={sparse_snap}")
+            if (dense.get("geography") or {})==(sparse.get("geography") or {}):
+                raise RuntimeError(f"WP-015 seed {label} dense/sparse targets lack distinct geographic inputs: dense={dense} sparse={sparse}")
         if proofs[0].get("seed")==proofs[9].get("seed") or (proofs[0].get("hierarchy") or {}).get("signature")==(proofs[9].get("hierarchy") or {}).get("signature"):
             raise RuntimeError("WP-015 second SEED did not produce an independent canonical settlement hierarchy")
         combined_counts={}
