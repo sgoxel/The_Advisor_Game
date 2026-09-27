@@ -731,21 +731,29 @@ function contextSignature(plan){
   return [plan.countryId,plan.regionId,r.dominantTerrain,r.dominantBiome,Math.round(l.resources.agriculture*5),Math.round(l.resources.mineral*5),Math.round(l.resources.water*5),Math.round(l.routeAccess*5),Math.round(plan.inputs.border.proximity*5)].join("|");
 }
 function build(seedValue,centerValue,optionsValue){
-  const seed=String(seedValue==null?"":seedValue);
-  const suppliedOptions=optionsValue||{},canonicalRecord=suppliedOptions.canonicalRecord||null;
-  const canonicalClass=canonicalRecord?.classId==="national-capital"?"national-capital":canonicalRecord?.classId;
-  const options=canonicalRecord?Object.freeze({...suppliedOptions,
+  const seed=String(seedValue==null?"":seedValue),suppliedOptions=optionsValue||{};
+  const requested=Object.freeze({x:String(centerValue?.x??"0"),y:String(centerValue?.y??"0")});
+  let canonicalRecord=suppliedOptions.canonicalRecord||null;
+  if(!canonicalRecord){
+    const hint=String(suppliedOptions.classHint||"");
+    if(hint==="national-capital"&&suppliedOptions.countryId){
+      canonicalRecord=hierarchyCapitalForRecord(seed,{countryId:String(suppliedOptions.countryId)});
+    }else if(HIERARCHY_CLASS_SPECS[hint]){
+      const candidate=canonicalSettlementAtPoint(seed,hint,requested.x,requested.y);
+      if(candidate&&String(candidate.center.x)===requested.x&&String(candidate.center.y)===requested.y)canonicalRecord=candidate;
+    }
+  }
+  if(!canonicalRecord)return null;
+  const canonicalClass=canonicalRecord.classId==="national-capital"?"national-capital":canonicalRecord.classId;
+  const options=Object.freeze({...suppliedOptions,
     countryId:String(canonicalRecord.countryId||suppliedOptions.countryId||""),
     role:String(canonicalRecord.role||suppliedOptions.role||"local"),
-    classHint:canonicalClass||suppliedOptions.classHint||null,
+    classHint:canonicalClass,
     nameHint:String(canonicalRecord.name||suppliedOptions.nameHint||""),
     canonicalRecord
-  }):suppliedOptions;
-  const desired=Object.freeze({
-    x:String(canonicalRecord?.center?.x??centerValue?.x??"0"),
-    y:String(canonicalRecord?.center?.y??centerValue?.y??"0")
   });
-  const country=countryFromInput(seed,options.countryId?String(options.countryId):desired);
+  const desired=Object.freeze({x:String(canonicalRecord.center.x),y:String(canonicalRecord.center.y)});
+  const country=countryFromInput(seed,String(canonicalRecord.countryId));
   if(!country)return null;
   const center=legalCenter(seed,country,desired,options);
   if(!center)return null;
@@ -778,7 +786,7 @@ function build(seedValue,centerValue,optionsValue){
   const population=populationBand(classId,prosperityValue,seed,key);
   const functions=buildingFunctions(classId,subtypes);
   const architecture=architectureKeys(countryProfile,region,local,subtypes);
-  const id=canonicalRecord?String(canonicalRecord.id):"SET|"+hashText(seed+"|"+key);
+  const id=String(canonicalRecord.id);
   const revision="SAF-"+hashText([VERSION,id,countryProfile.revision,region.revision,border.relationRevision||"none",classId,subtypes.tags.join(","),prosperityValue,defense,tradeMarket].join("|"));
   const plan=Object.freeze({
     version:VERSION,id,revision,
@@ -840,16 +848,6 @@ function build(seedValue,centerValue,optionsValue){
   });
   cache.set(cacheKey,plan);
   return plan;
-}
-function satelliteCenter(seed,country,region,index){
-  const seat=region.administrativeSeat;
-  const key=region.id+"|"+index;
-  const angle=unit(seed,"settlement:satellite-angle:"+key)*Math.PI*2;
-  const radius=480+Math.round(unit(seed,"settlement:satellite-radius:"+key)*1050);
-  return Object.freeze({
-    x:(BigInt(seat.x)+BigInt(Math.round(Math.cos(angle)*radius))).toString(),
-    y:(BigInt(seat.y)+BigInt(Math.round(Math.sin(angle)*radius))).toString()
-  });
 }
 function settlementsForCountry(seedValue,countryValue,radiusValue){
   const seed=String(seedValue==null?"":seedValue),country=countryFromInput(seed,countryValue);
