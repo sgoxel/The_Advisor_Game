@@ -108,7 +108,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
-- `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance
+- `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips
 - `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette
 - `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna
