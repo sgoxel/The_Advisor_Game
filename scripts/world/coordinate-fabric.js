@@ -17,6 +17,7 @@ function floorDivBig(value,size){
   return q;
 }
 function vector(x,y,z){return Object.freeze({x:Number(x),y:Number(y),z:Number(z)});}
+function normalize3(x,y,z){const m=Math.hypot(Number(x)||0,Number(y)||0,Number(z)||0)||1;return vector((Number(x)||0)/m,(Number(y)||0)/m,(Number(z)||0)/m);}
 function dot3(a,b){return Number(a?.x||0)*Number(b?.x||0)+Number(a?.y||0)*Number(b?.y||0)+Number(a?.z||0)*Number(b?.z||0);}
 function tangentBasis(latitudeRadians,longitudeRadians){
   const lat=clamp(latitudeRadians,-Math.PI/2,Math.PI/2),lon=Number(longitudeRadians)||0;
@@ -66,6 +67,43 @@ function create(seedValue,options={}){
       registeredLatitudeRadians:Number(BigInt(tile.y))*tileMeters/radiusMeters,
       registeredLongitudeRadians:Number(BigInt(tile.x))*tileMeters/radiusMeters,
       authority:"Campaign-SEED -> SeedCoordinateFabric.canonical-world-tile-fallback"
+    });
+  }
+  function latLonForRegisteredMeters(eastMeters,northMeters){
+    const origin=registration.originDirection,east=registration.eastDirection,north=registration.northDirection;
+    if(origin&&east&&north){
+      const registeredLatitudeRadians=clamp((Number(northMeters)||0)/radiusMeters,-Math.PI/2,Math.PI/2);
+      const period=Math.PI*2*radiusMeters,half=period*.5;
+      let wrappedEast=(Number(eastMeters)||0)%period;if(wrappedEast>half)wrappedEast-=period;else if(wrappedEast<-half)wrappedEast+=period;
+      const registeredLongitudeRadians=wrappedEast/radiusMeters,c=Math.cos(registeredLatitudeRadians),s=Math.sin(registeredLatitudeRadians),cl=Math.cos(registeredLongitudeRadians),sl=Math.sin(registeredLongitudeRadians);
+      const direction=normalize3(
+        origin.x*c*cl+east.x*c*sl+north.x*s,
+        origin.y*c*cl+east.y*c*sl+north.y*s,
+        origin.z*c*cl+east.z*c*sl+north.z*s
+      );
+      const geo=window.PlanetGeography.latLonFromDirection(direction);
+      return Object.freeze({
+        latitudeRadians:Number(geo.latitudeRadians),longitudeRadians:Number(geo.longitudeRadians),
+        latitudeDegrees:Number((Number(geo.latitudeRadians)*180/Math.PI).toFixed(6)),
+        longitudeDegrees:Number((Number(geo.longitudeRadians)*180/Math.PI).toFixed(6)),
+        registeredLatitudeRadians,registeredLongitudeRadians,
+        registeredMeters:Object.freeze({east:wrappedEast,north:registeredLatitudeRadians*radiusMeters}),
+        authority:"Campaign-SEED -> SeedCoordinateFabric.seed-fixed-spherical-frame"
+      });
+    }
+    const x=String(Math.round((Number(eastMeters)||0)/tileMeters)),y=String(Math.round((Number(northMeters)||0)/tileMeters));
+    return worldLatLonForTile(x,y);
+  }
+  function registeredDeltaMeters(originLatitudeRadians,originLongitudeRadians,targetLatitudeRadians,targetLongitudeRadians){
+    const origin=registeredMetersForLatLon(originLatitudeRadians,originLongitudeRadians),target=registeredMetersForLatLon(targetLatitudeRadians,targetLongitudeRadians);
+    const period=Math.PI*2*radiusMeters,half=period*.5;
+    let eastMeters=Number(target.eastMeters)-Number(origin.eastMeters);
+    if(eastMeters>half)eastMeters-=period;else if(eastMeters<-half)eastMeters+=period;
+    return Object.freeze({
+      eastMeters,northMeters:Number(target.northMeters)-Number(origin.northMeters),
+      originRegisteredMeters:Object.freeze({east:Number(origin.eastMeters),north:Number(origin.northMeters)}),
+      targetRegisteredMeters:Object.freeze({east:Number(target.eastMeters),north:Number(target.northMeters)}),
+      authority:"Campaign-SEED -> SeedCoordinateFabric.registered-meter-delta"
     });
   }
   function worldLatLonForTile(xValue,yValue){
@@ -159,7 +197,7 @@ function create(seedValue,options={}){
 
   const api=Object.freeze({
     VERSION,seed,revisionSignature,radiusMeters,tileMeters,
-    worldLatLonForTile,worldTileForLatLon,registeredMetersForLatLon,describeTile,describeLatLon,cellForTile,
+    worldLatLonForTile,worldTileForLatLon,registeredMetersForLatLon,latLonForRegisteredMeters,registeredDeltaMeters,describeTile,describeLatLon,cellForTile,
     worldToLocal,localToWorldTile,materializeCell,releaseCell,snapshot,verify,
     registration:Object.freeze({...registration})
   });
