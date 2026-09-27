@@ -117,7 +117,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-014` — Reactive Ambient Wildlife Behavior
 - `WP-S003-015` — Contextual Building Activity Indicators — IN PROGRESS (3-attempt acceptance cap reached 2026-09-27; implementation present, latest visual 6.5/10, evidence harness zero-value validator defect remains; NOT COMPLETED)
 - `WP-S003-016` — Local Environmental Reaction Effects
-- `WP-S003-017` — Positional Ambient Soundscape + Activity Audio
+- `WP-S003-017` — Positional Ambient Soundscape + Activity Audio — COMPLETED
 - `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks
 - `WP-S003-019` — Seasonal World Presentation + Vegetation State
 - `WP-S003-020` — Function-Readable Building Surroundings + Ownership Cues
