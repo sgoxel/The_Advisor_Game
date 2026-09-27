@@ -845,7 +845,7 @@ function atlasQueryCandidates(spec){
     const countryCount=[...unique.values()].filter(entity=>entity.type==="country").length;
     if(countryCount<2){for(const [id,entity] of [...unique.entries()])if(entity.type==="region")unique.delete(id);}
   }
-  const typePriority={continent:100,ocean:96,country:90,region:82,capital:78,city:72,village:68,district:60,landmark:52};
+  const typePriority={continent:100,ocean:96,country:90,landmark:84,region:82,capital:78,city:72,village:68,district:60};
   const candidates=[...unique.values()].map(entity=>Object.freeze({...entity,currentFocus:entity.id===focus.primaryId,priority:(entity.id===focus.primaryId?1000:0)+(typePriority[entity.type]||0)+Number(entity.importance||0)}))
     .sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
   atlasLabelCache={key,candidates,queryCellCount:samples.length,buildMs:Number((performance.now()-started).toFixed(3)),focus};
@@ -963,14 +963,30 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   for(const entity of query.candidates){
     if(atlasStickyEntities.has(entity.id))atlasStickyEntities.set(entity.id,entity);
   }
+  for(const [id,entity] of [...atlasStickyEntities.entries()]){
+    if(!spec.kinds.includes(entity.type)){atlasStickyEntities.delete(id);atlasLabelPlacementCache.delete(id);}
+  }
+  // Landmarks are independently eligible at their scale tier. Reserve a small
+  // bounded quota so hierarchy labels cannot consume the entire sticky budget.
+  const landmarkReserve=spec.kinds.includes("landmark")?Math.min(spec.budget,portrait?2:3):0;
+  const preferredLandmarks=query.candidates.filter(entity=>entity.type==="landmark")
+    .sort((a,b)=>Number(b.importance||0)-Number(a.importance||0)||a.id.localeCompare(b.id))
+    .slice(0,landmarkReserve);
+  for(const entity of preferredLandmarks){
+    if(atlasStickyEntities.has(entity.id)){atlasStickyEntities.set(entity.id,entity);continue;}
+    while(atlasStickyEntities.size>=spec.budget){
+      const removable=[...atlasStickyEntities.values()].filter(item=>item.type!=="landmark")
+        .sort((a,b)=>Number(a.importance||0)-Number(b.importance||0)||b.id.localeCompare(a.id))[0];
+      if(!removable)break;
+      atlasStickyEntities.delete(removable.id);atlasLabelPlacementCache.delete(removable.id);
+    }
+    if(atlasStickyEntities.size<spec.budget)atlasStickyEntities.set(entity.id,entity);
+  }
   for(const entity of query.candidates){
     if(atlasStickyEntities.size>=spec.budget)break;
     if(!atlasStickyEntities.has(entity.id))atlasStickyEntities.set(entity.id,entity);
   }
-  for(const [id,entity] of [...atlasStickyEntities.entries()]){
-    if(!spec.kinds.includes(entity.type)){atlasStickyEntities.delete(id);atlasLabelPlacementCache.delete(id);}
-  }
-  const typePriority={continent:100,ocean:96,country:90,region:82,capital:78,city:72,village:68,district:60,landmark:52};
+  const typePriority={continent:100,ocean:96,country:90,landmark:84,region:82,capital:78,city:72,village:68,district:60};
   const rankedCandidates=[...atlasStickyEntities.values()].map(entity=>({
     ...entity,
     currentFocus:entity.id===query.focus?.primaryId,
