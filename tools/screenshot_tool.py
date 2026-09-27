@@ -243,7 +243,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-010": 7,
     "wp-s003-012": 8,
     "wp-s003-009-011": 7,
-    "wp-s003-013": 12,
+    "wp-s003-013": 13,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -6447,7 +6447,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             };
             for(let lat=-68;lat<=68;lat+=4)for(let lon=-176;lon<180;lon+=4){
               const la=lat*Math.PI/180,lo=lon*Math.PI/180,g=geo.sampleLatLon(la,lo);if(!g.land)continue;
-              const wet=nearWater(la,lo)||g.surfaceClass==='coast'||Number(g.moisture)>.68;
+              const wet=g.surfaceClass==='coast'||Number(g.moisture)>.70;
               const rocky=Number(g.elevationMeters)>1550||Number(g.mountainInfluence)>.22;
               const wooded=!wet&&!rocky&&Number(g.moisture)>.49;
               const grass=!wet&&!rocky&&!wooded;
@@ -6460,18 +6460,19 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not required.issubset(set(targets or {})):
             raise RuntimeError(f"Unable to find bounded wilderness biome targets: {targets}")
         plan=(
-            ("village-edge","village",0.849485,(1280,800),True),
-            ("grassland-0.50x","grassland",0.849485,(1280,800),True),
+            ("village-edge","village",0.985,(1280,800),True),
+            ("grassland-local","grassland",0.985,(1280,800),True),
             ("grassland-1.00x","grassland",1.0,(1280,800),True),
-            ("rocky-0.50x","rocky",0.849485,(1280,800),True),
-            ("wooded-0.50x","wooded",0.849485,(1280,800),True),
-            ("wet-0.50x","wet",0.849485,(1280,800),True),
+            ("rocky-local","rocky",0.985,(1280,800),True),
+            ("wooded-local","wooded",0.985,(1280,800),True),
+            ("wet-local","wet",0.985,(1280,800),True),
             ("fauna-ground","grassland",1.0,(1280,800),True),
-            ("grassland-repeat","grassland",0.849485,(1280,800),True),
-            ("far-lod","grassland",0.70,(1280,800),True),
-            ("phone-landscape","grassland",0.849485,(844,390),True),
-            ("phone-portrait","wooded",0.849485,(390,844),True),
-            ("grassland-baseline-disabled","grassland",0.849485,(1280,800),False),
+            ("grassland-repeat","grassland",0.985,(1280,800),True),
+            ("mid-lod-0.50x","grassland",0.849485,(1280,800),True),
+            ("far-lod-0.25x","grassland",0.70,(1280,800),True),
+            ("phone-landscape","grassland",0.985,(844,390),True),
+            ("phone-portrait","wooded",0.985,(390,844),True),
+            ("grassland-baseline-disabled","grassland",0.985,(1280,800),False),
         )
         label,key,scalar,viewport,enabled=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
@@ -6512,7 +6513,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 if(far)return w.localActive!==true;
                 if(!enabled)return w.localEnabled===false&&w.localActive!==true;
                 return w.localEnabled===true&&Number(w.localAcceptedStaticProps||0)>=8;
-            """,float(scalar),"far-lod" in label,bool(enabled)))
+            """,float(scalar),("far-lod" in label or "mid-lod" in label),bool(enabled)))
         time.sleep(.25)
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),w=s.wilderness||{},ls=s.projection?.localStatic||{},r=s.projection?.resourceBudget||{};
@@ -8836,9 +8837,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         return
 
     if scenario == "wp-s003-013":
-        if len(frames) < 12:
-            raise RuntimeError("wp-s003-013 requires twelve local biome-wilderness evidence frames")
-        enabled=frames[:11]
+        if len(frames) < 13:
+            raise RuntimeError("wp-s003-013 requires thirteen local biome-wilderness evidence frames")
+        enabled=frames[:12]
         local_signatures={}
         seen_biomes=set()
         fauna_frames=0
@@ -8852,12 +8853,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if wild.get("localFullWorldScan") is not False or wild.get("localDeterministicGlobalCells") is not True:
                 raise RuntimeError(f"Local wilderness bounded/deterministic contract failed in frame {index}: {wild}")
             action=str(frame.get("action") or "")
-            if "far-lod" not in action:
+            culled_lod=("far-lod" in action or "mid-lod" in action)
+            if not culled_lod:
                 if wild.get("localEnabled") is not True or int(resources.get("pendingPreparationCount") or 0)!=0:
                     raise RuntimeError(f"Local wilderness readiness failed in frame {index}: wild={wild} resources={resources}")
-            if "far-lod" in action:
+            if culled_lod:
                 if wild.get("localActive") is True:
-                    raise RuntimeError(f"Far LOD failed to cull local wilderness in frame {index}: {wild}")
+                    raise RuntimeError(f"Distant LOD failed to cull local wilderness in frame {index}: {wild}")
             elif int(wild.get("localAcceptedStaticProps") or 0)<8:
                 raise RuntimeError(f"Local wilderness scene too sparse in frame {index}: {wild}")
             if int(wild.get("localDrawCalls") or 0)>9 or float(wild.get("localMaxFrameUpdateMs") or 0)>4.0:
@@ -8882,7 +8884,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"Mobile wilderness evidence incomplete: frames={mobile_frames}")
         if not local_signatures.get("initial") or local_signatures.get("initial")!=local_signatures.get("repeat"):
             raise RuntimeError(f"Repeated grassland layout changed: {local_signatures}")
-        baseline=frames[11]
+        baseline=frames[12]
         bw=((baseline.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {}).get("wilderness") or {})
         if bw.get("localEnabled") is not False or bw.get("localActive") is True or int(bw.get("localAcceptedStaticProps") or 0)!=0:
             raise RuntimeError(f"Wilderness-disabled baseline hook failed: {bw}")
