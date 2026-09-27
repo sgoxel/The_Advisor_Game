@@ -68,11 +68,26 @@ function countryId(seed,cx,cy){
   const key=cellKey(cx,cy);
   return "CTR|"+cx.toString()+"|"+cy.toString()+"|"+hashText(seed+"|country|"+key).slice(0,8);
 }
-function countryName(seed,key){
+function rawCountryName(seed,key){
   const a=pick(seed,"country-name:a:"+key,COUNTRY_WORDS_A);
   const b=pick(seed,"country-name:b:"+key,COUNTRY_WORDS_B);
   const form=pick(seed,"country-name:form:"+key,COUNTRY_FORMS);
-  return form+" of "+a+b;
+  return Object.freeze({a,b,form,name:form+" of "+a+b});
+}
+function countryName(seed,cx,cy){
+  const key=cellKey(cx,cy),raw=rawCountryName(seed,key),colliders=[];
+  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+    const otherKey=cellKey(cx+BigInt(dx),cy+BigInt(dy));
+    if(rawCountryName(seed,otherKey).name===raw.name)colliders.push(otherKey);
+  }
+  colliders.sort();
+  const rank=colliders.indexOf(key);
+  if(rank<=0)return raw.name;
+  const baseFormIndex=Math.max(0,COUNTRY_FORMS.indexOf(raw.form));
+  if(rank<COUNTRY_FORMS.length){
+    return COUNTRY_FORMS[(baseFormIndex+rank)%COUNTRY_FORMS.length]+" of "+raw.a+raw.b;
+  }
+  return COUNTRY_FORMS[(baseFormIndex+rank)%COUNTRY_FORMS.length]+" of "+raw.a+raw.b+" "+String(rank+1);
 }
 function centerForCell(seed,cx,cy){
   const size=BigInt(COUNTRY_CELL_SIZE),half=BigInt(Math.floor(COUNTRY_CELL_SIZE/2));
@@ -88,7 +103,7 @@ function candidateForCell(seed,cx,cy){
   const key=cellKey(cx,cy);
   return Object.freeze({
     id:countryId(seed,cx,cy),
-    name:countryName(seed,key),
+    name:countryName(seed,cx,cy),
     cellX:cx.toString(),cellY:cy.toString(),
     key,
     politicalCenter:centerForCell(seed,cx,cy),

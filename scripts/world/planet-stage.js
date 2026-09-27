@@ -896,7 +896,7 @@ function interpolateGeoPoint(a,b,t){
 function borderSignature(segments){
   let h=2166136261>>>0;
   const rows=segments.map(seg=>{
-    const pair=[seg.ownerA,seg.ownerB].sort().join("~");
+    const pair=String(seg.stitchKey||[seg.ownerA,seg.ownerB].sort().join("~"));
     const a=seg.aTile,b=seg.bTile;
     return pair+"|"+a.x+","+a.y+"|"+b.x+","+b.y;
   }).sort();
@@ -906,7 +906,7 @@ function borderSignature(segments){
 function stitchMapBorderSegments(segments){
   const groups=new Map();
   for(const seg of segments){
-    const pair=[seg.ownerA,seg.ownerB].sort().join("~");
+    const pair=String(seg.stitchKey||[seg.ownerA,seg.ownerB].sort().join("~"));
     if(!groups.has(pair))groups.set(pair,[]);
     groups.get(pair).push(seg);
   }
@@ -939,8 +939,8 @@ function stitchMapBorderSegments(segments){
         points.push(pointFor(edge,currentKey));
       }
       if(points.length>=2){
-        const [ownerA,ownerB]=pair.split("~");
-        lines.push(Object.freeze({ownerA,ownerB,points:Object.freeze(points)}));
+        const first=group[0]||{};
+        lines.push(Object.freeze({ownerA:first.ownerA||null,ownerB:first.ownerB||null,points:Object.freeze(points)}));
       }
     }
   }
@@ -984,7 +984,18 @@ function buildMapBorderSegments(){
     const tile={x:((ax+bx)/2n).toString(),y:((ay+by)/2n).toString()},geo=worldLatLonForTile(tile.x,tile.y);
     return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
   };
-  const crossing=(a,b)=>a.land&&b.land&&a.owner!=="none"&&b.owner!=="none"&&a.owner!==b.owner;
+  const crossing=(a,b)=>{
+    if(!a.land||!b.land||a.owner==="none"||b.owner==="none"||a.owner===b.owner)return false;
+    return focusOwnerId?((a.owner===focusOwnerId)!==(b.owner===focusOwnerId)):true;
+  };
+  const segmentOnLand=(a,b)=>{
+    for(const t of [.2,.4,.6,.8]){
+      const point=interpolateGeoPoint(a,b,t);
+      let sample=null;try{sample=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){sample=null;}
+      if(!sample?.land)return false;
+    }
+    return true;
+  };
   const segments=[];let waterClippedCount=0;
   for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
     const a=nodes[r][col],b=nodes[r][col+1],c=nodes[r+1][col+1],d=nodes[r+1][col],edges=[];
@@ -994,20 +1005,20 @@ function buildMapBorderSegments(){
       if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
     }
     if(edges.length>=2){
-      const byPair=new Map();
-      for(const edge of edges){
-        const pair=[edge.ownerA,edge.ownerB].sort(),pairKey=pair.join("~");
-        if(!byPair.has(pairKey))byPair.set(pairKey,{owners:pair,edges:[]});
-        byPair.get(pairKey).edges.push(edge);
-      }
-      for(const group of byPair.values()){
-        const owners=group.owners;
-        if(focusOwnerId&&!owners.includes(focusOwnerId))continue;
-        for(let i=0;i+1<group.edges.length;i+=2){
-          const e0=group.edges[i],e1=group.edges[i+1];
-          segments.push({a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,ownerA:owners[0],ownerB:owners[1]});
-        }
-      }
+      const stitchKey=focusOwnerId?"focus:"+focusOwnerId:null;
+      const addSegment=(e0,e1)=>{
+        if(!segmentOnLand(e0.point,e1.point)){waterClippedCount++;return;}
+        const owners=[e0.ownerA,e0.ownerB,e1.ownerA,e1.ownerB].filter(owner=>owner&&owner!=="none");
+        const other=owners.find(owner=>!focusOwnerId||owner!==focusOwnerId)||owners[0]||"none";
+        const ownerA=focusOwnerId||[e0.ownerA,e0.ownerB].sort()[0];
+        const ownerB=focusOwnerId?other:[e0.ownerA,e0.ownerB].sort()[1];
+        segments.push({
+          a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,
+          ownerA,ownerB,stitchKey:stitchKey||[ownerA,ownerB].sort().join("~")
+        });
+      };
+      if(edges.length===2)addSegment(edges[0],edges[1]);
+      else if(edges.length===4){addSegment(edges[0],edges[1]);addSegment(edges[2],edges[3]);}
     }
   }
   const topologySignature=borderSignature(segments),worldVertexCount=segments.length*3;

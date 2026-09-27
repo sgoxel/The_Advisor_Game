@@ -242,12 +242,22 @@ function create(seedValue){
     if(!continentComponents.has(root))continentComponents.set(root,[]);
     continentComponents.get(root).push(group);
   });
-  const continentNameForRoot=root=>{
-    const h=hash32(seed+"|continent-name|"+root);
-    const stem=CONTINENT_STEMS[h%CONTINENT_STEMS.length];
-    const tail=CONTINENT_TAILS[(h>>>8)%CONTINENT_TAILS.length];
-    return stem+tail+" Continent";
-  };
+  const continentNames=new Map(),usedContinentNames=new Set();
+  for(const root of [...continentComponents.keys()].sort((a,b)=>a-b)){
+    let candidate=null;
+    const attempts=CONTINENT_STEMS.length*CONTINENT_TAILS.length;
+    for(let nonce=0;nonce<attempts;nonce++){
+      const salt=nonce===0?seed+"|continent-name|"+root:seed+"|continent-name|"+root+"|alt|"+nonce;
+      const h=hash32(salt);
+      const stem=CONTINENT_STEMS[h%CONTINENT_STEMS.length];
+      const tail=CONTINENT_TAILS[(h>>>8)%CONTINENT_TAILS.length];
+      const proposed=stem+tail+" Continent";
+      if(!usedContinentNames.has(proposed)){candidate=proposed;break;}
+    }
+    if(!candidate)candidate="Continent "+String(root+1);
+    continentNames.set(root,candidate);usedContinentNames.add(candidate);
+  }
+  const continentNameForRoot=root=>continentNames.get(root)||null;
   const registrationOrigin=continentGroups[0]?.center||normalize(0,0,1);
   const registrationBasis=tangentBasis(registrationOrigin);
   const registrationEast=registrationBasis.u,registrationNorth=registrationBasis.v;
