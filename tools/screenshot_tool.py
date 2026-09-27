@@ -135,6 +135,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
+    "wp-s003-010-003-008",
     "wp-s003-010-004",
     "wp-s004-001",
     "wp-s004-002",
@@ -247,6 +248,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-005-002": 10,
     "wp-s003-010-003-006": 14,
     "wp-s003-010-003-007": 10,
+    "wp-s003-010-003-008": 10,
     "wp-s003-010-004": 4,
     "wp-s004-001": 3,
     "wp-s004-002": 3,
@@ -1646,7 +1648,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6747,6 +6749,60 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-008":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("globe",0.050,(1280,800),False),
+            ("continent",0.280,(1280,800),False),
+            ("country",0.500,(1280,800),False),
+            ("regional-overview","height:400000",(1280,800),False),
+            ("regional-detail","height:140000",(1280,800),False),
+            ("local","height:10000",(1280,800),False),
+            ("ground",1.000,(1280,800),False),
+            ("rotated-backside",0.120,(1280,800),True),
+            ("phone-landscape",0.500,(844,390),False),
+            ("phone-portrait",0.280,(390,844),False),
+        )
+        label,target,viewport,rotate=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1])); time.sleep(0.18)
+        if frame_index in (0,8,9):
+            result=driver.execute_script("return window.PlanetStage?.setWorldTileFocus?.('0','0') || null")
+            if not isinstance(result,dict):
+                raise RuntimeError(f"Atlas canonical focus API unavailable: {result}")
+        if isinstance(target,str) and target.startswith("height:"):
+            height=float(target.split(":",1)[1])
+            scalar=driver.execute_script("return Number(window.PlanetStage?.scalarForFootprintHeight?.(arguments[0]))",height)
+        else:
+            scalar=float(target)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
+        if rotate:
+            driver.execute_script("window.PlanetStage.rotateBy(155,0)")
+        WebDriverWait(driver,60.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{};
+            return s?.ready===true &&
+                   Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001 &&
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   m?.bounded===true && m?.fullWorldScan===false &&
+                   Number(m?.atlasVisibleLabelCount||0)>0;
+        """,float(scalar)))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{};
+            return {
+              scalar:s?.zoom?.scalar,band:s?.zoom?.visibleBand,
+              footprint:[s?.zoom?.visibleFootprintWidthMeters,s?.zoom?.visibleFootprintHeightMeters],
+              projection:m?.projectionMode,projectionBlend:m?.projectionBlend,
+              queryCells:m?.atlasQueryCellCount,candidates:m?.atlasCandidateCount,
+              hidden:m?.hiddenHemisphereCulledCount,behind:m?.behindCameraCulledCount,
+              offscreen:m?.offscreenCulledCount,occluded:m?.occludedCulledCount,
+              overlap:m?.overlapRejectedCount,visible:m?.atlasVisibleLabelCount,
+              classes:m?.visibleLabelClasses,budget:m?.maxLabelBudget,
+              labelBuildMs:m?.labelQueryBuildMs,updateMs:m?.lastUpdateMs,
+              labels:m?.visibleLabels,context:m?.context,
+              pending:r?.pendingPreparationCount,blockingZoomBuilds:r?.blockingZoomBuilds,
+              fullWorldScan:m?.fullWorldScan,bounded:m?.bounded
+            };
+        """)
+        return "atlas:"+label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-007":
         plan=(
             (0.540,"desktop:pre-reveal"),
@@ -7056,6 +7112,78 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-008":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-010-003-008 requires ten canonical atlas frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:10]]
+        maps=[stage.get("mapPresentation") or {} for stage in stages]
+        for index,m in enumerate(maps, start=1):
+            if m.get("bounded") is not True or m.get("fullWorldScan") is not False:
+                raise RuntimeError(f"Atlas lost bounded/no-full-world contract in frame {index}: {m}")
+            query=int(m.get("atlasQueryCellCount") or 0); candidates=int(m.get("atlasCandidateCount") or 0)
+            visible=int(m.get("atlasVisibleLabelCount") or 0); budget=int(m.get("maxLabelBudget") or 0)
+            if query<1 or query>35 or candidates<1 or candidates>180:
+                raise RuntimeError(f"Atlas bounded query/candidate budget invalid in frame {index}: {m}")
+            if visible<1 or budget<1 or visible>budget:
+                raise RuntimeError(f"Atlas visible label budget invalid in frame {index}: {m}")
+            if float(m.get("labelQueryBuildMs") or 0)>260 or float(m.get("lastUpdateMs") or 0)>360:
+                raise RuntimeError(f"Atlas label/update build exceeded bounded input-path budget in frame {index}: {m}")
+            labels=m.get("visibleLabels") or []
+            ids=[]
+            for item in labels:
+                if item.get("identityMatch") is not True:
+                    raise RuntimeError(f"Atlas rendered a label with mismatched canonical identity in frame {index}: {item}")
+                entity_id=str(item.get("canonicalEntityId") or "")
+                name=str(item.get("authoritativeName") or "")
+                if not entity_id or not name:
+                    raise RuntimeError(f"Atlas visible label lacks canonical ID/name in frame {index}: {item}")
+                ids.append(entity_id)
+                sx=float(item.get("screenX") or -1); sy=float(item.get("screenY") or -1)
+                viewport=frames[index-1].get("runtime",{}).get("viewport",{})
+                if sx<0 or sy<0 or sx>float(viewport.get("width") or 0)+1 or sy>float(viewport.get("height") or 0)+1:
+                    raise RuntimeError(f"Atlas rendered off-screen label in frame {index}: {item}")
+            if len(ids)!=len(set(ids)):
+                raise RuntimeError(f"Atlas rendered duplicate canonical IDs in frame {index}: {ids}")
+            focus_labels=[item for item in labels if item.get("currentFocus") is True]
+            for item in focus_labels:
+                context=(m.get("context") or {})
+                context_name=str(context.get(str(item.get("entityType") or "")) or "")
+                if context_name and context_name!=str(item.get("authoritativeName") or ""):
+                    raise RuntimeError(f"Focus label/context name mismatch in frame {index}: {item} vs {context_name}")
+        # Zoom LOD progression must be semantic, not just more labels.
+        classes=[set(m.get("visibleLabelClasses") or []) for m in maps]
+        if not classes[0].issubset({"continent","ocean"}) or "continent" not in classes[0]:
+            raise RuntimeError(f"Far globe label classes are not continent/ocean-only: {classes[0]}")
+        if "country" not in classes[1] and "country" not in classes[2]:
+            raise RuntimeError(f"Country labels never appeared on continent/country approach: {classes[1:3]}")
+        if not ({"region","capital","city"} & classes[3]) and not ({"region","capital","city"} & classes[4]):
+            raise RuntimeError(f"Regional detail classes never appeared: {classes[3:5]}")
+        if not ({"village","district","city"} & classes[5]):
+            raise RuntimeError(f"Local atlas did not expose local settlement classes: {classes[5]}")
+        if classes[6] & {"continent","country","region","ocean"}:
+            raise RuntimeError(f"Ground view retained distant atlas classes: {classes[6]}")
+        if not (classes[6] & {"village","district","landmark"}):
+            raise RuntimeError(f"Ground view lacks locally relevant label class: {classes[6]}")
+        if int(maps[7].get("hiddenHemisphereCulledCount") or 0)<1 or int(maps[7].get("occludedCulledCount") or 0)<1:
+            raise RuntimeError(f"Rotated globe did not prove backside/globe-occlusion culling: {maps[7]}")
+        if max(int(m.get("offscreenCulledCount") or 0) for m in maps)<1:
+            raise RuntimeError("Atlas evidence never exercised off-screen/frustum culling")
+        # Same canonical entity must never silently rename while zooming at the fixed focus.
+        identity_names={}
+        for m in maps[:7]:
+            for item in m.get("visibleLabels") or []:
+                key=str(item.get("canonicalEntityId") or "")
+                name=str(item.get("authoritativeName") or "")
+                if key in identity_names and identity_names[key]!=name:
+                    raise RuntimeError(f"Canonical atlas entity renamed across zoom: {key}: {identity_names[key]} -> {name}")
+                identity_names[key]=name
+        landscape=frames[8].get("runtime",{}).get("viewport",{})
+        portrait=frames[9].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>430:
+            raise RuntimeError(f"Phone landscape atlas frame has unexpected viewport: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"Phone portrait atlas frame has unexpected viewport: {portrait}")
+        return
     if scenario == "wp-s003-010-003-007":
         if len(frames) < 10:
             raise RuntimeError("wp-s003-010-003-007 requires ten fixed-focus semantic reveal frames")
