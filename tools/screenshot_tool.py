@@ -7323,6 +7323,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return {
               label:arguments[0],seed:s.activeSeed,scalar:s.zoom?.scalar,scaleIndex:s.zoom?.scaleIndex,scaleLabel:s.zoom?.scaleLabel,
               focus:s.canonicalFocus?.worldTile,focusLat:s.canonicalFocus?.latitudeDegrees,focusLon:s.canonicalFocus?.longitudeDegrees,
+              screenFocus:s.canonicalFocus?.screenSpaceFocus,
               coordinateRevision:c.revisionSignature,coordinateSeed:c.seed,coordinateCenter:c.center,consumerKinds:c.consumerKinds,
               consumers:c.consumers,maxRoundTripErrorMeters:c.maxRoundTripErrorMeters,sameSeedSpatialAuthority:c.sameSeedSpatialAuthority,
               lazy:c.lazy,cameraIndependent:c.cameraIndependent,viewportIndependent:c.viewportIndependent,lodIndependent:c.lodIndependent,fullWorldScan:c.fullWorldScan,
@@ -8172,6 +8173,17 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             marker=proof.get("centerMarker") or {}
             if marker.get("visible") is not True or marker.get("worldAnchored") is not True or marker.get("fixedHudDot") is not False or not marker.get("canonicalSpatialCellId"):
                 raise RuntimeError(f"WP-012 gameplay center marker is not world-anchored in frame {index}: {marker}")
+            if float(marker.get("viewDepth") or 0)>=0:
+                raise RuntimeError(f"WP-012 gameplay center marker is not in front of the camera in frame {index}: {marker}")
+            focus_screen=proof.get("screenFocus") or {}
+            if focus_screen.get("valid") is not True:
+                raise RuntimeError(f"WP-012 canonical focus screen projection invalid in frame {index}: {focus_screen}")
+            marker_delta=math.hypot(
+                float(marker.get("screenX") or 0)-float(focus_screen.get("screenX") or 0),
+                float(marker.get("screenY") or 0)-float(focus_screen.get("screenY") or 0)
+            )
+            if marker_delta>4.0:
+                raise RuntimeError(f"WP-012 marker drifted from canonical screen focus in frame {index}: delta={marker_delta:.3f}px marker={marker} focus={focus_screen}")
             required={"gameplay-center","terrain","country","capital","region","village","landmark","building","road"}
             kinds=set(proof.get("consumerKinds") or [])
             if not required.issubset(kinds):
