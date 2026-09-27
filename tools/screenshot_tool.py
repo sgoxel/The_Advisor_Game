@@ -7274,6 +7274,13 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
         auxiliary={}
         if mode=="scale":
+            if label=="seed-a-phone-portrait":
+                driver.execute_script("""
+                    const stage=window.PlanetStage,s=stage.snapshot(),target=s?.featureTargets?.peak||s?.featureTargets?.mountain||s?.featureTargets?.continent;
+                    if(!target)throw new Error('WP-013 canonical phone focus target unavailable');
+                    stage.setViewTarget(target);
+                """)
+                time.sleep(0.12)
             settle(scale_index)
         elif mode=="oscillate":
             settle(scale_index)
@@ -8387,6 +8394,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-013 canonical requested cell missing in frame {index}: {cell}")
             if int(lod.get("overscanCellCount") or 0)!=9:
                 raise RuntimeError(f"WP-013 overscan must remain bounded to 3x3 cells in frame {index}: {lod.get('overscanCellIds')}")
+            max_mag=float(lod.get("maxNativeMagnification") or 0)
+            requested_mag=float(lod.get("requestedNativeMagnification") or 999)
+            if max_mag<=0 or requested_mag>max_mag+0.011:
+                raise RuntimeError(f"WP-013 steady-state source magnification exceeds contract in frame {index}: requested={requested_mag} max={max_mag} lod={lod}")
             level_index=int(lod.get("requestedLevelIndex") if lod.get("requestedLevelIndex") is not None else -1)
             if level_index<11 and float(lod.get("requestedProjectedPixelError") or 999)>9.01:
                 raise RuntimeError(f"WP-013 requested SSE exceeds refine guard in frame {index}: {lod}")
