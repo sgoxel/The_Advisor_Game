@@ -2158,9 +2158,9 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.34,.25,.16),square:make("LocalSquare",.47,.39,.27),
-    wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.54,.42,.18,.46),
+    road:make("LocalRoad",.22,.14,.075),square:make("LocalSquare",.42,.32,.19),
+    wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.52,.12);m.__activityEmissiveBoost=.82;return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",.32,.72,.20);m.__activityEmissiveBoost=.34;return m;})(),
@@ -2531,7 +2531,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const centerGround=localGroundHeightUnits(0,0,frame)+lift+.012;
   addLocalStatic("CanonicalOccupiedArea","cylinder",localStaticMaterials.footprint,0,centerGround,0,coreRadiusMeters*2*scale/unit,.022,coreRadiusMeters*2*scale/unit);
   let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=80;
-  const roadWidth=Math.max(4,Number(window.WorldStandards?.TILE_METERS||2)*3);
+  const roadWidth=Math.max(5,Number(window.WorldStandards?.TILE_METERS||2)*4);
   const squareHalf=Number(window.StartingVillage.PUBLIC_HALF_SIZE||3);
   const ring=Number(window.StartingVillage.RING_RADIUS_TILES||14);
   const roadDetail=tier==="footprint"?8:tier==="route"?12:16;
@@ -2785,6 +2785,15 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
           return clamp(lerp(v,compressed,snowWeight)+cool[i]*snowWeight,0,.84);
         });
       }
+      // Fine canonical albedo roughness keeps close alpine terrain readable
+      // without inventing patch-local noise. Frequencies remain registered-meter
+      // anchored, so the same coordinate has the same mottling in every rebuild.
+      if(sample?.land&&metersPerTexel<=8){
+        const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
+        const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.105+
+          surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.045;
+        displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
+      }
       const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
       data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
@@ -2833,7 +2842,9 @@ function* localResourceSteps(job){
 }
 function textureFromPixels(pixels){
   const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
-  const ctx=canvas2d.getContext("2d",{alpha:false});ctx.putImageData(new ImageData(pixels.data,pixels.size,pixels.size),0,0);
+  // Preserve the detail texture's edge alpha; opacityMap uses this exact
+  // channel to feather the canonical child into its world-matched surround.
+  const ctx=canvas2d.getContext("2d",{alpha:true});ctx.putImageData(new ImageData(pixels.data,pixels.size,pixels.size),0,0);
   const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
   texture.flipY=true;
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
