@@ -942,10 +942,15 @@ function buildMapBorderSegments(){
   const band=zoomState.band,visible=["country-region","regional-overview","regional-detail","district"].includes(band);
   if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],built:false};
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  let focusOwnerId=null;
+  try{
+    const focusSurface=geography?.sampleLatLon?.(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians)||null;
+    if(focusSurface?.land)focusOwnerId=String(window.PoliticalGeography.ownerAt(activeSeed,focusTile.x,focusTile.y)?.id||"")||null;
+  }catch(_){focusOwnerId=null;}
   const bucketSize=16384n,fx=BigInt(focusTile.x),fy=BigInt(focusTile.y);
   const bucketX=atlasFloorDiv(fx,bucketSize),bucketY=atlasFloorDiv(fy,bucketSize);
   const centerX=bucketX*bucketSize+bucketSize/2n,centerY=bucketY*bucketSize+bucketSize/2n;
-  const key=[activeSeed,bucketX.toString(),bucketY.toString()].join("|");
+  const key=[activeSeed,bucketX.toString(),bucketY.toString(),focusOwnerId||"all"].join("|");
   if(mapBorderCache.key===key)return {
     segments:mapBorderCache.segments,sampleCount:mapBorderCache.sampleCount,landSampleCount:mapBorderCache.landSampleCount,waterSampleCount:mapBorderCache.waterSampleCount,
     ownerQueryCount:mapBorderCache.ownerQueryCount,ownerCount:mapBorderCache.ownerCount,worldVertexCount:mapBorderCache.worldVertexCount,
@@ -980,13 +985,20 @@ function buildMapBorderSegments(){
       if(left.land!==right.land){waterClippedCount++;continue;}
       if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
     }
-    if(edges.length===2){
-      const e0=edges[0],e1=edges[1],owners=[e0.ownerA,e0.ownerB].sort();
-      segments.push({a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,ownerA:owners[0],ownerB:owners[1]});
-    }else if(edges.length===4){
-      for(const [i,j] of [[0,1],[2,3]]){
-        const e0=edges[i],e1=edges[j],owners=[e0.ownerA,e0.ownerB].sort();
-        segments.push({a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,ownerA:owners[0],ownerB:owners[1]});
+    if(edges.length>=2){
+      const byPair=new Map();
+      for(const edge of edges){
+        const pair=[edge.ownerA,edge.ownerB].sort(),pairKey=pair.join("~");
+        if(!byPair.has(pairKey))byPair.set(pairKey,{owners:pair,edges:[]});
+        byPair.get(pairKey).edges.push(edge);
+      }
+      for(const group of byPair.values()){
+        const owners=group.owners;
+        if(focusOwnerId&&!owners.includes(focusOwnerId))continue;
+        for(let i=0;i+1<group.edges.length;i+=2){
+          const e0=group.edges[i],e1=group.edges[i+1];
+          segments.push({a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,ownerA:owners[0],ownerB:owners[1]});
+        }
       }
     }
   }
