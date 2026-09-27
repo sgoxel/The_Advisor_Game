@@ -267,13 +267,19 @@ def main():
         primary = run_seed(driver, evidence, "seed-a", True)
 
         second_seed = "AGENT6-PURE-ZOOM-B"
-        result = driver.execute_script("return window.SeedSystem.startNewCampaign(arguments[0]);", second_seed)
-        if not result or result.get("ok") is not True:
-            raise AssertionError(f"Could not create independent seed campaign: {result}")
+        result = driver.execute_script(
+            "const seed=String(arguments[0]);"
+            "const campaign=window.SeedSystem.startNewCampaign(seed);"
+            "const planet=window.PlanetGeography.persistSeed(seed);"
+            "return {campaign,planet};",
+            second_seed,
+        )
+        if not result or result.get("campaign", {}).get("ok") is not True or result.get("planet") != second_seed:
+            raise AssertionError(f"Could not create independent authoritative seed: {result}")
         driver.refresh()
         wait_ready(driver)
         if snap(driver).get("activeSeed") != second_seed:
-            raise AssertionError(f"Second campaign seed did not become authoritative: {snap(driver).get('activeSeed')}")
+            raise AssertionError(f"Second planet seed did not become authoritative: {snap(driver).get('activeSeed')}")
         secondary = run_seed(driver, evidence, "seed-b", False)
 
         logs = driver.get_log("browser")
