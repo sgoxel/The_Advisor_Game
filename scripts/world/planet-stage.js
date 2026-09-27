@@ -531,7 +531,7 @@ function atlasFocusEntityIds(spec){
 }
 function atlasQueryCandidates(spec){
   const precision=(zoomState.band==="planet"||zoomState.band==="continent")?1:2;
-  const key=[activeSeed,zoomState.band,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),Math.round(zoomState.visibleFootprintWidthMeters/Math.max(1,zoomState.visibleFootprintWidthMeters*.05)),spec.kinds.join(",")].join("|");
+  const key=[activeSeed,zoomState.band,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),Math.round(Math.log10(Math.max(1,zoomState.visibleFootprintWidthMeters))*20),spec.kinds.join(",")].join("|");
   if(atlasLabelCache.key===key)return atlasLabelCache;
   const started=performance.now(),samples=atlasQuerySamples(spec),unique=new Map(),focus=atlasFocusEntityIds(spec);
   for(const point of samples){
