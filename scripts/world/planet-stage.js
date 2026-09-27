@@ -737,7 +737,7 @@ function atlasProjectCandidate(entity){
   return {projection:{x,y,screenX:screen.x,screenY:screen.y,depth:screen.z,mode:scene.mode}};
 }
 function atlasLabelBox(entity,p,portrait){
-  const nameLen=Math.max(5,String(entity.name).length),scale=(portrait?.82:1)*.75;
+  const nameLen=Math.max(5,String(entity.name).length),scale=portrait?.82:1;
   const perChar={continent:15.5,ocean:11.5,country:11.0,region:8.2,capital:7.8,city:7.4,village:7.0,district:6.6,landmark:7.4}[entity.type]||7.4;
   const minWidth={continent:180,ocean:140,country:150,region:115,capital:110,city:104,village:100,district:96,landmark:112}[entity.type]||100;
   const maxWidth={continent:360,ocean:260,country:300,region:230,capital:220,city:200,village:190,district:180,landmark:220}[entity.type]||200;
@@ -836,19 +836,24 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     tag.className=entity.type==="landmark"?"planet-map-landmark":"planet-atlas-label";
     tag.dataset.kind=entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type;
     tag.dataset.focus=String(entity.currentFocus===true);
-    tag.style.left=p.x.toFixed(2)+"%";tag.style.top=p.y.toFixed(2)+"%";
+    const rootRect=root.getBoundingClientRect(),canvasOffsetX=rect.left-rootRect.left,canvasOffsetY=rect.top-rootRect.top;
+    tag.style.left=(canvasOffsetX+p.screenX).toFixed(2)+"px";tag.style.top=(canvasOffsetY+p.screenY).toFixed(2)+"px";
     tag.innerHTML="<small></small><strong></strong>";
     tag.querySelector("small").textContent=(entity.type==="landmark"?String(entity.landmarkType||"landmark"):entity.type).toUpperCase();
     tag.querySelector("strong").textContent=entity.name;
     const displacement=Math.hypot(placed.dx,placed.dy),leaderVisible=displacement>=18;
     if(leaderVisible){
       const leader=document.createElement("i");leader.className="planet-atlas-leader";
-      leader.style.left=anchor.x.toFixed(2)+"%";leader.style.top=anchor.y.toFixed(2)+"%";
+      leader.style.left=(canvasOffsetX+anchor.screenX).toFixed(2)+"px";leader.style.top=(canvasOffsetY+anchor.screenY).toFixed(2)+"px";
       leader.style.width=displacement.toFixed(1)+"px";
       leader.style.transform="rotate("+Math.atan2(placed.dy,placed.dx).toFixed(5)+"rad)";
       labelsLayer.appendChild(leader);
     }
     labelsLayer.appendChild(tag);occupied.push(box);
+    const renderedRect=tag.getBoundingClientRect();
+    const renderedCenterX=renderedRect.left+renderedRect.width*.5-rect.left;
+    const renderedCenterY=renderedRect.top+renderedRect.height*.5-rect.top;
+    const renderedClipped=renderedRect.left<rect.left-0.5||renderedRect.right>rect.right+0.5||renderedRect.top<rect.top-0.5||renderedRect.bottom>rect.bottom+0.5;
     const anchorSurface=atlasPlanetSurfaceForTile(entity.anchorTile.x,entity.anchorTile.y);
     const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2));
     const roundTrip=geography?.registrationRoundTrip?.(entity.anchorTile.x,entity.anchorTile.y,tileMeters,WORLD_RADIUS_METERS)||null;
@@ -863,6 +868,9 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
       screenX:Number(p.screenX.toFixed(2)),screenY:Number(p.screenY.toFixed(2)),
       placementDx:Number(placed.dx.toFixed(2)),placementDy:Number(placed.dy.toFixed(2)),
       displacementPixels:Number(displacement.toFixed(2)),leaderVisible,
+      renderedScreenX:Number(renderedCenterX.toFixed(2)),renderedScreenY:Number(renderedCenterY.toFixed(2)),
+      renderedPlacementErrorPixels:Number(Math.hypot(renderedCenterX-p.screenX,renderedCenterY-p.screenY).toFixed(2)),
+      renderedClipped,
       planetLand:Boolean(anchorSurface.sample?.land),planetSurfaceClass:String(anchorSurface.sample?.surfaceClass||"unknown"),
       continentId:anchorSurface.sample?.continentId||null,continentName:anchorSurface.sample?.continentName||null,
       politicalOwnerId:politicalOwner?.id||null,parentCountryMatch:entity.type==="capital"?Boolean(politicalOwner?.id&&politicalOwner.id===entity.countryId):null,
@@ -1011,6 +1019,14 @@ function buildMapBorderSegments(){
   mapBorderCache={key,segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,topologySignature,waterClippedCount,diagnostics,builtAtMs:Number((performance.now()-started).toFixed(3))};
   return {segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,topologySignature,waterClippedCount,diagnostics,built:true};
 }
+function borderPathLandSafe(a,b){
+  for(const t of [0,.2,.4,.6,.8,1]){
+    const point=interpolateGeoPoint(a,b,t);
+    let sample=null;try{sample=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){sample=null;}
+    if(!sample?.land)return false;
+  }
+  return true;
+}
 function renderMapPresentation(){
   const layer=ensureMapPresentationDom();if(!layer)return;
   const started=performance.now(),context=mapContextForFocus(),contextKinds=mapContextKindsForBand(zoomState.band),placeKinds=mapPlaceKindsForBand(zoomState.band);
@@ -1025,19 +1041,26 @@ function renderMapPresentation(){
   const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
   const borderLines=stitchMapBorderSegments(border.segments);
   for(const chain of borderLines){
-    const projected=chain.points.map(point=>projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true}));
     let run=[];
     const flush=()=>{
       if(run.length<2){run=[];return;}
       const xs=run.map(p=>p.x),ys=run.map(p=>p.y);
       if(Math.max(...xs)<-3||Math.min(...xs)>103||Math.max(...ys)<-3||Math.min(...ys)>103){run=[];return;}
+      let pixelLength=0;
+      for(let i=1;i<run.length;i++)pixelLength+=Math.hypot(run[i].screenX-run[i-1].screenX,run[i].screenY-run[i-1].screenY);
+      if(pixelLength<32){run=[];return;}
       const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");
       line.setAttribute("points",run.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
       line.setAttribute("class","planet-political-border");
       line.dataset.ownerA=chain.ownerA;line.dataset.ownerB=chain.ownerB;
       svg.appendChild(line);projectedBorderSegmentCount++;run=[];
     };
-    for(const point of projected){if(point)run.push(point);else flush();}
+    for(let i=0;i<chain.points.length;i++){
+      const point=chain.points[i],projected=projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+      if(!projected){flush();continue;}
+      if(i>0&&!borderPathLandSafe(chain.points[i-1],point)){flush();run=[projected];continue;}
+      run.push(projected);
+    }
     flush();
   }
   svg.hidden=projectedBorderSegmentCount===0;
