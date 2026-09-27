@@ -127,6 +127,7 @@ SCENARIOS = {
     "wp-s003-012",
     "wp-s003-009-011",
     "wp-s003-013",
+    "wp-s003-015",
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
@@ -244,6 +245,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-012": 8,
     "wp-s003-009-011": 7,
     "wp-s003-013": 13,
+    "wp-s003-015": 8,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -6433,6 +6435,56 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-015":
+        from selenium.webdriver.support.ui import WebDriverWait
+        configs=(
+            ("workday-active",10,0,(1280,800)),
+            ("night-inactive-workplaces",2,30,(1280,800)),
+            ("workday-repeat",10,0,(1280,800)),
+            ("lunch-social",13,30,(1280,800)),
+            ("late-day-mixed",17,30,(1280,800)),
+            ("night-home",22,30,(1280,800)),
+            ("phone-workday",10,0,(844,390)),
+            ("phone-night",22,30,(390,844)),
+        )
+        label,hour,minute,viewport=configs[min(frame_index,len(configs)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
+        driver.execute_script("window.PlanetStage.setWorldTileFocus('0','0');window.PlanetStage.setZoomScalar(1)")
+        WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{};
+            return s.ready===true&&Number(r.pendingPreparationCount||0)===0&&
+                   String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   ls.revealTier==='full'&&Number(ls.buildingCount||0)>=12;
+        """))
+        driver.execute_script("""
+            window.PlanetStage.applyAuthoritativeFantasyTime(
+              {year:1100,month:6,day:15,hour:Number(arguments[0]),minute:Number(arguments[1]),second:0},
+              'wp-s003-015-evidence'
+            );
+        """,int(hour),int(minute))
+        WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
+            const a=window.PlanetStage?.snapshot?.()?.buildingActivity||{};
+            return Math.abs(Number(a.authoritativeHour||-99)-Number(arguments[0]))<.02&&
+                   Number(a.buildingCount||0)>=12&&Boolean(a.lastSignature);
+        """,float(hour)+float(minute)/60.0))
+        time.sleep(.25)
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),a=s.buildingActivity||{},ls=s.projection?.localStatic||{},r=s.projection?.resourceBudget||{};
+            return {
+              label:arguments[0],hour:a.authoritativeHour,timeBand:a.timeBand,signature:a.lastSignature,
+              active:a.active,buildingCount:a.buildingCount,activeBuildingCount:a.activeBuildingCount,
+              occupiedBuildingCount:a.occupiedBuildingCount,activeWorkplaceCount:a.activeWorkplaceCount,activeHomeCount:a.activeHomeCount,
+              warmWindowCount:a.warmWindowCount,smokeCueCount:a.smokeCueCount,openMarketCount:a.openMarketCount,
+              forgeGlowCount:a.forgeGlowCount,workPropCount:a.workPropCount,cueCount:a.cueCount,
+              drawCalls:a.drawCallEstimate,dynamicLights:a.dynamicLightCount,particleEmitters:a.particleEmitterCount,
+              sharedMaterials:a.sharedMaterialCount,updateMs:a.lastUpdateMs,maxUpdateMs:a.maxUpdateMs,
+              presentationOnly:a.presentationOnly,simulationAuthority:a.simulationAuthority,bounded:a.bounded,
+              fullSettlementPerFrameScan:a.fullSettlementPerFrameScan,activitySource:a.activitySource,
+              occupancySourceAvailable:a.occupancySourceAvailable,residentsEvaluated:a.residentsEvaluated,
+              buildings:a.buildings,localStatic:ls,pending:r.pendingPreparationCount,focus:s.canonicalFocus?.worldTile
+            };
+        """,label)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-013":
         from selenium.webdriver.support.ui import WebDriverWait
         # Find bounded canonical land samples with distinct biome identities.
@@ -7892,6 +7944,61 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-015":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-015 requires eight building-activity evidence frames")
+        proofs=[]
+        for index,frame in enumerate(frames[:8],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split(":",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-S003-015 frame {index} lacks activity proof: {action}") from exc
+            proofs.append(proof)
+            if proof.get("presentationOnly") is not True or proof.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Building activity authority failed in frame {index}: {proof}")
+            if proof.get("bounded") is not True or proof.get("fullSettlementPerFrameScan") is not False:
+                raise RuntimeError(f"Building activity bounded contract failed in frame {index}: {proof}")
+            if int(proof.get("buildingCount") or 0)<12 or int(proof.get("residentsEvaluated") or 0)!=12:
+                raise RuntimeError(f"Building/activity authority coverage failed in frame {index}: {proof}")
+            if int(proof.get("dynamicLights") or -1)!=0 or int(proof.get("particleEmitters") or -1)!=0:
+                raise RuntimeError(f"Per-building lights/emitters introduced in frame {index}: {proof}")
+            if int(proof.get("cueCount") or 0)>13 or int(proof.get("drawCalls") or 0)>13 or int(proof.get("sharedMaterials") or 0)>5:
+                raise RuntimeError(f"Building activity presentation budget failed in frame {index}: {proof}")
+            if float(proof.get("maxUpdateMs") or 0)>12:
+                raise RuntimeError(f"Building activity update cost exceeded bounded budget in frame {index}: {proof}")
+            if int(proof.get("pending") or 0)!=0 or (proof.get("localStatic") or {}).get("revealTier")!="full":
+                raise RuntimeError(f"Building activity local scene not settled in frame {index}: {proof}")
+            if (proof.get("focus") or {})!={"x":"0","y":"0"}:
+                raise RuntimeError(f"Building activity evidence moved canonical focus in frame {index}: {proof.get('focus')}")
+        day=proofs[0];night=proofs[1];repeat=proofs[2];night_home=proofs[5]
+        if day.get("signature")!=repeat.get("signature"):
+            raise RuntimeError(f"Identical workday activity state was not deterministic: {day.get('signature')} vs {repeat.get('signature')}")
+        if int(day.get("activeWorkplaceCount") or 0)<4 or int(day.get("openMarketCount") or 0)<1 or int(day.get("forgeGlowCount") or 0)<1:
+            raise RuntimeError(f"Workday building activity cues incomplete: {day}")
+        if int(night.get("activeWorkplaceCount") or 0)!=0:
+            raise RuntimeError(f"Night frame still claims active workplaces: {night}")
+        if int(night.get("warmWindowCount") or 0)<4 or int(night_home.get("activeHomeCount") or 0)<4:
+            raise RuntimeError(f"Night/home activity cues incomplete: night={night} home={night_home}")
+        def by_function(proof,function_name):
+            return next((item for item in (proof.get("buildings") or []) if str(item.get("function") or "")==function_name),None)
+        market_day,market_night=by_function(day,"market"),by_function(night,"market")
+        craft_day,craft_night=by_function(day,"craft"),by_function(night,"craft")
+        if not market_day or not market_night or market_day.get("id")!=market_night.get("id") or market_day.get("active") is not True or market_night.get("active") is not False:
+            raise RuntimeError(f"Same market building did not prove active/inactive state: day={market_day} night={market_night}")
+        if not craft_day or not craft_night or craft_day.get("id")!=craft_night.get("id") or craft_day.get("active") is not True or craft_night.get("active") is not False:
+            raise RuntimeError(f"Same craft building did not prove active/inactive state: day={craft_day} night={craft_night}")
+        day_home=by_function(day,"home");night_home_entry=by_function(night_home,"home")
+        if not day_home or not night_home_entry or day_home.get("id")!=night_home_entry.get("id") or day_home.get("active") is not False or night_home_entry.get("active") is not True:
+            raise RuntimeError(f"Same home did not prove day/night occupancy/activity state: day={day_home} night={night_home_entry}")
+        landscape=frames[6].get("runtime",{}).get("viewport",{})
+        portrait=frames[7].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>430:
+            raise RuntimeError(f"WP-S003-015 phone landscape frame unexpected: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"WP-S003-015 phone portrait frame unexpected: {portrait}")
+        return
+
     if scenario == "wp-s003-010-003-010":
         if len(frames) < 12:
             raise RuntimeError("wp-s003-010-003-010 requires twelve canonical-border frames")
@@ -14169,7 +14276,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-015", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
