@@ -1667,56 +1667,61 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         )
         if scenario == "wp-s003-010-003-007":
             selected=driver.execute_script("""
-                const stage=window.PlanetStage,s=stage.snapshot(),seed=s?.activeSeed;
-                const archetypes=window.SettlementArchetypes,politics=window.PoliticalGeography,bridge=window.PlanetWorldProjection;
-                if(!seed || !archetypes?.settlementsForCountry || !politics?.countryAt || !bridge?.forSeed){
-                  throw new Error('canonical settlement projection authority unavailable');
+                const stage=window.PlanetStage,s=stage?.snapshot?.(),seed=s?.activeSeed;
+                const archetypes=window.SettlementArchetypes,politics=window.PoliticalGeography;
+                if(!seed || !archetypes?.settlementsForCountry || !politics?.countryAt ||
+                   !stage?.setWorldTileFocus || !stage?.worldLatLonForTile){
+                  throw new Error('integrated canonical settlement projection authority unavailable');
                 }
-                const projection=bridge.forSeed(seed);
                 const country=politics.countryAt(seed,"0","0");
-                const plans=(archetypes.settlementsForCountry(seed,country,2)||[]).slice(0,40);
-                const priority=(plan)=>plan?.role==='starting-village'?0:plan?.classId==='village'?1:plan?.classId==='hamlet'?2:plan?.classId==='town'?3:plan?.classId==='city'?4:5;
-                plans.sort((a,b)=>priority(a)-priority(b)||String(a.id).localeCompare(String(b.id)));
-                let chosen=null;
-                for(const plan of plans){
-                  const projected=projection.projectSettlement(plan);
-                  if(!projected?.land)continue;
-                  stage.setViewTarget({latitudeRadians:projected.latitudeRadians,longitudeRadians:projected.longitudeRadians});
-                  const now=stage.snapshot(),surface=now?.canonicalFocus?.surfaceIdentity?.center,worldTile=now?.canonicalFocus?.worldTile;
-                  const dx=Math.abs(Number(worldTile?.x)-Number(plan?.center?.x));
-                  const dy=Math.abs(Number(worldTile?.y)-Number(plan?.center?.y));
-                  let owner=null;try{owner=politics.ownerAt(seed,String(plan.center.x),String(plan.center.y));}catch(_){owner=null;}
-                  if(surface?.land===true&&dx<=1&&dy<=1&&owner?.id===plan.countryId){
-                    chosen={
-                      settlementId:plan.id,settlementName:plan.name,countryId:plan.countryId,role:plan.role,classId:plan.classId,
-                      center:plan.center,projected,focus:now.canonicalFocus
-                    };
-                    break;
-                  }
-                }
-                if(!chosen) throw new Error(
-                  'canonical projection produced no planetary-land settlement: plans='+plans.length+
-                  ', projectedSettlementLand='+Number(projection?.support?.projectedSettlementLandCount||0)
-                );
+                const plan=(archetypes.settlementsForCountry(seed,country,3)||[])
+                  .find(item=>item?.role==='starting-village')||null;
+                if(!plan)throw new Error('canonical Starting Village plan unavailable');
+                const target=stage.worldLatLonForTile("0","0");
+                stage.setWorldTileFocus("0","0");
                 stage.setZoomScalar(0.54);
-                const ready=stage.snapshot();
+                const ready=stage.snapshot(),projection=ready?.projection?.worldTileProjection||{};
+                const focusTile=ready?.canonicalFocus?.worldTile||{};
+                const surface=ready?.canonicalFocus?.surfaceIdentity?.center||{};
+                const roundTrip=projection?.roundTripOrigin||{};
+                let owner=null;try{owner=politics.ownerAt(seed,"0","0");}catch(_){owner=null;}
+                const exactOrigin=String(focusTile.x)==='0'&&String(focusTile.y)==='0'&&
+                  String(roundTrip.x)==='0'&&String(roundTrip.y)==='0';
+                if(projection?.land!==true || surface?.land!==true || !exactOrigin || owner?.id!==plan.countryId){
+                  throw new Error(
+                    'canonical Starting Village projection invalid: anchorLand='+String(projection?.land)+
+                    ', surfaceLand='+String(surface?.land)+', focus='+JSON.stringify(focusTile)+
+                    ', roundTrip='+JSON.stringify(roundTrip)+', owner='+String(owner?.id)+
+                    ', expectedCountry='+String(plan.countryId)
+                  );
+                }
                 return {
-                  settlementId:chosen.settlementId,settlementName:chosen.settlementName,countryId:chosen.countryId,
-                  role:chosen.role,classId:chosen.classId,center:chosen.center,
-                  projectionVersion:projection.version,projectionAnchor:projection.anchor,projectionSupport:projection.support,
-                  projectedLatitudeDegrees:chosen.projected.latitudeDegrees,
-                  projectedLongitudeDegrees:chosen.projected.longitudeDegrees,
-                  focusTile:ready?.canonicalFocus?.worldTile,
-                  latitudeDegrees:ready?.canonicalFocus?.latitudeDegrees,
+                  settlementId:plan.id,settlementName:plan.name,countryId:plan.countryId,
+                  role:plan.role,classId:plan.classId,center:plan.center,
+                  projectionVersion:'planet-stage-world-tile-anchor-v1',
+                  projectionAnchor:{
+                    latitudeDegrees:projection.latitudeDegrees,
+                    longitudeDegrees:projection.longitudeDegrees,
+                    surfaceClass:projection.surfaceClass,
+                    elevationMeters:projection.elevationMeters,
+                    land:projection.land
+                  },
+                  projectionSupport:{roundTripOrigin:projection.roundTripOrigin,tileMeters:projection.tileMeters},
+                  projectedLatitudeDegrees:target.latitudeDegrees,
+                  projectedLongitudeDegrees:target.longitudeDegrees,
+                  focusTile,latitudeDegrees:ready?.canonicalFocus?.latitudeDegrees,
                   longitudeDegrees:ready?.canonicalFocus?.longitudeDegrees,
-                  land:ready?.canonicalFocus?.surfaceIdentity?.center?.land===true,
+                  land:surface?.land===true,
                   scalar:ready?.zoom?.scalar,revealTier:ready?.projection?.localStatic?.revealTier
                 };
             """)
             WebDriverWait(driver, timeout).until(
                 lambda d: d.execute_script("""
-                    const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
+                    const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},wp=s?.projection?.worldTileProjection||{};
+                    const tile=s?.canonicalFocus?.worldTile||{},origin=wp?.roundTripOrigin||{};
                     return s?.canonicalFocus?.surfaceIdentity?.center?.land===true &&
+                           wp?.land===true && String(tile.x)==='0' && String(tile.y)==='0' &&
+                           String(origin.x)==='0' && String(origin.y)==='0' &&
                            Math.abs(Number(s?.zoom?.scalar||0)-0.54)<0.000001 &&
                            Number(r?.pendingPreparationCount||0)===0;
                 """)
