@@ -6458,15 +6458,19 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             proof=driver.execute_script("""
                 const wantHouse=Boolean(arguments[0]),stage=window.PlanetStage,targets=stage.inspectionTargets().filter(t=>t.type==='building');
                 const match=t=>wantHouse?/^H\d+$/i.test(String(t.id||'')):/^S\d+$/i.test(String(t.id||''));
-                const target=targets.find(match)||null;
-                if(!target)throw new Error(wantHouse?'No ordinary house pick target':'No special building pick target');
+                const canvas=document.querySelector('#planetCanvas'),viewport=canvas?.getBoundingClientRect?.();
+                const visible=t=>{const b=t.bounds,cx=(b.left+b.right)/2,cy=(b.top+b.bottom)/2;return viewport&&cx>=viewport.left&&cx<=viewport.right&&cy>=viewport.top&&cy<=viewport.bottom;};
+                const target=targets.filter(match).find(visible)||null;
+                if(!target)throw new Error(wantHouse?'No visible ordinary house pick target':'No visible special building pick target');
                 const b=target.bounds;stage.pickInspection((b.left+b.right)/2,(b.top+b.bottom)/2);
-                const tip=document.querySelector('.world-inspection-tooltip');
-                return {target,s:stage.snapshot(),lines:tip?Array.from(tip.children).map(x=>x.textContent):[]};
+                const tip=document.querySelector('.world-inspection-tooltip'),r=tip?.getBoundingClientRect?.();
+                return {target,s:stage.snapshot(),lines:tip?Array.from(tip.children).map(x=>x.textContent):[],rect:r?{left:r.left,top:r.top,right:r.right,bottom:r.bottom}:null,w:innerWidth,h:innerHeight};
             """,want_house)
             time.sleep(0.2)
-            if (proof.get("s") or {}).get("inspection",{}).get("selectedType")!="building" or not (proof.get("lines") or []):
-                raise RuntimeError(f"Building tooltip proof failed: {proof}")
+            rect=proof.get("rect") or {}
+            clipped=float(rect.get("left",-1))<0 or float(rect.get("top",-1))<0 or float(rect.get("right",99999))>float(proof.get("w") or 0)+1 or float(rect.get("bottom",99999))>float(proof.get("h") or 0)+1
+            if (proof.get("s") or {}).get("inspection",{}).get("selectedType")!="building" or not (proof.get("lines") or []) or clipped:
+                raise RuntimeError(f"Building tooltip proof failed or clipped: {proof}")
             return f"building-selected:{'house' if want_house else 'special'}:{proof.get('target',{}).get('id')}:{' | '.join(map(str,proof.get('lines') or []))}"
         if frame_index == 4:
             driver.set_window_size(390,844);time.sleep(0.5)
@@ -6515,8 +6519,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 const oldSet=canvas.setPointerCapture,oldRelease=canvas.releasePointerCapture;canvas.setPointerCapture=()=>{};canvas.releasePointerCapture=()=>{};
                 try{
                   canvas.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x,clientY:y,button:0,isPrimary:true}));
-                  canvas.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x+24,clientY:y+18,button:0,isPrimary:true}));
-                  canvas.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x+24,clientY:y+18,button:0,isPrimary:true}));
+                  canvas.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x+8,clientY:y+4,button:0,isPrimary:true}));
+                  canvas.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x+8,clientY:y+4,button:0,isPrimary:true}));
                 }finally{canvas.setPointerCapture=oldSet;canvas.releasePointerCapture=oldRelease;}
                 return {target,before,after:stage.snapshot().inspection};
             """)
