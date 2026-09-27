@@ -2901,7 +2901,11 @@ function makeCloudTexture(){
   for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++){
     const u=x/source.width,v=y/source.height,lat=(v-.5)*Math.PI;
     const field=Math.sin(u*Math.PI*10+phaseA)*.34+Math.sin(u*Math.PI*22+v*Math.PI*5+phaseB)*.22+Math.cos(u*Math.PI*7-v*Math.PI*13+phaseC)*.18+Math.cos(lat*3)*.20;
-    const alpha=Math.round(clamp((field-.12)*260,0,112));const i=(y*source.width+x)*4;
+    // Longitude is singular at a sphere pole. Fade the decorative cloud alpha
+    // through the last ~10 degrees so longitude-varying texels cannot collapse
+    // into radial fan/star streaks at the shared pole vertices.
+    const polar=Math.min(1,Math.max(0,Math.cos(lat)*6)),polarFade=polar*polar*(3-2*polar);
+    const alpha=Math.round(clamp((field-.12)*260,0,112)*polarFade);const i=(y*source.width+x)*4;
     data[i]=232;data[i+1]=241;data[i+2]=246;data[i+3]=alpha;
   }
   ctx.putImageData(image,0,0);
