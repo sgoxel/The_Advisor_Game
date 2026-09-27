@@ -14,6 +14,7 @@ const cache=new Map();
 const catalogCache=new Map();
 const proofCache=new Map();
 const HIERARCHY_VERSION=1;
+const REGION_CELL_SIZE_FALLBACK=8192;
 const HIERARCHY_TILE_METERS=Math.max(0.001,Number(WorldStandards.TILE_METERS||2));
 const HIERARCHY_QUERY_CELL_LIMIT=225;
 const HIERARCHY_CLASS_ORDER=Object.freeze(["city","town","village","hamlet"]);
@@ -491,6 +492,18 @@ function placementClearanceForOptions(options){
   return 320;
 }
 function legalCenter(seed,country,desired,options){
+  const canonical=options?.canonicalRecord||null;
+  if(canonical){
+    const x=String(canonical.center?.x??desired.x),y=String(canonical.center?.y??desired.y);
+    let owner=null,terrain="water",environment=null;
+    try{
+      owner=PoliticalGeography.ownerAt(seed,x,y)||null;
+      terrain=GeographyFoundation.getTerrainType(seed,x,y);
+      environment=GeographyFoundation.environment(seed,x,y);
+    }catch(_){return null;}
+    if(!owner||owner.id!==country.id||terrain==="water")return null;
+    return Object.freeze({x,y,terrain,environment,placement:null});
+  }
   const baseX=BigInt(desired.x),baseY=BigInt(desired.y);
   const offsets=[[0,0]];
   for(const radius of [96,192,384,768,1536,3072]){
@@ -663,13 +676,18 @@ function build(seedValue,centerValue,optionsValue){
   const key=[country.id,region.id,center.x,center.y,role,options.classHint||""].join("|");
   const cacheKey=seed+"|"+key;
   if(cache.has(cacheKey))return cache.get(cacheKey);
-  const classId=classFor(seed,key,countryProfile,region,local,border,options);
+  const canonical=options.canonicalRecord||null;
+  const classId=canonical?String(canonical.classId):classFor(seed,key,countryProfile,region,local,border,options);
   const subtypes=subtypeWeights(countryProfile,region,local,border,classId);
   const footprintRadius={hamlet:40,village:72,town:112,city:160,"national-capital":240}[classId]||96;
-  const placement=PoliticalGeography.validatePlacement?.(seed,{
-    x:center.x,y:center.y,countryId:country.id,
-    clearanceTiles:footprintRadius+96,footprintRadiusTiles:footprintRadius
-  })||Object.freeze({valid:true,parentOwnerMatch:true,footprintCrossesBorder:false,borderDistanceTiles:null,reason:"validator-unavailable"});
+  const placement=canonical
+    ?(PoliticalGeography.validatePlacement?.(seed,{
+        x:center.x,y:center.y,countryId:country.id,clearanceTiles:0,footprintRadiusTiles:0
+      })||Object.freeze({valid:true,parentOwnerMatch:true,footprintCrossesBorder:false,borderDistanceTiles:null,reason:"canonical-point-validator-unavailable"}))
+    :(PoliticalGeography.validatePlacement?.(seed,{
+        x:center.x,y:center.y,countryId:country.id,
+        clearanceTiles:footprintRadius+96,footprintRadiusTiles:footprintRadius
+      })||Object.freeze({valid:true,parentOwnerMatch:true,footprintCrossesBorder:false,borderDistanceTiles:null,reason:"validator-unavailable"}));
   if(placement.valid!==true)return null;
   const prosperityValue=clamp01(
     countryProfile.wealth.value*0.46+(countryProfile.wealth.value+region.prosperity.modifier)*0.24+
@@ -683,11 +701,11 @@ function build(seedValue,centerValue,optionsValue){
   const population=populationBand(classId,prosperityValue,seed,key);
   const functions=buildingFunctions(classId,subtypes);
   const architecture=architectureKeys(countryProfile,region,local,subtypes);
-  const id="SET|"+hashText(seed+"|"+key);
-  const revision="SAF-"+hashText([VERSION,id,countryProfile.revision,region.revision,border.relationRevision||"none",classId,subtypes.tags.join(","),prosperityValue,defense,tradeMarket].join("|"));
+  const id=canonical?String(canonical.id):"SET|"+hashText(seed+"|"+key);
+  const revision="SAF-"+hashText([VERSION,id,countryProfile.revision,region.revision,border.relationRevision||"none",classId,subtypes.tags.join(","),prosperityValue,defense,tradeMarket,canonical?.cacheRegenerationSignature||"legacy"].join("|"));
   const plan=Object.freeze({
     version:VERSION,id,revision,
-    name:planName(seed,country,region,classId,subtypes,key,options),
+    name:canonical?String(canonical.name):planName(seed,country,region,classId,subtypes,key,options),
     countryId:country.id,countryName:country.name,regionId:region.id,regionName:region.name,
     center:Object.freeze({x:center.x,y:center.y,terrain:center.terrain}),
     placement:Object.freeze({...placement,authority:"PoliticalGeography.validatePlacement"}),
@@ -703,7 +721,10 @@ function build(seedValue,centerValue,optionsValue){
     generation:Object.freeze({
       desiredCenter:Object.freeze({x:desired.x,y:desired.y}),
       countryId:country.id,role,
-      classHint:options.classHint||null,nameHint:options.nameHint||null
+      classHint:options.classHint||null,nameHint:options.nameHint||null,
+      canonicalSettlementId:canonical?.id||null,
+      canonicalGenerationCell:canonical?.generationCell||null,
+      canonicalRecord:canonical||null
     }),
     inputs:Object.freeze({
       countryProfileRevision:countryProfile.revision,
@@ -721,7 +742,10 @@ function build(seedValue,centerValue,optionsValue){
       precedence:Object.freeze(["CountryProfile","RegionProfile","local fixed geography/resources"])
     }),
     foundation:Object.freeze({
-      source:"campaign-seed + country-profile + region-profile + local-geography + route/border context",
+      source:canonical?"canonical settlement hierarchy + campaign-seed + country-profile + region-profile + local-geography + route/border context":"campaign-seed + country-profile + region-profile + local-geography + route/border context",
+      canonicalSettlementId:canonical?.id||null,
+      canonicalGenerationCellId:canonical?.generationCell?.id||null,
+      canonicalHierarchyRevision:canonical?"settlement-hierarchy-v"+HIERARCHY_VERSION:null,
       immutable:true,fantasyTimeDependent:false,lazy:true,renderIndependent:true,
       countryAuthority:"PoliticalGeography",countryProfileAuthority:"CountryProfile",regionAuthority:"RegionProfile",
       politicalBoundaryAuthority:"PoliticalGeography.canonicalBoundaryGraph",
@@ -741,35 +765,57 @@ function satelliteCenter(seed,country,region,index){
   const radius=480+Math.round(unit(seed,"settlement:satellite-radius:"+key)*1050);
   return Object.freeze({
     x:(BigInt(seat.x)+BigInt(Math.round(Math.cos(angle)*radius))).toString(),
-    y:(BigInt(seat.y)+BigInt(Math.round(Math.sin(angle)*radius))).toString()
-  });
-}
-function settlementsForCountry(seedValue,countryValue,radiusValue){
+    y:(BigInt(seat.y)+BigInt(Math.round(Math.sifunction settlementsForCountry(seedValue,countryValue,radiusValue){
   const seed=String(seedValue==null?"":seedValue);
   const country=countryFromInput(seed,countryValue);
   if(!country)return Object.freeze([]);
   const radius=Math.max(1,Math.min(4,Number(radiusValue??3)));
-  const cacheKey=seed+"|"+country.id+"|"+radius;
+  const cacheKey=seed+"|"+country.id+"|"+radius+"|canonical-v"+HIERARCHY_VERSION;
   if(catalogCache.has(cacheKey))return catalogCache.get(cacheKey);
+
   const out=[],seen=new Set();
-  const add=plan=>{if(plan&&!seen.has(plan.id)){seen.add(plan.id);out.push(plan)}};
-  add(build(seed,country.capital,{countryId:country.id,role:"national-capital",classHint:"national-capital",nameHint:country.capital.name}));
-  if(PoliticalGeography.countryAt(seed,"0","0").id===country.id){
-    const startingName=window.StartingVillage?.plan?.(seed)?.name||"Starting Village";
-    add(build(seed,{x:"0",y:"0"},{countryId:country.id,role:"starting-village",classHint:"village",nameHint:startingName}));
-  }
-  const regions=RegionProfile.regionsForCountry(seed,country,radius);
-  for(let i=0;i<regions.length;i++){
-    const region=regions[i];
-    const seatPlan=build(seed,region.administrativeSeat,{countryId:country.id,role:"regional-seat"});
-    add(seatPlan);
-    if(i%2===0){
-      const satellite=satelliteCenter(seed,country,region,i);
-      add(build(seed,satellite,{countryId:country.id,role:"satellite"}));
+  const addRecord=record=>{
+    if(!record||record.countryId!==country.id||seen.has(record.id))return;
+    const role=record.role||(
+      record.classId==="national-capital"?"national-capital":
+      record.importanceClass==="major-city"?"major-city":
+      record.classId==="city"?"regional-center":
+      record.classId==="town"?"market-town":
+      record.classId==="village"?"village":"hamlet"
+    );
+    const plan=build(seed,record.center,{
+      countryId:country.id,role,classHint:record.classId,nameHint:record.name,canonicalRecord:record
+    });
+    if(plan&&!seen.has(plan.id)){seen.add(plan.id);out.push(plan);}
+  };
+
+  addRecord(hierarchyCapitalForRecord(seed,{countryId:country.id}));
+
+  const center=country.politicalCenter||country.mapAnchor||country.capital;
+  const span=BigInt(Math.max(REGION_CELL_SIZE_FALLBACK,Math.round(radius*REGION_CELL_SIZE_FALLBACK)));
+  const cx=BigInt(String(center?.x??country.capital?.x??"0"));
+  const cy=BigInt(String(center?.y??country.capital?.y??"0"));
+  const query=canonicalSettlementsInBounds(seed,{
+    minX:(cx-span).toString(),maxX:(cx+span).toString(),
+    minY:(cy-span).toString(),maxY:(cy+span).toString()
+  },["city","town","village","hamlet"]);
+  for(const record of query.settlements||[])addRecord(record);
+
+  try{
+    const originCountry=PoliticalGeography.countryAt(seed,"0","0");
+    if(originCountry?.id===country.id){
+      const originVillage=canonicalSettlementAtPoint(seed,"village","0","0");
+      if(originVillage)addRecord(originVillage);
     }
-  }
-  const frozen=Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+  }catch(_){}
+
+  const frozen=Object.freeze(out.sort((a,b)=>{
+    const priority={"national-capital":0,city:1,town:2,village:3,hamlet:4};
+    return (priority[a.classId]??9)-(priority[b.classId]??9)||a.id.localeCompare(b.id);
+  }));
   catalogCache.set(cacheKey,frozen);
+  return frozen;
+}t(cacheKey,frozen);
   return frozen;
 }
 function sampleCatalog(seed){
@@ -821,7 +867,8 @@ function proof(seedValue){
   const rebuilt=reps.map(item=>{
     const g=item.plan.generation;
     return Object.freeze({reason:item.reason,plan:build(seed,g.desiredCenter,{
-      countryId:g.countryId,role:g.role,classHint:g.classHint,nameHint:g.nameHint
+      countryId:g.countryId,role:g.role,classHint:g.classHint,nameHint:g.nameHint,
+      canonicalRecord:g.canonicalRecord||null
     })});
   });
   const deterministic=JSON.stringify(reps)===JSON.stringify(rebuilt);
