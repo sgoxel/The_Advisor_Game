@@ -262,7 +262,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-009": 14,
     "wp-s003-010-003-010": 12,
     "wp-s003-010-003-012": 12,
-    "wp-s003-010-003-013": 15,
+    "wp-s003-010-003-013": 16,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -7217,13 +7217,14 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("seed-a-scale-1-10000",9,(1280,800),"scale"),
             ("seed-a-sse-hysteresis",6,(1280,800),"oscillate"),
             ("seed-a-parent-child-handoff",9,(1280,800),"handoff"),
-            ("seed-a-cell-boundary",7,(1280,800),"boundary"),
+            ("seed-a-mid-cell-boundary",8,(1280,800),"boundary"),
+            ("seed-a-ground-cell-boundary",9,(1280,800),"boundary"),
             ("seed-a-phone-portrait",9,(390,844),"scale"),
             ("seed-b-scale-1-10000",9,(1280,800),"scale"),
         )
         label,scale_index,viewport,mode=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(*viewport); time.sleep(0.12)
-        if frame_index in (0,14):
+        if frame_index in (0,15):
             seed="WP_S003_010_003_013_A" if frame_index==0 else "WP_S003_010_003_013_B"
             base=driver.current_url.split("?",1)[0]
             driver.get(base+"?seed="+seed)
@@ -7315,15 +7316,19 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
                 const lod=s?.projection?.spatialLod||{},cell=lod.requestedCell;
                 if(!cell?.worldBounds||!cell?.centerRegisteredMeters)throw new Error('WP-013 handoff source cell bounds unavailable');
-                // Stay inside the already-prepared coarse canonical cell but
-                // move far enough to guarantee an unseen 64m ground child.
-                const margin=Math.max(512,Math.min(Number(cell.cellSizeMeters||0)*.2,65536));
-                const b=cell.worldBounds;
-                const east=Math.min(Number(b.maxEastMeters)-margin,Number(cell.centerRegisteredMeters.east)+margin);
-                const north=Math.min(Number(b.maxNorthMeters)-margin,Number(cell.centerRegisteredMeters.north)+margin*.37);
+                // Stay close to the current land focus while moving far enough
+                // to guarantee a different 64m child. Do not jump toward the
+                // center of this very large coarse cell.
+                const current=fabric.registeredMetersForLatLon(
+                  Number(s.canonicalFocus.latitudeDegrees)*Math.PI/180,
+                  Number(s.canonicalFocus.longitudeDegrees)*Math.PI/180);
+                const shift=Math.max(512,Math.min(Number(cell.cellSizeMeters||0)*.01,4096));
+                const b=cell.worldBounds,pad=Math.max(16,shift*.25);
+                const east=Math.max(Number(b.minEastMeters)+pad,Math.min(Number(b.maxEastMeters)-pad,Number(current.eastMeters)+shift));
+                const north=Math.max(Number(b.minNorthMeters)+pad,Math.min(Number(b.maxNorthMeters)-pad,Number(current.northMeters)+shift*.37));
                 const ll=fabric.latLonForRegisteredMeters(east,north);
                 stage.setViewTarget({latitudeRadians:Number(ll.latitudeRadians),longitudeRadians:Number(ll.longitudeRadians)});
-                return {sourceCellId:cell.id,shiftMeters:margin,targetRegistered:{east,north}};
+                return {sourceCellId:cell.id,shiftMeters:shift,targetRegistered:{east,north}};
             """)
             auxiliary["handoffFreshFocus"]=fresh
             WebDriverWait(driver,75.0).until(lambda d:d.execute_script("""
@@ -7349,10 +7354,21 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 const stage=window.PlanetStage,before=stage.snapshot(),lod=before?.projection?.spatialLod||{},cell=lod.requestedCell;
                 const fabric=window.SeedCoordinateFabric.create(before.activeSeed,{radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
                 if(!cell?.worldBounds)throw new Error('WP-013 requested cell bounds unavailable');
-                const b=cell.worldBounds,east=Number(b.maxEastMeters)+Math.max(4,Number(cell.cellSizeMeters)*.015),north=(Number(b.minNorthMeters)+Number(b.maxNorthMeters))*.5;
+                const b=cell.worldBounds,current=fabric.registeredMetersForLatLon(
+                  Number(before.canonicalFocus.latitudeDegrees)*Math.PI/180,
+                  Number(before.canonicalFocus.longitudeDegrees)*Math.PI/180);
+                const candidates=[
+                  {axis:"east",edge:Number(b.minEastMeters),distance:Math.abs(Number(current.eastMeters)-Number(b.minEastMeters)),sign:-1},
+                  {axis:"east",edge:Number(b.maxEastMeters),distance:Math.abs(Number(b.maxEastMeters)-Number(current.eastMeters)),sign:1},
+                  {axis:"north",edge:Number(b.minNorthMeters),distance:Math.abs(Number(current.northMeters)-Number(b.minNorthMeters)),sign:-1},
+                  {axis:"north",edge:Number(b.maxNorthMeters),distance:Math.abs(Number(b.maxNorthMeters)-Number(current.northMeters)),sign:1}
+                ].sort((a,b)=>a.distance-b.distance);
+                const chosen=candidates[0],step=Math.max(4,Math.min(64,Number(cell.cellSizeMeters)*.01));
+                let east=Number(current.eastMeters),north=Number(current.northMeters);
+                if(chosen.axis==="east")east=chosen.edge+chosen.sign*step;else north=chosen.edge+chosen.sign*step;
                 const ll=fabric.latLonForRegisteredMeters(east,north);
                 stage.setViewTarget({latitudeRadians:Number(ll.latitudeRadians),longitudeRadians:Number(ll.longitudeRadians)});
-                return {fromCell:cell,fromFocus:before.canonicalFocus,toRegistered:{east,north}};
+                return {fromCell:cell,fromFocus:before.canonicalFocus,toRegistered:{east,north},crossedAxis:chosen.axis,crossDistanceMeters:chosen.distance+step};
             """)
             WebDriverWait(driver,75.0).until(lambda d:d.execute_script("""
                 const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},lod=s?.projection?.spatialLod||{};
@@ -8372,10 +8388,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         return
 
     if scenario == "wp-s003-010-003-013":
-        if len(frames) < 15:
-            raise RuntimeError("wp-s003-010-003-013 requires fifteen SSE/canonical-cell frames")
+        if len(frames) < 16:
+            raise RuntimeError("wp-s003-010-003-013 requires sixteen SSE/canonical-cell frames")
         proofs=[]
-        for index,frame in enumerate(frames[:15],start=1):
+        for index,frame in enumerate(frames[:16],start=1):
             action=str(frame.get("action") or "")
             try:
                 proof=json.loads(action.split("|",1)[1])
@@ -8436,17 +8452,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if ready.get("readyChildHandoff") is not True or (proofs[11].get("resource") or {}).get("pending") not in (0,0.0):
             raise RuntimeError(f"WP-013 child did not atomically replace fallback when ready: {proofs[11]}")
 
-        boundary=proofs[12].get("boundary") or {}
-        from_cell=boundary.get("fromCell") or {};to_cell=boundary.get("toCell") or {}
-        if not from_cell.get("id") or not to_cell.get("id") or from_cell.get("id")==to_cell.get("id"):
-            raise RuntimeError(f"WP-013 boundary traversal did not cross canonical cells: {boundary}")
-        if int(from_cell.get("depth") or -1)!=int(to_cell.get("depth") or -2) or boundary.get("visibleContainsFocus") is not True or int(boundary.get("pending") or 0)!=0:
-            raise RuntimeError(f"WP-013 boundary traversal lost continuous ready coverage: {boundary}")
+        for boundary_index in (12,13):
+            boundary=proofs[boundary_index].get("boundary") or {}
+            from_cell=boundary.get("fromCell") or {};to_cell=boundary.get("toCell") or {}
+            if not from_cell.get("id") or not to_cell.get("id") or from_cell.get("id")==to_cell.get("id"):
+                raise RuntimeError(f"WP-013 boundary traversal did not cross canonical cells at frame {boundary_index+1}: {boundary}")
+            if int(from_cell.get("depth") or -1)!=int(to_cell.get("depth") or -2) or boundary.get("visibleContainsFocus") is not True or int(boundary.get("pending") or 0)!=0:
+                raise RuntimeError(f"WP-013 boundary traversal lost continuous ready coverage at frame {boundary_index+1}: {boundary}")
+        if int((proofs[12].get("spatialLod") or {}).get("requestedLevelIndex") or -1)>=int((proofs[13].get("spatialLod") or {}).get("requestedLevelIndex") or -1):
+            raise RuntimeError("WP-013 boundary evidence must cover distinct mid and ground refinement depths")
 
-        phone=frames[13].get("runtime",{}).get("viewport",{})
+        phone=frames[14].get("runtime",{}).get("viewport",{})
         if int(phone.get("width") or 0)>430 or int(phone.get("height") or 0)<700:
             raise RuntimeError(f"WP-013 phone portrait evidence unexpected: {phone}")
-        if proofs[14].get("seed")==proofs[0].get("seed") or proofs[14].get("coordinateRevision")==proofs[0].get("coordinateRevision"):
+        if proofs[15].get("seed")==proofs[0].get("seed") or proofs[15].get("coordinateRevision")==proofs[0].get("coordinateRevision"):
             raise RuntimeError("WP-013 second SEED did not produce an independent canonical hierarchy revision")
         return
 
