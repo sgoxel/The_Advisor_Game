@@ -7051,9 +7051,17 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 const s=window.PlanetStage?.snapshot?.();
                 return Boolean(s?.ready===true&&s?.geographyVersion==='planetary-geography-v5');
             """))
-            verification=driver.execute_script("return window.PlanetStage?.verify?.() || null")
-            if not isinstance(verification,dict) or verification.get("pass") is not True:
-                raise RuntimeError(f"WP-009 deterministic planet verification failed after ready: {verification}")
+            verification=driver.execute_script("""
+                const s=window.PlanetStage?.snapshot?.(),f=s?.canonicalFocus?.worldTile||{};
+                const tileMeters=Number(window.WorldStandards?.TILE_METERS||2);
+                const radius=Number(window.PlanetStage?.constants?.WORLD_RADIUS_METERS||637100);
+                const check=window.PlanetGeography?.registrationRoundTrip?.(
+                  s?.activeSeed,String(f.x??"0"),String(f.y??"0"),tileMeters,radius
+                )||null;
+                return {ready:s?.ready===true,seed:s?.activeSeed,check};
+            """)
+            if not isinstance(verification,dict) or verification.get("ready") is not True or (verification.get("check") or {}).get("pass") is not True:
+                raise RuntimeError(f"WP-009 canonical registration verification failed after ready: {verification}")
             driver.execute_script("""
                 const s=window.PlanetStage.snapshot();
                 const t=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent||s?.featureTargets?.mountain;
