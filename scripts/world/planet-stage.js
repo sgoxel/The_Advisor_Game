@@ -129,6 +129,11 @@ const LOCAL_LOD_HYSTERESIS=0.003;
 // SEED-coordinate ancestry independent of camera/viewport/load order.
 const SPATIAL_LOD_ROOT_CELL_METERS=4_194_304;
 const SPATIAL_LOD_MAX_DEPTH=20;
+// A canonical cell-centered resource must cover every possible focus position
+// inside that cell even at the narrowest supported portrait aspect. Keep cell
+// span well inside the physical patch's spare margin; identity therefore stays
+// viewport-independent while the disposable presentation patch may resize.
+const SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO=.22;
 const SSE_TARGET_PIXELS=8;
 const SSE_REFINE_PIXELS=9;
 const SSE_COARSEN_PIXELS=6.5;
@@ -2828,8 +2833,9 @@ function trimLocalResourceCache(){
 }
 function spatialDepthForLevel(index){
   const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
-  const desiredCoverage=Math.max(1,Number(level.visibleHeightMeters||1)*LOCAL_PATCH_MARGIN);
-  return clamp(Math.floor(Math.log2(SPATIAL_LOD_ROOT_CELL_METERS/desiredCoverage)),0,SPATIAL_LOD_MAX_DEPTH);
+  const maxCellSize=Math.max(1,Number(level.visibleHeightMeters||1)*SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO);
+  // ceil() guarantees the selected canonical cell never exceeds the safe span.
+  return clamp(Math.ceil(Math.log2(SPATIAL_LOD_ROOT_CELL_METERS/maxCellSize)),0,SPATIAL_LOD_MAX_DEPTH);
 }
 function spatialCellAtDepth(depth,registered){
   const d=clamp(Math.round(depth),0,SPATIAL_LOD_MAX_DEPTH),size=SPATIAL_LOD_ROOT_CELL_METERS/Math.pow(2,d);
@@ -4034,6 +4040,10 @@ function spatialLodDiagnostics(){
     const size=requestedCell.cellSizeMeters,x=requestedCell.cellX+dx,y=requestedCell.cellY+dy;
     overscanCells.push(["SLOD",coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate",requestedCell.depth,x,y].join("|"));
   }
+  const requestedDims=patchDimensionsForLevel(requestedIndex);
+  const requestedOffset=localFocusOffsetMeters({lat0:requestedCell.centerLatitudeRadians,lon0:requestedCell.centerLongitudeRadians,dims:requestedDims});
+  const marginEast=Math.max(0,(requestedDims.patchWidth-requestedDims.visibleWidth)*.5),marginNorth=Math.max(0,(requestedDims.patchHeight-requestedDims.visibleHeight)*.5);
+  const canonicalAnchorCoveragePass=Math.abs(requestedOffset.east)<=marginEast+.01&&Math.abs(requestedOffset.north)<=marginNorth+.01;
   return {
     selectionMode:"screen-space-error",canonicalHierarchy:"SEED-coordinate-quadtree",
     targetPixelError:SSE_TARGET_PIXELS,refinePixelError:SSE_REFINE_PIXELS,coarsenPixelError:SSE_COARSEN_PIXELS,
@@ -4048,8 +4058,11 @@ function spatialLodDiagnostics(){
     visibleProjectedPixelError:visibleIndex===null?null:Number(projectedPixelErrorForLevel(visibleIndex).toFixed(6)),
     visibleNativeMagnification:visibleIndex===null?null:Number(nativeMagnificationForLevel(visibleIndex).toFixed(6)),
     requestedCell,visibleCell,parentFallbackActive,readyChildHandoff:Boolean(!localResources.standInActive&&visibleCell?.id===requestedCell.id),
+    requestedAnchorOffsetMeters:Object.freeze({east:Number(requestedOffset.east.toFixed(3)),north:Number(requestedOffset.north.toFixed(3))}),
+    requestedPatchMarginMeters:Object.freeze({east:Number(marginEast.toFixed(3)),north:Number(marginNorth.toFixed(3))}),
+    canonicalAnchorCoveragePass,
     visibleContainsFocus,overscanCellIds:Object.freeze(overscanCells),overscanCellCount:overscanCells.length,
-    rootCellMeters:SPATIAL_LOD_ROOT_CELL_METERS,maxDepth:SPATIAL_LOD_MAX_DEPTH,
+    rootCellMeters:SPATIAL_LOD_ROOT_CELL_METERS,maxDepth:SPATIAL_LOD_MAX_DEPTH,cellMaxLevelHeightRatio:SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,
     hysteresis:true,viewportBounded:true,fullWorldScan:false,cameraAssignsIdentity:false,viewportAssignsIdentity:false
   };
 }
@@ -4229,7 +4242,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
   })
 });
 const boot=()=>start().catch(()=>{});
