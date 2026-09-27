@@ -1770,19 +1770,54 @@ function buildLocalWildernessMesh(plan,frame,reveal){
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   return {mesh,accepted,rejectedManaged,rejectedRoad,triangles:indices.length/3,familyCounts,biomeCounts};
 }
+function buildLocalFaunaMesh(kind,size,unit){
+  const positions=[],normals=[],colors=[],indices=[],s=size/unit;
+  const palette=kind==="waterbird"?[.78,.78,.62]:kind==="bird"?[.32,.25,.13]:kind==="hare"?[.57,.43,.25]:[.52,.31,.13];
+  const push=(x,y,z,color=palette)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
+  const quad=(a,b,c,d)=>indices.push(a,b,c,a,c,d);
+  const box=(cx,cy,cz,sx,sy,sz,color=palette)=>{
+    const x=sx*.5,y=sy*.5,z=sz*.5,v=[
+      push(cx-x,cy-y,cz-z,color),push(cx+x,cy-y,cz-z,color),push(cx+x,cy+y,cz-z,color),push(cx-x,cy+y,cz-z,color),
+      push(cx-x,cy-y,cz+z,color),push(cx+x,cy-y,cz+z,color),push(cx+x,cy+y,cz+z,color),push(cx-x,cy+y,cz+z,color)
+    ];
+    quad(v[0],v[1],v[2],v[3]);quad(v[4],v[7],v[6],v[5]);quad(v[0],v[4],v[5],v[1]);quad(v[3],v[2],v[6],v[7]);quad(v[1],v[5],v[6],v[2]);quad(v[0],v[3],v[7],v[4]);
+  };
+  if(kind==="deer"){
+    box(0,s*.72,0,s*1.35,s*.62,s*.55);
+    box(s*.52,s*1.08,0,s*.28,s*.72,s*.30);
+    box(s*.82,s*1.38,0,s*.52,s*.38,s*.38);
+    for(const x of [-s*.42,s*.42])for(const z of [-s*.18,s*.18])box(x,s*.30,z,s*.12,s*.60,s*.12,[.36,.20,.09]);
+    box(s*.94,s*1.62,-s*.13,s*.10,s*.28,s*.10);box(s*.94,s*1.62,s*.13,s*.10,s*.28,s*.10);
+  }else if(kind==="hare"){
+    box(0,s*.48,0,s*.90,s*.58,s*.58);
+    box(s*.40,s*.72,0,s*.48,s*.46,s*.44);
+    box(s*.43,s*1.08,-s*.11,s*.11,s*.58,s*.12);box(s*.43,s*1.08,s*.11,s*.11,s*.58,s*.12);
+    box(-s*.34,s*.24,-s*.18,s*.30,s*.20,s*.18);box(-s*.34,s*.24,s*.18,s*.30,s*.20,s*.18);
+  }else{
+    box(0,s*.44,0,s*.76,s*.36,s*.42);
+    box(s*.42,s*.57,0,s*.34,s*.32,s*.30);
+    box(-s*.04,s*.48,-s*.42,s*.58,s*.08,s*.58);box(-s*.04,s*.48,s*.42,s*.58,s*.08,s*.58);
+    if(kind==="waterbird"){box(-s*.18,s*.18,-s*.12,s*.08,s*.36,s*.08,[.45,.28,.10]);box(-s*.18,s*.18,s*.12,s*.08,s*.36,s*.08,[.45,.28,.10]);}
+  }
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+  return {mesh,triangles:indices.length/3};
+}
+function clearLocalFauna(){
+  for(const actor of localFaunaActors)actor.mesh?.destroy?.();
+  localFaunaActors=[];localFaunaRoot?.destroy?.();localFaunaRoot=null;
+}
 function rebuildLocalFauna(plan,frame,reveal){
-  localFaunaRoot?.destroy?.();localFaunaRoot=null;localFaunaActors=[];
+  clearLocalFauna();
   if(!localWildernessEnabled||!plan?.fauna?.length||!tangentPatch)return 0;
   localFaunaRoot=new pc.Entity("LocalAmbientFauna");tangentPatch.addChild(localFaunaRoot);
   const unit=frame.dims.metersPerUnit;
   for(const item of plan.fauna){
     if(localFaunaActors.length>=4||localWildernessManaged(item,reveal).reject)continue;
-    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?2.0:item.kind==="waterbird"?.9:item.kind==="bird"?.7:1.05)*item.scale;
-    const actor=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actor);
-    addLocalPrimitive(actor,"Body","sphere",localStaticMaterials.fauna,0,size*.42/unit,0,size*1.15/unit,size*.70/unit,size*.58/unit);
-    addLocalPrimitive(actor,"Head","sphere",localStaticMaterials.fauna,size*.72/unit,size*.74/unit,0,size*.46/unit,size*.46/unit,size*.42/unit);
+    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?2.0:item.kind==="waterbird"?.95:item.kind==="bird"?.78:1.12)*item.scale;
+    const built=buildLocalFaunaMesh(item.kind,size,unit),actor=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actor);
+    actor.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actor.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actor)];
     const x=item.east/unit,z=-item.north/unit;actor.setLocalPosition(x,y,z);
-    localFaunaActors.push({entity:actor,baseX:x,baseY:y,baseZ:z,phase:item.rotation,radius:(item.kind==="bird"?.7:.35)/unit,kind:item.kind});
+    localFaunaActors.push({entity:actor,mesh:built.mesh,triangles:built.triangles,baseX:x,baseY:y,baseZ:z,phase:item.rotation,radius:(item.kind==="bird"?.7:.35)/unit,kind:item.kind});
   }
   return localFaunaActors.length;
 }
@@ -1796,9 +1831,9 @@ function renderLocalWilderness(resource,frame,reveal){
     const entity=new pc.Entity("LocalWildernessBatch");entity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});
     entity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.wilderness,entity)];localStaticRoot.addChild(entity);drawCalls=1;
   }
-  const fauna=rebuildLocalFauna(plan,frame,reveal),dominant=Object.entries(built.biomeCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0]?.[0]||null;
-  wilderness={...wilderness,localActive:built.accepted>0,localBiome:dominant,localAcceptedStaticProps:built.accepted,localAmbientFaunaActiveCount:fauna,localRejectedManaged:built.rejectedManaged,localRejectedRoad:built.rejectedRoad,localFamilyCounts:{...built.familyCounts},localBiomeCounts:{...built.biomeCounts},localDrawCalls:drawCalls+fauna*2,localTriangles:built.triangles+fauna*160};
-  return {accepted:built.accepted,triangles:built.triangles,drawCalls,fauna};
+  const fauna=rebuildLocalFauna(plan,frame,reveal),faunaTriangles=localFaunaActors.reduce((sum,item)=>sum+Number(item.triangles||0),0),dominant=Object.entries(built.biomeCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0]?.[0]||null;
+  wilderness={...wilderness,localActive:built.accepted>0,localBiome:dominant,localAcceptedStaticProps:built.accepted,localAmbientFaunaActiveCount:fauna,localRejectedManaged:built.rejectedManaged,localRejectedRoad:built.rejectedRoad,localFamilyCounts:{...built.familyCounts},localBiomeCounts:{...built.biomeCounts},localDrawCalls:drawCalls+fauna,localTriangles:built.triangles+faunaTriangles};
+  return {accepted:built.accepted,triangles:built.triangles+faunaTriangles,drawCalls:drawCalls+fauna,fauna};
 }
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
@@ -1809,7 +1844,7 @@ function ensureLocalStaticMaterials(){
     wall:make("LocalWall",.72,.55,.34),roof:make("LocalRoof",.35,.12,.08),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.54,.42,.18,.46),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    wilderness:wildernessMaterial,fauna:make("LocalFauna",.48,.30,.13)
+    wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
 }
 function sharedLocalPrimitive(type){
@@ -2105,7 +2140,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
     roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
-    entityCount,triangleEstimate:triangles+wild.triangles,drawCallEstimate:entityCount+wild.fauna*2,
+    entityCount,triangleEstimate:triangles+wild.triangles,drawCallEstimate:entityCount+wild.fauna,
     buildTimeMs:Number((performance.now()-started).toFixed(3)),
     grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,
     authority:"SettlementArchetypes + StartingVillage + HousePlans + SpecialLots"
@@ -2116,7 +2151,7 @@ function rebuildLocalStaticPresentation(resource){
   const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
   clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);
   localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
-  localFaunaRoot?.destroy?.();localFaunaRoot=null;localFaunaActors=[];
+  clearLocalFauna();
   localStaticRoot?.destroy?.();localStaticRoot=null;
   const tier=settlementRevealTierForScalar();
   localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,presentationOnly:true,simulationAuthority:false};
@@ -2135,7 +2170,7 @@ function rebuildLocalStaticPresentation(resource){
   if(center?.land){
     const wild=renderLocalWilderness(resource,frame,null);
     localStatic.wildernessCount=wild.accepted;localStatic.ambientFaunaCount=wild.fauna;localStatic.vegetationCount=Object.entries(wilderness.localFamilyCounts||{}).filter(([k])=>["grass","flower","bush","sapling","reed"].includes(k)).reduce((sum,[,v])=>sum+Number(v||0),0);
-    localStatic.triangleEstimate+=wild.triangles;localStatic.drawCallEstimate+=wild.drawCalls+wild.fauna*2;
+    localStatic.triangleEstimate+=wild.triangles;localStatic.drawCallEstimate+=wild.drawCalls;
   }else{
     rebuildLocalFauna(null,frame,null);wilderness={...wilderness,localActive:false,localAmbientFaunaActiveCount:0};
     const y=localGroundHeightUnits(0,0,frame)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
