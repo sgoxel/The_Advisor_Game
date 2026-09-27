@@ -1140,18 +1140,15 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     if(seenDisplayNames.has(displayKey)){hiddenReasons.duplicateName++;continue;}
     seenDisplayNames.add(displayKey);validCandidates.push(entity);
   }
-  const validIds=new Set(validCandidates.map(entity=>entity.id));
   if(atlasStickyBand!==spec.id){
     atlasStickyBand=spec.id;
-    atlasStickyEntities.clear();
     atlasLabelPlacementCache.clear();
   }
-  for(const entity of validCandidates){
-    if(atlasStickyEntities.has(entity.id))atlasStickyEntities.set(entity.id,entity);
-  }
-  for(const [id,entity] of [...atlasStickyEntities.entries()]){
-    if(!spec.kinds.includes(entity.type)||!validIds.has(id)){atlasStickyEntities.delete(id);atlasLabelPlacementCache.delete(id);}
-  }
+  // Semantic hysteresis stabilizes the eligible class set across scale
+  // thresholds. Density membership inside that set is recomputed from the
+  // current projected/validated candidates so identical visible state cannot
+  // inherit a different label set from prior pan or viewport history.
+  atlasStickyEntities.clear();
   const classCount=type=>[...atlasStickyEntities.values()].filter(item=>item.type===type).length;
   const canAdd=entity=>{
     if(atlasStickyEntities.has(entity.id))return true;
