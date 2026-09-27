@@ -446,7 +446,12 @@ function ensureMapPresentationDom(){
 function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMeters=0){
   if(!pc||!cameraEntity?.camera||!window.PlanetGeography?.directionFromLatLon)return null;
   const lat=clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999),lon=wrapLongitudeRadians(longitudeRadians);
-  const tangentActive=Boolean(tangentPatch?.enabled&&displayResource&&projectionState.blend>LOCAL_TANGENT_OWNERSHIP_BLEND);
+  // Project overlays against the representation that is actually visible.
+  // Raw projectionState.blend begins before the tangent surface is presented;
+  // using it clipped borders/labels to the hidden tangent patch at 0.12x while
+  // the player was still seeing the globe. Switch only when tangent is the
+  // dominant rendered representation.
+  const tangentActive=Boolean(tangentPatch?.enabled&&displayResource&&Number(projectionPresentation?.representationBlend||0)>=.5);
   if(tangentActive){
     const frame=localDisplayFrame(),dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,cosLat=Math.max(.08,Math.cos(lat0));
     const north=(lat-lat0)*WORLD_RADIUS_METERS,east=wrapLongitudeRadians(lon-lon0)*WORLD_RADIUS_METERS*cosLat;
