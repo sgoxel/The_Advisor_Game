@@ -2592,6 +2592,10 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
   app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);const emissiveTint=p.phase==="night"?[.52,.72,1]:p.phase==="dawn"?[1,.66,.42]:p.phase==="late-day"?[1,.58,.34]:[1,.96,.84];surfaceMaterial.emissive.set(p.emissive*emissiveTint[0],p.emissive*emissiveTint[1],p.emissive*emissiveTint[2]);surfaceMaterial.update();
   atmosphere={active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false,keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3)))};
   refreshCanonicalNpcPresentation();
+  if(inspection.selectedId!==null){
+    inspection.lastContentRefreshAtMs=Number.NEGATIVE_INFINITY;
+    updateInspectionTooltip();
+  }
   return snapshot();
 }
 async function buildScene(){  const started=performance.now();
