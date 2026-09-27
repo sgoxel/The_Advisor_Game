@@ -23,6 +23,7 @@ const ZOOM_WHEEL_SENSITIVITY=0.00045;
 const ZOOM_PINCH_SENSITIVITY=0.003;
 const ZOOM_DISTANCE_FACTOR=0.018;
 const SCALE_LADDER=Object.freeze(["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]);
+const SCALE_DENOMINATORS=Object.freeze([10,20,50,100,250,500,1000,2500,5000,10000]);
 // One continuous footprint ladder drives every representation:
 // - up to LADDER_START_SCALAR it is the true surface footprint of the globe
 //   camera (it depends on viewport framing, so it is computed, not tabled);
@@ -496,12 +497,28 @@ function mapPlaceKindsForBand(band){
   };
   return table[band]||[];
 }
+function scaleTargetFootprintHeightMeters(index){
+  const i=Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(Number(index)||0)));
+  const first=Math.max(1,SCALE_DENOMINATORS[0]),last=Math.max(first+1,SCALE_DENOMINATORS[SCALE_DENOMINATORS.length-1]);
+  const denominator=Math.max(first,SCALE_DENOMINATORS[i]||first);
+  const progress=clamp(Math.log(denominator/first)/Math.log(last/first),0,1);
+  const startHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(0));
+  return startHeight*Math.exp(Math.log(GROUND_FOOTPRINT_HEIGHT_METERS/startHeight)*progress);
+}
 function scaleIndexForScalar(value=zoomState.scalar){
-  return Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(clamp(value,0,1)*(SCALE_LADDER.length-1))));
+  const height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(clamp(value,0,1)));
+  let best=0,bestDistance=Infinity;
+  for(let i=0;i<SCALE_LADDER.length;i++){
+    const target=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,scaleTargetFootprintHeightMeters(i));
+    const distance=Math.abs(Math.log(height/target));
+    if(distance<bestDistance){best=i;bestDistance=distance;}
+  }
+  return best;
 }
 function scalarForScaleIndex(index){
   const i=Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(Number(index)||0)));
-  return i/Math.max(1,SCALE_LADDER.length-1);
+  if(i===0)return 0;if(i===SCALE_LADDER.length-1)return 1;
+  return scalarForFootprintHeight(scaleTargetFootprintHeightMeters(i));
 }
 function scaleStateForScalar(value=zoomState.scalar){
   const index=scaleIndexForScalar(value),scalar=scalarForScaleIndex(index);
@@ -2774,7 +2791,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
       const contourLine=Math.pow(1-contour,10)*contourStrength;
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i]-contourLine*(i===2?.55:1))*shade,0,1));
       let displayColor=authoritative;
-      if(useMicroDetail){const micro=localSurfaceSample(worldEast,worldNorth,sample).color;displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));}
+      if(useMicroDetail){
+        const micro=localSurfaceSample(worldEast,worldNorth,sample).color;
+        // As the physical texel size approaches gameplay scale, let canonical
+        // registered-meter micro terrain carry more of the surface. This keeps
+        // close props visually grounded while coarser views retain macro identity.
+        const closeWeight=smoothstep01((4-metersPerTexel)/3.5),microWeight=lerp(.38,.72,closeWeight);
+        displayColor=authoritative.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
+      }
       // High peaks are legitimately snow-covered, but the canonical near-white
       // macro palette plus hillshade used to saturate into featureless white.
       // Compress only alpine highlights, preserving SEED-derived hue/detail.
@@ -4301,7 +4325,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
   })
 });
 const boot=()=>start().catch(()=>{});
