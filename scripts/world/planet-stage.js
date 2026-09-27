@@ -570,6 +570,13 @@ function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMete
   const world=planet?.getWorldTransform?.().transformPoint(local,new pc.Vec3())||local;
   return {world,mode:"globe",latitudeRadians:lat,longitudeRadians:lon,eastMeters:null,northMeters:null};
 }
+function cameraViewDepth(world){
+  if(!world||!cameraEntity?.camera?.viewMatrix||!pc)return null;
+  try{
+    const viewPoint=cameraEntity.camera.viewMatrix.transformPoint(world,new pc.Vec3());
+    return Number(viewPoint?.z);
+  }catch(_){return null;}
+}
 function projectGeographicAnchor(anchor,options={}){
   if(!canvas||!cameraEntity?.camera||!anchor)return null;
   const scene=geographicScenePoint(anchor.latitudeRadians,anchor.longitudeRadians,options.surfaceOffsetMeters||0);if(!scene)return null;
@@ -577,12 +584,15 @@ function projectGeographicAnchor(anchor,options={}){
     const center=planet.getPosition(),normal=scene.world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(scene.world);
     if(normal.dot(toCamera)<=0)return null;
   }
-  const screen=cameraEntity.camera.worldToScreen(scene.world),rect=canvas.getBoundingClientRect();
-  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z)||screen.z<0)return null;
+  const screen=cameraEntity.camera.worldToScreen(scene.world),viewDepth=cameraViewDepth(scene.world),rect=canvas.getBoundingClientRect();
+  // PlayCanvas worldToScreen().z is unnormalized clip-space depth and can be
+  // negative for visible points, especially with our orthographic camera.
+  // The documented behind-camera test is view-space Z: visible points are < 0.
+  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z)||!Number.isFinite(viewDepth)||viewDepth>=0)return null;
   const xPct=screen.x/Math.max(1,rect.width)*100,yPct=screen.y/Math.max(1,rect.height)*100;
   if(options.allowOffscreen!==true&&(xPct<0||xPct>100||yPct<0||yPct>100))return null;
   return {
-    x:xPct,y:yPct,screenX:screen.x,screenY:screen.y,depth:screen.z,mode:scene.mode,
+    x:xPct,y:yPct,screenX:screen.x,screenY:screen.y,depth:screen.z,viewDepth,mode:scene.mode,
     latitudeRadians:scene.latitudeRadians,longitudeRadians:scene.longitudeRadians,
     worldX:Number(scene.world.x.toFixed(6)),worldY:Number(scene.world.y.toFixed(6)),worldZ:Number(scene.world.z.toFixed(6))
   };
@@ -602,7 +612,7 @@ function gameplayCenterMarkerTelemetry(layer){
   if(code)code.textContent="CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
   marker.dataset.cellId=cell.id;marker.dataset.tile=center.worldTile.x+","+center.worldTile.y;
   return Object.freeze({
-    visible:true,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),projection:projected.mode,
+    visible:true,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),clipDepth:Number(projected.depth.toFixed(6)),viewDepth:Number(projected.viewDepth.toFixed(6)),projection:projected.mode,
     latitudeDegrees:Number(center.latitudeDegrees.toFixed(6)),longitudeDegrees:Number(center.longitudeDegrees.toFixed(6)),
     worldTile:center.worldTile,registeredMeters:center.registeredMeters,canonicalSpatialCellId:cell.id,streamSignature:cell.signature,
     coordinateFabricRevision:fabric.revisionSignature,roundTripErrorMeters:center.roundTripErrorMeters,worldAnchored:true,fixedHudDot:false
@@ -917,11 +927,12 @@ function atlasProjectCandidate(entity){
     const center=planet.getPosition(),normal=scene.world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(scene.world);
     if(normal.dot(toCamera)<=0)return {reason:"hidden-hemisphere"};
   }
-  const screen=cameraEntity.camera.worldToScreen(scene.world),rect=canvas.getBoundingClientRect();
-  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z)||screen.z<0)return {reason:"behind-camera"};
+  const screen=cameraEntity.camera.worldToScreen(scene.world),viewDepth=cameraViewDepth(scene.world),rect=canvas.getBoundingClientRect();
+  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z))return {reason:"invalid-projection"};
+  if(!Number.isFinite(viewDepth)||viewDepth>=0)return {reason:"behind-camera"};
   const x=screen.x/Math.max(1,rect.width)*100,y=screen.y/Math.max(1,rect.height)*100;
   if(x<2||x>98||y<3||y>97)return {reason:"offscreen"};
-  return {projection:{x,y,screenX:screen.x,screenY:screen.y,depth:screen.z,mode:scene.mode}};
+  return {projection:{x,y,screenX:screen.x,screenY:screen.y,depth:screen.z,viewDepth,mode:scene.mode}};
 }
 function atlasLabelBox(entity,p,portrait){
   const nameLen=Math.max(5,String(entity.name).length),scale=portrait?.82:1;
