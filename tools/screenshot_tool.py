@@ -140,7 +140,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
-    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010",
+    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012",
     "wp-s003-010-004",
     "wp-s003-010-005",
     "wp-s004-001",
@@ -261,6 +261,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-008": 14,
     "wp-s003-010-003-009": 14,
     "wp-s003-010-003-010": 12,
+    "wp-s003-010-003-012": 9,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -7200,6 +7201,106 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-012":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("seed-a-landmark",0.12,(1280,800),"origin"),
+            ("seed-a-zoom-0.15",0.15,(1280,800),"origin"),
+            ("seed-a-zoom-0.20",0.20,(1280,800),"origin"),
+            ("seed-a-zoom-back",0.12,(1280,800),"origin"),
+            ("seed-a-stream-away",0.12,(1280,800),"away"),
+            ("seed-a-revisit",0.12,(1280,800),"origin"),
+            ("seed-a-phone-landscape",0.12,(844,390),"origin"),
+            ("seed-a-phone-portrait",0.12,(390,844),"origin"),
+            ("seed-b-landmark",0.12,(1280,800),"origin"),
+        )
+        label,display_multiplier,viewport,target_kind=plan[min(frame_index,len(plan)-1)]
+        if frame_index in (0,8):
+            seed="WP_S003_010_003_012_A" if frame_index==0 else "WP_S003_010_003_012_B"
+            base=driver.current_url.split("?",1)[0]
+            driver.get(base+"?seed="+seed)
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.();
+                return Boolean(s?.ready===true&&window.SeedCoordinateFabric?.VERSION==='seed-coordinate-fabric-v1'&&
+                  s?.coordinateFabric?.revisionSignature&&s?.coordinateFabric?.fullWorldScan===false);
+            """))
+            setup=driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),target=s?.featureTargets?.peak||s?.featureTargets?.mountain||s?.featureTargets?.continent;
+                if(!target)throw new Error('WP-012 canonical landmark target unavailable');
+                stage.setViewTarget(target);
+                const after=stage.snapshot(),origin=after.canonicalFocus.worldTile,fabric=window.SeedCoordinateFabric.create(after.activeSeed,{
+                  radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+                const first=fabric.materializeCell(origin,256);
+                const away={x:(BigInt(origin.x)+32000n).toString(),y:(BigInt(origin.y)+18000n).toString()};
+                window.__wp012={seed:after.activeSeed,origin,away,originCellId:first.id,originStreamSignature:first.signature,revision:fabric.revisionSignature};
+                return window.__wp012;
+            """)
+            if not isinstance(setup,dict) or not setup.get("originCellId") or not setup.get("revision"):
+                raise RuntimeError(f"WP-012 coordinate setup failed: {setup}")
+        driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.18)
+        target=driver.execute_script("""
+            const state=window.__wp012;if(!state)return null;
+            return arguments[0]==='away'?state.away:state.origin;
+        """,target_kind)
+        if not isinstance(target,dict):
+            raise RuntimeError(f"WP-012 target unavailable for {label}: {target}")
+        driver.execute_script("window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]))",target.get("x"),target.get("y"))
+        scalar=(math.log10(float(display_multiplier))+2.0)/2.0
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
+        landmark_required=frame_index in (0,3,5,6,7,8)
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{},c=s?.coordinateFabric||{};
+            const requireLandmark=Boolean(arguments[1]);
+            return s?.ready===true&&Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001&&
+                   Number(r?.pendingPreparationCount||0)===0&&Boolean(c?.revisionSignature)&&c?.fullWorldScan===false&&
+                   m?.centerMarker?.visible===true&&m?.centerMarker?.worldAnchored===true&&
+                   (!requireLandmark||Number(m?.landmarkVisibleCount||0)>=1);
+        """,float(scalar),bool(landmark_required)))
+        stream_proof=None
+        if frame_index==4:
+            stream_proof=driver.execute_script("""
+                const stage=window.PlanetStage,state=window.__wp012,s=stage.snapshot();
+                const fabric=window.SeedCoordinateFabric.create(s.activeSeed,{radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+                const first=fabric.materializeCell(state.away,256),firstId=first.id,firstSig=first.signature;
+                fabric.releaseCell(first.id);
+                const second=fabric.materializeCell(state.away,256);
+                return {firstId,firstSig,secondId:second.id,secondSig:second.signature,stable:firstId===second.id&&firstSig===second.signature,cache:fabric.snapshot(state.away).cache};
+            """)
+            if not isinstance(stream_proof,dict) or stream_proof.get("stable") is not True:
+                raise RuntimeError(f"WP-012 streamed cell regeneration is unstable: {stream_proof}")
+        time.sleep(.28)
+        proof=driver.execute_script("""
+            const stage=window.PlanetStage,s=stage.snapshot(),m=s.mapPresentation||{},c=s.coordinateFabric||{},state=window.__wp012||{};
+            const labels=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].map(node=>{
+              const r=node.getBoundingClientRect();return {kind:node.dataset.kind||'',left:r.left,right:r.right,top:r.top,bottom:r.bottom};
+            });
+            let overlapCount=0;
+            for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++){
+              const a=labels[i],b=labels[j],x=Math.min(a.right,b.right)-Math.max(a.left,b.left),y=Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top);
+              if(x>2&&y>2)overlapCount++;
+            }
+            const landmarkLabels=(m.visibleLabels||[]).filter(item=>item.entityType==='landmark');
+            const fabric=window.SeedCoordinateFabric.create(s.activeSeed,{radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+            const verify=fabric.verify();
+            const alternate=window.SeedCoordinateFabric.create(s.activeSeed+'__WP012_SECOND',{radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+            return {
+              label:arguments[0],seed:s.activeSeed,scalar:s.zoom?.scalar,scaleLabel:s.zoom?.scaleLabel,
+              focus:s.canonicalFocus?.worldTile,focusLat:s.canonicalFocus?.latitudeDegrees,focusLon:s.canonicalFocus?.longitudeDegrees,
+              coordinateRevision:c.revisionSignature,coordinateSeed:c.seed,coordinateCenter:c.center,consumerKinds:c.consumerKinds,
+              consumers:c.consumers,maxRoundTripErrorMeters:c.maxRoundTripErrorMeters,sameSeedSpatialAuthority:c.sameSeedSpatialAuthority,
+              lazy:c.lazy,cameraIndependent:c.cameraIndependent,viewportIndependent:c.viewportIndependent,lodIndependent:c.lodIndependent,fullWorldScan:c.fullWorldScan,
+              centerMarker:m.centerMarker,streamedCellIds:m.coordinateFabricStreamedCellIds,
+              landmarkVisibleCount:m.landmarkVisibleCount,visibleLandmarks:m.visibleLandmarks,landmarkLabels,
+              leaderDomCount:document.querySelectorAll('.planet-atlas-leader[data-landmark="true"]').length,
+              labelOverlapCount:overlapCount,atlasVisible:m.atlasVisibleLabelCount,atlasBudget:m.maxLabelBudget,
+              mapFullWorldScan:m.fullWorldScan,mapBounded:m.bounded,mapUpdateMs:m.lastUpdateMs,
+              verify,alternateRevision:alternate.revisionSignature,alternateDifferent:alternate.revisionSignature!==fabric.revisionSignature,
+              originCellId:state.originCellId,originStreamSignature:state.originStreamSignature
+            };
+        """,label)
+        if stream_proof is not None:
+            proof["streamProof"]=stream_proof
+        return "coordinate-fabric|"+label+"|"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-010":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -8006,6 +8107,75 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             raise RuntimeError(f"WP-S003-015 phone landscape frame unexpected: {landscape}")
         if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
             raise RuntimeError(f"WP-S003-015 phone portrait frame unexpected: {portrait}")
+        return
+
+    if scenario == "wp-s003-010-003-012":
+        if len(frames) < 9:
+            raise RuntimeError("wp-s003-010-003-012 requires nine coordinate-fabric frames")
+        proofs=[]
+        for index,frame in enumerate(frames[:9],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split("|",2)[2])
+            except Exception as exc:
+                raise RuntimeError(f"WP-012 frame {index} lacks coordinate proof: {action}") from exc
+            proofs.append(proof)
+            if proof.get("coordinateRevision") is None or proof.get("coordinateSeed")!=proof.get("seed"):
+                raise RuntimeError(f"WP-012 coordinate revision/seed missing in frame {index}: {proof}")
+            if proof.get("lazy") is not True or proof.get("cameraIndependent") is not True or proof.get("viewportIndependent") is not True or proof.get("lodIndependent") is not True:
+                raise RuntimeError(f"WP-012 coordinate fabric depends on presentation state in frame {index}: {proof}")
+            if proof.get("fullWorldScan") is not False or proof.get("mapFullWorldScan") is not False or proof.get("mapBounded") is not True:
+                raise RuntimeError(f"WP-012 lost bounded/no-full-world contract in frame {index}: {proof}")
+            if proof.get("sameSeedSpatialAuthority") is not True or (proof.get("verify") or {}).get("pass") is not True:
+                raise RuntimeError(f"WP-012 coordinate round-trip/authority verification failed in frame {index}: {proof}")
+            if float(proof.get("maxRoundTripErrorMeters") or 999)>2.01:
+                raise RuntimeError(f"WP-012 round-trip error exceeds one 2m tile in frame {index}: {proof}")
+            marker=proof.get("centerMarker") or {}
+            if marker.get("visible") is not True or marker.get("worldAnchored") is not True or marker.get("fixedHudDot") is not False or not marker.get("canonicalSpatialCellId"):
+                raise RuntimeError(f"WP-012 gameplay center marker is not world-anchored in frame {index}: {marker}")
+            required={"gameplay-center","terrain","country","capital","region","village","landmark","building","road"}
+            kinds=set(proof.get("consumerKinds") or [])
+            if not required.issubset(kinds):
+                raise RuntimeError(f"WP-012 cross-system coordinate consumers missing in frame {index}: {required-kinds}; got={kinds}")
+            if int(proof.get("labelOverlapCount") or 0)!=0:
+                raise RuntimeError(f"WP-012 atlas labels overlap in frame {index}: {proof.get('labelOverlapCount')}")
+            if float(proof.get("mapUpdateMs") or 0)>500:
+                raise RuntimeError(f"WP-012 map/coordinate presentation update exceeded bounded budget in frame {index}: {proof.get('mapUpdateMs')}")
+        zoom_set=proofs[:4]
+        tiles=[json.dumps(p.get("focus") or {},sort_keys=True) for p in zoom_set]
+        cells=[str((p.get("centerMarker") or {}).get("canonicalSpatialCellId") or "") for p in zoom_set]
+        revisions=[str(p.get("coordinateRevision") or "") for p in zoom_set]
+        if len(set(tiles))!=1 or len(set(cells))!=1 or len(set(revisions))!=1:
+            raise RuntimeError(f"WP-012 pure zoom changed canonical coordinate/cell/revision: tiles={tiles} cells={cells} revisions={revisions}")
+        if str((proofs[4].get("centerMarker") or {}).get("canonicalSpatialCellId"))==cells[0]:
+            raise RuntimeError("WP-012 away-stream frame did not enter a different canonical spatial cell")
+        if str((proofs[5].get("centerMarker") or {}).get("canonicalSpatialCellId"))!=cells[0] or proofs[5].get("focus")!=proofs[0].get("focus"):
+            raise RuntimeError(f"WP-012 revisit did not restore exact canonical center: start={proofs[0].get('focus')} return={proofs[5].get('focus')}")
+        stream=proofs[4].get("streamProof") or {}
+        if stream.get("stable") is not True or stream.get("firstId")!=stream.get("secondId") or stream.get("firstSig")!=stream.get("secondSig"):
+            raise RuntimeError(f"WP-012 streamed cell regenerate/revisit identity failed: {stream}")
+        for index in (0,3,5,6,7,8):
+            proof=proofs[index]
+            if int(proof.get("landmarkVisibleCount") or 0)<1 or int(proof.get("leaderDomCount") or 0)<1:
+                raise RuntimeError(f"WP-012 landmark callout missing in frame {index+1}: {proof}")
+            landmarks=proof.get("visibleLandmarks") or []
+            labels=proof.get("landmarkLabels") or []
+            if not landmarks or not labels:
+                raise RuntimeError(f"WP-012 landmark telemetry missing in frame {index+1}: {proof}")
+            if any(item.get("leaderVisible") is not True or float(item.get("displacementPixels") or 0)<=1 or not item.get("canonicalSpatialCellId") for item in landmarks):
+                raise RuntimeError(f"WP-012 landmark leader/anchor invalid in frame {index+1}: {landmarks}")
+            if any(item.get("renderedClipped") is True for item in labels):
+                raise RuntimeError(f"WP-012 landmark label clipped in frame {index+1}: {labels}")
+        if len({str(p.get("coordinateRevision") or "") for p in proofs[:8]})!=1:
+            raise RuntimeError("WP-012 coordinate revision changed within primary SEED run")
+        if str(proofs[8].get("coordinateRevision") or "")==str(proofs[0].get("coordinateRevision") or "") or proofs[8].get("alternateDifferent") is not True:
+            raise RuntimeError("WP-012 independent SEED did not change canonical coordinate fabric revision")
+        landscape=frames[6].get("runtime",{}).get("viewport",{})
+        portrait=frames[7].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>430:
+            raise RuntimeError(f"WP-012 phone landscape viewport invalid: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"WP-012 phone portrait viewport invalid: {portrait}")
         return
 
     if scenario == "wp-s003-010-003-010":
@@ -14293,7 +14463,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
