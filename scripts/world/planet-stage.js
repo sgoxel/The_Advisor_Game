@@ -1955,6 +1955,7 @@ function textureFromPixels(pixels){
   const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
   const ctx=canvas2d.getContext("2d",{alpha:false});ctx.putImageData(new ImageData(pixels.data,pixels.size,pixels.size),0,0);
   const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  texture.flipY=true;
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
   return texture;
@@ -1962,7 +1963,7 @@ function textureFromPixels(pixels){
 function skirtMeshForDims(dims,spanFactor=3){
   const halfX=dims.patchWidth*spanFactor*.5/dims.metersPerUnit,halfZ=dims.patchHeight*spanFactor*.5/dims.metersPerUnit,mesh=new pc.Mesh(device);
   mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
-  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setUvs(0,[0,0,1,0,0,1,1,1]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
+  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setUvs(0,[0,1,1,1,0,0,1,0]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
   return mesh;
 }
 function finalizeLocalResource(job,result){
@@ -2459,6 +2460,7 @@ async function makeGeographyTexture(){
     mipmaps:true
   });
   texture.name="SeededPlanetGeography";
+  texture.flipY=true;
   texture.addressU=pc.ADDRESS_REPEAT;
   texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
