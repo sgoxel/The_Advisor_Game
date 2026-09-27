@@ -103,8 +103,12 @@ function activityCounts(seed,when){
   return Object.freeze({current,awake,byBuilding});
 }
 function contextZones(){
-  const stage=window.PlanetStage?.snapshot?.();
-  if(!stage?.ready)return Object.freeze({stage:null,zones:Object.freeze([]),seed:"",hour:null,biome:"unknown",activityCount:0});
+  const stageRoot=document.getElementById("planetStageRoot");
+  if(stageRoot?.dataset?.ready!=="true"||!window.PlanetStage?.snapshot){
+    return Object.freeze({stage:null,zones:Object.freeze([]),seed:"",hour:null,biome:"pending",activityCount:0});
+  }
+  const stage=window.PlanetStage.snapshot();
+  if(!stage?.ready)return Object.freeze({stage:null,zones:Object.freeze([]),seed:"",hour:null,biome:"pending",activityCount:0});
   const seed=currentSeed(stage);
   if(!seed)return Object.freeze({stage,zones:Object.freeze([]),seed:"",hour:null,biome:"unknown",activityCount:0});
   const when=fantasyNow(),hour=fantasyHour(when),focus=stage.canonicalFocus?.worldTile||{x:"0",y:"0"};
@@ -113,19 +117,19 @@ function contextZones(){
     return Object.freeze({stage,zones:Object.freeze([]),seed,hour:Number(hour.toFixed(3)),biome:"inactive",activityCount:0});
   }
 
-  const zones=[],village=window.StartingVillage?.plan?.(seed)||null;
+  const zones=[];
+  // Village-specific authority is read only after the canonical local
+  // presentation has already materialized it. Broad biome/water ambience does
+  // not need to build StartingVillage/DailyActivity at all.
+  const localStaticReady=Boolean(stage.projection?.localStatic?.active);
+  const localNpcReady=Number(stage.npcPresentation?.activeCount||0)>0;
+  const village=(localStaticReady&&localNpcReady)?(window.StartingVillage?.plan?.(seed)||null):null;
   let villageEast=Infinity,villageNorth=Infinity,villageDistance=Infinity;
   if(village){
     const center=village.center||{x:"0",y:"0"};
     villageEast=tileDeltaMeters(center.x,focus.x);villageNorth=tileDeltaMeters(center.y,focus.y);
     villageDistance=Math.hypot(villageEast,villageNorth);
   }
-  // DailyActivity/SpecialLots are intentionally read only after the canonical
-  // local NPC/static presentation is active. That path already materializes and
-  // caches the same 12-resident authority, avoiding a cold audio-side rebuild
-  // on the visible-frame transition.
-  const localStaticReady=Boolean(stage.projection?.localStatic?.active);
-  const localNpcReady=Number(stage.npcPresentation?.activeCount||0)>0;
   const nearVillage=Boolean(village&&villageDistance<=260);
   const detailedActivityReady=nearVillage&&localStaticReady&&localNpcReady;
   const activity=detailedActivityReady?activityCounts(seed,when):Object.freeze({current:Object.freeze([]),awake:0,byBuilding:new Map()});
@@ -186,7 +190,7 @@ function buildBuffer(type,seed){
   const ctx=ensureContext();if(!ctx)return null;
   const key=type+"|"+seed+"|"+ctx.sampleRate;
   if(bufferCache.has(key))return bufferCache.get(key);
-  const seconds=1.5,length=Math.max(1,Math.floor(ctx.sampleRate*seconds)),buffer=ctx.createBuffer(1,length,ctx.sampleRate),data=buffer.getChannelData(0),rnd=seededUnit(seed+"|audio|"+type);
+  const seconds=.4,length=Math.max(1,Math.floor(ctx.sampleRate*seconds)),buffer=ctx.createBuffer(1,length,ctx.sampleRate),data=buffer.getChannelData(0),rnd=seededUnit(seed+"|audio|"+type);
   const base=90+(hash32(type+"|"+seed)%140);
   for(let i=0;i<length;i++){
     const t=i/ctx.sampleRate,phase=(t%seconds)/seconds,noise=rnd()*2-1;
