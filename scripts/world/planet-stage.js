@@ -810,11 +810,17 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     if(!spec.kinds.includes(entity.type)){atlasStickyEntities.delete(id);atlasLabelPlacementCache.delete(id);}
   }
   const typePriority={continent:100,ocean:96,country:90,region:82,capital:78,city:72,village:68,district:60,landmark:52};
-  const candidates=[...atlasStickyEntities.values()].map(entity=>({
+  const rankedCandidates=[...atlasStickyEntities.values()].map(entity=>({
     ...entity,
     currentFocus:entity.id===query.focus?.primaryId,
     priority:(entity.id===query.focus?.primaryId?1000:0)+(typePriority[entity.type]||0)+Number(entity.importance||0)
   })).sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
+  const candidates=[],seenDisplayNames=new Set();
+  for(const entity of rankedCandidates){
+    const displayKey=entity.type+"|"+String(entity.name).trim().toLocaleLowerCase();
+    if(seenDisplayNames.has(displayKey))continue;
+    seenDisplayNames.add(displayKey);candidates.push(entity);
+  }
   const reservedSelectors=[".planet-map-context",".planet-places-button",".planet-scale-ruler"];
   const reserved=reservedSelectors.map(selector=>root?.querySelector?.(selector)?.getBoundingClientRect?.()).filter(Boolean).map(r=>({left:r.left-rect.left,right:r.right-rect.left,top:r.top-rect.top,bottom:r.bottom-rect.top}));
   for(const entity of candidates){
@@ -896,7 +902,7 @@ function interpolateGeoPoint(a,b,t){
 function borderSignature(segments){
   let h=2166136261>>>0;
   const rows=segments.map(seg=>{
-    const pair=String(seg.stitchKey||[seg.ownerA,seg.ownerB].sort().join("~"));
+    const pair=[seg.ownerA,seg.ownerB].sort().join("~");
     const a=seg.aTile,b=seg.bTile;
     return pair+"|"+a.x+","+a.y+"|"+b.x+","+b.y;
   }).sort();
@@ -984,10 +990,7 @@ function buildMapBorderSegments(){
     const tile={x:((ax+bx)/2n).toString(),y:((ay+by)/2n).toString()},geo=worldLatLonForTile(tile.x,tile.y);
     return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
   };
-  const crossing=(a,b)=>{
-    if(!a.land||!b.land||a.owner==="none"||b.owner==="none"||a.owner===b.owner)return false;
-    return focusOwnerId?((a.owner===focusOwnerId)!==(b.owner===focusOwnerId)):true;
-  };
+  const crossing=(a,b)=>a.land&&b.land&&a.owner!=="none"&&b.owner!=="none"&&a.owner!==b.owner;
   const segmentOnLand=(a,b)=>{
     for(const t of [.2,.4,.6,.8]){
       const point=interpolateGeoPoint(a,b,t);
@@ -998,30 +1001,59 @@ function buildMapBorderSegments(){
   };
   const segments=[];let waterClippedCount=0;
   for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
-    const a=nodes[r][col],b=nodes[r][col+1],c=nodes[r+1][col+1],d=nodes[r+1][col],edges=[];
+    const a=nodes[r][col],b=nodes[r][col+1],c=nodes[r+1][col+1],d=nodes[r+1][col],edges=[],coastPoints=[];
     const pairs=[[a,b],[b,c],[d,c],[a,d]];
     for(const [left,right] of pairs){
-      if(left.land!==right.land){waterClippedCount++;continue;}
+      if(left.land!==right.land){waterClippedCount++;coastPoints.push(edgePoint(left,right));continue;}
       if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
     }
-    if(edges.length>=2){
-      const stitchKey=focusOwnerId?"focus:"+focusOwnerId:null;
-      const addSegment=(e0,e1)=>{
-        if(!segmentOnLand(e0.point,e1.point)){waterClippedCount++;return;}
-        const owners=[e0.ownerA,e0.ownerB,e1.ownerA,e1.ownerB].filter(owner=>owner&&owner!=="none");
-        const other=owners.find(owner=>!focusOwnerId||owner!==focusOwnerId)||owners[0]||"none";
-        const ownerA=focusOwnerId||[e0.ownerA,e0.ownerB].sort()[0];
-        const ownerB=focusOwnerId?other:[e0.ownerA,e0.ownerB].sort()[1];
+    if(edges.length){
+      const byPair=new Map();
+      for(const edge of edges){
+        const owners=[edge.ownerA,edge.ownerB].sort(),pairKey=owners.join("~");
+        if(!byPair.has(pairKey))byPair.set(pairKey,{owners,edges:[]});
+        byPair.get(pairKey).edges.push(edge);
+      }
+      let centerPoint;
+      const cellCenterPoint=()=>{
+        if(centerPoint!==undefined)return centerPoint;
+        const tile={
+          x:((BigInt(a.tile.x)+BigInt(b.tile.x)+BigInt(c.tile.x)+BigInt(d.tile.x))/4n).toString(),
+          y:((BigInt(a.tile.y)+BigInt(b.tile.y)+BigInt(c.tile.y)+BigInt(d.tile.y))/4n).toString()
+        };
+        const geo=worldLatLonForTile(tile.x,tile.y);
+        let land=false;try{land=Boolean(geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)?.land);}catch(_){}
+        centerPoint=land?Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)}):null;
+        return centerPoint;
+      };
+      const nearestCoastPoint=point=>{
+        if(!coastPoints.length)return null;
+        const px=BigInt(point.tile.x),py=BigInt(point.tile.y);
+        let best=null,bestDistance=Infinity;
+        for(const coast of coastPoints){
+          const dx=Number(BigInt(coast.tile.x)-px),dy=Number(BigInt(coast.tile.y)-py),distance=dx*dx+dy*dy;
+          if(distance<bestDistance){best=coast;bestDistance=distance;}
+        }
+        return best;
+      };
+      const addSegment=(e0,pointB,owners)=>{
+        if(!pointB||!segmentOnLand(e0.point,pointB)){waterClippedCount++;return;}
         segments.push({
-          a:e0.point,b:e1.point,aTile:e0.point.tile,bTile:e1.point.tile,
-          ownerA,ownerB,stitchKey:stitchKey||[ownerA,ownerB].sort().join("~")
+          a:e0.point,b:pointB,aTile:e0.point.tile,bTile:pointB.tile,
+          ownerA:owners[0],ownerB:owners[1],stitchKey:owners.join("~")
         });
       };
-      if(edges.length===2)addSegment(edges[0],edges[1]);
-      else if(edges.length===4){addSegment(edges[0],edges[1]);addSegment(edges[2],edges[3]);}
+      for(const group of byPair.values()){
+        let i=0;
+        for(;i+1<group.edges.length;i+=2)addSegment(group.edges[i],group.edges[i+1].point,group.owners);
+        if(i<group.edges.length){
+          const edge=group.edges[i],terminal=nearestCoastPoint(edge.point)||cellCenterPoint();
+          addSegment(edge,terminal,group.owners);
+        }
+      }
     }
   }
-  const topologySignature=borderSignature(segments),worldVertexCount=segments.length*3;
+  const topologySignature=borderSignature(segments),worldVertexCount=segments.length*2;
   const diagnostics=segments.slice(0,24).map(seg=>Object.freeze({
     ownerPair:Object.freeze([seg.ownerA,seg.ownerB]),
     aTile:seg.aTile,bTile:seg.bTile,
