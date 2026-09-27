@@ -1195,6 +1195,25 @@ function borderRunClosed(run){
   const lonDelta=wrapLongitudeRadians(Number(a.longitudeRadians)-Number(b.longitudeRadians))*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(meanLat));
   return Math.hypot(latDelta,lonDelta)<4000;
 }
+function borderChainClosed(chain){
+  const points=chain?.points||[];if(points.length<3)return false;
+  const a=points[0],b=points[points.length-1];
+  if(String(a?.tile?.x)===String(b?.tile?.x)&&String(a?.tile?.y)===String(b?.tile?.y))return true;
+  const latDelta=(Number(a.latitudeRadians)-Number(b.latitudeRadians))*WORLD_RADIUS_METERS;
+  const meanLat=(Number(a.latitudeRadians)+Number(b.latitudeRadians))*.5;
+  const lonDelta=wrapLongitudeRadians(Number(a.longitudeRadians)-Number(b.longitudeRadians))*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(meanLat));
+  return Math.hypot(latDelta,lonDelta)<4000;
+}
+function borderChainLengthMeters(chain){
+  const points=chain?.points||[];let total=0;
+  for(let i=1;i<points.length;i++){
+    const a=points[i-1],b=points[i],latDelta=(Number(b.latitudeRadians)-Number(a.latitudeRadians))*WORLD_RADIUS_METERS;
+    const meanLat=(Number(a.latitudeRadians)+Number(b.latitudeRadians))*.5;
+    const lonDelta=wrapLongitudeRadians(Number(b.longitudeRadians)-Number(a.longitudeRadians))*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(meanLat));
+    total+=Math.hypot(latDelta,lonDelta);
+  }
+  return total;
+}
 function renderMapPresentation(){
   const layer=ensureMapPresentationDom();if(!layer)return;
   const started=performance.now(),context=mapContextForFocus(),contextKinds=mapContextKindsForBand(zoomState.band),placeKinds=mapPlaceKindsForBand(zoomState.band);
@@ -1207,7 +1226,18 @@ function renderMapPresentation(){
   const border=buildMapBorderSegments(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();
   let projectedBorderSegmentCount=0,rejectedInteriorBorderStubCount=0;
   const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
-  const borderLines=stitchMapBorderSegments(border.segments);
+  const rawBorderLines=stitchMapBorderSegments(border.segments);
+  const openLengths=rawBorderLines.filter(chain=>!borderChainClosed(chain)).map(borderChainLengthMeters);
+  const dominantOpenLength=openLengths.length?Math.max(...openLengths):0;
+  // At country scale the focused owner should read as one coherent boundary.
+  // A tiny disconnected open component is almost always a coarse-sampling
+  // artifact. Keep every closed component (real enclaves/exclaves) and every
+  // substantial open component; suppress only components below 45% of the
+  // dominant open contour when multiple components exist.
+  const borderLines=rawBorderLines.filter(chain=>
+    rawBorderLines.length<=1||borderChainClosed(chain)||borderChainLengthMeters(chain)>=dominantOpenLength*.45
+  );
+  const suppressedMinorBorderPolylineCount=rawBorderLines.length-borderLines.length;
   for(const chain of borderLines){
     let run=[];
     const flush=()=>{
@@ -1294,7 +1324,7 @@ function renderMapPresentation(){
     maxLabelBudget:spec.budget,labelQueryBuildMs:atlas.query.buildMs,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
     borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
-    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,rejectedInteriorBorderStubCount,
+    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,rawBorderPolylineCount:rawBorderLines.length,suppressedMinorBorderPolylineCount,rejectedInteriorBorderStubCount,
     maxLabelDisplacementPixels:visible.reduce((max,item)=>Math.max(max,Number(item.displacementPixels||0)),0),
     registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
     projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
