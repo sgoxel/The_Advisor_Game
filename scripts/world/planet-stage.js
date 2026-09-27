@@ -1440,7 +1440,17 @@ function zoomBandFor(value){
   if(value<=SEMANTIC_LOCAL_BAND_START)return (ZOOM_BANDS.find(b=>b.max!==null&&value<=b.max)||ZOOM_BANDS[2]).id;
   return LOCAL_DETAIL_LEVELS[rawLodIndexForZoom(value)].band;
 }
-function updateZoomFocusFromRotation(){zoomState.focusLatitudeRadians=pitchDegrees*Math.PI/180;zoomState.focusLongitudeRadians=-yawDegrees*Math.PI/180;}
+function updateZoomFocusFromRotation(){
+  // PlayCanvas interprets local Euler angles in XYZ order. For Z=0, the local
+  // direction that the rotated sphere places on world +Z is R^T*[0,0,1]:
+  // [-sin(yaw), sin(pitch)*cos(yaw), cos(pitch)*cos(yaw)].
+  // Convert that exact direction back to the canonical spherical latitude/lon
+  // instead of assuming latitude===pitch and longitude===-yaw.
+  const pitch=pitchDegrees*Math.PI/180,yaw=yawDegrees*Math.PI/180;
+  const x=-Math.sin(yaw),y=Math.sin(pitch)*Math.cos(yaw),z=Math.cos(pitch)*Math.cos(yaw);
+  zoomState.focusLatitudeRadians=Math.asin(clamp(y,-1,1));
+  zoomState.focusLongitudeRadians=wrapLongitudeRadians(Math.atan2(x,z));
+}
 function lodHysteresisAt(index){
   const max=levelMaxScalar(index),previousMax=index>0?levelMaxScalar(index-1):projectionState.transitionStart;
   return Math.min(LOCAL_LOD_HYSTERESIS,Math.max(.0005,(max-previousMax)*.2));
@@ -2822,9 +2832,18 @@ function rotateBy(deltaYaw,deltaPitch){
   return setRotation(yawDegrees+Number(deltaYaw||0),pitchDegrees+Number(deltaPitch||0));
 }
 function rotationForLatLon(latitudeRadians,longitudeRadians){
+  // Solve the exact inverse of PlayCanvas XYZ Euler rotation for the canonical
+  // local direction d=[cos(lat)sin(lon), sin(lat), cos(lat)cos(lon)] such that
+  // R(pitch,yaw,0)*d == world +Z. Choose the yaw branch whose cos(yaw) has the
+  // same sign as d.z; that keeps the required pitch in the minimal +/-90 range.
+  const lat=clamp(Number(latitudeRadians)||0,-Math.PI*.499999,Math.PI*.499999),lon=wrapLongitudeRadians(longitudeRadians);
+  const c=Math.cos(lat),dx=c*Math.sin(lon),dy=Math.sin(lat),dz=c*Math.cos(lon);
+  const yz=Math.hypot(dy,dz),signCosYaw=dz<0?-1:1;
+  const yaw=Math.atan2(-dx,signCosYaw*yz);
+  const pitch=yz<1e-12?0:Math.atan2(dy*signCosYaw,Math.abs(dz));
   return Object.freeze({
-    yawDegrees:normalizeYaw(-longitudeRadians*180/Math.PI),
-    pitchDegrees:clamp(latitudeRadians*180/Math.PI,-78,78)
+    yawDegrees:normalizeYaw(yaw*180/Math.PI),
+    pitchDegrees:clamp(pitch*180/Math.PI,-82,82)
   });
 }
 function setViewTarget(target){
