@@ -8168,7 +8168,8 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-012 lost bounded/no-full-world contract in frame {index}: {proof}")
             if proof.get("sameSeedSpatialAuthority") is not True or (proof.get("verify") or {}).get("pass") is not True:
                 raise RuntimeError(f"WP-012 coordinate round-trip/authority verification failed in frame {index}: {proof}")
-            if float(proof.get("maxRoundTripErrorMeters") or 999)>2.01:
+            round_trip_error=proof.get("maxRoundTripErrorMeters")
+            if round_trip_error is None or float(round_trip_error)>2.01:
                 raise RuntimeError(f"WP-012 round-trip error exceeds one 2m tile in frame {index}: {proof}")
             marker=proof.get("centerMarker") or {}
             if marker.get("visible") is not True or marker.get("worldAnchored") is not True or marker.get("fixedHudDot") is not False or not marker.get("canonicalSpatialCellId"):
