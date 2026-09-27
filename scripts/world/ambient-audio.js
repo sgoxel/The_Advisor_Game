@@ -109,17 +109,32 @@ function contextZones(){
   if(!seed)return Object.freeze({stage,zones:Object.freeze([]),seed:"",hour:null,biome:"unknown",activityCount:0});
   const when=fantasyNow(),hour=fantasyHour(when),focus=stage.canonicalFocus?.worldTile||{x:"0",y:"0"};
   const localAudible=Number(stage.zoom?.scalar||0)>=.84;
-  const activity=activityCounts(seed,when),zones=[];
-  const lots=window.SpecialLots?.build?.(seed)||[];
-  const village=window.StartingVillage?.plan?.(seed)||null;
-  if(localAudible&&village){
-    const center=village.center||{x:"0",y:"0"},east=tileDeltaMeters(center.x,focus.x),north=tileDeltaMeters(center.y,focus.y);
-    const distance=Math.hypot(east,north);
-    if(activity.awake>=2&&distance<=170){
-      zones.push(makeZone("village-chatter","village-chatter","Village chatter",east,north,"DailyActivity.current + StartingVillage.plan",activity.awake));
-    }
+  if(!localAudible){
+    return Object.freeze({stage,zones:Object.freeze([]),seed,hour:Number(hour.toFixed(3)),biome:"inactive",activityCount:0});
   }
-  if(localAudible){
+
+  const zones=[],village=window.StartingVillage?.plan?.(seed)||null;
+  let villageEast=Infinity,villageNorth=Infinity,villageDistance=Infinity;
+  if(village){
+    const center=village.center||{x:"0",y:"0"};
+    villageEast=tileDeltaMeters(center.x,focus.x);villageNorth=tileDeltaMeters(center.y,focus.y);
+    villageDistance=Math.hypot(villageEast,villageNorth);
+  }
+  // DailyActivity/SpecialLots are intentionally read only after the canonical
+  // local NPC/static presentation is active. That path already materializes and
+  // caches the same 12-resident authority, avoiding a cold audio-side rebuild
+  // on the visible-frame transition.
+  const localStaticReady=Boolean(stage.projection?.localStatic?.active);
+  const localNpcReady=Number(stage.npcPresentation?.activeCount||0)>0;
+  const nearVillage=Boolean(village&&villageDistance<=260);
+  const detailedActivityReady=nearVillage&&localStaticReady&&localNpcReady;
+  const activity=detailedActivityReady?activityCounts(seed,when):Object.freeze({current:Object.freeze([]),awake:0,byBuilding:new Map()});
+
+  if(detailedActivityReady&&activity.awake>=2&&villageDistance<=170){
+    zones.push(makeZone("village-chatter","village-chatter","Village chatter",villageEast,villageNorth,"DailyActivity.current + StartingVillage.plan",activity.awake));
+  }
+  if(detailedActivityReady){
+    const lots=window.SpecialLots?.build?.(seed)||[];
     for(const lot of lots){
       const count=activity.byBuilding.get(String(lot.id))||0;
       if(count<=0)continue;
@@ -134,11 +149,12 @@ function contextZones(){
       if(zone.distanceMeters<=zone.radiusMeters)zones.push(zone);
     }
   }
+
   const geo=window.PlanetGeography?.create?.(seed);
   const lat=(Number(stage.canonicalFocus?.latitudeDegrees)||0)*Math.PI/180;
   const lon=(Number(stage.canonicalFocus?.longitudeDegrees)||0)*Math.PI/180;
   const sample=geo?.sampleLatLon?.(lat,lon)||null,biome=localBiome(sample);
-  if(localAudible&&sample){
+  if(sample){
     if(!sample.land||biome==="coast"){
       zones.push(makeZone("broad-water","water-ambience","Nearby water",0,0,"PlanetGeography.sampleLatLon",1));
     }else if(biome==="wooded"){
