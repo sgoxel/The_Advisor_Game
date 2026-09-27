@@ -7307,19 +7307,22 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 const stage=window.PlanetStage,s=stage.snapshot(),fabric=window.SeedCoordinateFabric.create(s.activeSeed,{
                   radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
                 const lod=s?.projection?.spatialLod||{},cell=lod.requestedCell;
-                if(!cell?.worldBounds)throw new Error('WP-013 handoff source cell bounds unavailable');
-                const shift=Math.max(12000,Number(cell.cellSizeMeters||0)*1.25);
-                const reg=fabric.registeredMetersForLatLon(
-                  Number(s.canonicalFocus.latitudeDegrees)*Math.PI/180,
-                  Number(s.canonicalFocus.longitudeDegrees)*Math.PI/180);
-                const ll=fabric.latLonForRegisteredMeters(Number(reg.eastMeters)+shift,Number(reg.northMeters)+shift*.37);
-                stage.setViewTarget({latitudeDegrees:Number(ll.latitudeRadians)*180/Math.PI,longitudeDegrees:Number(ll.longitudeRadians)*180/Math.PI});
-                return {sourceCellId:cell.id,shiftMeters:shift};
+                if(!cell?.worldBounds||!cell?.centerRegisteredMeters)throw new Error('WP-013 handoff source cell bounds unavailable');
+                // Stay inside the already-prepared coarse canonical cell but
+                // move far enough to guarantee an unseen 64m ground child.
+                const margin=Math.max(512,Math.min(Number(cell.cellSizeMeters||0)*.2,65536));
+                const b=cell.worldBounds;
+                const east=Math.min(Number(b.maxEastMeters)-margin,Number(cell.centerRegisteredMeters.east)+margin);
+                const north=Math.min(Number(b.maxNorthMeters)-margin,Number(cell.centerRegisteredMeters.north)+margin*.37);
+                const ll=fabric.latLonForRegisteredMeters(east,north);
+                stage.setViewTarget({latitudeRadians:Number(ll.latitudeRadians),longitudeRadians:Number(ll.longitudeRadians)});
+                return {sourceCellId:cell.id,shiftMeters:margin,targetRegistered:{east,north}};
             """)
             auxiliary["handoffFreshFocus"]=fresh
             WebDriverWait(driver,75.0).until(lambda d:d.execute_script("""
-                const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
-                return Number(r?.pendingPreparationCount||0)===0&&r?.visibleLevel==='local-area-wide';
+                const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},lod=s?.projection?.spatialLod||{};
+                return Number(r?.pendingPreparationCount||0)===0&&
+                  r?.activeCellId===lod?.requestedCell?.id&&lod?.visibleContainsFocus===true;
             """))
             immediate=driver.execute_script("""
                 const stage=window.PlanetStage;
@@ -7341,7 +7344,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 if(!cell?.worldBounds)throw new Error('WP-013 requested cell bounds unavailable');
                 const b=cell.worldBounds,east=Number(b.maxEastMeters)+Math.max(4,Number(cell.cellSizeMeters)*.015),north=(Number(b.minNorthMeters)+Number(b.maxNorthMeters))*.5;
                 const ll=fabric.latLonForRegisteredMeters(east,north);
-                stage.setViewTarget({latitudeDegrees:Number(ll.latitudeRadians)*180/Math.PI,longitudeDegrees:Number(ll.longitudeRadians)*180/Math.PI});
+                stage.setViewTarget({latitudeRadians:Number(ll.latitudeRadians),longitudeRadians:Number(ll.longitudeRadians)});
                 return {fromCell:cell,fromFocus:before.canonicalFocus,toRegistered:{east,north}};
             """)
             WebDriverWait(driver,75.0).until(lambda d:d.execute_script("""
