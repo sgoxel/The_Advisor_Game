@@ -53,20 +53,6 @@ let localStaticMaterials=null;
 let localFaunaRoot=null;
 let localFaunaActors=[];
 let localFaunaClock=0;
-let localFaunaPresenceOverride=null;
-let localFaunaReactionAccumulator=0;
-const LOCAL_FAUNA_BUCKET_METERS=24;
-const LOCAL_FAUNA_REACTION_INTERVAL_SECONDS=.10;
-let localFaunaBuckets=new Map();
-let localFaunaBehavior={
-  active:false,presentationOnly:true,simulationAuthority:false,authority:"SEED-derived ambient fauna + local presence reaction",
-  presenceSource:"canonical-focus",presenceActive:false,presenceEastMeters:0,presenceNorthMeters:0,
-  bucketSizeMeters:LOCAL_FAUNA_BUCKET_METERS,reactionIntervalMs:LOCAL_FAUNA_REACTION_INTERVAL_SECONDS*1000,
-  activeCount:0,sleepingCount:0,reactionChecks:0,reactionTransitions:0,reactionCount:0,
-  stateCounts:{idle:0,alert:0,flee:0,flight:0,returning:0,sleeping:0},
-  kindCounts:{},lastReactionUpdateMs:0,maxReactionUpdateMs:0,domesticAvailable:false,
-  actorStates:[],fullWorldScan:false
-};
 let localWildernessEnabled=true;
 let localNpcRoot=null;
 let localNpcMaterials=null;
@@ -1740,42 +1726,9 @@ function buildLocalFaunaMesh(kind,size,unit){
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   return {mesh,triangles:indices.length/3};
 }
-function localFaunaBehaviorConfig(kind){
-  if(kind==="bird"||kind==="waterbird")return Object.freeze({triggerMeters:16,releaseMeters:26,speedMetersPerSecond:13,maxDisplacementMeters:16,liftMeters:kind==="waterbird"?4.8:6.2,state:"flight"});
-  if(kind==="hare")return Object.freeze({triggerMeters:12,releaseMeters:22,speedMetersPerSecond:10,maxDisplacementMeters:13,liftMeters:.45,state:"flee"});
-  return Object.freeze({triggerMeters:22,releaseMeters:34,speedMetersPerSecond:7.2,maxDisplacementMeters:20,liftMeters:.20,state:"flee"});
-}
-function localFaunaBucketKey(eastMeters,northMeters){
-  return Math.floor(Number(eastMeters||0)/LOCAL_FAUNA_BUCKET_METERS)+","+Math.floor(Number(northMeters||0)/LOCAL_FAUNA_BUCKET_METERS);
-}
-function rebuildLocalFaunaBuckets(){
-  localFaunaBuckets=new Map();
-  for(let index=0;index<localFaunaActors.length;index++){
-    const actor=localFaunaActors[index],key=localFaunaBucketKey(actor.baseEastMeters,actor.baseNorthMeters);
-    if(!localFaunaBuckets.has(key))localFaunaBuckets.set(key,[]);
-    localFaunaBuckets.get(key).push(index);
-  }
-}
-function localFaunaPresence(){
-  if(localFaunaPresenceOverride?.active)return Object.freeze({active:true,eastMeters:Number(localFaunaPresenceOverride.eastMeters||0),northMeters:Number(localFaunaPresenceOverride.northMeters||0),source:"explicit-local-presence"});
-  // Until the authoritative protagonist is enabled in the planet-first scene,
-  // the canonical local focus is the bounded player-presence proxy. It affects
-  // presentation reactions only and never writes Simulation/world state.
-  return Object.freeze({active:Boolean(tangentPatch?.enabled&&localFaunaActors.length),eastMeters:0,northMeters:0,source:"canonical-focus"});
-}
-function localFaunaNearbyIndices(presence){
-  if(!presence?.active)return [];
-  const bx=Math.floor(presence.eastMeters/LOCAL_FAUNA_BUCKET_METERS),by=Math.floor(presence.northMeters/LOCAL_FAUNA_BUCKET_METERS),out=[];
-  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
-    const list=localFaunaBuckets.get((bx+dx)+","+(by+dy));if(list)out.push(...list);
-  }
-  return out;
-}
 function clearLocalFauna(){
   for(const actor of localFaunaActors)actor.mesh?.destroy?.();
-  localFaunaActors=[];localFaunaBuckets=new Map();localFaunaReactionAccumulator=0;localFaunaRoot?.destroy?.();localFaunaRoot=null;
-  localFaunaBehavior={...localFaunaBehavior,active:false,activeCount:0,sleepingCount:0,presenceActive:false,
-    stateCounts:{idle:0,alert:0,flee:0,flight:0,returning:0,sleeping:0},kindCounts:{},actorStates:[]};
+  localFaunaActors=[];localFaunaRoot?.destroy?.();localFaunaRoot=null;
 }
 function rebuildLocalFauna(plan,frame,reveal){
   clearLocalFauna();
@@ -1787,38 +1740,10 @@ function rebuildLocalFauna(plan,frame,reveal){
     const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?2.0:item.kind==="waterbird"?.95:item.kind==="bird"?.78:1.12)*item.scale;
     const built=buildLocalFaunaMesh(item.kind,size,unit),actor=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actor);
     actor.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actor.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actor)];
-    const x=item.east/unit,z=-item.north/unit,config=localFaunaBehaviorConfig(item.kind);actor.setLocalPosition(x,y,z);
-    localFaunaActors.push({
-      id:"FAUNA|"+String(plan.signature||"local")+"|"+item.kind+"|"+item.worldTile.x+"|"+item.worldTile.y,
-      entity:actor,mesh:built.mesh,triangles:built.triangles,kind:item.kind,phase:item.rotation,unit,
-      baseX:x,baseY:y,baseZ:z,baseEastMeters:Number(item.east),baseNorthMeters:Number(item.north),
-      offsetEastMeters:0,offsetNorthMeters:0,verticalMeters:0,state:"idle",previousState:"idle",
-      threatActive:false,threatDistanceMeters:null,config,lastHeadingRadians:item.rotation||0,reactionSerial:0
-    });
+    const x=item.east/unit,z=-item.north/unit;actor.setLocalPosition(x,y,z);
+    localFaunaActors.push({entity:actor,mesh:built.mesh,triangles:built.triangles,baseX:x,baseY:y,baseZ:z,phase:item.rotation,radius:(item.kind==="bird"?.7:.35)/unit,kind:item.kind});
   }
-  rebuildLocalFaunaBuckets();
-  const kindCounts={};for(const actor of localFaunaActors)kindCounts[actor.kind]=(kindCounts[actor.kind]||0)+1;
-  localFaunaBehavior={...localFaunaBehavior,active:localFaunaActors.length>0,activeCount:localFaunaActors.length,kindCounts,
-    domesticAvailable:localFaunaActors.some(actor=>["livestock","dog"].includes(actor.kind)),fullWorldScan:false};
   return localFaunaActors.length;
-}
-function setAmbientFaunaPresence(value){
-  if(value==null||value===false){
-    localFaunaPresenceOverride=null;
-  }else{
-    const source=typeof value==="object"?value:{};
-    localFaunaPresenceOverride=Object.freeze({active:source.active!==false,eastMeters:Number(source.eastMeters||0),northMeters:Number(source.northMeters||0)});
-  }
-  localFaunaReactionAccumulator=LOCAL_FAUNA_REACTION_INTERVAL_SECONDS;
-  return snapshot();
-}
-function localFaunaActorEvidence(){
-  return Object.freeze(localFaunaActors.map(actor=>Object.freeze({
-    id:actor.id,kind:actor.kind,state:actor.state,baseEastMeters:Number(actor.baseEastMeters.toFixed(3)),baseNorthMeters:Number(actor.baseNorthMeters.toFixed(3)),
-    offsetEastMeters:Number(actor.offsetEastMeters.toFixed(3)),offsetNorthMeters:Number(actor.offsetNorthMeters.toFixed(3)),
-    verticalMeters:Number(actor.verticalMeters.toFixed(3)),threatDistanceMeters:actor.threatDistanceMeters==null?null:Number(actor.threatDistanceMeters.toFixed(3)),
-    reactionSerial:actor.reactionSerial,triggerMeters:actor.config.triggerMeters,releaseMeters:actor.config.releaseMeters
-  })));
 }
 function renderLocalWilderness(resource,frame,reveal){
   const plan=resource?.wildernessPlan;
@@ -3282,56 +3207,14 @@ function updateAmbientMotion(dt){
   const started=performance.now(),step=Math.min(.12,Math.max(0,Number(dt)||0));ambientMotion.cloudYawDegrees=(ambientMotion.cloudYawDegrees+step*2.4)%360;
   if(cloudLayer)cloudLayer.setLocalEulerAngles(0,ambientMotion.cloudYawDegrees,0);
   localFaunaClock=(localFaunaClock+step)%10000;
-  const faunaStarted=performance.now(),presence=localFaunaPresence();
-  localFaunaReactionAccumulator+=step;
-  if(localFaunaActors.length&&localFaunaReactionAccumulator>=LOCAL_FAUNA_REACTION_INTERVAL_SECONDS){
-    localFaunaReactionAccumulator%=LOCAL_FAUNA_REACTION_INTERVAL_SECONDS;
-    const nearby=new Set(localFaunaNearbyIndices(presence));
-    for(let index=0;index<localFaunaActors.length;index++){
-      const actor=localFaunaActors[index],east=actor.baseEastMeters+actor.offsetEastMeters,north=actor.baseNorthMeters+actor.offsetNorthMeters;
-      let distance=Infinity;
-      if(presence.active&&nearby.has(index))distance=Math.hypot(east-presence.eastMeters,north-presence.northMeters);
-      actor.threatDistanceMeters=Number.isFinite(distance)?distance:null;
-      const shouldReact=Number.isFinite(distance)&&distance<=actor.config.triggerMeters;
-      const shouldRelease=!Number.isFinite(distance)||distance>=actor.config.releaseMeters;
-      actor.threatActive=shouldReact||(actor.threatActive&&!shouldRelease);
-      const next=actor.threatActive?actor.config.state:(Math.hypot(actor.offsetEastMeters,actor.offsetNorthMeters)>.6||actor.verticalMeters>.25?"returning":"idle");
-      if(next!==actor.state){actor.previousState=actor.state;actor.state=next;actor.reactionSerial++;localFaunaBehavior.reactionTransitions++;if(next==="flee"||next==="flight")localFaunaBehavior.reactionCount++;}
-    }
-    localFaunaBehavior.reactionChecks+=nearby.size;
-  }
+  const faunaStarted=performance.now();
   for(const actor of localFaunaActors){
-    const cfg=actor.config;
-    if(actor.state==="flee"||actor.state==="flight"){
-      let dx=(actor.baseEastMeters+actor.offsetEastMeters)-presence.eastMeters,dn=(actor.baseNorthMeters+actor.offsetNorthMeters)-presence.northMeters,len=Math.hypot(dx,dn);
-      if(len<.001){dx=Math.cos(actor.phase||0);dn=Math.sin(actor.phase||0);len=1;}
-      dx/=len;dn/=len;actor.lastHeadingRadians=Math.atan2(dn,dx);
-      const current=Math.hypot(actor.offsetEastMeters,actor.offsetNorthMeters),remaining=Math.max(0,cfg.maxDisplacementMeters-current),travel=Math.min(remaining,cfg.speedMetersPerSecond*step);
-      actor.offsetEastMeters+=dx*travel;actor.offsetNorthMeters+=dn*travel;
-      actor.verticalMeters=actor.state==="flight"?Math.min(cfg.liftMeters,actor.verticalMeters+step*cfg.speedMetersPerSecond*.65):Math.min(cfg.liftMeters,actor.verticalMeters+step*.7);
-    }else if(actor.state==="returning"){
-      const len=Math.hypot(actor.offsetEastMeters,actor.offsetNorthMeters),travel=Math.min(len,cfg.speedMetersPerSecond*.48*step);
-      if(len>.001){actor.offsetEastMeters-=actor.offsetEastMeters/len*travel;actor.offsetNorthMeters-=actor.offsetNorthMeters/len*travel;}
-      actor.verticalMeters=Math.max(0,actor.verticalMeters-step*cfg.speedMetersPerSecond*.35);
-      if(len<=.65&&actor.verticalMeters<=.1)actor.state="idle";
-    }else{
-      const t=localFaunaClock*.45+actor.phase,wanderMeters=actor.kind==="deer"?1.1:actor.kind==="hare"?.55:.8;
-      actor.offsetEastMeters=Math.sin(t)*wanderMeters;actor.offsetNorthMeters=Math.cos(t*.73)*wanderMeters*.65;
-      actor.verticalMeters=(actor.kind==="bird"||actor.kind==="waterbird")?Math.abs(Math.sin(t*1.4))*.18:0;
-      actor.lastHeadingRadians=t*.5;
-    }
-    const x=actor.baseX+actor.offsetEastMeters/actor.unit,z=actor.baseZ-actor.offsetNorthMeters/actor.unit,y=actor.baseY+actor.verticalMeters/actor.unit;
-    actor.entity.setLocalPosition(x,y,z);actor.entity.setLocalEulerAngles(0,actor.lastHeadingRadians*180/Math.PI,0);
+    const t=localFaunaClock*.65+actor.phase,dx=Math.sin(t)*actor.radius,dz=Math.cos(t*.73)*actor.radius*.65;
+    actor.entity.setLocalPosition(actor.baseX+dx,actor.baseY+Math.abs(Math.sin(t*1.8))*actor.radius*.10,actor.baseZ+dz);
+    actor.entity.setLocalEulerAngles(0,(t*35)%360,0);
   }
-  const stateCounts={idle:0,alert:0,flee:0,flight:0,returning:0,sleeping:0};
-  for(const actor of localFaunaActors)stateCounts[actor.state]=(stateCounts[actor.state]||0)+1;
   const faunaMs=performance.now()-faunaStarted;
-  localFaunaBehavior={...localFaunaBehavior,active:localFaunaActors.length>0,activeCount:localFaunaActors.length,sleepingCount:0,
-    presenceSource:presence.source,presenceActive:presence.active,presenceEastMeters:presence.eastMeters,presenceNorthMeters:presence.northMeters,
-    stateCounts,lastReactionUpdateMs:Number(faunaMs.toFixed(4)),maxReactionUpdateMs:Math.max(Number(localFaunaBehavior.maxReactionUpdateMs||0),Number(faunaMs.toFixed(4))),
-    actorStates:localFaunaActorEvidence(),fullWorldScan:false};
-  wilderness={...wilderness,localFrameUpdateMs:Number(faunaMs.toFixed(4)),localMaxFrameUpdateMs:Math.max(Number(wilderness.localMaxFrameUpdateMs||0),Number(faunaMs.toFixed(4))),localAmbientFaunaActiveCount:localFaunaActors.length,
-    localFaunaBehavior:Object.freeze({...localFaunaBehavior,actorStates:localFaunaActorEvidence()})};
+  wilderness={...wilderness,localFrameUpdateMs:Number(faunaMs.toFixed(4)),localMaxFrameUpdateMs:Math.max(Number(wilderness.localMaxFrameUpdateMs||0),Number(faunaMs.toFixed(4))),localAmbientFaunaActiveCount:localFaunaActors.length};
   ambientMotion.updateCount++;ambientMotion.lastUpdateMs=performance.now()-started;ambientMotion.maxUpdateMs=Math.max(ambientMotion.maxUpdateMs,ambientMotion.lastUpdateMs);
 }
 function lerp(a,b,t){return a+(b-a)*t;}
@@ -3700,8 +3583,7 @@ function snapshot(){
     ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
     atmosphere:Object.freeze({...atmosphere}),
     atmosphereTimeBinding:Object.freeze({...atmosphereTimeBinding}),
-    wilderness:Object.freeze({...wilderness,localFaunaBehavior:Object.freeze({...localFaunaBehavior,actorStates:localFaunaActorEvidence()})}),
-    faunaBehavior:Object.freeze({...localFaunaBehavior,actorStates:localFaunaActorEvidence()}),
+    wilderness:Object.freeze({...wilderness}),
     inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
@@ -3747,14 +3629,14 @@ function destroy(){
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();
   app?.destroy?.();
-  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaPresenceOverride=null;localFaunaReactionAccumulator=0;localFaunaBuckets=new Map();localFaunaBehavior={...localFaunaBehavior,active:false,activeCount:0,actorStates:[],reactionChecks:0,reactionTransitions:0,reactionCount:0};localWildernessEnabled=true;localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
+  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localWildernessEnabled=true;localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
   inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
   geography=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasEntityCache.clear();atlasIdentityCache.clear();localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,setWorldTileFocus,worldLatLonForTile,rotationForLatLon,setZoomScalar,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setAmbientFaunaPresence,ambientFaunaActors:localFaunaActorEvidence,setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,setWorldTileFocus,worldLatLonForTile,rotationForLatLon,setZoomScalar,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
