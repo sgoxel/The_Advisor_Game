@@ -89,8 +89,8 @@ function create(seedValue,options={}){
     const origin=describeTile(originTile.x,originTile.y),target=describeTile(targetTile.x,targetTile.y);
     return Object.freeze({
       originTile:origin.worldTile,targetTile:target.worldTile,
-      eastMeters:Number(((BigInt(target.worldTile.x)-BigInt(origin.worldTile.x))*BigInt(Math.round(tileMeters*1000)))/1000n),
-      northMeters:Number(((BigInt(target.worldTile.y)-BigInt(origin.worldTile.y))*BigInt(Math.round(tileMeters*1000)))/1000n),
+      eastMeters:Number(BigInt(target.worldTile.x)-BigInt(origin.worldTile.x))*tileMeters,
+      northMeters:Number(BigInt(target.worldTile.y)-BigInt(origin.worldTile.y))*tileMeters,
       authority:"canonical-registered-meter-delta"
     });
   }
