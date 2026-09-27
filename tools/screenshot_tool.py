@@ -7397,8 +7397,17 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 if abs(psa-psb)>max(.02,.02*max(abs(psa),abs(psb),1)):
                     raise RuntimeError(f"WP-005 reverse zoom settlement presentation mismatch at scalar {expected[a]}: forward={psa} reverse={psb}")
             ra,rb=pa.get("resourceBudget") or {},pb.get("resourceBudget") or {}
-            if str(ra.get("requestedLevel") or "")!=str(rb.get("requestedLevel") or ""):
-                raise RuntimeError(f"WP-005 reverse zoom requested LOD mismatch at scalar {expected[a]}: forward={ra.get('requestedLevel')} reverse={rb.get('requestedLevel')}")
+            aa,ab=int(ra.get("activeResourceCount") or 0),int(rb.get("activeResourceCount") or 0)
+            if aa!=ab:
+                raise RuntimeError(f"WP-005 reverse zoom active LOD count mismatch at scalar {expected[a]}: forward={aa} reverse={ab}")
+            # Cached/prepared LOD metadata may remain after zooming back to globe scale,
+            # but an inactive cache is not visible world detail. Enforce LOD symmetry
+            # only while a local terrain resource is actually active on screen.
+            if aa>0:
+                if str(ra.get("requestedLevel") or "")!=str(rb.get("requestedLevel") or ""):
+                    raise RuntimeError(f"WP-005 reverse zoom requested LOD mismatch at scalar {expected[a]}: forward={ra.get('requestedLevel')} reverse={rb.get('requestedLevel')}")
+                if str(ra.get("visibleLevel") or "")!=str(rb.get("visibleLevel") or ""):
+                    raise RuntimeError(f"WP-005 reverse zoom visible LOD mismatch at scalar {expected[a]}: forward={ra.get('visibleLevel')} reverse={rb.get('visibleLevel')}")
         phone_landscape=frames[20].get("runtime",{}).get("viewport",{})
         phone_portrait=frames[21].get("runtime",{}).get("viewport",{})
         if int(phone_landscape.get("width") or 0)>900 or int(phone_landscape.get("height") or 0)>430:
