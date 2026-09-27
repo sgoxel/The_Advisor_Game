@@ -990,18 +990,7 @@ function buildMapBorderSegments(){
     const tile={x:((ax+bx)/2n).toString(),y:((ay+by)/2n).toString()},geo=worldLatLonForTile(tile.x,tile.y);
     return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
   };
-  const coastLandPoint=(a,b)=>{
-    const land=a.land?a:b,water=a.land?b:a;
-    let landGeo={latitudeRadians:land.geo.latitudeRadians,longitudeRadians:land.geo.longitudeRadians};
-    let waterGeo={latitudeRadians:water.geo.latitudeRadians,longitudeRadians:water.geo.longitudeRadians};
-    for(let i=0;i<6;i++){
-      const mid=interpolateGeoPoint(landGeo,waterGeo,.5);
-      let sample=null;try{sample=geography?.sampleLatLon?.(mid.latitudeRadians,mid.longitudeRadians)||null;}catch(_){sample=null;}
-      if(sample?.land)landGeo=mid;else waterGeo=mid;
-    }
-    const tile=mapWorldTileAt(landGeo.latitudeRadians,landGeo.longitudeRadians);
-    return Object.freeze({latitudeRadians:landGeo.latitudeRadians,longitudeRadians:landGeo.longitudeRadians,tile});
-  };
+
   const crossing=(a,b)=>a.land&&b.land&&a.owner!=="none"&&b.owner!=="none"&&a.owner!==b.owner;
   const segmentOnLand=(a,b)=>{
     for(const t of [.2,.4,.6,.8]){
@@ -1038,18 +1027,7 @@ function buildMapBorderSegments(){
         centerPoint=land?Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)}):null;
         return centerPoint;
       };
-      let solvedCoastPoints;
-      const nearestCoastPoint=point=>{
-        if(!coastPairs.length)return null;
-        if(!solvedCoastPoints)solvedCoastPoints=coastPairs.map(pair=>coastLandPoint(pair[0],pair[1]));
-        const px=BigInt(point.tile.x),py=BigInt(point.tile.y);
-        let best=null,bestDistance=Infinity;
-        for(const coast of solvedCoastPoints){
-          const dx=Number(BigInt(coast.tile.x)-px),dy=Number(BigInt(coast.tile.y)-py),distance=dx*dx+dy*dy;
-          if(distance<bestDistance){best=coast;bestDistance=distance;}
-        }
-        return best;
-      };
+
       const addSegment=(e0,pointB,owners)=>{
         if(!pointB||!segmentOnLand(e0.point,pointB)){waterClippedCount++;return;}
         segments.push({
@@ -1060,8 +1038,8 @@ function buildMapBorderSegments(){
       for(const group of byPair.values()){
         let i=0;
         for(;i+1<group.edges.length;i+=2)addSegment(group.edges[i],group.edges[i+1].point,group.owners);
-        if(i<group.edges.length){
-          const edge=group.edges[i],terminal=nearestCoastPoint(edge.point)||cellCenterPoint();
+        if(i<group.edges.length&&coastPairs.length===0){
+          const edge=group.edges[i],terminal=cellCenterPoint();
           addSegment(edge,terminal,group.owners);
         }
       }
