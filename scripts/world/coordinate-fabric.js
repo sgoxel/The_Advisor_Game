@@ -17,6 +17,7 @@ function floorDivBig(value,size){
   return q;
 }
 function vector(x,y,z){return Object.freeze({x:Number(x),y:Number(y),z:Number(z)});}
+function dot3(a,b){return Number(a?.x||0)*Number(b?.x||0)+Number(a?.y||0)*Number(b?.y||0)+Number(a?.z||0)*Number(b?.z||0);}
 function tangentBasis(latitudeRadians,longitudeRadians){
   const lat=clamp(latitudeRadians,-Math.PI/2,Math.PI/2),lon=Number(longitudeRadians)||0;
   const c=Math.cos(lat),s=Math.sin(lat),cl=Math.cos(lon),sl=Math.sin(lon);
@@ -45,6 +46,28 @@ function create(seedValue,options={}){
   const cellCache=new Map();
   const stats={cacheHits:0,cacheMisses:0,regenerated:0,released:0};
 
+  function registeredMetersForLatLon(latitudeRadians,longitudeRadians){
+    const direction=window.PlanetGeography.directionFromLatLon(latitudeRadians,longitudeRadians);
+    const origin=registration.originDirection,east=registration.eastDirection,north=registration.northDirection;
+    if(direction&&origin&&east&&north){
+      const registeredLatitudeRadians=Math.asin(clamp(dot3(direction,north),-1,1));
+      const registeredLongitudeRadians=Math.atan2(dot3(direction,east),dot3(direction,origin));
+      return Object.freeze({
+        eastMeters:registeredLongitudeRadians*radiusMeters,
+        northMeters:registeredLatitudeRadians*radiusMeters,
+        registeredLatitudeRadians,registeredLongitudeRadians,
+        authority:"Campaign-SEED -> SeedCoordinateFabric.seed-fixed-spherical-frame"
+      });
+    }
+    const tile=worldTileForLatLon(latitudeRadians,longitudeRadians);
+    return Object.freeze({
+      eastMeters:Number(BigInt(tile.x))*tileMeters,
+      northMeters:Number(BigInt(tile.y))*tileMeters,
+      registeredLatitudeRadians:Number(BigInt(tile.y))*tileMeters/radiusMeters,
+      registeredLongitudeRadians:Number(BigInt(tile.x))*tileMeters/radiusMeters,
+      authority:"Campaign-SEED -> SeedCoordinateFabric.canonical-world-tile-fallback"
+    });
+  }
   function worldLatLonForTile(xValue,yValue){
     const geo=geography.worldLatLonForTile(xValue,yValue,tileMeters,radiusMeters);
     return Object.freeze({
@@ -136,7 +159,7 @@ function create(seedValue,options={}){
 
   const api=Object.freeze({
     VERSION,seed,revisionSignature,radiusMeters,tileMeters,
-    worldLatLonForTile,worldTileForLatLon,describeTile,describeLatLon,cellForTile,
+    worldLatLonForTile,worldTileForLatLon,registeredMetersForLatLon,describeTile,describeLatLon,cellForTile,
     worldToLocal,localToWorldTile,materializeCell,releaseCell,snapshot,verify,
     registration:Object.freeze({...registration})
   });
