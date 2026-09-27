@@ -201,7 +201,7 @@ function freshLocalResources(){
 }
 let localResources=freshLocalResources();
 let localPreparationToken=0;
-let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
+let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,borderGraphRevision:null,borderGraphNodeCount:0,borderGraphEdgeCount:0,borderGraphOwnerPairs:[],borderEndpointClassifications:null,borderFocusOwnerId:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
 let atlasStickyBand=null;
 const atlasStickyEntities=new Map();
@@ -278,7 +278,7 @@ function atlasDrainAuthorityQueue(deadline){
   }
 }
 let mapContextCache={key:null,value:null};
-let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],builtAtMs:0};
+let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],graphRevision:null,graphNodeCount:0,graphEdgeCount:0,graphOwnerPairs:[],endpointClassifications:null,focusOwnerId:null,builtAtMs:0};
 const mapBorderEndpointSnapCache=new Map();
 let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
 let worldProjectionAnchorCache=null;
@@ -1007,152 +1007,61 @@ function stitchMapBorderSegments(segments){
 }
 function buildMapBorderSegments(){
   const band=zoomState.band,visible=["country-region","regional-overview","regional-detail","district"].includes(band);
-  if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],built:false};
+  const empty={segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],graphRevision:null,graphNodeCount:0,graphEdgeCount:0,graphOwnerPairs:[],endpointClassifications:null,focusOwnerId:null,built:false};
+  if(!visible||!window.PoliticalGeography?.canonicalBoundaryGraph||!window.PoliticalGeography?.ownerAt)return empty;
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   let focusOwnerId=null;
   try{
     const focusSurface=geography?.sampleLatLon?.(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians)||null;
     if(focusSurface?.land)focusOwnerId=String(window.PoliticalGeography.ownerAt(activeSeed,focusTile.x,focusTile.y)?.id||"")||null;
   }catch(_){focusOwnerId=null;}
-  const bucketSize=16384n,fx=BigInt(focusTile.x),fy=BigInt(focusTile.y);
-  const bucketX=atlasFloorDiv(fx,bucketSize),bucketY=atlasFloorDiv(fy,bucketSize);
-  const centerX=bucketX*bucketSize+bucketSize/2n,centerY=bucketY*bucketSize+bucketSize/2n;
-  const key=[activeSeed,bucketX.toString(),bucketY.toString(),focusOwnerId||"all"].join("|");
+  if(!focusOwnerId)return empty;
+  const started=performance.now();
+  let graph=null;try{graph=window.PoliticalGeography.canonicalBoundaryGraph(activeSeed,focusOwnerId);}catch(_){graph=null;}
+  if(!graph)return empty;
+  const key=[activeSeed,focusOwnerId,graph.revision,graph.signature].join("|");
   if(mapBorderCache.key===key)return {
     segments:mapBorderCache.segments,sampleCount:mapBorderCache.sampleCount,landSampleCount:mapBorderCache.landSampleCount,waterSampleCount:mapBorderCache.waterSampleCount,
     ownerQueryCount:mapBorderCache.ownerQueryCount,ownerCount:mapBorderCache.ownerCount,worldVertexCount:mapBorderCache.worldVertexCount,
-    topologySignature:mapBorderCache.topologySignature,waterClippedCount:mapBorderCache.waterClippedCount,diagnostics:mapBorderCache.diagnostics,built:false
+    topologySignature:mapBorderCache.topologySignature,waterClippedCount:mapBorderCache.waterClippedCount,diagnostics:mapBorderCache.diagnostics,
+    graphRevision:mapBorderCache.graphRevision,graphNodeCount:mapBorderCache.graphNodeCount,graphEdgeCount:mapBorderCache.graphEdgeCount,
+    graphOwnerPairs:mapBorderCache.graphOwnerPairs,endpointClassifications:mapBorderCache.endpointClassifications,focusOwnerId,built:false
   };
-  const started=performance.now(),countrySize=Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608);
-  // Keep one zoom-invariant bounded field large enough for the widest tested
-  // desktop/phone footprint plus a deterministic off-screen margin. Overlay
-  // projection can now use the visible 3x surround, so the previous ~531 km
-  // field could end inside a ~909 km country view and create a false inland
-  // dangling endpoint. The ~1.08 Mm field remains bounded and zoom-invariant;
-  // 47x47 sampling preserves sufficient contour density without a world scan.
-  const cols=47,rows=47,halfSpanX=Math.round(countrySize*2.75),halfSpanY=Math.round(countrySize*2.75),nodes=[],ownerIds=new Set();
-  let landSampleCount=0,waterSampleCount=0,ownerQueryCount=0;
-  const nodeAt=(col,row)=>{
-    const rawX=centerX+BigInt(Math.round(-halfSpanX+(halfSpanX*2)*col/(cols-1)));
-    const rawY=centerY+BigInt(Math.round(-halfSpanY+(halfSpanY*2)*row/(rows-1)));
-    const geo=worldLatLonForTile(rawX.toString(),rawY.toString()),tile=mapWorldTileAt(geo.latitudeRadians,geo.longitudeRadians);
-    let surface=null;try{surface=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)||null;}catch(_){surface=null;}
-    if(!surface?.land){waterSampleCount++;return Object.freeze({land:false,owner:"water",tile,geo});}
-    landSampleCount++;
-    let owner=null;try{owner=window.PoliticalGeography.ownerAt(activeSeed,tile.x,tile.y);ownerQueryCount++;}catch(_){owner=null;}
-    const id=String(owner?.id||"none");if(id!=="none")ownerIds.add(id);
-    return Object.freeze({land:true,owner:id,tile,geo});
+  const pointFor=point=>{
+    const tile=Object.freeze({x:String(point.x),y:String(point.y)}),geo=worldLatLonForTile(tile.x,tile.y);
+    return Object.freeze({
+      latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile,
+      endpointClassification:String(point.classification||"continuation")
+    });
   };
-  for(let r=0;r<rows;r++){const row=[];for(let col=0;col<cols;col++)row.push(nodeAt(col,r));nodes.push(row);}
-  const edgePoint=(a,b)=>{
-    const ax=BigInt(a.tile.x),ay=BigInt(a.tile.y),bx=BigInt(b.tile.x),by=BigInt(b.tile.y);
-    const tile={x:((ax+bx)/2n).toString(),y:((ay+by)/2n).toString()},geo=worldLatLonForTile(tile.x,tile.y);
-    return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
-  };
-  const coastEdgePoint=(a,b)=>{
-    const land=a.land?a:b,water=a.land?b:a;
-    let lx=BigInt(land.tile.x),ly=BigInt(land.tile.y),wx=BigInt(water.tile.x),wy=BigInt(water.tile.y);
-    for(let step=0;step<18;step++){
-      const mx=(lx+wx)/2n,my=(ly+wy)/2n;
-      if((mx===lx&&my===ly)||(mx===wx&&my===wy))break;
-      const geo=worldLatLonForTile(mx.toString(),my.toString());
-      let sample=null;try{sample=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)||null;}catch(_){sample=null;}
-      if(sample?.land){lx=mx;ly=my;}else{wx=mx;wy=my;}
-    }
-    const tile={x:lx.toString(),y:ly.toString()},geo=worldLatLonForTile(tile.x,tile.y);
-    return Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)});
-  };
-
-  const crossing=(a,b)=>a.land&&b.land&&a.owner!=="none"&&b.owner!=="none"&&a.owner!==b.owner;
-  const segmentOnLand=(a,b)=>{
-    for(let step=0;step<=8;step++){
-      const point=interpolateGeoPoint(a,b,step/8);
-      let sample=null;try{sample=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){sample=null;}
-      if(!sample?.land)return false;
-    }
-    return true;
-  };
-  const segments=[];let waterClippedCount=0;
-  for(let r=0;r<rows-1;r++)for(let col=0;col<cols-1;col++){
-    const a=nodes[r][col],b=nodes[r][col+1],c=nodes[r+1][col+1],d=nodes[r+1][col],edges=[],coastPairs=[];
-    const pairs=[[a,b],[b,c],[d,c],[a,d]];
-    for(const [left,right] of pairs){
-      if(left.land!==right.land){waterClippedCount++;coastPairs.push([left,right]);continue;}
-      if(crossing(left,right))edges.push({point:edgePoint(left,right),ownerA:left.owner,ownerB:right.owner});
-    }
-    // Mixed land/water cells are allowed only as terminal cells. A political
-    // crossing may enter such a cell, but it must end at the last authoritative
-    // land sample on a real land/water edge rather than stopping one coarse cell
-    // inland or shortcutting across a bay.
-    if(edges.length){
-      const byPair=new Map();
-      for(const edge of edges){
-        const owners=[edge.ownerA,edge.ownerB].sort(),pairKey=owners.join("~");
-        if(!byPair.has(pairKey))byPair.set(pairKey,{owners,edges:[]});
-        byPair.get(pairKey).edges.push(edge);
-      }
-      let centerPoint;
-      const cellCenterPoint=()=>{
-        if(centerPoint!==undefined)return centerPoint;
-        const tile={
-          x:((BigInt(a.tile.x)+BigInt(b.tile.x)+BigInt(c.tile.x)+BigInt(d.tile.x))/4n).toString(),
-          y:((BigInt(a.tile.y)+BigInt(b.tile.y)+BigInt(c.tile.y)+BigInt(d.tile.y))/4n).toString()
-        };
-        const geo=worldLatLonForTile(tile.x,tile.y);
-        let land=false;try{land=Boolean(geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)?.land);}catch(_){}
-        centerPoint=land?Object.freeze({latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile:Object.freeze(tile)}):null;
-        return centerPoint;
-      };
-
-      const addSegment=(e0,pointB,owners)=>{
-        // Country-scale presentation follows only the focused country's
-        // authoritative boundary. Neighbor/neighbor borders inside the same
-        // sampling window are valid world topology, but drawing them here
-        // creates isolated interior fragments that look like broken borders.
-        if(focusOwnerId&&!owners.includes(focusOwnerId))return;
-        if(!pointB||!segmentOnLand(e0.point,pointB)){waterClippedCount++;return;}
-        const stitchKey=focusOwnerId&&owners.includes(focusOwnerId)?"focus:"+focusOwnerId:owners.join("~");
-        segments.push({
-          a:e0.point,b:pointB,aTile:e0.point.tile,bTile:pointB.tile,
-          ownerA:owners[0],ownerB:owners[1],stitchKey
-        });
-      };
-      const coastTerminals=coastPairs.map(pair=>coastEdgePoint(pair[0],pair[1])).filter(Boolean);
-      const tileDistanceSq=(a,b)=>{
-        const dx=Number(BigInt(a.tile.x)-BigInt(b.tile.x)),dy=Number(BigInt(a.tile.y)-BigInt(b.tile.y));
-        return dx*dx+dy*dy;
-      };
-      // A lone unmatched crossing in an all-land cell is sampling ambiguity,
-      // not proof that a political border legitimately terminates inland.
-      // Only use the cell centre when two or more focused owner-pairs share the
-      // same all-land cell, which proves a visible multi-country junction.
-      const interiorOddGroups=[...byPair.values()].filter(group=>
-        (!focusOwnerId||group.owners.includes(focusOwnerId))&&group.edges.length%2===1
-      );
-      const sharedInteriorJunction=coastTerminals.length===0&&interiorOddGroups.length>=2;
-      for(const group of byPair.values()){
-        let i=0;
-        for(;i+1<group.edges.length;i+=2)addSegment(group.edges[i],group.edges[i+1].point,group.owners);
-        if(i<group.edges.length){
-          const edge=group.edges[i];
-          let terminal=null;
-          if(coastTerminals.length){
-            const ordered=coastTerminals.slice().sort((a,b)=>tileDistanceSq(edge.point,a)-tileDistanceSq(edge.point,b));
-            terminal=ordered.find(candidate=>segmentOnLand(edge.point,candidate))||null;
-          }else if(sharedInteriorJunction) terminal=cellCenterPoint();
-          addSegment(edge,terminal,group.owners);
-        }
-      }
-    }
-  }
-  const topologySignature=borderSignature(segments),worldVertexCount=segments.length*2;
-  const diagnostics=segments.slice(0,24).map(seg=>Object.freeze({
-    ownerPair:Object.freeze([seg.ownerA,seg.ownerB]),
-    aTile:seg.aTile,bTile:seg.bTile,
-    aLand:true,bLand:true
+  const segments=graph.edges.map(edge=>{
+    const a=pointFor(edge.a),b=pointFor(edge.b);
+    return Object.freeze({
+      a,b,aTile:a.tile,bTile:b.tile,ownerA:edge.ownerA,ownerB:edge.ownerB,
+      stitchKey:"focus:"+focusOwnerId,canonicalEdgeId:edge.id,
+      endpointAClass:a.endpointClassification,endpointBClass:b.endpointClassification
+    });
+  });
+  const diagnostics=graph.edges.slice(0,32).map(edge=>Object.freeze({
+    canonicalEdgeId:edge.id,ownerPair:Object.freeze([edge.ownerA,edge.ownerB]),
+    aTile:Object.freeze({x:edge.a.x,y:edge.a.y}),bTile:Object.freeze({x:edge.b.x,y:edge.b.y}),
+    endpointAClass:edge.a.classification,endpointBClass:edge.b.classification,aLand:true,bLand:true
   }));
-  mapBorderCache={key,segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,topologySignature,waterClippedCount,diagnostics,builtAtMs:Number((performance.now()-started).toFixed(3))};
-  return {segments,sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,ownerCount:ownerIds.size,worldVertexCount,topologySignature,waterClippedCount,diagnostics,built:true};
+  mapBorderCache={
+    key,segments,sampleCount:graph.sampleCount,landSampleCount:graph.landSampleCount,waterSampleCount:graph.waterSampleCount,
+    ownerQueryCount:graph.ownerQueryCount,ownerCount:graph.ownerCount,worldVertexCount:segments.length*2,
+    topologySignature:graph.signature,waterClippedCount:graph.waterClippedCount,diagnostics,
+    graphRevision:graph.revision,graphNodeCount:graph.nodeCount,graphEdgeCount:graph.edgeCount,
+    graphOwnerPairs:graph.ownerPairs,endpointClassifications:graph.endpointClassifications,
+    focusOwnerId,builtAtMs:Number((performance.now()-started).toFixed(3))
+  };
+  return {
+    segments,sampleCount:graph.sampleCount,landSampleCount:graph.landSampleCount,waterSampleCount:graph.waterSampleCount,
+    ownerQueryCount:graph.ownerQueryCount,ownerCount:graph.ownerCount,worldVertexCount:segments.length*2,
+    topologySignature:graph.signature,waterClippedCount:graph.waterClippedCount,diagnostics,
+    graphRevision:graph.revision,graphNodeCount:graph.nodeCount,graphEdgeCount:graph.edgeCount,
+    graphOwnerPairs:graph.ownerPairs,endpointClassifications:graph.endpointClassifications,focusOwnerId,built:true
+  };
 }
 function borderPathLandSafe(a,b){
   for(const t of [0,.2,.4,.6,.8,1]){
@@ -1232,17 +1141,10 @@ function renderMapPresentation(){
   let projectedBorderSegmentCount=0,rejectedInteriorBorderStubCount=0;
   const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
   const rawBorderLines=stitchMapBorderSegments(border.segments);
-  const openLengths=rawBorderLines.filter(chain=>!borderChainClosed(chain)).map(borderChainLengthMeters);
-  const dominantOpenLength=openLengths.length?Math.max(...openLengths):0;
-  // At country scale the focused owner should read as one coherent boundary.
-  // A tiny disconnected open component is almost always a coarse-sampling
-  // artifact. Keep every closed component (real enclaves/exclaves) and every
-  // substantial open component; suppress only components below 45% of the
-  // dominant open contour when multiple components exist.
-  const borderLines=rawBorderLines.filter(chain=>
-    rawBorderLines.length<=1||borderChainClosed(chain)||borderChainLengthMeters(chain)>=dominantOpenLength*.45
-  );
-  const suppressedMinorBorderPolylineCount=rawBorderLines.length-borderLines.length;
+  // Canonical political topology is no longer presentation-filtered. Every
+  // canonical component is projected; viewport/horizon clipping happens later.
+  const borderLines=rawBorderLines;
+  const suppressedMinorBorderPolylineCount=0;
   for(const chain of borderLines){
     let run=[];
     const flush=()=>{
@@ -1329,7 +1231,9 @@ function renderMapPresentation(){
     maxLabelBudget:spec.budget,labelQueryBuildMs:atlas.query.buildMs,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
     borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
-    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,rawBorderPolylineCount:rawBorderLines.length,suppressedMinorBorderPolylineCount,rejectedInteriorBorderStubCount,
+    borderTopologySignature:border.topologySignature,borderGraphRevision:border.graphRevision,borderGraphNodeCount:border.graphNodeCount,borderGraphEdgeCount:border.graphEdgeCount,
+    borderGraphOwnerPairs:border.graphOwnerPairs,borderEndpointClassifications:border.endpointClassifications,borderFocusOwnerId:border.focusOwnerId,
+    waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,rawBorderPolylineCount:rawBorderLines.length,suppressedMinorBorderPolylineCount,rejectedInteriorBorderStubCount,
     maxLabelDisplacementPixels:visible.reduce((max,item)=>Math.max(max,Number(item.displacementPixels||0)),0),
     registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
     projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
