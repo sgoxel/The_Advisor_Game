@@ -7384,8 +7384,21 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         forward_reverse=((13,15),(11,16),(8,17),(2,18),(0,19))
         for a,b in forward_reverse:
             sa,sb=stages[a],stages[b]
-            if (sa.get("zoom") or {}).get("visibleBand")!=(sb.get("zoom") or {}).get("visibleBand") or (sa.get("projection") or {}).get("mode")!=(sb.get("projection") or {}).get("mode"):
-                raise RuntimeError(f"WP-005 reverse zoom semantic/projection mismatch at scalar {expected[a]}: forward={(sa.get('zoom') or {}).get('visibleBand')}/{(sa.get('projection') or {}).get('mode')} reverse={(sb.get('zoom') or {}).get('visibleBand')}/{(sb.get('projection') or {}).get('mode')}")
+            za,zb=sa.get("zoom") or {},sb.get("zoom") or {}
+            pa,pb=sa.get("projection") or {},sb.get("projection") or {}
+            if za.get("visibleBand")!=zb.get("visibleBand") or pa.get("mode")!=pb.get("mode"):
+                raise RuntimeError(f"WP-005 reverse zoom semantic/projection mismatch at scalar {expected[a]}: forward={za.get('visibleBand')}/{pa.get('mode')} reverse={zb.get('visibleBand')}/{pb.get('mode')}")
+            ha,hb=float(za.get("visibleFootprintHeightMeters") or 0),float(zb.get("visibleFootprintHeightMeters") or 0)
+            if ha<=0 or hb<=0 or abs(ha-hb)/max(ha,hb)>.02:
+                raise RuntimeError(f"WP-005 reverse zoom physical footprint mismatch at scalar {expected[a]}: forward={ha}m reverse={hb}m")
+            lsa,lsb=pa.get("localStatic") or {},pb.get("localStatic") or {}
+            if bool(lsa.get("active")) or bool(lsb.get("active")):
+                psa,psb=float(lsa.get("presentationScale") or 0),float(lsb.get("presentationScale") or 0)
+                if abs(psa-psb)>max(.02,.02*max(abs(psa),abs(psb),1)):
+                    raise RuntimeError(f"WP-005 reverse zoom settlement presentation mismatch at scalar {expected[a]}: forward={psa} reverse={psb}")
+            ra,rb=pa.get("resourceBudget") or {},pb.get("resourceBudget") or {}
+            if str(ra.get("requestedLevel") or "")!=str(rb.get("requestedLevel") or ""):
+                raise RuntimeError(f"WP-005 reverse zoom requested LOD mismatch at scalar {expected[a]}: forward={ra.get('requestedLevel')} reverse={rb.get('requestedLevel')}")
         phone_landscape=frames[20].get("runtime",{}).get("viewport",{})
         phone_portrait=frames[21].get("runtime",{}).get("viewport",{})
         if int(phone_landscape.get("width") or 0)>900 or int(phone_landscape.get("height") or 0)>430:
