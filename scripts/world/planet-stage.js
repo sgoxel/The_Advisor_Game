@@ -1611,7 +1611,7 @@ function localWildernessFamily(biome,roll){
   const r=clamp(Number(roll)||0,0,.999999);
   // Keep one deterministic global-cell scatter, but give each biome a
   // stronger silhouette vocabulary so terrain identity reads at gameplay zoom.
-  if(biome==="rocky")return r<.40?"rock":r<.68?"outcrop":r<.78?"grass":r<.86?"bush":r<.93?"stump":"flower";
+  if(biome==="rocky")return r<.46?"rock":r<.64?"outcrop":r<.76?"grass":r<.86?"bush":r<.93?"stump":"flower";
   if(biome==="wet")return r<.38?"reed":r<.52?"bush":r<.68?"driftwood":r<.76?"rock":r<.90?"grass":"flower";
   if(biome==="wooded")return r<.28?"bush":r<.49?"sapling":r<.64?"log":r<.73?"stump":r<.83?"rock":r<.92?"grass":"flower";
   return r<.24?"grass":r<.45?"flower":r<.62?"bush":r<.75?"rock":r<.86?"log":r<.93?"stump":"sapling";
@@ -1621,7 +1621,7 @@ function localWildernessSpacing(dims){
   // Keep candidate counts bounded without introducing an ordered early-stop
   // band. Each physical LOD gets globally anchored cells large enough that the
   // entire viewport can be scanned and still remain cheap.
-  return h<=45?6:h<=90?14:h<=240?32:75;
+  return h<=45?6:h<=90?11:h<=240?32:75;
 }
 function prepareLocalWildernessPlan(job){
   const started=performance.now(),dims=job?.dims;
@@ -1657,7 +1657,7 @@ function prepareLocalWildernessPlan(job){
     if(u>density)continue;
     const roll=(localWildernessHashInt(gx,gy,salt+71)>>>0)/4294967295,family=localWildernessFamily(biome,roll);
     const baseScale=.90+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.90;
-    const reliefScale=family==="outcrop"?1.42:(family==="rock"&&biome==="rocky"?1.24:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
+    const reliefScale=family==="outcrop"?1.18:(family==="rock"&&biome==="rocky"?1.18:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
     const scale=baseScale*reliefScale;
     const rotation=((localWildernessHashInt(gx,gy,salt+109)>>>0)/4294967295)*Math.PI*2;
     const priority=localWildernessHashInt(gx,gy,salt+191)>>>0;
@@ -1706,12 +1706,12 @@ function buildLocalWildernessMesh(plan,frame,reveal){
   for(const item of plan.items){
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,color=wildernessColor(item.family,item.biome);
-    const m=(item.family==="outcrop"?4.0:item.family==="rock"?1.45:item.family==="log"||item.family==="driftwood"?1.50:item.family==="sapling"?1.25:item.family==="bush"?1.15:item.family==="stump"?.90:.75)*item.scale/unit;
-    const h=(item.family==="outcrop"?3.2:item.family==="sapling"?4.5:item.family==="reed"?1.9:item.family==="bush"?1.45:item.family==="stump"?.95:item.family==="rock"?1.10:item.family==="log"||item.family==="driftwood"?.65:item.family==="flower"?.85:1.05)*item.scale/unit;
+    const m=(item.family==="outcrop"?2.8:item.family==="rock"?1.35:item.family==="log"||item.family==="driftwood"?1.50:item.family==="sapling"?1.25:item.family==="bush"?1.15:item.family==="stump"?.90:.75)*item.scale/unit;
+    const h=(item.family==="outcrop"?2.65:item.family==="sapling"?4.5:item.family==="reed"?1.9:item.family==="bush"?1.45:item.family==="stump"?.95:item.family==="rock"?1.10:item.family==="log"||item.family==="driftwood"?.65:item.family==="flower"?.85:1.05)*item.scale/unit;
     const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
-    if(!["grass","reed","flower"].includes(item.family)){
+    if(!["grass","flower"].includes(item.family)){
       const patch=item.biome==="wet"?[.07,.20,.17]:item.biome==="rocky"?[.17,.16,.14]:item.biome==="wooded"?[.10,.20,.06]:[.23,.29,.08];
-      const pr=m*(item.family==="outcrop"?1.65:1.48),py=y+.002;
+      const pr=m*(item.family==="outcrop"?1.24:1.48),py=y+.002;
       const pa=push(x-pr,py,z,patch),pb=push(x,py,z-pr*.72,patch),pcv=push(x+pr,py,z,patch),pd=push(x,py,z+pr*.72,patch);quad(pa,pb,pcv,pd);
     }
     if(item.family==="rock"||item.family==="outcrop"){
@@ -1751,7 +1751,7 @@ function buildLocalWildernessMesh(plan,frame,reveal){
       ];
       for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
     }else{
-      const stem=item.family==="flower"?[.25,.55,.12]:color,w=m*.28,blades=item.family==="reed"?5:3;
+      const stem=item.family==="flower"?[.25,.55,.12]:color,w=m*.28,blades=item.family==="flower"?3:5;
       for(let k=0;k<blades;k++){
         const a=item.rotation+k*Math.PI/blades,dx=Math.cos(a)*w,dz=Math.sin(a)*w,lean=(k-(blades-1)/2)*w*.38;
         const p=push(x-dz,y,z+dx,stem),q=push(x+dz,y,z-dx,stem),r=push(x+lean,y+h*(.78+k*.055),z-lean*.35,stem);tri(p,q,r);
@@ -1765,6 +1765,21 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     accepted++;familyCounts[item.family]=(familyCounts[item.family]||0)+1;biomeCounts[item.biome]=(biomeCounts[item.biome]||0)+1;
   }
   if(!indices.length)return {mesh:null,accepted,rejectedManaged,rejectedRoad,triangles:0,familyCounts,biomeCounts};
+  // The old wilderness mesh forced every vertex normal straight upward, so
+  // rocks, bushes and fauna-adjacent props rendered like flat map symbols.
+  // Accumulate real triangle normals while keeping all geometry in one batch.
+  normals.fill(0);
+  for(let i=0;i<indices.length;i+=3){
+    const ia=indices[i]*3,ib=indices[i+1]*3,ic=indices[i+2]*3;
+    const abx=positions[ib]-positions[ia],aby=positions[ib+1]-positions[ia+1],abz=positions[ib+2]-positions[ia+2];
+    const acx=positions[ic]-positions[ia],acy=positions[ic+1]-positions[ia+1],acz=positions[ic+2]-positions[ia+2];
+    const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
+    for(const at of [ia,ib,ic]){normals[at]+=nx;normals[at+1]+=ny;normals[at+2]+=nz;}
+  }
+  for(let i=0;i<normals.length;i+=3){
+    const len=Math.hypot(normals[i],normals[i+1],normals[i+2])||1;
+    normals[i]/=len;normals[i+1]/=len;normals[i+2]/=len;
+  }
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   return {mesh,accepted,rejectedManaged,rejectedRoad,triangles:indices.length/3,familyCounts,biomeCounts};
 }
