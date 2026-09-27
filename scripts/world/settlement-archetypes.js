@@ -672,11 +672,11 @@ function build(seedValue,centerValue,optionsValue){
   if(!region||!countryProfile)return null;
   const local=localContext(seed,country,center,region);
   const border=borderContext(seed,country,center);
+  const canonical=options.canonicalRecord||null;
   const role=String(options.role||"local");
-  const key=[country.id,region.id,center.x,center.y,role,options.classHint||""].join("|");
+  const key=[country.id,region.id,center.x,center.y,role,options.classHint||"",canonical?.id||""].join("|");
   const cacheKey=seed+"|"+key;
   if(cache.has(cacheKey))return cache.get(cacheKey);
-  const canonical=options.canonicalRecord||null;
   const classId=canonical?String(canonical.classId):classFor(seed,key,countryProfile,region,local,border,options);
   const subtypes=subtypeWeights(countryProfile,region,local,border,classId);
   const footprintRadius={hamlet:40,village:72,town:112,city:160,"national-capital":240}[classId]||96;
@@ -798,11 +798,27 @@ function settlementsForCountry(seedValue,countryValue,radiusValue){
   const span=BigInt(Math.max(REGION_CELL_SIZE_FALLBACK,Math.round(radius*REGION_CELL_SIZE_FALLBACK)));
   const cx=BigInt(String(center?.x??country.capital?.x??"0"));
   const cy=BigInt(String(center?.y??country.capital?.y??"0"));
+  const requestedClasses=radius<=2?["city","town","village","hamlet"]:["city","town","village"];
   const query=canonicalSettlementsInBounds(seed,{
     minX:(cx-span).toString(),maxX:(cx+span).toString(),
     minY:(cy-span).toString(),maxY:(cy+span).toString()
-  },["city","town","village","hamlet"]);
-  for(const record of query.settlements||[])addRecord(record);
+  },requestedClasses);
+  const budgets={
+    city:Math.max(2,radius*2),
+    town:Math.max(4,radius*4),
+    village:Math.max(8,radius*8),
+    hamlet:Math.max(4,radius*4)
+  };
+  for(const classId of requestedClasses){
+    const ranked=(query.settlements||[]).filter(record=>record.classId===classId&&record.countryId===country.id)
+      .sort((a,b)=>
+        Number(b.carryingCapacity||0)-Number(a.carryingCapacity||0)||
+        Number(b.competitionScore||0)-Number(a.competitionScore||0)||
+        a.id.localeCompare(b.id)
+      )
+      .slice(0,budgets[classId]||0);
+    for(const record of ranked)addRecord(record);
+  }
 
   try{
     const originCountry=PoliticalGeography.countryAt(seed,"0","0");
@@ -907,20 +923,27 @@ function proof(seedValue){
   const uniquePlanSignatures=new Set(differentContexts.map(planningSignature)).size;
   const cloneAvoidance=differentContexts.length<2||uniquePlanSignatures>=Math.min(differentContexts.length,4);
   const roleCoverage=new Set(plans.map(plan=>plan.role));
-  const genericPlanner=roleCoverage.has("regional-seat")&&roleCoverage.has("satellite")&&roleCoverage.has("national-capital");
+  const canonicalCatalogAligned=plans.every(plan=>
+    plan.foundation?.canonicalSettlementId===plan.id&&plan.generation?.canonicalRecord?.id===plan.id&&
+    String(plan.center?.x)===String(plan.generation.canonicalRecord.center?.x)&&
+    String(plan.center?.y)===String(plan.generation.canonicalRecord.center?.y)
+  );
+  const genericPlanner=roleCoverage.has("national-capital")&&
+    plans.some(plan=>plan.classId==="city"||plan.classId==="town")&&
+    plans.some(plan=>plan.classId==="village"||plan.classId==="hamlet");
   const lazyQueryable=plans.every(plan=>plan.foundation.lazy&&plan.foundation.renderIndependent&&!plan.foundation.physicalLayoutCreated);
   const authorityPreserved=plans.every(plan=>!plan.foundation.terrainMutation&&!plan.foundation.resourceMutation&&!plan.foundation.npcPopulationCreated);
   const evidenceReasons=new Set(reps.map(item=>item.reason));
   const representativeCoverage=["agricultural","mining","trade","frontier-fortified","capital"].every(reason=>evidenceReasons.has(reason));
   const pass=Boolean(
     plans.length>=12&&reps.length===5&&deterministic&&timeIndependent&&numericValid&&geographyValid&&borderPlacementValid&&physicalConstraints&&classSupport&&
-    classCount>=3&&subtypeCount>=4&&capitalScale&&contextComplete&&countryRegionTerrainInfluence&&cloneAvoidance&&genericPlanner&&
+    classCount>=3&&subtypeCount>=4&&capitalScale&&contextComplete&&countryRegionTerrainInfluence&&cloneAvoidance&&genericPlanner&&canonicalCatalogAligned&&
     lazyQueryable&&authorityPreserved&&representativeCoverage
   );
   const result=Object.freeze({
     pass,campaignSeed:seed,planCount:plans.length,representativeCount:reps.length,
     deterministic,timeIndependent,numericValid,geographyValid,borderPlacementValid,physicalConstraints,classSupport,
-    classCount,subtypeCount,capitalScale,contextComplete,countryRegionTerrainInfluence,cloneAvoidance,genericPlanner,
+    classCount,subtypeCount,capitalScale,contextComplete,countryRegionTerrainInfluence,cloneAvoidance,genericPlanner,canonicalCatalogAligned,
     lazyQueryable,authorityPreserved,representativeCoverage,
     supportedClasses:SUPPORTED_CLASSES,representatives:reps,
     authority:"settlement-archetype-planning-foundation",
