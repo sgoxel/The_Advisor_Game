@@ -2468,7 +2468,10 @@ function renderInspectionTooltip(record,knownBounds=null){
   tip.style.visibility="hidden";tip.style.left="0px";tip.style.top="0px";
   const tipRect=tip.getBoundingClientRect(),halfWidth=Math.min(rootRect.width/2,tipRect.width/2),margin=12;
   const x=clamp(anchorX,margin+halfWidth,Math.max(margin+halfWidth,rootRect.width-margin-halfWidth));
-  const placeBelow=anchorY-tipRect.height-margin<margin,y=placeBelow?clamp(anchorY+margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin)):clamp(anchorY-tipRect.height-margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin));
+  const placeBelow=anchorY-tipRect.height-margin<margin;
+  const y=placeBelow
+    ?clamp(anchorY+margin,margin,Math.max(margin,rootRect.height-tipRect.height-margin))
+    :clamp(anchorY-margin,margin+tipRect.height,Math.max(margin+tipRect.height,rootRect.height-margin));
   tip.classList.toggle("below-anchor",placeBelow);tip.dataset.placement=placeBelow?"below":"above";tip.style.left=x+"px";tip.style.top=y+"px";tip.style.visibility="";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
 }
 function pickInspection(clientX,clientY){
