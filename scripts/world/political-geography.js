@@ -18,6 +18,10 @@ const COUNTRY_FORMS=Object.freeze(["Realm","Kingdom","Principality","March","Dom
 const PLANET_ANCHOR_CACHE=new Map();
 const PLANET_TILE_METERS=2;
 const PLANET_RADIUS_METERS=637100;
+const BOUNDARY_GRAPH_REVISION="CBG-1";
+const BOUNDARY_GRAPH_GRID=37;
+const BOUNDARY_GRAPH_HALFSPAN_FACTOR=1.45;
+const BOUNDARY_GRAPH_CACHE=new Map();
 
 function toBig(value){return BigInt(WorldCoordinates.normalize(value))}
 function floorDiv(value,divisor){
@@ -230,6 +234,19 @@ function deterministicCountryLandAnchor(seed,candidate){
   PLANET_ANCHOR_CACHE.set(key,result);
   return result;
 }
+function ownerClearancePass(seed,countryId,xValue,yValue,clearanceValue){
+  const clearance=Math.max(0,Math.round(Number(clearanceValue)||0));
+  if(ownerAt(seed,xValue,yValue).id!==countryId)return false;
+  if(clearance<=0)return true;
+  const x=toBig(xValue),y=toBig(yValue);
+  for(let i=0;i<12;i++){
+    const angle=Math.PI*2*i/12;
+    const px=(x+BigInt(Math.round(Math.cos(angle)*clearance))).toString();
+    const py=(y+BigInt(Math.round(Math.sin(angle)*clearance))).toString();
+    if(ownerAt(seed,px,py).id!==countryId)return false;
+  }
+  return true;
+}
 function capitalForCandidate(seed,candidate){
   const mapAnchor=deterministicCountryLandAnchor(seed,candidate);
   if(mapAnchor){
@@ -251,6 +268,7 @@ function capitalForCandidate(seed,candidate){
       const x=option.x.toString(),y=option.y.toString();
       let winner=null;try{winner=resolveWinner(seed,x,y,"full").best?.candidate||null;}catch(_){winner=null;}
       if(!winner||winner.id!==candidate.id)continue;
+      if(!ownerClearancePass(seed,candidate.id,x,y,768))continue;
       const surface=planetSurfaceAt(seed,x,y);
       if(!surface?.sample?.land)continue;
       const terrain=GeographyFoundation.getTerrainType(seed,x,y);
@@ -451,6 +469,250 @@ function nearbyCountries(seed,countryValue){
     });
   }));
 }
+
+function canonicalGraphSurfaceSampler(seed){
+  const pg=window.PlanetGeography;
+  if(!pg?.create)return null;
+  let instance=null;
+  try{instance=pg.create(seed);}catch(_){return null;}
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||pg.DEFAULT_TILE_METERS||PLANET_TILE_METERS));
+  const radius=Math.max(1,Number(pg.DEFAULT_WORLD_RADIUS_METERS||PLANET_RADIUS_METERS));
+  return (xValue,yValue)=>{
+    try{
+      const geo=instance.worldLatLonForTile(xValue,yValue,tileMeters,radius);
+      return Object.freeze({geo,sample:instance.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians)});
+    }catch(_){return null;}
+  };
+}
+function boundaryPointKey(point){return String(point.x)+","+String(point.y)}
+function canonicalBoundaryGraph(seedValue,countryValue){
+  const seed=String(seedValue==null?"":seedValue);
+  const countryId=typeof countryValue==="string"?String(countryValue):String(countryValue?.id||"");
+  const candidate=parseCountryId(seed,countryId);
+  if(!candidate)return null;
+  const cacheKey=seed+"|"+countryId+"|"+BOUNDARY_GRAPH_REVISION;
+  if(BOUNDARY_GRAPH_CACHE.has(cacheKey))return BOUNDARY_GRAPH_CACHE.get(cacheKey);
+  const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+  const cols=BOUNDARY_GRAPH_GRID,rows=BOUNDARY_GRAPH_GRID;
+  const halfSpan=Math.round(COUNTRY_CELL_SIZE*BOUNDARY_GRAPH_HALFSPAN_FACTOR);
+  const centerX=toBig(candidate.politicalCenter.x),centerY=toBig(candidate.politicalCenter.y);
+  const surfaceAt=canonicalGraphSurfaceSampler(seed);
+  const nodes=[],ownerIds=new Set();
+  let landSampleCount=0,waterSampleCount=0,ownerQueryCount=0,waterClippedCount=0;
+  const nodeAt=(col,row)=>{
+    const x=(centerX+BigInt(Math.round(-halfSpan+(halfSpan*2)*col/(cols-1)))).toString();
+    const y=(centerY+BigInt(Math.round(-halfSpan+(halfSpan*2)*row/(rows-1)))).toString();
+    const surface=surfaceAt?surfaceAt(x,y):null;
+    const land=surface?Boolean(surface.sample?.land):true;
+    if(!land){waterSampleCount++;return Object.freeze({land:false,owner:"water",x,y});}
+    landSampleCount++;
+    let owner=null;try{owner=ownerAt(seed,x,y);ownerQueryCount++;}catch(_){owner=null;}
+    const id=String(owner?.id||"none");if(id!=="none")ownerIds.add(id);
+    return Object.freeze({land:true,owner:id,x,y});
+  };
+  for(let row=0;row<rows;row++){
+    const line=[];for(let col=0;col<cols;col++)line.push(nodeAt(col,row));nodes.push(line);
+  }
+  const politicalCrossing=(a,b)=>a.land&&b.land&&a.owner!==b.owner&&a.owner!=="none"&&b.owner!=="none"&&(a.owner===countryId||b.owner===countryId);
+  const refinePolitical=(a,b)=>{
+    let inside=a.owner===countryId?a:b,outside=a.owner===countryId?b:a;
+    let ix=toBig(inside.x),iy=toBig(inside.y),ox=toBig(outside.x),oy=toBig(outside.y);
+    for(let step=0;step<18;step++){
+      const mx=(ix+ox)/2n,my=(iy+oy)/2n;
+      if((mx===ix&&my===iy)||(mx===ox&&my===oy))break;
+      let id="none";try{id=ownerAt(seed,mx.toString(),my.toString()).id;ownerQueryCount++;}catch(_){}
+      if(id===countryId){ix=mx;iy=my;}else{ox=mx;oy=my;}
+    }
+    return Object.freeze({x:((ix+ox)/2n).toString(),y:((iy+oy)/2n).toString()});
+  };
+  const refineCoast=(a,b)=>{
+    const land=a.land?a:b,water=a.land?b:a;
+    let lx=toBig(land.x),ly=toBig(land.y),wx=toBig(water.x),wy=toBig(water.y);
+    if(!surfaceAt)return Object.freeze({x:lx.toString(),y:ly.toString(),endpointClass:"coastline"});
+    for(let step=0;step<18;step++){
+      const mx=(lx+wx)/2n,my=(ly+wy)/2n;
+      if((mx===lx&&my===ly)||(mx===wx&&my===wy))break;
+      const sample=surfaceAt(mx.toString(),my.toString());
+      if(sample?.sample?.land){lx=mx;ly=my;}else{wx=mx;wy=my;}
+    }
+    return Object.freeze({x:lx.toString(),y:ly.toString(),endpointClass:"coastline"});
+  };
+  const segmentOnLand=(a,b)=>{
+    if(!surfaceAt)return true;
+    const ax=toBig(a.x),ay=toBig(a.y),bx=toBig(b.x),by=toBig(b.y);
+    for(let i=0;i<=6;i++){
+      const x=(ax+BigInt(Math.round(Number(bx-ax)*i/6))).toString();
+      const y=(ay+BigInt(Math.round(Number(by-ay)*i/6))).toString();
+      if(!surfaceAt(x,y)?.sample?.land)return false;
+    }
+    return true;
+  };
+  const raw=[];
+  for(let row=0;row<rows-1;row++)for(let col=0;col<cols-1;col++){
+    const a=nodes[row][col],b=nodes[row][col+1],cc=nodes[row+1][col+1],d=nodes[row+1][col];
+    const pairs=[[a,b],[b,cc],[d,cc],[a,d]],crossings=[],coasts=[];
+    for(const [left,right] of pairs){
+      if(left.land!==right.land){waterClippedCount++;coasts.push(refineCoast(left,right));continue;}
+      if(politicalCrossing(left,right)){
+        const owners=[left.owner,right.owner].sort();
+        crossings.push({point:refinePolitical(left,right),owners});
+      }
+    }
+    if(!crossings.length)continue;
+    const byPair=new Map();
+    for(const edge of crossings){
+      const key=edge.owners.join("~");
+      if(!byPair.has(key))byPair.set(key,{owners:edge.owners,edges:[]});
+      byPair.get(key).edges.push(edge);
+    }
+    const oddGroups=[...byPair.values()].filter(group=>group.edges.length%2===1);
+    const junction=coasts.length===0&&oddGroups.length>=2
+      ?Object.freeze({
+          x:((toBig(a.x)+toBig(b.x)+toBig(cc.x)+toBig(d.x))/4n).toString(),
+          y:((toBig(a.y)+toBig(b.y)+toBig(cc.y)+toBig(d.y))/4n).toString(),
+          endpointClass:"junction"
+        }):null;
+    const distSq=(p,q)=>{const dx=Number(toBig(p.x)-toBig(q.x)),dy=Number(toBig(p.y)-toBig(q.y));return dx*dx+dy*dy;};
+    for(const group of byPair.values()){
+      let i=0;
+      const add=(p0,p1)=>{
+        if(!p0||!p1||!segmentOnLand(p0,p1))return;
+        raw.push({a:p0,b:p1,ownerA:group.owners[0],ownerB:group.owners[1]});
+      };
+      for(;i+1<group.edges.length;i+=2)add(group.edges[i].point,group.edges[i+1].point);
+      if(i<group.edges.length){
+        const edge=group.edges[i].point;
+        let terminal=null;
+        if(coasts.length)terminal=coasts.slice().sort((p,q)=>distSq(edge,p)-distSq(edge,q)).find(p=>segmentOnLand(edge,p))||null;
+        else terminal=junction;
+        add(edge,terminal);
+      }
+    }
+  }
+  let edges=raw;
+  for(let pass=0;pass<4;pass++){
+    const degree=new Map(),explicit=new Map();
+    for(const edge of edges){
+      for(const point of [edge.a,edge.b]){
+        const key=boundaryPointKey(point);degree.set(key,(degree.get(key)||0)+1);
+        if(point.endpointClass)explicit.set(key,point.endpointClass);
+      }
+    }
+    const filtered=edges.filter(edge=>[edge.a,edge.b].every(point=>{
+      const key=boundaryPointKey(point),d=degree.get(key)||0;
+      return d!==1||explicit.get(key)==="coastline";
+    }));
+    if(filtered.length===edges.length)break;
+    edges=filtered;
+  }
+  const degree=new Map(),explicit=new Map();
+  for(const edge of edges){
+    for(const point of [edge.a,edge.b]){
+      const key=boundaryPointKey(point);degree.set(key,(degree.get(key)||0)+1);
+      if(point.endpointClass)explicit.set(key,point.endpointClass);
+    }
+  }
+  const nodeClasses=new Map();
+  for(const [key,d] of degree){
+    const cls=explicit.get(key)||(d>=3?"junction":d===2?"continuation":"unclassified");
+    nodeClasses.set(key,cls);
+  }
+  const frozenEdges=Object.freeze(edges.map((edge,index)=>{
+    const pair=[edge.ownerA,edge.ownerB].sort();
+    const a=Object.freeze({x:String(edge.a.x),y:String(edge.a.y),classification:nodeClasses.get(boundaryPointKey(edge.a))||"continuation"});
+    const b=Object.freeze({x:String(edge.b.x),y:String(edge.b.y),classification:nodeClasses.get(boundaryPointKey(edge.b))||"continuation"});
+    const id="CBEDGE|"+hashText([BOUNDARY_GRAPH_REVISION,seed,countryId,pair.join("~"),a.x,a.y,b.x,b.y,index].join("|"));
+    return Object.freeze({id,ownerA:pair[0],ownerB:pair[1],a,b});
+  }));
+  const ownerPairs=Object.freeze([...new Set(frozenEdges.map(edge=>[edge.ownerA,edge.ownerB].sort().join("~")))].sort());
+  const endpointClassifications={coastline:0,junction:0,continuation:0,unclassified:0};
+  for(const cls of nodeClasses.values())endpointClassifications[cls]=(endpointClassifications[cls]||0)+1;
+  const signature="CBG|"+hashText([BOUNDARY_GRAPH_REVISION,seed,countryId,...frozenEdges.map(edge=>edge.id)].join("|"));
+  const elapsed=(typeof performance!=="undefined"&&performance.now?performance.now():Date.now())-started;
+  const graph=Object.freeze({
+    revision:BOUNDARY_GRAPH_REVISION,signature,seed,countryId,
+    center:Object.freeze({x:candidate.politicalCenter.x,y:candidate.politicalCenter.y}),
+    grid:Object.freeze({columns:cols,rows,halfSpanTiles:halfSpan}),
+    sampleCount:cols*rows,landSampleCount,waterSampleCount,ownerQueryCount,
+    ownerCount:ownerIds.size,nodeCount:degree.size,edgeCount:frozenEdges.length,
+    ownerPairs,endpointClassifications:Object.freeze(endpointClassifications),
+    edges:frozenEdges,waterClippedCount,
+    builtAtMs:Number(elapsed.toFixed(3)),fullWorldScan:false,
+    authority:"PoliticalGeography.ownerAt canonical country-centered boundary graph"
+  });
+  BOUNDARY_GRAPH_CACHE.set(cacheKey,graph);
+  return graph;
+}
+function pointSegmentDistance(x,y,a,b){
+  const ax=Number(toBig(a.x)),ay=Number(toBig(a.y)),bx=Number(toBig(b.x)),by=Number(toBig(b.y));
+  const px=Number(toBig(x)),py=Number(toBig(y)),dx=bx-ax,dy=by-ay,den=dx*dx+dy*dy;
+  const t=den?Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/den)):0;
+  const nx=ax+dx*t,ny=ay+dy*t;
+  return Object.freeze({distance:Math.hypot(px-nx,py-ny),x:String(Math.round(nx)),y:String(Math.round(ny)),t});
+}
+function nearestBorder(seedValue,xValue,yValue,countryValue){
+  const seed=String(seedValue==null?"":seedValue),x=WorldCoordinates.normalize(xValue),y=WorldCoordinates.normalize(yValue);
+  let countryId=typeof countryValue==="string"?countryValue:String(countryValue?.id||"");
+  if(!countryId)countryId=ownerAt(seed,x,y).id;
+  const graph=canonicalBoundaryGraph(seed,countryId);
+  if(!graph||!graph.edges.length)return null;
+  let best=null;
+  for(const edge of graph.edges){
+    const hit=pointSegmentDistance(x,y,edge.a,edge.b);
+    if(!best||hit.distance<best.distanceTiles||(hit.distance===best.distanceTiles&&edge.id<best.edgeId)){
+      best={
+        graphRevision:graph.revision,graphSignature:graph.signature,edgeId:edge.id,
+        borderId:"BORDER|"+edge.ownerA+"|"+edge.ownerB,
+        ownerPair:Object.freeze([edge.ownerA,edge.ownerB]),
+        distanceTiles:hit.distance,nearestPoint:Object.freeze({x:hit.x,y:hit.y}),t:hit.t
+      };
+    }
+  }
+  return best?Object.freeze({...best,distanceTiles:Number(best.distanceTiles.toFixed(3))}):null;
+}
+function isSafelyInside(seedValue,xValue,yValue,countryValue,clearanceValue){
+  const seed=String(seedValue==null?"":seedValue),countryId=typeof countryValue==="string"?countryValue:String(countryValue?.id||"");
+  if(!countryId||ownerAt(seed,xValue,yValue).id!==countryId)return false;
+  const clearance=Math.max(0,Number(clearanceValue)||0);
+  if(clearance<=0)return true;
+  const nearest=nearestBorder(seed,xValue,yValue,countryId);
+  return !nearest||nearest.distanceTiles>=clearance;
+}
+function orientation(ax,ay,bx,by,cx,cy){return (bx-ax)*(cy-ay)-(by-ay)*(cx-ax)}
+function segmentsIntersect(a,b,c,d){
+  const ax=Number(toBig(a.x)),ay=Number(toBig(a.y)),bx=Number(toBig(b.x)),by=Number(toBig(b.y));
+  const cx=Number(toBig(c.x)),cy=Number(toBig(c.y)),dx=Number(toBig(d.x)),dy=Number(toBig(d.y));
+  const o1=orientation(ax,ay,bx,by,cx,cy),o2=orientation(ax,ay,bx,by,dx,dy),o3=orientation(cx,cy,dx,dy,ax,ay),o4=orientation(cx,cy,dx,dy,bx,by);
+  return (o1===0||o2===0||o1*o2<0)&&(o3===0||o4===0||o3*o4<0);
+}
+function segmentCrossesBorder(seedValue,aValue,bValue,countryValue){
+  const seed=String(seedValue==null?"":seedValue),a={x:WorldCoordinates.normalize(aValue.x),y:WorldCoordinates.normalize(aValue.y)},b={x:WorldCoordinates.normalize(bValue.x),y:WorldCoordinates.normalize(bValue.y)};
+  let countryId=typeof countryValue==="string"?countryValue:String(countryValue?.id||"");
+  if(!countryId)countryId=ownerAt(seed,a.x,a.y).id;
+  const graph=canonicalBoundaryGraph(seed,countryId);
+  if(!graph)return false;
+  if(ownerAt(seed,a.x,a.y).id!==ownerAt(seed,b.x,b.y).id)return true;
+  return graph.edges.some(edge=>segmentsIntersect(a,b,edge.a,edge.b));
+}
+function validatePlacement(seedValue,placementValue){
+  const seed=String(seedValue==null?"":seedValue),p=placementValue||{};
+  const x=WorldCoordinates.normalize(p.x),y=WorldCoordinates.normalize(p.y),countryId=String(p.countryId||"");
+  const clearance=Math.max(0,Number(p.clearanceTiles)||0),footprint=Math.max(0,Number(p.footprintRadiusTiles)||0);
+  const owner=ownerAt(seed,x,y),parentOwnerMatch=Boolean(countryId&&owner.id===countryId);
+  const nearest=countryId?nearestBorder(seed,x,y,countryId):null;
+  const distance=nearest?.distanceTiles??Infinity;
+  const footprintCrossesBorder=!parentOwnerMatch||distance<footprint;
+  const safelyInside=parentOwnerMatch&&distance>=Math.max(clearance,footprint);
+  return Object.freeze({
+    valid:safelyInside&&!footprintCrossesBorder,parentOwnerMatch,safelyInside,footprintCrossesBorder,
+    countryId,ownerId:owner.id,x,y,clearanceTiles:clearance,footprintRadiusTiles:footprint,
+    nearestBorderId:nearest?.borderId||null,nearestEdgeId:nearest?.edgeId||null,
+    nearestOwnerPair:nearest?.ownerPair||null,borderDistanceTiles:Number.isFinite(distance)?Number(distance.toFixed(3)):null,
+    graphRevision:nearest?.graphRevision||null,graphSignature:nearest?.graphSignature||null,
+    reason:!parentOwnerMatch?"wrong-owner":footprintCrossesBorder?"footprint-crosses-border":distance<clearance?"insufficient-clearance":"accepted"
+  });
+}
+
 function proof(seedValue){
   const seed=String(seedValue==null?"":seedValue);
   const terrainBefore=GeographyFoundation.getTerrainType(seed,"0","0");
@@ -583,9 +845,10 @@ function renderDebugPanel(seedValue,borderIndexValue,rootNode){
 }
 
 const api=Object.freeze({
-  COUNTRY_CELL_SIZE,COUNTRY_JITTER,CANDIDATE_RADIUS,
-  politicalCellFor,countryAt,ownerAt,countryForCell,countryById,nearbyCountries,borderEvidence,proof,renderDebugPanel,
-  planetSurfaceAt,deterministicCountryLandAnchor
+  COUNTRY_CELL_SIZE,COUNTRY_JITTER,CANDIDATE_RADIUS,BOUNDARY_GRAPH_REVISION,
+  politicalCellFor,countryAt,ownerAt,countryForCell,countryById,nearbyCountries,borderEvidence,
+  canonicalBoundaryGraph,nearestBorder,isSafelyInside,segmentCrossesBorder,validatePlacement,
+  proof,renderDebugPanel,planetSurfaceAt,deterministicCountryLandAnchor
 });
 window.PoliticalGeography=api;
 window.CountryTerritories=api;
