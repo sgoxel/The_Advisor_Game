@@ -455,10 +455,18 @@ function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMete
   if(tangentActive){
     const frame=localDisplayFrame(),dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,cosLat=Math.max(.08,Math.cos(lat0));
     const north=(lat-lat0)*WORLD_RADIUS_METERS,east=wrapLongitudeRadians(lon-lon0)*WORLD_RADIUS_METERS*cosLat;
-    if(Math.abs(east)>dims.patchWidth*.52||Math.abs(north)>dims.patchHeight*.52)return null;
-    const local=new pc.Vec3(east/dims.metersPerUnit,localGroundHeightUnits(east,north,frame)+Number(surfaceOffsetMeters||0)/dims.metersPerUnit,-north/dims.metersPerUnit);
-    const world=tangentPatch.getWorldTransform().transformPoint(local,new pc.Vec3());
-    return {world,mode:"tangent",latitudeRadians:lat,longitudeRadians:lon,eastMeters:east,northMeters:north};
+    const insideDetail=Math.abs(east)<=dims.patchWidth*.52&&Math.abs(north)<=dims.patchHeight*.52;
+    // The visible local map is the detailed 1x patch plus a canonical 3x
+    // surround. Projecting overlays only against the 1x patch made valid
+    // country boundaries stop at an invisible interior rectangle while the
+    // player still saw world-matched surround terrain beyond it.
+    const insideSurround=Boolean(horizonSkirt?.enabled)&&Math.abs(east)<=dims.patchWidth*1.5&&Math.abs(north)<=dims.patchHeight*1.5;
+    if(!insideDetail&&!insideSurround)return null;
+    const holder=insideDetail?tangentPatch:horizonSkirt;
+    const groundY=insideDetail?localGroundHeightUnits(east,north,frame):0;
+    const local=new pc.Vec3(east/dims.metersPerUnit,groundY+Number(surfaceOffsetMeters||0)/dims.metersPerUnit,-north/dims.metersPerUnit);
+    const world=holder.getWorldTransform().transformPoint(local,new pc.Vec3());
+    return {world,mode:insideDetail?"tangent":"tangent-surround",latitudeRadians:lat,longitudeRadians:lon,eastMeters:east,northMeters:north};
   }
   const direction=window.PlanetGeography.directionFromLatLon(lat,lon);if(!direction)return null;
   let sample=null;try{sample=geography?.sampleLatLon?.(lat,lon)||null;}catch(_){sample=null;}
