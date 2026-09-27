@@ -985,11 +985,12 @@ function buildMapBorderSegments(){
   };
   const started=performance.now(),countrySize=Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608);
   // Keep one zoom-invariant bounded field large enough for the widest tested
-  // desktop/phone footprint. The old shallow 29x19 window could end inside a
-  // portrait viewport and make valid country contours look like broken slivers.
-  // 35x35 preserves roughly the previous ~32 km cell spacing while adding
-  // symmetric viewport margin without turning border work into a full-world scan.
-  const cols=35,rows=35,halfSpanX=Math.round(countrySize*1.35),halfSpanY=Math.round(countrySize*1.35),nodes=[],ownerIds=new Set();
+  // desktop/phone footprint plus a deterministic off-screen margin. Overlay
+  // projection can now use the visible 3x surround, so the previous ~531 km
+  // field could end inside a ~909 km country view and create a false inland
+  // dangling endpoint. The ~1.08 Mm field remains bounded and zoom-invariant;
+  // 47x47 sampling preserves sufficient contour density without a world scan.
+  const cols=47,rows=47,halfSpanX=Math.round(countrySize*2.75),halfSpanY=Math.round(countrySize*2.75),nodes=[],ownerIds=new Set();
   let landSampleCount=0,waterSampleCount=0,ownerQueryCount=0;
   const nodeAt=(col,row)=>{
     const rawX=centerX+BigInt(Math.round(-halfSpanX+(halfSpanX*2)*col/(cols-1)));
@@ -2914,10 +2915,12 @@ function makeCloudTexture(){
   for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++){
     const u=x/source.width,v=y/source.height,lat=(v-.5)*Math.PI;
     const field=Math.sin(u*Math.PI*10+phaseA)*.34+Math.sin(u*Math.PI*22+v*Math.PI*5+phaseB)*.22+Math.cos(u*Math.PI*7-v*Math.PI*13+phaseC)*.18+Math.cos(lat*3)*.20;
-    // Longitude is singular at a sphere pole. Fade the decorative cloud alpha
-    // through the last ~10 degrees so longitude-varying texels cannot collapse
-    // into radial fan/star streaks at the shared pole vertices.
-    const polar=Math.min(1,Math.max(0,Math.cos(lat)*6)),polarFade=polar*polar*(3-2*polar);
+    // Longitude is singular at a sphere pole and every longitude wedge shares
+    // the same physical pole. Even tiny non-zero alpha there stacks through
+    // coincident translucent triangles as a radial fan. Keep a true zero-alpha
+    // polar cap, then ease clouds back in before normal latitudes.
+    const poleDistance=Math.min(v,1-v);
+    const polarT=clamp((poleDistance-.05)/.05,0,1),polarFade=polarT*polarT*(3-2*polarT);
     const alpha=Math.round(clamp((field-.12)*260,0,112)*polarFade);const i=(y*source.width+x)*4;
     data[i]=232;data[i+1]=241;data[i+2]=246;data[i+3]=alpha;
   }
