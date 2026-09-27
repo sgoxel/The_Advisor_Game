@@ -210,6 +210,14 @@ The canonical fantasy planet uses **10% of Earth's linear scale**:
 
 The displayed PlayCanvas sphere is a visualization of that physical world, not a literal meter-per-engine-unit mesh. Physical measurements remain in meters/kilometers independently of renderer scale.
 
+### Pure Zoom Interaction Rule
+
+Zoom input changes **zoom only**. It must not rotate, tilt, orbit, translate, recenter or otherwise move the planet/sphere or change the viewing angle. The current geographic focus and screen-space focus remain fixed unless the player explicitly uses a separate movement/rotation control.
+
+As zoom increases, the already-visible area is progressively refined with more SEED-generated detail. Internal LOD or globe/tangent/local representation changes may occur only when they are visually equivalent to continuing the same pure zoom; they must not introduce a new angle, horizon, focus, location or camera choreography.
+
+Wheel/pinch is therefore strictly separated from pan/drag and rotation/orbit controls. Zoom is magnification/detail refinement, not navigation.
+
 The world is a **finite continuous sphere**, not an unbounded planar tile grid. No tile is authoritative world state. Future local terrain and LOD systems may use bounded render patches or caches, but those patches must sample planet-space world data and remain disposable presentation/performance structures rather than defining world truth.
 
 For Stage 1, protagonist, NPC, settlement, building and local-terrain systems are deliberately dormant. Later stages will add planetary geography first, then progressively finer detail while preserving the same canonical planet scale.
