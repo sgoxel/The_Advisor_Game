@@ -1905,3 +1905,13 @@
 - Added deterministic WP evidence covering all ten forward scales, reverse zoom, equal-pixel drag at all scales, two independent SEEDs, static JS parsing, browser startup and fresh screenshots.
 - Acceptance passed in run 36346377293 (artifact 10940592423): 13 screenshots, 10 drag states, 9 reverse states, primary SEED The_Advisor_Game_Planet_001, secondary SEED AGENT6-PURE-ZOOM-B, max ruler truth error 0.0 m.
 - Fresh screenshots were directly inspected. VISUAL: 8/10 — scale labels/ruler are readable and the same geographic focus enlarges without orbit, tilt, horizon reveal, clipping, black frames or visible focus jumps. Intermediate/local terrain art remains coarse but not a major WP-blocking visual defect.
+
+2026-09-27 23:04 +03:00 | WP-S003-010-003-011 | MIXED | ACCEPTED — DEPLOYMENT PENDING
+- Replaced zoom-triggered camera choreography with fixed-pose orthographic magnification. Sphere position/rotation, camera pose/look vector/target and canonical geographic focus remain invariant during zoom; local/tangent LOD refinement is presented in the same camera-facing plane instead of orbiting, tilting or revealing a horizon.
+- Replaced the user-facing continuous x multiplier with the exact required ladder: 1/10, 1/20, 1/50, 1/100, 1/250, 1/500, 1/1000, 1/2500, 1/5000, 1/10000. Wheel/pinch and +/- keyboard zoom route only through discrete ladder steps.
+- Rebuilt the ruler from visible world footprint / viewport pixels with no arbitrary 72–190 px clamp. Final evidence reported max ruler truth error 0.0 m.
+- Reworked drag/navigation to convert screen pixels into geodesic canonical-focus movement derived from current meters-per-pixel, then solve the exact PlayCanvas XYZ sphere rotation. Final evidence measured a 100 px horizontal drag at ~157.86 km on 1/10 and ~5.48 m on 1/10000.
+- Corrected canonical focus math to use the exact inverse of PlayCanvas intrinsic XYZ Euler sphere rotation instead of treating latitude and yaw as separable; this eliminated the previous ~39 px optical-anchor offset.
+- Final acceptance run 36346377293 passed node parse, browser startup, all ten forward scale checkpoints, nine reverse checkpoints, ten equal-pixel drag checks, independent second-seed checks, no severe browser errors, and 13 fresh screenshots.
+- Fresh final screenshots were directly inspected. VISUAL: 8/10 PASS. No zoom-induced angle/orbit/focus jump, clipping, horizon reveal or major layout defect was visible. Intermediate 1/2500–1/5000 terrain remains visually soft/blocky, limiting the score but not violating this WP's zoom/navigation acceptance.
+- ROADMAP remains intentionally NOT COMPLETED until the accepted implementation/docs commit is deployed and verified on GitHub Pages.
