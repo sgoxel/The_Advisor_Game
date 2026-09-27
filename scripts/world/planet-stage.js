@@ -592,6 +592,7 @@ function coordinateFabricDiagnostics(){
     }catch(_){}
   };
   add("gameplay-center","ACTIVE-CENTER",center.worldTile,"PlanetStage.canonicalFocus");
+  add("terrain","FOCUS-TERRAIN",center.worldTile,"PlanetGeography.sampleLatLon");
   try{
     const country=window.PoliticalGeography?.countryAt?.(activeSeed,center.worldTile.x,center.worldTile.y);
     const anchor=country?.mapAnchor||country?.politicalCenter||country?.capital;
