@@ -103,8 +103,8 @@ function chooseWeather(context){
   const order=["clear","cloudy","rain","fog","windy","storm"],total=order.reduce((sum,k)=>sum+weights[k],0);
   let cursor=roll*total,state="clear";
   for(const key of order){cursor-=weights[key];if(cursor<=0){state=key;break}}
-  const baseIntensity={clear:.12,cloudy:.38,rain:.62,fog:.58,windy:.54,storm:.82}[state];
-  const spread={clear:.18,cloudy:.28,rain:.28,fog:.25,windy:.34,storm:.18}[state];
+  const baseIntensity={clear:.12,cloudy:.38,rain:.70,fog:.58,windy:.54,storm:.82}[state];
+  const spread={clear:.18,cloudy:.28,rain:.24,fog:.25,windy:.34,storm:.18}[state];
   const intensity=clamp(baseIntensity+(intensityRoll-.5)*spread,.05,1);
   const windIntensity=clamp((state==="windy"?.62:state==="storm"?.78:state==="rain"?.32:.12)+rugged*.18+(intensityRoll-.5)*.12,0,1);
   const precipitation=state==="rain"?intensity:state==="storm"?clamp(intensity+.12,0,1):0;
