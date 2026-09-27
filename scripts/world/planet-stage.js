@@ -451,7 +451,23 @@ function navigationSensitivity(){
   const pitchDegreesPerPixel=metersPerPixelY/WORLD_RADIUS_METERS*180/Math.PI;
   return Object.freeze({viewportWidthPixels:widthPx,viewportHeightPixels:heightPx,metersPerPixelX:Number(metersPerPixelX.toFixed(6)),metersPerPixelY:Number(metersPerPixelY.toFixed(6)),yawDegreesPerPixel:Number(yawDegreesPerPixel.toFixed(9)),pitchDegreesPerPixel:Number(pitchDegreesPerPixel.toFixed(9)),samplePixels:100,sampleHorizontalMeters:Number((metersPerPixelX*100).toFixed(3)),sampleVerticalMeters:Number((metersPerPixelY*100).toFixed(3))});
 }
-function rotateByScreenPixels(dx,dy){const sensitivity=navigationSensitivity();return rotateBy(Number(dx||0)*sensitivity.yawDegreesPerPixel,Number(dy||0)*sensitivity.pitchDegreesPerPixel);}
+function rotateByScreenPixels(dx,dy){
+  const sensitivity=navigationSensitivity();
+  // Screen-space navigation is defined in physical surface distance, not raw
+  // Euler degrees. Convert the requested pointer displacement to a great-circle
+  // destination so equal pixel drags track the current visible footprint at
+  // every scale, then solve the exact sphere rotation for that canonical focus.
+  const eastMeters=-Number(dx||0)*sensitivity.metersPerPixelX;
+  const northMeters=Number(dy||0)*sensitivity.metersPerPixelY;
+  const distanceMeters=Math.hypot(eastMeters,northMeters);
+  if(distanceMeters<1e-9)return snapshot();
+  const angular=distanceMeters/WORLD_RADIUS_METERS,bearing=Math.atan2(eastMeters,northMeters);
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
+  const sinLat0=Math.sin(lat0),cosLat0=Math.cos(lat0),sinAngular=Math.sin(angular),cosAngular=Math.cos(angular);
+  const lat=Math.asin(clamp(sinLat0*cosAngular+cosLat0*sinAngular*Math.cos(bearing),-1,1));
+  const lon=wrapLongitudeRadians(lon0+Math.atan2(Math.sin(bearing)*sinAngular*cosLat0,cosAngular-sinLat0*Math.sin(lat)));
+  return setViewTarget({latitudeRadians:lat,longitudeRadians:lon});
+}
 function rotateByScreenFraction(xFraction,yFraction){const sensitivity=navigationSensitivity();return rotateByScreenPixels(Number(xFraction||0)*sensitivity.viewportWidthPixels,Number(yFraction||0)*sensitivity.viewportHeightPixels);}
 function niceScaleDistanceMeters(widthMeters){
   const target=Math.max(1,Number(widthMeters)||1)*.22;
