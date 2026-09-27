@@ -139,7 +139,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
-    "wp-s003-010-003-008","wp-s003-010-003-009",
+    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010",
     "wp-s003-010-004",
     "wp-s003-010-005",
     "wp-s004-001",
@@ -258,6 +258,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-007": 10,
     "wp-s003-010-003-008": 14,
     "wp-s003-010-003-009": 14,
+    "wp-s003-010-003-010": 12,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -1693,7 +1694,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -7133,6 +7134,129 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetHeightMeters:p?.targetHeightMeters};
         """)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-010-003-010":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("seed-a-baseline",0.12,(1280,800),"path",0),
+            ("seed-a-slow-1",0.12,(1280,800),"path",1),
+            ("seed-a-slow-2",0.12,(1280,800),"path",2),
+            ("seed-a-slow-3",0.12,(1280,800),"path",3),
+            ("seed-a-slow-back",0.12,(1280,800),"path",2),
+            ("seed-a-zoom-0.08",0.08,(1280,800),"path",1),
+            ("seed-a-zoom-0.15",0.15,(1280,800),"path",1),
+            ("seed-a-coast",0.12,(1280,800),"coast",0),
+            ("seed-a-junction",0.12,(1280,800),"junction",0),
+            ("seed-a-phone-landscape",0.12,(844,390),"path",0),
+            ("seed-a-phone-portrait",0.12,(390,844),"path",0),
+            ("seed-b-baseline",0.12,(1280,800),"path",0),
+        )
+        label,display_multiplier,viewport,target_kind,target_index=plan[min(frame_index,len(plan)-1)]
+        if frame_index in (0,11):
+            seed="WP_S003_010_003_010_A" if frame_index==0 else "WP_S003_010_003_010_B"
+            base=driver.current_url.split("?",1)[0]
+            driver.get(base+"?seed="+seed)
+            WebDriverWait(driver,180.0).until(lambda d: d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.();
+                return Boolean(s?.ready===true&&s?.geographyVersion==='planetary-geography-v5'&&window.PoliticalGeography?.canonicalBoundaryGraph);
+            """))
+            setup=driver.execute_script("""
+                const stage=window.PlanetStage,politics=window.PoliticalGeography,s=stage.snapshot(),seed=s.activeSeed;
+                const focus=s?.canonicalFocus?.worldTile||{x:"0",y:"0"};
+                const country=politics.countryAt(seed,String(focus.x||"0"),String(focus.y||"0"));
+                const starts=[country?.mapAnchor,country?.capital,country?.politicalCenter].filter(Boolean);
+                let path=null;
+                const steps=[0,18000,36000,54000];
+                for(const start of starts){
+                  const sx=BigInt(start.x),sy=BigInt(start.y);
+                  for(let spoke=0;spoke<24&&!path;spoke++){
+                    const angle=Math.PI*2*spoke/24;
+                    const points=steps.map(distance=>({
+                      x:(sx+BigInt(Math.round(Math.cos(angle)*distance))).toString(),
+                      y:(sy+BigInt(Math.round(Math.sin(angle)*distance))).toString()
+                    }));
+                    const valid=points.every(point=>{
+                      const owner=politics.ownerAt(seed,point.x,point.y);
+                      const surface=politics.planetSurfaceAt(seed,point.x,point.y);
+                      return owner?.id===country.id&&surface?.sample?.land===true;
+                    });
+                    if(valid)path=points;
+                  }
+                  if(path)break;
+                }
+                if(!path)throw new Error("no same-country slow-navigation path spanning old cache buckets");
+                const graph=politics.canonicalBoundaryGraph(seed,country.id);
+                if(!graph?.signature||!graph.edges?.length)throw new Error("canonical boundary graph unavailable");
+                const coastPoint=graph.edges.flatMap(edge=>[edge.a,edge.b]).find(point=>point.classification==="coastline")||null;
+                const junctionPoint=graph.edges.flatMap(edge=>[edge.a,edge.b]).find(point=>point.classification==="junction")||null;
+                window.__wp010={countryId:country.id,path,coastPoint,junctionPoint,graphSignature:graph.signature};
+                stage.setWorldTileFocus(path[0].x,path[0].y);
+                return {countryId:country.id,path,coastPoint,junctionPoint,signature:graph.signature};
+            """)
+            if not isinstance(setup,dict) or not setup.get("countryId") or len(setup.get("path") or [])<4:
+                raise RuntimeError(f"WP-010 canonical setup failed: {setup}")
+        driver.set_window_size(int(viewport[0]),int(viewport[1])); time.sleep(0.18)
+        target=driver.execute_script("""
+            const state=window.__wp010;if(!state)return null;
+            const kind=String(arguments[0]),index=Number(arguments[1])||0;
+            if(kind==="coast"&&state.coastPoint)return state.coastPoint;
+            if(kind==="junction"&&state.junctionPoint)return state.junctionPoint;
+            return state.path[Math.max(0,Math.min(state.path.length-1,index))]||state.path[0];
+        """,target_kind,target_index)
+        if not isinstance(target,dict):
+            raise RuntimeError(f"WP-010 target resolution failed for {label}: {target}")
+        driver.execute_script("window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]))",target.get("x"),target.get("y"))
+        scalar=(math.log10(float(display_multiplier))+2.0)/2.0
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0])",float(scalar))
+        WebDriverWait(driver,180.0).until(lambda d: d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},r=s?.projection?.resourceBudget||{},state=window.__wp010||{};
+            return s?.ready===true &&
+                   Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001 &&
+                   Number(r?.pendingPreparationCount||0)===0 &&
+                   m?.bounded===true&&m?.fullWorldScan===false&&
+                   m?.borderGraphRevision==="CBG-1"&&
+                   String(m?.borderTopologySignature||"")===String(state.graphSignature||"")&&
+                   Number(m?.borderGraphEdgeCount||0)>0;
+        """,float(scalar))
+        proof=driver.execute_script("""
+            const stage=window.PlanetStage,s=stage.snapshot(),m=s.mapPresentation||{},seed=s.activeSeed;
+            const politics=window.PoliticalGeography,state=window.__wp010||{};
+            const country=politics.countryById(seed,state.countryId);
+            const regions=window.RegionProfile?.regionsForCountry?.(seed,country,3)||[];
+            const archetypes=window.SettlementArchetypes;
+            const generated=[];
+            const cap=archetypes?.build?.(seed,country.capital,{countryId:country.id,role:"national-capital",classHint:"national-capital",nameHint:country.capital.name});
+            if(cap)generated.push(cap);
+            for(const [index,classId] of ["city","town","village"].entries()){
+              const region=regions[index]||regions[0];
+              if(!region)continue;
+              const plan=archetypes?.build?.(seed,region.administrativeSeat,{countryId:country.id,role:"wp010-"+classId,classHint:classId,nameHint:"WP010 "+classId});
+              if(plan)generated.push(plan);
+            }
+            const catalog=archetypes?.settlementsForCountry?.(seed,country,3)||[];
+            const frontier=catalog.find(plan=>plan?.subtypes?.tags?.includes("frontier")||plan?.subtypes?.tags?.includes("fortified"))||null;
+            if(frontier&&!generated.some(plan=>plan.id===frontier.id))generated.push(frontier);
+            const placements=generated.map(plan=>({
+              id:plan.id,name:plan.name,classId:plan.classId,role:plan.role,
+              valid:plan.placement?.valid===true,parentOwnerMatch:plan.placement?.parentOwnerMatch===true,
+              footprintCrossesBorder:plan.placement?.footprintCrossesBorder===true,
+              borderDistanceTiles:plan.placement?.borderDistanceTiles??null,
+              nearestBorderId:plan.placement?.nearestBorderId||null
+            }));
+            const regionSeats=regions.slice(0,8).map(region=>({
+              id:region.id,valid:region.administrativeSeat?.borderPlacement?.valid===true,
+              footprintCrossesBorder:region.administrativeSeat?.borderPlacement?.footprintCrossesBorder===true
+            }));
+            return {
+              seed,countryId:country.id,graphRevision:m.borderGraphRevision,graphSignature:m.borderTopologySignature,
+              graphNodeCount:m.borderGraphNodeCount,graphEdgeCount:m.borderGraphEdgeCount,ownerPairs:m.borderGraphOwnerPairs,
+              endpoints:m.borderEndpointClassifications,focusOwnerId:m.borderFocusOwnerId,
+              sampleCount:m.borderSampleCount,ownerQueryCount:m.borderOwnerQueryCount,projected:m.projectedBorderSegmentCount,
+              placements,regionSeats,frontierAvailable:Boolean(frontier),fullWorldScan:m.fullWorldScan,bounded:m.bounded
+            };
+        """)
+        if not isinstance(proof,dict):
+            raise RuntimeError(f"WP-010 proof unavailable: {proof}")
+        return "canonical-border|"+label+"|"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-010-003-009":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -7752,6 +7876,63 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-010-003-010":
+        if len(frames) < 12:
+            raise RuntimeError("wp-s003-010-003-010 requires twelve canonical-border frames")
+        proofs=[]
+        maps=[]
+        for index,frame in enumerate(frames[:12],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split("|",2)[2])
+            except Exception as exc:
+                raise RuntimeError(f"WP-010 frame {index} lacks canonical proof: {action}") from exc
+            proofs.append(proof)
+            stage=frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {}
+            m=stage.get("mapPresentation") or {}
+            maps.append(m)
+            if proof.get("graphRevision")!="CBG-1" or not proof.get("graphSignature"):
+                raise RuntimeError(f"WP-010 canonical graph metadata missing in frame {index}: {proof}")
+            if int(proof.get("graphNodeCount") or 0)<2 or int(proof.get("graphEdgeCount") or 0)<1:
+                raise RuntimeError(f"WP-010 canonical graph empty in frame {index}: {proof}")
+            if proof.get("bounded") is not True or proof.get("fullWorldScan") is not False:
+                raise RuntimeError(f"WP-010 lost bounded/no-full-world contract in frame {index}: {proof}")
+            if int(proof.get("sampleCount") or 0)>1400 or int(proof.get("ownerQueryCount") or 0)>12000:
+                raise RuntimeError(f"WP-010 canonical graph exceeded bounded query budget in frame {index}: {proof}")
+            if int(proof.get("projected") or 0)<1 and index not in (8,9):
+                raise RuntimeError(f"WP-010 no political border projected in frame {index}: {proof}")
+            placements=proof.get("placements") or []
+            required={"national-capital","city","town","village"}
+            classes={str(item.get("classId") or "") for item in placements}
+            if not required.issubset(classes):
+                raise RuntimeError(f"WP-010 placement class coverage missing in frame {index}: {classes}")
+            bad=[item for item in placements if item.get("valid") is not True or item.get("parentOwnerMatch") is not True or item.get("footprintCrossesBorder") is True]
+            if bad:
+                raise RuntimeError(f"WP-010 border-aware place validation failed in frame {index}: {bad}")
+            bad_regions=[item for item in (proof.get("regionSeats") or []) if item.get("valid") is not True or item.get("footprintCrossesBorder") is True]
+            if bad_regions:
+                raise RuntimeError(f"WP-010 region-seat validation failed in frame {index}: {bad_regions}")
+            if str(m.get("borderTopologySignature") or "")!=str(proof.get("graphSignature") or ""):
+                raise RuntimeError(f"WP-010 renderer diverged from canonical graph in frame {index}: {m}")
+        seed_a=[str(proofs[i].get("graphSignature") or "") for i in range(0,11)]
+        if len(set(seed_a))!=1:
+            raise RuntimeError(f"WP-010 graph signature changed during same-SEED navigation/zoom/mobile cycle: {seed_a}")
+        focus_owners=[str(proofs[i].get("focusOwnerId") or "") for i in range(0,7)]
+        if len(set(focus_owners))!=1 or not focus_owners[0]:
+            raise RuntimeError(f"WP-010 slow navigation left focused political owner: {focus_owners}")
+        seed_names=[str(proofs[i].get("seed") or "") for i in (0,11)]
+        if not all(seed_names) or seed_names[0]==seed_names[1]:
+            raise RuntimeError(f"WP-010 independent SEED coverage invalid: {seed_names}")
+        if str(proofs[0].get("graphSignature"))==str(proofs[11].get("graphSignature")):
+            raise RuntimeError("WP-010 independent SEEDs unexpectedly produced identical graph signatures")
+        landscape=frames[9].get("runtime",{}).get("viewport",{})
+        portrait=frames[10].get("runtime",{}).get("viewport",{})
+        if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>430:
+            raise RuntimeError(f"WP-010 phone landscape frame unexpected: {landscape}")
+        if int(portrait.get("width") or 0)>430 or int(portrait.get("height") or 0)<700:
+            raise RuntimeError(f"WP-010 phone portrait frame unexpected: {portrait}")
+        return
+
     if scenario == "wp-s003-010-003-009":
         if len(frames) < 14:
             raise RuntimeError("wp-s003-010-003-009 requires fourteen registration frames")
@@ -13980,7 +14161,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
