@@ -1074,8 +1074,10 @@ function atlasFindLabelPlacement(entity,p,portrait,rect,reserved,occupied){
     const key=Math.round(dx)+"|"+Math.round(dy);
     if(seen.has(key))return;seen.add(key);candidates.push({dx,dy});
   };
-  const previous=atlasLabelPlacementCache.get(entity.id);
-  if(previous)remember(previous.dx,previous.dy);
+  // Placement choice must be a pure function of the current canonical anchor,
+  // viewport and deterministic candidate ordering. Historical offsets are kept
+  // only as telemetry; consulting them here made identical visible states choose
+  // different layouts after an intervening pan/portrait frame.
   if(entity.type==="landmark"){
     remember(0,-26);remember(26,0);remember(-26,0);remember(0,26);
   }else remember(0,0);
