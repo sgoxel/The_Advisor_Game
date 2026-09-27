@@ -22,6 +22,7 @@ const ZOOM_MAX=1;
 const ZOOM_WHEEL_SENSITIVITY=0.00045;
 const ZOOM_PINCH_SENSITIVITY=0.003;
 const ZOOM_DISTANCE_FACTOR=0.018;
+const SCALE_LADDER=Object.freeze(["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]);
 // One continuous footprint ladder drives every representation:
 // - up to LADDER_START_SCALAR it is the true surface footprint of the globe
 //   camera (it depends on viewport framing, so it is computed, not tabled);
@@ -212,7 +213,7 @@ function freshLocalResources(){
 }
 let localResources=freshLocalResources();
 let localPreparationToken=0;
-let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,borderGraphRevision:null,borderGraphNodeCount:0,borderGraphEdgeCount:0,borderGraphOwnerPairs:[],borderEndpointClassifications:null,borderFocusOwnerId:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",zoomScaleMultiplier:.01,zoomScaleLabel:"0.01x",updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
+let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,borderGraphRevision:null,borderGraphNodeCount:0,borderGraphEdgeCount:0,borderGraphOwnerPairs:[],borderEndpointClassifications:null,borderFocusOwnerId:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",scaleStateIndex:0,scaleStateLabel:SCALE_LADDER[0],scalePixelLength:0,metersPerScreenPixel:0,rulerTruthErrorMeters:0,internalZoomScalar:0,updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
 let atlasStickyBand=null;
 const atlasStickyEntities=new Map();
@@ -428,21 +429,41 @@ function mapPlaceKindsForBand(band){
   };
   return table[band]||[];
 }
-function mapZoomScaleMultiplier(){
-  return Math.pow(10,-2+2*clamp(zoomState.scalar,0,1));
+function scaleIndexForScalar(value=zoomState.scalar){
+  return Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(clamp(value,0,1)*(SCALE_LADDER.length-1))));
 }
-function formatZoomScale(value){
-  const v=Math.max(.0001,Number(value)||.01);
-  if(v>=.995)return "1.00x";
-  if(v>=.1)return v.toFixed(2)+"x";
-  return v.toFixed(2)+"x";
+function scalarForScaleIndex(index){
+  const i=Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(Number(index)||0)));
+  return i/Math.max(1,SCALE_LADDER.length-1);
 }
+function scaleStateForScalar(value=zoomState.scalar){
+  const index=scaleIndexForScalar(value),scalar=scalarForScaleIndex(index);
+  return Object.freeze({index,label:SCALE_LADDER[index],scalar:Number(scalar.toFixed(6)),targetFootprintHeightMeters:Number(presentationTargetHeightMeters(scalar).toFixed(3))});
+}
+function setScaleIndex(index){return setZoomScalar(scalarForScaleIndex(index));}
+function stepScale(direction){const d=Math.sign(Number(direction)||0);return d===0?snapshot():setScaleIndex(scaleIndexForScalar()+d);}
+function navigationSensitivity(){
+  const rect=canvas?.getBoundingClientRect?.(),widthPx=Math.max(1,Number(rect?.width||1)),heightPx=Math.max(1,Number(rect?.height||1));
+  const metersPerPixelX=Math.max(.000001,Number(zoomState.visibleFootprintWidthMeters||1))/widthPx;
+  const metersPerPixelY=Math.max(.000001,Number(zoomState.visibleFootprintHeightMeters||1))/heightPx;
+  const cosLat=Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  const yawDegreesPerPixel=metersPerPixelX/(WORLD_RADIUS_METERS*cosLat)*180/Math.PI;
+  const pitchDegreesPerPixel=metersPerPixelY/WORLD_RADIUS_METERS*180/Math.PI;
+  return Object.freeze({viewportWidthPixels:widthPx,viewportHeightPixels:heightPx,metersPerPixelX:Number(metersPerPixelX.toFixed(6)),metersPerPixelY:Number(metersPerPixelY.toFixed(6)),yawDegreesPerPixel:Number(yawDegreesPerPixel.toFixed(9)),pitchDegreesPerPixel:Number(pitchDegreesPerPixel.toFixed(9)),samplePixels:100,sampleHorizontalMeters:Number((metersPerPixelX*100).toFixed(3)),sampleVerticalMeters:Number((metersPerPixelY*100).toFixed(3))});
+}
+function rotateByScreenPixels(dx,dy){const sensitivity=navigationSensitivity();return rotateBy(Number(dx||0)*sensitivity.yawDegreesPerPixel,Number(dy||0)*sensitivity.pitchDegreesPerPixel);}
+function rotateByScreenFraction(xFraction,yFraction){const sensitivity=navigationSensitivity();return rotateByScreenPixels(Number(xFraction||0)*sensitivity.viewportWidthPixels,Number(yFraction||0)*sensitivity.viewportHeightPixels);}
 function niceScaleDistanceMeters(widthMeters){
   const target=Math.max(1,Number(widthMeters)||1)*.22;
   const power=Math.pow(10,Math.floor(Math.log10(target)));
   const normalized=target/power;
   const nice=normalized>=5?5:normalized>=2?2:1;
   return nice*power;
+}
+function scaleRulerForViewport(widthMeters,pixelWidth){
+  const width=Math.max(.000001,Number(widthMeters)||1),pixels=Math.max(1,Number(pixelWidth)||1);
+  const distanceMeters=niceScaleDistanceMeters(width),metersPerScreenPixel=width/pixels,pixelLength=distanceMeters/metersPerScreenPixel;
+  return Object.freeze({distanceMeters,pixelLength:Number(pixelLength.toFixed(4)),metersPerScreenPixel:Number(metersPerScreenPixel.toFixed(6)),truthErrorMeters:Number(Math.abs(distanceMeters-pixelLength*metersPerScreenPixel).toFixed(6))});
 }
 function formatDistanceMeters(meters){
   const m=Math.max(1,Number(meters)||1);
@@ -1226,8 +1247,8 @@ function renderMapPresentation(){
   const visibleClasses=Array.from(new Set(visible.map(item=>item.displayClass)));
   const landmarkCandidates=atlas.query.candidates.filter(item=>item.type==="landmark");
   const maxLandmarkCount=spec.budget;
-  const multiplier=mapZoomScaleMultiplier(),scaleMeters=niceScaleDistanceMeters(zoomState.visibleFootprintWidthMeters),barPx=clamp(scaleMeters/Math.max(1,zoomState.visibleFootprintWidthMeters)*(rect?.width||1),72,190);
-  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=formatZoomScale(multiplier);scale.querySelector(".planet-scale-meta span").textContent=zoomState.band.replaceAll("-"," ");scale.querySelector(".planet-scale-line").style.width=Math.round(barPx)+"px";scale.querySelector("small").textContent=formatDistanceMeters(scaleMeters);
+  const scaleState=scaleStateForScalar(),ruler=scaleRulerForViewport(zoomState.visibleFootprintWidthMeters,rect?.width||1);
+  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label;scale.querySelector(".planet-scale-meta span").textContent=zoomState.band.replaceAll("-"," ");scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
   mapPresentation={
     active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount:legacyLabelCount,
     atlasVisibleLabelCount:visible.length,atlasCandidateCount:atlas.query.candidates.length,atlasQueryCellCount:atlas.query.queryCellCount,
@@ -1242,7 +1263,8 @@ function renderMapPresentation(){
     maxLabelDisplacementPixels:visible.reduce((max,item)=>Math.max(max,Number(item.displacementPixels||0)),0),
     registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
     projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
-    scaleDistanceMeters:scaleMeters,scaleLabel:formatDistanceMeters(scaleMeters),zoomScaleMultiplier:Number(multiplier.toFixed(5)),zoomScaleLabel:formatZoomScale(multiplier),
+    scaleDistanceMeters:ruler.distanceMeters,scaleLabel:formatDistanceMeters(ruler.distanceMeters),scaleStateIndex:scaleState.index,scaleStateLabel:scaleState.label,
+    scalePixelLength:ruler.pixelLength,metersPerScreenPixel:ruler.metersPerScreenPixel,rulerTruthErrorMeters:ruler.truthErrorMeters,internalZoomScalar:Number(zoomState.scalar.toFixed(6)),
     updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
   };
 }
@@ -1306,7 +1328,7 @@ function updateProjectionState(){
     blend,
     tangentOrigin:frame.originMeters,
     basis:Object.freeze({east:frame.east,north:frame.north,up:frame.up}),
-    cameraTarget:Object.freeze([0,0,Number((DISPLAY_RADIUS_UNITS*blend).toFixed(6))]),
+    cameraTarget:Object.freeze([0,0,0]),
     continuityErrorMeters:0
   };
 }
@@ -2649,7 +2671,8 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
     }
-    tangentPatch.setLocalEulerAngles(0,0,0);
+    // LOD refinement occupies the same camera-facing tangent plane; zoom never changes viewing angle.
+    tangentPatch.setLocalEulerAngles(90,0,0);
     const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
@@ -2680,7 +2703,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       // only until the authoritative requested-focus resource atomically swaps.
       offset=standInOffsetClamped?{east:0,north:0}:bounded;
     }
-    tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,0,-offset.north/dims.metersPerUnit*patchScale);
+    tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,offset.north/dims.metersPerUnit*patchScale,DISPLAY_RADIUS_UNITS+.002);
     const requestedIndex=requestedLodIndex,visibleIndex=displayResource?.levelIndex??requestedIndex;
     localResources.standInActive=standInActive;
     localResources.standInOffsetClamped=standInOffsetClamped;
@@ -2695,8 +2718,9 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       // large focus jump the bounded stand-in offset guarantees that this last
       // valid terrain representation still covers the viewport until swap.
       const surroundScale=patchScale;
+      horizonSkirt.setLocalEulerAngles(90,0,0);
       horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
-      horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,-.012,-offset.north/dims.metersPerUnit*surroundScale);
+      horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,offset.north/dims.metersPerUnit*surroundScale,DISPLAY_RADIUS_UNITS-.010);
       projectionPresentation={...projectionPresentation,surroundScale};
     }
   }
@@ -2738,66 +2762,23 @@ function updateProjectionPresentation(visibleHeightUnits=1){
 function applyCameraZoom(){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
   const scalar=clamp(zoomState.scalar,ZOOM_MIN,ZOOM_MAX);
-  // Keep the globe camera outside the displaced planetary mesh throughout this
-  // foundation WP. Later projection-transition WPs take over before true
-  // ground-scale rendering; entering the sphere here produces blank/inverted
-  // frames and breaks continuous visual focus.
-  const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
-  const travel=Math.max(0,zoomState.baseCameraDistance-safeSurfaceDistance);
-  const distance=safeSurfaceDistance+travel*Math.pow(1-scalar,2.15);
-  zoomState.cameraDistance=distance;zoomState.requestedBand=zoomBandFor(scalar);
+  zoomState.requestedBand=zoomBandFor(scalar);
   updateProjectionState();
-  const blend=projectionState.blend;
   updateLocalRequest();
   scheduleLocalStaticPresentationRefresh();
-  const globeZ=distance;
-  const viewBlend=blend;
-  const localZ=6.20;
-  const localY=5.00;
-  // Projection flattening and camera orientation are intentionally independent.
-  // Keep map-scale zoom radial/top-down through the country/regional bands, then
-  // introduce the gameplay oblique view gradually across the local approach.
-  // This prevents a small wheel/pinch step around 0.06x-0.08x from behaving
-  // like camera rotation while preserving the same spherical focus anchor.
-  // Gameplay oblique tilt starts at the same ~5 km footprint as before the
-  // log-uniform ladder rebalance.
-  const orientationStart=ladderState().orientationStart;
-  const orientationEnd=1.0;
-  const orientationRaw=clamp((scalar-orientationStart)/(orientationEnd-orientationStart),0,1);
-  const angleBlend=smoothstep01(orientationRaw);
-  const handoff=projectionHandoffForZoom(scalar);
-  const representationBlend=displayResource?projectionPresentationBlendForZoom(scalar):0;
-  const tangentVisible=representationBlend>.02;
-  // The tangent patch lies in X/Z. Once it becomes the visible representation,
-  // view it from above; keeping the old globe-front camera at Y~=0 makes the
-  // horizontal patch appear as a horizon strip. The later gameplay oblique
-  // transition is independent and begins only at orientationStart.
-  const mapY=8.0,mapZ=.35;
-  const tangentZ=lerp(mapZ,localZ,angleBlend);
-  const tangentY=lerp(mapY,localY,angleBlend);
-  // Smoothly move from the globe-front camera to the tangent-map camera.
-  // Zoom alone must never cause a discrete camera relocation.
-  const cameraZ=lerp(globeZ,tangentZ,representationBlend);
-  const cameraY=lerp(0,tangentY,representationBlend);
-  const targetZ=0;
-  const targetY=lerp(0,lerp(0,-.12,angleBlend),representationBlend);
-  cameraEntity.setLocalPosition(0,cameraY,cameraZ);cameraEntity.lookAt(0,targetY,targetZ);
-  const fov=34+12*angleBlend;if(cameraEntity.camera)cameraEntity.camera.fov=fov;
-  const lookLength=Math.max(.000001,Math.hypot(cameraY-targetY,cameraZ-targetZ));
-  const lookVector=Object.freeze([0,Number(((targetY-cameraY)/lookLength).toFixed(6)),Number(((targetZ-cameraZ)/lookLength).toFixed(6))]);
-  // Presentation pitch is 0 degrees for radial/top-down map viewing and grows
-  // only as the later local gameplay oblique camera is introduced.
-  const mapPitchBaseline=Math.atan2(mapZ,mapY)*180/Math.PI;
-  const cameraPitchDegrees=tangentVisible?Number(Math.max(0,Math.atan2(Math.abs(cameraZ-targetZ),Math.max(.000001,Math.abs(cameraY-targetY)))*180/Math.PI-mapPitchBaseline).toFixed(3)):0;
-  projectionPresentation={...projectionPresentation,viewBlend,handoff,representationBlend,angleBlend,orientationStart,orientationEnd,cameraY,cameraZ,fov,cameraPitchDegrees,lookVector,cameraTarget:Object.freeze([0,targetY,targetZ])};
-  const focusDistance=Math.hypot(cameraY-targetY,cameraZ-targetZ);
-  const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
-  const visibleHeightUnits=2*focusDistance*Math.tan(fov*Math.PI/360);
+  const targetHeightMeters=Math.max(2,presentationTargetHeightMeters(scalar));
+  const visibleHeightUnits=Math.max(1e-6,targetHeightMeters/WORLD_RADIUS_METERS*DISPLAY_RADIUS_UNITS);
+  const orthoHeight=Math.max(1e-6,visibleHeightUnits*.5);
+  cameraEntity.setLocalPosition(0,0,zoomState.baseCameraDistance);
+  cameraEntity.lookAt(0,0,0);
+  if(cameraEntity.camera){cameraEntity.camera.projection=pc.PROJECTION_ORTHOGRAPHIC;cameraEntity.camera.orthoHeight=orthoHeight;cameraEntity.camera.fov=GLOBE_VERTICAL_FOV_DEGREES;}
+  zoomState.cameraDistance=zoomState.baseCameraDistance;
+  const handoff=projectionHandoffForZoom(scalar),representationBlend=displayResource?projectionPresentationBlendForZoom(scalar):0;
+  projectionPresentation={...projectionPresentation,viewBlend:projectionState.blend,handoff,representationBlend,angleBlend:0,orientationStart:null,orientationEnd:null,cameraY:0,cameraZ:zoomState.baseCameraDistance,fov:GLOBE_VERTICAL_FOV_DEGREES,orthoHeight,cameraPitchDegrees:0,lookVector:Object.freeze([0,0,-1]),cameraTarget:Object.freeze([0,0,0]),zoomTransform:"orthographic-magnification-only",cameraPoseInvariant:true};
   updateProjectionPresentation(visibleHeightUnits);
-  const tangentOwnsView=blend>LOCAL_TANGENT_OWNERSHIP_BLEND&&Boolean(displayResource);
-  // Footprint (and therefore the ruler) is what is actually on screen: the
-  // globe camera's surface footprint, or the height the tangent patch shows.
-  const footprintHeight=tangentOwnsView?projectionPresentation.shownHeightMeters:globeSurfaceFootprintHeightMeters(scalar);
+  const tangentOwnsView=projectionState.blend>LOCAL_TANGENT_OWNERSHIP_BLEND&&Boolean(displayResource);
+  const footprintHeight=tangentOwnsView?Number(projectionPresentation.shownHeightMeters||targetHeightMeters):targetHeightMeters;
+  const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
   zoomState.visibleFootprintHeightMeters=Math.max(2,footprintHeight);
   zoomState.visibleFootprintWidthMeters=Math.max(2,footprintHeight*aspect);
   zoomState.band=visibleBandFor(zoomState.requestedBand,tangentOwnsView);
@@ -2823,7 +2804,7 @@ function setZoomScalar(value){
   lastZoomDirection=next>zoomState.scalar?1:-1;
   zoomState.scalar=next;zoomState.zoomChanges++;applyCameraZoom();return snapshot();
 }
-function zoomBy(delta){return setZoomScalar(zoomState.scalar+Number(delta||0));}
+function zoomBy(delta){const d=Number(delta||0);return d===0?snapshot():stepScale(d>0?1:-1);}
 function applyRotation(){
   if(!planet)return;
   planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
@@ -3276,7 +3257,7 @@ function bindInput(){
   canvas.setAttribute("role","application");
   canvas.setAttribute("aria-label","Rotatable seeded fantasy planet. Drag to rotate.");
   canvas.addEventListener("contextmenu",event=>event.preventDefault());
-  canvas.addEventListener("wheel",event=>{zoomState.wheelEvents++;zoomBy(-event.deltaY*ZOOM_WHEEL_SENSITIVITY);event.preventDefault();},{passive:false});
+  canvas.addEventListener("wheel",event=>{zoomState.wheelEvents++;if(event.deltaY!==0)stepScale(event.deltaY<0?1:-1);event.preventDefault();},{passive:false});
   canvas.addEventListener("pointerdown",event=>{
     if(event.pointerType==="mouse"&&event.button!==0)return;
     activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
@@ -3290,12 +3271,12 @@ function bindInput(){
   },{passive:false});
   canvas.addEventListener("pointermove",event=>{
     if(activePointers.has(event.pointerId))activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
-    if(activePointers.size>=2){const pts=Array.from(activePointers.values()).slice(0,2),distance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);if(lastPinchDistance!==null){zoomState.pinchEvents++;zoomBy((distance-lastPinchDistance)*ZOOM_PINCH_SENSITIVITY);}lastPinchDistance=distance;event.preventDefault();return;}
+    if(activePointers.size>=2){const pts=Array.from(activePointers.values()).slice(0,2),distance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);if(lastPinchDistance!==null&&Math.abs(distance-lastPinchDistance)>=8){zoomState.pinchEvents++;stepScale(distance>lastPinchDistance?1:-1);lastPinchDistance=distance;}event.preventDefault();return;}
     if(!dragging||event.pointerId!==pointerId)return;
     const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;
     inspection.dragDistance=Math.max(inspection.dragDistance,Math.hypot(event.clientX-inspection.pointerDownX,event.clientY-inspection.pointerDownY));
     lastPointerX=event.clientX;lastPointerY=event.clientY;
-    rotateBy(dx*0.34,dy*0.26);event.preventDefault();
+    rotateByScreenPixels(dx,dy);event.preventDefault();
   },{passive:false});
   const endPointer=event=>{
     activePointers.delete(event.pointerId);if(activePointers.size<2)lastPinchDistance=null;
@@ -3306,12 +3287,12 @@ function bindInput(){
   canvas.addEventListener("pointercancel",endPointer);
   canvas.addEventListener("keydown",event=>{
     let handled=true;
-    if(event.key==="ArrowLeft")rotateBy(-6,0);
-    else if(event.key==="ArrowRight")rotateBy(6,0);
-    else if(event.key==="ArrowUp")rotateBy(0,-6);
-    else if(event.key==="ArrowDown")rotateBy(0,6);
-    else if(event.key==="+"||event.key==="=")zoomBy(.06);
-    else if(event.key==="-"||event.key==="_")zoomBy(-.06);
+    if(event.key==="ArrowLeft")rotateByScreenFraction(-.08,0);
+    else if(event.key==="ArrowRight")rotateByScreenFraction(.08,0);
+    else if(event.key==="ArrowUp")rotateByScreenFraction(0,-.08);
+    else if(event.key==="ArrowDown")rotateByScreenFraction(0,.08);
+    else if(event.key==="+"||event.key==="=")stepScale(1);
+    else if(event.key==="-"||event.key==="_")stepScale(-1);
     else if(event.key==="Escape"){dismissInspection();}
     else handled=false;
     if(handled)event.preventDefault();
@@ -3497,6 +3478,8 @@ async function buildScene(){  const started=performance.now();
   cameraEntity=new pc.Entity("PlanetCamera");
   cameraEntity.addComponent("camera",{
     clearColor:new pc.Color(0.004,0.008,0.018),
+    projection:pc.PROJECTION_ORTHOGRAPHIC,
+    orthoHeight:DISPLAY_RADIUS_UNITS*1.1,
     fov:34,
     nearClip:0.1,
     farClip:100
@@ -3622,6 +3605,17 @@ async function start(){
     throw error;
   }
 }
+function entityTransformTelemetry(entity){
+  if(!entity)return null;
+  const p=entity.getPosition?.(),q=entity.getRotation?.(),e=entity.getEulerAngles?.();
+  return Object.freeze({position:Object.freeze([Number((p?.x||0).toFixed(6)),Number((p?.y||0).toFixed(6)),Number((p?.z||0).toFixed(6))]),rotationQuaternion:Object.freeze([Number((q?.x||0).toFixed(9)),Number((q?.y||0).toFixed(9)),Number((q?.z||0).toFixed(9)),Number((q?.w??1).toFixed(9))]),eulerDegrees:Object.freeze([Number((e?.x||0).toFixed(6)),Number((e?.y||0).toFixed(6)),Number((e?.z||0).toFixed(6))])});
+}
+function canonicalScreenFocusTelemetry(){
+  const rect=canvas?.getBoundingClientRect?.(),centerX=(rect?.width||0)*.5,centerY=(rect?.height||0)*.5;
+  const projected=projectGeographicAnchor({latitudeRadians:zoomState.focusLatitudeRadians,longitudeRadians:zoomState.focusLongitudeRadians},{allowOffscreen:true});
+  const x=Number(projected?.screenX),y=Number(projected?.screenY),valid=Number.isFinite(x)&&Number.isFinite(y);
+  return Object.freeze({valid,screenX:valid?Number(x.toFixed(3)):null,screenY:valid?Number(y.toFixed(3)):null,centerX:Number(centerX.toFixed(3)),centerY:Number(centerY.toFixed(3)),deltaPixels:valid?Number(Math.hypot(x-centerX,y-centerY).toFixed(3)):null});
+}
 function snapshot(){
   return Object.freeze({
     version:VERSION,
@@ -3661,7 +3655,8 @@ function snapshot(){
     input:Object.freeze({
       dragging,pointerDragCount,rotationChangeCount,
       mouseDrag:true,touchDrag:true,keyboardRotation:true,wheelZoom:true,pinchZoom:true,keyboardZoom:true,
-      wheelSensitivity:ZOOM_WHEEL_SENSITIVITY,pinchSensitivity:ZOOM_PINCH_SENSITIVITY,zoomInputRateFraction:.5
+      wheelSensitivity:ZOOM_WHEEL_SENSITIVITY,pinchSensitivity:ZOOM_PINCH_SENSITIVITY,zoomInputRateFraction:.5,
+      dragSensitivity:navigationSensitivity(),scaleAwareDrag:true,scaleAwareKeyboard:true,zoomStepsOnly:true
     }),
     canonicalFocus:Object.freeze({
       latitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
@@ -3671,13 +3666,15 @@ function snapshot(){
       tangentOriginMeters:projectionState.tangentOrigin,
       activeLodOriginMeters:projectionState.tangentOrigin,
       screenSpaceTargetPercent:Object.freeze([50,50]),
-      screenSpaceFocusDeltaPixels:0,
+      screenSpaceFocus:canonicalScreenFocusTelemetry(),
+      screenSpaceFocusDeltaPixels:canonicalScreenFocusTelemetry().deltaPixels,
       authority:"rotation-derived-canonical-latlon",
       zoomMayRelocateFocus:false,
       surfaceIdentity:canonicalSurfaceIdentity()
     }),
     zoom:Object.freeze({
       scalar:Number(zoomState.scalar.toFixed(6)),band:zoomState.band,requestedBand:zoomState.requestedBand||zoomState.band,visibleBand:zoomState.band,
+      scaleIndex:scaleStateForScalar().index,scaleLabel:scaleStateForScalar().label,scaleLadder:SCALE_LADDER.slice(),
       requestedLevel:localResources.requestedLevel,visibleLevel:localResources.visibleLevel,
       focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
       focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),
@@ -3687,7 +3684,9 @@ function snapshot(){
       visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3)),
       wheelEvents:zoomState.wheelEvents,pinchEvents:zoomState.pinchEvents,zoomChanges:zoomState.zoomChanges,
       bands:ZOOM_BANDS.map(b=>b.id),detailLevels:LOCAL_DETAIL_LEVELS.map(level=>level.id),sameSphericalAuthority:true,
-      ladder:Object.freeze({startScalar:LADDER_START_SCALAR,startHeightMeters:Number(ladderState().startHeight.toFixed(1)),groundHeightMeters:GROUND_FOOTPRINT_HEIGHT_METERS,levelMaxScalars:ladderState().levelMax.slice(),logUniformBelowStart:true})
+      dragSensitivity:navigationSensitivity(),
+      pose:Object.freeze({sphere:entityTransformTelemetry(planet),camera:entityTransformTelemetry(cameraEntity),cameraLookVector:Object.freeze([0,0,-1]),cameraTarget:Object.freeze([0,0,0]),screenFocus:canonicalScreenFocusTelemetry(),cameraPoseInvariant:true,zoomTransform:"orthographic-magnification-only"}),
+      ladder:Object.freeze({labels:SCALE_LADDER.slice(),startScalar:LADDER_START_SCALAR,startHeightMeters:Number(ladderState().startHeight.toFixed(1)),groundHeightMeters:GROUND_FOOTPRINT_HEIGHT_METERS,levelMaxScalars:ladderState().levelMax.slice(),logUniformBelowStart:true})
     }),
     projection:Object.freeze({
       mode:projectionState.mode,
@@ -3786,12 +3785,12 @@ function destroy(){
   geography=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasEntityCache.clear();atlasIdentityCache.clear();localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,setViewTarget,setWorldTileFocus,worldLatLonForTile,rotationForLatLon,setZoomScalar,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS
   })
 });
 const boot=()=>start().catch(()=>{});
