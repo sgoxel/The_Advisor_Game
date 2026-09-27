@@ -94,6 +94,7 @@ let cloudLayer=null;
 let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
 let atmosphere={active:false,authoritativeHour:null,phase:"unbound",source:"none",dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false};
 let atmospherePalette=null;
+let atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
 let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClusters:0,rockClusters:0,ambientFaunaZones:0,rejectedWater:0,drawCalls:0,triangles:0,preparationMs:0,cacheReuse:false,perFrameScatter:false,simulationAuthority:false};
 let zoomState={scalar:0,band:"planet",focusLatitudeRadians:pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
 const activePointers=new Map();
@@ -2762,6 +2763,46 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
   }
   return snapshot();
 }
+function atmosphereTimestampKey(value){
+  if(!value)return null;
+  try{return window.GameTime?.toTimestampKey?.(value)||[value.year,value.month,value.day,value.hour,value.minute,value.second].join("-");}catch(_){return null;}
+}
+function initializeAtmosphereTimeBinding(){
+  const available=Boolean(window.SeedSystem?.loadCampaign&&window.SeedSystem?.getCampaign&&window.GameTime?.getNow);
+  atmosphereTimeBinding={...atmosphereTimeBinding,available,active:false,source:available?"GameTime.getNow":"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:performance.now(),lastAppliedAtMs:0,error:null};
+  if(!available)return false;
+  try{
+    if(!window.SeedSystem.getCampaign())window.SeedSystem.loadCampaign();
+    const campaign=window.SeedSystem.getCampaign();
+    if(!campaign){atmosphereTimeBinding={...atmosphereTimeBinding,source:"no-existing-campaign"};return false;}
+    const now=window.GameTime.getNow();if(!now){atmosphereTimeBinding={...atmosphereTimeBinding,source:"campaign-without-time"};return false;}
+    const key=atmosphereTimestampKey(now);
+    applyAuthoritativeFantasyTime(now,"GameTime.getNow");
+    atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,lastAppliedAtMs:performance.now(),error:null};
+    return true;
+  }catch(error){
+    atmosphereTimeBinding={...atmosphereTimeBinding,active:false,source:"binding-error",error:String(error?.message||error)};
+    return false;
+  }
+}
+function updateAtmosphereTimeBinding(){
+  if(!atmosphereTimeBinding.available)return;
+  const nowMs=performance.now();
+  if(nowMs-Number(atmosphereTimeBinding.lastPollAtMs||0)<Number(atmosphereTimeBinding.pollIntervalMs||1000))return;
+  atmosphereTimeBinding={...atmosphereTimeBinding,lastPollAtMs:nowMs};
+  try{
+    const campaign=window.SeedSystem?.getCampaign?.()||null;
+    if(!campaign){atmosphereTimeBinding={...atmosphereTimeBinding,active:false,source:"no-existing-campaign",campaignSeed:null};return;}
+    const now=window.GameTime?.getNow?.();if(!now)return;
+    const key=atmosphereTimestampKey(now);
+    if(key&&key!==atmosphereTimeBinding.lastTimestampKey){
+      applyAuthoritativeFantasyTime(now,"GameTime.getNow");
+      atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,lastAppliedAtMs:nowMs,error:null};
+    }else if(!atmosphereTimeBinding.active){
+      atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,error:null};
+    }
+  }catch(error){atmosphereTimeBinding={...atmosphereTimeBinding,active:false,source:"binding-error",error:String(error?.message||error)};}
+}
 async function buildScene(){  const started=performance.now();
   setStartupProgress("geography","Generating continents, oceans and islands…",52);
   if(!window.PlanetGeography)throw new Error("PlanetGeography is unavailable");
@@ -2866,9 +2907,10 @@ async function start(){
     await yieldPaint();
     bindInput();
     resize();
-    app.on?.("update",dt=>{frameCount++;recordLocalFrame(dt);updateInspectionTooltip();updateAmbientMotion(dt);});
+    app.on?.("update",dt=>{frameCount++;recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
     await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
+    initializeAtmosphereTimeBinding();
 
     if("ResizeObserver" in window){
       resizeObserver=new ResizeObserver(resize);
@@ -3006,6 +3048,7 @@ function snapshot(){
     frameCount,
     ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
     atmosphere:Object.freeze({...atmosphere}),
+    atmosphereTimeBinding:Object.freeze({...atmosphereTimeBinding}),
     wilderness:Object.freeze({...wilderness}),
     inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
@@ -3054,6 +3097,7 @@ function destroy(){
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
   inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
+  atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
   geography=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasEntityCache.clear();atlasIdentityCache.clear();localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
