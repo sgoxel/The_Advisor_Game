@@ -225,7 +225,7 @@ function create(seedValue){
       for(const la of continentGroups[a].lobes){
         for(const lb of continentGroups[b].lobes){
           const angle=Math.acos(clamp(dot(la.center,lb.center),-1,1));
-          if(angle<(la.radius+lb.radius)*0.72){overlaps=true;break;}
+          if(angle<(la.radius+lb.radius)*1.08){overlaps=true;break;}
         }
         if(overlaps)break;
       }
@@ -405,7 +405,7 @@ function create(seedValue){
     else surfaceClass="high-peak";
 
     const continentRoot=bestContinentGroup?continentComponentRoots[bestContinentGroup.id]:null;
-    const continentId=land&&continentRoot!=null&&continent>=Math.max(0.18,island*0.72)?"CONT|"+continentRoot:null;
+    const continentId=land&&continentRoot!=null?"CONT|"+continentRoot:null;
     const result={
       version:VERSION,seed,
       direction:Object.freeze({x:d.x,y:d.y,z:d.z}),
