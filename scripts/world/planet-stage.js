@@ -1151,17 +1151,11 @@ function renderMapPresentation(){
       if(run.length<2){run=[];return;}
       const xs=run.map(p=>p.x),ys=run.map(p=>p.y);
       if(Math.max(...xs)<-3||Math.min(...xs)>103||Math.max(...ys)<-3||Math.min(...ys)>103){run=[];return;}
-      let pixelLength=0;
-      for(let i=1;i<run.length;i++)pixelLength+=Math.hypot(run[i].screenX-run[i-1].screenX,run[i].screenY-run[i-1].screenY);
-      if(pixelLength<32){run=[];return;}
-      // Open border components may leave the visible frame or terminate at a
-      // proven coast. Otherwise both ends must continue: rendering a component
-      // that simply stops on uninterrupted land creates the exact dangling
-      // political-border stubs this WP is intended to eliminate. Closed loops
-      // remain valid for genuine enclaves/exclaves.
-      if(!borderRunClosed(run)&&(!borderEndpointJustified(run[0])||!borderEndpointJustified(run[run.length-1]))){
-        rejectedInteriorBorderStubCount++;run=[];return;
-      }
+      // Do not declutter, dominance-filter, or reject canonical political
+      // components by screen length/endpoints. Those viewport-relative
+      // heuristics caused borders to disappear/reappear while the sphere moved.
+      // Canonical graph construction has already pruned invalid interior stubs;
+      // this layer only performs deterministic world-land clipping + projection.
       const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");
       line.setAttribute("points",run.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
       line.setAttribute("class","planet-political-border");
