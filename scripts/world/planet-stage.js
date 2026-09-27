@@ -134,9 +134,12 @@ const SPATIAL_LOD_MAX_DEPTH=20;
 // span well inside the physical patch's spare margin; identity therefore stays
 // viewport-independent while the disposable presentation patch may resize.
 const SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO=.22;
-const SSE_TARGET_PIXELS=8;
-const SSE_REFINE_PIXELS=9;
-const SSE_COARSEN_PIXELS=6.5;
+// Keep local refinement near a two-pixel projected source/geometric error,
+ // comparable to a normal screen-space terrain LOD budget.  These are tighter
+ // than the original 8/9/6.5px values; hierarchy identity remains coordinate-only.
+const SSE_TARGET_PIXELS=2;
+const SSE_REFINE_PIXELS=2.5;
+const SSE_COARSEN_PIXELS=1.5;
 // A representation may shrink to cover a wider view, but once it would need
 // to be magnified beyond this ratio it is no longer an acceptable steady-state
 // source. Refinement must select a finer canonical child instead of stretching
@@ -1698,7 +1701,9 @@ function viewportPixelHeight(){
 function worldSpaceErrorForLevel(index){
   const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
   const geometricError=Math.max(.05,Number(level.sampleSpacingMeters||1)*.125);
-  const sourceError=Math.max(.05,Number(level.visibleHeightMeters||1)/Math.max(1,Number(level.textureSize||1))*.5);
+  // One source texel is the minimum honest texture error. The previous 0.5x
+  // factor understated source resolution and kept visibly blocky parents alive.
+  const sourceError=Math.max(.05,Number(level.visibleHeightMeters||1)/Math.max(1,Number(level.textureSize||1)));
   return Math.max(geometricError,sourceError);
 }
 function metersPerScreenPixelForZoom(value=zoomState.scalar){
@@ -1753,8 +1758,14 @@ function requestedLodIndexForZoom(value=zoomState.scalar){
   // Multi-tier moves must immediately request the raw target tier.
   if(Math.abs(rawIndex-requestedLodIndex)>1)return requestedLodIndex=rawIndex;
   if(rawIndex>requestedLodIndex){
-    // Refine only after the current prepared/requested tier clearly exceeds the
-    // visible-error budget.  This prevents boundary flutter around one pixel.
+    // Native-scale safety outranks hysteresis: a coarse tier may be a temporary
+    // stand-in while its child prepares, but it may never remain the requested
+    // steady-state source once it exceeds the 1.5x native magnification bound.
+    if(nativeMagnificationForLevel(requestedLodIndex,value)>SSE_MAX_NATIVE_MAGNIFICATION){
+      return requestedLodIndex=rawIndex;
+    }
+    // Otherwise refine only after the current tier clearly exceeds the pixel
+    // error guard, preventing boundary flutter without violating native scale.
     if(projectedPixelErrorForLevel(requestedLodIndex,value)<SSE_REFINE_PIXELS)return requestedLodIndex;
   }else if(rawIndex<requestedLodIndex){
     // Coarsen only once the candidate parent is comfortably below the target.
@@ -2754,7 +2765,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
         const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,metersPerTexel,detailSalt);
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        shade=clamp(1+(lit-flatShade)*1.25,.62,1.32);
+        // Keep hillshade readable without clipping bright alpine surfaces.
+        shade=clamp(1+(lit-flatShade)*1.0,.72,1.18);
         cover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
@@ -2763,6 +2775,16 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i]-contourLine*(i===2?.55:1))*shade,0,1));
       let displayColor=authoritative;
       if(useMicroDetail){const micro=localSurfaceSample(worldEast,worldNorth,sample).color;displayColor=authoritative.map((v,i)=>clamp(v*.62+micro[i]*.38,0,1));}
+      // High peaks are legitimately snow-covered, but the canonical near-white
+      // macro palette plus hillshade used to saturate into featureless white.
+      // Compress only alpine highlights, preserving SEED-derived hue/detail.
+      if(sample?.land&&elevation>3400){
+        const snowWeight=smoothstep01((elevation-3400)/2600),cool=[0,.008,.018];
+        displayColor=displayColor.map((v,i)=>{
+          const compressed=v<=.52?v:.52+(v-.52)*.56;
+          return clamp(lerp(v,compressed,snowWeight)+cool[i]*snowWeight,0,.84);
+        });
+      }
       const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
       data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
@@ -2776,11 +2798,37 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
     patchRelativeBiomeNoise:false
   };
 }
+function stitchSurroundCenterToDetail(detail,surround,spanFactor){
+  const ds=Number(detail?.size||0),ss=Number(surround?.size||0),factor=Math.max(1,Number(spanFactor||1));
+  if(!ds||!ss||!detail?.data||!surround?.data||factor<=1)return;
+  // The central 1/spanFactor area of the surround covers exactly the detail
+  // patch's world bounds. Blend that center toward the already-generated detail
+  // using the same edge feather curve as the foreground patch. The outer
+  // surround remains coarse/bounded, while the overlap becomes photometrically
+  // continuous instead of exposing a rectangular LOD seam.
+  for(let sy=0;sy<ss;sy++){
+    const sv=(sy+.5)/ss,dv=(sv-.5)*factor+.5;
+    if(dv<=0||dv>=1)continue;
+    const dy=Math.max(0,Math.min(ds-1,Math.floor(dv*ds)));
+    for(let sx=0;sx<ss;sx++){
+      const su=(sx+.5)/ss,du=(su-.5)*factor+.5;
+      if(du<=0||du>=1)continue;
+      const dx=Math.max(0,Math.min(ds-1,Math.floor(du*ds)));
+      const edge=Math.min(du,1-du,dv,1-dv),w=smoothstep01(clamp(edge/.18,0,1));
+      if(w<=0)continue;
+      const si=(sy*ss+sx)*4,di=(dy*ds+dx)*4;
+      surround.data[si]=Math.round(lerp(surround.data[si],detail.data[di],w));
+      surround.data[si+1]=Math.round(lerp(surround.data[si+1],detail.data[di+1],w));
+      surround.data[si+2]=Math.round(lerp(surround.data[si+2],detail.data[di+2],w));
+    }
+  }
+}
 function* localResourceSteps(job){
   const meshData=yield* tangentMeshSteps(job);
   const size=LOCAL_DETAIL_LEVELS[job.levelIndex].textureSize;
   const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true);
   const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false);
+  stitchSurroundCenterToDetail(detail,surround,LOCAL_SURROUND_SPAN_FACTOR);
   return {meshData,detail,surround};
 }
 function textureFromPixels(pixels){
