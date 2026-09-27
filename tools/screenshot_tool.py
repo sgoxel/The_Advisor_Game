@@ -6477,9 +6477,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
         driver.execute_script("window.PlanetStage.setWildernessEnabled(arguments[0])",bool(enabled))
         if key=="village":
-            # ~120 m east of the canonical village center: enough room for the
-            # managed-edge density ramp while preserving the village transition.
-            driver.execute_script("window.PlanetStage.setWorldTileFocus('60','0')")
+            # Keep the canonical village center fixed. The 0.50x / ~500 m
+            # footprint includes the managed settlement edge and surrounding
+            # countryside without shifting canonical local geometry.
+            driver.execute_script("window.PlanetStage.setWorldTileFocus('0','0')")
         else:
             target=targets[key]
             driver.execute_script("window.PlanetStage.setViewTarget({latitudeRadians:arguments[0],longitudeRadians:arguments[1]})",float(target["lat"]),float(target["lon"]))
