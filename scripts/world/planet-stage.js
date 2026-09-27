@@ -895,6 +895,49 @@ function borderSignature(segments){
   for(const row of rows)for(const ch of row){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
   return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
 }
+function stitchMapBorderSegments(segments){
+  const groups=new Map();
+  for(const seg of segments){
+    const pair=[seg.ownerA,seg.ownerB].sort().join("~");
+    if(!groups.has(pair))groups.set(pair,[]);
+    groups.get(pair).push(seg);
+  }
+  const lines=[];
+  for(const [pair,group] of groups.entries()){
+    const nodes=new Map(),edges=group.map((seg,index)=>({
+      index,seg,aKey:seg.aTile.x+","+seg.aTile.y,bKey:seg.bTile.x+","+seg.bTile.y
+    }));
+    const add=(key,index)=>{if(!nodes.has(key))nodes.set(key,[]);nodes.get(key).push(index);};
+    for(const edge of edges){add(edge.aKey,edge.index);add(edge.bKey,edge.index);}
+    const unused=new Set(edges.map(edge=>edge.index));
+    const pointFor=(edge,key)=>key===edge.aKey?edge.seg.a:edge.seg.b;
+    const otherKey=(edge,key)=>key===edge.aKey?edge.bKey:edge.aKey;
+    const candidateStarts=()=>[...nodes.entries()]
+      .filter(([,indices])=>indices.some(i=>unused.has(i)))
+      .sort((a,b)=>{
+        const au=a[1].filter(i=>unused.has(i)).length,bu=b[1].filter(i=>unused.has(i)).length;
+        return (au===1?0:1)-(bu===1?0:1)||a[0].localeCompare(b[0]);
+      });
+    while(unused.size){
+      const starts=candidateStarts();if(!starts.length)break;
+      let currentKey=starts[0][0],guard=0;const points=[];
+      while(guard++<group.length+4){
+        const options=(nodes.get(currentKey)||[]).filter(i=>unused.has(i)).sort((a,b)=>a-b);
+        if(!options.length)break;
+        const edge=edges[options[0]];
+        if(!points.length)points.push(pointFor(edge,currentKey));
+        unused.delete(edge.index);
+        currentKey=otherKey(edge,currentKey);
+        points.push(pointFor(edge,currentKey));
+      }
+      if(points.length>=2){
+        const [ownerA,ownerB]=pair.split("~");
+        lines.push(Object.freeze({ownerA,ownerB,points:Object.freeze(points)}));
+      }
+    }
+  }
+  return Object.freeze(lines);
+}
 function buildMapBorderSegments(){
   const band=zoomState.band,visible=["country-region","regional-overview","regional-detail","district"].includes(band);
   if(!visible||!window.PoliticalGeography?.ownerAt)return {segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],built:false};
@@ -968,14 +1011,22 @@ function renderMapPresentation(){
   const border=buildMapBorderSegments(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();
   let projectedBorderSegmentCount=0;
   const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
-  for(const seg of border.segments){
-    const samples=[seg.a,interpolateGeoPoint(seg.a,seg.b,.5),seg.b].map(point=>projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true}));
-    if(samples.some(p=>!p))continue;
-    const xs=samples.map(p=>p.x),ys=samples.map(p=>p.y);
-    if(Math.max(...xs)<-3||Math.min(...xs)>103||Math.max(...ys)<-3||Math.min(...ys)>103)continue;
-    const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");
-    line.setAttribute("points",samples.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
-    line.setAttribute("class","planet-political-border");svg.appendChild(line);projectedBorderSegmentCount++;
+  const borderLines=stitchMapBorderSegments(border.segments);
+  for(const chain of borderLines){
+    const projected=chain.points.map(point=>projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true}));
+    let run=[];
+    const flush=()=>{
+      if(run.length<2){run=[];return;}
+      const xs=run.map(p=>p.x),ys=run.map(p=>p.y);
+      if(Math.max(...xs)<-3||Math.min(...xs)>103||Math.max(...ys)<-3||Math.min(...ys)>103){run=[];return;}
+      const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");
+      line.setAttribute("points",run.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
+      line.setAttribute("class","planet-political-border");
+      line.dataset.ownerA=chain.ownerA;line.dataset.ownerB=chain.ownerB;
+      svg.appendChild(line);projectedBorderSegmentCount++;run=[];
+    };
+    for(const point of projected){if(point)run.push(point);else flush();}
+    flush();
   }
   svg.hidden=projectedBorderSegmentCount===0;
 
@@ -996,7 +1047,7 @@ function renderMapPresentation(){
     maxLabelBudget:spec.budget,labelQueryBuildMs:atlas.query.buildMs,
     landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
     borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
-    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,
+    borderTopologySignature:border.topologySignature,waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,
     maxLabelDisplacementPixels:visible.reduce((max,item)=>Math.max(max,Number(item.displacementPixels||0)),0),
     registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
     projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
