@@ -274,6 +274,7 @@ function atlasDrainAuthorityQueue(deadline){
 }
 let mapContextCache={key:null,value:null};
 let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],builtAtMs:0};
+const mapBorderEndpointSnapCache=new Map();
 let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
 let worldProjectionAnchorCache=null;
 let settlementRevealCache={key:null,value:null};
@@ -922,6 +923,34 @@ function borderSignature(segments){
   for(const row of rows)for(const ch of row){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
   return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
 }
+function snapBorderEndpointToNearbyCoast(point){
+  if(!point||!geography)return point;
+  const tile=point.tile||mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
+  const key=[activeSeed,tile.x,tile.y].join("|");
+  if(mapBorderEndpointSnapCache.has(key))return mapBorderEndpointSnapCache.get(key);
+  let origin=null;try{origin=geography.sampleLatLon(point.latitudeRadians,point.longitudeRadians);}catch(_){origin=null;}
+  if(!origin?.land){mapBorderEndpointSnapCache.set(key,point);return point;}
+  const lat0=point.latitudeRadians,lon0=point.longitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  let water=null;
+  outer:for(const radius of [6000,12000,18000,24000,30000,36000]){
+    for(let d=0;d<16;d++){
+      const angle=d/16*Math.PI*2,east=Math.cos(angle)*radius,north=Math.sin(angle)*radius;
+      const candidate={latitudeRadians:clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999),longitudeRadians:wrapLongitudeRadians(lon0+east/(WORLD_RADIUS_METERS*cosLat))};
+      let sample=null;try{sample=geography.sampleLatLon(candidate.latitudeRadians,candidate.longitudeRadians);}catch(_){sample=null;}
+      if(!sample?.land){water=candidate;break outer;}
+    }
+  }
+  if(!water){mapBorderEndpointSnapCache.set(key,point);return point;}
+  let land={latitudeRadians:point.latitudeRadians,longitudeRadians:point.longitudeRadians},sea=water;
+  for(let i=0;i<18;i++){
+    const mid=interpolateGeoPoint(land,sea,.5);
+    let sample=null;try{sample=geography.sampleLatLon(mid.latitudeRadians,mid.longitudeRadians);}catch(_){sample=null;}
+    if(sample?.land)land=mid;else sea=mid;
+  }
+  const snappedTile=mapWorldTileAt(land.latitudeRadians,land.longitudeRadians);
+  const snapped=Object.freeze({latitudeRadians:land.latitudeRadians,longitudeRadians:land.longitudeRadians,tile:Object.freeze({x:String(snappedTile.x),y:String(snappedTile.y)})});
+  mapBorderEndpointSnapCache.set(key,snapped);return snapped;
+}
 function stitchMapBorderSegments(segments){
   const groups=new Map();
   for(const seg of segments){
@@ -959,6 +988,12 @@ function stitchMapBorderSegments(segments){
       }
       if(points.length>=2){
         const first=group[0]||{};
+        const firstPoint=points[0],lastPoint=points[points.length-1];
+        const closed=String(firstPoint?.tile?.x)===String(lastPoint?.tile?.x)&&String(firstPoint?.tile?.y)===String(lastPoint?.tile?.y);
+        if(!closed){
+          points[0]=snapBorderEndpointToNearbyCoast(firstPoint);
+          points[points.length-1]=snapBorderEndpointToNearbyCoast(lastPoint);
+        }
         lines.push(Object.freeze({ownerA:first.ownerA||null,ownerB:first.ownerB||null,points:Object.freeze(points)}));
       }
     }
@@ -3153,6 +3188,7 @@ async function buildScene(){  const started=performance.now();
   politicalScaleEvidenceCache=null;
   mapContextCache={key:null,value:null};
   mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],builtAtMs:0};
+  mapBorderEndpointSnapCache.clear();
   atlasEntityCache.clear();atlasIdentityCache.clear();atlasStickyEntities.clear();atlasLabelPlacementCache.clear();
   geographySignature=geography.signature();
   geographyVerification=null;
