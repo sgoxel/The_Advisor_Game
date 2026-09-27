@@ -1659,7 +1659,10 @@ function localWildernessFamily(biome,roll){
 }
 function localWildernessSpacing(dims){
   const h=Number(dims?.visibleHeight||dims?.visibleHeightMeters||500);
-  return h<=45?4:h<=90?6:h<=240?11:24;
+  // Keep candidate counts bounded without introducing an ordered early-stop
+  // band. Each physical LOD gets globally anchored cells large enough that the
+  // entire viewport can be scanned and still remain cheap.
+  return h<=45?6:h<=90?14:h<=240?32:75;
 }
 function prepareLocalWildernessPlan(job){
   const started=performance.now(),dims=job?.dims;
@@ -1669,10 +1672,13 @@ function prepareLocalWildernessPlan(job){
   const spacing=localWildernessSpacing(dims),halfX=dims.patchWidth*.52,halfY=dims.patchHeight*.52;
   const minX=Math.floor((centerX-halfX)/spacing),maxX=Math.ceil((centerX+halfX)/spacing);
   const minY=Math.floor((centerY-halfY)/spacing),maxY=Math.ceil((centerY+halfY)/spacing);
-  const items=[],fauna=[],familyCounts={},biomeCounts={};let candidates=0,rejectedWater=0;
+  const raw=[],fauna=[],familyCounts={},biomeCounts={};let candidates=0,rejectedWater=0;
   const salt=((seededUnit("local-wilderness-cells")*0x7fffffff)|0)^0x63d83595;
   const maxStatic=dims.visibleHeight<=90?96:dims.visibleHeight<=240?112:128;
-  for(let gy=minY;gy<=maxY&&items.length<maxStatic;gy++)for(let gx=minX;gx<=maxX&&items.length<maxStatic;gx++){
+  // Scan the complete bounded patch. The previous ordered early stop filled the
+  // budget from one side of the grid, producing the visible horizontal prop
+  // band. Global-cell hashes now choose a uniformly distributed bounded subset.
+  for(let gy=minY;gy<=maxY;gy++)for(let gx=minX;gx<=maxX;gx++){
     candidates++;const h=localWildernessHashInt(gx,gy,salt),u=(h>>>0)/4294967295;
     const jx=((localWildernessHashInt(gx,gy,salt+17)>>>0)/4294967295-.5)*spacing*.72;
     const jy=((localWildernessHashInt(gx,gy,salt+31)>>>0)/4294967295-.5)*spacing*.72;
@@ -1691,13 +1697,18 @@ function prepareLocalWildernessPlan(job){
     const biome=localWildernessBiome(sample,nearWater),density=biome==="wooded"?.76:biome==="wet"?.72:biome==="rocky"?.62:.68;
     if(u>density)continue;
     const roll=(localWildernessHashInt(gx,gy,salt+71)>>>0)/4294967295,family=localWildernessFamily(biome,roll);
-    const scale=.72+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.72;
+    const scale=.82+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.82;
     const rotation=((localWildernessHashInt(gx,gy,salt+109)>>>0)/4294967295)*Math.PI*2;
-    const item=Object.freeze({east,north,worldX,worldY,worldTile:Object.freeze({x:tx,y:ty}),family,biome,scale,rotation,elevationMeters:Number(sample.elevationMeters||0),moisture:Number(sample.moisture||0),mountainInfluence:Number(sample.mountainInfluence||0),nearWater});
-    items.push(item);familyCounts[family]=(familyCounts[family]||0)+1;biomeCounts[biome]=(biomeCounts[biome]||0)+1;
+    const priority=localWildernessHashInt(gx,gy,salt+191)>>>0;
     const faunaRoll=(localWildernessHashInt(gx,gy,salt+157)>>>0)/4294967295;
-    if(fauna.length<4&&faunaRoll<(biome==="wooded"?.085:biome==="grassland"?.075:biome==="wet"?.06:.025)){
-      fauna.push(Object.freeze({...item,kind:biome==="wet"?"waterbird":biome==="wooded"?"hare":biome==="grassland"?"deer":"bird"}));
+    raw.push(Object.freeze({east,north,worldX,worldY,worldTile:Object.freeze({x:tx,y:ty}),family,biome,scale,rotation,priority,faunaRoll,elevationMeters:Number(sample.elevationMeters||0),moisture:Number(sample.moisture||0),mountainInfluence:Number(sample.mountainInfluence||0),nearWater}));
+  }
+  raw.sort((a,b)=>a.priority-b.priority||a.worldY-b.worldY||a.worldX-b.worldX);
+  const items=raw.slice(0,maxStatic).sort((a,b)=>a.worldY-b.worldY||a.worldX-b.worldX);
+  for(const item of items){
+    familyCounts[item.family]=(familyCounts[item.family]||0)+1;biomeCounts[item.biome]=(biomeCounts[item.biome]||0)+1;
+    if(fauna.length<4&&item.faunaRoll<(item.biome==="wooded"?.085:item.biome==="grassland"?.075:item.biome==="wet"?.06:.025)){
+      fauna.push(Object.freeze({...item,kind:item.biome==="wet"?"waterbird":item.biome==="wooded"?"hare":item.biome==="grassland"?"deer":"bird"}));
     }
   }
   const signature="WLD|"+revealHashText([activeSeed,focus.x,focus.y,dims.levelId,spacing,...items.map(x=>x.worldTile.x+","+x.worldTile.y+":"+x.family)].join("|"));
