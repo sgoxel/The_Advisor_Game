@@ -1633,8 +1633,8 @@ function localWildernessManaged(item,reveal){
 }
 function wildernessColor(family,biome){
   const colors={
-    grass:[.31,.55,.16,255],flower:[.92,.48,.20,255],bush:[.14,.38,.10,255],rock:[.43,.42,.37,255],outcrop:[.48,.45,.37,255],
-    log:[.34,.20,.09,255],driftwood:[.48,.36,.22,255],stump:[.31,.18,.08,255],sapling:[.18,.46,.12,255],reed:[.40,.52,.16,255]
+    grass:[.27,.50,.12,255],flower:[.88,.38,.10,255],bush:[.10,.31,.07,255],rock:[.25,.24,.21,255],outcrop:[.30,.28,.23,255],
+    log:[.26,.13,.05,255],driftwood:[.36,.25,.13,255],stump:[.24,.12,.04,255],sapling:[.13,.39,.08,255],reed:[.30,.44,.11,255]
   };
   const base=colors[family]||[.25,.45,.15,255];
   if(biome==="wet"&&family!=="flower")return [base[0]*.88,Math.min(1,base[1]*1.06),base[2]*.90,255];
@@ -1653,7 +1653,7 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     const h=(item.family==="outcrop"?2.0:item.family==="sapling"?3.6:item.family==="reed"?1.4:item.family==="bush"?1.2:item.family==="stump"?.8:item.family==="rock"?.85:item.family==="log"||item.family==="driftwood"?.55:item.family==="flower"?.65:.8)*item.scale/unit;
     const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
     if(!["grass","reed","flower"].includes(item.family)){
-      const patch=item.biome==="wet"?[.18,.28,.12]:item.biome==="rocky"?[.31,.29,.24]:item.biome==="wooded"?[.20,.27,.10]:[.34,.35,.13];
+      const patch=item.biome==="wet"?[.13,.23,.09]:item.biome==="rocky"?[.20,.19,.16]:item.biome==="wooded"?[.14,.22,.07]:[.25,.29,.09];
       const pr=m*(item.family==="outcrop"?1.35:1.65),py=y+.002;
       const pa=push(x-pr,py,z,patch),pb=push(x,py,z-pr*.72,patch),pcv=push(x+pr,py,z,patch),pd=push(x,py,z+pr*.72,patch);quad(pa,pb,pcv,pd);
     }
