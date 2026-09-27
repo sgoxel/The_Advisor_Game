@@ -204,11 +204,13 @@ function updateCanvasFilter(weather){
   canvas.style.transition="filter .35s ease";canvas.style.filter=filter;
 }
 function scheduleHook(context,weather){
-  const available=Boolean(window.DailyActivity?.current),states=available?(window.DailyActivity.current(context.seed,context.stamp)||[]):[];
-  const candidates=states.filter(item=>item&&item.state!=="sleep");
+  // Weather exposes a bounded read-only preference to schedule/AI consumers.
+  // It must not scan or resolve every resident on the presentation refresh
+  // cadence; consumers may apply the hook when they next resolve an activity.
+  const available=Boolean(window.DailyActivity?.resolveActionTarget);
   return Object.freeze({
     available,preferShelter:Boolean(weather.shelterPreferred),condition:weather.state,intensity:weather.intensity,
-    candidateResidentCount:candidates.length,totalResidentCount:states.length,
+    candidateResidentCount:null,totalResidentCount:null,
     recommendedTargetClass:weather.shelterPreferred?"indoors-or-covered":null,
     applied:false,mutation:false,fallbackSafe:true,authority:"read-only weather behavior hook"
   });
