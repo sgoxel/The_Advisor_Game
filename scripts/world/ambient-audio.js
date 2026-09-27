@@ -142,7 +142,7 @@ function contextZones(){
     if(!sample.land||biome==="coast"){
       zones.push(makeZone("broad-water","water-ambience","Nearby water",0,0,"PlanetGeography.sampleLatLon",1));
     }else if(biome==="wooded"){
-      zones.push(makeZone("broad-wooded","woodland-birds","Woodland ambience",0,0,"PlanetGeography.sampleLatLon",1));
+      if(hour>=5&&hour<19)zones.push(makeZone("broad-wooded","woodland-birds","Woodland ambience",0,0,"PlanetGeography.sampleLatLon + GameTime.getNow",1));
     }else{
       zones.push(makeZone("broad-wind","plains-wind","Open-land wind",0,0,"PlanetGeography.sampleLatLon",1));
     }
