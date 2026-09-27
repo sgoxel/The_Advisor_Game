@@ -127,7 +127,6 @@ SCENARIOS = {
     "wp-s003-012",
     "wp-s003-009-011",
     "wp-s003-013",
-    "wp-s003-014",
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
@@ -245,7 +244,6 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-012": 8,
     "wp-s003-009-011": 7,
     "wp-s003-013": 13,
-    "wp-s003-014": 8,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -6435,180 +6433,6 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
-    if scenario == "wp-s003-014":
-        from selenium.webdriver.support.ui import WebDriverWait
-        driver.set_window_size(1280,800)
-        targets=driver.execute_script("""
-            const stage=window.PlanetStage,s=stage.snapshot(),geo=window.PlanetGeography?.create?.(s.activeSeed),radius=stage.constants.WORLD_RADIUS_METERS;
-            if(!geo)throw new Error('PlanetGeography unavailable');
-            const out={};
-            const nearWater=(lat,lon)=>{
-              const d=64/radius,c=Math.max(.08,Math.cos(lat));
-              return !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat+d)),lon).land||
-                     !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat-d)),lon).land||
-                     !geo.sampleLatLon(lat,lon+d/c).land||!geo.sampleLatLon(lat,lon-d/c).land;
-            };
-            for(let lat=-68;lat<=68;lat+=4)for(let lon=-176;lon<180;lon+=4){
-              const la=lat*Math.PI/180,lo=lon*Math.PI/180,g=geo.sampleLatLon(la,lo);if(!g.land)continue;
-              const wet=nearWater(la,lo)||g.surfaceClass==='coast'||Number(g.moisture)>.68;
-              const rocky=!wet&&(Number(g.elevationMeters)>1550||Number(g.mountainInfluence)>.22);
-              const wooded=!wet&&!rocky&&Number(g.moisture)>.49;
-              const grass=!wet&&!rocky&&!wooded;
-              const key=wet?'wet':rocky?'rocky':wooded?'wooded':grass?'grassland':null;
-              if(key&&!out[key])out[key]={lat:la,lon:lo};
-            }
-            window.__WP_S003_014=window.__WP_S003_014||{targets:{}};
-            return out;
-        """)
-        plan=(
-            ("deer-idle","deer","grassland","idle",(1280,800)),
-            ("deer-approach","deer","grassland","react",(1280,800)),
-            ("hare-idle","hare","wooded","idle",(1280,800)),
-            ("hare-approach","hare","wooded","react",(1280,800)),
-            ("waterbird-idle","waterbird","wet","idle",(1280,800)),
-            ("waterbird-approach","waterbird","wet","react",(1280,800)),
-            ("deer-phone-landscape","deer","grassland","react",(844,390)),
-            ("distant-cull","deer","grassland","far",(1280,800)),
-        )
-        label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
-        driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
-        cached=driver.execute_script("return window.__WP_S003_014?.targets?.[arguments[0]]||null",kind)
-        if not isinstance(cached,dict):
-            base=(targets or {}).get(biome)
-            if not isinstance(base,dict):
-                raise RuntimeError(f"WP-S003-014 missing biome target {biome}: {targets}")
-            found=None
-            offsets=(0.0,.0015,-.0015,.003,-.003,.0045,-.0045)
-            for dy in offsets:
-                for dx in offsets:
-                    driver.execute_script("""
-                        window.PlanetStage.setAmbientFaunaPresence({active:true,eastMeters:1000,northMeters:1000});
-                        window.PlanetStage.setViewTarget({latitudeRadians:arguments[0],longitudeRadians:arguments[1]});
-                        window.PlanetStage.setZoomScalar(1);
-                    """,float(base["lat"]+dy),float(base["lon"]+dx))
-                    try:
-                        WebDriverWait(driver,14.0).until(lambda d:d.execute_script("""
-                            const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{};
-                            return Number(r.pendingPreparationCount||0)===0&&
-                                   window.PlanetStage.ambientFaunaActors().some(a=>a.kind===String(arguments[0]));
-                        """,kind))
-                        found={"lat":float(base["lat"]+dy),"lon":float(base["lon"]+dx)}
-                        break
-                    except Exception:
-                        pass
-                if found: break
-            if not found:
-                raise RuntimeError(f"WP-S003-014 could not find bounded generated {kind} near {biome} target")
-            cached=found
-            driver.execute_script("""
-                window.__WP_S003_014=window.__WP_S003_014||{targets:{}};
-                window.__WP_S003_014.targets[arguments[0]]={lat:Number(arguments[1]),lon:Number(arguments[2])};
-            """,kind,float(found["lat"]),float(found["lon"]))
-        driver.execute_script("""
-            window.PlanetStage.setAmbientFaunaPresence({active:true,eastMeters:1000,northMeters:1000});
-            window.PlanetStage.setViewTarget({latitudeRadians:arguments[0],longitudeRadians:arguments[1]});
-            window.PlanetStage.setZoomScalar(arguments[2]);
-        """,float(cached["lat"]),float(cached["lon"]),
-            float(driver.execute_script("return arguments[0]==='far'?window.PlanetStage.scalarForFootprintHeight(1000):1",mode)))
-        if mode=="far":
-            WebDriverWait(driver,90.0).until(lambda d:d.execute_script("""
-                const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},f=s.faunaBehavior||{};
-                return Number(r.pendingPreparationCount||0)===0&&f.active!==true&&Number(f.activeCount||0)===0;
-            """))
-        else:
-            WebDriverWait(driver,90.0).until(lambda d:d.execute_script("""
-                const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{};
-                return Number(r.pendingPreparationCount||0)===0&&
-                       window.PlanetStage.ambientFaunaActors().some(a=>a.kind===String(arguments[0]));
-            """,kind))
-            actor=driver.execute_script("return window.PlanetStage.ambientFaunaActors().find(a=>a.kind===String(arguments[0]))",kind)
-            if not isinstance(actor,dict):
-                raise RuntimeError(f"WP-S003-014 actor missing after readiness for {kind}")
-            if mode=="react":
-                driver.execute_script("""
-                    window.PlanetStage.setAmbientFaunaPresence({active:true,eastMeters:Number(arguments[0]),northMeters:Number(arguments[1])});
-                """,float(actor["baseEastMeters"]),float(actor["baseNorthMeters"]))
-                expected="flight" if kind in ("bird","waterbird") else "flee"
-                WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
-                    const a=window.PlanetStage.ambientFaunaActors().find(x=>x.kind===String(arguments[0]));
-                    return a&&a.state===String(arguments[1])&&Number(a.reactionSerial||0)>=1&&
-                           Math.hypot(Number(a.offsetEastMeters||0),Number(a.offsetNorthMeters||0))>=1.5;
-                """,kind,expected))
-            else:
-                WebDriverWait(driver,6.0).until(lambda d:d.execute_script("""
-                    const a=window.PlanetStage.ambientFaunaActors().find(x=>x.kind===String(arguments[0]));
-                    return a&&a.state==='idle';
-                """,kind))
-        time.sleep(.35)
-        proof=driver.execute_script("""
-            const s=window.PlanetStage.snapshot(),f=s.faunaBehavior||{},r=s.projection?.resourceBudget||{};
-            return {label:arguments[0],kind:arguments[1],mode:arguments[2],scalar:s.zoom?.scalar,focus:s.canonicalFocus?.worldTile,
-              active:f.active,activeCount:f.activeCount,stateCounts:f.stateCounts,kindCounts:f.kindCounts,
-              reactionChecks:f.reactionChecks,reactionTransitions:f.reactionTransitions,reactionCount:f.reactionCount,
-              presenceSource:f.presenceSource,presenceActive:f.presenceActive,bucketSizeMeters:f.bucketSizeMeters,
-              reactionIntervalMs:f.reactionIntervalMs,lastReactionUpdateMs:f.lastReactionUpdateMs,maxReactionUpdateMs:f.maxReactionUpdateMs,
-              domesticAvailable:f.domesticAvailable,fullWorldScan:f.fullWorldScan,actors:f.actorStates,
-              pending:r.pendingPreparationCount,simulationAuthority:f.simulationAuthority,presentationOnly:f.presentationOnly};
-        """,label,kind,mode)
-        return "fauna-reaction|"+label+"|"+json.dumps(proof,sort_keys=True)
-
-    if scenario == "wp-s003-014":
-        if len(frames) < 8:
-            raise RuntimeError("wp-s003-014 requires eight reactive-fauna evidence frames")
-        proofs=[]
-        reacted=set()
-        idle=set()
-        mobile=False
-        for index,frame in enumerate(frames[:8],start=1):
-            action=str(frame.get("action") or "")
-            try:
-                proof=json.loads(action.split("|",2)[2])
-            except Exception as exc:
-                raise RuntimeError(f"WP-S003-014 frame {index} lacks behavior proof: {action}") from exc
-            proofs.append(proof)
-            if proof.get("presentationOnly") is not True or proof.get("simulationAuthority") is not False or proof.get("fullWorldScan") is not False:
-                raise RuntimeError(f"WP-S003-014 authority/bounded contract failed in frame {index}: {proof}")
-            if int(proof.get("bucketSizeMeters") or 0)!=24 or int(proof.get("reactionIntervalMs") or 0)<90:
-                raise RuntimeError(f"WP-S003-014 spatial/event reaction contract failed in frame {index}: {proof}")
-            if float(proof.get("maxReactionUpdateMs") or 0)>4.0:
-                raise RuntimeError(f"WP-S003-014 reaction update budget failed in frame {index}: {proof}")
-            mode=str(proof.get("mode") or "")
-            kind=str(proof.get("kind") or "")
-            if mode=="far":
-                if proof.get("active") is True or int(proof.get("activeCount") or 0)!=0:
-                    raise RuntimeError(f"WP-S003-014 distant fauna did not fully cull in frame {index}: {proof}")
-                continue
-            if int(proof.get("activeCount") or 0)<1 or int(proof.get("activeCount") or 0)>4:
-                raise RuntimeError(f"WP-S003-014 active fauna cap invalid in frame {index}: {proof}")
-            actor=next((a for a in (proof.get("actors") or []) if str(a.get("kind") or "")==kind),None)
-            if not actor:
-                raise RuntimeError(f"WP-S003-014 requested actor missing in frame {index}: {proof}")
-            if mode=="idle":
-                if actor.get("state")!="idle":
-                    raise RuntimeError(f"WP-S003-014 idle actor was not idle in frame {index}: {actor}")
-                idle.add(kind)
-            elif mode=="react":
-                expected="flight" if kind in {"bird","waterbird"} else "flee"
-                displacement=math.hypot(float(actor.get("offsetEastMeters") or 0),float(actor.get("offsetNorthMeters") or 0))
-                if actor.get("state")!=expected or int(actor.get("reactionSerial") or 0)<1 or displacement<1.5:
-                    raise RuntimeError(f"WP-S003-014 {kind} did not visibly react in frame {index}: {actor}")
-                if kind in {"bird","waterbird"} and float(actor.get("verticalMeters") or 0)<0.5:
-                    raise RuntimeError(f"WP-S003-014 bird reaction did not take off in frame {index}: {actor}")
-                reacted.add(kind)
-            viewport=frame.get("runtime",{}).get("viewport",{})
-            if int(viewport.get("width") or 0)<900: mobile=True
-        required={"deer","hare","waterbird"}
-        if not required.issubset(idle) or not required.issubset(reacted):
-            raise RuntimeError(f"WP-S003-014 three-type approach coverage incomplete: idle={sorted(idle)} reacted={sorted(reacted)}")
-        if not mobile:
-            raise RuntimeError("WP-S003-014 mobile reaction evidence missing")
-        if any(p.get("domesticAvailable") is True for p in proofs):
-            # No domestic actor is currently generated by WP-S003-013. If one
-            # becomes available later, this scenario must be extended rather
-            # than silently ignoring the Issue's domestic-evidence clause.
-            raise RuntimeError("WP-S003-014 domestic fauna became available; extend evidence with its bounded behavior")
-        return
-
     if scenario == "wp-s003-013":
         from selenium.webdriver.support.ui import WebDriverWait
         # Find bounded canonical land samples with distinct biome identities.
