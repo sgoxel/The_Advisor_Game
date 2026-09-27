@@ -1034,10 +1034,16 @@ function buildMapBorderSegments(){
       };
 
       const addSegment=(e0,pointB,owners)=>{
+        // Country-scale presentation follows only the focused country's
+        // authoritative boundary. Neighbor/neighbor borders inside the same
+        // sampling window are valid world topology, but drawing them here
+        // creates isolated interior fragments that look like broken borders.
+        if(focusOwnerId&&!owners.includes(focusOwnerId))return;
         if(!pointB||!segmentOnLand(e0.point,pointB)){waterClippedCount++;return;}
+        const stitchKey=focusOwnerId&&owners.includes(focusOwnerId)?"focus:"+focusOwnerId:owners.join("~");
         segments.push({
           a:e0.point,b:pointB,aTile:e0.point.tile,bTile:pointB.tile,
-          ownerA:owners[0],ownerB:owners[1],stitchKey:owners.join("~")
+          ownerA:owners[0],ownerB:owners[1],stitchKey
         });
       };
       for(const group of byPair.values()){
