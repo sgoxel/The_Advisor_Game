@@ -6457,8 +6457,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             want_house=frame_index==2
             proof=driver.execute_script("""
                 const wantHouse=Boolean(arguments[0]),stage=window.PlanetStage,targets=stage.inspectionTargets().filter(t=>t.type==='building');
-                const match=t=>String(t.authority?.kind||'').toLowerCase().includes('house');
-                const target=targets.find(t=>wantHouse?match(t):!match(t))||null;
+                const match=t=>wantHouse?/^H\d+$/i.test(String(t.id||'')):/^S\d+$/i.test(String(t.id||''));
+                const target=targets.find(match)||null;
                 if(!target)throw new Error(wantHouse?'No ordinary house pick target':'No special building pick target');
                 const b=target.bounds;stage.pickInspection((b.left+b.right)/2,(b.top+b.bottom)/2);
                 const tip=document.querySelector('.world-inspection-tooltip');
@@ -6526,20 +6526,37 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if frame_index == 7:
             proof=driver.execute_script("""
                 const stage=window.PlanetStage,targets=stage.inspectionTargets(),rect=document.querySelector('#planetCanvas').getBoundingClientRect();
-                const points=[[rect.left+6,rect.top+6],[rect.right-6,rect.top+6],[rect.left+6,rect.bottom-6],[rect.right-6,rect.bottom-6],[rect.left+rect.width/2,rect.bottom-6]];
                 const inside=(x,y,b)=>x>=b.left&&x<=b.right&&y>=b.top&&y<=b.bottom;
+                const visible=targets.find(t=>{
+                  const b=t.bounds,x=(b.left+b.right)/2,y=(b.top+b.bottom)/2;
+                  return x>=rect.left&&x<=rect.right&&y>=rect.top&&y<=rect.bottom;
+                });
+                if(!visible)throw new Error('No visible inspection target before empty dismissal');
+                const vb=visible.bounds;stage.pickInspection((vb.left+vb.right)/2,(vb.top+vb.bottom)/2);
+                const before=stage.snapshot().inspection.selectedId;
+                const points=[[rect.left+6,rect.top+6],[rect.right-6,rect.top+6],[rect.left+6,rect.bottom-6],[rect.right-6,rect.bottom-6],[rect.left+rect.width/2,rect.bottom-6]];
                 const free=points.find(([x,y])=>!targets.some(t=>inside(x,y,t.bounds)));
                 if(!free)throw new Error('No deterministic empty terrain point');
-                const before=stage.snapshot().inspection.selectedId;const result=stage.pickInspection(free[0],free[1]);const after=stage.snapshot().inspection;
+                const result=stage.pickInspection(free[0],free[1]);const after=stage.snapshot().inspection;
                 return {before,result,after,point:free};
             """)
-            if proof.get("result") is not None or (proof.get("after") or {}).get("selectedId") is not None:
-                raise RuntimeError(f"Empty terrain did not dismiss tooltip: {proof}")
+            if not proof.get("before") or proof.get("result") is not None or (proof.get("after") or {}).get("selectedId") is not None:
+                raise RuntimeError(f"Empty terrain did not dismiss an active tooltip: {proof}")
             return f"empty-dismissed:previous={proof.get('before')}"
         if frame_index == 8:
             driver.set_window_size(1280,800);time.sleep(0.4)
-            driver.execute_script("window.PlanetStage.setZoomScalar(1);window.PlanetStage.applyAuthoritativeFantasyTime({year:1100,month:1,day:1,hour:10,minute:30,second:0},'wp-s003-011-overlap')")
-            time.sleep(0.4)
+            driver.execute_script("""
+                window.PlanetStage.setWorldTileFocus("0","0");
+                window.PlanetStage.setZoomScalar(1);
+                window.PlanetStage.applyAuthoritativeFantasyTime({year:1100,month:1,day:1,hour:10,minute:30,second:0},'wp-s003-011-overlap');
+            """)
+            WebDriverWait(driver,60.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),f=s.canonicalFocus?.worldTile||{},ls=s.projection?.localStatic||{},i=s.inspection||{};
+                return String(f.x)==='0'&&String(f.y)==='0'&&ls.revealTier==='full'&&Number(i.activeNpcCount||0)>=1&&Number(i.activeBuildingCount||0)>=1&&
+                  Math.abs(Number(ls.focusLatitudeDegrees)-Number(s.canonicalFocus?.latitudeDegrees))<0.01&&
+                  Math.abs(Number(ls.focusLongitudeDegrees)-Number(s.canonicalFocus?.longitudeDegrees))<0.01;
+            """))
+            time.sleep(0.3)
             proof=driver.execute_script("""
                 const stage=window.PlanetStage,targets=stage.inspectionTargets(),npcs=targets.filter(t=>t.type==='npc'),buildings=targets.filter(t=>t.type==='building');
                 let pair=null,point=null;
