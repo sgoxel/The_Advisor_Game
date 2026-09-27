@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION=1;
+const VERSION=2;
 const REGION_CELL_SIZE=8192;
 const SAMPLE_GRID=5;
 const NAME_A=Object.freeze([
@@ -91,8 +91,10 @@ function dominantCounts(samples,selector){
 }
 function seatFor(seed,countryId,rx,ry,samples){
   if(!samples.length)return null;
+  const safeSamples=samples.filter(sample=>PoliticalGeography.isSafelyInside?.(seed,sample.x,sample.y,countryId,192)!==false);
+  if(!safeSamples.length)return null;
   const key=countryId+"|"+cellKey(rx,ry);
-  const ranked=[...samples].map(sample=>{
+  const ranked=[...safeSamples].map(sample=>{
     const terrainPenalty=sample.terrain==="water"?1.0:sample.terrain==="rock"?0.34:0;
     const elevationPenalty=Math.min(0.5,sample.environment.elevationMeters/3600);
     const centerX=Number(toBig(sample.x)-(rx*BigInt(REGION_CELL_SIZE)))/REGION_CELL_SIZE;
@@ -107,7 +109,10 @@ function seatFor(seed,countryId,rx,ry,samples){
     name:regionName(seed,countryId,rx,ry)+" Seat",
     x:chosen.x,y:chosen.y,
     terrain:chosen.terrain,
-    elevationMeters:chosen.environment.elevationMeters
+    elevationMeters:chosen.environment.elevationMeters,
+    borderPlacement:PoliticalGeography.validatePlacement?.(seed,{
+      x:chosen.x,y:chosen.y,countryId,clearanceTiles:192,footprintRadiusTiles:96
+    })||null
   });
 }
 function terrainResourceIdentity(seed,countryId,rx,ry,samples){
@@ -268,6 +273,8 @@ function buildForCell(seedValue,countryIdValue,rxValue,ryValue){
       source:"campaign-seed + region + parent-country-profile + fixed-geography",
       immutable:true,fantasyTimeDependent:false,
       countryOwnershipAuthority:"PoliticalGeography",
+      politicalBoundaryAuthority:"PoliticalGeography.canonicalBoundaryGraph",
+      placementAuthority:"PoliticalGeography.validatePlacement",
       localTerrainAuthority:"GeographyFoundation.getTerrainType",
       terrainMutation:false,resourceMutation:false,
       dynamicOverlayCompatible:true,lazy:true
@@ -365,7 +372,9 @@ function proof(seedValue){
   const timeIndependent=JSON.stringify(timeA)===JSON.stringify(timeB);
   const parentCountryCorrect=regions.every(region=>
     region.parentCountryId===country.id&&
-    PoliticalGeography.ownerAt(seed,region.administrativeSeat.x,region.administrativeSeat.y).id===country.id
+    PoliticalGeography.ownerAt(seed,region.administrativeSeat.x,region.administrativeSeat.y).id===country.id&&
+    region.administrativeSeat.borderPlacement?.valid===true&&
+    region.administrativeSeat.borderPlacement?.footprintCrossesBorder===false
   );
   const hierarchyIntegrated=reps.every(region=>
     GeographyFoundation.hierarchy(seed,region.administrativeSeat.x,region.administrativeSeat.y).region===region.name
