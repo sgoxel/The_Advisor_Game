@@ -218,6 +218,18 @@ As zoom increases, the already-visible area is progressively refined with more S
 
 Wheel/pinch is therefore strictly separated from pan/drag and rotation/orbit controls. Zoom is magnification/detail refinement, not navigation.
 
+### Canonical Scale and Navigation Rule
+
+The player-facing scale display uses this exact ordered ladder and does not use `x` multipliers:
+
+`1/10 → 1/20 → 1/50 → 1/100 → 1/250 → 1/500 → 1/1000 → 1/2500 → 1/5000 → 1/10000`
+
+Each scale state corresponds to a specific visible planet-space footprint and detail tier. The on-screen distance ruler must be physically truthful to that footprint: its displayed distance and line length must match the measured world-space distance represented on screen. A convenient rounded label must never be retained when it makes the line physically false.
+
+Drag/rotation sensitivity is also scale-aware. The same pointer movement must not produce the same angular/geographic movement at every scale. Wide planet views may traverse large distances; close/local views must move proportionally small distances so a short drag while viewing local terrain cannot jump across a country or continent.
+
+Scale, ruler calculation and navigation sensitivity are presentation/control behavior only. They must never assign or alter Campaign-SEED world-foundation values.
+
 The world is a **finite continuous sphere**, not an unbounded planar tile grid. No tile is authoritative world state. Future local terrain and LOD systems may use bounded render patches or caches, but those patches must sample planet-space world data and remain disposable presentation/performance structures rather than defining world truth.
 
 For Stage 1, protagonist, NPC, settlement, building and local-terrain systems are deliberately dormant. Later stages will add planetary geography first, then progressively finer detail while preserving the same canonical planet scale.
