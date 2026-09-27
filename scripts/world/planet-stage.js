@@ -628,6 +628,17 @@ function atlasQueryCandidates(spec){
   const key=[activeSeed,zoomState.band,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),Math.round(Math.log10(Math.max(1,zoomState.visibleFootprintWidthMeters))*20),spec.kinds.join(",")].join("|");
   if(atlasLabelCache.key===key)return atlasLabelCache;
   const started=performance.now(),samples=atlasQuerySamples(spec),unique=new Map(),focus=atlasFocusEntityIds(spec);
+  if(spec.kinds.includes("country")&&focus.ids.country){
+    const indexed=atlasAuthorityIndex.get(atlasAuthorityKey("country",focus.tile))||null;
+    if(indexed){
+      const anchored=atlasEntityBase(
+        indexed.id,"country",indexed.name,focus.tile,
+        "PoliticalGeography.countryAt:indexed-focus-anchor",
+        {countryId:indexed.id,capital:indexed.capital||null}
+      );
+      if(anchored)unique.set(anchored.id,anchored);
+    }
+  }
   for(const [sampleIndex,point] of samples.entries()){
     let surface=null;try{surface=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){surface=null;}if(!surface)continue;
     const tile=mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
