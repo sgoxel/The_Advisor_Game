@@ -7661,10 +7661,12 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     raise RuntimeError(f"WP-009 capital is not on parent-country land in frame {index}: {item}")
                 cid=str(item.get("continentId") or "")
                 cname=str(item.get("continentName") or "")
-                if cid and cname:
-                    if cid in continent_names and continent_names[cid]!=cname:
-                        raise RuntimeError(f"WP-009 continent renamed across frames: {cid}: {continent_names[cid]} -> {cname}")
-                    continent_names[cid]=cname
+                seed_key=str(stage.get("activeSeed") or "")
+                scoped_cid=seed_key+"|"+cid if cid else ""
+                if scoped_cid and cname:
+                    if scoped_cid in continent_names and continent_names[scoped_cid]!=cname:
+                        raise RuntimeError(f"WP-009 continent renamed within one seed: {scoped_cid}: {continent_names[scoped_cid]} -> {cname}")
+                    continent_names[scoped_cid]=cname
         topology=[str(maps[i].get("borderTopologySignature") or "") for i in (4,5,6,7)]
         if not all(topology) or len(set(topology))!=1:
             raise RuntimeError(f"WP-009 border topology changed across 0.06x/0.08x/0.12x/0.15x: {topology}")
