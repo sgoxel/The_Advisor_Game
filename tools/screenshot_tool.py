@@ -6460,22 +6460,24 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not required.issubset(set(targets or {})):
             raise RuntimeError(f"Unable to find bounded wilderness biome targets: {targets}")
         plan=(
-            ("village-edge","village",0.985,(1280,800),True),
-            ("grassland-local","grassland",0.985,(1280,800),True),
+            ("village-edge","village","height:500",(1280,800),True),
+            ("grassland-local","grassland","height:80",(1280,800),True),
             ("grassland-1.00x","grassland",1.0,(1280,800),True),
-            ("rocky-local","rocky",0.985,(1280,800),True),
-            ("wooded-local","wooded",0.985,(1280,800),True),
-            ("wet-local","wet",0.985,(1280,800),True),
+            ("rocky-local","rocky","height:80",(1280,800),True),
+            ("wooded-local","wooded","height:80",(1280,800),True),
+            ("wet-local","wet","height:80",(1280,800),True),
             ("fauna-ground","grassland",1.0,(1280,800),True),
-            ("grassland-repeat","grassland",0.985,(1280,800),True),
-            ("mid-lod-0.50x","grassland",0.849485,(1280,800),True),
-            ("far-lod-0.25x","grassland",0.70,(1280,800),True),
-            ("phone-landscape","grassland",0.985,(844,390),True),
-            ("phone-portrait","wooded",0.985,(390,844),True),
-            ("grassland-baseline-disabled","grassland",0.985,(1280,800),False),
+            ("grassland-repeat","grassland","height:80",(1280,800),True),
+            ("mid-lod-1000m","grassland","height:1000",(1280,800),True),
+            ("far-lod-5000m","grassland","height:5000",(1280,800),True),
+            ("phone-landscape","grassland","height:80",(844,390),True),
+            ("phone-portrait","wooded","height:80",(390,844),True),
+            ("grassland-baseline-disabled","grassland","height:80",(1280,800),False),
         )
-        label,key,scalar,viewport,enabled=plan[min(frame_index,len(plan)-1)]
+        label,key,target,viewport,enabled=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
+        scalar=(driver.execute_script("return Number(window.PlanetStage.scalarForFootprintHeight(arguments[0]))",float(str(target).split(":",1)[1]))
+                if isinstance(target,str) and target.startswith("height:") else float(target))
         driver.execute_script("window.PlanetStage.setWildernessEnabled(arguments[0])",bool(enabled))
         if key=="village":
             # Keep the canonical village center fixed. The 0.50x / ~500 m
@@ -6506,14 +6508,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             if not found:
                 raise RuntimeError("No bounded ambient fauna zone found near grassland evidence target")
         else:
-            WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
-                const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},w=s.wilderness||{};
-                const far=Boolean(arguments[1]),enabled=Boolean(arguments[2]);
-                if(Math.abs(Number(s.zoom?.scalar||0)-Number(arguments[0]))>.00001||Number(r.pendingPreparationCount||0)!==0)return false;
-                if(far)return w.localActive!==true;
-                if(!enabled)return w.localEnabled===false&&w.localActive!==true;
-                return w.localEnabled===true&&Number(w.localAcceptedStaticProps||0)>=8;
-            """,float(scalar),("far-lod" in label or "mid-lod" in label),bool(enabled)))
+            try:
+                WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+                    const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},w=s.wilderness||{};
+                    const far=Boolean(arguments[1]),enabled=Boolean(arguments[2]);
+                    if(Math.abs(Number(s.zoom?.scalar||0)-Number(arguments[0]))>.00001||Number(r.pendingPreparationCount||0)!==0)return false;
+                    if(far)return w.localActive!==true;
+                    if(!enabled)return w.localEnabled===false&&w.localActive!==true;
+                    return w.localEnabled===true&&Number(w.localAcceptedStaticProps||0)>=8;
+                """,float(scalar),("far-lod" in label or "mid-lod" in label),bool(enabled)))
+            except Exception as exc:
+                diagnostic=driver.execute_script("""
+                    const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},w=s.wilderness||{},ls=s.projection?.localStatic||{},ld=s.projection?.localDetail||{};
+                    return {scalar:s.zoom?.scalar,visibleHeight:s.zoom?.visibleFootprintHeightMeters,requested:r.requestedSignature,active:r.activeSignature,
+                      pending:r.pendingPreparationCount,blocking:r.blockingZoomBuilds,level:ld.level,staticWorld:ls.active,revealTier:ls.revealTier,
+                      wilderness:{enabled:w.localEnabled,active:w.localActive,accepted:w.localAcceptedStaticProps,candidates:w.localCandidateCount,
+                        biome:w.localBiome,biomeCounts:w.localBiomeCounts,rejectedManaged:w.localRejectedManaged,rejectedRoad:w.localRejectedRoad,
+                        rejectedWater:w.localRejectedWater,layout:w.localLayoutSignature,planCached:w.localPlanCached}};
+                """)
+                raise RuntimeError(f"Wilderness readiness timeout for {label}: target={target}, scalar={scalar:.6f}, diagnostic={diagnostic}") from exc
         time.sleep(.25)
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),w=s.wilderness||{},ls=s.projection?.localStatic||{},r=s.projection?.resourceBudget||{};
