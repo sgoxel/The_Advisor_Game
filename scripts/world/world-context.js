@@ -369,7 +369,7 @@ function normalizeTarget(seedValue,targetValue){
   const seed=String(seedValue==null?"":seedValue);
   const target=targetValue||{};
   let plan=null,point=null,entityRef=null;
-  if(target?.id&&String(target.id).startsWith("SET|")&&target.center&&target.generation)plan=target;
+  if(target?.id&&target.center&&target.generation&&(target.canonicalSettlementId||target.foundation?.canonicalSettlementHierarchy===true))plan=target;
   else if(target?.settlement?.id)plan=target.settlement;
   else if(target?.plan?.id)plan=target.plan;
   else if(target?.kind==="settlement"&&target?.key?.desiredCenter){
