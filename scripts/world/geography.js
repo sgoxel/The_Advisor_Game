@@ -142,25 +142,51 @@ function layeredNoise(seed,label,x,y,layers){
 function naturalField(seed,label,x,y){
   return layeredNoise(seed,label,x,y,[[96,0.48],[42,0.32],[17,0.20]]);
 }
+function hierarchyName(seed,kind,x,y){
+  if(kind==="continent"){
+    const cell=broadCell(x,y,131072);
+    return generatedName(seed,"continent:"+cellKey(cell.x,cell.y),"Continent");
+  }
+  if(kind==="country"){
+    const cell=broadCell(x,y,32768);
+    return window.PoliticalGeography?.countryAt?.(seed,x,y)?.name||generatedName(seed,"country:"+cellKey(cell.x,cell.y),"Realm");
+  }
+  if(kind==="region"){
+    const cell=broadCell(x,y,8192);
+    return window.RegionProfile?.at?.(seed,x,y)?.name||generatedName(seed,"region:"+cellKey(cell.x,cell.y),"Region");
+  }
+  if(kind==="city"){
+    const cell=broadCell(x,y,1024);
+    return generatedName(seed,"city:"+cellKey(cell.x,cell.y),"City");
+  }
+  if(kind==="district"){
+    const cell=broadCell(x,y,256);
+    return generatedName(seed,"district:"+cellKey(cell.x,cell.y),"District");
+  }
+  if(kind==="village"){
+    const village=nearestVillage(seed,x,y,false);
+    return village?village.name:"Unsettled Lands";
+  }
+  if(kind==="avenue"){
+    const cell=broadCell(x,y,32);
+    return pick(seed,"avenue:"+cellKey(cell.x,cell.y),AVENUE_WORDS)+" Avenue";
+  }
+  if(kind==="street"){
+    const cell=broadCell(x,y,8);
+    return pick(seed,"street:"+cellKey(cell.x,cell.y),STREET_WORDS)+" Street";
+  }
+  return "";
+}
 function hierarchy(seed,x,y){
-  const continent=broadCell(x,y,131072);
-  const country=broadCell(x,y,32768);
-  const region=broadCell(x,y,8192);
-  const city=broadCell(x,y,1024);
-  const district=broadCell(x,y,256);
-  const village=nearestVillage(seed,x,y,false);
-  const streetCell=broadCell(x,y,8);
-  const avenueCell=broadCell(x,y,32);
-
   return Object.freeze({
-    continent:generatedName(seed,"continent:"+cellKey(continent.x,continent.y),"Continent"),
-    country:window.PoliticalGeography?.countryAt?.(seed,x,y)?.name||generatedName(seed,"country:"+cellKey(country.x,country.y),"Realm"),
-    region:window.RegionProfile?.at?.(seed,x,y)?.name||generatedName(seed,"region:"+cellKey(region.x,region.y),"Region"),
-    city:generatedName(seed,"city:"+cellKey(city.x,city.y),"City"),
-    district:generatedName(seed,"district:"+cellKey(district.x,district.y),"District"),
-    village:village?village.name:"Unsettled Lands",
-    avenue:pick(seed,"avenue:"+cellKey(avenueCell.x,avenueCell.y),AVENUE_WORDS)+" Avenue",
-    street:pick(seed,"street:"+cellKey(streetCell.x,streetCell.y),STREET_WORDS)+" Street"
+    continent:hierarchyName(seed,"continent",x,y),
+    country:hierarchyName(seed,"country",x,y),
+    region:hierarchyName(seed,"region",x,y),
+    city:hierarchyName(seed,"city",x,y),
+    district:hierarchyName(seed,"district",x,y),
+    village:hierarchyName(seed,"village",x,y),
+    avenue:hierarchyName(seed,"avenue",x,y),
+    street:hierarchyName(seed,"street",x,y)
   });
 }
 
@@ -577,7 +603,7 @@ function location(seed,x,y){
 window.GeographyFoundation=Object.freeze({
   TILE_METERS,VILLAGE_CELL_SIZE,MIN_VILLAGE_WALK_MINUTES,MAX_WALK_SPEED_KMH,
   MAIN_ROAD_WALK_SPEED_KMH,MAX_BRIDGE_WALK_MINUTES,MAX_BRIDGE_TILES,ROAD_WIDTH_POLICY,
-  hierarchy,environment,getTerrainType,location,
+  hierarchy,hierarchyName,environment,getTerrainType,location,
   mainRoadInfo,mainRoadProof,roadWidthForContext,bridgeRunAt,
   villageCenter,villageAtCell,nearestVillage,villageSpacingProof,estimateWalkRoute
 });
