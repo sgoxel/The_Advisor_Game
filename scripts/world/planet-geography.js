@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planetary-geography-v4";
+const VERSION="planetary-geography-v5";
 const DEFAULT_SEED="The_Advisor_Game_Planet_001";
 const STORAGE_KEY="advisor.planet.seed.v1";
 const CONTINENT_COUNT=5;
@@ -10,6 +10,11 @@ const ISLAND_CHAIN_COUNT=4;
 const ISLANDS_PER_CHAIN=9;
 const ISOLATED_ISLAND_COUNT=8;
 const MOUNTAIN_NODES_PER_CONTINENT=9;
+const DEFAULT_WORLD_RADIUS_METERS=637100;
+const DEFAULT_TILE_METERS=2;
+const INSTANCE_CACHE=new Map();
+const CONTINENT_STEMS=Object.freeze(["Alder","Amber","Ashen","Bright","Cedar","Dawn","Elder","Falcon","Golden","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"]);
+const CONTINENT_TAILS=Object.freeze(["reach","fall","wood","mere","gate","vale","march","crest","land","haven"]);
 
 function clamp(v,a=0,b=1){return Math.min(b,Math.max(a,Number(v)||0));}
 function smooth01(v){const t=clamp(v);return t*t*(3-2*t);}
@@ -143,6 +148,13 @@ function directionFromLatLon(latitudeRadians,longitudeRadians){
   if(Math.abs(c)<1e-12)c=0;
   return normalize(Math.sin(lon)*c,Math.sin(lat),Math.cos(lon)*c);
 }
+function latLonFromDirection(directionValue){
+  const d=normalize(directionValue.x,directionValue.y,directionValue.z);
+  return Object.freeze({
+    latitudeRadians:Math.asin(clamp(d.y,-1,1)),
+    longitudeRadians:Math.atan2(d.x,d.z)
+  });
+}
 function colorFor(sample){
   const e=sample.elevationMeters;
   const lat=Math.abs(sample.latitudeRadians)/(Math.PI/2);
@@ -171,6 +183,7 @@ function colorFor(sample){
 }
 function create(seedValue){
   const seed=sanitizeSeed(seedValue);
+  if(INSTANCE_CACHE.has(seed))return INSTANCE_CACHE.get(seed);
   const rng=rngFromSeed(seed,"layout");
   const centers=[];
   const minDot=Math.cos(0.88);
@@ -202,6 +215,87 @@ function create(seedValue){
     }
     continentGroups.push(Object.freeze({id:index,center,lobes:Object.freeze(group)}));
   });
+
+  const parent=continentGroups.map((_,index)=>index);
+  const findRoot=index=>{let i=index;while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;};
+  const union=(a,b)=>{const ra=findRoot(a),rb=findRoot(b);if(ra!==rb)parent[Math.max(ra,rb)]=Math.min(ra,rb);};
+  for(let a=0;a<continentGroups.length;a++){
+    for(let b=a+1;b<continentGroups.length;b++){
+      let overlaps=false;
+      for(const la of continentGroups[a].lobes){
+        for(const lb of continentGroups[b].lobes){
+          const angle=Math.acos(clamp(dot(la.center,lb.center),-1,1));
+          if(angle<(la.radius+lb.radius)*0.72){overlaps=true;break;}
+        }
+        if(overlaps)break;
+      }
+      if(overlaps)union(a,b);
+    }
+  }
+  const continentComponentRoots=Object.freeze(continentGroups.map((_,index)=>findRoot(index)));
+  const continentComponents=new Map();
+  continentGroups.forEach(group=>{
+    const root=continentComponentRoots[group.id];
+    if(!continentComponents.has(root))continentComponents.set(root,[]);
+    continentComponents.get(root).push(group);
+  });
+  const continentNameForRoot=root=>{
+    const h=hash32(seed+"|continent-name|"+root);
+    const stem=CONTINENT_STEMS[h%CONTINENT_STEMS.length];
+    const tail=CONTINENT_TAILS[(h>>>8)%CONTINENT_TAILS.length];
+    return stem+tail+" Continent";
+  };
+  const registrationOrigin=continentGroups[0]?.center||normalize(0,0,1);
+  const registrationBasis=tangentBasis(registrationOrigin);
+  const registrationEast=registrationBasis.u,registrationNorth=registrationBasis.v;
+  function registeredDirection(latitudeRadians,longitudeRadians){
+    const lat=clamp(Number(latitudeRadians),-Math.PI/2,Math.PI/2),lon=Number(longitudeRadians)||0,c=Math.cos(lat);
+    return normalize(
+      registrationOrigin.x*c*Math.cos(lon)+registrationEast.x*c*Math.sin(lon)+registrationNorth.x*Math.sin(lat),
+      registrationOrigin.y*c*Math.cos(lon)+registrationEast.y*c*Math.sin(lon)+registrationNorth.y*Math.sin(lat),
+      registrationOrigin.z*c*Math.cos(lon)+registrationEast.z*c*Math.sin(lon)+registrationNorth.z*Math.sin(lat)
+    );
+  }
+  function registeredLatLonFromDirection(directionValue){
+    const d=normalize(directionValue.x,directionValue.y,directionValue.z);
+    return Object.freeze({
+      latitudeRadians:Math.asin(clamp(dot(d,registrationNorth),-1,1)),
+      longitudeRadians:Math.atan2(dot(d,registrationEast),dot(d,registrationOrigin))
+    });
+  }
+  function canonicalWorldTile(xValue,yValue,tileMeters=DEFAULT_TILE_METERS,radiusMeters=DEFAULT_WORLD_RADIUS_METERS){
+    const tile=Math.max(0.001,Number(tileMeters)||DEFAULT_TILE_METERS),radius=Math.max(1,Number(radiusMeters)||DEFAULT_WORLD_RADIUS_METERS);
+    const period=Math.max(8,Math.round(Math.PI*2*radius/tile)),periodBig=BigInt(period),half=periodBig/2n;
+    let x=BigInt(String(xValue??"0"));x=((x%periodBig)+periodBig)%periodBig;if(x>half)x-=periodBig;
+    const maxY=BigInt(Math.max(1,Math.round(Math.PI*.5*radius/tile)));let y=BigInt(String(yValue??"0"));
+    if(y>maxY)y=maxY;else if(y<-maxY)y=-maxY;
+    return Object.freeze({x:x.toString(),y:y.toString(),periodTiles:period,maxLatitudeTile:maxY.toString(),tileMeters:tile,radiusMeters:radius});
+  }
+  function worldLatLonForTile(xValue,yValue,tileMeters=DEFAULT_TILE_METERS,radiusMeters=DEFAULT_WORLD_RADIUS_METERS){
+    const canonical=canonicalWorldTile(xValue,yValue,tileMeters,radiusMeters);
+    const localLat=Number(BigInt(canonical.y))*canonical.tileMeters/canonical.radiusMeters;
+    const localLon=Number(BigInt(canonical.x))*canonical.tileMeters/canonical.radiusMeters;
+    const direction=registeredDirection(localLat,localLon),geo=latLonFromDirection(direction);
+    return Object.freeze({
+      latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,
+      latitudeDegrees:Number((geo.latitudeRadians*180/Math.PI).toFixed(6)),
+      longitudeDegrees:Number((geo.longitudeRadians*180/Math.PI).toFixed(6)),
+      registeredLatitudeRadians:localLat,registeredLongitudeRadians:localLon,
+      worldTile:Object.freeze({x:canonical.x,y:canonical.y})
+    });
+  }
+  function worldTileForLatLon(latitudeRadians,longitudeRadians,tileMeters=DEFAULT_TILE_METERS,radiusMeters=DEFAULT_WORLD_RADIUS_METERS){
+    const tile=Math.max(0.001,Number(tileMeters)||DEFAULT_TILE_METERS),radius=Math.max(1,Number(radiusMeters)||DEFAULT_WORLD_RADIUS_METERS);
+    const local=registeredLatLonFromDirection(directionFromLatLon(latitudeRadians,longitudeRadians));
+    return canonicalWorldTile(String(Math.round(local.longitudeRadians*radius/tile)),String(Math.round(local.latitudeRadians*radius/tile)),tile,radius);
+  }
+  function registrationRoundTrip(xValue,yValue,tileMeters=DEFAULT_TILE_METERS,radiusMeters=DEFAULT_WORLD_RADIUS_METERS){
+    const canonical=canonicalWorldTile(xValue,yValue,tileMeters,radiusMeters);
+    const geo=worldLatLonForTile(canonical.x,canonical.y,tileMeters,radiusMeters);
+    const round=worldTileForLatLon(geo.latitudeRadians,geo.longitudeRadians,tileMeters,radiusMeters);
+    const dx=Number(BigInt(round.x)-BigInt(canonical.x)),dy=Number(BigInt(round.y)-BigInt(canonical.y));
+    return Object.freeze({input:Object.freeze({x:canonical.x,y:canonical.y}),output:Object.freeze({x:round.x,y:round.y}),errorTiles:Number(Math.hypot(dx,dy).toFixed(6)),pass:Math.abs(dx)<=1&&Math.abs(dy)<=1});
+  }
 
   const isolatedIslands=[];
   for(let i=0;i<ISOLATED_ISLAND_COUNT;i++){
@@ -266,6 +360,11 @@ function create(seedValue){
     const wz=(noise3(bases.warpZ,d.x*warpFrequency+1.2,d.y*warpFrequency+0.8,d.z*warpFrequency-4.6)-0.5)*2*warpStrength;
     const warped=normalize(d.x+wx,d.y+wy,d.z+wz);
     const continent=maxInfluence(warped,continentLobes);
+    let bestContinentGroup=null,bestContinentGroupInfluence=-1;
+    for(const group of continentGroups){
+      const influence=maxInfluence(warped,group.lobes);
+      if(influence>bestContinentGroupInfluence){bestContinentGroup=group;bestContinentGroupInfluence=influence;}
+    }
     const island=maxInfluence(warped,islandLobes);
     const coastNoise=(fbm3(bases.coast,warped,2.7,4)-0.5)*0.44+(fbm3(bases.detail,warped,11.5,4)-0.5)*0.17;
     const islandRough=(fbm3(bases.detail,warped,18.5,3)-0.5)*0.44;
@@ -305,6 +404,8 @@ function create(seedValue){
     else if(elevationMeters<3400)surfaceClass="mountain";
     else surfaceClass="high-peak";
 
+    const continentRoot=bestContinentGroup?continentComponentRoots[bestContinentGroup.id]:null;
+    const continentId=land&&continentRoot!=null&&continent>=Math.max(0.18,island*0.72)?"CONT|"+continentRoot:null;
     const result={
       version:VERSION,seed,
       direction:Object.freeze({x:d.x,y:d.y,z:d.z}),
@@ -313,6 +414,9 @@ function create(seedValue){
       surfaceClass,
       elevationMeters:Number(elevationMeters.toFixed(2)),
       continentInfluence:Number(continent.toFixed(5)),
+      continentGroupInfluence:Number(Math.max(0,bestContinentGroupInfluence).toFixed(5)),
+      continentId,
+      continentName:continentId?continentNameForRoot(continentRoot):null,
       islandInfluence:Number(island.toFixed(5)),
       mountainInfluence:Number(mountainInfluence.toFixed(5)),
       moisture:Number(moisture.toFixed(5))
@@ -322,6 +426,26 @@ function create(seedValue){
   }
   function sampleLatLon(latitudeRadians,longitudeRadians){
     return sampleDirection(directionFromLatLon(latitudeRadians,longitudeRadians));
+  }
+  function continentById(idValue){
+    const parts=String(idValue||"").split("|");if(parts.length!==2||parts[0]!=="CONT")return null;
+    const root=Number(parts[1]);if(!Number.isInteger(root)||!continentComponents.has(root))return null;
+    let best=null;
+    for(const group of continentComponents.get(root)){
+      for(const candidateDirection of [group.center,...group.lobes.map(item=>item.center)]){
+        const sample=sampleDirection(candidateDirection);
+        if(sample.land&&sample.continentId===String(idValue)&&(!best||sample.continentInfluence>best.sample.continentInfluence))best={direction:candidateDirection,sample};
+      }
+    }
+    if(!best)return null;
+    const geo=latLonFromDirection(best.direction);
+    return Object.freeze({
+      id:String(idValue),name:continentNameForRoot(root),componentRoot:root,
+      groupIds:Object.freeze(continentComponents.get(root).map(group=>group.id)),
+      latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,
+      latitudeDegrees:Number((geo.latitudeRadians*180/Math.PI).toFixed(6)),
+      longitudeDegrees:Number((geo.longitudeRadians*180/Math.PI).toFixed(6))
+    });
   }
   function signature(){
     let h=2166136261>>>0;
@@ -368,18 +492,31 @@ function create(seedValue){
       southPoleRangeMeters:Number((Math.max(...south)-Math.min(...south)).toFixed(6))
     });
   }
-  return Object.freeze({
+  const instance=Object.freeze({
     VERSION,seed,
-    sampleDirection,sampleLatLon,signature,seamProof,
+    sampleDirection,sampleLatLon,signature,seamProof,continentById,
+    worldLatLonForTile,worldTileForLatLon,registrationRoundTrip,
+    registration:Object.freeze({
+      authority:"PlanetGeography.seed-fixed-spherical-frame",
+      originDirection:registrationOrigin,eastDirection:registrationEast,northDirection:registrationNorth,
+      defaultWorldRadiusMeters:DEFAULT_WORLD_RADIUS_METERS,defaultTileMeters:DEFAULT_TILE_METERS,
+      componentRoots:continentComponentRoots
+    }),
     layout:Object.freeze({
       continentCount:CONTINENT_COUNT,
+      continentComponentCount:continentComponents.size,
       continentLobeCount:continentLobes.length,
       islandNodeCount:islandLobes.length,
       mountainNodeCount:mountainNodes.length
     })
   });
+  INSTANCE_CACHE.set(seed,instance);
+  return instance;
 }
 function signatureForSeed(seed){return create(seed).signature();}
+function worldLatLonForTile(seedValue,xValue,yValue,tileMeters=DEFAULT_TILE_METERS,radiusMeters=DEFAULT_WORLD_RADIUS_METERS){return create(seedValue).worldLatLonForTile(xValue,yValue,tileMeters,radiusMeters);}
+function worldTileForLatLon(seedValue,latitudeRadians,longitudeRadians,tileMeters=DEFAULT_TILE_METERS,radiusMeters=DEFAULT_WORLD_RADIUS_METERS){return create(seedValue).worldTileForLatLon(latitudeRadians,longitudeRadians,tileMeters,radiusMeters);}
+function registrationRoundTrip(seedValue,xValue,yValue,tileMeters=DEFAULT_TILE_METERS,radiusMeters=DEFAULT_WORLD_RADIUS_METERS){return create(seedValue).registrationRoundTrip(xValue,yValue,tileMeters,radiusMeters);}
 function verifyDeterminism(seedValue){
   const seed=sanitizeSeed(seedValue);
   const a=create(seed),b=create(seed),other=create(seed+"__alternate");
@@ -399,6 +536,8 @@ function verifyDeterminism(seedValue){
 window.PlanetGeography=Object.freeze({
   VERSION,DEFAULT_SEED,STORAGE_KEY,
   create,signatureForSeed,verifyDeterminism,
-  resolveSeed,persistSeed,sanitizeSeed,directionFromLatLon
+  resolveSeed,persistSeed,sanitizeSeed,directionFromLatLon,latLonFromDirection,
+  worldLatLonForTile,worldTileForLatLon,registrationRoundTrip,
+  DEFAULT_WORLD_RADIUS_METERS,DEFAULT_TILE_METERS
 });
 })();
