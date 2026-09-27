@@ -1163,7 +1163,7 @@ function borderEndpointNearCoast(point){
   // Roughly one contour sample spacing. A real land-border endpoint may stop at
   // a coast/lake shore, but an isolated endpoint surrounded by land is a
   // presentation/topology defect and must not be rendered as a dangling stub.
-  const radiusMeters=32000;
+  const radiusMeters=5000;
   const offsets=[[radiusMeters,0],[-radiusMeters,0],[0,radiusMeters],[0,-radiusMeters],
     [radiusMeters*.707,radiusMeters*.707],[-radiusMeters*.707,radiusMeters*.707],
     [radiusMeters*.707,-radiusMeters*.707],[-radiusMeters*.707,-radiusMeters*.707]];
