@@ -84,7 +84,7 @@ const activity={
   state:"social",location:"public",buildingId:null,label:"Talking in the square",intendedAction:"social",
   timestamp:"1201-02-01 12:00:00",target:{x:"0",y:"0"}
 };
-global.DailyActivity={resolve:()=>activity,resolveActionTarget:()=>activity};
+global.DailyActivity={roster:()=>residents,build:()=>residents,resolve:()=>activity,resolveActionTarget:()=>activity};
 global.SpecialLots={build:()=>[]};
 global.SocialState={dialogueContext:()=>({
   values:{trust:.72,fear:.08,respect:.68,suspicion:.2,loyalty:.52,resentment:.08},
