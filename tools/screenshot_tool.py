@@ -6461,7 +6461,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if not required.issubset(set(targets or {})):
             raise RuntimeError(f"Unable to find bounded wilderness biome targets: {targets}")
         plan=(
-            ("village-edge","village","height:500",(1280,800),True),
+            ("village-edge","village","height:200",(1280,800),True),
             ("grassland-local","grassland","height:80",(1280,800),True),
             ("grassland-1.00x","grassland",1.0,(1280,800),True),
             ("rocky-local","rocky","height:80",(1280,800),True),
@@ -6477,6 +6477,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
         label,key,target,viewport,enabled=plan[min(frame_index,len(plan)-1)]
         driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
+        driver.execute_async_script("""
+            const done=arguments[arguments.length-1];
+            requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+        """)
         scalar=(driver.execute_script("return Number(window.PlanetStage.scalarForFootprintHeight(arguments[0]))",float(str(target).split(":",1)[1]))
                 if isinstance(target,str) and target.startswith("height:") else float(target))
         driver.execute_script("window.PlanetStage.setWildernessEnabled(arguments[0])",bool(enabled))
@@ -6514,6 +6518,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                     const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},w=s.wilderness||{};
                     const far=Boolean(arguments[1]),enabled=Boolean(arguments[2]);
                     if(Math.abs(Number(s.zoom?.scalar||0)-Number(arguments[0]))>.00001||Number(r.pendingPreparationCount||0)!==0)return false;
+                    if(String(r.activeSignature||'')!==String(r.requestedSignature||''))return false;
                     if(far)return w.localActive!==true;
                     if(!enabled)return w.localEnabled===false&&w.localActive!==true;
                     return w.localEnabled===true&&Number(w.localAcceptedStaticProps||0)>=8;
