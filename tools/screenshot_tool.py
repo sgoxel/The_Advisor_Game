@@ -124,6 +124,7 @@ SCENARIOS = {
     "wp-s003-009-008",
     "wp-s003-009-009",
     "wp-s003-009-010",
+    "wp-s003-012",
     "wp-s003-009-011",
     "wp-s003-010-001",
     "wp-s003-010-002",
@@ -239,6 +240,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-009-008": 8,
     "wp-s003-009-009": 6,
     "wp-s003-009-010": 7,
+    "wp-s003-012": 8,
     "wp-s003-009-011": 7,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
@@ -1688,7 +1690,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-009-011"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -1707,6 +1709,21 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                 """
             )
         )
+        if scenario == "wp-s003-012":
+            driver.execute_script("""
+                window.PlanetStage.setWorldTileFocus("0","0");
+                window.PlanetStage.setZoomScalar(1);
+            """)
+            WebDriverWait(driver, 180.0).until(
+                lambda d: d.execute_script("""
+                    const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},f=s?.canonicalFocus?.worldTile||{};
+                    return String(f.x)==='0'&&String(f.y)==='0'&&
+                      Math.abs(Number(s?.zoom?.scalar||0)-1)<0.000001&&
+                      ls?.revealTier==='full'&&Number(ls?.buildingCount||0)>=6&&Number(ls?.roadCount||0)>=4&&
+                      Number(r?.pendingPreparationCount||0)===0;
+                """)
+            )
+            return "atmosphere-ready:ground-origin"
         if scenario == "wp-s003-010-003-007":
             selected=driver.execute_script("""
                 const stage=window.PlanetStage,s=stage?.snapshot?.(),seed=s?.activeSeed;
@@ -6414,6 +6431,44 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-012":
+        from selenium.webdriver.support.ui import WebDriverWait
+        configs = (
+            ("ground","dawn",5,30),
+            ("ground","day",12,0),
+            ("ground","late-day",17,30),
+            ("ground","night",21,30),
+            ("globe","dawn",5,30),
+            ("globe","day",12,0),
+            ("globe","late-day",17,30),
+            ("globe","night",21,30),
+        )
+        mode,label,hour,minute=configs[min(frame_index,len(configs)-1)]
+        driver.set_window_size(1280,800)
+        scalar=1 if mode=="ground" else 0
+        driver.execute_script("""
+            const scalar=Number(arguments[0]),hour=Number(arguments[1]),minute=Number(arguments[2]),label=String(arguments[3]);
+            const stage=window.PlanetStage;
+            stage.setWorldTileFocus("0","0");
+            stage.setZoomScalar(scalar);
+            stage.applyAuthoritativeFantasyTime({year:1100,month:6,day:15,hour,minute,second:0},"wp-s003-012-"+label);
+        """,scalar,hour,minute,label)
+        if mode=="ground":
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{},f=s?.canonicalFocus?.worldTile||{};
+                return String(f.x)==='0'&&String(f.y)==='0'&&Math.abs(Number(s?.zoom?.scalar||0)-1)<0.000001&&
+                  ls?.revealTier==='full'&&Number(ls?.buildingCount||0)>=6&&Number(ls?.roadCount||0)>=4&&
+                  Number(r?.pendingPreparationCount||0)===0&&s?.atmosphere?.active===true;
+            """))
+        else:
+            WebDriverWait(driver,60.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),f=s?.canonicalFocus?.worldTile||{};
+                return String(f.x)==='0'&&String(f.y)==='0'&&Math.abs(Number(s?.zoom?.scalar||0))<0.000001&&s?.atmosphere?.active===true;
+            """))
+        time.sleep(0.25)
+        s=driver.execute_script("return window.PlanetStage.snapshot()")
+        a=s.get("atmosphere") or {}
+        return f"{mode}:{label}:hour={a.get('authoritativeHour')}:key={a.get('keyIntensity')}:fill={a.get('fillIntensity')}"
     if scenario == "wp-s003-011":
         from selenium.webdriver.support.ui import WebDriverWait
         if frame_index == 0:
@@ -8507,6 +8562,40 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             signatures.add((wild.get("acceptedStaticProps"),wild.get("vegetationClusters"),wild.get("rockClusters"),wild.get("ambientFaunaZones")))
         if len(signatures)!=1:
             raise RuntimeError(f"Wilderness deterministic counts changed across views: {signatures}")
+        return
+
+    if scenario == "wp-s003-012":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-012 requires four fixed-ground and four fixed-globe atmosphere frames")
+        stages=[frame.get("runtime",{}).get("currentBuild",{}).get("planetStage") or {} for frame in frames[:8]]
+        expected=("dawn","day","late-day","night","dawn","day","late-day","night")
+        focus=[]
+        sky_signatures=set()
+        for index,(stage,phase) in enumerate(zip(stages,expected),start=1):
+            atmosphere=stage.get("atmosphere") or {}
+            if atmosphere.get("active") is not True or atmosphere.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Atmosphere authority failed in frame {index}: {atmosphere}")
+            if atmosphere.get("phase")!=phase or int(atmosphere.get("dynamicLightCount") or 0)!=2 or int(atmosphere.get("drawCallImpact",-1))!=0:
+                raise RuntimeError(f"Atmosphere phase/light budget failed in frame {index}: {atmosphere}")
+            if float(atmosphere.get("keyIntensity") or 0)<=0 or float(atmosphere.get("fillIntensity") or 0)<=0:
+                raise RuntimeError(f"Atmosphere light intensity invalid in frame {index}: {atmosphere}")
+            sky=tuple(atmosphere.get("sky") or [])
+            if len(sky)!=3:
+                raise RuntimeError(f"Atmosphere sky telemetry missing in frame {index}: {atmosphere}")
+            sky_signatures.add(tuple(round(float(x),3) for x in sky))
+            tile=(stage.get("canonicalFocus") or {}).get("worldTile") or {}
+            focus.append((str(tile.get("x")),str(tile.get("y"))))
+            if index<=4:
+                local=(stage.get("projection") or {}).get("localStatic") or {}
+                budget=(stage.get("projection") or {}).get("resourceBudget") or {}
+                if local.get("revealTier")!="full" or int(local.get("buildingCount") or 0)<6 or int(local.get("roadCount") or 0)<4:
+                    raise RuntimeError(f"Ground composition missing in atmosphere frame {index}: {local}")
+                if int(budget.get("pendingPreparationCount") or 0)!=0 or int(budget.get("blockingZoomBuilds") or 0)!=0:
+                    raise RuntimeError(f"Ground atmosphere resource budget failed in frame {index}: {budget}")
+        if len(set(focus))!=1 or focus[0] != ("0","0"):
+            raise RuntimeError(f"Atmosphere evidence changed canonical focus: {focus}")
+        if len(sky_signatures)<4:
+            raise RuntimeError(f"Atmosphere phases are not visually distinct in sky telemetry: {sky_signatures}")
         return
 
     if scenario == "wp-s003-009-010":
@@ -13535,7 +13624,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -13543,7 +13632,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
