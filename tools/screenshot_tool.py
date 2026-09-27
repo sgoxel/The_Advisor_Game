@@ -7278,8 +7278,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-004 world/planet anchor is not land-safe exact origin: {wp}")
             if projection.get("mode")!="local-tangent" or projection.get("tangentPatchActive") is not True:
                 raise RuntimeError(f"WP-004 local tangent projection is not active: {projection.get('mode')}")
-            if detail.get("active") is not True or float(detail.get("visibleHeightMeters") or 1e9)>80:
-                raise RuntimeError(f"WP-004 fine local terrain is not active/ground-scale: {detail}")
+            if (
+                detail.get("active") is not True or
+                float(detail.get("visibleHeightMeters") or 1e9)>130 or
+                float(detail.get("geometrySampleSpacingMeters") or 1e9)>3 or
+                float((s.get("zoom") or {}).get("visibleFootprintHeightMeters") or 1e9)>110
+            ):
+                raise RuntimeError(f"WP-004 fine local terrain is not active/near-ground bounded: {detail}")
             if local.get("active") is not True or local.get("grounded") is not True or local.get("viewportBounded") is not True:
                 raise RuntimeError(f"WP-004 local static world is not active/grounded/bounded: {local}")
             if int(local.get("roadCount") or 0)<1 or int(local.get("buildingCount") or 0)<1:
