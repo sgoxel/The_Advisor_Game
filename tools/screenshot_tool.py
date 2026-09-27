@@ -261,7 +261,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-008": 14,
     "wp-s003-010-003-009": 14,
     "wp-s003-010-003-010": 12,
-    "wp-s003-010-003-012": 9,
+    "wp-s003-010-003-012": 12,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -7214,10 +7214,13 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("seed-a-revisit-ground",9,(1280,800),"origin"),
             ("seed-a-phone-landscape",5,(844,390),"origin"),
             ("seed-a-phone-portrait",5,(390,844),"origin"),
+            ("seed-a-city-spacing-1-2500",7,(1280,800),"origin"),
+            ("seed-a-city-navigation-1-2500",7,(1280,800),"city-pan"),
+            ("seed-a-city-return-1-2500",7,(1280,800),"origin"),
             ("seed-b-ground-1-10000",9,(1280,800),"origin"),
         )
         label,scale_index,viewport,target_kind=plan[min(frame_index,len(plan)-1)]
-        if frame_index in (0,8):
+        if frame_index in (0,11):
             seed="WP_S003_010_003_012_A" if frame_index==0 else "WP_S003_010_003_012_B"
             base=driver.current_url.split("?",1)[0]
             driver.get(base+"?seed="+seed)
@@ -7235,7 +7238,21 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                   radiusMeters:stage.constants.WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
                 const first=fabric.materializeCell(origin,256);
                 const away={x:(BigInt(origin.x)+32000n).toString(),y:(BigInt(origin.y)+18000n).toString()};
-                window.__wp012={seed:after.activeSeed,origin,away,originCellId:first.id,originStreamSignature:first.signature,revision:fabric.revisionSignature,groundOriginProof:null};
+                const cityBase=window.GeographyFoundation?.cityCellFor?.(origin.x,origin.y);
+                let cityPan=null,cityPanId=null;
+                if(cityBase){
+                  const offsets=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2]];
+                  for(const [dx,dy] of offsets){
+                    const cx=cityBase.x+BigInt(dx),cy=cityBase.y+BigInt(dy);
+                    const city=window.GeographyFoundation?.cityAtCell?.(after.activeSeed,cx,cy)||null;
+                    if(!city)continue;
+                    cityPan={x:String(city.x),y:String(city.y)};
+                    cityPanId="CITY|"+cx.toString()+"|"+cy.toString();
+                    if(cityPan.x!==String(origin.x)||cityPan.y!==String(origin.y))break;
+                  }
+                }
+                if(!cityPan)throw new Error('WP-012 canonical nearby city unavailable');
+                window.__wp012={seed:after.activeSeed,origin,away,cityPan,cityPanId,originCellId:first.id,originStreamSignature:first.signature,revision:fabric.revisionSignature,groundOriginProof:null};
                 return window.__wp012;
             """)
             if not isinstance(setup,dict) or not setup.get("originCellId") or not setup.get("revision"):
@@ -7243,7 +7260,9 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.18)
         target=driver.execute_script("""
             const state=window.__wp012;if(!state)return null;
-            return arguments[0]==='away'?state.away:state.origin;
+            if(arguments[0]==='away')return state.away;
+            if(arguments[0]==='city-pan')return state.cityPan;
+            return state.origin;
         """,target_kind)
         if not isinstance(target,dict):
             raise RuntimeError(f"WP-012 target unavailable for {label}: {target}")
@@ -7344,6 +7363,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               landmarkVisibleCount:m.landmarkVisibleCount,visibleLandmarks:m.visibleLandmarks,landmarkLabels,
               leaderDomCount:document.querySelectorAll('.planet-atlas-leader[data-landmark="true"]').length,
               labelOverlapCount:overlapCount,atlasVisible:m.atlasVisibleLabelCount,atlasBudget:m.maxLabelBudget,
+              cityCandidateCount:m.cityCandidateCount,cityVisibleCount:m.cityVisibleCount,
+              cityMinSeparationMeters:m.cityMinSeparationMeters,citySpacingPass:m.citySpacingPass,
+              cityRequiredMinSeparationMeters:m.cityRequiredMinSeparationMeters,cityQueryCellCount:m.cityQueryCellCount,
+              cityVisibleIds:m.cityVisibleIds||[],cityPanId:state.cityPanId||null,
               mapFullWorldScan:m.fullWorldScan,mapBounded:m.bounded,mapUpdateMs:m.lastUpdateMs,
               verify,alternateRevision:alternate.revisionSignature,alternateDifferent:alternate.revisionSignature!==fabric.revisionSignature,
               originCellId:state.originCellId,originStreamSignature:state.originStreamSignature
@@ -8163,10 +8186,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         return
 
     if scenario == "wp-s003-010-003-012":
-        if len(frames) < 9:
-            raise RuntimeError("wp-s003-010-003-012 requires nine coordinate-fabric frames")
+        if len(frames) < 12:
+            raise RuntimeError("wp-s003-010-003-012 requires twelve coordinate-fabric/city-spacing frames")
         proofs=[]
-        for index,frame in enumerate(frames[:9],start=1):
+        for index,frame in enumerate(frames[:12],start=1):
             action=str(frame.get("action") or "")
             try:
                 proof=json.loads(action.split("|",2)[2])
@@ -8219,7 +8242,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         stream=proofs[4].get("streamProof") or {}
         if stream.get("stable") is not True or stream.get("firstId")!=stream.get("secondId") or stream.get("firstSig")!=stream.get("secondSig"):
             raise RuntimeError(f"WP-012 streamed cell regenerate/revisit identity failed: {stream}")
-        for index in (0,3,5,6,7,8):
+        for index in (0,3,5,6,7,11):
             proof=proofs[index]
             if int(proof.get("landmarkVisibleCount") or 0)<1 or int(proof.get("leaderDomCount") or 0)<1:
                 raise RuntimeError(f"WP-012 landmark callout missing in frame {index+1}: {proof}")
@@ -8231,9 +8254,30 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-012 landmark leader/anchor invalid in frame {index+1}: {landmarks}")
             if any(item.get("renderedClipped") is True for item in labels):
                 raise RuntimeError(f"WP-012 landmark label clipped in frame {index+1}: {labels}")
-        if len({str(p.get("coordinateRevision") or "") for p in proofs[:8]})!=1:
+        city_frames=[proofs[8],proofs[9],proofs[10]]
+        for city_index,proof in zip((9,10,11),city_frames):
+            if proof.get("scaleLabel")!="1/2500":
+                raise RuntimeError(f"WP-012 city-spacing frame {city_index} is not canonical 1/2500: {proof.get('scaleLabel')}")
+            if proof.get("citySpacingPass") is not True:
+                raise RuntimeError(f"WP-012 city-spacing contract failed in frame {city_index}: {proof}")
+            city_cells=int(proof.get("cityQueryCellCount") or 0)
+            if city_cells<1 or city_cells>121:
+                raise RuntimeError(f"WP-012 city query is not bounded in frame {city_index}: {city_cells}")
+            if int(proof.get("cityCandidateCount") or 0)<1 or int(proof.get("cityVisibleCount") or 0)<1:
+                raise RuntimeError(f"WP-012 1/2500 city discovery missing in frame {city_index}: {proof}")
+            minimum=proof.get("cityMinSeparationMeters")
+            required_min=float(proof.get("cityRequiredMinSeparationMeters") or 0)
+            if minimum is not None and float(minimum)+2.0<required_min:
+                raise RuntimeError(f"WP-012 cities are implausibly close in frame {city_index}: min={minimum} required={required_min}")
+        if city_frames[0].get("focus")!=city_frames[2].get("focus"):
+            raise RuntimeError(f"WP-012 city-navigation return changed canonical focus: start={city_frames[0].get('focus')} return={city_frames[2].get('focus')}")
+        if set(city_frames[0].get("cityVisibleIds") or [])!=set(city_frames[2].get("cityVisibleIds") or []):
+            raise RuntimeError(f"WP-012 city labels did not reproduce after navigate/return: start={city_frames[0].get('cityVisibleIds')} return={city_frames[2].get('cityVisibleIds')}")
+        if city_frames[1].get("focus")==city_frames[0].get("focus"):
+            raise RuntimeError("WP-012 city-navigation frame did not move away from origin")
+        if len({str(p.get("coordinateRevision") or "") for p in proofs[:11]})!=1:
             raise RuntimeError("WP-012 coordinate revision changed within primary SEED run")
-        if str(proofs[8].get("coordinateRevision") or "")==str(proofs[0].get("coordinateRevision") or "") or proofs[8].get("alternateDifferent") is not True:
+        if str(proofs[11].get("coordinateRevision") or "")==str(proofs[0].get("coordinateRevision") or "") or proofs[11].get("alternateDifferent") is not True:
             raise RuntimeError("WP-012 independent SEED did not change canonical coordinate fabric revision")
         landscape=frames[6].get("runtime",{}).get("viewport",{})
         portrait=frames[7].get("runtime",{}).get("viewport",{})
