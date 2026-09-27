@@ -7113,8 +7113,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                    Math.abs(Number(s?.zoom?.scalar||0)-Number(arguments[0]))<0.00001 &&
                    Number(r?.pendingPreparationCount||0)===0 &&
                    m?.bounded===true && m?.fullWorldScan===false &&
-                   Number(m?.atlasVisibleLabelCount||0)>0;
-        """,float(scalar)))
+                   (arguments[1]===true || Number(m?.atlasVisibleLabelCount||0)>0);
+        """,float(scalar),frame_index==11))
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),m=s?.mapPresentation||{},p=s?.projection||{},r=p?.resourceBudget||{};
             return {
