@@ -7038,7 +7038,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("coast-0.12x",0.12,None,(1280,800),0),
             ("handoff-0.35x",0.35,None,(1280,800),0),
             ("phone-landscape-0.12x",0.12,None,(844,390),0),
-            ("phone-portrait-0.08x",0.08,None,(390,844),0),
+            ("phone-portrait-0.06x",0.06,None,(390,844),0),
             ("seed-b-globe",None,0.050,(1280,800),0),
             ("seed-b-country-0.12x",0.12,None,(1280,800),0),
         )
