@@ -111,6 +111,7 @@ SCENARIOS = {
     "wp-s003-008-004",
     "wp-s003-008-005",
     "wp-s003-008-006",
+    "wp-s003-011",
     "wp-s003-009-001",
     "wp-s003-009-002",
     "wp-s003-009-003",
@@ -225,6 +226,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-008-004": 6,
     "wp-s003-008-005": 6,
     "wp-s003-008-006": 6,
+    "wp-s003-011": 10,
     "wp-s003-009-001": 8,
     "wp-s003-009-002": 11,
     "wp-s003-009-003": 9,
@@ -1633,11 +1635,46 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 30.0)
     if scenario == "wp-s003-008-006":
-        # Tooltip evidence exercises the canonical local PlayCanvas scene, not the
-        # planet-only presentation. Cold software-WebGL CI can need the same
-        # bounded startup allowance as other terrain/presentation evidence.
+        # Historical pre-planet tooltip evidence path.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
+    if scenario == "wp-s003-011":
+        from selenium.webdriver.support.ui import WebDriverWait
+        driver.set_window_size(1280, 800)
+        timeout = max(timeout, 180.0)
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.(),v=window.PlanetStage?.verify?.();
+                return Boolean(s?.ready===true&&s?.version==='planet-inspection-v1'&&v?.pass===true);
+                """
+            )
+        )
+        driver.execute_script(
+            """
+            const stage=window.PlanetStage;
+            stage.setWorldTileFocus("0","0");
+            stage.setZoomScalar(1);
+            stage.applyAuthoritativeFantasyTime({year:1100,month:1,day:1,hour:10,minute:30,second:0},"wp-s003-011-evidence");
+            """
+        )
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                """
+                const s=window.PlanetStage?.snapshot?.()||{},i=s.inspection||{},ls=s.projection?.localStatic||{};
+                const targets=window.PlanetStage?.inspectionTargets?.()||[];
+                return Boolean(
+                  ls?.revealTier==='full' &&
+                  Number(i.activeNpcCount||0)>=1 &&
+                  Number(i.activeBuildingCount||0)>=6 &&
+                  targets.some(t=>t.type==='npc') &&
+                  targets.some(t=>t.type==='building')
+                );
+                """
+            )
+        )
+        snap=driver.execute_script("return window.PlanetStage.snapshot()")
+        return f"inspection-ready:npc={int((snap.get('inspection') or {}).get('activeNpcCount') or 0)}:building={int((snap.get('inspection') or {}).get('activeBuildingCount') or 0)}"
     if scenario == "starting-village":
         # Cold software-WebGL startup may legitimately exceed the generic
         # readiness window after terrain mesh changes. This is test-harness
@@ -6377,6 +6414,159 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-011":
+        from selenium.webdriver.support.ui import WebDriverWait
+        if frame_index == 0:
+            result=driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),seed=s.activeSeed;
+                const roster=window.DailyActivity?.build?.(seed)||[],targets=stage.inspectionTargets();
+                const viable=targets.filter(t=>t.type==='npc').find(t=>{
+                  const r=roster.find(x=>x.id===t.id);
+                  const later=r?window.DailyActivity.resolveActionTarget(seed,r,{year:1100,month:1,day:1,hour:14,minute:30,second:0}):null;
+                  return later&&later.targetSource!=='interior-interaction';
+                })||targets.find(t=>t.type==='npc');
+                if(!viable)throw new Error('No active NPC target');
+                const b=viable.bounds,x=(b.left+b.right)/2,y=(b.top+b.bottom)/2;
+                stage.pickInspection(x,y);
+                window.__WP_S003_011={npcId:viable.id,activityBefore:null};
+                return {id:viable.id,snapshot:stage.snapshot()};
+            """)
+            time.sleep(0.35)
+            proof=driver.execute_script("""
+                const s=window.PlanetStage.snapshot(),tip=document.querySelector('.world-inspection-tooltip');
+                const lines=tip?Array.from(tip.children).map(x=>x.textContent):[];
+                if(window.__WP_S003_011)window.__WP_S003_011.activityBefore=lines[2]||'';
+                return {s,lines,hidden:tip?.hidden};
+            """)
+            lines=proof.get("lines") or []
+            if (proof.get("s") or {}).get("inspection",{}).get("selectedType")!="npc" or len(lines)<3 or " " not in str(lines[0]):
+                raise RuntimeError(f"NPC tooltip identity/job/activity proof failed: {proof}")
+            return f"npc-selected:{result.get('id')}:{' | '.join(map(str,lines))}"
+        if frame_index == 1:
+            driver.execute_script("window.PlanetStage.applyAuthoritativeFantasyTime({year:1100,month:1,day:1,hour:14,minute:30,second:0},'wp-s003-011-activity-change')")
+            time.sleep(0.4)
+            proof=driver.execute_script("""
+                const s=window.PlanetStage.snapshot(),tip=document.querySelector('.world-inspection-tooltip'),lines=tip?Array.from(tip.children).map(x=>x.textContent):[];
+                return {s,lines,expected:window.__WP_S003_011?.npcId,before:window.__WP_S003_011?.activityBefore};
+            """)
+            lines=proof.get("lines") or []
+            if (proof.get("s") or {}).get("inspection",{}).get("selectedId")!=proof.get("expected") or len(lines)<3 or str(lines[2])==str(proof.get("before") or ""):
+                raise RuntimeError(f"Selected NPC live activity did not update: {proof}")
+            return f"npc-activity-updated:{proof.get('expected')}:{proof.get('before')}->{lines[2]}"
+        if frame_index in {2,3}:
+            want_house=frame_index==2
+            proof=driver.execute_script("""
+                const wantHouse=Boolean(arguments[0]),stage=window.PlanetStage,targets=stage.inspectionTargets().filter(t=>t.type==='building');
+                const match=t=>String(t.authority?.kind||'').toLowerCase().includes('house');
+                const target=targets.find(t=>wantHouse?match(t):!match(t))||null;
+                if(!target)throw new Error(wantHouse?'No ordinary house pick target':'No special building pick target');
+                const b=target.bounds;stage.pickInspection((b.left+b.right)/2,(b.top+b.bottom)/2);
+                const tip=document.querySelector('.world-inspection-tooltip');
+                return {target,s:stage.snapshot(),lines:tip?Array.from(tip.children).map(x=>x.textContent):[]};
+            """,want_house)
+            time.sleep(0.2)
+            if (proof.get("s") or {}).get("inspection",{}).get("selectedType")!="building" or not (proof.get("lines") or []):
+                raise RuntimeError(f"Building tooltip proof failed: {proof}")
+            return f"building-selected:{'house' if want_house else 'special'}:{proof.get('target',{}).get('id')}:{' | '.join(map(str,proof.get('lines') or []))}"
+        if frame_index == 4:
+            driver.set_window_size(390,844);time.sleep(0.5)
+            proof=driver.execute_script("""
+                const stage=window.PlanetStage,w=innerWidth,h=innerHeight;
+                const targets=stage.inspectionTargets().filter(t=>{
+                  const b=t.bounds,cx=(b.left+b.right)/2,cy=(b.top+b.bottom)/2;
+                  return cx>=0&&cx<=w&&cy>=0&&cy<=h;
+                });
+                targets.sort((a,b)=>{
+                  const ca=a.bounds,cb=b.bounds,ax=(ca.left+ca.right)/2,ay=(ca.top+ca.bottom)/2,bx=(cb.left+cb.right)/2,by=(cb.top+cb.bottom)/2;
+                  return Math.min(ax,w-ax,ay,h-ay)-Math.min(bx,w-bx,by,h-by);
+                });
+                const target=targets[0];if(!target)throw new Error('No edge inspection target');
+                const b=target.bounds;stage.pickInspection((b.left+b.right)/2,(b.top+b.bottom)/2);
+                const tip=document.querySelector('.world-inspection-tooltip'),r=tip?.getBoundingClientRect?.();
+                return {target,s:stage.snapshot(),rect:r?{left:r.left,top:r.top,right:r.right,bottom:r.bottom}:null,w,h};
+            """)
+            time.sleep(0.2)
+            r=proof.get("rect") or {}
+            if float(r.get("left",-1))<0 or float(r.get("top",-1))<0 or float(r.get("right",9999))>float(proof.get("w") or 0)+1 or float(r.get("bottom",9999))>float(proof.get("h") or 0)+1:
+                raise RuntimeError(f"Phone edge tooltip clipped: {proof}")
+            return f"phone-edge:{proof.get('target',{}).get('type')}:{proof.get('target',{}).get('id')}:viewport={proof.get('w')}x{proof.get('h')}"
+        if frame_index == 5:
+            proof=driver.execute_script("""
+                const stage=window.PlanetStage,canvas=document.querySelector('#planetCanvas'),target=stage.inspectionTargets().find(t=>t.type==='npc');
+                if(!target||!canvas)throw new Error('Touch target unavailable');
+                const b=target.bounds,x=(b.left+b.right)/2,y=(b.top+b.bottom)/2,oldSet=canvas.setPointerCapture,oldRelease=canvas.releasePointerCapture;
+                canvas.setPointerCapture=()=>{};canvas.releasePointerCapture=()=>{};
+                try{
+                  canvas.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:51,pointerType:'touch',clientX:x,clientY:y,button:0,isPrimary:true}));
+                  canvas.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,pointerId:51,pointerType:'touch',clientX:x,clientY:y,button:0,isPrimary:true}));
+                }finally{canvas.setPointerCapture=oldSet;canvas.releasePointerCapture=oldRelease;}
+                return {target,s:stage.snapshot()};
+            """)
+            time.sleep(0.2)
+            if (proof.get("s") or {}).get("inspection",{}).get("selectedId")!=(proof.get("target") or {}).get("id"):
+                raise RuntimeError(f"Touch tap did not select NPC: {proof}")
+            return f"touch-selected:{proof.get('target',{}).get('id')}"
+        if frame_index == 6:
+            proof=driver.execute_script("""
+                const stage=window.PlanetStage,canvas=document.querySelector('#planetCanvas'),target=stage.inspectionTargets().find(t=>t.type==='building');
+                if(!target||!canvas)throw new Error('Drag target unavailable');
+                const b=target.bounds,x=(b.left+b.right)/2,y=(b.top+b.bottom)/2;
+                stage.pickInspection(x,y);const before=stage.snapshot().inspection;
+                const oldSet=canvas.setPointerCapture,oldRelease=canvas.releasePointerCapture;canvas.setPointerCapture=()=>{};canvas.releasePointerCapture=()=>{};
+                try{
+                  canvas.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x,clientY:y,button:0,isPrimary:true}));
+                  canvas.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x+24,clientY:y+18,button:0,isPrimary:true}));
+                  canvas.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,pointerId:61,pointerType:'mouse',clientX:x+24,clientY:y+18,button:0,isPrimary:true}));
+                }finally{canvas.setPointerCapture=oldSet;canvas.releasePointerCapture=oldRelease;}
+                return {target,before,after:stage.snapshot().inspection};
+            """)
+            if (proof.get("after") or {}).get("pickQueries")!=(proof.get("before") or {}).get("pickQueries"):
+                raise RuntimeError(f"Camera drag incorrectly issued selection pick: {proof}")
+            return f"drag-rejected-selection:kept={proof.get('after',{}).get('selectedId')}"
+        if frame_index == 7:
+            proof=driver.execute_script("""
+                const stage=window.PlanetStage,targets=stage.inspectionTargets(),rect=document.querySelector('#planetCanvas').getBoundingClientRect();
+                const points=[[rect.left+6,rect.top+6],[rect.right-6,rect.top+6],[rect.left+6,rect.bottom-6],[rect.right-6,rect.bottom-6],[rect.left+rect.width/2,rect.bottom-6]];
+                const inside=(x,y,b)=>x>=b.left&&x<=b.right&&y>=b.top&&y<=b.bottom;
+                const free=points.find(([x,y])=>!targets.some(t=>inside(x,y,t.bounds)));
+                if(!free)throw new Error('No deterministic empty terrain point');
+                const before=stage.snapshot().inspection.selectedId;const result=stage.pickInspection(free[0],free[1]);const after=stage.snapshot().inspection;
+                return {before,result,after,point:free};
+            """)
+            if proof.get("result") is not None or (proof.get("after") or {}).get("selectedId") is not None:
+                raise RuntimeError(f"Empty terrain did not dismiss tooltip: {proof}")
+            return f"empty-dismissed:previous={proof.get('before')}"
+        if frame_index == 8:
+            driver.set_window_size(1280,800);time.sleep(0.4)
+            driver.execute_script("window.PlanetStage.setZoomScalar(1);window.PlanetStage.applyAuthoritativeFantasyTime({year:1100,month:1,day:1,hour:10,minute:30,second:0},'wp-s003-011-overlap')")
+            time.sleep(0.4)
+            proof=driver.execute_script("""
+                const stage=window.PlanetStage,targets=stage.inspectionTargets(),npcs=targets.filter(t=>t.type==='npc'),buildings=targets.filter(t=>t.type==='building');
+                let pair=null,point=null;
+                for(const n of npcs){for(const b of buildings){
+                  const left=Math.max(n.bounds.left,b.bounds.left),right=Math.min(n.bounds.right,b.bounds.right),top=Math.max(n.bounds.top,b.bounds.top),bottom=Math.min(n.bounds.bottom,b.bounds.bottom);
+                  if(right>left&&bottom>top){pair=[n,b];point=[(left+right)/2,(top+bottom)/2];break;}
+                }if(pair)break;}
+                if(!pair)return {pair:null,s:stage.snapshot()};
+                const selected=stage.pickInspection(point[0],point[1]);
+                return {pair:pair.map(x=>({id:x.id,type:x.type,authority:x.authority})),point,selected,s:stage.snapshot()};
+            """)
+            if not proof.get("pair"):
+                raise RuntimeError(f"No genuine NPC/building projected overlap available for evidence: {proof}")
+            if not proof.get("selected"):
+                raise RuntimeError(f"Overlapping real targets did not resolve deterministically: {proof}")
+            return f"overlap:{proof.get('pair')}=>{proof.get('selected',{}).get('type')}:{proof.get('selected',{}).get('id')}"
+        if frame_index == 9:
+            proof=driver.execute_script("""
+                const stage=window.PlanetStage,target=stage.inspectionTargets().find(t=>t.type==='npc');
+                if(!target)throw new Error('NPC unavailable before dematerialization');
+                const b=target.bounds;stage.pickInspection((b.left+b.right)/2,(b.top+b.bottom)/2);stage.setZoomScalar(.90);
+                return {target,before:stage.snapshot()};
+            """)
+            WebDriverWait(driver,30.0).until(lambda d:d.execute_script("const s=window.PlanetStage.snapshot();return Number(s.inspection?.activeNpcCount||0)===0&&s.inspection?.selectedId===null;"))
+            after=driver.execute_script("return window.PlanetStage.snapshot()")
+            return f"npc-dematerialized:{proof.get('target',{}).get('id')}:activeNpc={after.get('inspection',{}).get('activeNpcCount')}"
+
     if scenario == "wp-s003-008-006":
         from selenium.webdriver.support.ui import WebDriverWait
         WebDriverWait(driver, 60.0).until(
@@ -13303,7 +13493,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -13311,7 +13501,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
@@ -13337,7 +13527,7 @@ def take_screenshots(
                 if not driver.save_screenshot(str(path)):
                     raise RuntimeError(f"Screenshot capture failed: {path}")
                 snapshot = runtime_snapshot(driver)
-                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-010-004", "wp-s003-010-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002"}:
+                if scenario not in {"playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-006-002", "wp-s003-008-006", "wp-s003-011", "wp-s003-010-004", "wp-s003-010-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002"}:
                     validate_current_build_snapshot(snapshot, require_coverage=scenario != "responsive-cycle")
                 frames.append(
                     {
