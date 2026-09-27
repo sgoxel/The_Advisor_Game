@@ -1,3 +1,8 @@
+2026-09-28 00:32 +03:00 | WP-S003-010-003-012 | DEPLOYMENT VERIFIED
+- Passing continuation evidence remains run 36351719289 / artifact 10942307245 at VISUAL 8.1/10 on exact test head 9ae15f1bdb6e8418e529ab32665a11b32c243dc0.
+- Final pre-completion docs head 01939fdfcd952e26daaa48c4fdbc0909420a0e0c deployed successfully in GitHub Pages run 36352046178.
+- ROADMAP completion bookkeeping follows as the final deployment-gated commit; Issue #167 will close only after that commit is independently deployed.
+
 2026-09-28 00:28 +03:00 | WP-S003-010-003-012 | MIXED PASS — continuation acceptance
 - Corrected ground-scale rocky wilderness presentation without changing canonical SEED/global-cell coordinates: realistic rock/outcrop physical dimensions, narrower scale variation and reduced outcrop dominance remove the previous overlapping block-mass defect at 1/10000.
 - Added SEED-authoritative canonical city cells (16,384 tiles) with bounded jitter/land search. Minimum guaranteed city-center spacing is 20,480 m; atlas city discovery is bounded to <=121 queried cells and uses GeographyFoundation.cityAtCell rather than viewport-relative city invention.
