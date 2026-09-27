@@ -7306,6 +7306,19 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             if frame_index==5 and ground_proof.get("revisitMatches") is not True:
                 raise RuntimeError(f"WP-012 ground biome changed after stream-away/revisit: {ground_proof}")
         time.sleep(.28)
+        # Viewport changes can fire ResizeObserver/app canvas resize and map
+        # presentation on adjacent animation frames.  Do not sample the marker
+        # in the transient frame between canonical screen-focus recentering and
+        # map-overlay reprojection.
+        driver.execute_async_script("""
+            const done=arguments[arguments.length-1];
+            requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+        """)
+        WebDriverWait(driver,10.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.(),m=s?.mapPresentation||{},marker=m.centerMarker||{},focus=s?.canonicalFocus?.screenSpaceFocus||{};
+            if(marker.visible!==true||marker.worldAnchored!==true||focus.valid!==true)return false;
+            return Math.hypot(Number(marker.screenX)-Number(focus.screenX),Number(marker.screenY)-Number(focus.screenY))<=4;
+        """))
         proof=driver.execute_script("""
             const stage=window.PlanetStage,s=stage.snapshot(),m=s.mapPresentation||{},c=s.coordinateFabric||{},state=window.__wp012||{};
             const labels=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].map(node=>{
