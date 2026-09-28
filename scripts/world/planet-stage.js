@@ -4508,14 +4508,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
   const useMicroDetail=metersPerTexel<=4&&!contextRing;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
-  // Focus is the detailed layer; 3x/6x rings are context. Keeping strong
-  // scale-dependent contour/hillshade treatment on every ring produced false
-  // concentric/diagonal "terrain bands" at 1/500 despite identical SEED/world
-  // coordinates. Context rings therefore retain canonical geography while
-  // using deliberately lower-frequency, lower-contrast presentation.
-  const contourStrength=contextRing?0:(metersPerTexel<=100?.028:metersPerTexel<=1200?.014:.006);
-  const hillshadeStrength=contextRing?.30:.72;
-  const contextDetailStrength=contextRing?.58:1;
+  // Surface relief is presented as continuous hillshade, not synthetic
+  // cartographic contour bands. The previous 420 m sine contours and strong
+  // regional hillshade created giant concentric/diagonal shapes at 1/500 that
+  // looked like broken LOD seams. Keep the same canonical elevation/color
+  // samples, but use restrained scale-aware lighting instead.
+  const hillshadeStrength=contextRing?.22:(metersPerTexel<=8?.58:metersPerTexel<=30?.42:.26);
+  const contextDetailStrength=contextRing?.64:1;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
   const flatShade=light[2];
@@ -4575,13 +4574,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
         // Keep hillshade readable without clipping bright alpine surfaces.
-        shade=clamp(1+(lit-flatShade)*hillshadeStrength,contextRing?.86:.78,contextRing?1.10:1.15);
+        shade=clamp(1+(lit-flatShade)*hillshadeStrength,contextRing?.90:.86,contextRing?1.08:1.10);
         cover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
-      const contour=.5+.5*Math.sin((elevation/420)*Math.PI*2);
-      const contourLine=Math.pow(1-contour,10)*contourStrength;
-      const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i]-contourLine*(i===2?.55:1))*shade,0,1));
+      const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
       let displayColor=authoritative;
       if(useMicroDetail){
         const micro=localSurfaceSample(worldEast,worldNorth,sample).color;
