@@ -3289,7 +3289,7 @@ function buildCanonicalWayfindingSignposts(reveal,tier,frame,presentationScale,u
     geometryDrawCallEstimate:positions.length?1:0,textCanvasCount:wayfindingTextContext?1:0,visibleTextCount:0,
     routeQueryCount:Number(model.routeQueryCount||0),routeQueryMs:Number(model.routeQueryMs||0),buildMs:Number((performance.now()-started).toFixed(3)),
     signs:Object.freeze((model.signs||[]).slice()),signature:model.signature||null,
-    authority:"RoadSignposts: StartingVillage road topology + RoutePlanner + canonical local labels",fallbackScope:model.fallbackScope||null,
+    authority:"RoadSignposts: StartingVillage bounded local road graph + canonical local labels",fallbackScope:model.fallbackScope||null,
     interSettlementRoadAuthorityAvailable:Boolean(model.interSettlementRoadAuthorityAvailable),remoteConnectivityInvented:Boolean(model.remoteConnectivityInvented),
     presentationOnly:true,simulationAuthority:false,bounded:model.bounded!==false,fullWorldScan:Boolean(model.fullWorldScan),perFrameRouteQuery:Boolean(model.perFrameRouteQuery)
   };
@@ -5845,6 +5845,7 @@ async function buildScene(){  const started=performance.now();
   app.root.addChild(fillLight);
 
   applyRotation();
+  if(EVIDENCE_FAST_START)buildDestinationDescriptors();
   setStartupProgress("scene","Finalizing first playable planet…",95);
   buildTimeMs=performance.now()-started;
 }
