@@ -1712,7 +1712,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"wp-s003-020","wp-s003-021","wp-s003-022"}:
+    if scenario in {"wp-s003-015","wp-s003-020","wp-s003-021","wp-s003-022"}:
         # Chrome 153 + SwiftShader can spend well over a minute in the initial
         # deterministic planetary height-mesh build before PlanetStage.ready.
         # This is evidence-only patience: all later readiness, pending=0,
