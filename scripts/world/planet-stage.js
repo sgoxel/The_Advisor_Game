@@ -2863,12 +2863,13 @@ function campaignWearAtlasTexture(){
   const ox=i=>i*slot;
   {
     const x=ox(0);
-    ctx.fillStyle="rgba(77,47,26,.34)";ctx.beginPath();ctx.moveTo(x+8,20);ctx.lineTo(x+43,12);ctx.lineTo(x+78,23);ctx.lineTo(x+118,18);ctx.lineTo(x+109,48);ctx.lineTo(x+82,58);ctx.lineTo(x+43,50);ctx.lineTo(x+14,61);ctx.closePath();ctx.fill();
-    ctx.fillStyle="rgba(111,72,37,.30)";ctx.beginPath();ctx.moveTo(x+16,70);ctx.lineTo(x+49,61);ctx.lineTo(x+92,69);ctx.lineTo(x+116,88);ctx.lineTo(x+87,108);ctx.lineTo(x+43,101);ctx.lineTo(x+9,112);ctx.closePath();ctx.fill();
-    ctx.strokeStyle="rgba(48,34,26,.76)";ctx.lineWidth=8;
-    for(const p of [[10,29,38,38,70,26,116,41],[14,66,46,53,77,72,114,59],[18,101,47,87,81,105,109,91]]){ctx.beginPath();ctx.moveTo(x+p[0],p[1]);ctx.bezierCurveTo(x+p[2],p[3],x+p[4],p[5],x+p[6],p[7]);ctx.stroke();}
-    ctx.strokeStyle="rgba(197,137,72,.58)";ctx.lineWidth=4;for(const p of [[20,18,41,26,66,17,96,29],[28,84,50,76,77,87,103,77]]){ctx.beginPath();ctx.moveTo(x+p[0],p[1]);ctx.bezierCurveTo(x+p[2],p[3],x+p[4],p[5],x+p[6],p[7]);ctx.stroke();}
-    ctx.fillStyle="rgba(176,120,61,.52)";for(const p of [[24,24,9],[79,43,11],[47,76,8],[99,94,10],[62,112,6]]){ctx.beginPath();ctx.ellipse(x+p[0],p[1],p[2]*1.75,p[2],-.25,0,Math.PI*2);ctx.fill();}
+    ctx.fillStyle="rgba(58,43,31,.58)";ctx.beginPath();ctx.moveTo(x+7,18);ctx.lineTo(x+38,10);ctx.lineTo(x+69,18);ctx.lineTo(x+95,13);ctx.lineTo(x+120,29);ctx.lineTo(x+111,54);ctx.lineTo(x+80,60);ctx.lineTo(x+49,52);ctx.lineTo(x+17,64);ctx.lineTo(x+8,43);ctx.closePath();ctx.fill();
+    ctx.fillStyle="rgba(124,82,43,.42)";ctx.beginPath();ctx.moveTo(x+12,70);ctx.lineTo(x+44,61);ctx.lineTo(x+71,69);ctx.lineTo(x+103,63);ctx.lineTo(x+117,83);ctx.lineTo(x+106,106);ctx.lineTo(x+76,114);ctx.lineTo(x+50,103);ctx.lineTo(x+18,114);ctx.lineTo(x+7,92);ctx.closePath();ctx.fill();
+    ctx.strokeStyle="rgba(43,34,28,.74)";ctx.lineWidth=5;
+    for(const p of [[9,30,35,35,66,26,116,35],[12,55,42,49,74,60,113,52],[13,82,43,74,76,87,115,77],[20,105,47,94,77,111,106,97]]){ctx.beginPath();ctx.moveTo(x+p[0],p[1]);ctx.bezierCurveTo(x+p[2],p[3],x+p[4],p[5],x+p[6],p[7]);ctx.stroke();}
+    ctx.strokeStyle="rgba(208,153,89,.46)";ctx.lineWidth=2.6;
+    for(const p of [[18,23,44,27,69,21,101,27],[28,67,51,62,79,70,105,65],[24,94,53,88,78,97,102,90]]){ctx.beginPath();ctx.moveTo(x+p[0],p[1]);ctx.bezierCurveTo(x+p[2],p[3],x+p[4],p[5],x+p[6],p[7]);ctx.stroke();}
+    ctx.fillStyle="rgba(214,165,101,.34)";for(const r of [[20,40,24,3],[73,43,30,3],[34,73,21,3],[78,84,26,3],[52,108,30,3]])ctx.fillRect(x+r[0],r[1],r[2],r[3]);
   }
   {
     const x=ox(1),g=ctx.createRadialGradient(x+61,62,7,x+61,62,55);g.addColorStop(0,"rgba(22,20,18,.94)");g.addColorStop(.42,"rgba(49,31,23,.88)");g.addColorStop(.76,"rgba(116,51,27,.62)");g.addColorStop(1,"rgba(35,28,23,0)");
@@ -3991,17 +3992,16 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      roofAtlasPatch(leftEast,north,roofCenter+.055,Math.max(3.1,w*.55),Math.max(4.4,d*.88),-24,"worn",255);
-      roofAtlasPatch(rightEast+w*.02,north+d*.03,roofCenter+.057,Math.max(2.6,w*.46),Math.max(4.0,d*.80),24,"worn",238);
-      groundAtlasPatch(east,north+d*.68,Math.max(4.1,w*.78),Math.max(1.6,d*.27),"worn",190);
+      roofAtlasPatch(leftEast,north-d*.01,roofCenter+.055,Math.max(3.5,w*.62),Math.max(4.6,d*.92),-24,"worn",255);
+      roofAtlasPatch(rightEast-w*.01,north+d*.02,roofCenter+.057,Math.max(3.0,w*.54),Math.max(4.3,d*.86),24,"worn",250);
     }else if(item.visualState==="damaged"){
       roofAtlasPatch(leftEast,north-d*.05,roofCenter+.060,Math.max(3.4,w*.60),Math.max(4.5,d*.90),-24,"damaged",255);
       roofAtlasPatch(rightEast+w*.10,north+d*.17,roofCenter+.062,Math.max(1.9,w*.34),Math.max(2.8,d*.55),24,"damaged",235);
       groundAtlasPatch(east+w*.48,north+d*.48,Math.max(2.0,w*.34),Math.max(1.7,d*.30),"damaged",205);
     }else if(item.visualState==="repaired"){
-      roofAtlasPatch(leftEast+w*.03,north,roofCenter+.064,Math.max(3.6,w*.63),Math.max(4.7,d*.94),-24,"repaired",255);
-      roofAtlasPatch(rightEast-w*.11,north+d*.23,roofCenter+.064,Math.max(1.55,w*.27),Math.max(2.1,d*.42),24,"repaired",230);
-      groundAtlasPatch(east+w*.55,north+d*.35,Math.max(1.7,w*.28),Math.max(1.2,d*.20),"repaired",185);
+      roofAtlasPatch(leftEast+w*.01,north,roofCenter+.064,Math.max(3.4,w*.59),Math.max(4.5,d*.90),-24,"repaired",255);
+      roofAtlasPatch(rightEast-w*.18,north+d*.10,roofCenter+.064,Math.max(1.35,w*.22),Math.max(1.8,d*.34),24,"repaired",220);
+      groundAtlasPatch(east+w*.47,north+d*.34,Math.max(1.45,w*.23),Math.max(1.0,d*.17),"repaired",150);
     }else if(item.visualState==="overgrown"){
       roofAtlasPatch(leftEast-w*.02,north+d*.07,roofCenter+.066,Math.max(3.0,w*.52),Math.max(4.4,d*.88),-24,"overgrown",245);
       roofAtlasPatch(rightEast+w*.04,north-d*.02,roofCenter+.066,Math.max(2.7,w*.47),Math.max(4.0,d*.80),24,"overgrown",240);
