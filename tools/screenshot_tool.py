@@ -6605,7 +6605,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             // settlement road mesh. This evaluates the effect rather than an
             // unrelated simplified-road presentation gap.
             if(expectedKind==='dust'){
-              const canonicalPairs=[[[0,-9],[0,-8]],[[0,8],[0,9]],[[-9,0],[-8,0]],[[8,0],[9,0]]];
+              // Prefer a central-avenue move that remains inside one ground
+              // SLOD child so the visual frame does not judge a transient
+              // previous-ready stand-in while the reaction is active.
+              const canonicalPairs=[[[0,8],[0,9]],[[8,0],[9,0]],[[0,-9],[0,-8]],[[-9,0],[-8,0]]];
               for(const pair of canonicalPairs){
                 const [a,b]=pair,t=typeAt(a[0],a[1]);
                 if(wanted.has(t)&&typeAt(b[0],b[1])===t)return {a:{x:String(a[0]),y:String(a[1])},b:{x:String(b[0]),y:String(b[1])},surface:t};
