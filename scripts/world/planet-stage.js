@@ -2832,7 +2832,7 @@ function ensureLocalStaticMaterials(){
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.08;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",1,.50,.22);m.__activityEmissiveBoost=.34;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -2887,18 +2887,6 @@ function sharedLocalPrimitive(type){
       face([[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]],[0,1,0],color);
       face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],[0,-1,0],color);
     };
-    const tri=(a,b,c,color)=>{
-      const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
-      let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,ln=Math.hypot(nx,ny,nz)||1;nx/=ln;ny/=ln;nz/=ln;
-      const base=positions.length/3,cc=color||[255,255,255,255];
-      for(const v of [a,b,c]){positions.push(v[0],v[1],v[2]);normals.push(nx,ny,nz);colors.push(cc[0],cc[1],cc[2],cc[3]??255);}
-      indices.push(base,base+1,base+2);
-    };
-    const octa=(cx,cy,cz,rx,ry,rz,color)=>{
-      const t=[cx,cy+ry,cz],b=[cx,cy-ry,cz],e=[cx+rx,cy,cz],w=[cx-rx,cy,cz],n=[cx,cy,cz-rz],s=[cx,cy,cz+rz];
-      tri(t,e,n,color);tri(t,s,e,color);tri(t,w,s,color);tri(t,n,w,color);
-      tri(b,n,e,color);tri(b,e,s,color);tri(b,s,w,color);tri(b,w,n,color);
-    };
     if(type==="activity-market-accessory"){
       const cloth=[242,160,62,255],cloth2=[255,215,118,255],wood=[92,58,32,255];
       // A narrow roof-edge awning plus an unmistakable hanging board. Both
@@ -2910,14 +2898,12 @@ function sharedLocalPrimitive(type){
       box(.60,.67,-.575,.22,.18,.055,wood);
       box(.57,.80,-.575,.30,.045,.045,wood);
     }else if(type==="activity-forge-accessory"){
-      const soot=[58,54,50,255],iron=[92,86,78,255],ember=[255,104,24,255],hot=[255,206,112,255],smoke1=[132,132,126,255],smoke2=[156,155,148,255];
-      // A roof-breaking chimney plus two low-poly smoke puffs makes active forge
-      // operation readable at a glance while remaining a single static cue mesh.
-      // The grounded anvil/ember still anchors the effect to workshop function.
+      const soot=[58,54,50,255],iron=[92,86,78,255],ember=[255,104,24,255],hot=[255,206,112,255];
+      // Keep the forge legible from the fixed steep camera by letting the stack
+      // and hood break the front roof/eave silhouette. The anvil remains a small
+      // grounded secondary cue; no broad colored apron is used.
       box(.28,1.06,-.20,.14,.66,.14,soot);
       box(.28,1.40,-.20,.24,.09,.24,soot);
-      octa(.28,1.55,-.20,.10,.10,.10,smoke1);
-      octa(.33,1.70,-.18,.075,.075,.075,smoke2);
       box(-.20,.70,-.585,.34,.22,.11,iron);
       box(-.20,.63,-.648,.24,.07,.07,hot);
       box(-.24,.13,-.69,.10,.25,.10,iron);
@@ -2925,19 +2911,18 @@ function sharedLocalPrimitive(type){
       box(-.37,.255,-.69,.12,.075,.10,iron);
       box(.03,.075,-.69,.16,.065,.16,ember);
     }else{
-      const warm=[255,214,92,255],hot=[255,248,205,255],frame=[78,53,32,255];
-      // Two thin framed roof windows sit flush on the roof plane instead of
-      // standing up as chunky dormer blocks. Their bright inset panes are the
-      // visible occupancy cue; the eave lantern remains a small entrance accent.
-      box(-.19,1.018,-.15,.26,.045,.22,frame);
-      box(.19,1.018,-.15,.26,.045,.22,frame);
-      box(-.19,1.043,-.15,.17,.020,.13,warm);
-      box(.19,1.043,-.15,.17,.020,.13,hot);
-      box(-.19,1.055,-.15,.018,.022,.14,frame);
-      box(.19,1.055,-.15,.018,.022,.14,frame);
-      box(.40,.54,-.61,.040,.22,.040,frame);
-      box(.40,.42,-.635,.10,.11,.10,hot);
-      box(.40,.50,-.635,.14,.030,.030,frame);
+      const warm=[255,224,118,255],hot=[255,248,205,255],frame=[89,61,36,255];
+      // Two tiny lit dormer/window boxes rise through the roof silhouette, so
+      // the state reads as occupied architecture rather than a detached marker.
+      // A restrained eave lantern reinforces the entrance without becoming a
+      // full facade overlay.
+      box(-.19,1.035,-.18,.25,.25,.20,frame);
+      box(.19,1.035,-.18,.25,.25,.20,frame);
+      box(-.19,1.025,-.292,.17,.14,.035,warm);
+      box(.19,1.025,-.292,.17,.14,.035,hot);
+      box(.40,.56,-.61,.045,.25,.045,frame);
+      box(.40,.43,-.635,.11,.13,.11,hot);
+      box(.40,.52,-.635,.15,.035,.035,frame);
     }
     mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   }else{
