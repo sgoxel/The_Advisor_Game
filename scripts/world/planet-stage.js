@@ -3912,34 +3912,37 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const leftEast=east-w*.20,rightEast=east+w*.20;
     const facadeNorth=north+d*.515,eaveY=roofCenter-.10*s;
     if(item.visualState==="worn"){
-      // Top-down-readable eave aging: perimeter discoloration and small attached weathering clusters.
-      orientedBox(east,facadeNorth,eaveY,Math.max(4.0,w*.76),.24,.26,C.wearDark,0);
-      surfaceFan(east-w*.22,facadeNorth+.12,roofCenter+.035,Math.max(.58,w*.10),C.weather,C.wear,0);
-      surfaceFan(east+w*.20,facadeNorth+.10,roofCenter+.037,Math.max(.50,w*.09),C.wearDark,C.weather,2);
-      groundFan(east,north+d*.69,Math.max(1.35,w*.24),C.wearDark,C.wear,0);
+      // Keep weathering readable from the fixed oblique/top-down camera by carrying
+      // the worn edge beyond the roof silhouette into a connected doorstep/scuff zone.
+      orientedBox(east,facadeNorth+d*.055,eaveY,Math.max(4.2,w*.78),.28,.34,C.wearDark,0);
+      groundBox(east-w*.27,north+d*.655,.02,Math.max(.42,w*.08),.12,Math.max(2.4,d*.25),C.weather);
+      groundBox(east+w*.24,north+d*.625,.02,Math.max(.36,w*.07),.10,Math.max(2.0,d*.22),C.wear);
+      groundFan(east,north+d*.72,Math.max(1.55,w*.28),C.wearDark,C.wear,0);
     }else if(item.visualState==="damaged"){
-      // Broken rafters physically project beyond the eave, so the damaged silhouette survives the near-top-down camera.
-      orientedBox(east-w*.08,facadeNorth,eaveY,Math.max(3.7,w*.70),.34,.32,C.char,0);
-      orientedBox(east-w*.27,facadeNorth+d*.10,roofCenter+.02,.28,.22,Math.max(2.0,d*.34),C.char,0);
-      orientedBox(east,facadeNorth+d*.12,roofCenter+.03,.30,.20,Math.max(2.35,d*.40),C.debris,0);
-      orientedBox(east+w*.27,facadeNorth+d*.08,roofCenter+.01,.26,.19,Math.max(1.75,d*.30),C.burn,0);
-      surfaceFan(east-w*.08,facadeNorth-.04,roofCenter+.045,Math.max(.72,w*.13),C.char,C.burn,1);
-      groundFan(east+w*.32,north+d*.70,1.35,C.ash,C.debris,1);
+      // Damage breaks the visible roof/eave perimeter and spills outward as fallen
+      // rafters/debris, so the state survives near-top-down framing without decals.
+      orientedBox(east-w*.08,facadeNorth+d*.065,eaveY,Math.max(3.9,w*.72),.38,.38,C.char,0);
+      groundBox(east-w*.26,north+d*.70,.04,Math.max(.34,w*.065),.20,Math.max(2.8,d*.31),C.char);
+      groundBox(east+w*.08,north+d*.74,.05,Math.max(.30,w*.055),.18,Math.max(2.35,d*.27),C.burn);
+      groundBox(east+w*.42,north+d*.65,.03,Math.max(.86,w*.16),.34,Math.max(1.35,d*.16),C.debris);
+      groundFan(east-w*.06,north+d*.80,Math.max(1.45,w*.27),C.ash,C.debris,1);
     }else if(item.visualState==="repaired"){
-      // New perimeter header and projecting replacement boards form a readable attached repair scaffold.
-      orientedBox(east,facadeNorth,eaveY,Math.max(4.2,w*.80),.30,.32,C.newWood,0);
-      orientedBox(east-w*.26,facadeNorth+d*.08,roofCenter+.025,.30,.20,Math.max(1.80,d*.30),C.newWoodLight,0);
-      orientedBox(east,facadeNorth+d*.10,roofCenter+.030,.32,.20,Math.max(2.05,d*.35),C.newWood,0);
-      orientedBox(east+w*.26,facadeNorth+d*.07,roofCenter+.020,.28,.18,Math.max(1.65,d*.28),C.newWoodLight,0);
-      groundBox(east+w*.57,north+d*.58,.02,2.05,.24,.48,C.repairDark);
+      // A compact U-shaped timber scaffold hugs the repaired perimeter. Its plan
+      // silhouette is intentionally visible from above while remaining building-attached.
+      orientedBox(east,facadeNorth+d*.062,eaveY,Math.max(4.3,w*.80),.32,.36,C.newWood,0);
+      groundBox(east,north+d*.69,.03,Math.max(4.0,w*.74),.22,.44,C.newWoodLight);
+      groundBox(east-w*.30,north+d*.75,.03,.34,.22,Math.max(2.45,d*.27),C.repairDark);
+      groundBox(east+w*.30,north+d*.75,.03,.34,.22,Math.max(2.45,d*.27),C.repairDark);
+      groundBox(east+w*.52,north+d*.58,.05,Math.max(1.7,w*.30),.30,.62,C.newWood);
     }else if(item.visualState==="overgrown"){
-      // Irregular leaf masses overlap the eave perimeter and continue into grounded vegetation.
-      orientedBox(east-w*.06,facadeNorth,eaveY,Math.max(3.8,w*.72),.24,.30,C.moss,0);
-      surfaceFan(east-w*.27,facadeNorth+.12,roofCenter+.040,Math.max(.78,w*.14),C.green,C.greenLight,0);
-      surfaceFan(east+.02*w,facadeNorth+.18,roofCenter+.044,Math.max(.68,w*.12),C.greenLight,C.moss,1);
-      surfaceFan(east+w*.27,facadeNorth+.10,roofCenter+.042,Math.max(.72,w*.13),C.green,C.moss,2);
-      groundFan(east-w*.34,north+d*.69,1.55,C.green,C.greenLight,0);
-      groundFan(east+w*.34,north+d*.66,1.35,C.greenLight,C.moss,1);
+      // Moss remains attached to the eave, with narrow vine runners flowing into
+      // overlapping vegetation masses just outside the roof edge instead of a roof mask.
+      orientedBox(east-w*.05,facadeNorth+d*.055,eaveY,Math.max(3.9,w*.72),.30,.38,C.green,0);
+      groundBox(east-w*.24,north+d*.69,.025,Math.max(.34,w*.06),.12,Math.max(2.3,d*.25),C.green);
+      groundBox(east+w*.20,north+d*.67,.025,Math.max(.30,w*.055),.12,Math.max(2.0,d*.22),C.moss);
+      groundFan(east-w*.24,north+d*.79,Math.max(1.35,w*.25),C.green,C.greenLight,0);
+      groundFan(east+w*.22,north+d*.76,Math.max(1.18,w*.22),C.greenLight,C.moss,1);
+      groundFan(east+w*.45,north+d*.61,Math.max(.92,w*.17),C.green,C.moss,2);
     }
   }
   if(positions.length){
