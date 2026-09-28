@@ -2548,30 +2548,25 @@ function createEnvironmentReactionGroup(kind,index){
   const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
-    // Three pooled translucent lobes form one readable puff. Their low profile,
-    // overlap and later per-frame drift avoid the old row of solid brown balls.
     const specs=[
-      [-.72,.22,-.28,1.28,.58,1.10],
-      [.00,.34,.02,1.62,.78,1.38],
-      [.72,.20,.30,1.18,.52,1.02]
+      [-.30,.28,-.12,1.18,1.04,1.18],
+      [.00,.35,.00,1.48,1.22,1.38],
+      [.32,.24,.12,1.04,.94,1.08]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
+      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*19,0);
       e.render.castShadows=false;e.render.receiveShadows=false;
       children.push(e);
     }
   }else if(kind==="grassBend"){
-    // Each pooled drawable is a broad, flattened pressed-grass ribbon rather
-    // than a thin upright cone. Four overlapping ribbons make one disturbed
-    // patch that remains legible in the exact phone landscape viewport.
     const specs=[
-      [-.78,.075,-.34,-34,.52,.11,1.52],
-      [-.25,.085,.14,-12,.58,.12,1.72],
-      [.30,.080,-.12,15,.56,.11,1.66],
-      [.80,.070,.32,36,.48,.10,1.44]
+      [-.58,.04,-.30,-42,.92,.92,1.48],
+      [-.20,.05,.08,-15,1.00,1.00,1.62],
+      [.22,.05,-.08,17,.96,.96,1.58],
+      [.60,.04,.28,44,.86,.86,1.42]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],6,q[3],i%2?7:-7);
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
       e.render.castShadows=false;e.render.receiveShadows=true;
       children.push(e);
     }
@@ -2588,13 +2583,13 @@ function createEnvironmentReactionGroup(kind,index){
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.88,.76,.56,.30),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.39,.64,.15,.90),
+    dust:environmentReactionMaterial("EnvironmentDust",.88,.76,.56,.24),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.38,.62,.14,.92),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
   environmentalReactionMaterials.dust.useLighting=false;
   environmentalReactionMaterials.dust.emissive.set(.76,.62,.40);
-  environmentalReactionMaterials.dust.emissiveIntensity=.42;
+  environmentalReactionMaterials.dust.emissiveIntensity=.38;
   environmentalReactionMaterials.dust.update();
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
@@ -2665,19 +2660,17 @@ function updateEnvironmentalReactions(){
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
     if(slot.kind==="dust"){
-      // Expand gently while the three existing pooled lobes rise and separate.
-      // No new entities/materials are allocated after pool initialization.
-      scale=.92+t*.42;liftMeters=.06+t*.16;
-      const spread=.34*t, rise=.42*t;
-      const bases=[[-.72,.22,-.28],[0,.34,.02],[.72,.20,.30]];
+      // The crossed puff silhouettes stay overlapped while expanding and
+      // drifting upward, avoiding three individually readable ball shapes.
+      scale=.94+t*.38;liftMeters=.06+t*.14;
+      const spread=.13*t,rise=.52*t;
+      const bases=[[-.30,.28,-.12],[0,.35,0],[.32,.24,.12]];
       for(let i=0;i<slot.children.length;i++){
         const b=bases[i],side=i-1;
-        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.72),b[2]+(i===1?-.08:.16)*t);
+        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.72),b[2]+side*.08*t);
       }
     }else if(slot.kind==="grassBend"){
-      // Keep the patch broad enough to read, then settle it back toward the
-      // surface instead of shrinking into thin marker-like sticks.
-      scale=1-t*.10;liftMeters=.035;
+      scale=1-t*.08;liftMeters=.030;
     }else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
@@ -2706,7 +2699,39 @@ function ensureLocalStaticMaterials(){
 }
 function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
-  const mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
+  let mesh;
+  if(type==="dust-puff"){
+    // Two intersecting irregular translucent planes make one low-poly puff
+    // silhouette without adding drawables or allocating at trigger time.
+    mesh=new pc.Mesh(device);
+    const outline=[[-.50,-.10],[-.38,.24],[-.12,.46],[.22,.40],[.50,.14],[.40,-.22],[.08,-.40],[-.32,-.32]];
+    const positions=[0,0,0],normals=[0,0,1],indices=[];
+    for(const p of outline){positions.push(p[0],p[1],0);normals.push(0,0,1);}
+    for(let i=0;i<outline.length;i++)indices.push(0,1+i,1+((i+1)%outline.length));
+    const base=positions.length/3;
+    positions.push(0,0,0);normals.push(1,0,0);
+    for(const p of outline){positions.push(0,p[1],p[0]);normals.push(1,0,0);}
+    for(let i=0;i<outline.length;i++)indices.push(base,base+1+i,base+1+((i+1)%outline.length));
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
+  }else if(type==="bent-grass-blade"){
+    // Tapered, segmented ribbon lying mostly along the ground. Four rotated
+    // instances read as pressed vegetation instead of a rectangular marker.
+    mesh=new pc.Mesh(device);
+    mesh.setPositions([
+      -.18,0,-.10,  .18,0,-.10,
+      -.16,.10,.24, .16,.10,.24,
+      -.10,.18,.62, .10,.18,.62,
+      -.018,.07,1.00, .018,.07,1.00
+    ]);
+    mesh.setNormals([
+      0,1,0, 0,1,0, 0,1,0, 0,1,0,
+      0,1,0, 0,1,0, 0,1,0, 0,1,0
+    ]);
+    mesh.setIndices([0,1,2, 1,3,2, 2,3,4, 3,5,4, 4,5,6, 5,7,6]);
+    mesh.update();
+  }else{
+    mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
+  }
   mesh.incRefCount();// keep alive across static-world rebuilds
   return localSharedPrimitives[type]=mesh;
 }
