@@ -2131,3 +2131,6 @@
 - ResidentMovement now exposes per-resident social encounter state and aggregate telemetry. Planet bootstrap registers the module; legacy local character presentation can surface encounter labels and participant ribbon state.
 - Fresh workflow 36409482792 passed deterministic unit tests plus live browser evidence for greeting, conversation, three-person gathering, busy-NPC skip, schedule recovery, road safety and bounded candidate/group behavior. Four screenshots were directly inspected; VISUAL 9.0/10 overall (landscape ~9.2, portrait ~8.5), with no major visual defects. WP remains IN PROGRESS until exact deployment verification and final completion bookkeeping.
 
+2026-09-28 13:29 +03:00 | WP-S004-006 | post-evidence cleanup
+- Removed the temporary one-shot proof page, capture script and dedicated evidence workflow after successful Pages deployment of the tested implementation. Retained the bounded SocialEncounters production module and permanent Node regression test; fresh evidence remains preserved in workflow run 36409482792 / artifact 10964006602.
+
