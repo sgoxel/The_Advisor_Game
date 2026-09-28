@@ -3279,9 +3279,9 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.22,.14,.075),square:make("LocalSquare",.42,.32,.19),
+    road:make("LocalRoad",.32,.20,.085),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.43,.33,.13,.32),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -4484,18 +4484,22 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const lift=settlementPresentationLift(tier);
   const centerGround=canonicalSemanticGroundHeightUnits(0,0,semanticFrame)+lift+.012,centerPos=canonicalSemanticPosition(0,0,scale,unit,semanticFrame);
   let occupiedAreaCount=0;
-  if(tier==="footprint"){
+  // Semantic scale policy is literal here: 1/1000 reveals the footprint only;
+  // 1/2500 retains that footprint and adds the canonical road network. Do not
+  // leak buildings into those overview tiers just because their data is ready.
+  if(tier==="footprint"||tier==="route"){
     addLocalStatic("CanonicalOccupiedArea","cylinder",localStaticMaterials.footprint,centerPos.x,centerGround,centerPos.z,coreRadiusMeters*2*scale/unit,.022,coreRadiusMeters*2*scale/unit);
     occupiedAreaCount=1;
   }
   let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=occupiedAreaCount?80:0;
   const roadWidth=Math.max(5,Number(window.WorldStandards?.TILE_METERS||2)*4);
+  const presentationRoadWidth=roadWidth*(tier==="route"?1.28:1);
   const squareHalf=Number(window.StartingVillage.PUBLIC_HALF_SIZE||3);
   const ring=Number(window.StartingVillage.RING_RADIUS_TILES||14);
-  const roadDetail=tier==="footprint"?8:tier==="route"?12:16;
-  if(tier!=="none"){
-    addCanonicalRoadSegment("CanonicalRoad-X",-ring,0,ring,0,roadWidth,scale,unit,semanticFrame,lift);roadCount++;
-    addCanonicalRoadSegment("CanonicalRoad-Y",0,-ring,0,ring,roadWidth,scale,unit,semanticFrame,lift);roadCount++;
+  const roadDetail=tier==="footprint"?0:tier==="route"?12:16;
+  if(tier!=="none"&&tier!=="footprint"){
+    addCanonicalRoadSegment("CanonicalRoad-X",-ring,0,ring,0,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
+    addCanonicalRoadSegment("CanonicalRoad-Y",0,-ring,0,ring,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
     const sq=(squareHalf*2+1)*reveal.tileMeters;
     addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;
   }
@@ -4503,21 +4507,21 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     let previous=null;
     for(let i=0;i<=roadDetail;i++){
       const a=i/roadDetail*Math.PI*2,x=Math.cos(a)*ring,y=Math.sin(a)*ring;
-      if(previous){addCanonicalRoadSegment("CanonicalRing-"+i,previous.x,previous.y,x,y,roadWidth,scale,unit,semanticFrame,lift);roadCount++;}
+      if(previous){addCanonicalRoadSegment("CanonicalRing-"+i,previous.x,previous.y,x,y,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;}
       previous={x,y};
     }
     const dir=window.StartingVillage.direction(activeSeed),start=ring,end=Number(window.StartingVillage.GATEWAY_MAINLAND_EDGE_TILES||29);
-    addCanonicalRoadSegment("CanonicalGateway",dir.dx*start,dir.dy*start,dir.dx*end,dir.dy*end,roadWidth,scale,unit,semanticFrame,lift);roadCount++;
+    addCanonicalRoadSegment("CanonicalGateway",dir.dx*start,dir.dy*start,dir.dx*end,dir.dy*end,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
-  const targetCount=tier==="footprint"?3:tier==="route"?5:tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
+  const targetCount=tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
   const detailed=tier==="refined"||tier==="full";
   for(let i=0;i<targetCount;i++){
     addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
     if(detailed)fullBuildings++;else coarseBuildings++;
   }
-  if((tier==="footprint"||tier==="route"||tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
+  if((tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
@@ -4695,7 +4699,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // All focus/context layers use the same photometric transfer function. LOD
   // differences come only from physical texel size / available frequencies,
   // so a ready child reads as added detail instead of a tinted rectangle.
-  const hillshadeStrength=sharedMetersPerTexel<=8?.48:sharedMetersPerTexel<=30?.38:sharedMetersPerTexel<=100?.30:.24;
+  const contextHillshadeStrength=sharedMetersPerTexel<=8?.48:sharedMetersPerTexel<=30?.38:sharedMetersPerTexel<=100?.30:.24;
   const contextDetailStrength=1;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
@@ -4759,23 +4763,38 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Rebuilding the same coordinates from a different patch/LOD therefore
       // reveals the same field instead of rolling a new patch-relative pattern.
       const worldEast=sample.registeredEastMeters,worldNorth=sample.registeredNorthMeters;
+      // Center-first refinement must add *information*, not a differently tinted
+      // tile. Keep the outer edge on the exact shared photometric basis and
+      // progressively admit finer registered-meter frequencies toward focus.
+      // Only frequency bandwidth changes; canonical geography/color authority
+      // remains identical for focus, medium and outer representations.
+      const focusRadius=Math.hypot((ux-.5)*2,(vz-.5)*2);
+      const focusRefineWeight=contextRing?0:smoothstep01(clamp((1.35-focusRadius)/1.10,0,1));
+      const focusPhotometricMetersPerTexel=contextRing
+        ? sharedMetersPerTexel
+        : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.22),focusRefineWeight*.86);
       const sharedMacro=worldSurfaceDetailValue(worldEast,worldNorth,sharedMetersPerTexel,phase)*contextDetailStrength;
-      const focusMacroDelta=contextRing?0:(worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase)-sharedMacro)*.28;
+      const nativeMacro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
+      const focusMacroDelta=contextRing?0:(nativeMacro-sharedMacro)*lerp(.28,.72,focusRefineWeight);
       const macro=sharedMacro+focusMacroDelta;
       let shade=1,cover=[0,0,0];
       if(sample?.land){
-        // Hillshade of authoritative elevation + scale-appropriate detail relief.
-        const step=sharedMetersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
+        // Shared context remains restrained while focus progressively samples
+        // a finer, still world-registered relief gradient. This restores
+        // readable 1/500 landform structure without a rectangular LOD edge.
+        const step=focusPhotometricMetersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
         const sx=mixSample(Math.min(1,ux+dux),vz),sy=mixSample(ux,Math.max(0,vz-dvz));
-        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,sharedMetersPerTexel,detailSalt);
-        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,sharedMetersPerTexel,detailSalt);
-        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,sharedMetersPerTexel,detailSalt);
+        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,focusPhotometricMetersPerTexel,detailSalt);
+        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,focusPhotometricMetersPerTexel,detailSalt);
+        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,focusPhotometricMetersPerTexel,detailSalt);
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        // Keep hillshade readable without clipping bright alpine surfaces.
-        shade=clamp(1+(lit-flatShade)*hillshadeStrength,contextRing?.90:.86,contextRing?1.08:1.10);
+        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.10,.24,.50);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.90:.84,contextRing?1.08:1.12);
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
-        const fineCover=contextRing?[0,0,0]:landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation).map((v,i)=>(v-sharedCover[i])*.22);
+        const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
+        const coverGain=lerp(.22,.75,focusRefineWeight);
+        const fineCover=contextRing?[0,0,0]:nativeCover.map((v,i)=>(v-sharedCover[i])*coverGain);
         cover=sharedCover.map((v,i)=>v+fineCover[i]);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
