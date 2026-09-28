@@ -5624,13 +5624,31 @@ async function buildScene(){  const started=performance.now();
   surfaceMaterial.update();
 
   planet=new pc.Entity("FantasyPlanet");
-  planet.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
-  setStartupProgress("mesh","Building planetary height mesh…",84);
-  const mesh=await buildPlanetMesh();
-  planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
-  app.root.addChild(planet);
-  buildAmbientMotion(mesh);
-  buildWildernessPresentation();
+  if(EVIDENCE_FAST_START){
+    // Trusted local-evidence bootstrap. WP-S003-015 frames immediately move to
+    // the canonical tangent/local world and never inspect the globe. Skip the
+    // irrelevant globe render mesh and global ambient/wilderness mesh uploads
+    // entirely so software WebGL cannot stall before local evidence begins.
+    // Planet entity transforms, SEED geography, coordinates, local terrain,
+    // settlement generation, camera authority and Simulation truth are unchanged.
+    startupScheduler.evidenceFastStart=true;
+    startupScheduler.evidencePlanetSkipped=true;
+    startupScheduler.planetMeshLatitudeSegments=0;
+    startupScheduler.planetMeshLongitudeSegments=0;
+    meshVertexCount=0;
+    meshTriangleCount=0;
+    app.root.addChild(planet);
+    setStartupProgress("mesh","Skipping globe mesh for trusted local evidence…",84);
+    await yieldBrowser();
+  }else{
+    planet.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+    setStartupProgress("mesh","Building planetary height mesh…",84);
+    const mesh=await buildPlanetMesh();
+    planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
+    app.root.addChild(planet);
+    buildAmbientMotion(mesh);
+    buildWildernessPresentation();
+  }
 
   keyLight=new pc.Entity("PlanetKeyLight");
   keyLight.addComponent("light",{
