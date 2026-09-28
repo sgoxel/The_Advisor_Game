@@ -141,6 +141,7 @@ let buildingSurroundings={
 };
 let localCampaignWearMesh=null;
 let localCampaignWearGeometry=null;
+let localCampaignWearAtlasTexture=null;
 let localCampaignWearContext=null;
 let localCampaignWearRelevantIds=new Set();
 let campaignWearProjection={
@@ -2854,6 +2855,44 @@ function updateEnvironmentalReactions(){
   environmentalReactions={...environmentalReactions,activeCount,visibleCount,activeDrawCallEstimate,peakActiveCount:Math.max(environmentalReactions.peakActiveCount,activeCount),lastUpdateMs:Number(ms.toFixed(4)),maxUpdateMs:Math.max(Number(environmentalReactions.maxUpdateMs||0),Number(ms.toFixed(4)))};
 }
 
+function campaignWearAtlasTexture(){
+  if(localCampaignWearAtlasTexture||!pc||!device)return localCampaignWearAtlasTexture;
+  const slot=128,width=slot*4,height=slot,canvas=document.createElement("canvas");canvas.width=width;canvas.height=height;
+  const ctx=canvas.getContext("2d",{alpha:true});if(!ctx)throw new Error("Campaign wear atlas context unavailable");
+  ctx.clearRect(0,0,width,height);ctx.lineCap="round";ctx.lineJoin="round";
+  const ox=i=>i*slot;
+  {
+    const x=ox(0);ctx.fillStyle="rgba(83,50,26,.18)";
+    for(const r of [[10,18,96,18],[24,46,82,14],[14,76,104,16],[36,101,66,10]])ctx.fillRect(x+r[0],r[1],r[2],r[3]);
+    ctx.strokeStyle="rgba(55,38,27,.52)";ctx.lineWidth=7;
+    for(const p of [[12,28,42,34,67,25,112,38],[18,64,50,54,72,69,110,58],[24,95,51,86,78,101,105,88]]){ctx.beginPath();ctx.moveTo(x+p[0],p[1]);ctx.bezierCurveTo(x+p[2],p[3],x+p[4],p[5],x+p[6],p[7]);ctx.stroke();}
+    ctx.fillStyle="rgba(171,116,61,.34)";for(const p of [[25,22,8],[78,44,10],[48,78,7],[98,92,9]]){ctx.beginPath();ctx.ellipse(x+p[0],p[1],p[2]*1.7,p[2],-.25,0,Math.PI*2);ctx.fill();}
+  }
+  {
+    const x=ox(1),g=ctx.createRadialGradient(x+61,62,7,x+61,62,55);g.addColorStop(0,"rgba(22,20,18,.94)");g.addColorStop(.42,"rgba(49,31,23,.88)");g.addColorStop(.76,"rgba(116,51,27,.62)");g.addColorStop(1,"rgba(35,28,23,0)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(x+62,62,56,43,-.18,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="rgba(18,17,16,.92)";ctx.beginPath();ctx.moveTo(x+31,55);ctx.lineTo(x+53,29);ctx.lineTo(x+79,36);ctx.lineTo(x+96,57);ctx.lineTo(x+82,78);ctx.lineTo(x+52,83);ctx.lineTo(x+28,71);ctx.closePath();ctx.fill();
+    ctx.strokeStyle="rgba(181,104,54,.70)";ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(x+18,92);ctx.bezierCurveTo(x+42,80,x+75,99,x+111,78);ctx.stroke();
+    ctx.fillStyle="rgba(198,179,143,.66)";for(const p of [[24,29,3],[101,34,4],[103,96,3],[37,103,4],[91,68,2.5]]){ctx.beginPath();ctx.arc(x+p[0],p[1],p[2],0,Math.PI*2);ctx.fill();}
+  }
+  {
+    const x=ox(2);ctx.fillStyle="rgba(205,143,72,.90)";ctx.fillRect(x+15,18,98,92);
+    const tones=["rgba(239,193,118,.86)","rgba(190,116,55,.88)","rgba(222,159,81,.88)"];
+    for(let i=0;i<6;i++){ctx.fillStyle=tones[i%tones.length];ctx.fillRect(x+20,22+i*14,88,11);}
+    ctx.strokeStyle="rgba(111,67,37,.78)";ctx.lineWidth=2.4;for(let i=1;i<6;i++){ctx.beginPath();ctx.moveTo(x+20,22+i*14);ctx.lineTo(x+108,22+i*14);ctx.stroke();}
+    ctx.fillStyle="rgba(74,65,56,.90)";for(const p of [[28,28],[99,28],[28,98],[99,98],[63,56],[63,84]]){ctx.beginPath();ctx.arc(x+p[0],p[1],2.3,0,Math.PI*2);ctx.fill();}
+    ctx.strokeStyle="rgba(255,222,151,.62)";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x+26,33);ctx.lineTo(x+100,33);ctx.stroke();
+  }
+  {
+    const x=ox(3);ctx.strokeStyle="rgba(34,89,38,.88)";ctx.lineWidth=6;
+    for(const p of [[18,112,31,83,47,65,61,25],[55,116,64,92,83,73,104,38],[36,105,57,91,74,85,112,79]]){ctx.beginPath();ctx.moveTo(x+p[0],p[1]);ctx.bezierCurveTo(x+p[2],p[3],x+p[4],p[5],x+p[6],p[7]);ctx.stroke();}
+    const leaves=[[28,92,11,7,-.4],[42,75,10,7,.35],[54,56,12,8,-.2],[63,35,10,7,.4],[67,98,12,8,-.3],[79,79,11,7,.3],[92,60,13,8,-.25],[105,42,10,7,.2],[91,88,10,7,.5],[108,79,9,6,-.35],[47,101,9,6,.2]];
+    for(let i=0;i<leaves.length;i++){const p=leaves[i];ctx.fillStyle=i%3===0?"rgba(125,160,67,.86)":i%2===0?"rgba(58,127,52,.92)":"rgba(35,102,44,.92)";ctx.beginPath();ctx.ellipse(x+p[0],p[1],p[2],p[3],p[4],0,Math.PI*2);ctx.fill();}
+    ctx.fillStyle="rgba(129,151,67,.48)";for(const p of [[19,34,16,9],[38,30,13,8],[95,108,18,8],[72,111,14,7]]){ctx.beginPath();ctx.ellipse(x+p[0],p[1],p[2],p[3],0,0,Math.PI*2);ctx.fill();}
+  }
+  const texture=new pc.Texture(device,{name:"campaign-wear-atlas",width,height,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE});
+  texture.setSource(canvas);localCampaignWearAtlasTexture=texture;return texture;
+}
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
@@ -2869,7 +2908,7 @@ function ensureLocalStaticMaterials(){
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    campaignWear:(()=>{const m=make("LocalCampaignWear",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    campaignWear:(()=>{const m=make("LocalCampaignWear",1,1,1);const t=campaignWearAtlasTexture();m.vertexColors=true;m.diffuseVertexColor=true;m.diffuseMap=t;m.opacityMap=t;m.opacityMapChannel="a";m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;m.alphaTest=.018;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     wayfinding:(()=>{const m=make("LocalWayfindingSigns",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
@@ -3814,9 +3853,9 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     return 0;
   }
   ensureLocalStaticMaterials();
-  const state=campaignWearResolvedState(context.reveal),positions=[],normals=[],colors=[],indices=[];
+  const state=campaignWearResolvedState(context.reveal),positions=[],normals=[],colors=[],uvs=[],indices=[];
   let primitiveCount=0;
-  const addVertex=(x,y,z,color,normal)=>{positions.push(x,y,z);normals.push(normal[0],normal[1],normal[2]);colors.push(color[0],color[1],color[2],color[3]??255);return positions.length/3-1;};
+  const addVertex=(x,y,z,color,normal,uv=[0,0])=>{positions.push(x,y,z);normals.push(normal[0],normal[1],normal[2]);colors.push(color[0],color[1],color[2],color[3]??255);uvs.push(uv[0],uv[1]);return positions.length/3-1;};
   const box=(east,north,yMeters,sxMeters,syMeters,szMeters,color)=>{
     const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),s=context.presentationScale/context.unit;
     const x0=p.x-sxMeters*s*.5,x1=p.x+sxMeters*s*.5,z0=p.z-szMeters*s*.5,z1=p.z+szMeters*s*.5;
@@ -3860,6 +3899,21 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift;
     orientedBox(east,north,ground+yMeters*s+Math.max(.015,syMeters*s)*.5,sxMeters,syMeters,szMeters,color,0);
   };
+  const atlasRect=stateName=>{
+    const i=stateName==="worn"?0:stateName==="damaged"?1:stateName==="repaired"?2:3,eps=.006;
+    return [i*.25+eps,eps,(i+1)*.25-eps,1-eps];
+  };
+  const roofAtlasPatch=(east,north,centerY,widthMeters,depthMeters,rollDeg,stateName,alpha=255)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),w=Math.max(.25,widthMeters)*s,d=Math.max(.25,depthMeters)*s,rad=rollDeg*Math.PI/180,cr=Math.cos(rad),sr=Math.sin(rad),hx=w*.5,hz=d*.5;
+    const transform=(x,z)=>[p.x+x*cr,centerY+x*sr,p.z+z],normal=[-sr,cr,0],uv=atlasRect(stateName),base=positions.length/3,color=[255,255,255,alpha];
+    const verts=[transform(-hx,-hz),transform(hx,-hz),transform(hx,hz),transform(-hx,hz)],tex=[[uv[0],uv[1]],[uv[2],uv[1]],[uv[2],uv[3]],[uv[0],uv[3]]];
+    for(let i=0;i<4;i++)addVertex(...verts[i],color,normal,tex[i]);indices.push(base,base+1,base+2,base,base+2,base+3);primitiveCount++;
+  };
+  const groundAtlasPatch=(east,north,widthMeters,depthMeters,stateName,alpha=220)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift+.028,w=Math.max(.25,widthMeters)*s,d=Math.max(.25,depthMeters)*s,hx=w*.5,hz=d*.5,uv=atlasRect(stateName),base=positions.length/3,color=[255,255,255,alpha];
+    const verts=[[p.x-hx,ground,p.z-hz],[p.x+hx,ground,p.z-hz],[p.x+hx,ground,p.z+hz],[p.x-hx,ground,p.z+hz]],tex=[[uv[0],uv[1]],[uv[2],uv[1]],[uv[2],uv[3]],[uv[0],uv[3]]];
+    for(let i=0;i<4;i++)addVertex(...verts[i],color,[0,1,0],tex[i]);indices.push(base,base+1,base+2,base,base+2,base+3);primitiveCount++;
+  };
   const C={
     wear:[122,82,42,255],wearDark:[66,48,32,255],weather:[165,119,67,255],
     char:[34,31,29,255],burn:[116,47,24,255],ash:[167,145,108,255],debris:[93,80,65,255],
@@ -3874,43 +3928,25 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      // Weathering follows both canonical roof planes instead of floating above them.
-      orientedBox(leftEast-w*.04,north+d*.08,roofCenter+.028,Math.max(.52,w*.11),.055,Math.max(3.6,d*.72),C.weather,-24);
-      orientedBox(rightEast+w*.03,north-d*.10,roofCenter+.030,Math.max(.46,w*.10),.052,Math.max(3.2,d*.66),C.wearDark,24);
-      orientedBox(leftEast+w*.10,north-d*.25,roofCenter+.042,Math.max(.34,w*.07),.045,Math.max(1.7,d*.34),C.wear,-24);
-      orientedBox(rightEast-w*.10,north+d*.30,roofCenter+.044,Math.max(.32,w*.065),.045,Math.max(1.5,d*.30),C.wear,24);
-      groundBox(east,north+d*.73,.018,Math.max(4.2,w*.88),.05,Math.max(1.3,d*.22),C.wear);
-      groundBox(east-w*.24,north+d*.60,.020,Math.max(.34,w*.07),.055,Math.max(2.5,d*.46),C.wearDark);
+      roofAtlasPatch(leftEast,north,roofCenter+.055,Math.max(2.7,w*.47),Math.max(4.0,d*.82),-24,"worn",220);
+      roofAtlasPatch(rightEast+w*.03,north+d*.04,roofCenter+.057,Math.max(2.2,w*.39),Math.max(3.6,d*.74),24,"worn",205);
+      groundAtlasPatch(east,north+d*.68,Math.max(3.7,w*.70),Math.max(1.4,d*.23),"worn",150);
     }else if(item.visualState==="damaged"){
-      // Irregular char/ash strips sit on the pitched roof; debris remains grounded.
-      orientedBox(leftEast-w*.02,north-d*.12,roofCenter+.040,Math.max(1.55,w*.28),.075,Math.max(3.3,d*.68),C.char,-24);
-      orientedBox(rightEast+w*.02,north+d*.15,roofCenter+.045,Math.max(1.10,w*.20),.065,Math.max(2.5,d*.50),C.burn,24);
-      orientedBox(leftEast+w*.18,north+d*.30,roofCenter+.060,Math.max(.62,w*.11),.050,Math.max(1.15,d*.22),C.ash,-24);
-      groundBox(east+w*.62,north+d*.26,.02,1.55,.62,1.15,C.debris);
-      groundBox(east+w*.72,north-d*.30,.02,1.10,.42,1.55,C.char);
-      groundBox(east+w*.50,north+d*.55,.02,1.65,.30,.56,C.burn);
+      roofAtlasPatch(leftEast,north-d*.05,roofCenter+.060,Math.max(3.4,w*.60),Math.max(4.5,d*.90),-24,"damaged",255);
+      roofAtlasPatch(rightEast+w*.10,north+d*.17,roofCenter+.062,Math.max(1.9,w*.34),Math.max(2.8,d*.55),24,"damaged",235);
+      groundAtlasPatch(east+w*.48,north+d*.48,Math.max(2.0,w*.34),Math.max(1.7,d*.30),"damaged",205);
     }else if(item.visualState==="repaired"){
-      // Fresh planks inherit the roof pitch and overlap like an actual patch.
-      orientedBox(leftEast-w*.01,north,roofCenter+.045,Math.max(.48,w*.09),.060,Math.max(3.8,d*.78),C.newWood,-24);
-      orientedBox(leftEast+w*.16,north-d*.08,roofCenter+.060,Math.max(.44,w*.082),.055,Math.max(3.5,d*.72),C.newWoodLight,-24);
-      orientedBox(leftEast-w*.18,north+d*.10,roofCenter+.052,Math.max(.40,w*.075),.055,Math.max(3.2,d*.66),C.repairDark,-24);
-      orientedBox(rightEast-w*.05,north+d*.28,roofCenter+.050,Math.max(.38,w*.07),.050,Math.max(1.8,d*.36),C.newWoodLight,24);
-      groundBox(east+w*.62,north+.22*d,.02,.24,2.9,2.5,C.newWood);
-      groundBox(east+w*.62,north+.22*d,2.50,2.15,.24,.24,C.newWoodLight);
+      roofAtlasPatch(leftEast+w*.03,north,roofCenter+.064,Math.max(3.6,w*.63),Math.max(4.7,d*.94),-24,"repaired",255);
+      roofAtlasPatch(rightEast-w*.11,north+d*.23,roofCenter+.064,Math.max(1.55,w*.27),Math.max(2.1,d*.42),24,"repaired",230);
+      groundAtlasPatch(east+w*.55,north+d*.35,Math.max(1.7,w*.28),Math.max(1.2,d*.20),"repaired",185);
     }else if(item.visualState==="overgrown"){
-      // Ivy/moss is deliberately split across both roof planes so portrait framing
-      // cannot hide the whole cue behind one roof edge.
-      orientedBox(leftEast-w*.04,north+d*.12,roofCenter+.055,Math.max(.72,w*.14),.070,Math.max(3.4,d*.68),C.green,-24);
-      orientedBox(rightEast+w*.03,north-d*.08,roofCenter+.058,Math.max(.66,w*.13),.070,Math.max(3.0,d*.60),C.greenLight,24);
-      orientedBox(leftEast+w*.16,north-d*.30,roofCenter+.075,Math.max(.45,w*.085),.055,Math.max(1.55,d*.30),C.moss,-24);
-      orientedBox(rightEast-w*.18,north+d*.34,roofCenter+.078,Math.max(.43,w*.08),.055,Math.max(1.45,d*.28),C.moss,24);
-      groundBox(east-w*.56,north+d*.28,.02,2.25,.14,3.9,C.green);
-      groundBox(east+w*.58,north-d*.12,.02,2.55,.15,3.25,C.greenLight);
-      groundBox(east,north+d*.70,.02,Math.max(4.0,w*.80),.12,1.75,C.moss);
+      roofAtlasPatch(leftEast-w*.02,north+d*.07,roofCenter+.066,Math.max(3.0,w*.52),Math.max(4.4,d*.88),-24,"overgrown",245);
+      roofAtlasPatch(rightEast+w*.04,north-d*.02,roofCenter+.066,Math.max(2.7,w*.47),Math.max(4.0,d*.80),24,"overgrown",240);
+      groundAtlasPatch(east,north+d*.66,Math.max(4.1,w*.75),Math.max(2.0,d*.34),"overgrown",210);
     }
   }
   if(positions.length){
-    const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+    const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
     const entity=new pc.Entity("CanonicalCampaignWear");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
     entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.campaignWear,entity)];tangentPatch.addChild(entity);
     localCampaignWearMesh=entity;localCampaignWearGeometry=mesh;
@@ -6093,6 +6129,7 @@ function destroy(){
   generatedTexture?.destroy?.();generatedTexture=null;
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection();localCampaignWearContext=null;clearCanonicalWayfindingSignposts();
+  localCampaignWearAtlasTexture?.destroy?.();localCampaignWearAtlasTexture=null;
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
