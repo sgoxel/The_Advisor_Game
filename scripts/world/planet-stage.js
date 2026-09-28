@@ -4496,7 +4496,10 @@ function* tangentMeshSteps(job){
 // Each octave fades in once it spans >2 texels, so every LOD shows structure at
 // its own scale without aliasing, and finer LODs add detail instead of blur.
 const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[1700,56],[560,20],[180,7],[60,2.4],[20,.8]]);
-// Narrow cross-LOD visual handoff. The old 18% edge feather made the canonical\n// focus patch read as a giant blurred square at 1/500-1/2500. Colors are\n// already world-coordinate stitched, so only a small bounded blend is needed.\nconst LOCAL_TEXTURE_HANDOFF_FEATHER=.045;
+// Narrow cross-LOD visual handoff. The old 18% edge feather made the canonical
+// focus patch read as a giant blurred square at 1/500-1/2500. Colors are
+// already world-coordinate stitched, so only a small bounded blend is needed.
+const LOCAL_TEXTURE_HANDOFF_FEATHER=.045;
 function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
 function terrainDetailHeight(east,north,metersPerTexel,salt){
   let h=0;
