@@ -2458,7 +2458,10 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.035;
   if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.034;
   if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.038;
-  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.030;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.022;
+  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.016;
+  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+89)*.018;
   if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.022;
   if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.014;
   return detail;
@@ -4719,6 +4722,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0);
     return {
       land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters),
+      moisture:bilerp(a.moisture,b.moisture,c.moisture,d.moisture),
+      mountainInfluence:bilerp(a.mountainInfluence,b.mountainInfluence,c.mountainInfluence,d.mountainInfluence),
       registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters),
       registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
     };
@@ -4733,12 +4738,15 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // map scales those low-frequency fields can read as giant polygon wedges.
       // Keep their SEED-derived identity as an accent, while deriving most local
       // albedo from the same authoritative land/elevation state at every LOD.
-      const elevationBase=Number(sample?.elevationMeters||0);
-      const alpineBase=smoothstep01((elevationBase-1700)/2600);
+      const elevationBase=Number(sample?.elevationMeters||0),moistureBase=clamp(Number(sample?.moisture||.5),0,1);
+      const alpineBase=smoothstep01((elevationBase-1700)/2600),dry=1-moistureBase;
       const localPalette=sample?.land
-        ? [lerp(.25,.46,alpineBase),lerp(.39,.47,alpineBase),lerp(.20,.39,alpineBase)]
+        ? [lerp(.20+.08*dry,.45,alpineBase),lerp(.34+.10*moistureBase,.48,alpineBase),lerp(.16+.06*moistureBase,.39,alpineBase)]
         : [.055,.19,.34];
-      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,.28),0,1));
+      // Preserve macro hue only as a subtle identity accent. The dominant local
+      // map albedo is continuous authoritative elevation/moisture, preventing
+      // continent-scale palette cells from reading as giant polygon wedges.
+      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,.10),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
       // Detail frequencies are anchored to canonical SEED-registered meters.
@@ -4791,8 +4799,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
       const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
-      const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1))):255;
+      // Focus refinement is center-first, not a visible square tile. Fade each
+      // finer layer through a broad radial mask so higher detail appears around
+      // the focus without advertising the rectangular texture footprint.
+      const radial=Math.hypot((ux-.5)*2,(vz-.5)*2);
+      const radialCoverage=smoothstep01(clamp((1-radial)/.24,0,1));
+      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*radialCoverage):255;
     }
     yield 1;
   }
