@@ -4541,7 +4541,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // regional hillshade created giant concentric/diagonal shapes at 1/500 that
   // looked like broken LOD seams. Keep the same canonical elevation/color
   // samples, but use restrained scale-aware lighting instead.
-  const baseHillshadeStrength=metersPerTexel<=8?.58:metersPerTexel<=30?.42:.26;\n  const hillshadeStrength=contextRing?baseHillshadeStrength*.84:baseHillshadeStrength;
+  const baseHillshadeStrength=metersPerTexel<=8?.58:metersPerTexel<=30?.42:.26;
+  const hillshadeStrength=contextRing?baseHillshadeStrength*.84:baseHillshadeStrength;
   const contextDetailStrength=1;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
