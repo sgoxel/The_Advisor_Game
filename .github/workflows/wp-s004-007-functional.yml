@@ -1,0 +1,35 @@
+name: WP-S004-007 Functional
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/world/work-cycles.js
+      - scripts/world/action-executor.js
+      - scripts/world/resident-movement.js
+      - scripts/world/planet-stage.js
+      - index.html
+      - tools/tests/wp-s004-007-work-cycles.test.js
+      - .github/workflows/wp-s004-007-functional.yml
+
+permissions:
+  contents: read
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: |
+          node --check scripts/world/work-cycles.js
+          node --check scripts/world/action-executor.js
+          node --check scripts/world/resident-movement.js
+          node --check scripts/world/planet-stage.js
+      - name: Work-cycle contract
+        run: node tools/tests/wp-s004-007-work-cycles.test.js
