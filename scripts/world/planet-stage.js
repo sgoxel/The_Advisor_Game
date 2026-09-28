@@ -3611,29 +3611,43 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,2.45,0,.82,5.15,.16,[.55,.38,.10]);
       box(anchor,b,0,1.85,2.6,1.65,1.05,C.hay);
     }else if(fn==="civic"){
-      box(anchor,b,0,0,6.6,4.4,.07,[.50,.46,.35]);
-      // Tall notice board with two posts.
-      box(anchor,b,-1.15,.35,.25,.25,2.55,C.wood);
-      box(anchor,b,1.15,.35,.25,.25,2.55,C.wood);
-      box(anchor,b,0,.35,2.70,.22,1.35,C.civic,1.30);
-      box(anchor,b,0,.35,3.15,.18,.24,C.woodLight,2.62);
-      // Small bell/yoke creates a civic silhouette above the benches.
-      box(anchor,b,0,1.36,2.35,.20,.22,C.wood,1.62);
-      box(anchor,b,0,1.36,.52,.52,.66,[.74,.52,.14],1.82);
-      box(anchor,b,-1.75,1.42,2.35,.62,.42,C.woodLight,.18);
-      box(anchor,b,1.75,1.42,2.35,.62,.42,C.woodLight,.18);
+      // Pale paved forecourt gives the public/meeting function a distinct base.
+      box(anchor,b,0,0,6.8,4.6,.08,[.56,.52,.42]);
+      // Broad raised notice dais with dark frame and three high-contrast notices.
+      box(anchor,b,0,.18,3.75,2.20,.24,[.29,.22,.14],.18);
+      box(anchor,b,0,.18,3.28,1.74,.12,[.76,.64,.38],.45);
+      box(anchor,b,-1.02,.18,.62,.84,.08,[.73,.29,.13],.60);
+      box(anchor,b,0,.18,.62,.84,.08,[.88,.76,.43],.61);
+      box(anchor,b,1.02,.18,.62,.84,.08,[.73,.29,.13],.60);
+      // Posts + lintel + bell remain vertically legible from the oblique view.
+      box(anchor,b,-1.48,.32,.30,.30,2.85,C.wood);
+      box(anchor,b,1.48,.32,.30,.30,2.85,C.wood);
+      box(anchor,b,0,.32,3.35,.26,.28,C.woodLight,2.62);
+      box(anchor,b,0,1.32,.72,.72,.86,[.78,.55,.13],2.16);
+      // Facing benches make the composition read as a public meeting place.
+      box(anchor,b,-1.78,1.48,2.70,.72,.48,C.woodLight,.24);
+      box(anchor,b,1.78,1.48,2.70,.72,.48,C.woodLight,.24);
     }else{
-      box(anchor,b,0,0,6.6,4.4,.07,[.40,.31,.18]);
-      // Outdoor-work yard: a long log on two sawhorses plus a tall tool rack.
-      box(anchor,b,-.35,.12,4.55,.58,.55,C.woodLight,.88);
-      box(anchor,b,-1.55,.12,.38,1.45,.82,C.wood,.15);
-      box(anchor,b,.85,.12,.38,1.45,.82,C.wood,.15);
-      box(anchor,b,1.95,1.20,.28,.28,2.20,C.wood);
-      box(anchor,b,1.95,1.20,2.10,.22,.24,C.woodLight,1.78);
-      box(anchor,b,1.48,1.20,.16,.16,1.05,C.metal,.82);
-      box(anchor,b,2.02,1.20,.16,.16,1.28,C.metal,.72);
-      box(anchor,b,2.52,1.20,.16,.16,.92,C.metal,.90);
-      box(anchor,b,-2.25,1.10,1.20,1.05,.42,C.crate,.02);
+      // Outdoor-work yard: high-contrast lumber and saw-table silhouette.
+      box(anchor,b,0,0,7.0,4.8,.08,[.34,.27,.17]);
+      // Three long parallel timbers are intentionally broader than the old
+      // single log so they survive the exact 844x390 ground-scale viewport.
+      box(anchor,b,-1.78,-.55,3.70,.48,.42,[.68,.43,.17],.22);
+      box(anchor,b,-1.78,.05,3.35,.48,.50,[.58,.34,.12],.28);
+      box(anchor,b,-1.78,.65,3.95,.48,.38,[.76,.51,.22],.20);
+      // Raised saw table with a steel cutting strip and two dark trestles.
+      box(anchor,b,1.05,.15,3.85,1.20,.28,C.woodLight,.72);
+      box(anchor,b,1.05,.15,.16,1.34,.12,[.70,.72,.69],1.02);
+      box(anchor,b,-.15,.15,.34,1.55,.82,[.25,.16,.08],.16);
+      box(anchor,b,2.25,.15,.34,1.55,.82,[.25,.16,.08],.16);
+      // Tall tool rack plus a compact cart/handle shape at the rear.
+      box(anchor,b,1.90,1.55,.30,.30,2.45,C.wood);
+      box(anchor,b,1.90,1.55,2.35,.24,.28,C.woodLight,2.02);
+      box(anchor,b,1.28,1.55,.18,.18,1.18,C.metal,1.02);
+      box(anchor,b,1.92,1.55,.18,.18,1.42,C.metal,.88);
+      box(anchor,b,2.52,1.55,.18,.18,1.06,C.metal,1.00);
+      box(anchor,b,-.20,1.55,1.65,.92,.48,C.crate,.14);
+      box(anchor,b,-1.15,1.55,1.45,.18,.20,C.woodLight,.54);
     }
     return propCount-propsBefore;
   };
