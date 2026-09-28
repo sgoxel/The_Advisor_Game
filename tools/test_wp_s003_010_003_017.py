@@ -47,7 +47,20 @@ def set_viewport(driver, width, height):
         "width": int(width), "height": int(height), "deviceScaleFactor": 1,
         "mobile": False, "screenWidth": int(width), "screenHeight": int(height)
     })
-    time.sleep(.25)
+    driver.execute_script("window.dispatchEvent(new Event('resize'));")
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        metrics = driver.execute_script("""
+          const c=document.querySelector('#planetCanvas')?.getBoundingClientRect?.();
+          return {iw:innerWidth,ih:innerHeight,cw:Number(c?.width||0),ch:Number(c?.height||0)};
+        """)
+        if (abs(float(metrics.get("iw") or 0)-width) <= 2 and
+            abs(float(metrics.get("ih") or 0)-height) <= 2 and
+            float(metrics.get("cw") or 0) > 0 and float(metrics.get("ch") or 0) > 0):
+            time.sleep(.8)
+            return
+        time.sleep(.15)
+    raise AssertionError(f"Viewport did not settle to {width}x{height}")
 
 
 def wait(driver, script, timeout=120, *args):
@@ -74,6 +87,10 @@ def settle_scale(driver, index):
     wait(driver, "return window.PlanetStage.snapshot().mapPresentation.scaleStateIndex===arguments[0]", 30, int(index))
     # Let async atlas authority workers publish any already-bounded labels.
     time.sleep(.7)
+    wait(driver, """
+      const s=window.PlanetStage.snapshot();
+      return s.mapPresentation?.centerMarker?.visible===true;
+    """, 20)
     return snap(driver)
 
 
