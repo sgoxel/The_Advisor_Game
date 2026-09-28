@@ -2548,25 +2548,29 @@ function createEnvironmentReactionGroup(kind,index){
   const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
-    // Three overlapping translucent flattened lobes read as one brief dust puff
-    // instead of three opaque stones. Keep the existing fixed pooled drawables.
-    const specs=[[-.54,.26,-.12,1.30,.38,1.04],[.02,.36,.06,1.55,.48,1.20],[.60,.24,-.16,1.16,.34,.92]];
+    // Keep exactly three pooled drawables, but spread them into one low, soft
+    // cloud footprint instead of a vertical stack of solid-looking lobes.
+    const specs=[
+      [-.92,.18,-.48,1.85,.24,1.42],
+      [.02,.30,.02,2.20,.34,1.68],
+      [.96,.16,.52,1.62,.22,1.28]
+    ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
       e.render.castShadows=false;e.render.receiveShadows=false;
       children.push(e);
     }
   }else if(kind==="grassBend"){
-    // Rounded, overlapping blades form a small bent tuft/fan rather than four
-    // rigid box sticks. This reuses the shared cylinder mesh and pool budget.
+    // Four tapered blades span a small ~2 m disturbed swath and lean in a fan.
+    // The drawable count and pool topology stay identical to the accepted path.
     const specs=[
-      [-.38,.30,-.14,-58,-16,.24,.74],
-      [-.12,.34,.14,-34,10,.27,.84],
-      [.14,.32,-.10,34,-8,.26,.80],
-      [.40,.28,.16,58,14,.23,.70]
+      [-.62,.42,-.28,-58,-18,.34,1.30,.20],
+      [-.20,.48,.18,-30,12,.38,1.46,.22],
+      [.22,.46,-.16,30,-10,.36,1.38,.21],
+      [.64,.38,.30,58,18,.32,1.20,.19]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"cylinder",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[5],q[6],.13,0,q[4],q[3]);
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"cone",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[5],q[6],q[7],0,q[4],q[3]);
       e.render.castShadows=false;
       children.push(e);
     }
@@ -2583,10 +2587,14 @@ function createEnvironmentReactionGroup(kind,index){
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.76,.62,.40,.34),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.24,.58,.12,.95),
+    dust:environmentReactionMaterial("EnvironmentDust",.84,.72,.50,.22),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.34,.68,.16,.94),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
+  environmentalReactionMaterials.dust.useLighting=false;
+  environmentalReactionMaterials.dust.emissive.set(.84,.72,.50);
+  environmentalReactionMaterials.dust.emissiveIntensity=.55;
+  environmentalReactionMaterials.dust.update();
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
   environmentalReactionPool=[];
@@ -2655,8 +2663,8 @@ function updateEnvironmentalReactions(){
     visibleCount++;activeDrawCallEstimate+=slot.children.length;
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
-    if(slot.kind==="dust"){scale=.92+t*.70;liftMeters=.12+t*.38;}
-    else if(slot.kind==="grassBend"){scale=1-t*.18;liftMeters=.055;}
+    if(slot.kind==="dust"){scale=.82+t*.95;liftMeters=.08+t*.46;}
+    else if(slot.kind==="grassBend"){scale=1-t*.16;liftMeters=.045;}
     else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
@@ -2685,7 +2693,7 @@ function ensureLocalStaticMaterials(){
 }
 function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
-  const mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):pc.createBox(device);
+  const mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
   mesh.incRefCount();// keep alive across static-world rebuilds
   return localSharedPrimitives[type]=mesh;
 }
