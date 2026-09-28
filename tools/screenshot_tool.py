@@ -16538,6 +16538,42 @@ def take_screenshots(
             prune_capture_history()
             return True
         finally:
+            if sys.exc_info()[0] is not None:
+                try:
+                    diagnostic = driver.execute_script(
+                        """
+                        const stage=window.PlanetStage?.snapshot?.()||null;
+                        const root=document.querySelector('#planetStage')||document.querySelector('#gameplayArea')||document.body;
+                        return {
+                          readyState:document.readyState,
+                          planetStageType:typeof window.PlanetStage,
+                          roadSignpostsType:typeof window.RoadSignposts,
+                          routePlannerType:typeof window.RoutePlanner,
+                          rootReady:root?.dataset?.ready||null,
+                          rootSeed:root?.dataset?.seed||null,
+                          stage:stage?{
+                            ready:stage.ready,
+                            stage:stage.stage,
+                            startupError:stage.startupError,
+                            startupProgress:stage.startupProgress,
+                            zoom:stage.zoom,
+                            localStatic:stage.projection?.localStatic||null,
+                            resourceBudget:stage.projection?.resourceBudget||null,
+                            wayfindingSignposts:stage.wayfindingSignposts||null
+                          }:null,
+                          scripts:Array.from(document.scripts).map(s=>s.src||'<inline>').filter(Boolean)
+                        };
+                        """
+                    )
+                    print("Failure runtime diagnostic: "+json.dumps(diagnostic,sort_keys=True), file=sys.stderr)
+                    try:
+                        browser_logs=driver.get_log("browser")
+                        if browser_logs:
+                            print("Failure browser console: "+json.dumps(browser_logs[-30:],sort_keys=True), file=sys.stderr)
+                    except Exception as log_exc:
+                        print(f"Failure browser-console read failed: {type(log_exc).__name__}: {log_exc}", file=sys.stderr)
+                except Exception as diagnostic_exc:
+                    print(f"Failure runtime diagnostic unavailable: {type(diagnostic_exc).__name__}: {diagnostic_exc}", file=sys.stderr)
             driver.quit()
     except Exception as exc:
         print(f"Error taking screenshot: {type(exc).__name__}: {exc}", file=sys.stderr)
