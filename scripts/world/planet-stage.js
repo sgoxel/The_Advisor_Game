@@ -812,8 +812,24 @@ function gameplayCenterMarkerTelemetry(layer){
   if(!fabric||!marker)return null;
   const center=fabric.describeLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,256);
   const cell=fabric.materializeCell(center.worldTile,256);
-  const projected=projectGeographicAnchor(center,{surfaceOffsetMeters:14});
-  if(!projected){marker.hidden=true;return Object.freeze({visible:false,worldTile:center.worldTile,canonicalSpatialCellId:cell.id});}
+  let projected=projectGeographicAnchor(center,{surfaceOffsetMeters:14}),projectionFallbackUsed=false;
+  // Responsive canvas/camera resize can briefly invalidate the generic geographic
+  // projection even though the canonical focus itself remains camera-facing.
+  // The focus transform is authoritative for this one special marker, so use its
+  // world projection as a bounded fallback rather than hiding or HUD-pinning it.
+  if(!projected){
+    const focus=canonicalScreenFocusTelemetry();
+    const rect=canvas?.getBoundingClientRect?.();
+    if(focus?.valid&&Number(focus.facingDot||0)>0&&rect?.width>0&&rect?.height>0){
+      projected={
+        x:Number(focus.screenX)/rect.width*100,y:Number(focus.screenY)/rect.height*100,
+        screenX:Number(focus.screenX),screenY:Number(focus.screenY),depth:null,viewDepth:null,
+        mode:"canonical-focus-transform"
+      };
+      projectionFallbackUsed=true;
+    }
+  }
+  if(!projected){marker.hidden=true;return Object.freeze({visible:false,worldTile:center.worldTile,canonicalSpatialCellId:cell.id,projectionFallbackUsed:false});}
   marker.hidden=false;
   const rect=canvas.getBoundingClientRect(),rootRect=root.getBoundingClientRect(),offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
   marker.style.left=(offsetX+projected.screenX).toFixed(2)+"px";marker.style.top=(offsetY+projected.screenY).toFixed(2)+"px";
@@ -821,7 +837,10 @@ function gameplayCenterMarkerTelemetry(layer){
   if(code)code.textContent="CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
   marker.dataset.cellId=cell.id;marker.dataset.tile=center.worldTile.x+","+center.worldTile.y;
   return Object.freeze({
-    visible:true,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),clipDepth:Number(projected.depth.toFixed(6)),viewDepth:Number(projected.viewDepth.toFixed(6)),projection:projected.mode,
+    visible:true,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),
+    clipDepth:Number.isFinite(projected.depth)?Number(projected.depth.toFixed(6)):null,
+    viewDepth:Number.isFinite(projected.viewDepth)?Number(projected.viewDepth.toFixed(6)):null,
+    projection:projected.mode,projectionFallbackUsed,
     latitudeDegrees:Number(center.latitudeDegrees.toFixed(6)),longitudeDegrees:Number(center.longitudeDegrees.toFixed(6)),
     worldTile:center.worldTile,registeredMeters:center.registeredMeters,canonicalSpatialCellId:cell.id,streamSignature:cell.signature,
     coordinateFabricRevision:fabric.revisionSignature,roundTripErrorMeters:center.roundTripErrorMeters,worldAnchored:true,fixedHudDot:false
