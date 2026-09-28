@@ -7501,12 +7501,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("origin-steady",6,(1280,800),"steady"),
             ("east-boundary-preparing",6,(1280,800),"east-preparing"),
             ("east-boundary-ready",6,(1280,800),"east-ready"),
-            ("origin-reverse-preparing",6,(1280,800),"origin-preparing"),
-            ("origin-grace-reuse",6,(1280,800),"origin-ready"),
+            ("origin-reverse-grace-hit",6,(1280,800),"origin-grace-hit"),
+            ("origin-grace-confirmed",6,(1280,800),"origin-ready"),
             ("zoom-child-preparing",7,(1280,800),"zoom-in-preparing"),
             ("zoom-child-ready",7,(1280,800),"zoom-in-ready"),
-            ("zoom-parent-preparing",6,(1280,800),"zoom-out-preparing"),
-            ("zoom-parent-ready",6,(1280,800),"zoom-out-ready"),
+            ("zoom-parent-grace-hit",6,(1280,800),"zoom-out-grace-hit"),
+            ("zoom-parent-confirmed",6,(1280,800),"zoom-out-ready"),
             ("evict-and-revisit",6,(1280,800),"evict-revisit"),
             ("phone-origin-ready",6,(390,844),"phone"),
             ("origin-repeat",6,(1280,800),"repeat"),
@@ -7561,7 +7561,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             auxiliary["move"]=focus_registered_offset(1,0,scale_index,False)
         elif mode=="east-ready":
             settle(scale_index)
-        elif mode=="origin-preparing":
+        elif mode=="origin-grace-hit":
             driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
             driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
             time.sleep(.025)
@@ -7572,7 +7572,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             time.sleep(.025)
         elif mode=="zoom-in-ready":
             settle(scale_index)
-        elif mode=="zoom-out-preparing":
+        elif mode=="zoom-out-grace-hit":
             driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
             time.sleep(.025)
         elif mode=="zoom-out-ready":
@@ -7607,7 +7607,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             settle(scale_index)
 
         proof=driver.execute_script("""
-            const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},lod=s.projection?.spatialLod||{},t=lod.temporalResidency||{},m=s.mapPresentation||{};
+            const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},lod=s.projection?.spatialLod||{},t=lod.temporalResidency||{},m=s.mapPresentation||{},ls=s.projection?.localStatic||{};
             const focus=s.canonicalFocus?.worldTile||{x:"0",y:"0"};
             let hierarchy=null;
             try{hierarchy=window.SettlementArchetypes?.canonicalHierarchySnapshot?.(s.activeSeed,focus.x,focus.y,10000)||null;}catch(_){}
@@ -7620,6 +7620,9 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               visibleContainsFocus:Boolean(lod.visibleContainsFocus),canonicalAnchorCoveragePass:Boolean(lod.canonicalAnchorCoveragePass),
               residency:t,cacheSize:Number(r.cachedResourceCount||0),cacheLimit:Number(r.cacheLimit||0),
               pending:Number(r.pendingPreparationCount||0),preparing:Boolean(r.preparing),
+              standInMagnification:Number(r.standInMagnification||1),standInSemanticScale:Number(r.standInSemanticScale||1),
+              visibleLevel:r.visibleLevel||null,requestedLevel:r.requestedLevel||null,
+              localStaticRevealTier:ls.revealTier||null,localStaticSignature:ls.signature||null,
               labelIds:(m.visibleLabels||[]).map(x=>x.canonicalEntityId).filter(Boolean).sort(),
               landmarkIds:(m.visibleLandmarks||[]).map(x=>x.id||x.canonicalEntityId).filter(Boolean).sort(),
               hierarchySignature:hierarchy?.signature||null,
@@ -8931,19 +8934,31 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             if revisit.get("pass") is False:
                 raise RuntimeError(f"WP-016 regenerated content changed canonical signature in frame {index}: {revisit}")
 
-        for idx in (1,3,5,7):
+        # Only genuine cache misses should remain on the previous-ready
+        # representation. Reversals and zoom-out to grace-resident data must
+        # swap immediately instead of artificially showing a fallback.
+        for idx in (1,5):
             p=proofs[idx]
+            handoff=(p.get("residency") or {}).get("handoff") or {}
             if not p.get("activeSignature") or p.get("activeSignature")==p.get("requestedSignature"):
-                raise RuntimeError(f"WP-016 preparing frame {idx+1} did not preserve previous ready representation: {p}")
-            if p.get("parentFallbackActive") is not True:
-                raise RuntimeError(f"WP-016 preparing frame {idx+1} lacks parent/previous fallback: {p}")
-        for idx in (0,2,4,6,8,9,10,11):
+                raise RuntimeError(f"WP-016 asynchronous preparing frame {idx+1} did not preserve previous ready representation: {p}")
+            if handoff.get("fallbackActive") is not True:
+                raise RuntimeError(f"WP-016 asynchronous preparing frame {idx+1} lacks previous-ready fallback: {p}")
+        if proofs[5].get("parentFallbackActive") is not True:
+            raise RuntimeError(f"WP-016 finer zoom miss did not expose canonical parent fallback: {proofs[5]}")
+        for idx in (0,2,3,4,6,7,8,9,10,11):
             p=proofs[idx]
             if not p.get("activeSignature") or p.get("activeSignature")!=p.get("requestedSignature") or p.get("readyChildHandoff") is not True:
-                raise RuntimeError(f"WP-016 settled frame {idx+1} did not complete ready-child handoff: {p}")
+                raise RuntimeError(f"WP-016 settled/grace-hit frame {idx+1} did not complete immediate ready handoff: {p}")
 
-        if int((proofs[4].get("residency") or {}).get("graceReuseCount") or 0)<1:
-            raise RuntimeError(f"WP-016 short reverse did not reuse grace-resident detail: {proofs[4]}")
+        reverse_reuse=int((proofs[3].get("residency") or {}).get("graceReuseCount") or 0)
+        parent_reuse=int((proofs[7].get("residency") or {}).get("graceReuseCount") or 0)
+        if reverse_reuse<1 or parent_reuse<2:
+            raise RuntimeError(f"WP-016 short reverse/zoom-out did not reuse grace-resident detail immediately: reverse={proofs[3]} parent={proofs[7]}")
+        if float(proofs[5].get("standInSemanticScale") or 1)>=0.999:
+            raise RuntimeError(f"WP-016 zoom-in stand-in did not compensate coarse semantic/static scale: {proofs[5]}")
+        if proofs[5].get("localStaticRevealTier")!=proofs[4].get("localStaticRevealTier"):
+            raise RuntimeError(f"WP-016 semantic/static tier advanced before refined child was ready: before={proofs[4]} preparing={proofs[5]}")
         prefetch=proofs[9].get("residency",{}).get("prefetch") or {}
         if int(prefetch.get("requests") or 0)<1:
             raise RuntimeError(f"WP-016 motion-direction prefetch never issued a bounded request: {proofs[9]}")
