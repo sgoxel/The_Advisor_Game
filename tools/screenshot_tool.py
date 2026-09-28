@@ -6600,12 +6600,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         pair=driver.execute_script("""
             const wanted=new Set(arguments[0]||[]),seed=window.PlanetStage.snapshot().activeSeed;
             const typeAt=(x,y)=>String(window.TerrainFoundation?.getType?.(seed,String(x),String(y))||'');
-            for(let radius=2;radius<=36;radius++){
-              for(let y=-radius;y<=radius;y++)for(let x=-radius;x<=radius;x++){
-                if(Math.max(Math.abs(x),Math.abs(y))!==radius)continue;
-                const t=typeAt(x,y);if(!wanted.has(t))continue;
-                const candidates=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
-                for(const [nx,ny] of candidates)if(typeAt(nx,ny)===t)return {a:{x:String(x),y:String(y)},b:{x:String(nx),y:String(ny)},surface:t};
+            const preferred=arguments[0]||[];
+            for(const desired of preferred){
+              for(let radius=8;radius<=36;radius++){
+                for(let y=-radius;y<=radius;y++)for(let x=-radius;x<=radius;x++){
+                  if(Math.max(Math.abs(x),Math.abs(y))!==radius)continue;
+                  const t=typeAt(x,y);if(t!==desired)continue;
+                  const candidates=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+                  for(const [nx,ny] of candidates)if(typeAt(nx,ny)===t)return {a:{x:String(x),y:String(y)},b:{x:String(nx),y:String(ny)},surface:t};
+                }
               }
             }
             return null;
@@ -6631,8 +6634,19 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             const e=window.PlanetStage?.snapshot?.().environmentalReactions||{};
             return Number(e.triggerCount||0)>Number(arguments[0])&&String(e.lastKind||'')===String(arguments[1])&&Number(e.activeCount||0)>0;
         """,int(before.get("triggerCount") or 0),expected_kind))
+        driver.execute_script("window.PlanetStage.setEnvironmentalReactionEnabled(false)")
+        framing_x=str(int(pair["b"]["x"])+4)
+        framing_y=str(pair["b"]["y"])
+        driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1])",framing_x,framing_y)
+        WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},e=s.environmentalReactions||{},f=s.canonicalFocus?.worldTile||{};
+            return String(f.x)===String(arguments[0])&&String(f.y)===String(arguments[1])&&
+                   Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   Number(e.activeCount||0)>0;
+        """,framing_x,framing_y))
+        driver.execute_script("window.PlanetStage.setEnvironmentalReactionEnabled(true)")
         if decay:
-            time.sleep(4.2)
+            time.sleep(5.7)
             WebDriverWait(driver,20.0).until(lambda d:d.execute_script("return Number(window.PlanetStage?.snapshot?.().environmentalReactions?.activeCount||0)===0"))
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),e=s.environmentalReactions||{},r=s.projection?.resourceBudget||{};
@@ -6645,7 +6659,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               desktopActiveCap:e.desktopActiveCap,phoneActiveCap:e.phoneActiveCap,poolAllocationsAfterInit:e.poolAllocationsAfterInit,
               terrainMutation:e.terrainMutation,presentationOnly:e.presentationOnly,simulationAuthority:e.simulationAuthority,bounded:e.bounded,
               fullWorldScan:e.fullWorldScan,perFrameWorldScan:e.perFrameWorldScan,activeSlots:e.activeSlots,
-              focus:s.canonicalFocus?.worldTile,pending:r.pendingPreparationCount,viewport:{width:innerWidth,height:innerHeight}};
+              focus:s.canonicalFocus?.worldTile,pending:r.pendingPreparationCount,standInActive:r.standInActive,requestedSignature:r.requestedSignature,activeSignature:r.activeSignature,viewport:{width:innerWidth,height:innerHeight}};
         """,label,expected_kind,str(pair["surface"]),pair)
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-015":
@@ -9124,7 +9138,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Environmental reaction update cost exceeded 4 ms in frame {index}: {proof}")
             if float(proof.get("lastMovementMeters") or 0)>float(proof.get("maxMoveMeters") or 0)+.01:
                 raise RuntimeError(f"Environmental reaction accepted an invalid movement jump in frame {index}: {proof}")
-            if int(proof.get("pending") or 0)!=0:
+            if int(proof.get("pending") or 0)!=0 or proof.get("requestedSignature")!=proof.get("activeSignature"):
                 raise RuntimeError(f"Environmental reaction evidence captured unsettled local resource in frame {index}: {proof}")
             if proof.get("label")!="decay-cleared":
                 kind=str(proof.get("expectedKind") or "")
