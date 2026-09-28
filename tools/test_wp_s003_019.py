@@ -75,7 +75,7 @@ def set_season(driver, stamp, expected):
     return snap
 
 
-def assert_runtime(label, snap):
+def assert_runtime(label, snap, steady=True):
     if not isinstance(snap, dict) or snap.get("ready") is not True or snap.get("active") is not True:
         raise AssertionError(f"{label}: seasonal runtime inactive: {snap}")
     if snap.get("presentationOnly") is not True or snap.get("simulationAuthority") is not False:
@@ -92,7 +92,7 @@ def assert_runtime(label, snap):
         raise AssertionError(f"{label}: profile cache unbounded: {snap}")
     if float(snap.get("maxUpdateMs") or 0) > 40.0:
         raise AssertionError(f"{label}: cold seasonal refresh too expensive: {snap}")
-    if float(snap.get("lastUpdateMs") or 0) > 15.0:
+    if steady and float(snap.get("lastUpdateMs") or 0) > 15.0:
         raise AssertionError(f"{label}: steady seasonal refresh too expensive: {snap}")
     if float(snap.get("maxDrawMs") or 0) > 15.0:
         raise AssertionError(f"{label}: seasonal overlay draw too expensive: {snap}")
@@ -132,17 +132,19 @@ def main():
         region_id = None
         profile_summary = {}
         for idx, season in enumerate(("spring", "summer", "autumn", "winter"), start=1):
-            snap = set_season(driver, dates[season], season)
-            assert_runtime(season, snap)
+            cold_snap = set_season(driver, dates[season], season)
+            assert_runtime(season + "-cold", cold_snap, steady=False)
+            repeat = driver.execute_script("return window.SeasonalPresentation.refresh()")
+            assert_runtime(season + "-steady", repeat, steady=True)
+            if repeat.get("seasonSignature") != cold_snap.get("seasonSignature"):
+                raise AssertionError(f"Deterministic repeat signature changed for {season}")
+            snap = repeat
             if region_id is None:
                 region_id = snap.get("region", {}).get("id")
             elif snap.get("region", {}).get("id") != region_id:
                 raise AssertionError(f"Fixed location changed region between seasons: {region_id} vs {snap.get('region')}")
             if (snap.get("focusTile") or {}) != tile:
                 raise AssertionError(f"Fixed location changed canonical tile during {season}: {snap.get('focusTile')} vs {tile}")
-            repeat = driver.execute_script("return window.SeasonalPresentation.refresh()")
-            if repeat.get("seasonSignature") != snap.get("seasonSignature"):
-                raise AssertionError(f"Deterministic repeat signature changed for {season}")
             signatures[season] = snap.get("seasonSignature")
             profile = snap.get("profile") or {}
             profile_summary[season] = {
