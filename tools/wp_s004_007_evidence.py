@@ -106,7 +106,9 @@ def visual_state(resident_id,building_id):
       const targets=PlanetStage.inspectionTargets?.()||[];
       const npcTarget=targets.find(x=>x.type==="npc"&&String(x.id)===String(residentId))||null;
       const buildingTarget=buildingId?targets.find(x=>x.type==="building"&&String(x.id)===String(buildingId))||null:null;
-      const workplaceKnown=Boolean(!buildingId||(s.buildingActivity?.buildings||[]).some(x=>String(x.id)===String(buildingId)));
+      const buildingKnown=(s.buildingActivity?.buildings||[]).some(x=>String(x.id)===String(buildingId));
+      const specialLotKnown=Boolean(buildingId&&(SpecialLots.build(s.activeSeed)||[]).some(x=>String(x.id)===String(buildingId)));
+      const workplaceKnown=Boolean(!buildingId||buildingKnown||specialLotKnown);
       return {
         settled:Boolean(!rb.standInActive&&Number(rb.pendingPreparationCount||0)===0&&
           (!rb.requestedSignature||(rb.activeSignature&&String(rb.activeSignature)===String(rb.requestedSignature)))),
@@ -125,14 +127,10 @@ def visual_state(resident_id,building_id):
 def visual_ready(info):
     state=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
     exact=state.get("exact") or {}
-    npc_bounds=state.get("npcInspectionBounds")
-    building_id=info["sample"].get("buildingId")
-    workplace_bounds=state.get("workplaceInspectionBounds")
     return (
         state["settled"] and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
         state["localStaticActive"] and state["localBuildingCount"]>0 and state["workplaceKnown"] and
-        bool(npc_bounds) and (not building_id or bool(workplace_bounds)) and
-        exact.get("visible") and exact.get("inViewport") and state["exactToolActive"] and
+        exact.get("visible") and bool(exact.get("screen")) and exact.get("inViewport") and state["exactToolActive"] and
         exact.get("movementStatus")=="arrived" and
         (exact.get("workCycle") or {}).get("stepId")==info["sample"]["stepId"]
     )
