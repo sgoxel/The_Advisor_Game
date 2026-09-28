@@ -37,6 +37,7 @@ let weatherCacheHits=0;
 let canvasFilterWrites=0;
 let lastCanvasFilter="";
 let lastCanvasFilterCanvas=null;
+let stageSnapshotFallbacks=0;
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function round(v,digits=4){const f=10**digits;return Math.round(Number(v)*f)/f}
@@ -70,10 +71,27 @@ function particleLimit(cls=deviceClass()){
   return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches?Math.min(24,base):base;
 }
 function focusContext(tileOverride=null,stampOverride=null){
-  const stage=window.PlanetStage?.snapshot?.()||null;
-  if(!stage?.ready)return null;
-  const seed=currentSeed(stage);if(!seed)return null;
-  const tile=tileOverride||stage.canonicalFocus?.worldTile||{x:"0",y:"0"};
+  const root=document.getElementById("planetStageRoot")||document.querySelector(".planet-stage-root");
+  if(root?.dataset?.ready!=="true")return null;
+  let seed=String(root.dataset.seed||"");
+  let tile=tileOverride||null;
+  // The gameplay-center marker is generated from SeedCoordinateFabric and
+  // tracks the canonical focus tile without constructing the full diagnostic
+  // PlanetStage snapshot on every weather poll.
+  if(!tile){
+    const marker=root.querySelector(".planet-world-center"),raw=String(marker?.dataset?.tile||"");
+    const parts=raw.split(",");
+    if(parts.length===2&&parts[0]!==""&&parts[1]!=="")tile={x:parts[0],y:parts[1]};
+  }
+  // Startup-only fallback for the brief interval before the canonical marker
+  // has been materialized. Steady weather refreshes should not use this path.
+  if(!seed||!tile){
+    const stage=window.PlanetStage?.snapshot?.()||null;stageSnapshotFallbacks++;
+    if(!stage?.ready)return null;
+    if(!seed)seed=currentSeed(stage);
+    if(!tile)tile=stage.canonicalFocus?.worldTile||null;
+  }
+  if(!seed||!tile)return null;
   const stamp=stampOverride||fantasyNow();if(!stamp)return null;
   const normalizedTile=Object.freeze({x:String(tile.x),y:String(tile.y)});
   const spatialKey=[seed,normalizedTile.x,normalizedTile.y].join("|");
@@ -88,7 +106,7 @@ function focusContext(tileOverride=null,stampOverride=null){
   // Weather currently depends on immutable RegionProfile + fantasy time only.
   // Do not resample PlanetGeography on every presentation poll when that sample
   // is not an input to weather truth.
-  return Object.freeze({stage,seed,tile:normalizedTile,stamp,region});
+  return Object.freeze({seed,tile:normalizedTile,stamp,region});
 }
 function seasonFactor(month){
   const m=Math.max(1,Math.min(12,Number(month)||1));
@@ -267,9 +285,9 @@ function refresh(){
     pooledParticles:true,cameraLocalParticles:true,canvasOverlay:true,overlayZIndex:3,mapLabelsRemainAbove:true,
     fogAlpha:weather?.fog||0,wetness:weather?.wetness||0,windMotionIntensity:weather?.windIntensity||0,
     scheduleHook:hook,audioHints:Object.freeze({rainGain:round((weather?.precipitation||0)*.18),windGain:round((weather?.windIntensity||0)*.12),waterAmbienceBoost:round((weather?.state==="rain"||weather?.state==="storm")?.08:0)}),
-    cacheTelemetry:Object.freeze({spatialContextHits:spatialContextCacheHits,weatherHits:weatherCacheHits,weatherEntries:weatherCache.size,weatherLimit:WEATHER_CACHE_LIMIT,canvasFilterWrites}),
+    cacheTelemetry:Object.freeze({spatialContextHits:spatialContextCacheHits,weatherHits:weatherCacheHits,weatherEntries:weatherCache.size,weatherLimit:WEATHER_CACHE_LIMIT,canvasFilterWrites,stageSnapshotFallbacks}),
     updateCount,frameCount,lastUpdateMs:round(lastUpdateMs),maxUpdateMs:round(maxUpdateMs),lastFrameMs:round(lastFrameMs),maxFrameMs:round(maxFrameMs),
-    authoritativeSources:Object.freeze(["SeedSystem campaign SEED","RegionProfile.at","GameTime.getNow","PlanetStage.canonicalFocus","PRNG.foundationUint32"]),
+    authoritativeSources:Object.freeze(["planetStageRoot active SEED","SeedCoordinateFabric gameplay-center world tile","RegionProfile.at","GameTime.getNow","PRNG.foundationUint32"]),
     deterministicState:true,regional:true,presentationOnly:true,simulationAuthority:false,terrainMutation:false,scheduleMutation:false,fullWorldScan:false,perFrameWorldScan:false
   });
   if(active)ensureFrameLoop();else{if(raf){cancelAnimationFrame(raf);raf=0}if(ctx&&overlay)ctx.clearRect(0,0,overlay.width,overlay.height)}
@@ -286,7 +304,7 @@ function shutdown(){
   if(timer){clearInterval(timer);timer=null}if(raf){cancelAnimationFrame(raf);raf=0}resizeObserver?.disconnect?.();resizeObserver=null;
   const canvas=document.getElementById("planetCanvas");if(canvas)canvas.style.filter="";
   overlay?.remove?.();overlay=null;ctx=null;particles=[];lastSnapshot=null;lastStateKey="";
-  spatialContextCacheKey="";spatialContextCacheRegion=null;weatherCache.clear();lastCanvasFilter="";lastCanvasFilterCanvas=null;
+  spatialContextCacheKey="";spatialContextCacheRegion=null;weatherCache.clear();lastCanvasFilter="";lastCanvasFilterCanvas=null;stageSnapshotFallbacks=0;
 }
 function bootstrap(){
   refresh();timer=setInterval(()=>{if(!document.hidden)refresh()},UPDATE_INTERVAL_MS);
