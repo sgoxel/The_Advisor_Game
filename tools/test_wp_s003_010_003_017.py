@@ -108,16 +108,16 @@ def assert_marker_contract(stage, label, production=True):
         raise AssertionError(f"{label}: marker policy revision missing: {mp.get('markerPolicyRevision')}")
     if mp.get("markerViewportBounded") is not True or mp.get("markerFullWorldScan") is not False:
         raise AssertionError(f"{label}: marker query is not viewport-bounded: {mp}")
-    if int(mp.get("markerStandaloneDecorativeGlyphCount") or -1) != 0:
+    if int(mp.get("markerStandaloneDecorativeGlyphCount", -1)) != 0:
         raise AssertionError(f"{label}: unexplained decorative marker glyphs remain")
     if production:
         if mp.get("markerDebugMode") is not False:
             raise AssertionError(f"{label}: production capture unexpectedly in marker debug mode")
         if int(mp.get("markerDebugSuppressedCount") or 0) < 1:
             raise AssertionError(f"{label}: debug marker was not explicitly suppressed")
-        if int(mp.get("markerUnknownProductionCount") or -1) != 0:
+        if int(mp.get("markerUnknownProductionCount", -1)) != 0:
             raise AssertionError(f"{label}: unknown/debug production markers rendered")
-        if int(mp.get("markerBroadScaleMinorRenderedCount") or -1) != 0:
+        if int(mp.get("markerBroadScaleMinorRenderedCount", -1)) != 0:
             raise AssertionError(f"{label}: town/village/road/debug marker leaked into 1/10-1/500 broad scales")
     decisions = mp.get("markerDecisions") or []
     visible = mp.get("visibleMarkers") or []
