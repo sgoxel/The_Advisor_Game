@@ -55,6 +55,19 @@ let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
 let localStaticMaterials=null;
+let localWayfindingMesh=null;
+let localWayfindingEntity=null;
+let wayfindingTextCanvas=null;
+let wayfindingTextContext=null;
+let wayfindingLastTextDrawAt=0;
+let wayfindingPanelAnchors=[];
+const wayfindingSignAnchors=new Map();
+let wayfindingSignposts={
+  active:false,version:null,signCount:0,panelCount:0,triangleCount:0,geometryDrawCallEstimate:0,textCanvasCount:0,
+  visibleTextCount:0,textUpdateCount:0,lastTextDrawMs:0,maxTextDrawMs:0,routeQueryCount:0,routeQueryMs:0,buildMs:0,
+  signs:[],signature:null,authority:"unavailable",fallbackScope:null,interSettlementRoadAuthorityAvailable:false,
+  remoteConnectivityInvented:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameRouteQuery:false
+};
 let localFaunaRoot=null;
 let localFaunaActors=[];
 let localFaunaClock=0;
@@ -136,6 +149,7 @@ let localNpcContext=null;
 let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity.resolveActionTarget",presentationOnly:true,simulationAuthority:false};
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
+const localSignInspectionKeys=new Set();
 let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,authority:"spherical-seed-focus-presentation"};
 let resizeObserver=null;
 let yawDegrees=-18;
@@ -2848,6 +2862,7 @@ function ensureLocalStaticMaterials(){
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     campaignWear:(()=>{const m=make("LocalCampaignWear",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    wayfinding:(()=>{const m=make("LocalWayfindingSigns",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
 }
@@ -3046,6 +3061,139 @@ function addCanonicalRoadSegment(name,x1,y1,x2,y2,widthMeters,presentationScale,
   const ground=canonicalSemanticGroundHeightUnits(centerEast,centerNorth,frame)+lift+.028,pos=canonicalSemanticPosition(centerEast,centerNorth,presentationScale,unit,frame);
   addLocalStatic(name,"box",material,pos.x,ground,pos.z,widthMeters*presentationScale/unit,.058,length/unit,0,angle,0);
 }
+function clearCanonicalWayfindingSignposts(){
+  clearInspectionKeySet(localSignInspectionKeys,false);
+  localWayfindingEntity?.destroy?.();localWayfindingEntity=null;
+  localWayfindingMesh?.destroy?.();localWayfindingMesh=null;
+  wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
+  if(wayfindingTextContext&&wayfindingTextCanvas){
+    wayfindingTextContext.setTransform(1,0,0,1,0,0);
+    wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);
+  }
+  wayfindingSignposts={...wayfindingSignposts,active:false,signCount:0,panelCount:0,triangleCount:0,geometryDrawCallEstimate:0,
+    visibleTextCount:0,routeQueryCount:0,routeQueryMs:0,buildMs:0,signs:[],signature:null,authority:"unavailable",
+    fallbackScope:null,interSettlementRoadAuthorityAvailable:false,remoteConnectivityInvented:false};
+}
+function ensureWayfindingTextCanvas(){
+  if(wayfindingTextCanvas?.isConnected&&wayfindingTextContext)return wayfindingTextCanvas;
+  if(!root)return null;
+  const layer=document.createElement("canvas");
+  layer.className="wayfinding-sign-text-layer";
+  layer.setAttribute("aria-hidden","true");
+  Object.assign(layer.style,{position:"absolute",inset:"0",width:"100%",height:"100%",pointerEvents:"none",zIndex:"7"});
+  root.appendChild(layer);
+  wayfindingTextCanvas=layer;wayfindingTextContext=layer.getContext("2d");
+  wayfindingSignposts={...wayfindingSignposts,textCanvasCount:wayfindingTextContext?1:0};
+  return layer;
+}
+function wayfindingWorldPoint(localPoint){
+  if(!localStaticRoot||!pc||!localPoint)return null;
+  return localStaticRoot.getWorldTransform().transformPoint(new pc.Vec3(localPoint.x,localPoint.y,localPoint.z),new pc.Vec3());
+}
+function projectWayfindingPoint(localPoint){
+  if(!cameraEntity?.camera||!canvas||!device||!pc)return null;
+  const world=wayfindingWorldPoint(localPoint);if(!world)return null;
+  const projected=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
+  if(!projected||![projected.x,projected.y,projected.z].every(Number.isFinite)||projected.z<=0)return null;
+  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(device.width||canvas.width||rect.width)),sourceH=Math.max(1,Number(device.height||canvas.height||rect.height));
+  return {x:projected.x*(rect.width/sourceW),y:projected.y*(rect.height/sourceH),z:projected.z,world};
+}
+function wayfindingSignScreenBounds(signId){
+  const localPoint=wayfindingSignAnchors.get(String(signId));const p=projectWayfindingPoint(localPoint);if(!p)return null;
+  const rect=canvas?.getBoundingClientRect?.(),narrow=(rect?.width||0)<600,halfW=narrow?42:52,topPad=narrow?54:62,bottomPad=narrow?28:34;
+  return {left:(rect?.left||0)+p.x-halfW,right:(rect?.left||0)+p.x+halfW,top:(rect?.top||0)+p.y-topPad,bottom:(rect?.top||0)+p.y+bottomPad};
+}
+function wayfindingSignScreenDepth(signId){
+  const localPoint=wayfindingSignAnchors.get(String(signId)),world=wayfindingWorldPoint(localPoint),camera=cameraEntity?.getPosition?.();
+  if(!world||!camera)return Infinity;return (world.x-camera.x)**2+(world.y-camera.y)**2+(world.z-camera.z)**2;
+}
+function updateWayfindingTextOverlay(force=false){
+  if(!wayfindingSignposts.active||!wayfindingPanelAnchors.length||!root||!canvas||!cameraEntity?.camera){
+    if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
+    return;
+  }
+  const now=performance.now();if(!force&&now-wayfindingLastTextDrawAt<50)return;wayfindingLastTextDrawAt=now;
+  const started=performance.now(),layer=ensureWayfindingTextCanvas(),ctx=wayfindingTextContext;if(!layer||!ctx)return;
+  const rect=canvas.getBoundingClientRect(),width=Math.max(1,Math.round(rect.width)),height=Math.max(1,Math.round(rect.height)),dpr=Math.min(2,Math.max(1,Number(window.devicePixelRatio||1)));
+  const pixelW=Math.max(1,Math.round(width*dpr)),pixelH=Math.max(1,Math.round(height*dpr));
+  if(layer.width!==pixelW||layer.height!==pixelH){layer.width=pixelW;layer.height=pixelH;}
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,layer.width,layer.height);ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";ctx.font=(width<600?"600 10px":"600 12px")+" system-ui, sans-serif";
+  let visible=0;
+  for(const panel of wayfindingPanelAnchors){
+    const p=projectWayfindingPoint(panel.localPoint);if(!p||p.x<-80||p.x>width+80||p.y<-50||p.y>height+50)continue;
+    const label=panel.destinationName+"  "+panel.distanceLabel;
+    ctx.lineWidth=3.2;ctx.strokeStyle="rgba(44,27,15,.92)";ctx.strokeText(label,p.x,p.y,Math.max(74,width<600?116:150));
+    ctx.fillStyle="#f7e2ad";ctx.fillText(label,p.x,p.y,Math.max(74,width<600?116:150));visible++;
+  }
+  const elapsed=Number((performance.now()-started).toFixed(4));
+  wayfindingSignposts={...wayfindingSignposts,visibleTextCount:visible,textUpdateCount:Number(wayfindingSignposts.textUpdateCount||0)+1,lastTextDrawMs:elapsed,maxTextDrawMs:Math.max(Number(wayfindingSignposts.maxTextDrawMs||0),elapsed)};
+}
+function buildCanonicalWayfindingSignposts(reveal,tier,frame,presentationScale,unit,lift){
+  const started=performance.now();clearCanonicalWayfindingSignposts();
+  if(!["refined","full"].includes(String(tier))||!window.RoadSignposts?.build||!localStaticRoot||!pc||!device)return 0;
+  ensureLocalStaticMaterials();
+  const model=window.RoadSignposts.build(activeSeed),positions=[],normals=[],colors=[],indices=[],panelAnchors=[];
+  const s=Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1),tm=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
+  const rotate=(x,z,a)=>{const c=Math.cos(a),q=Math.sin(a);return [x*c-z*q,x*q+z*c];};
+  const face=(verts,normal,color)=>{
+    const base=positions.length/3,cc=color||[255,255,255,255];
+    for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(normal[0],normal[1],normal[2]);colors.push(cc[0],cc[1],cc[2],cc[3]??255);}
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+  };
+  const box=(cx,cy,cz,sx,sy,sz,color,yaw=0)=>{
+    const x0=-sx*.5,x1=sx*.5,y0=cy-sy*.5,y1=cy+sy*.5,z0=-sz*.5,z1=sz*.5;
+    const rv=(x,y,z)=>{const q=rotate(x,z,yaw);return [cx+q[0],y,cz+q[1]];};
+    const rn=(x,y,z)=>{const q=rotate(x,z,yaw);return [q[0],y,q[1]];};
+    face([rv(x0,y0,z1),rv(x1,y0,z1),rv(x1,y1,z1),rv(x0,y1,z1)],rn(0,0,1),color);
+    face([rv(x1,y0,z0),rv(x0,y0,z0),rv(x0,y1,z0),rv(x1,y1,z0)],rn(0,0,-1),color);
+    face([rv(x1,y0,z1),rv(x1,y0,z0),rv(x1,y1,z0),rv(x1,y1,z1)],rn(1,0,0),color);
+    face([rv(x0,y0,z0),rv(x0,y0,z1),rv(x0,y1,z1),rv(x0,y1,z0)],rn(-1,0,0),color);
+    face([rv(x0,y1,z1),rv(x1,y1,z1),rv(x1,y1,z0),rv(x0,y1,z0)],[0,1,0],color);
+    face([rv(x0,y0,z0),rv(x1,y0,z0),rv(x1,y0,z1),rv(x0,y0,z1)],[0,-1,0],color);
+  };
+  const postColor=[78,51,28,255],boardColors=[[126,82,42,255],[108,69,35,255],[143,94,48,255]];
+  for(const sign of model.signs||[]){
+    const east=Number(sign.anchor.x)*tm,north=Number(sign.anchor.y)*tm,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
+    const postH=3.15*s;box(pos.x,ground+postH*.5,pos.z,.28*s,postH,.28*s,postColor,0);
+    const topPoint={x:pos.x,y:ground+2.65*s,z:pos.z};wayfindingSignAnchors.set(String(sign.id),topPoint);
+    (sign.branches||[]).forEach((branch,index)=>{
+      const dx=Number(branch.dx||0),dz=-Number(branch.dy||0),yaw=Math.atan2(dz,dx),centerX=pos.x+dx*.62*s,centerZ=pos.z+dz*.62*s,centerY=ground+(2.50-index*.56)*s;
+      box(centerX,centerY,centerZ,3.25*s,.42*s,.30*s,boardColors[index%boardColors.length],yaw);
+      // Small pale end-cap makes branch direction physical without relying on a
+      // screen-space arrow icon whose meaning would change under camera rotation.
+      box(centerX+dx*1.50*s,centerY,centerZ+dz*1.50*s,.22*s,.30*s,.34*s,[224,184,108,255],yaw);
+      panelAnchors.push(Object.freeze({signId:String(sign.id),destinationId:String(branch.destinationId),destinationName:String(branch.destinationName),distanceLabel:String(branch.distanceLabel),directionLabel:String(branch.directionLabel),localPoint:Object.freeze({x:centerX,y:centerY,z:centerZ})}));
+    });
+    registerLocalInspection({
+      id:String(sign.id),type:"signpost",name:sign.purpose==="village-exit"?"Village Exit Sign":sign.purpose==="three-way-junction"?"Three-way Road Sign":"Crossroads Signpost",
+      branches:Object.freeze((sign.branches||[]).slice()),authority:sign.authority,pickPriority:3,
+      visible:()=>wayfindingSignposts.active&&["refined","full"].includes(String(localStatic.revealTier)),
+      screenBounds:()=>wayfindingSignScreenBounds(sign.id),screenDepth:()=>wayfindingSignScreenDepth(sign.id)
+    },localSignInspectionKeys);
+  }
+  if(positions.length){
+    const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+    const entity=new pc.Entity("CanonicalWayfindingSigns");entity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});
+    entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.wayfinding,entity)];localStaticRoot.addChild(entity);
+    localWayfindingMesh=mesh;localWayfindingEntity=entity;
+  }
+  wayfindingPanelAnchors=panelAnchors;
+  ensureWayfindingTextCanvas();
+  wayfindingSignposts={
+    ...wayfindingSignposts,active:Boolean(model.signCount&&positions.length),version:model.version||window.RoadSignposts.VERSION||null,
+    signCount:Number(model.signCount||0),panelCount:Number(model.panelCount||0),triangleCount:indices.length/3,
+    geometryDrawCallEstimate:positions.length?1:0,textCanvasCount:wayfindingTextContext?1:0,visibleTextCount:0,
+    routeQueryCount:Number(model.routeQueryCount||0),routeQueryMs:Number(model.routeQueryMs||0),buildMs:Number((performance.now()-started).toFixed(3)),
+    signs:Object.freeze((model.signs||[]).slice()),signature:model.signature||null,
+    authority:"RoadSignposts: StartingVillage road topology + RoutePlanner + canonical local labels",fallbackScope:model.fallbackScope||null,
+    interSettlementRoadAuthorityAvailable:Boolean(model.interSettlementRoadAuthorityAvailable),remoteConnectivityInvented:Boolean(model.remoteConnectivityInvented),
+    presentationOnly:true,simulationAuthority:false,bounded:model.bounded!==false,fullWorldScan:Boolean(model.fullWorldScan),perFrameRouteQuery:Boolean(model.perFrameRouteQuery)
+  };
+  updateWayfindingTextOverlay(true);
+  return wayfindingSignposts.geometryDrawCallEstimate;
+}
+
 function clearInspectionKeySet(keys,preserveSelected=false){
   const selectedKey=inspection.selectedId===null?null:inspectionRegistryKey(inspection.selectedType,inspection.selectedId);
   for(const key of keys)inspectionPickables.delete(key);
@@ -3707,6 +3855,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
+  const wayfindingDrawCalls=buildCanonicalWayfindingSignposts(reveal,tier,semanticFrame,scale,unit,lift);
   const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
   localCampaignWearContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   const campaignWearDrawCalls=rebuildCanonicalCampaignWearProjection("settlement-rebuild");
@@ -3736,8 +3885,9 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
     roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
-    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0),
+    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
     drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0),
+    wayfindingSignCount:Number(wayfindingSignposts.signCount||0),wayfindingPanelCount:Number(wayfindingSignposts.panelCount||0),wayfindingDrawCallEstimate:Number(wayfindingDrawCalls||0),
     persistentRevisionSignature:campaignWearProjection.revisionSignature,persistentPresentationSignature:String(resource.signature||"")+"|"+String(campaignWearProjection.revisionSignature||"CWP|0"),
     campaignWearDrawCallEstimate:Number(campaignWearProjection.drawCallEstimate||0),campaignWearTriangleCount:Number(campaignWearProjection.triangleCount||0),
     buildTimeMs:Number((performance.now()-started).toFixed(3)),
@@ -3748,7 +3898,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
 function rebuildLocalStaticPresentation(resource){
   if(!tangentPatch||!device||!geography||!resource)return;
   const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
-  clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);
+  clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);clearCanonicalWayfindingSignposts();
   localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
   clearLocalBuildingActivity();localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
@@ -4973,7 +5123,7 @@ function dismissInspection(){const hadSelection=inspection.selectedId!==null||in
 function inspectionIdText(id){return String(id).trim();}
 function inspectionRegistryKey(type,id){return String(type)+":"+inspectionIdText(id);}
 function registerInspectionPickable(record){
-  if(record?.id===undefined||record.id===null||inspectionIdText(record.id).length===0||!["npc","building"].includes(record.type)||typeof record.screenBounds!=="function")return false;
+  if(record?.id===undefined||record.id===null||inspectionIdText(record.id).length===0||!["npc","building","signpost"].includes(record.type)||typeof record.screenBounds!=="function")return false;
   inspectionPickables.set(inspectionRegistryKey(record.type,record.id),record);return true;
 }
 function unregisterInspectionPickable(id,type=null){
@@ -4986,6 +5136,9 @@ function readableInspectionLines(record){
   if(record.type==="npc"){
     let live=null;try{live=typeof record.inspect==="function"?record.inspect():null;}catch{live=null;}
     return [readable(live?.displayName||record.name,"Unknown resident"),readable(live?.profession||record.job,"Unassigned"),readable(live?.activity||record.activity,"Activity unavailable")];
+  }
+  if(record.type==="signpost"){
+    return [readable(record.name,"Road signpost"),...(record.branches||[]).slice(0,3).map(branch=>readable(branch.destinationName,"Destination")+" — "+readable(branch.distanceLabel,"route")+" "+readable(branch.directionLabel,""))];
   }
   const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim();
   return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
@@ -5380,7 +5533,7 @@ async function start(){
     await yieldPaint();
     bindInput();
     resize();
-    app.on?.("update",dt=>{frameCount++;recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateAmbientMotion(dt);});
+    app.on?.("update",dt=>{frameCount++;recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateWayfindingTextOverlay();updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
     await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
     initializeAtmosphereTimeBinding();
@@ -5596,7 +5749,8 @@ function snapshot(){
     wildlifeReaction:Object.freeze({...wildlifeReaction,actors:Object.freeze(localFaunaActors.map(localFaunaActorSnapshot)),memoryEntryCount:localFaunaReactionMemory.size,
       speciesRules:Object.freeze(Object.fromEntries(Object.entries(LOCAL_FAUNA_SPECS).map(([kind,spec])=>[kind,Object.freeze({...spec})])))}),
     environmentalReactions:Object.freeze({...environmentalReactions,activeSlots:Object.freeze(environmentalReactionPool.filter(slot=>slot.active).map(slot=>Object.freeze({kind:slot.kind,index:slot.index,ageMs:Number((performance.now()-slot.startedAtMs).toFixed(1)),lifetimeMs:slot.lifetimeMs,latitudeDegrees:Number((slot.latitudeRadians*180/Math.PI).toFixed(6)),longitudeDegrees:Number((slot.longitudeRadians*180/Math.PI).toFixed(6))})))}),
-    inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
+    inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,activeSignpostCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="signpost").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
+    wayfindingSignposts:Object.freeze({...wayfindingSignposts,signs:Object.freeze((wayfindingSignposts.signs||[]).slice())}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
@@ -5642,7 +5796,7 @@ function destroy(){
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
-  clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection();localCampaignWearContext=null;
+  clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection();localCampaignWearContext=null;clearCanonicalWayfindingSignposts();
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
@@ -5650,14 +5804,18 @@ function destroy(){
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
   localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
-  inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();
+  inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();localSignInspectionKeys.clear();
+  wayfindingTextCanvas?.remove?.();wayfindingTextCanvas=null;wayfindingTextContext=null;wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
   geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
-  setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
+  setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
+  focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.junction.x,sign.junction.y);setZoomScalar(1);}return snapshot();},
+  selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
+  destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
