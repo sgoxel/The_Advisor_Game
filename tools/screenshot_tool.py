@@ -1524,7 +1524,16 @@ def create_driver(width: int, height: int):
     options.add_argument("--hide-scrollbars")
     options.add_argument(f"--window-size={width},{height}")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
-    return webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(options=options)
+    # Selenium's Chromium transport defaults to a 120 s HTTP command timeout.
+    # Cold SwiftShader planet-mesh startup can legitimately hold a WebDriver
+    # command longer than that even though the scenario's readiness wait is
+    # intentionally 240 s. Keep the transport/page/script ceilings above the
+    # evidence readiness ceiling so infrastructure does not abort first.
+    driver.command_executor.client_config.timeout = 360
+    driver.set_page_load_timeout(300)
+    driver.set_script_timeout(300)
+    return driver
 
 
 def screenshots_directory() -> Path:
