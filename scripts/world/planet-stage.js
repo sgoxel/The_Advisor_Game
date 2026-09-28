@@ -821,10 +821,21 @@ function gameplayCenterMarkerTelemetry(layer){
     const focus=canonicalScreenFocusTelemetry();
     const rect=canvas?.getBoundingClientRect?.();
     if(focus?.valid&&Number(focus.facingDot||0)>0&&rect?.width>0&&rect?.height>0){
+      const centerX=rect.width*.5,centerY=rect.height*.5;
+      const projectedInside=Number(focus.screenX)>=0&&Number(focus.screenX)<=rect.width&&Number(focus.screenY)>=0&&Number(focus.screenY)<=rect.height;
+      const projectedNearCurrentCenter=Math.hypot(Number(focus.screenX)-centerX,Number(focus.screenY)-centerY)<=Math.max(3,Math.min(rect.width,rect.height)*.025);
+      // During a responsive canvas handoff worldToScreen can briefly expose the
+      // previous viewport's coordinates (for example 640,400 after switching to
+      // 844x390). The canonical gameplay focus is defined by the camera-center
+      // invariant, so reject stale coordinates and place this one world-anchored
+      // focus marker at the current canvas center until the projection matrix
+      // catches up. No entity/world coordinate or camera state is changed.
+      const screenX=projectedInside&&projectedNearCurrentCenter?Number(focus.screenX):centerX;
+      const screenY=projectedInside&&projectedNearCurrentCenter?Number(focus.screenY):centerY;
       projected={
-        x:Number(focus.screenX)/rect.width*100,y:Number(focus.screenY)/rect.height*100,
-        screenX:Number(focus.screenX),screenY:Number(focus.screenY),depth:null,viewDepth:null,
-        mode:"canonical-focus-transform"
+        x:screenX/rect.width*100,y:screenY/rect.height*100,
+        screenX,screenY,depth:null,viewDepth:null,
+        mode:projectedInside&&projectedNearCurrentCenter?"canonical-focus-transform":"canonical-focus-center-invariant"
       };
       projectionFallbackUsed=true;
     }
