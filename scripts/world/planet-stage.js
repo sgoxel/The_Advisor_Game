@@ -2795,9 +2795,9 @@ function ensureLocalStaticMaterials(){
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.50,.12,.78);m.__activityEmissiveBoost=.72;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    activityOpen:(()=>{const m=make("LocalActivityOpen",.62,.38,.10);m.__activityEmissiveBoost=.12;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",.84,.16,.035,.90);m.__activityEmissiveBoost=.66;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.56,.14,.82);m.__activityEmissiveBoost=.88;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityOpen:(()=>{const m=make("LocalActivityOpen",.82,.53,.14);m.__activityEmissiveBoost=.20;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",.92,.22,.04,.92);m.__activityEmissiveBoost=.82;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
@@ -2852,23 +2852,24 @@ function sharedLocalPrimitive(type){
       face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],[0,-1,0]);
     };
     if(type==="activity-market"){
-      // Wall fascia touches z=0; canopy and braces project outward (-z).
-      box(0,.22,-.035,1.00,.30,.10);
-      box(0,-.055,-.34,.88,.11,.62);
-      box(-.40,-.25,-.32,.075,.40,.075);
-      box(.40,-.25,-.32,.075,.40,.075);
+      // Back edge remains flush to the wall (z≈0), while the canopy extends
+      // far enough outside the roof footprint to stay readable from above.
+      box(0,.22,-.04,1.00,.30,.10);
+      box(0,-.06,-.72,.96,.12,1.44);
+      box(-.43,-.55,-1.14,.08,1.10,.08);
+      box(.43,-.55,-1.14,.08,1.10,.08);
     }else if(type==="activity-forge"){
-      // Low masonry hearth is physically backed into the facade.
-      box(0,-.28,-.31,.94,.20,.58);
-      box(0,-.04,-.055,.94,.50,.14);
-      box(-.42,-.13,-.31,.13,.40,.54);
-      box(.42,-.13,-.31,.13,.40,.54);
+      // Hearth floor spans continuously from the facade to the work apron.
+      box(0,-.30,-.58,.96,.22,1.16);
+      box(0,-.04,-.07,.96,.54,.14);
+      box(-.42,-.13,-.56,.13,.42,1.08);
+      box(.42,-.13,-.56,.13,.42,1.08);
     }else{
-      // Vertical window/door light remains wall-attached while a shallow sill
-      // and threshold plane make the source readable under the steep camera.
-      box(0,.12,-.035,.72,.90,.09);
-      box(0,.62,-.035,.82,.09,.12);
-      box(0,-.38,-.24,.74,.07,.46);
+      // The wall source stays flush while a thin threshold spill begins at the
+      // same wall and extends outward; there is no gap that can read as UI.
+      box(0,.12,-.04,.72,.90,.09);
+      box(0,.62,-.04,.82,.09,.12);
+      box(0,-.45,-.62,.78,.07,1.24);
     }
     mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
   }else{
@@ -3196,17 +3197,18 @@ function addBuildingActivityCue(record,state,context,index){
   const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s,frontZ=front.z;
   const name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
   if(state.cue==="warm-window"){
-    // One merged window+lintel+threshold assembly, anchored exactly to the
-    // facade plane. The threshold projects from the same mesh, so the normal
-    // camera sees the warm source without a detached glowing rectangle.
-    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-warm",localStaticMaterials.activityWarm,x,g.ground+h*.43,frontZ,Math.max(.075,2.20*s),Math.max(.075,1.65*s),Math.max(.060,1.05*s));
+    // Low-wall window/door source plus a continuous threshold spill. The mesh
+    // touches the facade and reaches outside the roof footprint from the same
+    // entity, so it remains architectural rather than a detached marker.
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-warm",localStaticMaterials.activityWarm,x,g.ground+Math.max(.080,1.00*s),frontZ,Math.max(.080,2.35*s),Math.max(.080,1.55*s),Math.max(.075,1.55*s));
     e.render.castShadows=false;
   }else if(state.cue==="open-sign"){
-    // A fascia/awning with two supports is visibly attached to the market wall.
-    addLocalPrimitive(localBuildingActivityRoot,name,"activity-market",localStaticMaterials.activityOpen,x,g.ground+h*.58,frontZ,Math.max(.080,2.55*s),Math.max(.080,1.55*s),Math.max(.065,1.05*s));
+    // Attached fascia + deep canopy: its back edge is the wall, its outer edge
+    // clears the roof silhouette without moving the cue away from the building.
+    addLocalPrimitive(localBuildingActivityRoot,name,"activity-market",localStaticMaterials.activityOpen,x,g.ground+Math.max(.10,2.00*s),frontZ,Math.max(.090,2.80*s),Math.max(.085,1.40*s),Math.max(.085,1.45*s));
   }else if(state.cue==="forge-glow"){
-    // A low backed hearth reads as working forge equipment, not a floating pad.
-    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-forge",localStaticMaterials.activityForge,x,g.ground+Math.max(.055,.72*s),frontZ,Math.max(.080,2.45*s),Math.max(.080,1.45*s),Math.max(.070,1.20*s));
+    // Grounded backed hearth/apron with the back wall flush to the building.
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-forge",localStaticMaterials.activityForge,x,g.ground+Math.max(.060,.65*s),frontZ,Math.max(.090,2.50*s),Math.max(.080,1.20*s),Math.max(.085,1.55*s));
     e.render.castShadows=false;
   }else if(state.cue==="chimney-smoke"){
     addLocalPrimitive(localBuildingActivityRoot,name,"sphere",localStaticMaterials.activitySmoke,x+g.w*.20*s,g.ground+h+Math.max(.10,1.75*s),z,Math.max(.08,2.20*s),Math.max(.11,3.00*s),Math.max(.08,2.20*s));
