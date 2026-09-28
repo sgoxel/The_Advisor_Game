@@ -2238,21 +2238,29 @@ function buildLocalWildernessMesh(plan,frame,reveal){
       const e=push(x-m*.7,y+h,z-m*.7,color),ff=push(x+m*.7,y+h,z-m*.7,color),g=push(x+m*.7,y+h,z+m*.7,color),hh=push(x-m*.7,y+h,z+m*.7,color);
       quad(a,b,ff,e);quad(b,cc,g,ff);quad(cc,d,hh,g);quad(d,a,e,hh);quad(e,ff,g,hh);
     }else if(item.family==="bush"){
-      const top=push(x-m*.18,y+h,z+m*.06,color),bottom=push(x,y+h*.08,z,color),ring=[
-        push(x-m,y+h*.48,z,color),push(x,y+h*.48,z-m,color),push(x+m,y+h*.48,z,color),push(x,y+h*.48,z+m,color)
-      ];
-      for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
-      const side=[color[0]*.88,color[1]*.94,color[2]*.86,255],sm=m*.58,sx=x+m*.46,sz=z-m*.18,st=push(sx,y+h*.78,sz,side),sb=push(sx,y+h*.12,sz,side);
-      const sr=[push(sx-sm,y+h*.38,sz,side),push(sx,y+h*.38,sz-sm,side),push(sx+sm,y+h*.38,sz,side),push(sx,y+h*.38,sz+sm,side)];
-      for(let k=0;k<4;k++){const n=(k+1)%4;tri(st,sr[k],sr[n]);tri(sb,sr[n],sr[k]);}
+      const lobe=(cx,cz,rm,rh,shade)=>{
+        const top=push(cx-rm*.10,y+rh,cz+rm*.05,shade),bottom=push(cx,y+rh*.10,cz,shade),ring=[
+          push(cx-rm,y+rh*.46,cz,shade),push(cx-rm*.38,y+rh*.56,cz-rm*.80,shade),push(cx+rm*.55,y+rh*.50,cz-rm*.62,shade),
+          push(cx+rm,y+rh*.44,cz+rm*.08,shade),push(cx+rm*.28,y+rh*.53,cz+rm*.78,shade),push(cx-rm*.60,y+rh*.48,cz+rm*.58,shade)
+        ];
+        for(let k=0;k<ring.length;k++){const n=(k+1)%ring.length;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+      };
+      lobe(x-m*.16,z+m*.04,m,h,color);
+      const side=[color[0]*.84,color[1]*.92,color[2]*.82,255];
+      lobe(x+m*.50,z-m*.24,m*.62,h*.76,side);
     }else if(item.family==="sapling"){
       const trunk=[.31,.18,.07],tw=m*.16,th=h*.58;
       const a=push(x-tw,y,z,trunk),b=push(x+tw,y,z,trunk),cc=push(x+tw,y+th,z,trunk),d=push(x-tw,y+th,z,trunk);quad(a,b,cc,d);
       const e=push(x,y,z-tw,trunk),ff=push(x,y,z+tw,trunk),g=push(x,y+th,z+tw,trunk),hh=push(x,y+th,z-tw,trunk);quad(e,ff,g,hh);
-      const cy=y+h*.72,top=push(x,y+h*1.08,z,color),bottom=push(x,cy-h*.22,z,color),ring=[
-        push(x-m,cy,z,color),push(x,cy,z-m,color),push(x+m,cy,z,color),push(x,cy,z+m,color)
-      ];
-      for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+      const canopy=(cx,cz,rm,cy,shade)=>{
+        const top=push(cx-rm*.08,cy+rm*.82,cz+rm*.04,shade),bottom=push(cx,cy-rm*.30,cz,shade),ring=[
+          push(cx-rm,cy,cz,shade),push(cx-rm*.30,cy+rm*.06,cz-rm*.82,shade),push(cx+rm*.62,cy,cz-rm*.60,shade),
+          push(cx+rm,cy,cz+rm*.12,shade),push(cx+rm*.22,cy+rm*.04,cz+rm*.82,shade),push(cx-rm*.66,cy,cz+rm*.56,shade)
+        ];
+        for(let k=0;k<ring.length;k++){const n=(k+1)%ring.length;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+      };
+      const cy=y+h*.72;canopy(x-m*.10,z,m,cy,color);
+      canopy(x+m*.38,z-m*.24,m*.62,cy-h*.04,[color[0]*.84,color[1]*.90,color[2]*.80,255]);
     }else{
       const stem=item.family==="flower"?[.25,.55,.12]:color,w=m*.28,blades=item.family==="flower"?3:5;
       for(let k=0;k<blades;k++){
