@@ -112,6 +112,13 @@ let buildingActivity={
   activitySource:"DailyActivity.resolveActionTarget",occupancySource:"ResidentMovement.get when available",
   presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false
 };
+let localBuildingSurroundingsMesh=null;
+let buildingSurroundings={
+  active:false,buildingCount:0,functionCount:0,propCount:0,drawCallEstimate:0,triangleCount:0,sharedMaterialCount:1,
+  functions:[],buildings:[],doorClearanceViolations:0,roadClearanceViolations:0,ownershipCueCount:0,
+  authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:0
+};
 let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
@@ -2828,6 +2835,7 @@ function ensureLocalStaticMaterials(){
     activityForge:(()=>{const m=make("LocalActivityForge",1,.16,.025);m.__activityEmissiveBoost=1.12;return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
+    surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
 }
@@ -3236,6 +3244,88 @@ function refreshCanonicalBuildingActivityPresentation(){
   if(localBuildingActivityContext)rebuildCanonicalBuildingActivityPresentation("authoritative-time-change");
 }
 
+
+function clearCanonicalBuildingSurroundings(){
+  localBuildingSurroundingsMesh?.destroy?.();localBuildingSurroundingsMesh=null;
+  buildingSurroundings={...buildingSurroundings,active:false,buildingCount:0,functionCount:0,propCount:0,drawCallEstimate:0,triangleCount:0,functions:[],buildings:[],doorClearanceViolations:0,roadClearanceViolations:0,ownershipCueCount:0,buildMs:0};
+}
+function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,unit,lift){
+  const started=performance.now();clearCanonicalBuildingSurroundings();
+  if(!reveal||!["refined","full"].includes(tier)||!localStaticRoot||!pc||!device)return 0;
+  const records=[
+    ...(reveal.houses||[]).map(x=>({...x,function:"home",label:x.kind==="cabin"?"Cabin":"Residence"})),
+    ...(reveal.specialLots||[])
+  ];
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const positions=[],normals=[],colors=[],indices=[],summaries=[];let propCount=0,doorViolations=0,roadViolations=0;
+  const C={
+    wood:[.34,.18,.07],woodLight:[.52,.31,.13],fabric:[.69,.27,.10],metal:[.24,.26,.25],stone:[.38,.39,.36],
+    hay:[.73,.56,.16],soil:[.34,.20,.08],green:[.20,.42,.12],civic:[.63,.49,.24],crate:[.45,.28,.12]
+  };
+  const addVertex=(x,y,z,c)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(c[0]*255),Math.round(c[1]*255),Math.round(c[2]*255),255);return positions.length/3-1;};
+  const box=(anchor,basis,u,v,along,depth,height,color,yOffset=0)=>{
+    const ce=anchor.east+basis.tx*u+basis.ox*v,cn=anchor.north+basis.tn*u+basis.on*v;
+    const ground=canonicalSemanticGroundHeightUnits(ce,cn,frame)+lift+.014+yOffset*presentationScale/unit;
+    const ha=along*.5,hd=depth*.5;
+    const corners=[[-ha,-hd],[ha,-hd],[ha,hd],[-ha,hd]].map(([a,d])=>{
+      const e=ce+basis.tx*a+basis.ox*d,n=cn+basis.tn*a+basis.on*d;return canonicalSemanticPosition(e,n,presentationScale,unit,frame);
+    });
+    const top=ground+height*presentationScale/unit,base=positions.length/3,ids=[];
+    for(const p of corners)ids.push(addVertex(p.x,ground,p.z,color));
+    for(const p of corners)ids.push(addVertex(p.x,top,p.z,color));
+    indices.push(base,base+1,base+2, base,base+2,base+3, base+4,base+6,base+5, base+4,base+7,base+6);
+    for(let i=0;i<4;i++){const j=(i+1)%4;indices.push(base+i,base+j,base+4+j, base+i,base+4+j,base+4+i);}
+    propCount++;
+  };
+  const blockedByOther=(record,x,y)=>records.some(other=>String(other.id)!==String(record.id)&&other.bounds&&x>=Number(other.bounds.minX)-.75&&x<=Number(other.bounds.maxX)+.75&&y>=Number(other.bounds.minY)-.75&&y<=Number(other.bounds.maxY)+.75);
+  const roadAt=(x,y)=>{const l=window.StartingVillage?.local?.(activeSeed,String(Math.round(x)),String(Math.round(y)));return Boolean(l&&window.StartingVillage?.isRoadReserved?.(activeSeed,l));};
+  const sideBasis=side=>side==="N"?{ox:0,on:-1,tx:1,tn:0}:side==="S"?{ox:0,on:1,tx:-1,tn:0}:side==="W"?{ox:-1,on:0,tx:0,tn:-1}:{ox:1,on:0,tx:0,tn:1};
+  const anchorFor=record=>{
+    const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N";
+    const order=[opposite,...["N","S","W","E"].filter(x=>x!==opposite&&x!==access?.side),access?.side].filter(Boolean);
+    for(const side of order){
+      const basis=sideBasis(side),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+      const half=side==="N"||side==="S"?(Number(b.maxY)-Number(b.minY)+1)/2:(Number(b.maxX)-Number(b.minX)+1)/2;
+      const x=cx+basis.ox*(half+1.55),y=cy+basis.on*(half+1.55);
+      if(roadAt(x,y)||blockedByOther(record,x,y))continue;
+      if(access&&Math.hypot(x-Number(access.x),y-Number(access.y))<2.2)continue;
+      return {side,basis,east:x*tileMeters,north:y*tileMeters,tileX:x,tileY:y};
+    }
+    const basis=sideBasis(opposite),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+    return {side:opposite,basis,east:(cx+basis.ox*3)*tileMeters,north:(cy+basis.on*3)*tileMeters,tileX:cx+basis.ox*3,tileY:cy+basis.on*3};
+  };
+  const decorate=(record,anchor)=>{
+    const fn=String(record.function||"home"),b=anchor.basis,propsBefore=propCount;
+    if(fn==="home"){box(anchor,b,-1.0,0,1.8,.75,.55,C.wood);box(anchor,b,1.0,.15,1.7,1.0,.10,C.green);}
+    else if(fn==="lodging"){box(anchor,b,-1.2,0,2.2,.55,.45,C.woodLight);box(anchor,b,1.0,0,1.8,.65,.50,C.wood);box(anchor,b,0,1.0,3.6,.18,.72,C.wood);}
+    else if(fn==="market"){box(anchor,b,0,0,3.8,1.35,.55,C.wood);box(anchor,b,0,0,4.2,1.8,.16,C.fabric,1.75);box(anchor,b,-1.65,0, .18,.18,1.8,C.wood);box(anchor,b,1.65,0,.18,.18,1.8,C.wood);}
+    else if(fn==="craft"){box(anchor,b,0,0,2.1,.70,.55,C.metal);box(anchor,b,0,0,3.2,.32,.22,C.metal,.55);box(anchor,b,-1.7,.15,1.0,1.0,.55,C.stone);box(anchor,b,1.6,.15,1.5,.75,.55,C.wood);}
+    else if(fn==="storage"){box(anchor,b,-1.1,0,1.25,1.25,1.0,C.crate);box(anchor,b,.25,.15,1.25,1.25,.65,C.crate);box(anchor,b,1.55,0,1.25,1.25,1.25,C.crate);}
+    else if(fn==="farm"){box(anchor,b,-1.6,0,1.0,4.6,.10,C.soil);box(anchor,b,0,0,1.0,4.6,.10,C.green);box(anchor,b,1.6,0,1.0,4.6,.10,C.soil);box(anchor,b,0,1.6,2.0,1.2,.75,C.hay);}
+    else if(fn==="civic"){box(anchor,b,0,0,3.4,.28,1.45,C.civic);box(anchor,b,-1.45,0,.18,.18,1.45,C.wood);box(anchor,b,1.45,0,.18,.18,1.45,C.wood);box(anchor,b,0,1.35,3.2,.52,.42,C.woodLight);}
+    else {box(anchor,b,0,0,3.6,.42,.48,C.wood);box(anchor,b,-1.35,.15,.30,1.5,.80,C.woodLight);box(anchor,b,1.35,.15,.30,1.5,.80,C.woodLight);}
+    return propCount-propsBefore;
+  };
+  for(const record of records){
+    if(!record?.bounds)continue;
+    const anchor=anchorFor(record),count=decorate(record,anchor),access=record.entrance||record.access||null;
+    if(access&&Math.hypot(anchor.tileX-Number(access.x),anchor.tileY-Number(access.y))<2.2)doorViolations++;
+    if(roadAt(anchor.tileX,anchor.tileY))roadViolations++;
+    summaries.push(Object.freeze({id:String(record.id),label:String(record.label||record.kind||record.id),function:String(record.function||"home"),propCount:count,side:anchor.side,anchorTile:Object.freeze({x:Number(anchor.tileX.toFixed(2)),y:Number(anchor.tileY.toFixed(2))})}));
+  }
+  if(!positions.length)return 0;
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();localBuildingSurroundingsMesh=mesh;
+  const entity=new pc.Entity("CanonicalBuildingSurroundings");entity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.surroundings,entity)];localStaticRoot.addChild(entity);
+  const functions=[...new Set(summaries.map(x=>x.function))].sort();
+  buildingSurroundings={
+    active:true,buildingCount:summaries.length,functionCount:functions.length,propCount,drawCallEstimate:1,triangleCount:indices.length/3,sharedMaterialCount:1,
+    functions:Object.freeze(functions),buildings:Object.freeze(summaries),doorClearanceViolations:doorViolations,roadClearanceViolations:roadViolations,ownershipCueCount:0,
+    authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
+    presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:Number((performance.now()-started).toFixed(4))
+  };
+  return 1;
+}
+
 function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
   const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104));
@@ -3283,6 +3373,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
+  const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
   const treeCount=tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
   for(let i=0;i<treeCount;i++){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
@@ -3309,7 +3400,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
     roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
-    entityCount,triangleEstimate:triangles+wild.triangles,drawCallEstimate:entityCount+wild.fauna,
+    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0),drawCallEstimate:entityCount+wild.fauna,
     buildTimeMs:Number((performance.now()-started).toFixed(3)),
     grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,
     authority:"SettlementArchetypes + StartingVillage + HousePlans + SpecialLots"
@@ -3322,6 +3413,7 @@ function rebuildLocalStaticPresentation(resource){
   localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
   clearLocalBuildingActivity();localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
+  clearCanonicalBuildingSurroundings();
   clearLocalFauna();
   localStaticRoot?.destroy?.();localStaticRoot=null;
   const tier=settlementRevealTierForScalar();
@@ -5160,6 +5252,7 @@ function snapshot(){
     inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
+    buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     mapPresentation:Object.freeze({...mapPresentation}),
     politicalScale:politicalScaleEvidence(),
@@ -5201,7 +5294,7 @@ function destroy(){
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
-  clearLocalFauna();
+  clearLocalFauna();clearCanonicalBuildingSurroundings();
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
