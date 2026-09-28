@@ -4,8 +4,8 @@
 const VERSION="road-signposts-v1";
 const MAX_SIGNS=3;
 const MAX_DESTINATIONS_PER_SIGN=3;
-const MAX_ROUTE_TILES=96;
-const MAX_ROUTE_NODES=6000;
+const MAX_ROUTE_TILES=64;
+const MAX_ROUTE_NODES=1800;
 const TILE_METERS_FALLBACK=2;
 const CACHE_LIMIT=8;
 const cache=new Map();
@@ -70,16 +70,29 @@ function gatewayRoadPoint(seed,forward,g){
   const chosen=candidates[0]||{x:g.dx*forward,y:g.dy*forward,lateral:0,degree:0};
   return Object.freeze({x:chosen.x,y:chosen.y,lateral:chosen.lateral,degree:chosen.degree});
 }
+function threeWayJunction(seed){
+  const ring=Number(window.StartingVillage?.RING_RADIUS_TILES||14),candidates=[];
+  for(let y=-ring-5;y<=ring+5;y++)for(let x=-ring-5;x<=ring+5;x++){
+    if(!roadAt(seed,x,y))continue;
+    const degree=roadDegree(seed,freezePoint(x,y));if(degree!==3)continue;
+    const radius=Math.hypot(x,y),centerPenalty=Math.abs(x)<=3&&Math.abs(y)<=3?100:0;
+    const ringPenalty=Math.abs(radius-ring);
+    const tie=window.PRNG?.foundationUint32?.(seed,"road-signpost:t-junction:"+x+":"+y)??0;
+    candidates.push({x,y,degree,score:centerPenalty+ringPenalty,tie});
+  }
+  candidates.sort((a,b)=>a.score-b.score||b.tie-a.tie||a.y-b.y||a.x-b.x);
+  const chosen=candidates[0]||null;
+  return chosen?Object.freeze({x:chosen.x,y:chosen.y,degree:chosen.degree}):null;
+}
 function junctionSpecs(seed){
   const ring=Number(window.StartingVillage?.RING_RADIUS_TILES||14),g=gatewayVector(seed);
-  const right={dx:-g.dy,dy:g.dx};
-  const tX=right.dx*(ring+1),tY=right.dy*(ring+1);
-  const exitForward=ring+6,exit=gatewayRoadPoint(seed,exitForward,g);
-  return Object.freeze([
-    Object.freeze({id:"SV-JUNCTION-CENTER",purpose:"four-way-crossroads",junction:freezePoint(0,0),expectedDegree:4}),
-    Object.freeze({id:"SV-JUNCTION-T",purpose:"three-way-junction",junction:freezePoint(tX,tY),expectedDegree:3}),
-    Object.freeze({id:"SV-SIGN-EXIT",purpose:"village-exit",junction:freezePoint(exit.x,exit.y),expectedDegree:exit.degree,exitForward,exitLateral:exit.lateral})
-  ]);
+  const t=threeWayJunction(seed),exitForward=ring+6,exit=gatewayRoadPoint(seed,exitForward,g);
+  const specs=[
+    Object.freeze({id:"SV-JUNCTION-CENTER",purpose:"four-way-crossroads",junction:freezePoint(0,0),expectedDegree:4})
+  ];
+  if(t)specs.push(Object.freeze({id:"SV-JUNCTION-T",purpose:"three-way-junction",junction:freezePoint(t.x,t.y),expectedDegree:3}));
+  specs.push(Object.freeze({id:"SV-SIGN-EXIT",purpose:"village-exit",junction:freezePoint(exit.x,exit.y),expectedDegree:exit.degree,exitForward,exitLateral:exit.lateral}));
+  return Object.freeze(specs);
 }
 function destinationRecords(seed){
   const out=[];
@@ -139,20 +152,31 @@ function build(seedValue){
   let routeQueryCount=0,routeQueryMs=0;
   for(const spec of junctionSpecs(seed)){
     const degree=roadDegree(seed,spec.junction),anchor=chooseShoulder(seed,spec.junction),byDirection=new Map();
-    for(const destination of destinations){
-      if(destination.target.x===spec.junction.x&&destination.target.y===spec.junction.y)continue;
+    const origin=numberPoint(spec.junction);
+    let candidates=destinations.filter(destination=>destination.target.x!==spec.junction.x||destination.target.y!==spec.junction.y);
+    if(spec.purpose==="village-exit"){
+      const village=candidates.find(destination=>destination.category==="settlements");
+      candidates=village?[village]:candidates.slice(0,1);
+    }else{
+      const groups=new Map(DIRS.map(d=>[d.id,[]]));
+      for(const destination of candidates){
+        const target=numberPoint(destination.target),dx=target.x-origin.x,dy=target.y-origin.y;
+        const hint=Math.abs(dx)>=Math.abs(dy)?(dx>=0?"E":"W"):(dy>=0?"S":"N");
+        groups.get(hint).push({destination,distance:Math.abs(dx)+Math.abs(dy)});
+      }
+      candidates=DIRS.flatMap(d=>(groups.get(d.id)||[]).sort((a,b)=>a.distance-b.distance||a.destination.name.localeCompare(b.destination.name)).slice(0,2).map(x=>x.destination));
+    }
+    for(const destination of candidates){
       const result=routeBranch(seed,spec.junction,destination);routeQueryCount++;routeQueryMs+=result.queryMs;
       const branch=result.route;if(!branch||branch.neighborRoad!==true)continue;
       const prior=byDirection.get(branch.directionId);
       if(!prior||branch.routeDistanceMeters<prior.routeDistanceMeters||(
         branch.routeDistanceMeters===prior.routeDistanceMeters&&branch.destinationName.localeCompare(prior.destinationName)<0
       ))byDirection.set(branch.directionId,branch);
+      if(spec.purpose!=="village-exit"&&byDirection.size>=MAX_DESTINATIONS_PER_SIGN)break;
     }
     let branches=Array.from(byDirection.values()).sort((a,b)=>a.routeDistanceMeters-b.routeDistanceMeters||a.directionId.localeCompare(b.directionId));
-    if(spec.purpose==="village-exit"){
-      const village=branches.find(x=>x.destinationCategory==="settlements");
-      branches=village?[village]:branches.slice(0,1);
-    }else branches=branches.slice(0,MAX_DESTINATIONS_PER_SIGN);
+    branches=branches.slice(0,spec.purpose==="village-exit"?1:MAX_DESTINATIONS_PER_SIGN);
     if(!branches.length)continue;
     signs.push(Object.freeze({
       id:spec.id,purpose:spec.purpose,junction:spec.junction,anchor,roadDegree:degree,expectedDegree:spec.expectedDegree,
