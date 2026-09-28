@@ -5717,7 +5717,16 @@ async function start(){
     resize();
     app.on?.("update",dt=>{frameCount++;if(activeSeed&&window.ResidentMovement){const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();window.ResidentMovement.advance(activeSeed,when,dt);}updateCanonicalNpcMotion();recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateWayfindingTextOverlay();updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
-    await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
+    if(EVIDENCE_FAST_START){
+      // Trusted local screenshot runs do not need the synthetic hidden shader
+      // warmup scene. On software WebGL that pre-playable compile can stall
+      // before any canonical local resource is requested. Let the actual local
+      // evidence resource compile the same shaders on demand instead.
+      startupScheduler.evidenceShaderWarmupSkipped=true;
+      startupScheduler.phaseTimings.localShaderWarmupMs=0;
+    }else{
+      await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
+    }
     initializeAtmosphereTimeBinding();
 
     if("ResizeObserver" in window){
