@@ -3,8 +3,10 @@
 
 const VERSION="WP-S004-007-v1";
 const PLAN_CACHE=new Map();
+const ROUTE_PASS_CACHE=new Map();
 const MAX_STEPS=4;
 const MAX_OUTDOOR_CANDIDATES=96;
+const MAX_FRONTAGE_ROUTE_CANDIDATES=6;
 let telemetry={
   resolveCount:0,planBuildCount:0,routeQueryCount:0,routeFailureCount:0,fallbackCount:0,
   transitionSamples:0,totalResolveMs:0,maxResolveMs:0,totalPlanBuildMs:0,maxPlanBuildMs:0
@@ -102,13 +104,12 @@ function exteriorTarget(seed,resident,step){
     let road=false;
     try{const local=window.StartingVillage?.local?.(seed,target.x,target.y);road=Boolean(local&&window.StartingVillage?.isRoadReserved?.(seed,local));}catch(_){}
     if(road)continue;
-    const route=window.RoutePlanner?.findRoute?.(seed,origin,target)||null;
-    if(!route?.found)continue;
     const score=Number(window.PRNG?.foundationUint32?.(seed,"work-cycle:frontage:"+resident.id+":"+target.x+":"+target.y)||0);
-    candidates.push({target,score,routeSteps:Number(route.stepCount||0)});
+    candidates.push({target,score,radius});
   }
-  candidates.sort((a,b)=>a.routeSteps-b.routeSteps||b.score-a.score||pointKey(a.target).localeCompare(pointKey(b.target)));
-  const target=candidates[0]?.target||null;
+  candidates.sort((a,b)=>a.radius-b.radius||b.score-a.score||pointKey(a.target).localeCompare(pointKey(b.target)));
+  const selected=candidates.slice(0,MAX_FRONTAGE_ROUTE_CANDIDATES).find(candidate=>routePass(seed,origin,candidate.target))||null;
+  const target=selected?.target||null;
   if(!target)return null;
   return Object.freeze({
     target,targetSource:"work-choreography",buildingId:String(resident.workplaceId),
@@ -148,9 +149,15 @@ function outdoorTarget(seed,resident,step,index,candidates){
 }
 function routePass(seed,a,b){
   if(!a||!b||!window.RoutePlanner?.findRoute)return false;
+  const aKey=pointKey(a),bKey=pointKey(b);
+  if(aKey===bKey)return true;
+  const pair=aKey<bKey?aKey+"|"+bKey:bKey+"|"+aKey;
+  const cacheKey=String(seed)+"|"+pair;
+  if(ROUTE_PASS_CACHE.has(cacheKey))return ROUTE_PASS_CACHE.get(cacheKey);
   telemetry.routeQueryCount++;
   const route=RoutePlanner.findRoute(seed,a,b);
   const pass=Boolean(route?.found);
+  ROUTE_PASS_CACHE.set(cacheKey,pass);
   if(!pass)telemetry.routeFailureCount++;
   return pass;
 }
@@ -301,7 +308,7 @@ function snapshot(seedValue){
   const resolves=Math.max(1,telemetry.resolveCount),plans=Math.max(1,telemetry.planBuildCount);
   return Object.freeze({
     version:VERSION,seed:String(seedValue||""),supportedProfessions:Object.freeze(Object.keys(DEFINITIONS)),
-    cachedPlanCount:PLAN_CACHE.size,resolveCount:telemetry.resolveCount,planBuildCount:telemetry.planBuildCount,
+    cachedPlanCount:PLAN_CACHE.size,cachedRoutePassCount:ROUTE_PASS_CACHE.size,resolveCount:telemetry.resolveCount,planBuildCount:telemetry.planBuildCount,
     routeQueryCount:telemetry.routeQueryCount,routeFailureCount:telemetry.routeFailureCount,fallbackCount:telemetry.fallbackCount,
     transitionSamples:telemetry.transitionSamples,
     averageResolveMs:Number((telemetry.totalResolveMs/resolves).toFixed(4)),maxResolveMs:Number(telemetry.maxResolveMs.toFixed(4)),
@@ -310,10 +317,11 @@ function snapshot(seedValue){
   });
 }
 function clear(seedValue=null){
-  if(seedValue==null)PLAN_CACHE.clear();
+  if(seedValue==null){PLAN_CACHE.clear();ROUTE_PASS_CACHE.clear();}
   else{
     const prefix=String(seedValue)+"|";
     for(const key of [...PLAN_CACHE.keys()])if(key.startsWith(prefix))PLAN_CACHE.delete(key);
+    for(const key of [...ROUTE_PASS_CACHE.keys()])if(key.startsWith(prefix))ROUTE_PASS_CACHE.delete(key);
   }
   telemetry={resolveCount:0,planBuildCount:0,routeQueryCount:0,routeFailureCount:0,fallbackCount:0,transitionSamples:0,totalResolveMs:0,maxResolveMs:0,totalPlanBuildMs:0,maxPlanBuildMs:0};
 }
