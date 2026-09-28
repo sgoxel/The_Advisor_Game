@@ -43,27 +43,41 @@ def driver_for(width=1280, height=800):
 
 
 def set_viewport(driver, width, height):
+    orientation = (
+        {"type": "landscapePrimary", "angle": 90}
+        if width > height else
+        {"type": "portraitPrimary", "angle": 0}
+    )
     driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
         "width": int(width), "height": int(height), "deviceScaleFactor": 1,
-        "mobile": False, "screenWidth": int(width), "screenHeight": int(height)
+        "mobile": False, "screenWidth": int(width), "screenHeight": int(height),
+        "screenOrientation": orientation,
     })
     driver.execute_script("window.dispatchEvent(new Event('resize'));")
+    target_aspect = float(width) / max(1.0, float(height))
     deadline = time.time() + 10
+    last = None
     while time.time() < deadline:
         metrics = driver.execute_script("""
           const node=document.querySelector('#planetCanvas');
           const c=node?.getBoundingClientRect?.();
-          return {iw:innerWidth,ih:innerHeight,hasCanvas:Boolean(node),cw:Number(c?.width||0),ch:Number(c?.height||0)};
+          return {iw:Number(innerWidth||0),ih:Number(innerHeight||0),hasCanvas:Boolean(node),
+                  cw:Number(c?.width||0),ch:Number(c?.height||0)};
         """)
+        last = metrics
+        iw, ih = float(metrics.get("iw") or 0), float(metrics.get("ih") or 0)
+        cw, ch = float(metrics.get("cw") or 0), float(metrics.get("ch") or 0)
+        inner_aspect_ok = iw > 0 and ih > 0 and abs((iw / ih) - target_aspect) / target_aspect <= .035
         canvas_ok = (not metrics.get("hasCanvas")) or (
-            float(metrics.get("cw") or 0) > 0 and float(metrics.get("ch") or 0) > 0
+            cw > 0 and ch > 0 and
+            abs((cw / ch) - target_aspect) / target_aspect <= .035 and
+            cw >= iw * .90 and ch >= ih * .90
         )
-        if (abs(float(metrics.get("iw") or 0)-width) <= 2 and
-            abs(float(metrics.get("ih") or 0)-height) <= 2 and canvas_ok):
+        if inner_aspect_ok and canvas_ok:
             time.sleep(.8)
             return
         time.sleep(.15)
-    raise AssertionError(f"Viewport did not settle to {width}x{height}")
+    raise AssertionError(f"Viewport aspect/render target did not settle for {width}x{height}: {last}")
 
 
 def wait(driver, script, timeout=120, *args):
@@ -91,8 +105,11 @@ def settle_scale(driver, index):
     # Let async atlas authority workers publish any already-bounded labels.
     time.sleep(.7)
     wait(driver, """
-      const s=window.PlanetStage.snapshot();
-      return s.mapPresentation?.centerMarker?.visible===true;
+      const s=window.PlanetStage.snapshot(),m=s.mapPresentation?.centerMarker;
+      const r=document.querySelector('#planetCanvas')?.getBoundingClientRect?.();
+      return m?.visible===true && r?.width>0 && r?.height>0 &&
+             Number(m.screenX)>=0 && Number(m.screenX)<=r.width &&
+             Number(m.screenY)>=0 && Number(m.screenY)<=r.height;
     """, 20)
     return snap(driver)
 
@@ -163,6 +180,16 @@ def assert_marker_contract(stage, label, production=True):
     center = mp.get("centerMarker") or {}
     if center.get("visible") is not True or center.get("worldAnchored") is not True:
         raise AssertionError(f"{label}: gameplay center marker not visibly world-anchored: {center}")
+    viewport = stage.get("zoom", {}).get("dragSensitivity", {}) or {}
+    vw = float(viewport.get("viewportWidthPixels") or 0)
+    vh = float(viewport.get("viewportHeightPixels") or 0)
+    cx = float(center.get("screenX") if center.get("screenX") is not None else -1)
+    cy = float(center.get("screenY") if center.get("screenY") is not None else -1)
+    if vw <= 0 or vh <= 0 or not (0 <= cx <= vw and 0 <= cy <= vh):
+        raise AssertionError(f"{label}: visible center marker is outside current viewport {vw}x{vh}: {center}")
+    if center.get("projectionFallbackUsed") is True:
+        if abs(cx-vw*.5) > 3 or abs(cy-vh*.5) > 3:
+            raise AssertionError(f"{label}: responsive focus fallback is not at canonical 50/50 target: {center}, {viewport}")
     if int(mp.get("atlasVisibleLabelCount") or 0) > int(mp.get("maxLabelBudget") or 0):
         raise AssertionError(f"{label}: atlas density budget exceeded")
     return {
@@ -179,6 +206,7 @@ def assert_marker_contract(stage, label, production=True):
         "markerUnknownProductionCount": mp.get("markerUnknownProductionCount"),
         "markerBroadScaleMinorRenderedCount": mp.get("markerBroadScaleMinorRenderedCount"),
         "markerStandaloneDecorativeGlyphCount": mp.get("markerStandaloneDecorativeGlyphCount"),
+        "centerMarker": center,
         "semanticOrderingSignature": mp.get("semanticOrderingSignature"),
         "mapUpdateMs": mp.get("lastUpdateMs"),
         "hiddenHemisphereCulledCount": mp.get("hiddenHemisphereCulledCount"),
@@ -213,19 +241,23 @@ def run_production_seed(driver, tag, all_screenshots=True):
     if all_screenshots:
         set_viewport(driver, 844, 390)
         phone_land = settle_scale(driver, 2)
-        wait(driver, "return innerWidth===844 && innerHeight===390 && window.PlanetStage.snapshot().mapPresentation?.centerMarker?.visible===true", 20)
-        phone_land = snap(driver)
+        phone_land_shot = capture(driver, f"{tag}-phone-landscape-1_50")
         phone_land_record = assert_marker_contract(phone_land, f"{tag} phone landscape 1/50", production=True)
-        phone_land_record["viewport"] = driver.execute_script("return {width:innerWidth,height:innerHeight}")
-        phone_land_record["screenshot"] = capture(driver, f"{tag}-phone-landscape-1_50")
+        phone_land_record["viewport"] = driver.execute_script("""
+          const r=document.querySelector('#planetCanvas')?.getBoundingClientRect?.();
+          return {innerWidth,innerHeight,canvasWidth:Number(r?.width||0),canvasHeight:Number(r?.height||0)};
+        """)
+        phone_land_record["screenshot"] = phone_land_shot
 
         set_viewport(driver, 390, 844)
         phone_portrait = settle_scale(driver, 5)
-        wait(driver, "return innerWidth===390 && innerHeight===844 && window.PlanetStage.snapshot().mapPresentation?.centerMarker?.visible===true", 20)
-        phone_portrait = snap(driver)
+        phone_portrait_shot = capture(driver, f"{tag}-phone-portrait-1_500")
         phone_portrait_record = assert_marker_contract(phone_portrait, f"{tag} phone portrait 1/500", production=True)
-        phone_portrait_record["viewport"] = driver.execute_script("return {width:innerWidth,height:innerHeight}")
-        phone_portrait_record["screenshot"] = capture(driver, f"{tag}-phone-portrait-1_500")
+        phone_portrait_record["viewport"] = driver.execute_script("""
+          const r=document.querySelector('#planetCanvas')?.getBoundingClientRect?.();
+          return {innerWidth,innerHeight,canvasWidth:Number(r?.width||0),canvasHeight:Number(r?.height||0)};
+        """)
+        phone_portrait_record["screenshot"] = phone_portrait_shot
 
         set_viewport(driver, 1280, 800)
     else:
