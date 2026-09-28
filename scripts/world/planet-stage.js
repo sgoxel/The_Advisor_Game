@@ -2518,10 +2518,10 @@ function ensureLocalStaticMaterials(){
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.52,.12);m.__activityEmissiveBoost=.82;return m;})(),
-    activityOpen:(()=>{const m=make("LocalActivityOpen",.32,.72,.20);m.__activityEmissiveBoost=.34;return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",1,.20,.035);m.__activityEmissiveBoost=.92;return m;})(),
-    activitySmoke:make("LocalActivitySmoke",.42,.43,.42,.48),
+    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.48,.08);m.__activityEmissiveBoost=1.05;return m;})(),
+    activityOpen:(()=>{const m=make("LocalActivityOpen",.96,.64,.12);m.__activityEmissiveBoost=.52;return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",1,.16,.025);m.__activityEmissiveBoost=1.12;return m;})(),
+    activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
@@ -2820,8 +2820,12 @@ function canonicalBuildingActivityState(reveal){
     else if(fn==="craft"&&workActive)cue="forge-glow";
     else if(active&&["home","lodging","farm"].includes(fn))cue="chimney-smoke";
     else if(active)cue="work-prop";
+    const bounds=record.bounds||{},centerTile=Object.freeze({
+      x:String(Math.round((Number(bounds.minX||0)+Number(bounds.maxX||0))/2)),
+      y:String(Math.round((Number(bounds.minY||0)+Number(bounds.maxY||0))/2))
+    });
     return Object.freeze({
-      id,label:String(record.label||record.name||id),kind:String(record.kind||"building"),function:fn,
+      id,label:String(record.label||record.name||id),kind:String(record.kind||"building"),function:fn,centerTile,
       active,workActive,homeActive,socialActive,scheduledResidentCount:stats.scheduledResidentCount,
       occupiedResidentCount:stats.occupiedResidentCount,states:Object.freeze([...stats.states].sort()),cue
     });
@@ -2847,15 +2851,19 @@ function addBuildingActivityCue(record,state,context,index){
   const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s,frontZ=front.z;
   const name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
   if(state.cue==="warm-window"){
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityWarm,x,g.ground+h*.53,frontZ,Math.max(.035,1.8*s),Math.max(.035,1.25*s),Math.max(.018,.14*s));
+    // One emissive facade panel per active building: larger than the former
+    // postage-stamp cue, but still a single shared-material draw with no light.
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityWarm,x,g.ground+h*.51,frontZ,Math.max(.06,2.8*s),Math.max(.06,1.55*s),Math.max(.025,.24*s));
   }else if(state.cue==="open-sign"){
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityOpen,x+g.w*.28*s,g.ground+h*.68,frontZ,Math.max(.04,1.4*s),Math.max(.04,1.0*s),Math.max(.02,.18*s));
+    // A readable projecting shop/market board, positioned outside the wall so
+    // it survives the fixed dimetric camera without becoming floating UI.
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityOpen,x+g.w*.34*s,g.ground+h*.70,frontZ-Math.max(.03,.20*s),Math.max(.07,2.25*s),Math.max(.06,1.25*s),Math.max(.03,.32*s));
   }else if(state.cue==="forge-glow"){
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityForge,x,g.ground+h*.45,frontZ,Math.max(.04,1.7*s),Math.max(.04,1.2*s),Math.max(.02,.16*s));
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityForge,x,g.ground+h*.43,frontZ-Math.max(.03,.12*s),Math.max(.07,2.75*s),Math.max(.06,1.55*s),Math.max(.03,.28*s));
   }else if(state.cue==="chimney-smoke"){
-    addLocalPrimitive(localBuildingActivityRoot,name,"sphere",localStaticMaterials.activitySmoke,x+g.w*.20*s,g.ground+h+Math.max(.06,1.05*s),z,Math.max(.05,1.35*s),Math.max(.07,1.8*s),Math.max(.05,1.35*s));
+    addLocalPrimitive(localBuildingActivityRoot,name,"sphere",localStaticMaterials.activitySmoke,x+g.w*.20*s,g.ground+h+Math.max(.10,1.75*s),z,Math.max(.08,2.20*s),Math.max(.11,3.00*s),Math.max(.08,2.20*s));
   }else{
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityProp,x+g.w*.22*s,g.ground+Math.max(.025,.42*s),frontZ-Math.max(.02,.5*s),Math.max(.04,.9*s),Math.max(.04,.84*s),Math.max(.04,.9*s));
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityProp,x+g.w*.24*s,g.ground+Math.max(.04,.62*s),frontZ-Math.max(.03,.70*s),Math.max(.06,1.35*s),Math.max(.06,1.22*s),Math.max(.06,1.35*s));
   }
   return 1;
 }
