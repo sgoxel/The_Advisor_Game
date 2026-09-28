@@ -4472,6 +4472,7 @@ function* tangentMeshSteps(job){
 // Each octave fades in once it spans >2 texels, so every LOD shows structure at
 // its own scale without aliasing, and finer LODs add detail instead of blur.
 const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[1700,56],[560,20],[180,7],[60,2.4],[20,.8]]);
+// Narrow cross-LOD visual handoff. The old 18% edge feather made the canonical\n// focus patch read as a giant blurred square at 1/500-1/2500. Colors are\n// already world-coordinate stitched, so only a small bounded blend is needed.\nconst LOCAL_TEXTURE_HANDOFF_FEATHER=.045;
 function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
 function terrainDetailHeight(east,north,metersPerTexel,salt){
   let h=0;
@@ -4609,7 +4610,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       }
       const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/.18,0,1))):255;
+      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1))):255;
     }
     yield 1;
   }
@@ -4636,7 +4637,7 @@ function stitchSurroundCenterToDetail(detail,surround,spanFactor){
       const su=(sx+.5)/ss,du=(su-.5)*factor+.5;
       if(du<=0||du>=1)continue;
       const dx=Math.max(0,Math.min(ds-1,Math.floor(du*ds)));
-      const edge=Math.min(du,1-du,dv,1-dv),w=smoothstep01(clamp(edge/.18,0,1));
+      const edge=Math.min(du,1-du,dv,1-dv),w=smoothstep01(clamp(edge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
       if(w<=0)continue;
       const si=(sy*ss+sx)*4,di=(dy*ds+dx)*4;
       surround.data[si]=Math.round(lerp(surround.data[si],detail.data[di],w));
@@ -4658,7 +4659,7 @@ function carveNestedRingCenterAlpha(pixels,innerCoverageRatio){
     let innerCoverage=0;
     if(innerU>0&&innerU<1&&innerV>0&&innerV<1){
       const edge=Math.min(innerU,1-innerU,innerV,1-innerV);
-      innerCoverage=smoothstep01(clamp(edge/.18,0,1));
+      innerCoverage=smoothstep01(clamp(edge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
     }
     const i=(y*size+x)*4;
     data[i+3]=Math.round(Number(data[i+3]||0)*(1-innerCoverage));
