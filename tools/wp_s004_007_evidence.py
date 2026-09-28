@@ -79,7 +79,7 @@ def resource_ready():
     active=state.get("activeSignature")
     signature_ready=(not requested) or (bool(active) and str(active)==str(requested))
     return (
-        state["ready"] and not state["preparing"] and not state["standInActive"] and
+        state["ready"] and not state["standInActive"] and
         state["pendingPreparationCount"]==0 and signature_ready and state["scaleIndex"]==8 and
         state["tier"] in ("refined","full") and state["localStaticActive"] and
         state["localBuildingCount"]>0
@@ -108,7 +108,7 @@ def visual_state(resident_id,building_id):
       const buildingTarget=buildingId?targets.find(x=>x.type==="building"&&String(x.id)===String(buildingId))||null:null;
       const workplaceKnown=Boolean(!buildingId||(s.buildingActivity?.buildings||[]).some(x=>String(x.id)===String(buildingId)));
       return {
-        settled:Boolean(!rb.preparing&&!rb.standInActive&&Number(rb.pendingPreparationCount||0)===0&&
+        settled:Boolean(!rb.standInActive&&Number(rb.pendingPreparationCount||0)===0&&
           (!rb.requestedSignature||(rb.activeSignature&&String(rb.activeSignature)===String(rb.requestedSignature)))),
         requestedSignature:rb.requestedSignature,activeSignature:rb.activeSignature,localStaticSignature:ls.signature,
         preparing:Boolean(rb.preparing),pendingPreparationCount:Number(rb.pendingPreparationCount||0),
