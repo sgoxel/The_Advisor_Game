@@ -17,12 +17,20 @@ function loadResidentMovement(){
   script.onerror=()=>{console.error("Failed to load resident movement simulation.");start();};
   document.head.appendChild(script);
 }
+function loadSocialEncounters(){
+  if(window.SocialEncounters){loadResidentMovement();return;}
+  const script=document.createElement("script");
+  script.src="scripts/world/social-encounters.js";
+  script.onload=loadResidentMovement;
+  script.onerror=()=>{console.error("Failed to load local social encounter simulation.");loadResidentMovement();};
+  document.head.appendChild(script);
+}
 function loadObjectInteractions(){
-  if(window.ObjectInteractions){loadResidentMovement();return;}
+  if(window.ObjectInteractions){loadSocialEncounters();return;}
   const script=document.createElement("script");
   script.src="scripts/world/object-interactions.js";
-  script.onload=loadResidentMovement;
-  script.onerror=()=>{console.error("Failed to load object interactions.");loadResidentMovement();};
+  script.onload=loadSocialEncounters;
+  script.onerror=()=>{console.error("Failed to load object interactions.");loadSocialEncounters();};
   document.head.appendChild(script);
 }
 function loadActionExecutor(){
