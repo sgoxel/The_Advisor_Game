@@ -131,6 +131,7 @@ function reset(seed){
   wallClearancePenaltyCells=new Set();
   wallClearanceExemptCells=new Set();
   window.ActionExecutor?.clearKind?.("resident");
+  window.SocialEncounters?.reset?.(seed);
   return ensure(seed);
 }
 function routeTargetKey(activity){return activity?key(activity.target)+"|"+activity.state+"|"+activity.action:""}
@@ -259,8 +260,28 @@ function advance(seed,when,realSeconds){
   accumulator+=Math.max(0,Math.min(2,Number(realSeconds)||0));
   let ticks=0,changed=false;
   while(accumulator+1e-9>=FIXED_STEP_SECONDS&&ticks<MAX_ADVANCE_STEPS){
+    const activities=new Map();
+    const socialResidents=[];
     for(const state of states.values()){
       const activity=activeActivity(seedKey,state,when);
+      activities.set(state.residentId,activity);
+      const resident=residentById.get(state.residentId);
+      socialResidents.push(Object.freeze({
+        id:state.residentId,name:resident?.displayName||resident?.name||state.residentId,profession:resident?.profession||"",
+        position:point(state.position),status:state.status,activity,
+        actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null
+      }));
+    }
+    window.SocialEncounters?.advance?.({seed:seedKey,when,seconds:FIXED_STEP_SECONDS,residents:socialResidents});
+    for(const state of states.values()){
+      const activity=activities.get(state.residentId);
+      const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
+      if(social?.holdsPosition){
+        window.ActionExecutor?.clear?.("resident",state.residentId);
+        state.presentationOffset=Object.freeze({x:0,y:0});
+        changed=true;
+        continue;
+      }
       const before=window.ActionExecutor?.advanceActor?.({
         seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
       },FIXED_STEP_SECONDS)||null;
@@ -294,6 +315,7 @@ function stateSnapshot(state){
     activityState:state.activity?.state||null,
     intendedAction:state.activity?.action||null,
     actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null,
+    socialEncounter:window.SocialEncounters?.stateFor?.(state.residentId)||null,
     buildingId:nav?.buildingId||null,
     occupiesBuilding:Boolean(nav?.buildingId),
     navigationCategory:nav?.category||null,
@@ -324,6 +346,7 @@ function snapshot(){
     movementOnly:true,
     actionExecution:false,
     routePlanningPerFrame:false,
+    socialEncounters:window.SocialEncounters?.snapshot?.()||null,
     wallClearancePolicy:"prefer-one-tile",
     wallClearancePenaltySeconds:WALL_CLEARANCE_PENALTY_SECONDS,
     wallClearancePenaltyCellCount:wallClearancePenaltyCells.size,
