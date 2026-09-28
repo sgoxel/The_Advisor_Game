@@ -6482,6 +6482,26 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                    String(r.activeSignature||'')===String(r.requestedSignature||'')&&
                    bs.active===true&&Array.isArray(bs.buildings)&&bs.buildings.some(x=>x.function===arguments[0]);
         """,fn))
+        # Frame the canonical building together with its canonical surrounding
+        # composition. This is camera-only evidence: no prop or gameplay state is
+        # moved, and the same full/readiness/clearance gates remain in force.
+        anchor=driver.execute_script("""
+            const bs=window.PlanetStage.snapshot().buildingSurroundings||{};
+            return (bs.buildings||[]).find(x=>x.function===arguments[0])?.anchorTile||null;
+        """,fn)
+        if isinstance(anchor,dict):
+            mid_x=round((float(lot.get("cx") or 0)+float(anchor.get("x") or 0))/2.0)
+            mid_y=round((float(lot.get("cy") or 0)+float(anchor.get("y") or 0))/2.0)
+            driver.execute_script("""
+                window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]));
+                window.PlanetStage.setZoomScalar(1);
+            """,int(mid_x),int(mid_y))
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},bs=s.buildingSurroundings||{};
+                return s.projection?.localStatic?.revealTier==='full'&&Number(r.pendingPreparationCount||0)===0&&
+                       String(r.activeSignature||'')===String(r.requestedSignature||'')&&bs.active===true&&
+                       (bs.buildings||[]).some(x=>x.function===arguments[0]);
+            """,fn))
         time.sleep(.12)
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),bs=s.buildingSurroundings||{},r=s.projection?.resourceBudget||{},fn=arguments[1];
