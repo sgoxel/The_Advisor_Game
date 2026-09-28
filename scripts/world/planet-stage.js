@@ -2359,16 +2359,15 @@ function buildLocalFaunaMesh(kind,size,unit){
     ellipsoid(-s*.54,s*.50,0,s*.15,s*.15,s*.15,[.88,.82,.70],7,4);
   }else{
     const water=kind==="waterbird";
-    // Keep a long body/neck axis visible from the near-top-down game camera.
-    ellipsoid(-s*.07,s*.47,0,s*.46,s*.20,s*.22,palette,9,5);
-    ellipsoid(s*.42,s*(water?.66:.58),0,s*(water?.19:.17),s*(water?.19:.17),s*(water?.17:.16),light,8,4);
-    if(water)ellipsoid(s*.25,s*.59,0,s*.105,s*.28,s*.105,light,7,5);
-    pyramidX(s*.54,s*(water?.65:.57),0,s*.060,s*.080,s*.27,water?[.76,.49,.10]:[.68,.48,.17]);
-    // Attached dark wings overlap the body so the silhouette reads as one bird
-    // rather than three circular lobes, while remaining one merged draw.
-    ellipsoid(-s*.12,s*.51,-s*.21,s*.38,s*.050,s*.30,dark,8,4);
-    ellipsoid(-s*.12,s*.51,s*.21,s*.38,s*.050,s*.30,dark,8,4);
-    pyramidX(-s*.34,s*.46,0,s*.065,s*.15,-s*.25,dark);
+    ellipsoid(-s*.04,s*.48,0,s*.42,s*.22,s*.28,palette,9,5);
+    ellipsoid(s*.39,s*(water?.67:.59),0,s*(water?.20:.18),s*(water?.20:.18),s*(water?.19:.18),light,8,4);
+    if(water)ellipsoid(s*.25,s*.61,0,s*.12,s*.30,s*.13,light,7,5);
+    pyramidX(s*.53,s*(water?.66:.58),0,s*.07,s*.095,s*.28,water?[.72,.48,.12]:[.66,.49,.20]);
+    // Overlapping tapered-looking wing lobes stay attached to the body instead
+    // of reading as detached grey spheres in the top-down view.
+    ellipsoid(-s*.10,s*.52,-s*.20,s*.34,s*.060,s*.28,dark,8,4);
+    ellipsoid(-s*.10,s*.52,s*.20,s*.34,s*.060,s*.28,dark,8,4);
+    pyramidX(-s*.31,s*.47,0,s*.075,s*.16,-s*.27,dark);
     if(water){
       ellipsoid(-s*.12,s*.20,-s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
       ellipsoid(-s*.12,s*.20,s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
@@ -2437,7 +2436,7 @@ function rebuildLocalFauna(plan,frame,reveal){
     // from a grass candidate became tiny). Use restrained species metres plus a
     // deterministic mild variation from the existing canonical item variant.
     const y=localGroundHeightUnits(item.east,item.north,frame),variation=.92+clamp(Number(item.variant||0),0,1)*.16;
-    const size=(item.kind==="deer"?1.28:item.kind==="waterbird"?.96:item.kind==="bird"?.55:.82)*variation;
+    const size=(item.kind==="deer"?1.15:item.kind==="waterbird"?.80:item.kind==="bird"?.46:.68)*variation;
     const built=buildLocalFaunaMesh(item.kind,size,unit),actorEntity=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actorEntity);
     actorEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actorEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actorEntity)];
     const id=localFaunaKey(item),memory=localFaunaReactionMemory.get(id)||null;
@@ -2545,9 +2544,8 @@ function updateLocalFaunaMotion(step){
       (actor.state==="takeoff"?Math.sin(localFaunaClock*12+actor.phase)*.10:0);
     actor.entity.setLocalPosition(east/actor.unit,ground+actor.altitudeMeters/actor.unit+bob,-north/actor.unit);
     const heading=actor.state==="flee"||actor.state==="takeoff"?Math.atan2(actor.fleeEast,actor.fleeNorth)*180/Math.PI:(t*35)%360;
-    const reactionLean=actor.state==="flee"?-9:(actor.state==="takeoff"?-16:0);
-    const reactionBank=actor.state==="takeoff"?Math.sin(localFaunaClock*13+actor.phase)*16:(actor.state==="flee"?Math.sin(localFaunaClock*9+actor.phase)*3:0);
-    actor.entity.setLocalEulerAngles(reactionLean,heading,reactionBank);
+    const reactionLean=actor.state==="flee"?-7:(actor.state==="takeoff"?-12:0);
+    actor.entity.setLocalEulerAngles(reactionLean,heading,0);
     actor.lastRenderedEastMeters=east;actor.lastRenderedNorthMeters=north;actor.lastDistanceMeters=pdist;
   }
   wildlifeReaction={...wildlifeReaction,activeActorCount:localFaunaActors.length,visibleActorCount:visible,reactingActorCount:reacting,sleepingActorCount:sleeping,stateCounts:localFaunaReactionStateCounts(),updateCount:wildlifeReaction.updateCount+1};
