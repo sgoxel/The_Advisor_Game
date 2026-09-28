@@ -2910,31 +2910,40 @@ function sharedLocalPrimitive(type){
       box(.60,.67,-.575,.22,.18,.055,wood);
       box(.57,.80,-.575,.30,.045,.045,wood);
     }else if(type==="activity-forge-accessory"){
-      const soot=[58,54,50,255],iron=[92,86,78,255],ember=[255,104,24,255],hot=[255,206,112,255];
-      // Keep the forge legible from the fixed steep camera by letting the stack
-      // and hood break the front roof/eave silhouette. The anvil remains a small
-      // grounded secondary cue; no broad colored apron is used.
-      box(.28,1.06,-.20,.14,.66,.14,soot);
-      box(.28,1.40,-.20,.24,.09,.24,soot);
-      box(-.20,.70,-.585,.34,.22,.11,iron);
-      box(-.20,.63,-.648,.24,.07,.07,hot);
-      box(-.24,.13,-.69,.10,.25,.10,iron);
-      box(-.24,.255,-.69,.34,.10,.15,iron);
-      box(-.37,.255,-.69,.12,.075,.10,iron);
-      box(.03,.075,-.69,.16,.065,.16,ember);
+      const soot=[42,39,36,255],iron=[82,77,70,255],ember=[238,72,18,255],hot=[255,190,76,255],stone=[116,101,82,255];
+      // One attached smithy assembly: a broad masonry stack breaks the roof
+      // silhouette while the backed firebox and anvil project just beyond the
+      // front eave. This remains one reusable mesh/draw and avoids marker-like
+      // detached glow slabs or synthetic smoke particles.
+      box(.28,1.04,-.18,.18,.72,.18,stone);
+      box(.28,1.405,-.18,.29,.09,.29,soot);
+      box(.28,.80,-.18,.25,.12,.25,soot);
+      box(-.12,.68,-.602,.40,.28,.12,soot);
+      box(-.12,.655,-.670,.27,.16,.055,hot);
+      box(-.12,.625,-.704,.18,.09,.035,ember);
+      box(-.30,.16,-.694,.11,.30,.11,iron);
+      box(-.30,.315,-.694,.38,.11,.17,iron);
+      box(-.43,.315,-.694,.14,.08,.11,iron);
     }else{
-      const warm=[255,224,118,255],hot=[255,248,205,255],frame=[89,61,36,255];
-      // Two tiny lit dormer/window boxes rise through the roof silhouette, so
-      // the state reads as occupied architecture rather than a detached marker.
-      // A restrained eave lantern reinforces the entrance without becoming a
-      // full facade overlay.
-      box(-.19,1.035,-.18,.25,.25,.20,frame);
-      box(.19,1.035,-.18,.25,.25,.20,frame);
-      box(-.19,1.025,-.292,.17,.14,.035,warm);
-      box(.19,1.025,-.292,.17,.14,.035,hot);
-      box(.40,.56,-.61,.045,.25,.045,frame);
-      box(.40,.43,-.635,.11,.13,.11,hot);
-      box(.40,.52,-.635,.15,.035,.035,frame);
+      const warm=[255,207,92,255],hot=[255,242,185,255],frame=[72,48,30,255];
+      // Warm occupancy uses two broad, roof-flush framed skylights rather than
+      // dormer blocks. Their sloped faces follow the canonical roof silhouette,
+      // keeping them readable from the steep gameplay camera without floating
+      // above the building. A small eave lantern reinforces the entrance.
+      const pane=(side,cx,color)=>{
+        const x0=cx-.135,x1=cx+.135,z0=-.42,z1=-.13;
+        const outerY0=side<0?1.035:1.115,outerY1=side<0?1.115:1.035;
+        const n=side<0?[.40,.92,0]:[-.40,.92,0];
+        face([[x0,outerY0,z0],[x1,outerY1,z0],[x1,outerY1,z1],[x0,outerY0,z1]],n,frame);
+        const ix0=x0+.035,ix1=x1-.035,iz0=z0+.045,iz1=z1-.045;
+        const iy0=outerY0+.014,iy1=outerY1+.014;
+        face([[ix0,iy0,iz0],[ix1,iy1,iz0],[ix1,iy1,iz1],[ix0,iy0,iz1]],n,color);
+      };
+      pane(-1,-.23,warm);
+      pane(1,.23,hot);
+      box(.405,.55,-.625,.045,.27,.045,frame);
+      box(.405,.425,-.655,.12,.14,.10,hot);
+      box(.405,.525,-.655,.17,.035,.035,frame);
     }
     mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   }else{
