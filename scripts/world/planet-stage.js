@@ -3286,7 +3286,7 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.32,.20,.085),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
-    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.08;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.39,.34,.18,.12),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3892,32 +3892,34 @@ function updateCanonicalNpcMotion(){
 }
 function canonicalRoofSegmentColor(state,plane,band,lane,landmark){
   const visualState=String(state||"normal");
-  const normal=landmark?[[220,151,55,255],[197,124,42,255],[231,171,72,255]]:[[95,42,29,255],[111,50,32,255],[82,34,26,255]];
+  const normal=landmark?[[220,151,55,255],[197,124,42,255],[231,171,72,255]]:[[104,48,31,255],[120,56,35,255],[90,38,28,255],[112,45,30,255]];
   if(visualState==="worn"){
-    const p=[[148,116,82,255],[113,91,70,255],[171,137,94,255],[92,77,64,255],[132,101,72,255]];
-    return p[(plane*3+band*2+lane)%p.length];
+    // High enough value separation to survive night palettes, but varied across
+    // the real roof surface rather than recoloring the whole plane uniformly.
+    const p=[[194,163,126,255],[145,126,105,255],[211,177,128,255],[121,108,96,255],[171,143,109,255],[157,132,104,255]];
+    return p[(plane*5+band*3+lane)%p.length];
   }
   if(visualState==="damaged"){
-    if(plane===0&&(band<=1||lane===0)){
-      const p=[[45,36,31,255],[78,43,29,255],[112,67,41,255],[57,48,42,255]];
+    if(plane===0&&(band<=2||lane===0)){
+      const p=[[43,34,30,255],[81,43,28,255],[119,65,37,255],[61,49,42,255],[96,54,34,255]];
       return p[(band*2+lane)%p.length];
     }
-    const p=[[114,87,64,255],[92,72,58,255],[129,96,66,255]];
+    const p=[[132,102,77,255],[101,83,70,255],[148,111,77,255],[119,91,70,255]];
     return p[(plane+band+lane)%p.length];
   }
   if(visualState==="repaired"){
-    if(plane===0&&band<=1){
-      const p=[[219,153,70,255],[244,190,102,255],[185,111,46,255],[226,164,78,255]];
+    if(plane===0&&band<=2){
+      const p=[[232,163,72,255],[252,204,112,255],[190,112,44,255],[224,151,62,255],[245,183,86,255]];
       return p[(band*2+lane)%p.length];
     }
     return normal[(plane+band+lane)%normal.length];
   }
   if(visualState==="overgrown"){
-    if(lane===0&&(band===1||band===2||band===3)){
-      const p=[[52,105,47,255],[78,126,54,255],[125,143,66,255],[42,88,43,255]];
+    if(lane===0&&(band===1||band===2||band===4||band===5)){
+      const p=[[48,111,48,255],[74,137,58,255],[131,154,72,255],[43,92,44,255],[96,139,59,255]];
       return p[(plane+band)%p.length];
     }
-    const p=[[103,83,55,255],[118,96,61,255],[91,75,52,255],[110,91,59,255]];
+    const p=[[118,99,63,255],[132,110,67,255],[101,85,58,255],[124,104,65,255],[109,92,60,255]];
     return p[(plane+band+lane)%p.length];
   }
   return normal[(plane+band+lane)%normal.length];
@@ -3927,15 +3929,23 @@ function canonicalRoofMeshData(entry,state){
   const visualState=["normal","worn","damaged","repaired","overgrown"].includes(String(state))?String(state):"normal";
   const runMeters=Math.max(1,entry.w*.55),roofRiseMeters=Math.max(1.05,Math.min(2.55,entry.w*.245));
   const roofRise=roofRiseMeters*entry.presentationScale/entry.unit,outerY=entry.ground+entry.h+.018;
-  const northCuts=[-.55,-.28,.02,.31,.55],laneCuts=[0,.48,1];
+  // Smaller non-uniform roof sections plus per-vertex value drift read as
+  // shingles/weathering instead of the broad rectangular tiles from Attempt 1.
+  const northCuts=[-.55,-.39,-.20,.015,.22,.40,.55],laneCuts=[0,.34,.68,1];
   const normalFor=side=>{const slope=roofRiseMeters/runMeters,l=Math.hypot(slope,1);return [side*slope/l,1/l,0];};
   const point=(side,t,northFactor)=>{
     const east=entry.east+side*runMeters*(1-t),north=entry.north+northFactor*entry.d,p=canonicalSemanticPosition(east,north,entry.presentationScale,entry.unit,entry.frame);
     return [p.x,outerY+roofRise*t,p.z];
   };
-  const addQuad=(a,b,c,d,n,color)=>{
-    const base=positions.length/3;
-    for(const p of [a,b,c,d]){positions.push(p[0],p[1],p[2]);normals.push(n[0],n[1],n[2]);colors.push(color[0],color[1],color[2],color[3]??255);}
+  const variedColor=(color,plane,band,lane,corner)=>{
+    const salt=7103+plane*97+band*31+lane*13+corner*7;
+    const n=localHash(entry.east+band*3.7+corner*.8,entry.north+lane*4.3+plane*.9,salt);
+    const amount=visualState==="normal"?.055:visualState==="worn"?.12:.085,factor=1+(n-.5)*2*amount;
+    return [Math.round(clamp(color[0]*factor,0,255)),Math.round(clamp(color[1]*factor,0,255)),Math.round(clamp(color[2]*factor,0,255)),color[3]??255];
+  };
+  const addQuad=(a,b,c,d,n,color,plane=0,band=0,lane=0)=>{
+    const base=positions.length/3,verts=[a,b,c,d];
+    for(let corner=0;corner<4;corner++){const p=verts[corner],cc=variedColor(color,plane,band,lane,corner);positions.push(p[0],p[1],p[2]);normals.push(n[0],n[1],n[2]);colors.push(cc[0],cc[1],cc[2],cc[3]);}
     indices.push(base,base+1,base+2,base,base+2,base+3);
   };
   for(let plane=0;plane<2;plane++){
@@ -3945,16 +3955,16 @@ function canonicalRoofMeshData(entry,state){
         // Damage removes one real outer-eave roof section rather than painting
         // a black patch over it. The same bounded section becomes fresh timber
         // during repair, keeping authoritative footprint/bounds untouched.
-        if(visualState==="damaged"&&plane===0&&band===0&&lane===0)continue;
+        if(visualState==="damaged"&&plane===0&&band<=1&&lane===0)continue;
         const t0=laneCuts[lane],t1=laneCuts[lane+1],n0=northCuts[band],n1=northCuts[band+1];
-        addQuad(point(side,t0,n0),point(side,t1,n0),point(side,t1,n1),point(side,t0,n1),n,canonicalRoofSegmentColor(visualState,plane,band,lane,entry.landmark));
+        addQuad(point(side,t0,n0),point(side,t1,n0),point(side,t1,n1),point(side,t0,n1),n,canonicalRoofSegmentColor(visualState,plane,band,lane,entry.landmark),plane,band,lane);
       }
       // A thin fascia belongs to the same canonical roof mesh, so worn/green
       // eaves and the damaged missing section remain part of the silhouette.
-      if(!(visualState==="damaged"&&plane===0&&band===0)){
+      if(!(visualState==="damaged"&&plane===0&&band<=1)){
         const top0=point(side,0,northCuts[band]),top1=point(side,0,northCuts[band+1]),drop=Math.max(.025,.16*entry.presentationScale/entry.unit);
-        const edgeColor=visualState==="overgrown"?[47,82,39,255]:visualState==="worn"?[83,67,55,255]:visualState==="damaged"?[55,39,32,255]:visualState==="repaired"&&plane===0&&band===0?[167,92,37,255]:entry.landmark?[151,87,31,255]:[67,29,23,255];
-        addQuad(top0,top1,[top1[0],top1[1]-drop,top1[2]],[top0[0],top0[1]-drop,top0[2]],[side,0,0],edgeColor);
+        const edgeColor=visualState==="overgrown"?[51,94,41,255]:visualState==="worn"?[101,86,70,255]:visualState==="damaged"?[55,39,32,255]:visualState==="repaired"&&plane===0&&band<=1?[178,101,40,255]:entry.landmark?[151,87,31,255]:[67,29,23,255];
+        addQuad(top0,top1,[top1[0],top1[1]-drop,top1[2]],[top0[0],top0[1]-drop,top0[2]],[side,0,0],edgeColor,plane,band,9);
       }
     }
   }
