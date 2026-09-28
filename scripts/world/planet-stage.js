@@ -2458,7 +2458,10 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.035;
   if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.034;
   if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.038;
-  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.030;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.022;
+  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.016;
+  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+89)*.018;
   if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.022;
   if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.014;
   return detail;
@@ -4641,7 +4644,7 @@ const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[
 // Narrow cross-LOD visual handoff. The old 18% edge feather made the canonical
 // focus patch read as a giant blurred square at 1/500-1/2500. Colors are
 // already world-coordinate stitched, so only a small bounded blend is needed.
-const LOCAL_TEXTURE_HANDOFF_FEATHER=.045;
+const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
 function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
 function terrainDetailHeight(east,north,metersPerTexel,salt){
   let h=0;
@@ -4676,6 +4679,12 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
+  // One shared coarse photometric basis is sampled by every concentric ring.
+  // Resolution still falls with distance, while only the focus layer adds a
+  // restrained fine-frequency delta. This prevents LOD identity from appearing
+  // as a differently tinted/contrasted patch.
+  const focusTextureSize=Math.max(1,Number(LOCAL_DETAIL_LEVELS[job.levelIndex]?.textureSize||size));
+  const sharedMetersPerTexel=Math.max(job.dims.patchWidth,job.dims.patchHeight)*LOCAL_SURROUND_SPAN_FACTOR/focusTextureSize;
   const useMicroDetail=metersPerTexel<=4&&!contextRing;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
@@ -4686,7 +4695,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // All focus/context layers use the same photometric transfer function. LOD
   // differences come only from physical texel size / available frequencies,
   // so a ready child reads as added detail instead of a tinted rectangle.
-  const hillshadeStrength=metersPerTexel<=8?.52:metersPerTexel<=30?.40:metersPerTexel<=100?.31:.25;
+  const hillshadeStrength=sharedMetersPerTexel<=8?.48:sharedMetersPerTexel<=30?.38:sharedMetersPerTexel<=100?.30:.24;
   const contextDetailStrength=1;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
@@ -4696,7 +4705,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // change presentation, but never the world-space inputs to the detail field.
   const centerRegistered=job.biomeCoordinateProof?.registeredMeters||canonicalRegisteredMetersForLatLon(lat0,lon0);
   const centerRegisteredEast=Number(centerRegistered.east??centerRegistered.eastMeters??0),registeredPeriod=Math.PI*2*WORLD_RADIUS_METERS;
-  const authoritySize=Math.max(2,Math.min(size,128)),authorityCache=new Array(authoritySize*authoritySize);
+  const authoritySize=96,authorityCache=new Array(authoritySize*authoritySize);
   const unwrapRegisteredEast=value=>{
     const delta=Number(value||0)-centerRegisteredEast;
     return centerRegisteredEast+(delta-Math.round(delta/registeredPeriod)*registeredPeriod);
@@ -4719,6 +4728,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0);
     return {
       land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters),
+      moisture:bilerp(a.moisture,b.moisture,c.moisture,d.moisture),
+      mountainInfluence:bilerp(a.mountainInfluence,b.mountainInfluence,c.mountainInfluence,d.mountainInfluence),
       registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters),
       registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
     };
@@ -4733,32 +4744,39 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // map scales those low-frequency fields can read as giant polygon wedges.
       // Keep their SEED-derived identity as an accent, while deriving most local
       // albedo from the same authoritative land/elevation state at every LOD.
-      const elevationBase=Number(sample?.elevationMeters||0);
-      const alpineBase=smoothstep01((elevationBase-1700)/2600);
+      const elevationBase=Number(sample?.elevationMeters||0),moistureBase=clamp(Number(sample?.moisture||.5),0,1);
+      const alpineBase=smoothstep01((elevationBase-1700)/2600),dry=1-moistureBase;
       const localPalette=sample?.land
-        ? [lerp(.25,.46,alpineBase),lerp(.39,.47,alpineBase),lerp(.20,.39,alpineBase)]
+        ? [lerp(.20+.08*dry,.45,alpineBase),lerp(.34+.10*moistureBase,.48,alpineBase),lerp(.16+.06*moistureBase,.39,alpineBase)]
         : [.055,.19,.34];
-      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,.28),0,1));
+      // Preserve macro hue only as a subtle identity accent. The dominant local
+      // map albedo is continuous authoritative elevation/moisture, preventing
+      // continent-scale palette cells from reading as giant polygon wedges.
+      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,.10),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
       // Detail frequencies are anchored to canonical SEED-registered meters.
       // Rebuilding the same coordinates from a different patch/LOD therefore
       // reveals the same field instead of rolling a new patch-relative pattern.
       const worldEast=sample.registeredEastMeters,worldNorth=sample.registeredNorthMeters;
-      const macro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase)*contextDetailStrength;
+      const sharedMacro=worldSurfaceDetailValue(worldEast,worldNorth,sharedMetersPerTexel,phase)*contextDetailStrength;
+      const focusMacroDelta=contextRing?0:(worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase)-sharedMacro)*.28;
+      const macro=sharedMacro+focusMacroDelta;
       let shade=1,cover=[0,0,0];
       if(sample?.land){
         // Hillshade of authoritative elevation + scale-appropriate detail relief.
-        const step=metersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
+        const step=sharedMetersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
         const sx=mixSample(Math.min(1,ux+dux),vz),sy=mixSample(ux,Math.max(0,vz-dvz));
-        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,metersPerTexel,detailSalt);
-        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,metersPerTexel,detailSalt);
-        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,metersPerTexel,detailSalt);
+        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,sharedMetersPerTexel,detailSalt);
+        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,sharedMetersPerTexel,detailSalt);
+        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,sharedMetersPerTexel,detailSalt);
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
         // Keep hillshade readable without clipping bright alpine surfaces.
         shade=clamp(1+(lit-flatShade)*hillshadeStrength,contextRing?.90:.86,contextRing?1.08:1.10);
-        cover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
+        const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
+        const fineCover=contextRing?[0,0,0]:landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation).map((v,i)=>(v-sharedCover[i])*.22);
+        cover=sharedCover.map((v,i)=>v+fineCover[i]);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
@@ -4768,7 +4786,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // As the physical texel size approaches gameplay scale, let canonical
         // registered-meter micro terrain carry more of the surface. This keeps
         // close props visually grounded while coarser views retain macro identity.
-        const closeWeight=smoothstep01((4-metersPerTexel)/3.5),microWeight=lerp(.38,.72,closeWeight);
+        const closeWeight=smoothstep01((4-metersPerTexel)/3.5),microWeight=lerp(.16,.32,closeWeight);
         displayColor=authoritative.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
@@ -4786,13 +4804,16 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // anchored, so the same coordinate has the same mottling in every rebuild.
       if(sample?.land&&metersPerTexel<=8){
         const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
-        const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.105+
-          surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.045;
+        const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
+          surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
       const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
+      // Shared photometry makes the rectangular resource edge visually neutral;
+      // use only a broad edge feather for the subtle fine-frequency delta.
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1))):255;
+      const edgeCoverage=smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*edgeCoverage):255;
     }
     yield 1;
   }
@@ -5211,14 +5232,14 @@ function activateLocalDetailResource(signature,fromCache){
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
   if(focusRingPatch?.render&&focusRingMaterial){
     focusRingPatch.render.meshInstances=[new pc.MeshInstance(resource.mediumMesh,focusRingMaterial,focusRingPatch)];
-    focusRingMaterial.diffuseMap=resource.mediumTexture;focusRingMaterial.emissiveMap=resource.mediumTexture;focusRingMaterial.opacityMap=resource.mediumTexture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.88;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+    focusRingMaterial.diffuseMap=resource.mediumTexture;focusRingMaterial.emissiveMap=resource.mediumTexture;focusRingMaterial.opacityMap=resource.mediumTexture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.78;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
     localResources.mediumRingSpanFactor=LOCAL_MEDIUM_RING_SPAN_FACTOR;localResources.mediumRingWidthMeters=Number((resource.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingHeightMeters=Number((resource.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingWorldMatched=true;
   }
   if(horizonSkirt?.render){
     horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
     localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
   }
-  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
+  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.78;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
   rebuildLocalStaticPresentation(resource);
   if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);
   trimLocalResourceCache();
@@ -5266,7 +5287,7 @@ function recordLocalFrame(dt){
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
-  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.72;tangentPatchMaterial.__atmosphereBaseDiffuse=[1,1,1];tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.78;tangentPatchMaterial.__atmosphereBaseDiffuse=[1,1,1];tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   // Empty until the first cooperatively prepared resource is swapped in.
   tangentPatch.render.meshInstances=[];
@@ -5275,7 +5296,7 @@ function ensureTangentPatch(){
 function ensureFocusRingPatch(){
   if(focusRingPatch||!device)return;
   focusRingMaterial=new pc.StandardMaterial();focusRingMaterial.name="SeededFocusMediumRing";
-  focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.88;focusRingMaterial.__atmosphereBaseDiffuse=[1,1,1];
+  focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.78;focusRingMaterial.__atmosphereBaseDiffuse=[1,1,1];
   focusRingMaterial.useLighting=false;focusRingMaterial.cull=pc.CULLFACE_NONE;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
   focusRingPatch=new pc.Entity("LocalFocusMediumRing");focusRingPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   focusRingPatch.render.meshInstances=[];focusRingPatch.enabled=false;app.root.addChild(focusRingPatch);
@@ -5283,7 +5304,7 @@ function ensureFocusRingPatch(){
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
   horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
-  horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;horizonSkirtMaterial.__atmosphereBaseDiffuse=[.2,.34,.17];
+  horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.78;horizonSkirtMaterial.__atmosphereBaseDiffuse=[.2,.34,.17];
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   horizonSkirt.render.meshInstances=[];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
@@ -5313,7 +5334,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     if(focusRingPatch){
       focusRingPatch.enabled=tangentVisible;
       const mediumReveal=projectionPresentationBlendForZoom();
-      focusRingMaterial.opacity=mediumReveal*.98;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+      focusRingMaterial.opacity=mediumReveal;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
     }
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
@@ -5321,7 +5342,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       // settlement frame is fully owned by the same local geography, rather
       // than looking through a fading globe shell at a different surface.
       const tangentReveal=projectionPresentationBlendForZoom();
-      horizonSkirtMaterial.opacity=tangentReveal*.92;
+      horizonSkirtMaterial.opacity=tangentReveal;
       horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
@@ -5440,7 +5461,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   projectionPresentation={...projectionPresentation,
     globeOpacity:Number((1-globeFade).toFixed(6)),
     tangentOpacity:Number(tangentReveal.toFixed(6)),
-    horizonOpacity:Number((tangentReveal*.92).toFixed(6)),
+    horizonOpacity:Number(tangentReveal.toFixed(6)),
     globeDepthWrite:Boolean(handoff<.02)
   };
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
