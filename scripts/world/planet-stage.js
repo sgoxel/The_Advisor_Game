@@ -153,7 +153,8 @@ let campaignWearProjection={
 let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity.resolveActionTarget",presentationOnly:true,simulationAuthority:false};
+let localNpcEntities=new Map();
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",presentationOnly:true,simulationAuthority:false};
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
@@ -3245,10 +3246,15 @@ function inspectionFantasyStamp(){
   const whole=Math.floor(hour),minute=Math.round((hour-whole)*60);
   return Object.freeze({year:1100,month:1,day:1,hour:whole,minute:Math.min(59,minute),second:0});
 }
+function resolvedResidentActivity(resident,when){
+  if(!resident||!window.DailyActivity?.resolveActionTarget)return null;
+  const base=window.DailyActivity.resolveActionTarget(activeSeed,resident,when)||null;
+  return window.WorkCycles?.resolve?.(activeSeed,resident,when,base)||base;
+}
 function residentInspectionState(residentId){
   const resident=window.DailyActivity?.build?.(activeSeed)?.find(item=>item.id===String(residentId))||null;
   if(!resident)return null;
-  const scheduled=window.DailyActivity?.resolveActionTarget?.(activeSeed,resident,inspectionFantasyStamp())||null;
+  const scheduled=resolvedResidentActivity(resident,inspectionFantasyStamp());
   const movement=window.ResidentMovement?.get?.(resident.id)||null;
   const executing=window.ActionExecutor?.get?.("resident",resident.id)||movement?.actionExecution||null;
   let activity=executing?.label||scheduled?.label||"Idle";
@@ -3269,7 +3275,7 @@ function residentInspectionState(residentId){
 function residentPresentationState(resident){
   const movement=window.ResidentMovement?.presentation?.(resident.id)||null;
   const movementState=window.ResidentMovement?.get?.(resident.id)||null;
-  const scheduled=window.DailyActivity?.resolveActionTarget?.(activeSeed,resident,inspectionFantasyStamp())||null;
+  const scheduled=resolvedResidentActivity(resident,inspectionFantasyStamp());
   const point=movement?.point||scheduled?.target||null;if(!point)return null;
   const offset=movement?.offset||{x:0,y:0};
   const indoors=movementState?Boolean(movementState.occupiesBuilding):scheduled?.targetSource==="interior-interaction";
@@ -3278,7 +3284,14 @@ function residentPresentationState(resident){
 function ensureLocalNpcMaterials(){
   if(localNpcMaterials||!pc)return;
   const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.88;m.metalness=0;m.update();return m;};
-  localNpcMaterials={body:make("LocalResidentBody",.19,.42,.72),head:make("LocalResidentHead",.86,.68,.50)};
+  localNpcMaterials={
+    body:make("LocalResidentBody",.19,.42,.72),head:make("LocalResidentHead",.86,.68,.50),tool:make("LocalResidentWorkTool",.30,.23,.15),
+    professions:Object.freeze({
+      farmer:make("ResidentFarmer",.26,.46,.24),smith:make("ResidentSmith",.48,.24,.19),
+      "tavern-keeper":make("ResidentTavernKeeper",.55,.39,.20),shopkeeper:make("ResidentShopkeeper",.39,.30,.52),
+      woodcutter:make("ResidentWoodcutter",.42,.30,.19),guard:make("ResidentGuard",.20,.34,.55)
+    })
+  };
 }
 function registerCanonicalBuildingInspection(record,entities){
   const typeLabel=readableTitle(record?.function||record?.kind||record?.type,"Building");
@@ -3294,8 +3307,8 @@ function registerCanonicalBuildingInspection(record,entities){
 }
 function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,unit,lift=0,preserveSelection=false){
   const started=performance.now(),selectedNpc=inspection.selectedType==="npc"?inspection.selectedId:null;
-  clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;
-  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
+  clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;localNpcEntities.clear();
+  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0};
   localNpcContext={reveal,tier,frame,presentationScale,unit,lift};
   if(!["refined","full"].includes(tier)||!window.DailyActivity?.build)return;
   ensureLocalNpcMaterials();localNpcRoot=new pc.Entity("CanonicalResidents");tangentPatch.addChild(localNpcRoot);
@@ -3306,9 +3319,13 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const east=state.x*tileMeters,north=state.y*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.015;
     const bodyHeight=Math.max(.10,1.18*presentationScale/unit),bodyWidth=Math.max(.045,.48*presentationScale/unit),headSize=Math.max(.045,.44*presentationScale/unit);
     const pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),x=pos.x,z=pos.z;
-    const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",localNpcMaterials.body,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
+    const bodyMaterial=localNpcMaterials.professions?.[resident.profession]||localNpcMaterials.body;
+    const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",bodyMaterial,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
-    const entities=[body,head];
+    const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
+    tool.enabled=false;
+    localNpcEntities.set(resident.id,{resident,body,head,tool,bodyHeight,bodyWidth,headSize,presentationScale,unit,frame,lift});
+    const entities=[body,head,tool];
     registerLocalInspection({
       id:resident.id,type:"npc",residentId:resident.id,pickPriority:3,
       authority:Object.freeze({residentId:resident.id,identitySource:"DailyActivity",professionSource:"ResidentAssignments",activitySource:"DailyActivity.resolveActionTarget"}),
@@ -3317,7 +3334,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
       screenBounds:()=>inspectionEntityBounds(entities,5),
       screenDepth:()=>inspectionEntityDepth(entities)
     },localNpcInspectionKeys);
-    activeCount++;entityCount+=2;
+    activeCount++;entityCount+=3;
   }
   localNpcPresentation={...localNpcPresentation,active:activeCount>0,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp()};
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
@@ -3325,6 +3342,40 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
 function refreshCanonicalNpcPresentation(){
   if(!localNpcContext)return;
   const c=localNpcContext;rebuildCanonicalNpcPresentation(c.reveal,c.tier,c.frame,c.presentationScale,c.unit,c.lift,true);
+}
+function updateCanonicalNpcMotion(){
+  if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
+  const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  let activeTools=0,visibleCount=0;
+  for(const record of localNpcEntities.values()){
+    const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors);
+    record.body.enabled=visible;record.head.enabled=visible;record.tool.enabled=false;
+    if(!visible)continue;
+    visibleCount++;
+    const east=state.x*tileMeters,north=state.y*tileMeters;
+    const ground=canonicalSemanticGroundHeightUnits(east,north,record.frame)+record.lift+.015;
+    const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
+    const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
+    const pulse=working?Math.sin(frameCount*.18+Number(String(record.resident.id).replace(/\D/g,"")||0))*.035:0;
+    record.body.setLocalPosition(pos.x,ground+record.bodyHeight*.5,pos.z);
+    record.head.setLocalPosition(pos.x,ground+record.bodyHeight+record.headSize*(.48+pulse),pos.z);
+    if(working){
+      const profession=String(record.resident.profession||"");
+      const horizontal=["smith","woodcutter","farmer"].includes(profession);
+      const tray=["shopkeeper","tavern-keeper"].includes(profession);
+      const sx=horizontal?record.bodyWidth*.34:tray?record.bodyWidth*.72:record.bodyWidth*.20;
+      const sy=horizontal?record.bodyHeight*.62:tray?record.bodyWidth*.20:record.bodyHeight*.92;
+      const sz=tray?record.bodyWidth*.72:record.bodyWidth*.20;
+      record.tool.setLocalScale(sx,sy,sz);
+      record.tool.setLocalPosition(pos.x+record.bodyWidth*.58,ground+record.bodyHeight*(tray?.72:.62),pos.z);
+      record.tool.setLocalEulerAngles(horizontal?58:0,0,horizontal?32:0);
+      record.tool.enabled=true;activeTools++;
+    }
+  }
+  const elapsed=performance.now()-started;
+  localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,
+    motionUpdateCount:Number(localNpcPresentation.motionUpdateCount||0)+1,lastMotionUpdateMs:Number(elapsed.toFixed(4)),
+    maxMotionUpdateMs:Math.max(Number(localNpcPresentation.maxMotionUpdateMs||0),Number(elapsed.toFixed(4)))};
 }
 function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed,landmark,lift=0){
   const b=record.bounds,tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),entities=[];
@@ -3370,7 +3421,7 @@ function canonicalBuildingActivityState(reveal){
   };
   const residents=window.DailyActivity.build(activeSeed)||[];
   for(const resident of residents){
-    let scheduled=null;try{scheduled=window.DailyActivity.resolveActionTarget(activeSeed,resident,stamp)||null;}catch(_){scheduled=null;}
+    let scheduled=null;try{scheduled=resolvedResidentActivity(resident,stamp);}catch(_){scheduled=null;}
     const scheduledId=String(scheduled?.buildingId||"");
     if(scheduledId){
       const stats=ensure(scheduledId),state=String(scheduled?.state||scheduled?.kind||"");
@@ -5611,7 +5662,7 @@ async function start(){
     await yieldPaint();
     bindInput();
     resize();
-    app.on?.("update",dt=>{frameCount++;recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateWayfindingTextOverlay();updateAmbientMotion(dt);});
+    app.on?.("update",dt=>{frameCount++;if(activeSeed&&window.ResidentMovement){const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();window.ResidentMovement.advance(activeSeed,when,dt);}updateCanonicalNpcMotion();recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateWayfindingTextOverlay();updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
     await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
     initializeAtmosphereTimeBinding();
@@ -5881,7 +5932,7 @@ function destroy(){
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
-  localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
+  localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;localNpcEntities.clear();ready=false;
   inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();localSignInspectionKeys.clear();
   wayfindingTextCanvas?.remove?.();wayfindingTextCanvas=null;wayfindingTextContext=null;wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
