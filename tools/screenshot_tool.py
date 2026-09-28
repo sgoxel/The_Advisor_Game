@@ -6575,17 +6575,21 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
     if scenario == "wp-s003-015":
         from selenium.webdriver.support.ui import WebDriverWait
         configs=(
-            ("workday-active",10,0,(1280,800)),
-            ("night-inactive-workplaces",2,30,(1280,800)),
-            ("workday-repeat",10,0,(1280,800)),
-            ("lunch-social",13,30,(1280,800)),
-            ("late-day-mixed",17,30,(1280,800)),
-            ("night-home",22,30,(1280,800)),
-            ("phone-workday",10,0,(844,390)),
-            ("phone-night",22,30,(390,844)),
+            ("workday-market-active",10,0,(1280,800),"market"),
+            ("night-market-inactive",2,30,(1280,800),"market"),
+            ("workday-market-repeat",10,0,(1280,800),"market"),
+            ("workday-craft-active",10,0,(1280,800),"craft"),
+            ("night-craft-inactive",2,30,(1280,800),"craft"),
+            ("night-home-active",22,30,(1280,800),"home"),
+            ("phone-market-active",10,0,(844,390),"market"),
+            ("phone-home-active",22,30,(390,844),"home"),
         )
-        label,hour,minute,viewport=configs[min(frame_index,len(configs)-1)]
-        driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
+        label,hour,minute,viewport,target_function=configs[min(frame_index,len(configs)-1)]
+        target_w,target_h=int(viewport[0]),int(viewport[1])
+        driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width":target_w,"height":target_h,"deviceScaleFactor":1,"mobile":False
+        })
+        time.sleep(.12)
         driver.execute_script("window.PlanetStage.setWorldTileFocus('0','0');window.PlanetStage.setZoomScalar(1)")
         WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
             const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{};
@@ -6607,11 +6611,36 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                    String(r.activeSignature||'')===String(r.requestedSignature||'')&&
                    ls.revealTier==='full';
         """,float(hour)+float(minute)/60.0))
+        target=driver.execute_script("""
+            const a=window.PlanetStage.snapshot().buildingActivity||{},fn=String(arguments[0]);
+            const item=(a.buildings||[]).find(x=>String(x.function||'')===fn);
+            if(!item||!item.centerTile)return null;
+            return {id:item.id,function:item.function,centerTile:item.centerTile,active:item.active,cue:item.cue};
+        """,target_function)
+        if not target:
+            raise RuntimeError(f"WP-S003-015 missing canonical {target_function} target for {label}")
+        center=target["centerTile"]
+        driver.execute_script("""
+            window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]));
+            window.PlanetStage.setZoomScalar(1);
+        """,str(center["x"]),str(center["y"]))
+        WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},a=s.buildingActivity||{},r=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{},f=s.canonicalFocus?.worldTile||{};
+            return String(f.x)===String(arguments[0])&&String(f.y)===String(arguments[1])&&
+                   Math.abs(Number(a.authoritativeHour||-99)-Number(arguments[2]))<.02&&
+                   Number(a.buildingCount||0)>=12&&Boolean(a.lastSignature)&&
+                   Number(r.pendingPreparationCount||0)===0&&
+                   String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   ls.revealTier==='full';
+        """,str(center["x"]),str(center["y"]),float(hour)+float(minute)/60.0))
         time.sleep(.25)
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),a=s.buildingActivity||{},ls=s.projection?.localStatic||{},r=s.projection?.resourceBudget||{};
+            const targetId=String(arguments[1]),target=(a.buildings||[]).find(x=>String(x.id)===targetId)||null;
             return {
               label:arguments[0],hour:a.authoritativeHour,timeBand:a.timeBand,signature:a.lastSignature,
+              targetFunction:arguments[2],targetBuildingId:targetId,targetCenterTile:arguments[3],
+              targetActive:target?.active,targetCue:target?.cue,targetBuilding:target,
               active:a.active,buildingCount:a.buildingCount,activeBuildingCount:a.activeBuildingCount,
               occupiedBuildingCount:a.occupiedBuildingCount,activeWorkplaceCount:a.activeWorkplaceCount,activeHomeCount:a.activeHomeCount,
               warmWindowCount:a.warmWindowCount,smokeCueCount:a.smokeCueCount,openMarketCount:a.openMarketCount,
@@ -6621,9 +6650,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               presentationOnly:a.presentationOnly,simulationAuthority:a.simulationAuthority,bounded:a.bounded,
               fullSettlementPerFrameScan:a.fullSettlementPerFrameScan,activitySource:a.activitySource,
               occupancySourceAvailable:a.occupancySourceAvailable,residentsEvaluated:a.residentsEvaluated,
-              buildings:a.buildings,localStatic:ls,pending:r.pendingPreparationCount,focus:s.canonicalFocus?.worldTile
+              buildings:a.buildings,localStatic:ls,pending:r.pendingPreparationCount,focus:s.canonicalFocus?.worldTile,
+              viewport:{width:innerWidth,height:innerHeight}
             };
-        """,label)
+        """,label,str(target["id"]),target_function,center)
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-013":
         from selenium.webdriver.support.ui import WebDriverWait
@@ -9009,7 +9039,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Building activity bounded contract failed in frame {index}: {proof}")
             if int(proof.get("buildingCount") or 0)<12 or int(proof.get("residentsEvaluated") or 0)!=12:
                 raise RuntimeError(f"Building/activity authority coverage failed in frame {index}: {proof}")
-            if int(proof.get("dynamicLights") or -1)!=0 or int(proof.get("particleEmitters") or -1)!=0:
+            if int(proof.get("dynamicLights", -1))!=0 or int(proof.get("particleEmitters", -1))!=0:
                 raise RuntimeError(f"Per-building lights/emitters introduced in frame {index}: {proof}")
             if int(proof.get("cueCount") or 0)>13 or int(proof.get("drawCalls") or 0)>13 or int(proof.get("sharedMaterials") or 0)>5:
                 raise RuntimeError(f"Building activity presentation budget failed in frame {index}: {proof}")
@@ -9017,15 +9047,24 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Building activity update cost exceeded bounded budget in frame {index}: {proof}")
             if int(proof.get("pending") or 0)!=0 or (proof.get("localStatic") or {}).get("revealTier")!="full":
                 raise RuntimeError(f"Building activity local scene not settled in frame {index}: {proof}")
-            if (proof.get("focus") or {})!={"x":"0","y":"0"}:
-                raise RuntimeError(f"Building activity evidence moved canonical focus in frame {index}: {proof.get('focus')}")
-        day=proofs[0];night=proofs[1];repeat=proofs[2];night_home=proofs[5]
+            target_center=proof.get("targetCenterTile") or {}
+            if (proof.get("focus") or {})!=target_center:
+                raise RuntimeError(f"Building activity evidence is not centered on its canonical target in frame {index}: focus={proof.get('focus')} target={target_center}")
+        day=proofs[0];night=proofs[1];repeat=proofs[2];craft_day=proofs[3];craft_night=proofs[4];night_home=proofs[5]
         if day.get("signature")!=repeat.get("signature"):
             raise RuntimeError(f"Identical workday activity state was not deterministic: {day.get('signature')} vs {repeat.get('signature')}")
+        if day.get("targetBuildingId")!=night.get("targetBuildingId") or day.get("targetBuildingId")!=repeat.get("targetBuildingId"):
+            raise RuntimeError(f"Market evidence did not frame the same canonical building: day={day.get('targetBuildingId')} night={night.get('targetBuildingId')} repeat={repeat.get('targetBuildingId')}")
+        if day.get("targetActive") is not True or day.get("targetCue")!="open-sign" or night.get("targetActive") is not False or night.get("targetCue") is not None:
+            raise RuntimeError(f"Market active/inactive visual target failed: day={day} night={night}")
+        if craft_day.get("targetBuildingId")!=craft_night.get("targetBuildingId") or craft_day.get("targetActive") is not True or craft_day.get("targetCue")!="forge-glow" or craft_night.get("targetActive") is not False:
+            raise RuntimeError(f"Craft active/inactive visual target failed: day={craft_day} night={craft_night}")
+        if night_home.get("targetActive") is not True or night_home.get("targetCue")!="warm-window":
+            raise RuntimeError(f"Night home visual target failed: {night_home}")
         if int(day.get("activeWorkplaceCount") or 0)<4 or int(day.get("openMarketCount") or 0)<1 or int(day.get("forgeGlowCount") or 0)<1:
             raise RuntimeError(f"Workday building activity cues incomplete: {day}")
-        if int(night.get("activeWorkplaceCount") or 0)!=0:
-            raise RuntimeError(f"Night frame still claims active workplaces: {night}")
+        if int(night.get("activeWorkplaceCount") or 0)!=0 or int(craft_night.get("activeWorkplaceCount") or 0)!=0:
+            raise RuntimeError(f"Night frames still claim active workplaces: market={night} craft={craft_night}")
         if int(night.get("warmWindowCount") or 0)<4 or int(night_home.get("activeHomeCount") or 0)<4:
             raise RuntimeError(f"Night/home activity cues incomplete: night={night} home={night_home}")
         def by_function(proof,function_name):
