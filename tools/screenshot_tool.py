@@ -6528,14 +6528,32 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                             return actors[0]||null;
                         """,kind)
                         if actor:
-                            driver.execute_script("window.__WP_S003_014_ACTIVE={kind:arguments[0],actor:arguments[1]}",kind,actor)
+                            focus=driver.execute_script("return window.PlanetStage?.snapshot?.()?.canonicalFocus?.worldTile||null")
+                            driver.execute_script("""
+                                window.__WP_S003_014_ACTIVE={kind:arguments[0],actor:arguments[1]};
+                                window.__WP_S003_014_KNOWN=window.__WP_S003_014_KNOWN||{};
+                                window.__WP_S003_014_KNOWN[arguments[0]]={
+                                  kind:arguments[0],actor:arguments[1],focus:arguments[2],
+                                  latitudeRadians:Number(arguments[3]),longitudeRadians:Number(arguments[4])
+                                };
+                            """,kind,actor,focus,float(base["lat"]+dy),float(base["lon"]+dx))
                             return actor
                     except Exception:
                         pass
             raise RuntimeError(f"No bounded {kind} fauna actor found near canonical {biome} target")
 
         active=driver.execute_script("return window.__WP_S003_014_ACTIVE||null")
-        if mode in {"idle","mobile-react"} or not active or active.get("kind")!=kind:
+        known=driver.execute_script("return (window.__WP_S003_014_KNOWN||{})[arguments[0]]||null",kind)
+        # Phone evidence reuses the exact canonical actor/focus found for the
+        # desktop pair instead of scanning fresh neighboring cells. The old
+        # mobile re-search moved through several valid fauna cells and inflated
+        # cumulative trigger telemetry with evidence-navigation reactions,
+        # occasionally tripping the unchanged <=12 anti-spam gate. Reuse is
+        # stronger evidence (same actor at desktop + phone) and leaves the gate
+        # and all production reaction behavior untouched.
+        if mode=="mobile-react" and known and (known.get("actor") or {}).get("id"):
+            actor=known.get("actor")
+        elif mode=="idle" or not active or active.get("kind")!=kind:
             actor=find_actor()
         else:
             actor=active.get("actor")
@@ -6549,10 +6567,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             # terrain resource: the ready parent/stand-in remains on screen while
             # the bounded focus request prepares, and the reaction is tied to the
             # actor's stable world-tile identity.
-            driver.execute_script("""
-                const x=BigInt(arguments[0])+3n,y=BigInt(arguments[1]);
-                window.PlanetStage.setWorldTileFocus(String(x),String(y));window.PlanetStage.setZoomScalar(1);
-            """,str(tile["x"]),str(tile["y"]))
+            if mode=="mobile-react" and known:
+                driver.execute_script("""
+                    window.PlanetStage.setViewTarget({
+                      latitudeRadians:Number(arguments[0]),longitudeRadians:Number(arguments[1])
+                    });
+                    window.PlanetStage.setZoomScalar(1);
+                """,float(known["latitudeRadians"]),float(known["longitudeRadians"]))
+            else:
+                driver.execute_script("""
+                    const x=BigInt(arguments[0])+3n,y=BigInt(arguments[1]);
+                    window.PlanetStage.setWorldTileFocus(String(x),String(y));window.PlanetStage.setZoomScalar(1);
+                """,str(tile["x"]),str(tile["y"]))
             WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
                 const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],before=Number(arguments[1]),id=arguments[2];
                 return Number((wr.triggerByKind||{})[kind]||0)>before &&
