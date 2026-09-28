@@ -131,6 +131,7 @@ SCENARIOS = {
     "wp-s003-015",
     "wp-s003-016",
     "wp-s003-020",
+    "wp-s003-021",
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
@@ -252,6 +253,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-015": 8,
     "wp-s003-016": 6,
     "wp-s003-020": 8,
+    "wp-s003-021": 8,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -6446,6 +6448,101 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-021":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("normal-state","normal",(1280,800),False),
+            ("worn-state","worn",(1280,800),False),
+            ("damaged-state","damaged",(1280,800),False),
+            ("repaired-state","repaired",(1280,800),False),
+            ("overgrown-state","overgrown",(1280,800),False),
+            ("reload-overgrown","overgrown",(1280,800),True),
+            ("phone-damaged","damaged",(844,390),False),
+            ("phone-overgrown","overgrown",(390,844),False),
+        )
+        label,state_name,viewport,reload_mode=plan[min(frame_index,len(plan)-1)]
+        target_w,target_h=int(viewport[0]),int(viewport[1])
+        driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width":target_w,"height":target_h,"deviceScaleFactor":1,"mobile":False
+        })
+        time.sleep(.10)
+        expected=None
+        if reload_mode:
+            hook=driver.execute_script("""
+                const r=window.PlanetStage?.setCampaignWearEvidenceState?.("overgrown")||null;
+                if(!r?.ok)return r;
+                window.PlanetStage.setWorldTileFocus(r.targetTile.x,r.targetTile.y);
+                window.PlanetStage.setZoomScalar(1);
+                return r;
+            """)
+            if not hook or not hook.get("ok"):
+                raise RuntimeError(f"Unable to establish persistent overgrown evidence state: {hook}")
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},cw=s.campaignWearProjection||{};
+                return s.ready===true&&s.zoom?.scaleLabel==='1/10000'&&s.projection?.localStatic?.revealTier==='full'&&
+                       Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                       cw.evidenceTargetState==='overgrown'&&cw.revisionSignature;
+            """))
+            expected=driver.execute_script("""
+                const s=window.PlanetStage.snapshot(),cw=s.campaignWearProjection||{};
+                const payload={id:cw.evidenceTargetBuildingId,entityId:cw.evidenceTargetEntityId,state:cw.evidenceTargetState,
+                  revision:cw.evidenceTargetRevision,signature:cw.revisionSignature,deltaSequence:cw.deltaSequence,
+                  targetTile:(cw.buildings||[]).find(x=>x.id===cw.evidenceTargetBuildingId)?.centerTile||null};
+                localStorage.setItem("__WP_S003_021_RELOAD_EXPECTED",JSON.stringify(payload));return payload;
+            """)
+            driver.refresh()
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.()||{};
+                return s.ready===true&&Boolean(window.SeedSystem?.getCampaign?.()?.seed)&&Boolean(window.WorldState?.deltaSnapshot);
+            """))
+            expected=driver.execute_script("try{return JSON.parse(localStorage.getItem('__WP_S003_021_RELOAD_EXPECTED')||'null')}catch(_){return null}")
+            if not expected or not expected.get("targetTile"):
+                raise RuntimeError(f"Missing persisted reload expectation: {expected}")
+            driver.execute_script("""
+                window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]));
+                window.PlanetStage.setZoomScalar(1);
+            """,expected["targetTile"]["x"],expected["targetTile"]["y"])
+        else:
+            hook=driver.execute_script("""
+                const r=window.PlanetStage?.setCampaignWearEvidenceState?.(arguments[0])||null;
+                if(r?.ok){window.PlanetStage.setWorldTileFocus(r.targetTile.x,r.targetTile.y);window.PlanetStage.setZoomScalar(1);}
+                return r;
+            """,state_name)
+            if not hook or not hook.get("ok"):
+                raise RuntimeError(f"Unable to set campaign wear state {state_name}: {hook}")
+
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},cw=s.campaignWearProjection||{};
+            return s.ready===true&&s.zoom?.scaleLabel==='1/10000'&&s.projection?.localStatic?.revealTier==='full'&&
+                   Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   cw.evidenceTargetState===arguments[0]&&cw.revisionSignature&&Number(cw.localQueryCount||0)>0;
+        """,state_name))
+        time.sleep(.12)
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),cw=s.campaignWearProjection||{},r=s.projection?.resourceBudget||{},requested=arguments[1];
+            const target=(cw.buildings||[]).find(x=>x.id===cw.evidenceTargetBuildingId)||null;
+            let expected=null;try{expected=JSON.parse(localStorage.getItem("__WP_S003_021_RELOAD_EXPECTED")||"null")}catch(_){}
+            const reloadPersisted=arguments[2]===true&&expected&&target&&
+              expected.id===cw.evidenceTargetBuildingId&&expected.entityId===cw.evidenceTargetEntityId&&
+              Number(expected.revision)===Number(cw.evidenceTargetRevision)&&expected.signature===cw.revisionSignature&&
+              expected.state===cw.evidenceTargetState;
+            return {label:arguments[0],requestedState:requested,targetBuildingId:cw.evidenceTargetBuildingId,
+              targetEntityId:cw.evidenceTargetEntityId,targetVisualState:cw.evidenceTargetState,targetRevision:cw.evidenceTargetRevision,
+              target,targetCenterTile:target?.centerTile||null,active:cw.active,buildingCount:cw.buildingCount,
+              changedBuildingCount:cw.changedBuildingCount,visualPrimitiveCount:cw.visualPrimitiveCount,
+              drawCallEstimate:cw.drawCallEstimate,triangleCount:cw.triangleCount,sharedMaterialCount:cw.sharedMaterialCount,
+              stateCounts:cw.stateCounts,revisionSignature:cw.revisionSignature,maxRevision:cw.maxRevision,deltaSequence:cw.deltaSequence,
+              localQueryCount:cw.localQueryCount,localQueryLimit:cw.localQueryLimit,persistent:cw.persistent,historyReplay:cw.historyReplay,
+              lazyLocal:cw.lazyLocal,authoritativeSource:cw.authoritativeSource,evidenceHookAvailable:cw.evidenceHookAvailable,
+              presentationOnly:cw.presentationOnly,simulationAuthority:cw.simulationAuthority,bounded:cw.bounded,
+              fullWorldScan:cw.fullWorldScan,perFrameScan:cw.perFrameScan,resolveMs:cw.resolveMs,buildMs:cw.buildMs,
+              revealTier:s.projection?.localStatic?.revealTier,pending:r.pendingPreparationCount,
+              persistentRevisionSignature:s.projection?.localStatic?.persistentRevisionSignature||null,
+              persistentPresentationSignature:s.projection?.localStatic?.persistentPresentationSignature||null,
+              reloadExpected:expected,reloadPersisted:Boolean(reloadPersisted),viewport:{width:innerWidth,height:innerHeight},
+              focus:s.canonicalFocus?.worldTile};
+        """,label,state_name,bool(reload_mode))
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-020":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -9205,6 +9302,63 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-021":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-021 requires eight persistent environmental-state evidence frames")
+        proofs=[]
+        expected_states=["normal","worn","damaged","repaired","overgrown","overgrown","damaged","overgrown"]
+        target_id=None
+        for index,frame in enumerate(frames[:8],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split(":",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-S003-021 frame {index} lacks persistent projection proof: {action}") from exc
+            proofs.append(proof)
+            if proof.get("requestedState")!=expected_states[index-1] or proof.get("targetVisualState")!=expected_states[index-1]:
+                raise RuntimeError(f"Persistent environmental state mismatch in frame {index}: {proof}")
+            if proof.get("presentationOnly") is not True or proof.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Persistent projection authority isolation failed in frame {index}: {proof}")
+            if proof.get("bounded") is not True or proof.get("fullWorldScan") is not False or proof.get("perFrameScan") is not False:
+                raise RuntimeError(f"Persistent projection bounded contract failed in frame {index}: {proof}")
+            if proof.get("persistent") is not True or proof.get("historyReplay") is not False or proof.get("lazyLocal") is not True:
+                raise RuntimeError(f"Persistent/lazy projection contract failed in frame {index}: {proof}")
+            if proof.get("evidenceHookAvailable") is not True or not str(proof.get("authoritativeSource") or "").startswith("WorldState.resolve"):
+                raise RuntimeError(f"Persistent projection source/hook contract failed in frame {index}: {proof}")
+            if int(proof.get("buildingCount") or 0)<13 or int(proof.get("localQueryCount") or 0)>int(proof.get("localQueryLimit") or 0) or int(proof.get("localQueryLimit") or 0)>16:
+                raise RuntimeError(f"Persistent projection local-query bound failed in frame {index}: {proof}")
+            if int(proof.get("drawCallEstimate") or 0)>1 or int(proof.get("sharedMaterialCount") or 0)!=1 or int(proof.get("triangleCount") or 0)>1200:
+                raise RuntimeError(f"Persistent projection rendering budget failed in frame {index}: {proof}")
+            if float(proof.get("buildMs") or 0)>8.0:
+                raise RuntimeError(f"Persistent projection build cost exceeded 8 ms in frame {index}: {proof}")
+            if proof.get("revealTier")!="full" or int(proof.get("pending") or 0)!=0:
+                raise RuntimeError(f"Persistent projection local scene not settled in frame {index}: {proof}")
+            if not proof.get("revisionSignature") or proof.get("persistentRevisionSignature")!=proof.get("revisionSignature") or not proof.get("persistentPresentationSignature"):
+                raise RuntimeError(f"Persistent revision signature missing from local presentation in frame {index}: {proof}")
+            if not proof.get("targetBuildingId") or not proof.get("targetEntityId") or int(proof.get("targetRevision") or 0)<=0:
+                raise RuntimeError(f"Persistent target identity/revision missing in frame {index}: {proof}")
+            if target_id is None: target_id=proof.get("targetBuildingId")
+            if proof.get("targetBuildingId")!=target_id:
+                raise RuntimeError(f"Persistent evidence changed canonical building target: {target_id} -> {proof.get('targetBuildingId')}")
+            if proof.get("focus")!=proof.get("targetCenterTile"):
+                raise RuntimeError(f"Persistent evidence is not centered on canonical target in frame {index}: {proof}")
+            if expected_states[index-1]=="normal":
+                if proof.get("active") is not False or int(proof.get("visualPrimitiveCount") or 0)!=0 or int(proof.get("drawCallEstimate") or 0)!=0:
+                    raise RuntimeError(f"Normal state should not invent environmental wear geometry: {proof}")
+            else:
+                if proof.get("active") is not True or int(proof.get("changedBuildingCount") or 0)<1 or int(proof.get("visualPrimitiveCount") or 0)<4 or int(proof.get("drawCallEstimate") or 0)!=1:
+                    raise RuntimeError(f"Changed persistent state is not visibly projected in frame {index}: {proof}")
+                if int((proof.get("stateCounts") or {}).get(expected_states[index-1]) or 0)<1:
+                    raise RuntimeError(f"Changed persistent state count missing in frame {index}: {proof}")
+        reload=proofs[5]
+        if reload.get("reloadPersisted") is not True:
+            raise RuntimeError(f"Reload did not reproduce the identical persisted overgrown revision/signature: {reload}")
+        expected=reload.get("reloadExpected") or {}
+        if Number(expected.get("revision") or 0)!=int(reload.get("targetRevision") or 0) or expected.get("signature")!=reload.get("revisionSignature"):
+            raise RuntimeError(f"Reload persistent revision/signature mismatch: {reload}")
+        if proofs[6].get("viewport")!={"width":844,"height":390} or proofs[7].get("viewport")!={"width":390,"height":844}:
+            raise RuntimeError(f"Persistent projection mobile viewport evidence failed: {proofs[6].get('viewport')} / {proofs[7].get('viewport')}")
+        return
     if scenario == "wp-s003-020":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-020 requires eight building-surroundings evidence frames")
