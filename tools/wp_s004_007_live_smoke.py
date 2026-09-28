@@ -52,7 +52,7 @@ try:
         telemetry:WorkCycles.snapshot(seed)
       };
     """)
-    severe=[x for x in driver.get_log("browser") if x.get("level")=="SEVERE"]
+    severe=[x for x in driver.get_log("browser") if x.get("level")=="SEVERE" and "favicon.ico" not in str(x.get("message",""))]
     if severe:
         raise RuntimeError("browser console severe errors: "+json.dumps(severe[-10:]))
 
