@@ -3654,8 +3654,21 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // Child-local Y is terrain-normal/elevation. Compensate only the tangent-plane
     // axes so the previous-ready semantic world keeps its ground contact while
     // the terrain stand-in is magnified during an asynchronous child handoff.
+    // Scale around the canonical settlement anchor rather than the SLOD-cell
+    // origin; otherwise the anchor offset itself is multiplied by the hold scale
+    // and the village slides toward the cell center while the child prepares.
+    let semanticAnchorLocalX=0,semanticAnchorLocalZ=0;
+    const semanticCenterTile=localStatic?.canonicalCenterTile;
+    if(semanticCenterTile&&displayResource){
+      const semanticOrigin=worldLatLonForTile(semanticCenterTile.x,semanticCenterTile.y);
+      const semanticDelta=canonicalRegisteredDeltaMeters(displayResource.lat0,displayResource.lon0,semanticOrigin.latitudeRadians,semanticOrigin.longitudeRadians);
+      semanticAnchorLocalX=Number(semanticDelta.eastMeters||0)/dims.metersPerUnit;
+      semanticAnchorLocalZ=-Number(semanticDelta.northMeters||0)/dims.metersPerUnit;
+    }
+    const semanticAnchorCompensation=1-semanticHoldScale;
     for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot]){
       if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,1,semanticHoldScale);
+      if(rootNode?.setLocalPosition)rootNode.setLocalPosition(semanticAnchorLocalX*semanticAnchorCompensation,0,semanticAnchorLocalZ*semanticAnchorCompensation);
     }
     localResources.standInSemanticScale=Number(semanticHoldScale.toFixed(6));
     tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,offset.north/dims.metersPerUnit*patchScale,DISPLAY_RADIUS_UNITS+.002);
@@ -4112,6 +4125,10 @@ async function buildPlanetMesh(){
 }
 function resize(){
   if(!app||!device||!root)return;
+  // The scale ladder is discrete player-facing state. Reframing for a new
+  // viewport must not leave the scalar calibrated for the previous aspect ratio,
+  // or the same 1/N step will show a different physical footprint after resize.
+  const preservedScaleIndex=scaleIndexForScalar(zoomState.scalar);
   const width=Math.max(1,Math.round(root.clientWidth||window.innerWidth||1));
   const height=Math.max(1,Math.round(root.clientHeight||window.innerHeight||1));
   const dpr=Math.min(1.5,Math.max(1,Number(window.devicePixelRatio||1)));
@@ -4129,6 +4146,7 @@ function resize(){
     const framingMargin=(height<=500&&aspect>1.7)?0.78:(aspect>1.7?1.015:1.055);
     const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*framingMargin;
     zoomState.baseCameraDistance=distance;
+    zoomState.scalar=scalarForScaleIndex(preservedScaleIndex);
     applyCameraZoom();
   }
 }
