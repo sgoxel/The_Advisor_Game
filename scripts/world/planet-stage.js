@@ -3621,9 +3621,9 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     const corners=[[-ha,-hd],[ha,-hd],[ha,hd],[-ha,hd]].map(([a,d])=>{
       const e=ce+basis.tx*a+basis.ox*d,n=cn+basis.tn*a+basis.on*d;return canonicalSemanticPosition(e,n,presentationScale,unit,frame);
     });
-    const top=ground+height*presentationScale/unit,base=positions.length/3,ids=[];
-    for(const p of corners)ids.push(addVertex(p.x,ground,p.z,color));
-    for(const p of corners)ids.push(addVertex(p.x,top,p.z,color));
+    const top=ground+height*presentationScale/unit,base=positions.length/3;
+    for(const p of corners)addVertex(p.x,ground,p.z,color);
+    for(const p of corners)addVertex(p.x,top,p.z,color);
     indices.push(base,base+1,base+2, base,base+2,base+3, base+4,base+6,base+5, base+4,base+7,base+6);
     for(let i=0;i<4;i++){const j=(i+1)%4;indices.push(base+i,base+j,base+4+j, base+i,base+4+j,base+4+i);}
     propCount++;
@@ -3641,25 +3641,15 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   }));
   const blockedByTree=(x,y)=>canonicalTreeCrowns.some(tree=>Math.hypot(Number(x)-tree.x,Number(y)-tree.y)<tree.radiusTiles);
   const sideBasis=side=>side==="N"?{ox:0,on:-1,tx:1,tn:0}:side==="S"?{ox:0,on:1,tx:-1,tn:0}:side==="W"?{ox:-1,on:0,tx:0,tn:-1}:{ox:1,on:0,tx:0,tn:1};
-  const cueFootprintClear=(record,basis,x,y,fn)=>{
-    const extent=fn==="lodging"?{u:2.05,v:1.42}:fn==="craft"?{u:1.90,v:1.28}:null;
-    if(!extent)return true;
-    const samples=[[0,0],[-extent.u,-extent.v],[extent.u,-extent.v],[-extent.u,extent.v],[extent.u,extent.v]];
-    for(const [u,v] of samples){
-      const sx=x+basis.tx*u+basis.ox*v,sy=y+basis.tn*u+basis.on*v;
-      if(blockedByOther(record,sx,sy))return false;
-      if(blockedByTree(sx,sy)){treeOcclusionRejects++;return false;}
-    }
-    return true;
-  };
   const anchorFor=record=>{
     const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N",fn=String(record.function||"home");
-    // The dimetric gameplay camera reads S/E exterior space most clearly. Prefer
-    // the other visible side from an S/E entrance, then fall back to the hidden
-    // opposite side only when canonical road/building clearance requires it.
-    const preferred=access?.side==="S"?"E":access?.side==="E"?"S":access?.side==="N"?"E":access?.side==="W"?"S":"S";
-    const order=[preferred,opposite,...["S","E","N","W"].filter(x=>x!==preferred&&x!==opposite&&x!==access?.side),access?.side].filter(Boolean);
-    const outset=fn==="lodging"?2.35:fn==="craft"?1.85:1.55;
+    const cameraPreferred=access?.side==="S"?"E":access?.side==="E"?"S":access?.side==="N"?"E":access?.side==="W"?"S":"S";
+    // Lodging and craft need a stable open plan-view shoulder from the fixed
+    // ground camera. W is deterministic and was the clearest legal side in the
+    // canonical starting-village plan; if W is the entrance, use cameraPreferred.
+    const preferred=((fn==="lodging"||fn==="craft")&&access?.side!=="W")?"W":cameraPreferred;
+    const order=[...new Set([preferred,opposite,...["S","E","N","W"].filter(x=>x!==preferred&&x!==opposite&&x!==access?.side),access?.side].filter(Boolean))];
+    const outset=fn==="lodging"?2.65:fn==="craft"?1.85:1.55;
     for(const side of order){
       anchorSelectionAttempts++;
       const basis=sideBasis(side),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
@@ -3667,7 +3657,6 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       const x=cx+basis.ox*(half+outset),y=cy+basis.on*(half+outset);
       if(roadAt(x,y)||blockedByOther(record,x,y))continue;
       if(blockedByTree(x,y)){treeOcclusionRejects++;continue;}
-      if(!cueFootprintClear(record,basis,x,y,fn))continue;
       if(access&&Math.hypot(x-Number(access.x),y-Number(access.y))<2.2)continue;
       return {side,basis,east:x*tileMeters,north:y*tileMeters,tileX:x,tileY:y};
     }
@@ -3684,25 +3673,20 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-1.25,.15,2.1,.90,.70,C.wood);
       box(anchor,b,1.15,.05,1.6,1.15,.15,C.green);
     }else if(fn==="lodging"){
-      box(anchor,b,0,0,7.2,4.8,.07,[.49,.37,.18]);
-      // Stable paddock: a broad straw bed enclosed by a dark U-shaped rail. The
-      // footprint is intentionally low and wide so it survives near-top-down view.
-      box(anchor,b,-1.20,-.10,4.85,2.85,.11,[.72,.55,.18],.05);
-      box(anchor,b,-3.15,.72,.28,4.10,.66,[.24,.13,.05],.12);
-      box(anchor,b,.75,.72,.28,4.10,.66,[.24,.13,.05],.12);
-      box(anchor,b,-1.20,1.88,4.18,.28,.66,[.24,.13,.05],.12);
-      // A broad blue trough survives plan view better than three small hitching
-      // rail pieces and costs fewer primitives.
-      box(anchor,b,-1.34,.12,2.55,1.02,.36,[.16,.34,.38],.16);
-      // Compact horse silhouette stays inside the paddock and reads in plan view.
-      box(anchor,b,-1.15,.62,2.65,.92,.62,[.30,.15,.06],.22);
-      box(anchor,b,.02,.73,.62,.64,.58,[.34,.18,.07],.40);
-      box(anchor,b,.34,.78,.72,.56,.36,[.38,.20,.08],.76);
-      // Inn tables + hanging sign separate the public lodging use from a barn.
-      box(anchor,b,1.72,-.12,1.55,1.08,.18,C.woodLight,.60);
-      box(anchor,b,2.78,-.12,1.55,1.08,.18,C.woodLight,.60);
-      box(anchor,b,2.24,1.48,.24,.24,1.92,C.wood);
-      box(anchor,b,2.24,1.48,1.18,.16,.72,[.82,.58,.24],1.53);
+      // Broad stable yard: readable first as paddock + horse + water trough,
+      // then as public lodging through tables/sign. Twelve merged boxes total.
+      box(anchor,b,0,0,8.8,6.0,.07,[.48,.36,.17]);
+      box(anchor,b,-.70,.12,5.85,3.55,.11,[.76,.58,.19],.05);
+      box(anchor,b,-3.55,.72,.30,4.65,.68,[.18,.09,.035],.12);
+      box(anchor,b,2.15,.72,.30,4.65,.68,[.18,.09,.035],.12);
+      box(anchor,b,-.70,2.10,5.95,.30,.68,[.18,.09,.035],.12);
+      box(anchor,b,-2.25,-.38,2.90,1.05,.38,[.12,.36,.43],.16);
+      box(anchor,b,-.55,.62,3.25,1.18,.66,[.20,.09,.035],.22);
+      box(anchor,b,1.10,.72,.90,.76,.62,[.25,.12,.045],.46);
+      box(anchor,b,3.05,-.72,1.70,1.08,.20,C.woodLight,.60);
+      box(anchor,b,3.05,.66,1.70,1.08,.20,C.woodLight,.60);
+      box(anchor,b,3.75,1.82,.26,.26,2.05,C.wood);
+      box(anchor,b,3.75,1.82,1.34,.18,.76,[.84,.60,.23],1.62);
     }else if(fn==="market"){
       box(anchor,b,0,0,6.8,4.0,.07,[.47,.36,.18]);
       box(anchor,b,0,.15,5.4,1.15,.78,C.woodLight);
@@ -3722,19 +3706,14 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-1.76,.04,.92,.64,.18,[.88,.29,.06],.66);
       // Plan-view anvil: bright broad cap, visible stem and offset horn on a dark
       // stump. It is intentionally wider than the old equipment-stack silhouette.
-      box(anchor,b,.42,.02,.92,1.06,.66,[.29,.19,.10],.06);
-      box(anchor,b,.42,.02,2.95,.82,.32,[.48,.51,.50],.66);
-      box(anchor,b,-.62,.02,1.10,.54,.28,[.48,.51,.50],.70);
-      box(anchor,b,1.56,.02,.78,.46,.24,[.48,.51,.50],.72);
+      box(anchor,b,.42,.02,1.08,1.18,.66,[.29,.19,.10],.06);
+      box(anchor,b,.42,.02,3.25,.94,.34,[.53,.56,.55],.66);
+      box(anchor,b,-.72,.02,1.35,.60,.30,[.53,.56,.55],.70);
+      box(anchor,b,1.72,.02,.96,.52,.26,[.53,.56,.55],.72);
       // Neutral chimney/hood anchors the forge without becoming a UI-like glow.
       box(anchor,b,-1.76,.64,.88,.88,2.38,C.stone,1.02);
       box(anchor,b,-1.76,.64,1.12,1.12,.22,[.10,.10,.09],3.36);
-      // Tool rack with three metallic tools, then separate fuel/ore piles.
-      box(anchor,b,.72,1.46,.26,.26,1.95,C.wood,.06);
-      box(anchor,b,.72,1.46,2.48,.24,.28,C.woodLight,1.67);
-      box(anchor,b,.05,1.46,.18,.18,1.12,[.56,.58,.56],.78);
-      box(anchor,b,.72,1.46,.18,.18,1.40,[.56,.58,.56],.62);
-      box(anchor,b,1.39,1.46,.18,.18,1.02,[.56,.58,.56],.86);
+      // Fuel and ore piles retain the smithy work-yard cue without tiny rack geometry.
       box(anchor,b,2.18,.42,1.62,1.02,.54,C.wood,.02);
       box(anchor,b,2.40,-.15,.92,.84,.48,[.20,.21,.20],.10);
     }else if(fn==="storage"){
