@@ -8231,7 +8231,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if mode in ("seed-a","seed-b"):
             seed="WP_S003_010_003_019_A" if mode=="seed-a" else "WP_S003_010_003_019_B"
             base=driver.current_url.split("?",1)[0]
-            driver.get(base+"?seed="+seed)
+            # Seed A owns the required production broad-globe proof. Seed B is
+            # only a second-authority close-scale check, so skip its redundant
+            # global mesh/texture upload while keeping canonical geography,
+            # coordinate fabric, SLOD cells and local streaming unchanged.
+            suffix="" if mode=="seed-a" else "&evidence_fast_start=1"
+            driver.get(base+"?seed="+seed+suffix)
             wait_stage(); focus_starting(); settle(scale_index)
         elif mode=="steady":
             settle(scale_index)
