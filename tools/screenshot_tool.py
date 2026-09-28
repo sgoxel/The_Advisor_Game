@@ -6452,16 +6452,9 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("phone-deer-approach","deer","grassland","mobile-react",(844,390)),
             ("hare-idle","hare","wooded","idle",(1280,800)),
             ("hare-approach","hare","wooded","react",(1280,800)),
-            # Use the ground-bound canonical hare for the narrow portrait proof.
-            # A waterbird legitimately climbs several metres during takeoff; by
-            # the time the previous desktop screenshot has encoded, its altitude
-            # projection can carry it outside a 390 px-wide view even though the
-            # reaction is correct. Waterbird reaction remains proven immediately
-            # afterward in the desktop pair, while both phone aspect ratios still
-            # prove the same production behavior without moving gameplay presence.
-            ("phone-hare-approach","hare","wooded","mobile-react",(390,844)),
             ("waterbird-idle","waterbird","wet","idle",(1280,800)),
             ("waterbird-approach","waterbird","wet","react",(1280,800)),
+            ("phone-waterbird-approach","waterbird","wet","mobile-react",(390,844)),
         )
         label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
         target_w,target_h=int(viewport[0]),int(viewport[1])
@@ -6586,21 +6579,19 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 # new terrain resource: the ready parent/stand-in remains on
                 # screen while the bounded focus request prepares.
                 driver.execute_script("""
-                    // Approach from one canonical tile away. Keep the portrait
-                    // waterbird reaction on the tall screen axis: east/west flee
-                    // motion is correct but leaves a 390 px-wide viewport before
-                    // screenshot encoding finishes. This changes only evidence
-                    // approach direction, never trigger distance or production AI.
-                    const water=String(arguments[2])==='waterbird';
-                    const x=BigInt(arguments[0])+(water?0n:1n),y=BigInt(arguments[1])+(water?1n:0n);
+                    // Approach from one canonical tile away. This still exceeds
+                    // the production 0.6 m movement gate and remains far inside
+                    // every species trigger radius, while keeping the reacting
+                    // actor inside narrow portrait framing after the phone resize.
+                    const x=BigInt(arguments[0])+1n,y=BigInt(arguments[1]);
                     window.PlanetStage.setWorldTileFocus(String(x),String(y));window.PlanetStage.setZoomScalar(1);
-                """,str(tile["x"]),str(tile["y"]),kind)
+                """,str(tile["x"]),str(tile["y"]))
                 WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
                     const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],before=Number(arguments[1]),id=arguments[2];
                     return Number((wr.triggerByKind||{})[kind]||0)>before &&
                            (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
                 """,kind,before,str(actor["id"])))
-                time.sleep(.08)
+                time.sleep(.30)
 
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),wr=s.wildlifeReaction||{},r=s.projection?.resourceBudget||{},kind=arguments[1],targetId=arguments[2];
@@ -16042,13 +16033,13 @@ def take_screenshots(
             for index, path in enumerate(paths):
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
-                    time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
+                    time.sleep(interval)
                 elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
-                    time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
+                    time.sleep(interval)
                 elif index:
                     action = _run_scenario_step(driver, scenario, index, width, height)
-                    time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
+                    time.sleep(interval)
                 else:
                     action = prep_action
                 if scenario in {"wp-s003-009-003", "wp-s003-009-004"}:
