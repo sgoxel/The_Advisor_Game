@@ -2373,6 +2373,13 @@ def validate_current_build_snapshot(snapshot: dict, *, require_coverage: bool = 
         raise RuntimeError(f"Terrain grid lost centered world tile: {grid}")
     expected = int(grid.get("columns") or 0) * int(grid.get("rows") or 0)
     actual = int(current.get("terrainTileCount") or 0)
+    # Planet-first PlayCanvas startup legitimately has no legacy terrain-grid
+    # rows/columns or tile DOM at this preflight point. Scenario-specific waits
+    # below still require PlanetStage ready/full local presentation before any
+    # evidence frame is accepted, so zero legacy tiles are valid only when the
+    # runtime explicitly identifies the surface as planetary.
+    if grid.get("planetary") is True and expected == 0 and actual == 0:
+        return
     if expected <= 0 or actual != expected:
         raise RuntimeError(
             f"Terrain tile count mismatch: expected {expected}, captured {actual}"
