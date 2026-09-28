@@ -117,7 +117,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
 - `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — COMPLETED
 - `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder — COMPLETED
-- `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement
+- `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement — IN PROGRESS (AGENT #6; Attempt 3 functional PASS / VISUAL 6.4/10 FAIL on workflow 36478161427, artifact 10994129858; 1×/3×/6× center-first rings, bounded cache/reuse/fallback telemetry pass, but severe diagonal/triangular mid-scale terrain bands remain at 1/500 desktop + phone landscape; three-attempt cap reached; NOT COMPLETED)
 - `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
