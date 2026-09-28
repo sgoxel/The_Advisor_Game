@@ -115,6 +115,10 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-014` — Physical-Scale Semantic Layer Ladder + Stable Label/Border/Route Decluttering — COMPLETED
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
+- `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility
+- `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder
+- `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement
+- `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
