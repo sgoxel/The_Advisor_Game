@@ -168,13 +168,16 @@ function plan(seed,state,activity,reason){
   return Boolean(route?.found);
 }
 function activeActivity(seed,state,when){
+  const resident=residentById.get(state.residentId);
+  let sampleWhen=when,base=null;
   if(proofContext?.active&&proofContext.residentId===state.residentId&&proofContext.sampleTime){
-    return DailyActivity.resolveActionTarget(seed,residentById.get(state.residentId),proofContext.sampleTime);
+    sampleWhen=proofContext.sampleTime;
+    base=DailyActivity.resolveActionTarget(seed,resident,sampleWhen);
+  }else if(window.NPCLifecycle?.activityForResident){
+    try{base=NPCLifecycle.activityForResident(seed,state.residentId,sampleWhen)}catch(_){}
   }
-  if(window.NPCLifecycle?.activityForResident){
-    try{return NPCLifecycle.activityForResident(seed,state.residentId,when)}catch(_){}
-  }
-  return DailyActivity.resolveActionTarget(seed,residentById.get(state.residentId),when);
+  if(!base)base=DailyActivity.resolveActionTarget(seed,resident,sampleWhen);
+  return window.WorkCycles?.resolve?.(seed,resident,sampleWhen,base)||base;
 }
 function ensureTarget(seed,state,activity){
   const next=cloneActivity(activity);
