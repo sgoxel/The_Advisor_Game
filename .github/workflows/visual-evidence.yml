@@ -232,10 +232,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Checkout main
+      - name: Checkout event commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          # Issue-comment evidence must be reproducible even while other agents
+          # are pushing unrelated WPs to main. github.sha is the default-branch
+          # head captured when this event was created.
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up Python
