@@ -1,3 +1,10 @@
+2026-09-28 03:49 +03:00 | WP-S003-018 | MIXED | continuation incomplete after 3 attempts
+- Optimized standalone regional-weather refresh without changing SEED/fantasy-time authority: bounded SEED+tile RegionProfile cache, bounded 32-entry deterministic weather cache, removed unused geography sampling and duplicate PlanetStage snapshot work, idempotent canvas-filter writes, and canonical gameplay-center tile polling for the steady path.
+- Attempt 2 run 36362969947 / artifact 10946615449 reached all seven settlement/wilderness clear-rain-fog + phone-rain frames. Phone steady refresh improved from 15.8 ms to 0.3 ms against the unchanged <=15 ms gate; worst cold update 20.1 ms <=40 ms; worst weather draw frame 2.5 ms <=24 ms; phone cap 40 with 24 active rain particles; stageSnapshotFallbacks=0.
+- All seven fresh Attempt-2 screenshots were directly inspected. VISUAL 8.2/10 PASS: clear/rain/fog remain distinct and readable in settlement, wilderness and phone portrait with no major weather-presentation defect.
+- Attempt 2 failed only at authoritative-time resume because no active campaign existed after clearing the evidence override. Attempt 3 run 36363199891 then exposed an evidence-harness error: it waited for AppUI.startNewCampaignForEvidence even though current planet-first index.html does not load app-ui.js, so it timed out before rendering.
+- Three-attempt cap exhausted. WP remains OPEN / NOT COMPLETED. No completion deployment/bookkeeping or Issue closure performed. Next continuation must establish the campaign directly through loaded SeedSystem or a persisted campaign, then rerun unchanged performance/time-resume gates.
+
 2026-09-28 00:32 +03:00 | WP-S003-010-003-012 | DEPLOYMENT VERIFIED
 - Passing continuation evidence remains run 36351719289 / artifact 10942307245 at VISUAL 8.1/10 on exact test head 9ae15f1bdb6e8418e529ab32665a11b32c243dc0.
 - Final pre-completion docs head 01939fdfcd952e26daaa48c4fdbc0909420a0e0c deployed successfully in GitHub Pages run 36352046178.
