@@ -3622,8 +3622,13 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     for(let i=0;i<4;i++){const j=(i+1)%4;indices.push(base+i,base+j,base+4+j, base+i,base+4+j,base+4+i);}
     propCount++;
   };
-  const blockedByOther=(record,x,y)=>records.some(other=>String(other.id)!==String(record.id)&&other.bounds&&x>=Number(other.bounds.minX)-.75&&x<=Number(other.bounds.maxX)+.75&&y>=Number(other.bounds.minY)-.75&&y<=Number(other.bounds.maxY)+.75);
-  const roadAt=(x,y)=>{const l=window.StartingVillage?.local?.(activeSeed,String(Math.round(x)),String(Math.round(y)));return Boolean(l&&window.StartingVillage?.isRoadReserved?.(activeSeed,l));};
+  const roadMemo=new Map();
+  const roadAt=(x,y)=>{
+    const rx=Math.round(Number(x)),ry=Math.round(Number(y)),key=rx+","+ry;
+    if(roadMemo.has(key))return roadMemo.get(key);
+    const l=window.StartingVillage?.local?.(activeSeed,String(rx),String(ry)),value=Boolean(l&&window.StartingVillage?.isRoadReserved?.(activeSeed,l));
+    roadMemo.set(key,value);return value;
+  };
   // Match the deterministic canonical settlement tree ring below so a critical
   // function cue does not get placed under a tree crown. This is a bounded
   // local check (<=12 tree centers), not a world/viewport scan.
@@ -3633,27 +3638,53 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     const radiusTiles=22+localHash(i*31,canonicalTreeCount,92)*4;
     return Object.freeze({x:Math.cos(angle)*radiusTiles,y:Math.sin(angle)*radiusTiles,radiusTiles:2.35});
   }));
-  const blockedByTree=(x,y)=>canonicalTreeCrowns.some(tree=>Math.hypot(Number(x)-tree.x,Number(y)-tree.y)<tree.radiusTiles);
   const sideBasis=side=>side==="N"?{ox:0,on:-1,tx:1,tn:0}:side==="S"?{ox:0,on:1,tx:-1,tn:0}:side==="W"?{ox:-1,on:0,tx:0,tn:-1}:{ox:1,on:0,tx:0,tn:1};
+  const cueFootprintMeters=record=>{
+    const fn=String(record.function||"home");
+    return ({home:[4.6,2.8],lodging:[7.2,5.6],market:[6.8,4.0],craft:[7.0,4.6],storage:[6.4,3.8],farm:[7.4,5.6],civic:[6.8,4.6],"outdoor-work":[7.0,4.8]})[fn]||[7.0,4.8];
+  };
+  let footprintPlacementChecks=0,buildingFootprintRejects=0,roadFootprintRejects=0;
+  const footprintFor=(record,basis,x,y)=>{
+    const dims=cueFootprintMeters(record),ha=dims[0]/tileMeters*.5+.22,hd=dims[1]/tileMeters*.5+.22;
+    const corners=[[-ha,-hd],[ha,-hd],[ha,hd],[-ha,hd]].map(([u,v])=>({x:x+basis.tx*u+basis.ox*v,y:y+basis.tn*u+basis.on*v}));
+    return {ha,hd,minX:Math.min(...corners.map(p=>p.x)),maxX:Math.max(...corners.map(p=>p.x)),minY:Math.min(...corners.map(p=>p.y)),maxY:Math.max(...corners.map(p=>p.y))};
+  };
+  const footprintBlockedByOther=(record,fp)=>records.some(other=>{
+    if(String(other.id)===String(record.id)||!other.bounds)return false;
+    const b=other.bounds,margin=.25;
+    return fp.maxX>=Number(b.minX)-margin&&fp.minX<=Number(b.maxX)+margin&&fp.maxY>=Number(b.minY)-margin&&fp.minY<=Number(b.maxY)+margin;
+  });
+  const footprintTouchesRoad=fp=>{
+    for(let x=Math.floor(fp.minX);x<=Math.ceil(fp.maxX);x++)for(let y=Math.floor(fp.minY);y<=Math.ceil(fp.maxY);y++)if(roadAt(x,y))return true;
+    return false;
+  };
+  const footprintBlockedByTree=(basis,x,y,fp)=>canonicalTreeCrowns.some(tree=>{
+    const dx=tree.x-x,dy=tree.y-y;
+    const along=Math.abs(dx*basis.tx+dy*basis.tn),depth=Math.abs(dx*basis.ox+dy*basis.on);
+    return along<=fp.ha+tree.radiusTiles&&depth<=fp.hd+tree.radiusTiles;
+  });
   const anchorFor=record=>{
     const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N";
     // The dimetric gameplay camera reads S/E exterior space most clearly. Prefer
-    // the other visible side from an S/E entrance, then fall back to the hidden
-    // opposite side only when canonical road/building clearance requires it.
+    // the other visible side from an S/E entrance, but validate the FULL semantic
+    // yard footprint and try bounded outward alternatives before changing sides.
     const preferred=access?.side==="S"?"E":access?.side==="E"?"S":access?.side==="N"?"E":access?.side==="W"?"S":"S";
     const order=[preferred,opposite,...["S","E","N","W"].filter(x=>x!==preferred&&x!==opposite&&x!==access?.side),access?.side].filter(Boolean);
+    const dims=cueFootprintMeters(record),depthHalfTiles=dims[1]/tileMeters*.5+.22;
     for(const side of order){
-      anchorSelectionAttempts++;
       const basis=sideBasis(side),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
       const half=side==="N"||side==="S"?(Number(b.maxY)-Number(b.minY)+1)/2:(Number(b.maxX)-Number(b.minX)+1)/2;
-      const x=cx+basis.ox*(half+1.55),y=cy+basis.on*(half+1.55);
-      if(roadAt(x,y)||blockedByOther(record,x,y))continue;
-      if(blockedByTree(x,y)){treeOcclusionRejects++;continue;}
-      if(access&&Math.hypot(x-Number(access.x),y-Number(access.y))<2.2)continue;
-      return {side,basis,east:x*tileMeters,north:y*tileMeters,tileX:x,tileY:y};
+      for(const extra of [0,1.25,2.5]){
+        anchorSelectionAttempts++;footprintPlacementChecks++;
+        const offset=half+depthHalfTiles+.38+extra,x=cx+basis.ox*offset,y=cy+basis.on*offset,fp=footprintFor(record,basis,x,y);
+        if(footprintBlockedByOther(record,fp)){buildingFootprintRejects++;continue;}
+        if(footprintBlockedByTree(basis,x,y,fp)){treeOcclusionRejects++;continue;}
+        if(footprintTouchesRoad(fp)){roadFootprintRejects++;continue;}
+        if(access&&Math.hypot(x-Number(access.x),y-Number(access.y))<2.2+depthHalfTiles)continue;
+        return {side,basis,east:x*tileMeters,north:y*tileMeters,tileX:x,tileY:y,footprintSafe:true};
+      }
     }
-    const basis=sideBasis(opposite),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
-    return {side:opposite,basis,east:(cx+basis.ox*3)*tileMeters,north:(cy+basis.on*3)*tileMeters,tileX:cx+basis.ox*3,tileY:cy+basis.on*3};
+    return null;
   };
   const decorate=(record,anchor)=>{
     const fn=String(record.function||"home"),b=anchor.basis,propsBefore=propCount;
@@ -3785,7 +3816,8 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   };
   for(const record of records){
     if(!record?.bounds)continue;
-    const anchor=anchorFor(record),count=decorate(record,anchor),access=record.entrance||record.access||null;
+    const anchor=anchorFor(record);if(!anchor)continue;
+    const count=decorate(record,anchor),access=record.entrance||record.access||null;
     if(access&&Math.hypot(anchor.tileX-Number(access.x),anchor.tileY-Number(access.y))<2.2)doorViolations++;
     if(roadAt(anchor.tileX,anchor.tileY))roadViolations++;
     const fn=String(record.function||"home");
@@ -3800,7 +3832,8 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     active:true,buildingCount:summaries.length,functionCount:functions.length,propCount,drawCallEstimate:1,triangleCount:indices.length/3,sharedMaterialCount:1,
     functions:Object.freeze(functions),buildings:Object.freeze(summaries),doorClearanceViolations:doorViolations,roadClearanceViolations:roadViolations,ownershipCueCount:0,
     treeOcclusionRejectCount:treeOcclusionRejects,anchorSelectionAttempts,canonicalTreeOcclusionChecks:canonicalTreeCrowns.length,
-    criticalCueOcclusionAvoidance:true,authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
+    footprintPlacementChecks,buildingFootprintRejectCount:buildingFootprintRejects,roadFootprintRejectCount:roadFootprintRejects,roadFootprintMemoCells:roadMemo.size,
+    criticalCueOcclusionAvoidance:true,fullFootprintClearance:true,authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
     presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:Number((performance.now()-started).toFixed(4))
   };
   return 1;
