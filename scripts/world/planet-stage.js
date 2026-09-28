@@ -3926,7 +3926,7 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
       groundPatch(east-w*.54,north+d*.30,.024,2.10,2.75,C.green,0);
       groundPatch(east+w*.57,north-d*.08,.024,2.25,2.45,C.greenLight,2);
       groundPatch(east,north+d*.68,.026,Math.max(3.65,w*.69),1.30,C.moss,1);
-    }    }
+    }
   }
   if(positions.length){
     const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
