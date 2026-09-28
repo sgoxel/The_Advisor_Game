@@ -2405,8 +2405,8 @@ function surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
 function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
   const salt=((phase*100000)|0)^0x5f356495;
   let detail=0;
-  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.060;
-  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.050;
+  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.035;
+  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.034;
   if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.038;
   if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.030;
   if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.022;
@@ -4633,8 +4633,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // regional hillshade created giant concentric/diagonal shapes at 1/500 that
   // looked like broken LOD seams. Keep the same canonical elevation/color
   // samples, but use restrained scale-aware lighting instead.
-  const hillshadeStrength=contextRing?.22:(metersPerTexel<=8?.58:metersPerTexel<=30?.42:.26);
-  const contextDetailStrength=contextRing?.64:1;
+  // All focus/context layers use the same photometric transfer function. LOD
+  // differences come only from physical texel size / available frequencies,
+  // so a ready child reads as added detail instead of a tinted rectangle.
+  const hillshadeStrength=metersPerTexel<=8?.52:metersPerTexel<=30?.40:metersPerTexel<=100?.31:.25;
+  const contextDetailStrength=1;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
   const flatShade=light[2];
@@ -4675,7 +4678,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const ux=(x+.5)/size,vz=(y+.5)/size;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
       const sample=mixSample(ux,vz);
-      const base=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
+      const sourceColor=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
+      // PlanetGeography carries intentionally broad macro color fields. At local
+      // map scales those low-frequency fields can read as giant polygon wedges.
+      // Keep their SEED-derived identity as an accent, while deriving most local
+      // albedo from the same authoritative land/elevation state at every LOD.
+      const elevationBase=Number(sample?.elevationMeters||0);
+      const alpineBase=smoothstep01((elevationBase-1700)/2600);
+      const localPalette=sample?.land
+        ? [lerp(.25,.46,alpineBase),lerp(.39,.47,alpineBase),lerp(.20,.39,alpineBase)]
+        : [.055,.19,.34];
+      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,.28),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
       // Detail frequencies are anchored to canonical SEED-registered meters.
