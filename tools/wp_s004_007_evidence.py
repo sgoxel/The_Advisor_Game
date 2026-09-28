@@ -4,14 +4,14 @@ from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
 PROFILE=os.environ.get("PROFILE","landscape")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s004-007"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
-DESIRED_SCALE=8
-PROFESSIONS=["smith","shopkeeper","guard","woodcutter"]
+PRIORITY=["smith","shopkeeper","guard","woodcutter","tavern-keeper","farmer"]
 
 options=Options()
 options.add_argument("--headless=new")
@@ -26,125 +26,141 @@ wait=WebDriverWait(driver,120)
 
 def ready():
     try:
-        return driver.execute_script("return !!(window.PlanetStage&&PlanetStage.snapshot().ready&&window.WorkCycles&&window.ResidentMovement)")
-    except Exception:
-        return False
-
-def local_ready():
-    try:
-        snap=driver.execute_script("return PlanetStage.snapshot()")
-        projection=snap.get("projection",{})
-        budget=projection.get("resourceBudget",{})
-        local=projection.get("localStatic",{})
-        exact=(
-            budget.get("preparing") is False and
-            budget.get("standInActive") is False and
-            budget.get("requestedSignature") and
-            budget.get("requestedSignature")==budget.get("activeSignature") and
-            budget.get("requestedCellId")==budget.get("activeCellId") and
-            budget.get("requestedLevel")==budget.get("visibleLevel")
+        return driver.execute_script(
+            "return !!(window.PlanetStage&&PlanetStage.snapshot().ready&&window.WorkCycles&&window.ResidentMovement&&window.DailyActivity)"
         )
-        return bool(local.get("active")) and local.get("revealTier") in ("refined","full") and snap.get("zoom",{}).get("scaleIndex")==DESIRED_SCALE and bool(exact)
     except Exception:
         return False
 
-def visible_npc(resident_id):
-    try:
-        return driver.execute_script("""
-          const id=String(arguments[0]),w=innerWidth,h=innerHeight;
-          const target=(PlanetStage.inspectionTargets()||[]).find(t=>t.type==="npc"&&String(t.id)===id);
-          if(!target?.bounds)return null;
-          const b=target.bounds,cx=(b.left+b.right)/2,cy=(b.top+b.bottom)/2;
-          if(![b.left,b.right,b.top,b.bottom,cx,cy].every(Number.isFinite))return null;
-          if(b.right<0||b.left>w||b.bottom<0||b.top>h||cx<w*.08||cx>w*.92||cy<h*.08||cy>h*.84)return null;
-          const picked=PlanetStage.pickInspection(cx,cy);
-          const snap=PlanetStage.snapshot();
-          if(!picked||String(snap.inspection?.selectedId)!==id||snap.inspection?.selectedType!=="npc")return null;
-          return {bounds:b,cx,cy,inspection:snap.inspection};
-        """,resident_id)
-    except Exception:
-        return None
+def candidate_professions():
+    return driver.execute_script("""
+      const seed=PlanetStage.snapshot().activeSeed,priority=arguments[0],roster=DailyActivity.build(seed)||[];
+      return priority.map(profession=>{
+        const resident=roster.find(r=>r.profession===profession)||null;
+        if(!resident)return null;
+        const plan=WorkCycles.plan(seed,resident),samples=WorkCycles.evidenceSamples(seed,profession);
+        const visible=samples.find(s=>s.targetSource==="work-choreography")||
+          samples.find(s=>s.targetSource==="outdoor-worksite")||null;
+        return {profession,residentId:resident.id,plan,visible};
+      }).filter(x=>x&&x.plan?.valid&&x.visible).slice(0,4);
+    """,PRIORITY)
 
 def prepare(profession):
     return driver.execute_script("""
-      const profession=arguments[0];
-      const stage=PlanetStage.snapshot(),seed=stage.activeSeed;
+      const profession=arguments[0],stage=PlanetStage.snapshot(),seed=stage.activeSeed;
       const samples=WorkCycles.evidenceSamples(seed,profession);
-      if(!samples.length){
-        const resident=(DailyActivity.build(seed)||[]).find(r=>r.profession===profession)||null;
-        return {ok:false,reason:"no-samples",profession,seed,plan:resident?WorkCycles.plan(seed,resident):null};
-      }
-      let sample=samples.find(s=>s.targetSource==="work-choreography")||samples.find(s=>s.targetSource==="outdoor-worksite")||null;
-      if(!sample)return {ok:false,reason:"no-visible-exterior-sample",profession,seed,samples};
-      if(profession==="woodcutter"&&samples.length>1)sample=samples[1];
+      let sample=samples.find(s=>s.targetSource==="work-choreography")||
+        samples.find(s=>s.targetSource==="outdoor-worksite")||null;
+      if(!sample)return {ok:false,reason:"no-visible-sample",profession,seed,samples};
       PlanetStage.applyAuthoritativeFantasyTime(sample.when,"WP-S004-007 evidence");
       ResidentMovement.reset(seed);
       let state=null;
-      for(let i=0;i<160;i++){
+      for(let i=0;i<260;i++){
         ResidentMovement.advance(seed,sample.when,1);
         state=ResidentMovement.get(sample.residentId);
-        if(state&&state.status==="arrived"&&state.workCycle&&state.workCycle.stepId===sample.stepId)break;
+        if(state?.status==="arrived"&&state?.workCycle?.stepId===sample.stepId)break;
       }
       PlanetStage.setWorldTileFocus(sample.target.x,sample.target.y);
-      PlanetStage.setScaleIndex(arguments[1]);
-      return {ok:true,seed,sample,state,verify:WorkCycles.verify(seed),work:WorkCycles.snapshot(seed),movement:ResidentMovement.snapshot()};
-    """,profession,DESIRED_SCALE)
+      PlanetStage.setScaleIndex(8);
+      return {ok:true,seed,sample,state,verify:WorkCycles.verify(seed),work:WorkCycles.snapshot(seed)};
+    """,profession)
 
-def add_overlay(info):
+def visual_state(resident_id,building_id):
+    return driver.execute_script("""
+      const residentId=arguments[0],buildingId=arguments[1],s=PlanetStage.snapshot(),targets=PlanetStage.inspectionTargets();
+      const npc=targets.find(x=>x.type==="npc"&&String(x.id)===String(residentId))||null;
+      const building=buildingId?targets.find(x=>x.type==="building"&&String(x.id)===String(buildingId))||null:null;
+      const rb=s.projection.resourceBudget||{},ls=s.projection.localStatic||{},np=s.npcPresentation||{};
+      const w=window.innerWidth,h=window.innerHeight;
+      const inView=b=>!!b&&b.right>4&&b.left<w-4&&b.bottom>4&&b.top<h-4;
+      return {
+        settled:Boolean(!rb.preparing&&!rb.standInActive&&rb.requestedSignature&&rb.activeSignature===rb.requestedSignature),
+        requestedSignature:rb.requestedSignature,activeSignature:rb.activeSignature,preparing:Boolean(rb.preparing),
+        standInActive:Boolean(rb.standInActive),scaleIndex:s.zoom.scaleIndex,scaleLabel:s.zoom.scaleLabel,
+        tier:ls.revealTier,localStaticActive:Boolean(ls.active),localBuildingCount:Number(ls.buildingCount||0),
+        npc,npcInView:inView(npc?.bounds),building,buildingInView:buildingId?inView(building?.bounds):true,
+        exactToolActive:(np.activeWorkCycleResidentIds||[]).includes(String(residentId)),
+        activeWorkCycleResidentIds:np.activeWorkCycleResidentIds||[],
+        activeWorkCycleToolCount:Number(np.activeWorkCycleToolCount||0),
+        sceneLoading:document.querySelector(".planet-stage-loading")?.getAttribute("data-state")||null
+      };
+    """,resident_id,building_id)
+
+def visual_ready(info):
+    state=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
+    return (
+        state["settled"] and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
+        state["localStaticActive"] and state["localBuildingCount"]>0 and state["npcInView"] and
+        state["buildingInView"] and state["exactToolActive"]
+    )
+
+def add_overlay(info,bounds):
     driver.execute_script("""
-      const info=arguments[0];
+      const info=arguments[0],bounds=arguments[1]||{},w=window.innerWidth,h=window.innerHeight;
       document.getElementById("wp-s004-007-evidence-card")?.remove();
       const card=document.createElement("div");
       card.id="wp-s004-007-evidence-card";
+      const cx=((Number(bounds.left)||0)+(Number(bounds.right)||0))/2;
+      const cy=((Number(bounds.top)||0)+(Number(bounds.bottom)||0))/2;
+      const horizontal=cx>w*.5?"left":"right",vertical=cy>h*.5?"top":"bottom";
       Object.assign(card.style,{
-        position:"fixed",right:"8px",bottom:"46px",zIndex:"99999",width:"min(250px,calc(100vw - 16px))",
-        padding:"7px 9px",borderRadius:"8px",background:"rgba(7,12,18,.86)",color:"#f4f0df",
-        border:"1px solid rgba(232,202,128,.68)",boxShadow:"0 5px 16px rgba(0,0,0,.30)",
-        font:"600 10.5px/1.28 system-ui,sans-serif",pointerEvents:"none"
+        position:"fixed",zIndex:"99999",width:"min(286px,calc(100vw - 20px))",
+        padding:"8px 10px",borderRadius:"9px",background:"rgba(7,12,18,.86)",color:"#f4f0df",
+        border:"1px solid rgba(232,202,128,.68)",boxShadow:"0 6px 18px rgba(0,0,0,.32)",
+        font:"600 11px/1.32 system-ui,sans-serif",pointerEvents:"none"
       });
+      card.style[horizontal]="10px";card.style[vertical]="10px";
       const s=info.sample,st=info.state;
       card.innerHTML=
-        '<div style="font-size:8.5px;letter-spacing:.10em;color:#e8ca80">WP-S004-007 · LIVE</div>'+
-        '<div style="font-size:13px;margin:1px 0 3px">'+String(s.profession).replace(/-/g," ")+' · '+s.label+'</div>'+
-        '<div>'+s.action.toUpperCase()+' · '+(st?.status||"unknown")+' · step '+(Number(s.stepIndex)+1)+'/'+(st?.workCycle?.stepCount||"?")+'</div>'+
-        '<div style="opacity:.68;margin-top:2px">SEED + fantasy time · target-change routing · no economy mutation</div>';
+        '<div style="font-size:9px;letter-spacing:.11em;color:#e8ca80">WP-S004-007 · LIVE WORK CYCLE</div>'+
+        '<div style="font-size:15px;margin:2px 0 4px">'+String(s.profession).replace(/-/g," ")+' · '+s.label+'</div>'+
+        '<div>'+s.action.toUpperCase()+' · '+s.targetSource.replace(/-/g," ")+' · '+(st?.status||"unknown")+'</div>'+
+        '<div style="opacity:.76;margin-top:3px">Step '+(Number(s.stepIndex)+1)+'/'+(st?.workCycle?.stepCount||"?")+
+        ' · route '+(st?.routeRequests??"?")+' · ≤12 exact workers</div>'+
+        '<div style="opacity:.62;margin-top:2px">SEED + fantasy time · cached target-change routing · no economy mutation</div>';
       document.body.appendChild(card);
-    """,info)
+    """,info,bounds)
 
 records=[]
 try:
     driver.get(TARGET)
     wait.until(lambda _d: ready())
-    for idx,profession in enumerate(PROFESSIONS):
+    candidates=candidate_professions()
+    if len(candidates)<3:
+        raise RuntimeError("fewer than three live professions have valid visible work cycles: "+json.dumps(candidates))
+
+    for idx,candidate in enumerate(candidates):
+        profession=candidate["profession"]
         info=prepare(profession)
         if not info.get("ok"):
             raise RuntimeError(f"prepare failed: {info}")
-        wait.until(lambda _d: local_ready())
-        # Require the chosen resident to be an actually visible, production-pickable NPC
-        # after the exact requested SLOD cell has atomically replaced any stand-in.
-        wait.until(lambda _d: driver.execute_script(
-            "const s=PlanetStage.snapshot();return s.npcPresentation.activeWorkCycleToolCount>0 && s.projection.resourceBudget.standInActive===false && s.projection.resourceBudget.preparing===false;"
-        ))
-        vis=wait.until(lambda _d: visible_npc(info["sample"]["residentId"]))
+        if info["state"].get("status")!="arrived":
+            raise RuntimeError(f"worker failed to arrive before visual wait: {info['state']}")
+        try:
+            wait.until(lambda _d: visual_ready(info))
+        except TimeoutException:
+            diagnostic=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
+            raise RuntimeError("visual readiness timeout for "+profession+": "+json.dumps(diagnostic))
         time.sleep(0.45)
+
+        state=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
         info["state"]=driver.execute_script("return ResidentMovement.get(arguments[0])",info["sample"]["residentId"])
         info["stage"]=driver.execute_script("return PlanetStage.snapshot()")
         info["work"]=driver.execute_script("return WorkCycles.snapshot(arguments[0])",info["seed"])
-        info["visibleNpc"]=vis
-        add_overlay(info)
+        add_overlay(info,state["npc"]["bounds"])
         time.sleep(0.15)
+
         path=OUT/f"{PROFILE}-{idx+1:02d}-{profession}.png"
         driver.save_screenshot(str(path))
         records.append({
             "profile":PROFILE,"profession":profession,"file":str(path),
-            "sample":info["sample"],"state":info["state"],
-            "npcPresentation":info["stage"]["npcPresentation"],
-            "zoom":info["stage"]["zoom"],"localStatic":info["stage"]["projection"]["localStatic"],
-            "work":info["work"],"verifyPass":bool(info["verify"]["pass"]),
-            "visibleNpc":info["visibleNpc"],"resourceBudget":info["stage"]["projection"]["resourceBudget"],
-            "inspection":info["stage"]["inspection"]
+            "sample":info["sample"],"state":info["state"],"visualState":state,
+            "npcPresentation":info["stage"]["npcPresentation"],"zoom":info["stage"]["zoom"],
+            "localStatic":info["stage"]["projection"]["localStatic"],
+            "resourceBudget":info["stage"]["projection"]["resourceBudget"],
+            "work":info["work"],"verifyPass":bool(info["verify"]["pass"])
         })
-        (OUT/f"{PROFILE}-{idx+1:02d}-{profession}.json").write_text(json.dumps(records[-1],indent=2))
+
     browser_logs=driver.get_log("browser")
     severe=[x for x in browser_logs if x.get("level")=="SEVERE" and "favicon.ico" not in str(x.get("message",""))]
     if severe:
@@ -153,8 +169,8 @@ try:
         raise RuntimeError("WorkCycles.verify failed during evidence")
     if not all(r["state"].get("status")=="arrived" for r in records):
         raise RuntimeError("selected worker did not reach its choreography target")
-    if not all(r["npcPresentation"].get("activeWorkCycleToolCount",0)>0 for r in records):
-        raise RuntimeError("work tool was not active in one or more frames")
+    if not all(r["visualState"].get("settled") and r["visualState"].get("npcInView") and r["visualState"].get("buildingInView") and r["visualState"].get("exactToolActive") for r in records):
+        raise RuntimeError("one or more screenshots lacked settled exact worker/workplace visibility")
     result={"pass":True,"profile":PROFILE,"viewport":SIZE,"records":records}
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2))
     print(json.dumps(result,indent=2))
