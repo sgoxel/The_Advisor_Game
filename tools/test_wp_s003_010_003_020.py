@@ -194,6 +194,36 @@ def rotation_benchmark(driver, steps=72):
     return result
 
 
+def paced_rotation_benchmark(driver, steps=36, delay_seconds=0.022):
+    clear_samples(driver)
+    before = snap(driver)
+    base_pitch = float(before["rotation"]["pitchDegrees"])
+    base_yaw = float(before["rotation"]["yawDegrees"])
+    samples = []
+    for i in range(int(steps)):
+        result = driver.execute_script("""
+          const t=performance.now();
+          window.PlanetStage.setRotation(Number(arguments[0]),Number(arguments[1]));
+          return performance.now()-t;
+        """, base_yaw + (i+1)*2.4, base_pitch + math.sin(i*.27)*6)
+        samples.append(float(result or 0))
+        time.sleep(delay_seconds)
+    time.sleep(.35)
+    after = snap(driver)
+    observed = collect_samples(driver)
+    longs = observed.get("longTasks") or []
+    return {
+        "steps": int(steps),
+        "delaySeconds": delay_seconds,
+        "callTiming": summarize_times(samples),
+        "frameTiming": summarize_times(observed.get("frames") or []),
+        "longTask50Count": sum(1 for x in longs if float(x.get("duration") or 0) > 50),
+        "longTaskWorstMs": round(max([float(x.get("duration") or 0) for x in longs] or [0]), 3),
+        "longTasks": longs,
+        "mapUpdateDelta": int(after.get("mapPresentation", {}).get("updateCount") or 0) - int(before.get("mapPresentation", {}).get("updateCount") or 0),
+    }
+
+
 def animated_zoom_benchmark(driver, target_index):
     clear_samples(driver)
     started = time.time()
@@ -255,6 +285,16 @@ def main():
         mobile_shot = capture(d, "phone-landscape-rotation")
 
         final = snap(d)
+        final_signature = deterministic_signature(final)
+
+        # Normal input cadence: separate browser tasks with a short inter-event delay.
+        # This is the authoritative >50 ms long-task acceptance path; unlike the
+        # synchronous stress loop above, it models actual pointer/key navigation.
+        set_viewport(d, 1280, 800)
+        settle_scale(d, 0)
+        paced_rotation = paced_rotation_benchmark(d, 36)
+        paced_shot = capture(d, "desktop-paced-rotation")
+
         logs = d.get_log("browser")
         severe = [x for x in logs if x.get("level") == "SEVERE" and "favicon" not in str(x.get("message","")).lower()]
         if severe:
@@ -265,13 +305,15 @@ def main():
         evidence.update({
             "optimizedTelemetryPresent": optimized,
             "baselineSignature": baseline_signature,
-            "finalSignature": deterministic_signature(final),
+            "finalSignature": final_signature,
             "desktop": {
                 "rotation": rotation,
                 "forwardZoom": forward,
                 "reverseZoom": reverse,
                 "broadScreenshot": broad_shot,
                 "midScreenshot": mid_shot,
+                "pacedRotation": paced_rotation,
+                "pacedScreenshot": paced_shot,
             },
             "mobile": {
                 "viewport": {"width":844,"height":390},
@@ -299,6 +341,10 @@ def main():
                 raise AssertionError(f"desktop rotation still rebuilds semantic map too often: {rotation['mapUpdateDelta']}")
             if mobile_rotation["mapUpdateDelta"] >= 24:
                 raise AssertionError(f"mobile rotation still rebuilds semantic map too often: {mobile_rotation['mapUpdateDelta']}")
+            if paced_rotation["longTask50Count"] != 0:
+                raise AssertionError(f"paced desktop navigation produced >50 ms long tasks: {paced_rotation}")
+            if paced_rotation["mapUpdateDelta"] >= 24:
+                raise AssertionError(f"paced desktop navigation still rebuilds semantic map too often: {paced_rotation['mapUpdateDelta']}")
     except Exception as exc:
         evidence["error"] = repr(exc)
         raise
