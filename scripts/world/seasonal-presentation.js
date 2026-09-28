@@ -9,11 +9,11 @@ const DESKTOP_ACCENT_LIMIT=64;
 const TABLET_ACCENT_LIMIT=40;
 const PHONE_ACCENT_LIMIT=24;
 
-let overlay=null,ctx=null,timer=null,resizeObserver=null,evidenceStamp=null,lastSnapshot=null;
+let overlay=null,ctx=null,groundWash=null,timer=null,resizeObserver=null,evidenceStamp=null,lastSnapshot=null;
 let lastWidth=0,lastHeight=0,lastDpr=1,hidden=false;
 let spatialKey="",spatialRegion=null,profileCache=new Map();
 let spatialHits=0,profileHits=0,updateCount=0,lastUpdateMs=0,maxUpdateMs=0,drawCount=0,lastDrawMs=0,maxDrawMs=0;
-let rootNode=null,centerMarker=null,coarsePointerQuery=null,reducedMotionQuery=null;
+let rootNode=null,centerMarker=null,coarsePointerQuery=null,reducedMotionQuery=null,pendingDraw=0,pendingPlan=null,lastGroundSignature="";
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function round(v,d=4){const f=10**d;return Math.round(Number(v)*f)/f}
@@ -91,22 +91,22 @@ function buildProfile(context){
   if(season==="spring"){
     foliage=clamp(.72+moist*.22+(wet?.08:0)-(dry?.12:0),.45,1);
     flower=clamp(.28+moist*.40+(band==="temperate"?.16:band==="warm"?.06:-.06),.08,.82);
-    tint=[150,218,128,.055];
+    tint=[132,210,116,.105];
   }else if(season==="summer"){
     foliage=clamp(.82+moist*.14-(dry?.16:0),.48,1);
     dryGrass=clamp((1-moist)*.46+(dry?.24:0)+(band==="warm"?.16:0),0,.78);
     flower=clamp(.12+moist*.16,.04,.34);
-    tint=[244,197,110,.045+dryGrass*.035];
+    tint=[238,190,100,.075+dryGrass*.085];
   }else if(season==="autumn"){
     foliage=clamp(.52+moist*.15,.38,.76);
     autumn=clamp(.58+(band==="temperate"?.20:band==="cold"?.12:-.10),.30,.86);
     leafFall=clamp(.34+autumn*.42+(dry?.08:0),.24,.82);
-    tint=[207,123,55,.07+autumn*.045];
+    tint=[199,111,42,.115+autumn*.075];
   }else{
     foliage=clamp(band==="warm"?.62:band==="temperate"?.34:.20,.12,.68);
     frost=clamp((band==="cold"?.62:band==="temperate"?.32:.08)+Math.max(0,10-temp)*.025+(dry?-.06:0),0,.92);
     snow=clamp((band==="cold"?.52:band==="temperate"?.13:.01)+Math.max(0,4-temp)*.045+(wet?.10:0)-(dry?.08:0),0,.90);
-    tint=[190,214,226,.065+frost*.05+snow*.05];
+    tint=[188,216,230,.10+frost*.075+snow*.09];
   }
   const accentWeights={flower,leaf:leafFall,frost,snow};
   const totalAccent=Object.values(accentWeights).reduce((a,b)=>a+b,0);
@@ -125,10 +125,13 @@ function previewAt(tile,stamp){return buildProfile(rootContext(tile,stamp))}
 function ensureOverlay(){
   const root=stageRoot();if(!root)return null;
   if(overlay&&overlay.parentElement===root)return overlay;
-  overlay?.remove?.();overlay=document.createElement("canvas");overlay.className="seasonal-presentation-overlay";overlay.setAttribute("aria-hidden","true");
+  groundWash?.remove?.();overlay?.remove?.();
+  groundWash=document.createElement("div");groundWash.className="seasonal-ground-treatment";groundWash.setAttribute("aria-hidden","true");
+  Object.assign(groundWash.style,{position:"absolute",inset:"0",pointerEvents:"none",zIndex:"1",display:"block",mixBlendMode:"soft-light"});
+  overlay=document.createElement("canvas");overlay.className="seasonal-presentation-overlay";overlay.setAttribute("aria-hidden","true");
   Object.assign(overlay.style,{position:"absolute",inset:"0",width:"100%",height:"100%",pointerEvents:"none",zIndex:"2",display:"block"});
-  root.appendChild(overlay);ctx=overlay.getContext("2d",{alpha:true,desynchronized:true});resizeOverlay();
-  if(!resizeObserver&&"ResizeObserver" in window){resizeObserver=new ResizeObserver(entries=>{resizeOverlay(entries?.[0]?.contentRect||null);if(lastSnapshot?.active)draw(lastSnapshot.profile,lastSnapshot.seed,lastSnapshot.accentLimit)});resizeObserver.observe(root)}
+  root.appendChild(groundWash);root.appendChild(overlay);ctx=overlay.getContext("2d",{alpha:true,desynchronized:true});resizeOverlay();
+  if(!resizeObserver&&"ResizeObserver" in window){resizeObserver=new ResizeObserver(entries=>{resizeOverlay(entries?.[0]?.contentRect||null);if(lastSnapshot?.active&&pendingPlan)scheduleDraw(lastSnapshot.profile,lastSnapshot.seed,pendingPlan)});resizeObserver.observe(root)}
   return overlay;
 }
 function resizeOverlay(rectOverride=null){
@@ -143,38 +146,63 @@ function accentKind(profile,unit){
   for(const k of ["flower","leaf","frost","snow"]){x-=w[k];if(x<=0)return k}
   return "flower";
 }
-function draw(profile,seed,limit){
-  if(!ctx||!overlay||!profile)return Object.freeze({count:0,flower:0,leaf:0,frost:0,snow:0});
-  const started=performance.now();if(!lastWidth||!lastHeight)resizeOverlay();const w=overlay.width,h=overlay.height;ctx.clearRect(0,0,w,h);
-  const t=profile.tint;ctx.fillStyle="rgba("+t[0]+","+t[1]+","+t[2]+","+t[3]+")";ctx.fillRect(0,0,w,h);
+function accentPlan(profile,seed,limit){
   const intensity=clamp(profile.flowerDensity+profile.leafFall+profile.frost+profile.snow,0,1.8);
-  const count=Math.min(limit,Math.max(0,Math.round(limit*clamp(intensity*.72,0,1))));
-  const counts={count,flower:0,leaf:0,frost:0,snow:0};
+  const count=Math.min(limit,Math.max(0,Math.round(limit*clamp(intensity*.72,0,1)))),entries=[],counts={count,flower:0,leaf:0,frost:0,snow:0};
   for(let i=0;i<count;i++){
-    const prefix="season-accent:"+profile.signature+":"+i+":",x=foundationUnit(seed,prefix+"x")*w,y=(.16+foundationUnit(seed,prefix+"y")*.80)*h,kind=accentKind(profile,foundationUnit(seed,prefix+"kind"));
-    if(!kind)continue;counts[kind]++;
-    const sz=(1.2+foundationUnit(seed,prefix+"size")*2.8)*lastDpr;
-    if(kind==="flower"){
-      ctx.fillStyle=foundationUnit(seed,prefix+"hue")>.5?"rgba(255,219,108,.72)":"rgba(237,155,211,.68)";
-      ctx.beginPath();ctx.arc(x,y,sz,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle="rgba(255,247,205,.55)";ctx.beginPath();ctx.arc(x+sz*.8,y-sz*.55,sz*.58,0,Math.PI*2);ctx.fill();
-    }else if(kind==="leaf"){
-      ctx.save();ctx.translate(x,y);ctx.rotate(foundationUnit(seed,prefix+"rot")*Math.PI);ctx.fillStyle="rgba(205,111,45,.64)";ctx.fillRect(-sz*1.6,-sz*.55,sz*3.2,sz*1.1);ctx.restore();
-    }else if(kind==="frost"){
-      ctx.strokeStyle="rgba(226,242,246,.52)";ctx.lineWidth=Math.max(1,lastDpr*.65);ctx.beginPath();ctx.moveTo(x-sz,y);ctx.lineTo(x+sz,y);ctx.moveTo(x,y-sz);ctx.lineTo(x,y+sz);ctx.stroke();
+    const prefix="season-accent:"+profile.signature+":"+i+":",kind=accentKind(profile,foundationUnit(seed,prefix+"kind"));if(!kind)continue;
+    counts[kind]++;entries.push(Object.freeze({kind,x:foundationUnit(seed,prefix+"x"),y:.18+foundationUnit(seed,prefix+"y")*.76,size:foundationUnit(seed,prefix+"size"),rot:foundationUnit(seed,prefix+"rot"),hue:foundationUnit(seed,prefix+"hue")}));
+  }
+  return Object.freeze({entries:Object.freeze(entries),counts:Object.freeze(counts)});
+}
+function applyGroundTreatment(profile,seed){
+  if(!groundWash||!profile)return;
+  if(lastGroundSignature===profile.signature)return;lastGroundSignature=profile.signature;
+  const u=(k)=>Math.round(12+foundationUnit(seed,"season-ground:"+profile.signature+":"+k)*76);
+  let color="132,210,116",strength=.18;
+  if(profile.season==="summer"){color="214,164,74";strength=.14+profile.dryGrass*.20}
+  else if(profile.season==="autumn"){color="194,93,36";strength=.22+profile.autumnFoliage*.18}
+  else if(profile.season==="winter"){color="205,226,235";strength=.17+profile.frost*.15+profile.snow*.18}
+  else strength=.20+profile.flowerDensity*.08;
+  const a=Math.min(.48,strength),a2=Math.min(.32,a*.68),x1=u("x1"),y1=u("y1"),x2=u("x2"),y2=u("y2"),x3=u("x3"),y3=u("y3");
+  groundWash.style.opacity="1";
+  groundWash.style.background=[
+    "radial-gradient(ellipse at "+x1+"% "+y1+"%, rgba("+color+","+a.toFixed(3)+") 0%, rgba("+color+","+(a*.46).toFixed(3)+") 28%, rgba("+color+",0) 66%)",
+    "radial-gradient(ellipse at "+x2+"% "+y2+"%, rgba("+color+","+a2.toFixed(3)+") 0%, rgba("+color+",0) 62%)",
+    "radial-gradient(ellipse at "+x3+"% "+y3+"%, rgba("+color+","+(a2*.86).toFixed(3)+") 0%, rgba("+color+",0) 58%)",
+    "linear-gradient(rgba("+profile.tint[0]+","+profile.tint[1]+","+profile.tint[2]+","+(profile.tint[3]*.72).toFixed(3)+"),rgba("+profile.tint[0]+","+profile.tint[1]+","+profile.tint[2]+","+(profile.tint[3]*.42).toFixed(3)+"))"
+  ].join(",");
+}
+function draw(profile,seed,plan){
+  if(!ctx||!overlay||!profile||!plan)return;
+  const started=performance.now();if(!lastWidth||!lastHeight)resizeOverlay();const w=overlay.width,h=overlay.height;ctx.clearRect(0,0,w,h);
+  const t=profile.tint;ctx.fillStyle="rgba("+t[0]+","+t[1]+","+t[2]+","+Math.min(.16,t[3]*.52)+")";ctx.fillRect(0,0,w,h);
+  for(const e of plan.entries){
+    const x=e.x*w,y=e.y*h,sz=(1.8+e.size*3.6)*lastDpr;
+    if(e.kind==="flower"){
+      ctx.fillStyle=e.hue>.5?"rgba(255,221,99,.82)":"rgba(241,155,213,.78)";
+      for(let p=0;p<3;p++){const a=p*Math.PI*2/3;ctx.beginPath();ctx.arc(x+Math.cos(a)*sz*.72,y+Math.sin(a)*sz*.38,sz*.72,0,Math.PI*2);ctx.fill()}
+      ctx.fillStyle="rgba(246,242,185,.82)";ctx.beginPath();ctx.arc(x,y,sz*.42,0,Math.PI*2);ctx.fill();
+    }else if(e.kind==="leaf"){
+      ctx.save();ctx.translate(x,y);ctx.rotate(e.rot*Math.PI);ctx.fillStyle=e.hue>.52?"rgba(206,103,38,.76)":"rgba(168,79,35,.72)";ctx.beginPath();ctx.ellipse(0,0,sz*2.0,sz*.72,0,0,Math.PI*2);ctx.fill();ctx.restore();
+    }else if(e.kind==="frost"){
+      ctx.strokeStyle="rgba(231,245,248,.72)";ctx.lineWidth=Math.max(1,lastDpr*.72);for(let a=0;a<3;a++){const r=a*Math.PI/3;ctx.beginPath();ctx.moveTo(x-Math.cos(r)*sz*1.35,y-Math.sin(r)*sz*.72);ctx.lineTo(x+Math.cos(r)*sz*1.35,y+Math.sin(r)*sz*.72);ctx.stroke()}
     }else{
-      ctx.fillStyle="rgba(244,250,255,.70)";ctx.beginPath();ctx.arc(x,y,sz*.75,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="rgba(244,250,255,.54)";ctx.beginPath();ctx.ellipse(x,y,sz*2.5,sz*.82,e.rot*Math.PI,0,Math.PI*2);ctx.fill();
     }
   }
   drawCount++;lastDrawMs=performance.now()-started;maxDrawMs=Math.max(maxDrawMs,lastDrawMs);
-  return Object.freeze(counts);
+  if(lastSnapshot)lastSnapshot=Object.freeze({...lastSnapshot,drawCount,lastDrawMs:round(lastDrawMs),maxDrawMs:round(maxDrawMs)});
+}
+function scheduleDraw(profile,seed,plan){
+  pendingPlan=plan;if(pendingDraw)return;
+  pendingDraw=requestAnimationFrame(()=>{pendingDraw=0;const next=pendingPlan;pendingPlan=null;if(lastSnapshot?.active&&next)draw(profile,seed,next)});
 }
 function refresh(){
-  const started=performance.now(),context=rootContext(),profile=buildProfile(context),root=context?.root||stageRoot();
-  const active=Boolean(context&&profile&&root?.dataset?.ready==="true"),cls=deviceClass(),limit=accentLimit(cls);
-  let counts=Object.freeze({count:0,flower:0,leaf:0,frost:0,snow:0});
-  if(active){ensureOverlay();counts=draw(profile,context.seed,limit)}
-  else if(ctx&&overlay)ctx.clearRect(0,0,overlay.width,overlay.height);
+  const started=performance.now(),contextStarted=performance.now(),context=rootContext(),contextMs=performance.now()-contextStarted,profileStarted=performance.now(),profile=buildProfile(context),profileMs=performance.now()-profileStarted,root=context?.root||stageRoot();
+  const active=Boolean(context&&profile&&root?.dataset?.ready==="true"),cls=deviceClass(),limit=accentLimit(cls),planStarted=performance.now(),plan=profile?accentPlan(profile,context?.seed||"",limit):Object.freeze({entries:Object.freeze([]),counts:Object.freeze({count:0,flower:0,leaf:0,frost:0,snow:0})}),planMs=performance.now()-planStarted,counts=plan.counts;
+  if(active){ensureOverlay();applyGroundTreatment(profile,context.seed);scheduleDraw(profile,context.seed,plan)}
+  else{if(ctx&&overlay)ctx.clearRect(0,0,overlay.width,overlay.height);if(groundWash)groundWash.style.background="none"}
   updateCount++;lastUpdateMs=performance.now()-started;maxUpdateMs=Math.max(maxUpdateMs,lastUpdateMs);
   lastSnapshot=Object.freeze({
     version:VERSION,active,ready:Boolean(context&&profile),seed:context?.seed||null,focusTile:context?.tile||null,
@@ -182,8 +210,9 @@ function refresh(){
     profile,season:profile?.season||"pending",seasonSignature:profile?.signature||null,
     region:context?Object.freeze({id:context.region.id,name:context.region.name,revision:context.region.revision,climate:context.region.identity?.climate||"unknown"}):null,
     deviceClass:cls,accentLimit:limit,accentCount:counts.count,flowerAccentCount:counts.flower,leafAccentCount:counts.leaf,frostAccentCount:counts.frost,snowAccentCount:counts.snow,
-    overlayZIndex:2,cameraLocalPresentation:true,pooledAccents:true,materialParameterCount:2,instanceVariationCount:counts.count,
+    overlayZIndex:2,cameraLocalPresentation:true,pooledAccents:true,groundTreatmentActive:Boolean(active&&groundWash),groundPatchCount:active?3:0,materialParameterCount:3,instanceVariationCount:counts.count,
     updateIntervalMs:UPDATE_INTERVAL_MS,profileCacheEntries:profileCache.size,profileCacheLimit:PROFILE_CACHE_LIMIT,spatialCacheHits:spatialHits,profileCacheHits:profileHits,
+    updatePhasesMs:Object.freeze({context:round(contextMs),profile:round(profileMs),plan:round(planMs)}),
     updateCount,lastUpdateMs:round(lastUpdateMs),maxUpdateMs:round(maxUpdateMs),drawCount,lastDrawMs:round(lastDrawMs),maxDrawMs:round(maxDrawMs),
     deterministic:true,presentationOnly:true,simulationAuthority:false,climateMutation:false,resourceMutation:false,fullWorldScan:false,perFrameWorldScan:false,lazyRelevantOnly:true
   });
@@ -197,7 +226,7 @@ function setEvidenceStamp(stamp){
 }
 function clearEvidenceStamp(){evidenceStamp=null;return refresh()}
 function shutdown(){
-  if(timer){clearInterval(timer);timer=null}resizeObserver?.disconnect?.();resizeObserver=null;overlay?.remove?.();overlay=null;ctx=null;lastSnapshot=null;profileCache.clear();spatialKey="";spatialRegion=null;rootNode=null;centerMarker=null;coarsePointerQuery=null;reducedMotionQuery=null;
+  if(timer){clearInterval(timer);timer=null}if(pendingDraw){cancelAnimationFrame(pendingDraw);pendingDraw=0}resizeObserver?.disconnect?.();resizeObserver=null;groundWash?.remove?.();groundWash=null;overlay?.remove?.();overlay=null;ctx=null;lastSnapshot=null;pendingPlan=null;lastGroundSignature="";profileCache.clear();spatialKey="";spatialRegion=null;rootNode=null;centerMarker=null;coarsePointerQuery=null;reducedMotionQuery=null;
 }
 function bootstrap(){
   refresh();timer=setInterval(()=>{if(!document.hidden)refresh()},UPDATE_INTERVAL_MS);
