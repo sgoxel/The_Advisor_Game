@@ -3310,11 +3310,15 @@ function registerLocalInspection(record,keys){
 }
 function inspectionEntityBounds(entities,padding=5){
   if(!cameraEntity?.camera||!canvas||!device||!pc)return null;
-  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(device.width||canvas.width||rect.width)),sourceH=Math.max(1,Number(device.height||canvas.height||rect.height));
+  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(canvas.clientWidth||rect.width)),sourceH=Math.max(1,Number(canvas.clientHeight||rect.height));
   let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity,seen=0;
   const project=world=>{
-    const p=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
-    if(!p||![p.x,p.y,p.z].every(Number.isFinite)||p.z<=0)return;
+    const camera=cameraEntity.camera,p=camera.worldToScreen(world,new pc.Vec3());
+    if(!p||![p.x,p.y,p.z].every(Number.isFinite))return;
+    // Orthographic worldToScreen().z is unnormalized clip depth and may be
+    // negative for visible points. Use camera-view depth: visible points are < 0.
+    const viewSpace=camera.viewMatrix?.transformPoint?.(world,new pc.Vec3());
+    if(!viewSpace||!Number.isFinite(viewSpace.z)||viewSpace.z>=0)return;
     const x=rect.left+p.x*(rect.width/sourceW),y=rect.top+p.y*(rect.height/sourceH);
     left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);seen++;
   };
