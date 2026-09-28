@@ -2865,7 +2865,7 @@ function ensureLocalStaticMaterials(){
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",1,.50,.22);m.__activityEmissiveBoost=.34;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -2933,20 +2933,30 @@ function sharedLocalPrimitive(type){
       box(.60,.67,-.575,.22,.18,.055,wood);
       box(.57,.80,-.575,.30,.045,.045,wood);
     }else if(type==="activity-forge-accessory"){
-      const soot=[43,39,35,255],iron=[135,126,112,255],ember=[224,62,16,255],hot=[255,174,62,255],stone=[128,111,91,255];
-      // Put the stack on the outer, camera-visible eave instead of hiding it in
-      // the roof footprint. A short hood physically bridges it back into the
-      // workshop; the backed firebox and T-profile anvil sit just outside the
-      // front edge. Everything remains one shared mesh/draw.
-      box(-.53,1.02,-.12,.18,.76,.18,stone);
-      box(-.53,1.415,-.12,.29,.09,.29,soot);
-      box(-.42,.78,-.12,.40,.12,.28,soot);
-      box(-.36,.61,-.605,.38,.30,.12,soot);
-      box(-.36,.60,-.674,.25,.16,.045,hot);
-      box(-.36,.57,-.704,.15,.08,.026,ember);
-      box(.06,.16,-.705,.11,.30,.11,iron);
-      box(.06,.315,-.705,.42,.11,.18,iron);
-      box(-.09,.315,-.705,.14,.08,.11,iron);
+      const soot=[43,39,35,255],iron=[126,132,132,255],ironDark=[73,78,79,255],stone=[132,119,101,255],wood=[92,61,36,255],ember=[232,83,24,255];
+      // One authored smithy silhouette: a broad roof-edge chimney/hood plus a
+      // large neutral anvil-and-hammer apron readable from the fixed near-top-
+      // down camera. Vertex colors carry the material identity through a neutral
+      // shared carrier; only the tiny fire slit is warm. No glow slab or smoke.
+      box(-.50,1.00,-.28,.22,.78,.22,stone);
+      box(-.50,1.415,-.28,.35,.10,.35,soot);
+      box(-.43,.79,-.35,.48,.16,.42,ironDark);
+      box(-.38,.61,-.625,.48,.34,.16,stone);
+      box(-.38,.60,-.716,.22,.08,.035,ember);
+
+      // Oversized but physically plausible anvil profile on the work apron.
+      // The wide top, heel and horn read as an anvil in plan view while the
+      // pedestal keeps it grounded beside the active workshop.
+      box(.10,.13,-.735,.14,.26,.16,ironDark);
+      box(.10,.275,-.735,.28,.08,.20,ironDark);
+      box(.10,.35,-.735,.58,.13,.24,iron);
+      box(.42,.35,-.735,.22,.09,.13,iron);
+      box(-.24,.35,-.735,.14,.11,.20,ironDark);
+
+      // A grounded hammer next to the anvil strengthens the smithy read without
+      // adding another entity/draw call.
+      box(.38,.08,-.545,.09,.09,.48,wood);
+      box(.38,.16,-.775,.30,.15,.15,ironDark);
     }else{
       const warm=[255,196,68,255],hot=[255,236,166,255],frame=[64,43,28,255];
       // Roof-flush framed skylights are deliberately broad enough to survive the
