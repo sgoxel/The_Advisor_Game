@@ -2795,9 +2795,9 @@ function ensureLocalStaticMaterials(){
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.56,.14,.82);m.__activityEmissiveBoost=.88;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    activityOpen:(()=>{const m=make("LocalActivityOpen",.82,.53,.14);m.__activityEmissiveBoost=.20;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",.92,.22,.04,.92);m.__activityEmissiveBoost=.82;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.52,.12,.82);m.__activityEmissiveBoost=.56;m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityOpen:(()=>{const m=make("LocalActivityOpen",.78,.48,.12);m.__activityEmissiveBoost=.08;m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",.95,.20,.035,.92);m.__activityEmissiveBoost=.48;m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
@@ -2831,47 +2831,72 @@ function sharedLocalPrimitive(type){
     mesh.setUvs(0,[0,1, 1,1, 0,0, 1,0]);
     mesh.setIndices([0,1,2, 1,3,2]);mesh.update();
   }else if(type==="activity-market"||type==="activity-forge"||type==="activity-warm"){
-    // Activity cues remain ONE mesh/draw per building, but the mesh itself is a
-    // tiny architectural assembly rather than a detached marker box. Each part
-    // is merged into this reusable shared mesh: market = fascia+awning+supports,
-    // forge = hearth+back/side cheeks, warm = window+lintel+threshold spill.
+    // One reusable mesh/draw per cue. Vertex tone variation and open negative
+    // space make the silhouettes function-readable without adding entities,
+    // materials, dynamic lights or particle emitters.
     mesh=new pc.Mesh(device);
-    const positions=[],normals=[],indices=[];
-    const face=(verts,n)=>{
-      const base=positions.length/3;
-      for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(n[0],n[1],n[2]);}
+    const positions=[],normals=[],colors=[],indices=[];
+    const rgba=(c)=>[c[0],c[1],c[2],c[3]??255];
+    const face=(verts,n,color=[255,255,255,255])=>{
+      const base=positions.length/3,cc=rgba(color);
+      for(const v of verts){
+        positions.push(v[0],v[1],v[2]);normals.push(n[0],n[1],n[2]);
+        colors.push(cc[0],cc[1],cc[2],cc[3]);
+      }
       indices.push(base,base+1,base+2,base,base+2,base+3);
     };
-    const box=(cx,cy,cz,sx,sy,sz)=>{
+    const box=(cx,cy,cz,sx,sy,sz,color=[255,255,255,255])=>{
       const x0=cx-sx*.5,x1=cx+sx*.5,y0=cy-sy*.5,y1=cy+sy*.5,z0=cz-sz*.5,z1=cz+sz*.5;
-      face([[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],[0,0,1]);
-      face([[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0]],[0,0,-1]);
-      face([[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]],[1,0,0]);
-      face([[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]],[-1,0,0]);
-      face([[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]],[0,1,0]);
-      face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],[0,-1,0]);
+      face([[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],[0,0,1],color);
+      face([[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0]],[0,0,-1],color);
+      face([[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]],[1,0,0],color);
+      face([[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]],[-1,0,0],color);
+      face([[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]],[0,1,0],color);
+      face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],[0,-1,0],color);
+    };
+    const wedge=(backHalf,frontHalf,depth,cy,thickness,color=[255,255,255,255])=>{
+      // Back edge overlaps the facade slightly; the tapered front edge stays
+      // connected as one threshold/awning surface instead of a detached patch.
+      const y0=cy-thickness*.5,y1=cy+thickness*.5,zb=.08,zf=-Math.abs(depth);
+      face([[-backHalf,y1,zb],[backHalf,y1,zb],[frontHalf,y1,zf],[-frontHalf,y1,zf]],[0,1,0],color);
+      face([[backHalf,y0,zb],[-backHalf,y0,zb],[-frontHalf,y0,zf],[frontHalf,y0,zf]],[0,-1,0],color);
+      face([[-backHalf,y0,zb],[backHalf,y0,zb],[backHalf,y1,zb],[-backHalf,y1,zb]],[0,0,1],color);
+      face([[frontHalf,y0,zf],[-frontHalf,y0,zf],[-frontHalf,y1,zf],[frontHalf,y1,zf]],[0,0,-1],color);
+      face([[-backHalf,y0,zb],[-backHalf,y1,zb],[-frontHalf,y1,zf],[-frontHalf,y0,zf]],[-1,0,0],color);
+      face([[backHalf,y0,zb],[frontHalf,y0,zf],[frontHalf,y1,zf],[backHalf,y1,zb]],[1,0,0],color);
     };
     if(type==="activity-market"){
-      // Back edge remains flush to the wall (z≈0), while the canopy extends
-      // far enough outside the roof footprint to stay readable from above.
-      box(0,.22,-.04,1.00,.30,.10);
-      box(0,-.06,-.72,.96,.12,1.44);
-      box(-.43,-.55,-1.14,.08,1.10,.08);
-      box(.43,-.55,-1.14,.08,1.10,.08);
+      const dark=[122,108,82,255],gold=[255,226,168,255],shade=[205,180,132,255];
+      // Fascia + three separated canopy slats + front rail/supports. The gaps
+      // remain visible from above so this reads as an awning, not a solid card.
+      box(0,.23,-.01,1.00,.30,.14,dark);
+      box(-.33,-.05,-.66,.22,.10,1.42,gold);
+      box(0,-.05,-.66,.22,.10,1.42,shade);
+      box(.33,-.05,-.66,.22,.10,1.42,gold);
+      box(0,-.03,-1.34,.96,.17,.11,dark);
+      box(-.44,-.48,-1.30,.075,.90,.075,dark);
+      box(.44,-.48,-1.30,.075,.90,.075,dark);
     }else if(type==="activity-forge"){
-      // Hearth floor spans continuously from the facade to the work apron.
-      box(0,-.30,-.58,.96,.22,1.16);
-      box(0,-.04,-.07,.96,.54,.14);
-      box(-.42,-.13,-.56,.13,.42,1.08);
-      box(.42,-.13,-.56,.13,.42,1.08);
+      const brick=[142,106,92,255],dark=[90,74,66,255],ember=[255,238,202,255];
+      // Open-center U hearth: back wall and long cheeks frame a small ember bed.
+      // Exposed ground remains visible through the center/front, preventing the
+      // cue from collapsing into the same filled rectangle as the market.
+      box(0,-.03,-.015,.98,.54,.15,dark);
+      box(-.42,-.20,-.58,.15,.34,1.15,brick);
+      box(.42,-.20,-.58,.15,.34,1.15,brick);
+      box(0,-.32,-.32,.50,.09,.34,ember);
+      box(0,-.28,-1.09,.96,.14,.12,dark);
     }else{
-      // The wall source stays flush while a thin threshold spill begins at the
-      // same wall and extends outward; there is no gap that can read as UI.
-      box(0,.12,-.04,.72,.90,.09);
-      box(0,.62,-.04,.82,.09,.12);
-      box(0,-.45,-.62,.78,.07,1.24);
+      const frame=[151,124,97,255],bright=[255,255,230,255],spill=[232,196,146,190];
+      // Vertical warm source remains wall-mounted; a tapered translucent-looking
+      // threshold fan makes the active doorway readable from the steep camera.
+      box(0,.14,-.015,.72,.88,.10,bright);
+      box(0,.62,-.015,.84,.09,.13,frame);
+      box(-.38,.14,-.015,.07,.92,.13,frame);
+      box(.38,.14,-.015,.07,.92,.13,frame);
+      wedge(.24,.50,1.32,-.43,.07,spill);
     }
-    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   }else{
     mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
   }
