@@ -4705,8 +4705,12 @@ function* localResourceSteps(job){
   const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false,true);
   stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
-  carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
-  carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  // Normal alpha compositing already gives continuous coverage when the
+  // feathered finer layer is drawn over an opaque/coarser parent. Carving the
+  // parent to (1-childAlpha) creates an opacity hole: a + (1-a)^2 bottoms out
+  // at 0.75, exposing the lower representation as a dark rectangular halo.
+  // Keep medium fully present beneath detail, and surround fully present beneath
+  // medium; z ordering and the shared world-stitched colors perform the handoff.
   return {meshData,detail,medium,surround};
 }
 function textureFromPixels(pixels){
