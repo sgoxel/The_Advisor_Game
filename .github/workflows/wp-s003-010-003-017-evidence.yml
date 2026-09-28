@@ -46,7 +46,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wp-s003-010-003-017-evidence-\${{ github.run_id }}
+          name: wp-s003-010-003-017-evidence-${{ github.run_id }}
           path: tools/wp_s003_010_003_017_artifact/
           if-no-files-found: warn
           retention-days: 14
