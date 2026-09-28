@@ -127,7 +127,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks — COMPLETED
 - `WP-S003-019` — Seasonal World Presentation + Vegetation State — COMPLETED
 - `WP-S003-020` — Function-Readable Building Surroundings + Ownership Cues — IN PROGRESS (fresh 3-attempt implementation/evidence cap reached 2026-09-28; functional acceptance green; final fresh visual 7.4/10; improved one-draw semantic yards retained; ownership names correctly omitted because no canonical owner authority is exposed; NOT COMPLETED)
-- `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection
+- `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection — IN PROGRESS (fresh 3-attempt cap reached 2026-09-28; functional acceptance green on final run 36403315060; final fresh visual 7.5/10; deterministic local WorldState projection, persisted reload proof, one merged draw/material retained; portrait overgrowth readability remains below acceptance; NOT COMPLETED)
 - `WP-S003-022` — Crossroads Direction Signposts + Named Route Wayfinding
 
 # Stage 4 — Starting Village Population + Indoor Activity Foundation
