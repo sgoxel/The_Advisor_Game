@@ -2287,7 +2287,7 @@ function buildLocalWildernessMesh(plan,frame,reveal){
 }
 function buildLocalFaunaMesh(kind,size,unit){
   const positions=[],normals=[],colors=[],indices=[],s=size/unit;
-  const palette=kind==="waterbird"?[.94,.91,.70]:kind==="bird"?[.58,.35,.12]:kind==="hare"?[.73,.52,.26]:[.72,.38,.12];
+  const palette=kind==="waterbird"?[.78,.78,.62]:kind==="bird"?[.32,.25,.13]:kind==="hare"?[.57,.43,.25]:[.52,.31,.13];
   const push=(x,y,z,color=palette)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
   const quad=(a,b,c,d)=>indices.push(a,b,c,a,c,d);
   const box=(cx,cy,cz,sx,sy,sz,color=palette)=>{
@@ -2374,7 +2374,7 @@ function rebuildLocalFauna(plan,frame,reveal){
     // Keep the same canonical actors/placements, but give close-ground fauna
     // enough physical silhouette area to remain readable against wilderness
     // props on desktop and modern-phone viewports.
-    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?4.55:item.kind==="waterbird"?2.20:item.kind==="bird"?1.78:2.42)*item.scale;
+    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?3.15:item.kind==="waterbird"?1.52:item.kind==="bird"?1.22:1.72)*item.scale;
     const built=buildLocalFaunaMesh(item.kind,size,unit),actorEntity=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actorEntity);
     actorEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actorEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actorEntity)];
     const id=localFaunaKey(item),memory=localFaunaReactionMemory.get(id)||null;
@@ -2482,9 +2482,7 @@ function updateLocalFaunaMotion(step){
       (actor.state==="takeoff"?Math.sin(localFaunaClock*12+actor.phase)*.10:0);
     actor.entity.setLocalPosition(east/actor.unit,ground+actor.altitudeMeters/actor.unit+bob,-north/actor.unit);
     const heading=actor.state==="flee"||actor.state==="takeoff"?Math.atan2(actor.fleeEast,actor.fleeNorth)*180/Math.PI:(t*35)%360;
-    const reactionLean=actor.state==="flee"?-18:(actor.state==="takeoff"?-28:0);
-    const reactionPresentationScale=actor.state==="flee"?1.10:(actor.state==="takeoff"?1.16:1);
-    actor.entity.setLocalScale(reactionPresentationScale,reactionPresentationScale,reactionPresentationScale);
+    const reactionLean=actor.state==="flee"?-7:(actor.state==="takeoff"?-12:0);
     actor.entity.setLocalEulerAngles(reactionLean,heading,0);
     actor.lastRenderedEastMeters=east;actor.lastRenderedNorthMeters=north;actor.lastDistanceMeters=pdist;
   }
