@@ -6760,6 +6760,17 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                    ls.revealTier==='full';
         """,str(center["x"]),str(center["y"]),float(hour)+float(minute)/60.0))
         time.sleep(.25)
+        # A late child-preparation can begin after the earlier settled wait,
+        # especially immediately after a phone viewport change. Sample proof only
+        # after the exact target focus is settled again; keep the strict pending=0
+        # acceptance gate rather than masking the race in validation.
+        WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{},f=s.canonicalFocus?.worldTile||{};
+            return String(f.x)===String(arguments[0])&&String(f.y)===String(arguments[1])&&
+                   Number(r.pendingPreparationCount||0)===0&&
+                   String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   ls.revealTier==='full';
+        """,str(center["x"]),str(center["y"])))
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),a=s.buildingActivity||{},ls=s.projection?.localStatic||{},r=s.projection?.resourceBudget||{};
             const targetId=String(arguments[1]),target=(a.buildings||[]).find(x=>String(x.id)===targetId)||null;
