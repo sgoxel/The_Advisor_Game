@@ -3860,6 +3860,30 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift;
     orientedBox(east,north,ground+yMeters*s+Math.max(.015,syMeters*s)*.5,sxMeters,syMeters,szMeters,color,0);
   };
+  const orientedPatch=(east,north,centerY,sxMeters,szMeters,color,rollDeg=0,shape=0)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),rad=rollDeg*Math.PI/180,cr=Math.cos(rad),sr=Math.sin(rad);
+    const hx=Math.max(.08,sxMeters*s*.5),hz=Math.max(.08,szMeters*s*.5);
+    const variants=[
+      [[-.52,-.36],[-.18,-.55],[.49,-.38],[.56,.16],[.15,.52],[-.46,.42]],
+      [[-.48,-.46],[.10,-.56],[.53,-.22],[.42,.48],[-.12,.55],[-.55,.10]],
+      [[-.55,-.18],[-.28,-.53],[.34,-.49],[.56,-.02],[.31,.48],[-.38,.54]]
+    ],pts=variants[Math.abs(shape)%variants.length],base=positions.length/3,n=[-sr,cr,0];
+    for(const q of pts){const x=q[0]*hx,z=q[1]*hz;addVertex(p.x+x*cr,centerY+x*sr,p.z+z,color,n);}
+    for(let i=1;i<pts.length-1;i++){indices.push(base,base+i,base+i+1);indices.push(base,base+i+1,base+i);}
+    primitiveCount++;
+  };
+  const groundPatch=(east,north,yMeters,sxMeters,szMeters,color,shape=0)=>{
+    const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift;
+    orientedPatch(east,north,ground+yMeters*s,sxMeters,szMeters,color,0,shape);
+  };
+  const foliageClump=(east,north,baseY,radiusMeters,heightMeters,colorA,colorB)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),r=Math.max(.08,radiusMeters*s),h=Math.max(.10,heightMeters*s),base=positions.length/3;
+    const ring=[[-.62,-.36],[.18,-.72],[.68,-.08],[.38,.62],[-.44,.56]];
+    for(let i=0;i<ring.length;i++){const q=ring[i];addVertex(p.x+q[0]*r,baseY,p.z+q[1]*r,(i&1)?colorB:colorA,[0,.55,0]);}
+    const top=addVertex(p.x-r*.08,baseY+h,p.z+r*.06,colorB,[0,1,0]);
+    for(let i=0;i<ring.length;i++){const j=(i+1)%ring.length;indices.push(base+i,base+j,top);}
+    primitiveCount++;
+  };
   const C={
     wear:[122,82,42,255],wearDark:[66,48,32,255],weather:[165,119,67,255],
     char:[34,31,29,255],burn:[116,47,24,255],ash:[167,145,108,255],debris:[93,80,65,255],
@@ -3874,40 +3898,37 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      // Weathering follows both canonical roof planes instead of floating above them.
-      orientedBox(leftEast-w*.04,north+d*.08,roofCenter+.028,Math.max(.52,w*.11),.055,Math.max(3.6,d*.72),C.weather,-24);
-      orientedBox(rightEast+w*.03,north-d*.10,roofCenter+.030,Math.max(.46,w*.10),.052,Math.max(3.2,d*.66),C.wearDark,24);
-      orientedBox(leftEast+w*.10,north-d*.25,roofCenter+.042,Math.max(.34,w*.07),.045,Math.max(1.7,d*.34),C.wear,-24);
-      orientedBox(rightEast-w*.10,north+d*.30,roofCenter+.044,Math.max(.32,w*.065),.045,Math.max(1.5,d*.30),C.wear,24);
-      groundBox(east,north+d*.73,.018,Math.max(4.2,w*.88),.05,Math.max(1.3,d*.22),C.wear);
-      groundBox(east-w*.24,north+d*.60,.020,Math.max(.34,w*.07),.055,Math.max(2.5,d*.46),C.wearDark);
+      // Restrained irregular roof scuffs plus eave/ground wear read as age, not a decal grid.
+      orientedPatch(leftEast-w*.06,north+d*.10,roofCenter+.038,Math.max(1.55,w*.28),Math.max(2.65,d*.50),C.weather,-24,0);
+      orientedPatch(rightEast+w*.04,north-d*.13,roofCenter+.041,Math.max(1.20,w*.22),Math.max(2.25,d*.43),C.wearDark,24,1);
+      orientedPatch(leftEast+w*.13,north-d*.29,roofCenter+.050,Math.max(.72,w*.13),Math.max(1.20,d*.24),C.wear,-24,2);
+      groundPatch(east,north+d*.70,.024,Math.max(4.1,w*.78),Math.max(1.18,d*.21),C.wear,1);
+      orientedBox(east-w*.28,north+d*.55,ground+.34*s,Math.max(.34,w*.06),.42,Math.max(2.1,d*.38),C.wearDark,0);
     }else if(item.visualState==="damaged"){
-      // Irregular char/ash strips sit on the pitched roof; debris remains grounded.
-      orientedBox(leftEast-w*.02,north-d*.12,roofCenter+.040,Math.max(1.55,w*.28),.075,Math.max(3.3,d*.68),C.char,-24);
-      orientedBox(rightEast+w*.02,north+d*.15,roofCenter+.045,Math.max(1.10,w*.20),.065,Math.max(2.5,d*.50),C.burn,24);
-      orientedBox(leftEast+w*.18,north+d*.30,roofCenter+.060,Math.max(.62,w*.11),.050,Math.max(1.15,d*.22),C.ash,-24);
-      groundBox(east+w*.62,north+d*.26,.02,1.55,.62,1.15,C.debris);
-      groundBox(east+w*.72,north-d*.30,.02,1.10,.42,1.55,C.char);
-      groundBox(east+w*.50,north+d*.55,.02,1.65,.30,.56,C.burn);
+      // Localized burn/char patches plus broken raised members and fallen debris create a real damage silhouette.
+      orientedPatch(leftEast-w*.03,north-d*.10,roofCenter+.042,Math.max(2.0,w*.36),Math.max(2.75,d*.52),C.char,-24,1);
+      orientedPatch(rightEast+w*.08,north+d*.19,roofCenter+.047,Math.max(1.25,w*.23),Math.max(1.70,d*.33),C.burn,24,2);
+      orientedBox(leftEast+w*.03,north-d*.03,roofCenter+.23*s,Math.max(.30,w*.055),.22,Math.max(3.0,d*.58),C.debris,-24);
+      orientedBox(rightEast-w*.05,north+d*.20,roofCenter+.31*s,Math.max(.27,w*.05),.20,Math.max(2.35,d*.44),C.char,24);
+      groundPatch(east+w*.56,north+d*.42,.025,2.55,1.65,C.debris,0);
+      groundPatch(east+w*.66,north-d*.20,.028,1.65,2.10,C.ash,2);
     }else if(item.visualState==="repaired"){
-      // Fresh planks inherit the roof pitch and overlap like an actual patch.
-      orientedBox(leftEast-w*.01,north,roofCenter+.045,Math.max(.48,w*.09),.060,Math.max(3.8,d*.78),C.newWood,-24);
-      orientedBox(leftEast+w*.16,north-d*.08,roofCenter+.060,Math.max(.44,w*.082),.055,Math.max(3.5,d*.72),C.newWoodLight,-24);
-      orientedBox(leftEast-w*.18,north+d*.10,roofCenter+.052,Math.max(.40,w*.075),.055,Math.max(3.2,d*.66),C.repairDark,-24);
-      orientedBox(rightEast-w*.05,north+d*.28,roofCenter+.050,Math.max(.38,w*.07),.050,Math.max(1.8,d*.36),C.newWoodLight,24);
-      groundBox(east+w*.62,north+.22*d,.02,.24,2.9,2.5,C.newWood);
-      groundBox(east+w*.62,north+.22*d,2.50,2.15,.24,.24,C.newWoodLight);
+      // A small old scar remains visible beneath fresh overlapping timber boards.
+      orientedPatch(leftEast-w*.03,north+.02*d,roofCenter+.041,Math.max(1.45,w*.26),Math.max(2.85,d*.54),C.repairDark,-24,2);
+      orientedBox(leftEast-w*.10,north-d*.08,roofCenter+.115*s,Math.max(.44,w*.075),.18,Math.max(3.15,d*.60),C.newWood,-24);
+      orientedBox(leftEast+w*.04,north+d*.02,roofCenter+.135*s,Math.max(.42,w*.072),.17,Math.max(2.75,d*.53),C.newWoodLight,-24);
+      orientedBox(leftEast+w*.17,north+d*.12,roofCenter+.150*s,Math.max(.38,w*.066),.16,Math.max(2.35,d*.45),C.newWood,-24);
+      groundPatch(east+w*.62,north+d*.34,.024,2.25,1.30,C.newWoodLight,1);
     }else if(item.visualState==="overgrown"){
-      // Ivy/moss is deliberately split across both roof planes so portrait framing
-      // cannot hide the whole cue behind one roof edge.
-      orientedBox(leftEast-w*.04,north+d*.12,roofCenter+.055,Math.max(.72,w*.14),.070,Math.max(3.4,d*.68),C.green,-24);
-      orientedBox(rightEast+w*.03,north-d*.08,roofCenter+.058,Math.max(.66,w*.13),.070,Math.max(3.0,d*.60),C.greenLight,24);
-      orientedBox(leftEast+w*.16,north-d*.30,roofCenter+.075,Math.max(.45,w*.085),.055,Math.max(1.55,d*.30),C.moss,-24);
-      orientedBox(rightEast-w*.18,north+d*.34,roofCenter+.078,Math.max(.43,w*.08),.055,Math.max(1.45,d*.28),C.moss,24);
-      groundBox(east-w*.56,north+d*.28,.02,2.25,.14,3.9,C.green);
-      groundBox(east+w*.58,north-d*.12,.02,2.55,.15,3.25,C.greenLight);
-      groundBox(east,north+d*.70,.02,Math.max(4.0,w*.80),.12,1.75,C.moss);
-    }
+      // Small moss patches + raised organic clumps + trailing ground vegetation avoid a flat green roof mask.
+      orientedPatch(leftEast-w*.03,north+d*.12,roofCenter+.050,Math.max(1.42,w*.25),Math.max(2.30,d*.44),C.green,-24,0);
+      orientedPatch(rightEast+w*.07,north-d*.16,roofCenter+.054,Math.max(1.18,w*.21),Math.max(1.95,d*.37),C.moss,24,2);
+      foliageClump(leftEast-w*.02,north-d*.05,roofCenter+.12*s,Math.max(.62,w*.10),1.05,C.green,C.greenLight);
+      foliageClump(rightEast+w*.03,north+d*.22,roofCenter+.14*s,Math.max(.55,w*.09),.92,C.greenLight,C.moss);
+      foliageClump(east-w*.57,north+d*.30,ground+.04*s,1.05,1.65,C.green,C.greenLight);
+      foliageClump(east+w*.58,north-d*.10,ground+.04*s,1.15,1.80,C.greenLight,C.moss);
+      groundPatch(east,north+d*.69,.026,Math.max(4.0,w*.76),1.45,C.moss,1);
+    }    }
   }
   if(positions.length){
     const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
