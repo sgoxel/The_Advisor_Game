@@ -34,7 +34,10 @@ function accentLimit(cls=deviceClass()){
   return reducedMotionQuery?.matches?Math.min(16,base):base;
 }
 function stageRoot(){
-  if(rootNode?.isConnected)return rootNode;
+  // planetStageRoot is page-lifetime stable. Avoid Element.isConnected on the
+  // post-resize steady path because Chrome may charge pending layout work to
+  // that DOM connectivity read.
+  if(rootNode)return rootNode;
   rootNode=document.getElementById("planetStageRoot")||document.querySelector(".planet-stage-root");
   centerMarker=null;return rootNode;
 }
@@ -48,7 +51,10 @@ function rootContext(tileOverride=null,stampOverride=null){
   const seed=String(root.dataset.seed||"");if(!seed)return null;
   let tile=tileOverride;
   if(!tile){
-    if(!centerMarker?.isConnected)centerMarker=root.querySelector(".planet-world-center");
+    // The center marker node is persistent for the planet-first runtime. Keep
+    // the reference once resolved and read only its canonical data-tile value;
+    // do not re-query/connectivity-check it after every viewport resize.
+    if(!centerMarker)centerMarker=root.querySelector(".planet-world-center");
     const raw=String(centerMarker?.dataset?.tile||""),parts=raw.split(",");
     if(parts.length===2&&parts[0]!==""&&parts[1]!=="")tile={x:parts[0],y:parts[1]};
   }
