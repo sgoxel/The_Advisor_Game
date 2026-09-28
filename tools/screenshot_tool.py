@@ -6600,7 +6600,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                     return Number((wr.triggerByKind||{})[kind]||0)>before &&
                            (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
                 """,kind,before,str(actor["id"])))
-                time.sleep(.30)
+                time.sleep(.08)
 
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),wr=s.wildlifeReaction||{},r=s.projection?.resourceBudget||{},kind=arguments[1],targetId=arguments[2];
@@ -16042,13 +16042,13 @@ def take_screenshots(
             for index, path in enumerate(paths):
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
-                    time.sleep(interval)
+                    time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
                 elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
-                    time.sleep(interval)
+                    time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
                 elif index:
                     action = _run_scenario_step(driver, scenario, index, width, height)
-                    time.sleep(interval)
+                    time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
                 else:
                     action = prep_action
                 if scenario in {"wp-s003-009-003", "wp-s003-009-004"}:
