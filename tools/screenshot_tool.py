@@ -8249,12 +8249,25 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1])",origin["x"],origin["y"])
             settle(scale_index)
         elif mode=="slow-fallback":
-            settle(6)
+            # Use a cold canonical cell so the target child cannot already be
+            # cache-resident from the earlier close/pan frames. Throttle before
+            # preparing the parent; any adjacent child prewarm then remains slow
+            # enough to expose the real previous-ready fallback.
             driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate",{"rate":6})
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot(),c=s.projection?.spatialLod?.requestedCell||{},
+                      tileM=Number(s.projection?.worldTileProjection?.tileMeters||2),
+                      dx=Math.max(32,Math.ceil(Number(c.cellSizeMeters||64)/tileM*3.25)),
+                      f=s.canonicalFocus?.worldTile||{x:"0",y:"0"};
+                window.PlanetStage.setWorldTileFocus((BigInt(String(f.x))+BigInt(dx)).toString(),String(f.y));
+            """)
+            settle(6,240.0)
             driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
-            WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
+            WebDriverWait(driver,45.0).until(lambda d:d.execute_script("""
                 const r=window.PlanetStage.snapshot().projection?.resourceBudget||{};
-                return Number(r.pendingPreparationCount||0)>0 || r.standInActive===true;
+                return r.standInActive===true &&
+                       Boolean(r.activeSignature) &&
+                       String(r.activeSignature)!==String(r.requestedSignature);
             """))
         elif mode=="slow-settled":
             driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate",{"rate":1})
