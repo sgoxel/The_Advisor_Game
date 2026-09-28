@@ -2,17 +2,6 @@ name: WP-S004-007 Visual Evidence
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - scripts/world/work-cycles.js
-      - scripts/world/action-executor.js
-      - scripts/world/resident-movement.js
-      - scripts/world/planet-stage.js
-      - index.html
-      - tools/wp_s004_007_evidence.py
-      - tools/tests/wp-s004-007-work-cycles.test.js
-      - .github/workflows/wp-s004-007-evidence.yml
 
 permissions:
   contents: read
