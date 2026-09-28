@@ -116,7 +116,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
 - `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — COMPLETED
-- `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder — IN PROGRESS
+- `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder — IN PROGRESS (Attempt 3 accepted 2026-09-28; exact-head workflow 36474237139 PASS; artifact 10992971234; fresh desktop + mobile screenshots directly inspected VISUAL 8.3/10 PASS; implementation/evidence head ac8a7cef8418420ab54f2649fd3c0152bb0f6968 deployed by Pages run 36474235798; completion bookkeeping pending) — IN PROGRESS
 - `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement
 - `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
