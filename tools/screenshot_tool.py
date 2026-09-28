@@ -7736,7 +7736,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               pending:Number(r.pendingPreparationCount||0),preparing:Boolean(r.preparing),
               standInMagnification:Number(r.standInMagnification||1),standInSemanticScale:Number(r.standInSemanticScale||1),
               visibleLevel:r.visibleLevel||null,requestedLevel:r.requestedLevel||null,
-              localStaticRevealTier:ls.revealTier||null,localStaticSignature:ls.signature||null,
+              localStaticRevealTier:ls.revealTier||null,localStaticSettlementId:ls.settlementId||null,localStaticSignature:ls.signature||null,
               labelIds:(m.visibleLabels||[]).map(x=>x.canonicalEntityId).filter(Boolean).sort(),
               landmarkIds:(m.visibleLandmarks||[]).map(x=>x.id||x.canonicalEntityId).filter(Boolean).sort(),
               hierarchySignature:hierarchy?.signature||null,
@@ -9121,6 +9121,20 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
             p=proofs[idx]
             if not p.get("activeSignature") or p.get("activeSignature")!=p.get("requestedSignature") or p.get("readyChildHandoff") is not True:
                 raise RuntimeError(f"WP-016 settled/grace-hit frame {idx+1} did not complete immediate ready handoff: {p}")
+
+        # Same-scale boundary preparation and the ready-child handoff must
+        # preserve the same canonical settlement presentation. This directly
+        # guards the frame-2 -> frame-3 semantic pop-out that visual inspection
+        # caught after the terrain-residency harness had otherwise passed.
+        east_preparing=proofs[1]
+        east_ready=proofs[2]
+        for idx,p in ((1,east_preparing),(2,east_ready)):
+            if not p.get("localStaticSettlementId") or p.get("localStaticRevealTier") in (None,"none"):
+                raise RuntimeError(f"WP-016 canonical settlement presentation disappeared at east-boundary frame {idx+1}: {p}")
+        if east_preparing.get("localStaticSettlementId")!=east_ready.get("localStaticSettlementId"):
+            raise RuntimeError(f"WP-016 ready-child handoff changed canonical settlement identity: preparing={east_preparing} ready={east_ready}")
+        if east_preparing.get("localStaticRevealTier")!=east_ready.get("localStaticRevealTier"):
+            raise RuntimeError(f"WP-016 ready-child handoff changed same-scale settlement reveal tier: preparing={east_preparing} ready={east_ready}")
 
         reverse_reuse=int((proofs[3].get("residency") or {}).get("graceReuseCount") or 0)
         parent_reuse=int((proofs[7].get("residency") or {}).get("graceReuseCount") or 0)
