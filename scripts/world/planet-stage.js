@@ -4503,19 +4503,12 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     mottle*.55-.050*forest-.030*copse+.005*dryField+.010*meadow
   ];
 }
-function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
+function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
-  const useMicroDetail=metersPerTexel<=4&&!contextRing;
+  const useMicroDetail=metersPerTexel<=4;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
-  // Coarse 3x/6x streaming context must read as geographic context, not as a
-  // second cartographic overlay. Strong scale-dependent contour/hillshade bands
-  // were visually dominating the 1/500 handoff even though coordinates matched.
-  // Keep the detailed focus patch subtle, and suppress artificial contours in
-  // context rings while retaining the same canonical SEED samples.
-  const contourStrength=contextRing?0:(metersPerTexel<=100?.028:metersPerTexel<=1200?.014:.006);
-  const hillshadeStrength=contextRing?.30:.72;
-  const contextDetailStrength=contextRing?.58:1;
+  const contourStrength=metersPerTexel<=100?.10:metersPerTexel<=1200?.060:.026;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
   const flatShade=light[2];
@@ -4563,7 +4556,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Rebuilding the same coordinates from a different patch/LOD therefore
       // reveals the same field instead of rolling a new patch-relative pattern.
       const worldEast=sample.registeredEastMeters,worldNorth=sample.registeredNorthMeters;
-      const macro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase)*contextDetailStrength;
+      const macro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
       let shade=1,cover=[0,0,0];
       if(sample?.land){
         // Hillshade of authoritative elevation + scale-appropriate detail relief.
@@ -4575,8 +4568,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
         // Keep hillshade readable without clipping bright alpine surfaces.
-        shade=clamp(1+(lit-flatShade)*hillshadeStrength,contextRing?.86:.78,contextRing?1.10:1.15);
-        cover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
+        shade=clamp(1+(lit-flatShade)*1.0,.72,1.18);
+        cover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
       const contour=.5+.5*Math.sin((elevation/420)*Math.PI*2);
@@ -4674,10 +4667,10 @@ function* localResourceSteps(job){
   // patch first, then a cheaper 3x medium ring, then the 6x coarse fallback.
   // All three sample the same SEED-registered coordinates; only presentation
   // density differs.
-  const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false);
+  const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true);
   const mediumSize=Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
-  const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true);
-  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false,true);
+  const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true);
+  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false);
   stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
