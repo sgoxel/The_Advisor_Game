@@ -130,6 +130,7 @@ SCENARIOS = {
     "wp-s003-014",
     "wp-s003-015",
     "wp-s003-016",
+    "wp-s003-020",
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
@@ -250,6 +251,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-014": 8,
     "wp-s003-015": 8,
     "wp-s003-016": 6,
+    "wp-s003-020": 8,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -1705,7 +1707,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-014","wp-s003-015"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-014","wp-s003-015","wp-s003-020"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6444,6 +6446,57 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-020":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("lodging-surroundings","lodging",(1280,800)),
+            ("market-surroundings","market",(1280,800)),
+            ("craft-surroundings","craft",(1280,800)),
+            ("storage-surroundings","storage",(1280,800)),
+            ("farm-surroundings","farm",(1280,800)),
+            ("civic-surroundings","civic",(1280,800)),
+            ("phone-workyard-surroundings","outdoor-work",(844,390)),
+            ("phone-market-surroundings","market",(390,844)),
+        )
+        label,fn,viewport=plan[min(frame_index,len(plan)-1)]
+        target_w,target_h=int(viewport[0]),int(viewport[1])
+        driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width":target_w,"height":target_h,"deviceScaleFactor":1,"mobile":False
+        })
+        time.sleep(.10)
+        lot=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),seed=s.activeSeed;
+            return (window.SpecialLots?.build?.(seed)||[]).find(x=>String(x.function)===String(arguments[0]))||null;
+        """,fn)
+        if not lot:
+            raise RuntimeError(f"Missing canonical special lot for {fn}")
+        driver.execute_script("""
+            window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]));
+            window.PlanetStage.setZoomScalar(1);
+        """,int(lot.get("cx") or 0),int(lot.get("cy") or 0))
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},bs=s.buildingSurroundings||{};
+            return s.ready===true&&s.zoom?.scaleLabel==='1/10000'&&
+                   s.projection?.localStatic?.revealTier==='full'&&
+                   Number(r.pendingPreparationCount||0)===0&&
+                   String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   bs.active===true&&Array.isArray(bs.buildings)&&bs.buildings.some(x=>x.function===arguments[0]);
+        """,fn))
+        time.sleep(.12)
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),bs=s.buildingSurroundings||{},r=s.projection?.resourceBudget||{},fn=arguments[1];
+            const target=(bs.buildings||[]).find(x=>x.function===fn)||null;
+            return {label:arguments[0],targetFunction:fn,target,active:bs.active,buildingCount:bs.buildingCount,
+              functionCount:bs.functionCount,propCount:bs.propCount,drawCallEstimate:bs.drawCallEstimate,
+              triangleCount:bs.triangleCount,sharedMaterialCount:bs.sharedMaterialCount,functions:bs.functions,
+              doorClearanceViolations:bs.doorClearanceViolations,roadClearanceViolations:bs.roadClearanceViolations,
+              ownershipCueCount:bs.ownershipCueCount,authoritativeFunctionSource:bs.authoritativeFunctionSource,
+              ownershipSource:bs.ownershipSource,presentationOnly:bs.presentationOnly,simulationAuthority:bs.simulationAuthority,
+              bounded:bs.bounded,fullSettlementPerFrameScan:bs.fullSettlementPerFrameScan,buildMs:bs.buildMs,
+              revealTier:s.projection?.localStatic?.revealTier,pending:r.pendingPreparationCount,
+              viewport:{width:innerWidth,height:innerHeight},focus:s.canonicalFocus?.worldTile};
+        """,label,fn)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-014":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -9122,6 +9175,41 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-020":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-020 requires eight building-surroundings evidence frames")
+        required={"lodging","market","craft","storage","farm","civic","outdoor-work"}
+        seen=set()
+        proofs=[]
+        for index,frame in enumerate(frames[:8],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split(":",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-S003-020 frame {index} lacks surroundings proof: {action}") from exc
+            proofs.append(proof);seen.add(str(proof.get("targetFunction") or ""))
+            if proof.get("active") is not True or proof.get("presentationOnly") is not True or proof.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Building surroundings authority failed in frame {index}: {proof}")
+            if proof.get("bounded") is not True or proof.get("fullSettlementPerFrameScan") is not False:
+                raise RuntimeError(f"Building surroundings bounded contract failed in frame {index}: {proof}")
+            if int(proof.get("buildingCount") or 0)<13 or int(proof.get("functionCount") or 0)<8:
+                raise RuntimeError(f"Building surroundings coverage failed in frame {index}: {proof}")
+            if int(proof.get("propCount") or 0)<30 or int(proof.get("drawCallEstimate") or 0)!=1 or int(proof.get("sharedMaterialCount") or 0)!=1:
+                raise RuntimeError(f"Building surroundings batching failed in frame {index}: {proof}")
+            if int(proof.get("doorClearanceViolations") or 0)!=0 or int(proof.get("roadClearanceViolations") or 0)!=0:
+                raise RuntimeError(f"Building surroundings clearance failed in frame {index}: {proof}")
+            if proof.get("revealTier")!="full" or int(proof.get("pending") or 0)!=0:
+                raise RuntimeError(f"Building surroundings readiness failed in frame {index}: {proof}")
+            if float(proof.get("buildMs") or 0)>8.0:
+                raise RuntimeError(f"Building surroundings build budget failed in frame {index}: {proof}")
+            target=proof.get("target") or {}
+            if str(target.get("function") or "")!=str(proof.get("targetFunction") or "") or int(target.get("propCount") or 0)<2:
+                raise RuntimeError(f"Target function surroundings missing in frame {index}: {proof}")
+        if not required.issubset(seen):
+            raise RuntimeError(f"Building surroundings function evidence incomplete: seen={sorted(seen)}")
+        if proofs[6].get("viewport")!={"width":844,"height":390} or proofs[7].get("viewport")!={"width":390,"height":844}:
+            raise RuntimeError(f"Building surroundings mobile viewport evidence failed: {proofs[6].get('viewport')} / {proofs[7].get('viewport')}")
+        return
     if scenario == "wp-s003-014":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-014 requires eight wildlife approach/reaction evidence frames")
@@ -16034,7 +16122,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-020", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -16042,7 +16130,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-020", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
