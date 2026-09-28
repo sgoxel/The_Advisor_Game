@@ -9736,8 +9736,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if not craft_day or not craft_night or craft_day.get("id")!=craft_night.get("id") or craft_day.get("active") is not True or craft_night.get("active") is not False:
             raise RuntimeError(f"Same craft building did not prove active/inactive state: day={craft_day} night={craft_night}")
         day_home=by_function(day,"home");night_home_entry=by_function(night_home,"home")
-        if not day_home or not night_home_entry or day_home.get("id")!=night_home_entry.get("id") or day_home.get("active") is not False or night_home_entry.get("active") is not True:
-            raise RuntimeError(f"Same home did not prove day/night occupancy/activity state: day={day_home} night={night_home_entry}")
+        if not day_home or not night_home_entry or day_home.get("id")!=night_home_entry.get("id"):
+            raise RuntimeError(f"Same canonical home was not retained across day/night evidence: day={day_home} night={night_home_entry}")
+        # ResidentMovement may truthfully report daytime occupants, so an active
+        # home with chimney smoke is valid. The semantic transition we require
+        # is schedule-derived: daytime is not homeActive/warm-window, while the
+        # same home becomes homeActive with a warm-window cue at night.
+        if day_home.get("homeActive") is not False or day_home.get("cue")=="warm-window" or night_home_entry.get("active") is not True or night_home_entry.get("homeActive") is not True or night_home_entry.get("cue")!="warm-window":
+            raise RuntimeError(f"Same home did not prove truthful day/night cue transition: day={day_home} night={night_home_entry}")
         landscape=frames[6].get("runtime",{}).get("viewport",{})
         portrait=frames[7].get("runtime",{}).get("viewport",{})
         if int(landscape.get("width") or 0)>900 or int(landscape.get("height") or 0)>430:
