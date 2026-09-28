@@ -6449,11 +6449,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         plan=(
             ("deer-idle","deer","grassland","idle",(1280,800)),
             ("deer-approach","deer","grassland","react",(1280,800)),
+            ("phone-deer-approach","deer","grassland","mobile-react",(844,390)),
             ("hare-idle","hare","wooded","idle",(1280,800)),
             ("hare-approach","hare","wooded","react",(1280,800)),
             ("waterbird-idle","waterbird","wet","idle",(1280,800)),
             ("waterbird-approach","waterbird","wet","react",(1280,800)),
-            ("phone-deer-approach","deer","grassland","mobile-react",(844,390)),
             ("phone-waterbird-approach","waterbird","wet","mobile-react",(390,844)),
         )
         label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
@@ -6562,29 +6562,32 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
         if mode in {"react","mobile-react"}:
             tile=actor["worldTile"]
-            before=int(driver.execute_script("return Number((window.PlanetStage.snapshot().wildlifeReaction?.triggerByKind||{})[arguments[0]]||0)",kind))
-            # Approach the exact canonical actor directly. Do not wait for a new
-            # terrain resource: the ready parent/stand-in remains on screen while
-            # the bounded focus request prepares, and the reaction is tied to the
-            # actor's stable world-tile identity.
-            if mode=="mobile-react" and known:
-                driver.execute_script("""
-                    window.PlanetStage.setViewTarget({
-                      latitudeRadians:Number(arguments[0]),longitudeRadians:Number(arguments[1])
-                    });
-                    window.PlanetStage.setZoomScalar(1);
-                """,float(known["latitudeRadians"]),float(known["longitudeRadians"]))
+            if mode=="mobile-react":
+                # Mobile frames are the same just-triggered canonical desktop
+                # actor after a viewport resize. Do not manufacture a second
+                # approach or scan another fauna cell merely for phone evidence.
+                # This keeps the original cumulative <=12 anti-spam gate strict
+                # while proving the reaction remains visible on both phone shapes.
+                WebDriverWait(driver,4.0).until(lambda d:d.execute_script("""
+                    const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],id=arguments[1];
+                    return Number((wr.triggerByKind||{})[kind]||0)>0 &&
+                           (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
+                """,kind,str(actor["id"])))
             else:
+                before=int(driver.execute_script("return Number((window.PlanetStage.snapshot().wildlifeReaction?.triggerByKind||{})[arguments[0]]||0)",kind))
+                # Approach the exact canonical actor directly. Do not wait for a
+                # new terrain resource: the ready parent/stand-in remains on
+                # screen while the bounded focus request prepares.
                 driver.execute_script("""
                     const x=BigInt(arguments[0])+3n,y=BigInt(arguments[1]);
                     window.PlanetStage.setWorldTileFocus(String(x),String(y));window.PlanetStage.setZoomScalar(1);
                 """,str(tile["x"]),str(tile["y"]))
-            WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
-                const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],before=Number(arguments[1]),id=arguments[2];
-                return Number((wr.triggerByKind||{})[kind]||0)>before &&
-                       (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
-            """,kind,before,str(actor["id"])))
-            time.sleep(.30)
+                WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
+                    const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],before=Number(arguments[1]),id=arguments[2];
+                    return Number((wr.triggerByKind||{})[kind]||0)>before &&
+                           (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
+                """,kind,before,str(actor["id"])))
+                time.sleep(.30)
 
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),wr=s.wildlifeReaction||{},r=s.projection?.resourceBudget||{},kind=arguments[1],targetId=arguments[2];
