@@ -2086,7 +2086,7 @@ function localWildernessFamily(biome,roll){
   const r=clamp(Number(roll)||0,0,.999999);
   // Keep one deterministic global-cell scatter, but give each biome a
   // stronger silhouette vocabulary so terrain identity reads at gameplay zoom.
-  if(biome==="rocky")return r<.30?"rock":r<.40?"outcrop":r<.58?"grass":r<.73?"bush":r<.82?"stump":r<.91?"flower":"sapling";
+  if(biome==="rocky")return r<.36?"rock":r<.48?"outcrop":r<.64?"grass":r<.70?"bush":r<.80?"stump":r<.90?"flower":"sapling";
   if(biome==="wet")return r<.38?"reed":r<.52?"bush":r<.68?"driftwood":r<.76?"rock":r<.90?"grass":"flower";
   if(biome==="wooded")return r<.28?"bush":r<.49?"sapling":r<.64?"log":r<.73?"stump":r<.83?"rock":r<.92?"grass":"flower";
   return r<.24?"grass":r<.45?"flower":r<.62?"bush":r<.75?"rock":r<.86?"log":r<.93?"stump":"sapling";
@@ -2121,7 +2121,7 @@ function prepareLocalWildernessPlan(job){
     const tx=String(Math.round(worldX/tileMeters)),ty=String(Math.round(worldY/tileMeters)),geo=worldLatLonForTile(tx,ty);
     const sample=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians);
     if(!sample?.land){rejectedWater++;continue;}
-    const probeMeters=Math.max(24,Math.min(56,spacing*2.8)),probe=probeMeters/WORLD_RADIUS_METERS,probeLon=probe/Math.max(.08,Math.cos(geo.latitudeRadians));
+    const probeMeters=Math.max(40,Math.min(72,spacing*6)),probe=probeMeters/WORLD_RADIUS_METERS,probeLon=probe/Math.max(.08,Math.cos(geo.latitudeRadians));
     const waterNorthProbe=!geography?.sampleLatLon?.(clamp(geo.latitudeRadians+probe,-Math.PI*.499999,Math.PI*.499999),geo.longitudeRadians)?.land;
     const waterSouthProbe=!geography?.sampleLatLon?.(clamp(geo.latitudeRadians-probe,-Math.PI*.499999,Math.PI*.499999),geo.longitudeRadians)?.land;
     const waterEastProbe=!geography?.sampleLatLon?.(geo.latitudeRadians,wrapLongitudeRadians(geo.longitudeRadians+probeLon))?.land;
@@ -2136,14 +2136,14 @@ function prepareLocalWildernessPlan(job){
     const baseScale=.78+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.62;
     const reliefScale=family==="outcrop"?1.10:(family==="rock"&&biome==="rocky"?1.06:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
     const closeLod=Number(dims.visibleHeight||dims.visibleHeightMeters||500)<=90;
-    const closeReadableScale=closeLod?(biome==="wooded"&&["grass","flower","bush","sapling","log","stump"].includes(family)?1.34:(["grass","flower","bush","sapling","reed"].includes(family)?1.24:1)):1;
+    const closeReadableScale=closeLod?(family==="sapling"||family==="bush"?1.48:(family==="reed"?1.42:(family==="grass"||family==="flower"?1.34:(biome==="wooded"&&(family==="log"||family==="stump")?1.20:1)))):1;
     const scale=baseScale*reliefScale*closeReadableScale;
     const rotation=((localWildernessHashInt(gx,gy,salt+109)>>>0)/4294967295)*Math.PI*2;
     const variant=(localWildernessHashInt(gx,gy,salt+131)>>>0)/4294967295;
     const shoreRoll=(localWildernessHashInt(gx,gy,salt+149)>>>0)/4294967295;
     const priority=localWildernessHashInt(gx,gy,salt+191)>>>0;
     const faunaRoll=(localWildernessHashInt(gx,gy,salt+157)>>>0)/4294967295;
-    raw.push(Object.freeze({east,north,worldX,worldY,worldTile:Object.freeze({x:tx,y:ty}),family,biome,scale,rotation,variant,priority,faunaRoll,elevationMeters:Number(sample.elevationMeters||0),moisture:Number(sample.moisture||0),mountainInfluence:Number(sample.mountainInfluence||0),nearWater,shoreAccent:nearWater&&shoreRoll<.48,waterEast,waterNorth}));
+    raw.push(Object.freeze({east,north,worldX,worldY,worldTile:Object.freeze({x:tx,y:ty}),family,biome,scale,rotation,variant,priority,faunaRoll,elevationMeters:Number(sample.elevationMeters||0),moisture:Number(sample.moisture||0),mountainInfluence:Number(sample.mountainInfluence||0),nearWater,shoreAccent:nearWater&&shoreRoll<.68,waterEast,waterNorth}));
   }
   raw.sort((a,b)=>a.priority-b.priority||a.worldY-b.worldY||a.worldX-b.worldX);
   const items=raw.slice(0,maxStatic).sort((a,b)=>a.worldY-b.worldY||a.worldX-b.worldX);
@@ -2175,7 +2175,9 @@ function wildernessColor(family,biome){
     log:[.26,.13,.05,255],driftwood:[.36,.25,.13,255],stump:[.24,.12,.04,255],sapling:[.13,.39,.08,255],reed:[.30,.44,.11,255]
   };
   const base=colors[family]||[.25,.45,.15,255];
-  if(biome==="wet"&&family!=="flower")return [base[0]*.88,Math.min(1,base[1]*1.06),base[2]*.90,255];
+  if(biome==="wet"&&family!=="flower")return [base[0]*.78,Math.min(1,base[1]*.96+.03),base[2]*.84,255];
+  if(biome==="rocky"&&!["rock","outcrop"].includes(family))return [base[0]*.82,base[1]*.76,base[2]*.72,255];
+  if(biome==="wooded"&&(family==="bush"||family==="sapling"))return [base[0]*.82,Math.min(1,base[1]*.90),base[2]*.78,255];
   return base;
 }
 function buildLocalWildernessMesh(plan,frame,reveal){
@@ -2193,13 +2195,13 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
     if(item.biome==="wet"&&item.shoreAccent&&Math.hypot(Number(item.waterEast||0),Number(item.waterNorth||0))>.1){
       const bx=Number(item.waterEast||0),bz=-Number(item.waterNorth||0),tx=-bz,tz=bx;
-      const cx=x+bx*m*.78,cz=z+bz*m*.78,halfLength=m*(2.20+variant*.65),halfDepth=m*.52,py=y+.001;
-      const bank=[.08,.25,.18],inner=[.10,.31,.22];
+      const cx=x+bx*m*.96,cz=z+bz*m*.96,halfLength=m*(3.05+variant*.95),halfDepth=m*.78,py=y+.001;
+      const bank=[.07,.22,.18],inner=[.08,.34,.31];
       const a=push(cx-tx*halfLength-bx*halfDepth,py,cz-tz*halfLength-bz*halfDepth,bank);
       const b=push(cx+tx*halfLength-bx*halfDepth,py,cz+tz*halfLength-bz*halfDepth,bank);
       const cc=push(cx+tx*halfLength+bx*halfDepth,py,cz+tz*halfLength+bz*halfDepth,bank);
       const d=push(cx-tx*halfLength+bx*halfDepth,py,cz-tz*halfLength+bz*halfDepth,bank);quad(a,b,cc,d);
-      const innerLength=halfLength*.78,innerDepth=halfDepth*.42,icx=cx+bx*halfDepth*.45,icz=cz+bz*halfDepth*.45;
+      const innerLength=halfLength*.86,innerDepth=halfDepth*.46,icx=cx+bx*halfDepth*.38,icz=cz+bz*halfDepth*.38;
       const ia=push(icx-tx*innerLength-bx*innerDepth,py+.001,icz-tz*innerLength-bz*innerDepth,inner);
       const ib=push(icx+tx*innerLength-bx*innerDepth,py+.001,icz+tz*innerLength-bz*innerDepth,inner);
       const ic=push(icx+tx*innerLength+bx*innerDepth,py+.001,icz+tz*innerLength+bz*innerDepth,inner);
