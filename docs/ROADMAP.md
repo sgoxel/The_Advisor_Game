@@ -115,7 +115,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-014` — Physical-Scale Semantic Layer Ladder + Stable Label/Border/Route Decluttering — COMPLETED
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
-- `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility
+- `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — IN PROGRESS (Phase 1 capped 2026-09-28; semantic marker policy/telemetry and broad-scale minor/debug suppression implemented; Attempt 1 workflow 36468151462 failed on an evidence-only zero-value assertion, Attempt 2 workflow 36468910579 produced six fresh desktop `1/10`–`1/500` screenshots and then failed phone-landscape canonical-center visibility, Attempt 3 workflow 36469382876 failed before game load on an over-strict exact viewport-settlement assertion; six Attempt-2 screenshots directly inspected at VISUAL 7.0/10 FAIL because `1/100`–`1/500` terrain remains visibly coarse/blotchy despite substantially cleaner marker presentation; three-attempt cap reached; no fourth loop; NOT COMPLETED)
 - `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder
 - `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement
 - `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination
