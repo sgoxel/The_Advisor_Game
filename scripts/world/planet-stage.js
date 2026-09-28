@@ -3154,10 +3154,18 @@ function wayfindingWorldPoint(localPoint){
 function projectWayfindingPoint(localPoint){
   if(!cameraEntity?.camera||!canvas||!device||!pc)return null;
   const world=wayfindingWorldPoint(localPoint);if(!world)return null;
-  const projected=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
-  if(!projected||![projected.x,projected.y,projected.z].every(Number.isFinite)||projected.z<=0)return null;
-  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(device.width||canvas.width||rect.width)),sourceH=Math.max(1,Number(device.height||canvas.height||rect.height));
-  return {x:projected.x*(rect.width/sourceW),y:projected.y*(rect.height/sourceH),z:projected.z,world};
+  const camera=cameraEntity.camera,projected=camera.worldToScreen(world,new pc.Vec3());
+  if(!projected||![projected.x,projected.y,projected.z].every(Number.isFinite))return null;
+  // worldToScreen().z is unnormalized clip depth and is not a reliable
+  // behind-camera test for orthographic cameras. Use camera-view depth:
+  // visible points are in front of the camera on negative view-space Z.
+  const viewSpace=camera.viewMatrix?.transformPoint?.(world,new pc.Vec3());
+  if(!viewSpace||!Number.isFinite(viewSpace.z)||viewSpace.z>=0)return null;
+  // PlayCanvas worldToScreen returns CSS pixels from the canvas top-left.
+  // Normalize only against the CSS client size (not the drawing-buffer size)
+  // so high-DPR mobile displays keep labels aligned with their physical signs.
+  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(canvas.clientWidth||rect.width)),sourceH=Math.max(1,Number(canvas.clientHeight||rect.height));
+  return {x:projected.x*(rect.width/sourceW),y:projected.y*(rect.height/sourceH),z:-viewSpace.z,world};
 }
 function wayfindingSignScreenBounds(signId){
   const localPoint=wayfindingSignAnchors.get(String(signId));const p=projectWayfindingPoint(localPoint);if(!p)return null;
