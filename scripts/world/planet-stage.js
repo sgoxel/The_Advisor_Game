@@ -3667,13 +3667,22 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // Child-local Y is terrain-normal/elevation. Compensate only the tangent-plane
     // axes so the previous-ready semantic world keeps its ground contact while
     // the terrain stand-in is magnified during an asynchronous child handoff.
-    // Canonical semantic primitives are already registered from this SLOD cell
-    // to their SEED-fixed world anchor. The parent tangent patch applies the
-    // stand-in magnification; inverse-scale only the semantic root so both the
-    // anchor offset and local composition remain visually stationary. Adding a
-    // second root translation here would magnify the anchor twice.
+    // Root inverse-scaling holds semantic size, but root translation must also
+    // pivot around the canonical settlement anchor. Otherwise the parent patch
+    // translation/scale magnifies the SLOD-cell-to-village registration offset
+    // and the village slides toward a viewport edge while the child prepares.
+    let semanticAnchorLocalX=0,semanticAnchorLocalZ=0;
+    const semanticCenterTile=localStatic?.canonicalCenterTile;
+    if(semanticCenterTile&&displayResource){
+      const semanticOrigin=worldLatLonForTile(semanticCenterTile.x,semanticCenterTile.y);
+      const semanticDelta=canonicalRegisteredDeltaMeters(displayResource.lat0,displayResource.lon0,semanticOrigin.latitudeRadians,semanticOrigin.longitudeRadians);
+      semanticAnchorLocalX=Number(semanticDelta.eastMeters||0)/dims.metersPerUnit;
+      semanticAnchorLocalZ=-Number(semanticDelta.northMeters||0)/dims.metersPerUnit;
+    }
+    const semanticAnchorCompensation=1-semanticHoldScale;
     for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot]){
       if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,1,semanticHoldScale);
+      if(rootNode?.setLocalPosition)rootNode.setLocalPosition(semanticAnchorLocalX*semanticAnchorCompensation,0,semanticAnchorLocalZ*semanticAnchorCompensation);
     }
     localResources.standInSemanticScale=Number(semanticHoldScale.toFixed(6));
     tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,offset.north/dims.metersPerUnit*patchScale,DISPLAY_RADIUS_UNITS+.002);
