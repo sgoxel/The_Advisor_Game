@@ -2561,6 +2561,17 @@ function settlementPresentationLift(tier,value=zoomState.scalar){
   if(tier==="coarse")return .045;
   return .012;
 }
+function canonicalSemanticAnchor(frame){
+  return {east:Number(frame?.semanticAnchorEastMeters||0),north:Number(frame?.semanticAnchorNorthMeters||0)};
+}
+function canonicalSemanticGroundHeightUnits(eastMeters,northMeters,frame){
+  const anchor=canonicalSemanticAnchor(frame);
+  return localGroundHeightUnits(anchor.east+Number(eastMeters||0),anchor.north+Number(northMeters||0),frame);
+}
+function canonicalSemanticPosition(eastMeters,northMeters,presentationScale,unit,frame){
+  const anchor=canonicalSemanticAnchor(frame),scale=Number(presentationScale||1),u=Math.max(1e-9,Number(unit)||1);
+  return {x:(anchor.east+Number(eastMeters||0)*scale)/u,z:-(anchor.north+Number(northMeters||0)*scale)/u};
+}
 function addCanonicalRoadSegment(name,x1,y1,x2,y2,widthMeters,presentationScale,unit,frame,lift=0,material=localStaticMaterials.road){
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const east1=x1*tileMeters,north1=y1*tileMeters,east2=x2*tileMeters,north2=y2*tileMeters;
@@ -2568,8 +2579,8 @@ function addCanonicalRoadSegment(name,x1,y1,x2,y2,widthMeters,presentationScale,
   const dx=(east2-east1)*presentationScale,dz=-(north2-north1)*presentationScale;
   const length=Math.max(widthMeters*presentationScale,Math.hypot(dx,dz));
   const angle=Math.atan2(dx,dz)*180/Math.PI;
-  const ground=localGroundHeightUnits(centerEast,centerNorth,frame)+lift+.028;
-  addLocalStatic(name,"box",material,centerEast*presentationScale/unit,ground,-centerNorth*presentationScale/unit,widthMeters*presentationScale/unit,.058,length/unit,0,angle,0);
+  const ground=canonicalSemanticGroundHeightUnits(centerEast,centerNorth,frame)+lift+.028,pos=canonicalSemanticPosition(centerEast,centerNorth,presentationScale,unit,frame);
+  addLocalStatic(name,"box",material,pos.x,ground,pos.z,widthMeters*presentationScale/unit,.058,length/unit,0,angle,0);
 }
 function clearInspectionKeySet(keys,preserveSelected=false){
   const selectedKey=inspection.selectedId===null?null:inspectionRegistryKey(inspection.selectedType,inspection.selectedId);
@@ -2673,9 +2684,9 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
   let activeCount=0,entityCount=0;
   for(const resident of roster){
     const state=residentPresentationState(resident);if(!state||state.indoors)continue;
-    const east=state.x*tileMeters,north=state.y*tileMeters,ground=localGroundHeightUnits(east,north,frame)+lift+.015;
+    const east=state.x*tileMeters,north=state.y*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.015;
     const bodyHeight=Math.max(.10,1.18*presentationScale/unit),bodyWidth=Math.max(.045,.48*presentationScale/unit),headSize=Math.max(.045,.44*presentationScale/unit);
-    const x=east*presentationScale/unit,z=-north*presentationScale/unit;
+    const pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),x=pos.x,z=pos.z;
     const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",localNpcMaterials.body,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
     const entities=[body,head];
@@ -2700,20 +2711,20 @@ function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed
   const b=record.bounds,tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),entities=[];
   const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
   const w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
-  const east=cx*tileMeters,north=cy*tileMeters,ground=localGroundHeightUnits(east,north,frame)+lift;
-  const wall=landmark?localStaticMaterials.landmark:localStaticMaterials.wall;
+  const east=cx*tileMeters,north=cy*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
+  const wall=landmark?localStaticMaterials.landmark:localStaticMaterials.wall,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
   if(!detailed){
     const h=Math.max(.045,Math.min(.16,3.2*presentationScale/unit));
-    entities.push(addLocalStatic("CanonicalBlock-"+record.id,"box",wall,east*presentationScale/unit,ground+h*.5,-north*presentationScale/unit,w*presentationScale/unit,h,d*presentationScale/unit));
+    entities.push(addLocalStatic("CanonicalBlock-"+record.id,"box",wall,pos.x,ground+h*.5,pos.z,w*presentationScale/unit,h,d*presentationScale/unit));
     return entities.length;
   }
   const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
   const h=Math.max(.08,physicalHeight*presentationScale/unit);
-  entities.push(addLocalStatic("CanonicalBody-"+record.id,"box",wall,east*presentationScale/unit,ground+h*.5,-north*presentationScale/unit,w*presentationScale/unit,h,d*presentationScale/unit));
+  entities.push(addLocalStatic("CanonicalBody-"+record.id,"box",wall,pos.x,ground+h*.5,pos.z,w*presentationScale/unit,h,d*presentationScale/unit));
   const roofMat=landmark?localStaticMaterials.landmark:localStaticMaterials.roof;
-  const roofY=ground+h+.025;
-  entities.push(addLocalStatic("CanonicalRoofL-"+record.id,"box",roofMat,(east-w*.20)*presentationScale/unit,roofY,-north*presentationScale/unit,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,-24));
-  entities.push(addLocalStatic("CanonicalRoofR-"+record.id,"box",roofMat,(east+w*.20)*presentationScale/unit,roofY,-north*presentationScale/unit,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,24));
+  const roofY=ground+h+.025,roofL=canonicalSemanticPosition(east-w*.20,north,presentationScale,unit,frame),roofR=canonicalSemanticPosition(east+w*.20,north,presentationScale,unit,frame);
+  entities.push(addLocalStatic("CanonicalRoofL-"+record.id,"box",roofMat,roofL.x,roofY,roofL.z,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,-24));
+  entities.push(addLocalStatic("CanonicalRoofR-"+record.id,"box",roofMat,roofR.x,roofY,roofR.z,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,24));
   registerCanonicalBuildingInspection(record,entities);
   return entities.length;
 }
@@ -2783,13 +2794,13 @@ function activityBuildingGeometry(record,presentationScale,unit,frame,lift){
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
   const w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
-  const east=cx*tileMeters,north=cy*tileMeters,ground=localGroundHeightUnits(east,north,frame)+lift;
+  const east=cx*tileMeters,north=cy*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
   const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
   return {east,north,w,d,ground,height:physicalHeight,presentationScale,unit};
 }
 function addBuildingActivityCue(record,state,context,index){
   const g=activityBuildingGeometry(record,context.presentationScale,context.unit,context.frame,context.lift);if(!g||!state?.cue)return 0;
-  const s=g.presentationScale/g.unit,x=g.east*s,z=-g.north*s,h=g.height*s,frontZ=-(g.north+g.d*.505)*s;
+  const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s,frontZ=front.z;
   const name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
   if(state.cue==="warm-window"){
     addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityWarm,x,g.ground+h*.53,frontZ,Math.max(.035,1.8*s),Math.max(.035,1.25*s),Math.max(.018,.14*s));
@@ -2844,13 +2855,15 @@ function refreshCanonicalBuildingActivityPresentation(){
 function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
   const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104));
+  const villageOrigin=worldLatLonForTile(village.center.x,village.center.y),anchorDelta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,villageOrigin.latitudeRadians,villageOrigin.longitudeRadians);
+  const semanticFrame={...frame,semanticAnchorEastMeters:Number(anchorDelta.eastMeters||0),semanticAnchorNorthMeters:Number(anchorDelta.northMeters||0)};
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("CanonicalSettlementReveal");tangentPatch.addChild(localStaticRoot);
   const coreRadiusMeters=Number(village.approximateCoreDiameterMeters||104)/2;
   const lift=settlementPresentationLift(tier);
-  const centerGround=localGroundHeightUnits(0,0,frame)+lift+.012;
+  const centerGround=canonicalSemanticGroundHeightUnits(0,0,semanticFrame)+lift+.012,centerPos=canonicalSemanticPosition(0,0,scale,unit,semanticFrame);
   let occupiedAreaCount=0;
   if(tier==="footprint"){
-    addLocalStatic("CanonicalOccupiedArea","cylinder",localStaticMaterials.footprint,0,centerGround,0,coreRadiusMeters*2*scale/unit,.022,coreRadiusMeters*2*scale/unit);
+    addLocalStatic("CanonicalOccupiedArea","cylinder",localStaticMaterials.footprint,centerPos.x,centerGround,centerPos.z,coreRadiusMeters*2*scale/unit,.022,coreRadiusMeters*2*scale/unit);
     occupiedAreaCount=1;
   }
   let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=occupiedAreaCount?80:0;
@@ -2859,31 +2872,31 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const ring=Number(window.StartingVillage.RING_RADIUS_TILES||14);
   const roadDetail=tier==="footprint"?8:tier==="route"?12:16;
   if(tier!=="none"){
-    addCanonicalRoadSegment("CanonicalRoad-X",-ring,0,ring,0,roadWidth,scale,unit,frame,lift);roadCount++;
-    addCanonicalRoadSegment("CanonicalRoad-Y",0,-ring,0,ring,roadWidth,scale,unit,frame,lift);roadCount++;
+    addCanonicalRoadSegment("CanonicalRoad-X",-ring,0,ring,0,roadWidth,scale,unit,semanticFrame,lift);roadCount++;
+    addCanonicalRoadSegment("CanonicalRoad-Y",0,-ring,0,ring,roadWidth,scale,unit,semanticFrame,lift);roadCount++;
     const sq=(squareHalf*2+1)*reveal.tileMeters;
-    addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,0,centerGround+.012,0,sq*scale/unit,.032,sq*scale/unit);roadCount++;
+    addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;
   }
   if(roadDetail){
     let previous=null;
     for(let i=0;i<=roadDetail;i++){
       const a=i/roadDetail*Math.PI*2,x=Math.cos(a)*ring,y=Math.sin(a)*ring;
-      if(previous){addCanonicalRoadSegment("CanonicalRing-"+i,previous.x,previous.y,x,y,roadWidth,scale,unit,frame,lift);roadCount++;}
+      if(previous){addCanonicalRoadSegment("CanonicalRing-"+i,previous.x,previous.y,x,y,roadWidth,scale,unit,semanticFrame,lift);roadCount++;}
       previous={x,y};
     }
     const dir=window.StartingVillage.direction(activeSeed),start=ring,end=Number(window.StartingVillage.GATEWAY_MAINLAND_EDGE_TILES||29);
-    addCanonicalRoadSegment("CanonicalGateway",dir.dx*start,dir.dy*start,dir.dx*end,dir.dy*end,roadWidth,scale,unit,frame,lift);roadCount++;
+    addCanonicalRoadSegment("CanonicalGateway",dir.dx*start,dir.dy*start,dir.dx*end,dir.dy*end,roadWidth,scale,unit,semanticFrame,lift);roadCount++;
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
   const targetCount=tier==="footprint"?3:tier==="route"?5:tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
   const detailed=tier==="refined"||tier==="full";
   for(let i=0;i<targetCount;i++){
-    addCanonicalBuilding(ordinary[i],i,scale,unit,frame,detailed,false,lift);
+    addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
     if(detailed)fullBuildings++;else coarseBuildings++;
   }
   if((tier==="footprint"||tier==="route"||tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
-    addCanonicalBuilding(meeting,targetCount,scale,unit,frame,detailed,true,lift);
+    addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
   const treeCount=tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
@@ -2891,14 +2904,14 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
     const radiusTiles=22+localHash(i*31,treeCount,92)*4;
     const east=Math.cos(angle)*radiusTiles*reveal.tileMeters,north=Math.sin(angle)*radiusTiles*reveal.tileMeters;
-    const ground=localGroundHeightUnits(east,north,frame)+lift,h=(4.5+localHash(i*43,treeCount,93)*2.5)*scale/unit;
-    addLocalStatic("CanonicalTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,east*scale/unit,ground+h*.28,-north*scale/unit,.65*scale/unit,Math.max(.04,h*.56),.65*scale/unit);
-    addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,east*scale/unit,ground+h*.78,-north*scale/unit,3.8*scale/unit,Math.max(.06,h*.82),3.8*scale/unit);
+    const ground=canonicalSemanticGroundHeightUnits(east,north,semanticFrame)+lift,h=(4.5+localHash(i*43,treeCount,93)*2.5)*scale/unit,pos=canonicalSemanticPosition(east,north,scale,unit,semanticFrame);
+    addLocalStatic("CanonicalTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,pos.x,ground+h*.28,pos.z,.65*scale/unit,Math.max(.04,h*.56),.65*scale/unit);
+    addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,pos.x,ground+h*.78,pos.z,3.8*scale/unit,Math.max(.06,h*.82),3.8*scale/unit);
     vegetation++;triangles+=180;
   }
   const wild=renderLocalWilderness(resource,frame,reveal);
-  rebuildCanonicalNpcPresentation(reveal,tier,frame,scale,unit,lift,false);
-  localBuildingActivityContext={reveal,tier,frame,presentationScale:scale,unit,lift};
+  rebuildCanonicalNpcPresentation(reveal,tier,semanticFrame,scale,unit,lift,false);
+  localBuildingActivityContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   rebuildCanonicalBuildingActivityPresentation("settlement-rebuild");
   const entityCount=localStaticRoot.children.length;
   triangles+=roadCount*12+(coarseBuildings*12)+(fullBuildings*36);
