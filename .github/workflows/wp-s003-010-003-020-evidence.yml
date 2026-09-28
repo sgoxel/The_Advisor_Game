@@ -6,6 +6,8 @@ on:
     paths:
       - .github/workflows/wp-s003-010-003-020-evidence.yml
       - tools/test_wp_s003_010_003_020.py
+      - tools/test_wp_s003_010_003_020_visual.py
+      - scripts/world/resident-movement.js
       - scripts/world/planet-stage.js
       - index.html
   workflow_dispatch:
@@ -23,7 +25,7 @@ jobs:
       (!github.event.issue.pull_request &&
        startsWith(github.event.comment.body, '/wp-s003-010-003-020-evidence'))
     runs-on: ubuntu-latest
-    timeout-minutes: 24
+    timeout-minutes: 32
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +49,10 @@ jobs:
 
       - name: Run navigation benchmark
         run: python tools/test_wp_s003_010_003_020.py "http://127.0.0.1:8000/?evidence_fast_start=1" tools/wp_s003_010_003_020_artifact
+
+      - name: Run production visual navigation sequence
+        if: always()
+        run: python tools/test_wp_s003_010_003_020_visual.py "http://127.0.0.1:8000/?seed=AGENT6-NAV-PERF-A" tools/wp_s003_010_003_020_artifact/production_visual
 
       - name: Upload evidence artifact
         if: always()

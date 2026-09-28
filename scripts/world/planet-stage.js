@@ -382,6 +382,7 @@ let localPreparationToken=0;
 let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,labelLayoutMs:0,borderProjectionMs:0,cityCandidateCount:0,cityVisibleCount:0,cityMinSeparationMeters:null,citySpacingPass:true,cityQueryCellCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,borderGraphRevision:null,borderGraphNodeCount:0,borderGraphEdgeCount:0,borderGraphOwnerPairs:[],borderEndpointClassifications:null,borderFocusOwnerId:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",scaleStateIndex:0,scaleStateLabel:SCALE_LADDER[0],scalePixelLength:0,metersPerScreenPixel:0,rulerTruthErrorMeters:0,internalZoomScalar:0,updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};
 let navigationLongTaskObserver=null;
+let residentMovementTimer=0,residentMovementDrainTimer=0,residentMovementLastSchedulerAtMs=0;
 let navigationPerformance={
   revision:"world-map-navigation-budget-v1",
   semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,
@@ -390,9 +391,11 @@ let navigationPerformance={
   pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,
   programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,
   frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,
+  frameUpdateOver50Count:0,renderCpuOver50Count:0,
   framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
   framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
-  residentAdvanceSnapshotSuppressed:true,
+  residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",
+  residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,
   longTask50Count:0,longTaskWorstMs:0,
   eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false
 };
@@ -2092,6 +2095,53 @@ function recordNavigationFramePhase(name,started){
     navigationPerformance.framePhaseMaxMs[name]=Math.max(Number(navigationPerformance.framePhaseMaxMs[name]||0),Number(elapsed.toFixed(3)));
   }
   return elapsed;
+}
+function recordResidentSchedulerSlice(started){
+  const elapsed=Math.max(0,performance.now()-started);
+  navigationPerformance.residentSchedulerCalls++;
+  navigationPerformance.residentSchedulerLastMs=Number(elapsed.toFixed(3));
+  navigationPerformance.residentSchedulerMaxMs=Math.max(navigationPerformance.residentSchedulerMaxMs,navigationPerformance.residentSchedulerLastMs);
+  if(elapsed>50)navigationPerformance.residentSchedulerOver50Count++;
+  return elapsed;
+}
+function scheduleResidentMovementDrain(){
+  if(residentMovementDrainTimer||!ready||!activeSeed||!window.ResidentMovement)return;
+  residentMovementDrainTimer=setTimeout(()=>{
+    residentMovementDrainTimer=0;
+    const started=performance.now();
+    const result=window.ResidentMovement.advance(activeSeed,window.GameTime?.getNow?.()||inspectionFantasyStamp(),0,{snapshot:false,maxTicks:1});
+    recordResidentSchedulerSlice(started);
+    if(result?.pending){navigationPerformance.residentSchedulerPendingDrains++;scheduleResidentMovementDrain();}
+  },0);
+}
+function runResidentMovementScheduledSlice(realSeconds){
+  if(!ready||!activeSeed||!window.ResidentMovement)return;
+  const started=performance.now();
+  const result=window.ResidentMovement.advance(activeSeed,window.GameTime?.getNow?.()||inspectionFantasyStamp(),realSeconds,{snapshot:false,maxTicks:1});
+  recordResidentSchedulerSlice(started);
+  if(result?.pending){navigationPerformance.residentSchedulerPendingDrains++;scheduleResidentMovementDrain();}
+}
+function warmResidentMovementScheduler(){
+  if(!activeSeed||!window.ResidentMovement)return;
+  window.ResidentMovement.ensure?.(activeSeed);
+  const started=performance.now(),step=Math.max(.001,Number(window.ResidentMovement.FIXED_STEP_SECONDS||.1));
+  window.ResidentMovement.advance(activeSeed,window.GameTime?.getNow?.()||inspectionFantasyStamp(),step,{snapshot:false,maxTicks:1});
+  navigationPerformance.residentSchedulerWarmupMs=Number((performance.now()-started).toFixed(3));
+}
+function startResidentMovementScheduler(){
+  if(residentMovementTimer)clearInterval(residentMovementTimer);
+  if(residentMovementDrainTimer){clearTimeout(residentMovementDrainTimer);residentMovementDrainTimer=0;}
+  residentMovementLastSchedulerAtMs=performance.now();
+  residentMovementTimer=setInterval(()=>{
+    const now=performance.now(),dt=Math.max(0,Math.min(.5,(now-residentMovementLastSchedulerAtMs)/1000));
+    residentMovementLastSchedulerAtMs=now;
+    runResidentMovementScheduledSlice(dt);
+  },100);
+}
+function stopResidentMovementScheduler(){
+  if(residentMovementTimer)clearInterval(residentMovementTimer);
+  if(residentMovementDrainTimer)clearTimeout(residentMovementDrainTimer);
+  residentMovementTimer=0;residentMovementDrainTimer=0;residentMovementLastSchedulerAtMs=0;
 }
 function beginNavigationPerformanceTelemetry(){
   navigationLongTaskObserver?.disconnect?.();navigationLongTaskObserver=null;
@@ -6397,6 +6447,7 @@ async function start(){
     app=new pc.AppBase(canvas);
     await measuredPhase("appInitMs",async()=>app.init(options));
     controlledWorkActive=true;    await measuredPhase("buildSceneMs",()=>buildScene());
+    warmResidentMovementScheduler();
     controlledWorkActive=false;
     await yieldPaint();
     bindInput();
@@ -6404,10 +6455,7 @@ async function start(){
     app.on?.("update",dt=>{
       const frameStarted=performance.now();frameCount++;
       let phaseStarted=performance.now();updateAnimatedZoom(dt);recordNavigationFramePhase("zoom",phaseStarted);
-      if(activeSeed&&window.ResidentMovement){
-        const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();phaseStarted=performance.now();
-        window.ResidentMovement.advance(activeSeed,when,dt,{snapshot:false,maxTicks:2});recordNavigationFramePhase("residentAdvance",phaseStarted);
-      }else{navigationPerformance.framePhaseLastMs.residentAdvance=0;}
+      navigationPerformance.framePhaseLastMs.residentAdvance=0;
       phaseStarted=performance.now();updateCanonicalNpcMotion();recordNavigationFramePhase("npcMotion",phaseStarted);
       phaseStarted=performance.now();recordLocalFrame(dt);recordNavigationFramePhase("frameStats",phaseStarted);
       phaseStarted=performance.now();updateAtmosphereTimeBinding();recordNavigationFramePhase("atmosphere",phaseStarted);
@@ -6416,6 +6464,7 @@ async function start(){
       phaseStarted=performance.now();updateAmbientMotion(dt);recordNavigationFramePhase("ambientMotion",phaseStarted);
       const elapsed=performance.now()-frameStarted;navigationPerformance.frameUpdateCount++;
       navigationPerformance.lastFrameUpdateMs=Number(elapsed.toFixed(3));navigationPerformance.maxFrameUpdateMs=Math.max(navigationPerformance.maxFrameUpdateMs,navigationPerformance.lastFrameUpdateMs);
+      if(elapsed>50)navigationPerformance.frameUpdateOver50Count++;
     });
     let navigationRenderStarted=0;
     app.on?.("prerender",()=>{navigationRenderStarted=performance.now();});
@@ -6423,6 +6472,7 @@ async function start(){
       if(!navigationRenderStarted)return;
       const elapsed=Math.max(0,performance.now()-navigationRenderStarted);navigationPerformance.lastRenderCpuMs=Number(elapsed.toFixed(3));
       navigationPerformance.maxRenderCpuMs=Math.max(navigationPerformance.maxRenderCpuMs,navigationPerformance.lastRenderCpuMs);
+      if(elapsed>50)navigationPerformance.renderCpuOver50Count++;
     });
     await measuredPhase("appStartMs",async()=>app.start());
     if(EVIDENCE_FAST_START){
@@ -6444,6 +6494,7 @@ async function start(){
 
     ready=true;
     beginNavigationPerformanceTelemetry();
+    startResidentMovementScheduler();
     setStartupProgress("ready","First playable planet ready",100,"ready");
     startupProgress.gameplayReadyAtMs=Date.now();
     startupScheduler.backgroundPreparationCompleteAtMs=startupProgress.gameplayReadyAtMs;
@@ -6766,6 +6817,7 @@ function verify(){
   });
 }
 function destroy(){
+  stopResidentMovementScheduler();
   cancelMapPresentationSchedule();navigationLongTaskObserver?.disconnect?.();navigationLongTaskObserver=null;
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
@@ -6783,7 +6835,7 @@ function destroy(){
   wayfindingTextCanvas?.remove?.();wayfindingTextCanvas=null;wayfindingTextContext=null;wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
-  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};navigationPerformance={revision:"world-map-navigation-budget-v1",semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},residentAdvanceSnapshotSuppressed:true,longTask50Count:0,longTaskWorstMs:0,eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false};projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};navigationPerformance={revision:"world-map-navigation-budget-v1",semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,frameUpdateOver50Count:0,renderCpuOver50Count:0,framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,longTask50Count:0,longTaskWorstMs:0,eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false};projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
