@@ -2339,16 +2339,16 @@ function buildLocalFaunaMesh(kind,size,unit){
     tri(a,b,c);tri(a,c,d);tri(a,tip,b);tri(b,tip,c);tri(c,tip,d);tri(d,tip,a);
   };
   if(kind==="deer"){
-    // Long rounded torso + distinct neck/head/muzzle reads as an animal instead
-    // of one giant brown slab while preserving the existing physical envelope.
-    ellipsoid(-s*.08,s*.76,0,s*.70,s*.34,s*.31,palette,10,5);
-    ellipsoid(s*.45,s*1.05,0,s*.24,s*.48,s*.22,dark,8,5);
-    ellipsoid(s*.70,s*1.38,0,s*.34,s*.25,s*.24,palette,8,5);
-    ellipsoid(s*.98,s*1.32,0,s*.25,s*.14,s*.16,dark,8,4);
-    for(const x of [-s*.42,s*.36])for(const z of [-s*.19,s*.19])ellipsoid(x,s*.34,z,s*.075,s*.34,s*.07,dark,6,4);
-    pyramidY(s*.66,s*1.55,-s*.14,s*.09,s*.055,s*.26,dark);
-    pyramidY(s*.66,s*1.55,s*.14,s*.09,s*.055,s*.26,dark);
-    ellipsoid(-s*.79,s*.83,0,s*.22,s*.11,s*.11,light,6,4);
+    // Compact torso + distinct neck/head/muzzle keeps the top-down silhouette
+    // cervid-shaped instead of reading as a long capsule.
+    ellipsoid(-s*.10,s*.70,0,s*.55,s*.30,s*.28,palette,10,5);
+    ellipsoid(s*.32,s*.95,0,s*.19,s*.38,s*.18,dark,8,5);
+    ellipsoid(s*.55,s*1.20,0,s*.27,s*.21,s*.21,palette,8,5);
+    ellipsoid(s*.77,s*1.16,0,s*.19,s*.12,s*.13,dark,8,4);
+    for(const x of [-s*.36,s*.28])for(const z of [-s*.17,s*.17])ellipsoid(x,s*.29,z,s*.060,s*.28,s*.055,dark,6,4);
+    pyramidY(s*.51,s*1.35,-s*.12,s*.075,s*.050,s*.22,dark);
+    pyramidY(s*.51,s*1.35,s*.12,s*.075,s*.050,s*.22,dark);
+    ellipsoid(-s*.61,s*.75,0,s*.16,s*.09,s*.09,light,6,4);
   }else if(kind==="hare"){
     ellipsoid(-s*.10,s*.46,0,s*.47,s*.31,s*.32,palette,9,5);
     ellipsoid(s*.31,s*.64,0,s*.30,s*.25,s*.25,light,8,5);
@@ -2363,11 +2363,11 @@ function buildLocalFaunaMesh(kind,size,unit){
     ellipsoid(s*.39,s*(water?.67:.59),0,s*(water?.20:.18),s*(water?.20:.18),s*(water?.19:.18),light,8,4);
     if(water)ellipsoid(s*.25,s*.61,0,s*.12,s*.30,s*.13,light,7,5);
     pyramidX(s*.53,s*(water?.66:.58),0,s*.07,s*.095,s*.28,water?[.72,.48,.12]:[.66,.49,.20]);
-    // Broad, thin rounded wings give both idle and takeoff frames a clear bird
-    // silhouette without new draw calls or per-frame mesh deformation.
-    ellipsoid(-s*.07,s*.53,-s*.34,s*.37,s*.075,s*.42,dark,8,4);
-    ellipsoid(-s*.07,s*.53,s*.34,s*.37,s*.075,s*.42,dark,8,4);
-    pyramidX(-s*.34,s*.47,0,s*.09,s*.20,-s*.34,dark);
+    // Overlapping tapered-looking wing lobes stay attached to the body instead
+    // of reading as detached grey spheres in the top-down view.
+    ellipsoid(-s*.10,s*.52,-s*.20,s*.34,s*.060,s*.28,dark,8,4);
+    ellipsoid(-s*.10,s*.52,s*.20,s*.34,s*.060,s*.28,dark,8,4);
+    pyramidX(-s*.31,s*.47,0,s*.075,s*.16,-s*.27,dark);
     if(water){
       ellipsoid(-s*.12,s*.20,-s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
       ellipsoid(-s*.12,s*.20,s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
@@ -2430,10 +2430,13 @@ function rebuildLocalFauna(plan,frame,reveal){
   const unit=frame.dims.metersPerUnit;
   for(const item of plan.fauna){
     if(localFaunaActors.length>=4||localWildernessManaged(item,reveal).reject)continue;
-    // Keep the same canonical actors/placements, but give close-ground fauna
-    // enough physical silhouette area to remain readable against wilderness
-    // props on desktop and modern-phone viewports.
-    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?3.15:item.kind==="waterbird"?1.52:item.kind==="bird"?1.22:1.72)*item.scale;
+    // Fauna identity/position comes from the canonical wilderness item, but its
+    // physical body size must not inherit that item's unrelated prop-family
+    // scale (a deer spawned from a large prop candidate became huge while a hare
+    // from a grass candidate became tiny). Use restrained species metres plus a
+    // deterministic mild variation from the existing canonical item variant.
+    const y=localGroundHeightUnits(item.east,item.north,frame),variation=.92+clamp(Number(item.variant||0),0,1)*.16;
+    const size=(item.kind==="deer"?1.15:item.kind==="waterbird"?.80:item.kind==="bird"?.46:.68)*variation;
     const built=buildLocalFaunaMesh(item.kind,size,unit),actorEntity=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actorEntity);
     actorEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actorEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actorEntity)];
     const id=localFaunaKey(item),memory=localFaunaReactionMemory.get(id)||null;
