@@ -123,7 +123,10 @@ let lastPinchDistance=null;
 let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
-const LOCAL_RESOURCE_CACHE_LIMIT=5;
+const LOCAL_RESOURCE_CACHE_LIMIT=8;
+const LOCAL_GRACE_RESIDENCY_MS=4500;
+const LOCAL_RESIDENCY_RECORD_LIMIT=64;
+const LOCAL_PREFETCH_RECORD_LIMIT=16;
 // Keep adjacent-tier stabilization narrow enough that the same physical footprint
 // resolves to the same canonical LOD after forward or reverse zoom settles.
 const LOCAL_LOD_HYSTERESIS=0.003;
@@ -236,11 +239,21 @@ let lastZoomDirection=1;
 let localFrameStats={lastFrameMs:0,recent:[],maxDuringPreparationMs:0};
 const localSharedPrimitives={};
 const localResourceCache=new Map();
+const localResidency=new Map();
+const localRecentEvictions=new Map();
+const localMotionPrefetchTargets=new Map();
+let localLastRequestRegistered=null;
+let localMotionVector={east:0,north:0,magnitude:0};
 function freshLocalResources(){
   return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,requestedCellId:null,activeCellId:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
+    residencyRevision:"temporal-residency-v1",requestedCellCount:0,preparingCellCount:0,readyCellCount:0,activeCellCount:0,graceResidentCellCount:0,evictedCellCount:0,
+    parentFallbackCount:0,missingCoverageCount:0,graceReuseCount:0,prefetchRequests:0,prefetchCompleted:0,prefetchHits:0,prefetchMisses:0,
+    longestHandoffLatencyMs:0,lastHandoffLatencyMs:0,lastHandoffRequestedAtMs:0,lastHandoffCompletedAtMs:0,
+    revisitRegenerationSignature:null,revisitRegenerationPass:true,revisitCount:0,
+    requestBudgetPerFrame:1,buildJobBudget:1,prefetchQueueLimit:1,graceResidencyMs:LOCAL_GRACE_RESIDENCY_MS,
     surroundSpanFactor:LOCAL_SURROUND_SPAN_FACTOR,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
 }
 let localResources=freshLocalResources();
@@ -3004,11 +3017,20 @@ function finalizeLocalResource(job,result){
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
   const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+textureSize*textureSize*4*2;
   const wildernessPlan=prepareLocalWildernessPlan(job);
-  const resource={signature:job.signature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,mesh,skirtMesh,detailTexture,surroundTexture,wildernessPlan,estimatedBytes,
+  const regenerationSignature=localResourceRegenerationSignature(job);
+  const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,skirtMesh,detailTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
+  const evicted=localRecentEvictions.get(job.signature)||null;
+  if(evicted){
+    localResources.revisitCount++;localResources.revisitRegenerationSignature=regenerationSignature;
+    localResources.revisitRegenerationPass=String(evicted.regenerationSignature||"")===String(regenerationSignature);
+    localRecentEvictions.delete(job.signature);
+  }
+  setLocalResidencyState(job.signature,"ready",{cellId:job.spatialCell?.id||null,level:dims.levelId,regenerationSignature,prefetchKind:job.prewarm?job.prewarmKind:null,readyAtMs:performance.now()});
+  if(job.prewarm&&job.prewarmKind==="motion")localResources.prefetchCompleted++;
   trimLocalResourceCache();
   localResources.cachedResourceCount=localResourceCache.size;
   localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
@@ -3020,12 +3042,23 @@ function destroyCachedLocalResource(resource){
   resource.detailTexture?.destroy?.();resource.surroundTexture?.destroy?.();localResources.destroyedTextures+=2;
 }
 function trimLocalResourceCache(){
-  for(const [key,resource] of localResourceCache){
+  if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT)return;
+  const now=performance.now(),candidates=[...localResourceCache.entries()].filter(([,resource])=>resource!==displayResource&&resource?.signature!==localResources.requestedSignature&&resource?.signature!==localResources.preparingSignature);
+  candidates.sort((a,b)=>{
+    const ae=localResidency.get(a[0])||{},be=localResidency.get(b[0])||{};
+    const ag=ae.state==="grace"&&Number(ae.graceUntilMs||0)>now,bg=be.state==="grace"&&Number(be.graceUntilMs||0)>now;
+    if(ag!==bg)return ag?1:-1;
+    return Number(ae.lastStateAtMs||0)-Number(be.lastStateAtMs||0);
+  });
+  for(const [key,resource] of candidates){
     if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT)break;
-    if(resource===displayResource)continue;// never evict what is on screen
+    const entry=localResidency.get(key)||{};
     localResourceCache.delete(key);destroyCachedLocalResource(resource);
-    localResources.evictions++;localResources.lastEvictionReason="bounded-lru";
+    localRecentEvictions.set(key,{regenerationSignature:resource.regenerationSignature||null,cellId:resource.spatialCell?.id||null,evictedAtMs:now});
+    setLocalResidencyState(key,"evicted",{...entry,regenerationSignature:resource.regenerationSignature||entry.regenerationSignature||null,evictedAtMs:now});
+    localResources.evictions++;localResources.lastEvictionReason=entry.state==="grace"?"bounded-grace-pressure":"bounded-lru";
   }
+  pruneLocalResidency();
 }
 function spatialDepthForLevel(index){
   const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
@@ -3058,15 +3091,96 @@ function localSignatureFor(index,lat,lon){
   const d=patchDimensionsForLevel(index),cell=canonicalSpatialCellFor(index,lat,lon),revision=coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate";
   return [activeSeed,revision,cell.id,d.levelId,Math.ceil(d.patchWidth/d.sampleSpacingMeters),Math.ceil(d.patchHeight/d.sampleSpacingMeters)].join("|");
 }
-function startLocalJob(index,lat,lon,signature,prewarm){
+function localResourceRegenerationSignature(job){
+  const proof=job?.biomeCoordinateProof||{};
+  return "LRES-"+seededHash32([
+    "temporal-residency-v1",job?.spatialCell?.id||"",job?.dims?.levelId||"",
+    proof.signature||proof.coordinateRevision||"",job?.dims?.sampleSpacingMeters||0
+  ].join("|")).toString(16).toUpperCase().padStart(8,"0");
+}
+function pruneLocalResidency(){
+  while(localResidency.size>LOCAL_RESIDENCY_RECORD_LIMIT){
+    const first=localResidency.keys().next().value;if(first==null)break;
+    if(first===displayResource?.signature){const entry=localResidency.get(first);localResidency.delete(first);localResidency.set(first,entry);continue;}
+    localResidency.delete(first);
+  }
+  while(localRecentEvictions.size>LOCAL_PREFETCH_RECORD_LIMIT)localRecentEvictions.delete(localRecentEvictions.keys().next().value);
+  while(localMotionPrefetchTargets.size>LOCAL_PREFETCH_RECORD_LIMIT)localMotionPrefetchTargets.delete(localMotionPrefetchTargets.keys().next().value);
+}
+function setLocalResidencyState(signature,state,extra={}){
+  if(!signature)return null;
+  const now=performance.now(),previous=localResidency.get(signature)||{};
+  const next={...previous,...extra,signature,state,lastStateAtMs:now};
+  localResidency.delete(signature);localResidency.set(signature,next);pruneLocalResidency();return next;
+}
+function updateLocalMotion(lat,lon){
+  const current=canonicalRegisteredMetersForLatLon(lat,lon),previous=localLastRequestRegistered;
+  if(previous){
+    const east=Number(current.eastMeters||0)-Number(previous.eastMeters||0),north=Number(current.northMeters||0)-Number(previous.northMeters||0),magnitude=Math.hypot(east,north);
+    if(magnitude>.01)localMotionVector={east,north,magnitude};
+  }
+  localLastRequestRegistered={eastMeters:Number(current.eastMeters||0),northMeters:Number(current.northMeters||0)};
+}
+function localResidencyDiagnostics(){
+  const now=performance.now(),counts={requested:0,preparing:0,ready:0,active:0,grace:0,evicted:0};
+  const cells=[];
+  for(const [signature,entry] of localResidency){
+    let state=entry.state;
+    if(state==="grace"&&Number(entry.graceUntilMs||0)<=now&&!localResourceCache.has(signature))state="evicted";
+    if(counts[state]!=null)counts[state]++;
+    if(cells.length<20)cells.push(Object.freeze({
+      signature,state,cellId:entry.cellId||null,level:entry.level||null,
+      graceRemainingMs:state==="grace"?Math.max(0,Number(entry.graceUntilMs||0)-now):0,
+      regenerationSignature:entry.regenerationSignature||null,prefetchKind:entry.prefetchKind||null
+    }));
+  }
+  localResources.requestedCellCount=counts.requested;localResources.preparingCellCount=counts.preparing;localResources.readyCellCount=counts.ready;
+  localResources.activeCellCount=counts.active;localResources.graceResidentCellCount=counts.grace;localResources.evictedCellCount=counts.evicted;
+  return Object.freeze({
+    revision:"temporal-residency-v1",counts:Object.freeze({...counts}),cells:Object.freeze(cells),
+    parentFallbackCount:Number(localResources.parentFallbackCount||0),missingCoverageCount:Number(localResources.missingCoverageCount||0),
+    graceReuseCount:Number(localResources.graceReuseCount||0),prefetch:Object.freeze({
+      requests:Number(localResources.prefetchRequests||0),completed:Number(localResources.prefetchCompleted||0),
+      hits:Number(localResources.prefetchHits||0),misses:Number(localResources.prefetchMisses||0),
+      pendingTargets:localMotionPrefetchTargets.size
+    }),
+    handoff:Object.freeze({
+      lastLatencyMs:Number(localResources.lastHandoffLatencyMs||0),longestLatencyMs:Number(localResources.longestHandoffLatencyMs||0),
+      fallbackActive:Boolean(localResources.standInActive),readyChild:Boolean(localResources.requestedSignature&&localResources.activeSignature===localResources.requestedSignature)
+    }),
+    revisit:Object.freeze({
+      count:Number(localResources.revisitCount||0),regenerationSignature:localResources.revisitRegenerationSignature||null,
+      pass:localResources.revisitRegenerationPass!==false
+    }),
+    budget:Object.freeze({requestsPerFrame:1,buildJobs:1,prefetchQueue:1,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,graceMs:LOCAL_GRACE_RESIDENCY_MS}),
+    motion:Object.freeze({east:Number(localMotionVector.east.toFixed(3)),north:Number(localMotionVector.north.toFixed(3)),magnitude:Number(localMotionVector.magnitude.toFixed(3))}),
+    bounded:true,fullWorldScan:false
+  });
+}
+function motionPrefetchCandidate(index){
+  if(!displayResource||localMotionVector.magnitude<1)return null;
+  const cell=canonicalSpatialCellFor(index,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),size=Number(cell.cellSizeMeters||0);
+  if(size<=0)return null;
+  const ax=Math.abs(localMotionVector.east),ay=Math.abs(localMotionVector.north);
+  let dx=0,dy=0;
+  if(ax>=ay*.45)dx=localMotionVector.east>0?1:-1;
+  if(ay>=ax*.45)dy=localMotionVector.north>0?1:-1;
+  if(dx===0&&dy===0)return null;
+  const east=Number(cell.centerRegisteredMeters?.east||0)+dx*size,north=Number(cell.centerRegisteredMeters?.north||0)+dy*size;
+  const ll=coordinateFabricAuthority()?.latLonForRegisteredMeters?.(east,north);if(!ll)return null;
+  const signature=localSignatureFor(index,ll.latitudeRadians,ll.longitudeRadians);
+  return {index,lat:ll.latitudeRadians,lon:ll.longitudeRadians,signature,cellId:canonicalSpatialCellFor(index,ll.latitudeRadians,ll.longitudeRadians).id};
+}
+function startLocalJob(index,lat,lon,signature,prewarm,prewarmKind="lod"){
   const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize,spatialCell=canonicalSpatialCellFor(index,lat,lon);
   const anchorLat=spatialCell.centerLatitudeRadians,anchorLon=spatialCell.centerLongitudeRadians;
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
   const biomeCoordinateProof=localBiomeCoordinateProof(anchorLat,anchorLon);
-  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:anchorLat,lon0:anchorLon,requestedLat0:lat,requestedLon0:lon,spatialCell,prewarm,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(anchorLat,anchorLon)?.elevationMeters||0),biomeCoordinateProof,
+  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:anchorLat,lon0:anchorLon,requestedLat0:lat,requestedLon0:lon,spatialCell,prewarm,prewarmKind,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(anchorLat,anchorLon)?.elevationMeters||0),biomeCoordinateProof,
     totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
   job.iterator=localResourceSteps(job);
   localJob=job;localResources.cacheMisses+=prewarm?0:1;
+  setLocalResidencyState(signature,"preparing",{cellId:spatialCell.id,level:dims.levelId,prefetchKind:prewarm?prewarmKind:null,requestedAtMs:prewarm?null:performance.now()});
   localResources.preparing=true;localResources.preparingPrewarm=prewarm;localResources.preparingSignature=signature;localResources.preparingLevel=dims.levelId;localResources.preparationProgress=0;
   localResources.lastPreparationQueuedAtMs=Number(job.startedAtMs.toFixed(3));localFrameStats.maxDuringPreparationMs=0;
   scheduleLocalPump();
@@ -3128,10 +3242,23 @@ function pumpLocalPreparation(){
 // an already-prepared resource. It never generates geometry or textures.
 function requestLocalDetailResource(index){
   const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,cell=canonicalSpatialCellFor(index,lat,lon),signature=localSignatureFor(index,lat,lon);
+  updateLocalMotion(lat,lon);
+  const previousRequested=localResources.requestedSignature;
   localResources.requestedSignature=signature;localResources.requestedLevel=LOCAL_DETAIL_LEVELS[index].id;localResources.requestedCellId=cell.id;
-  if(displayResource?.signature===signature){localResources.pendingPreparationCount=0;return;}
+  setLocalResidencyState(signature,"requested",{cellId:cell.id,level:LOCAL_DETAIL_LEVELS[index].id,requestedAtMs:performance.now()});
+  if(previousRequested!==signature&&displayResource?.signature!==signature){
+    localResources.lastHandoffRequestedAtMs=Number(performance.now().toFixed(3));
+    if(displayResource){localResources.parentFallbackCount++;}else if(ready&&projectionState.blend>0){localResources.missingCoverageCount++;}
+  }
+  if(displayResource?.signature===signature){localResources.pendingPreparationCount=0;setLocalResidencyState(signature,"active",{cellId:cell.id,level:LOCAL_DETAIL_LEVELS[index].id});return;}
   localResources.pendingPreparationCount=1;
-  if(localResourceCache.has(signature)){activateLocalDetailResource(signature,true);return;}
+  if(localResourceCache.has(signature)){
+    const cached=localResourceCache.get(signature),entry=localResidency.get(signature)||{};
+    if(entry.state==="grace")localResources.graceReuseCount++;
+    if(localMotionPrefetchTargets.has(signature)){localResources.prefetchHits++;localMotionPrefetchTargets.delete(signature);}
+    activateLocalDetailResource(signature,true);return;
+  }
+  if(localMotionPrefetchTargets.has(signature)){localResources.prefetchMisses++;localMotionPrefetchTargets.delete(signature);}
   if(localJob){
     if(localJob.signature===signature){localJob.prewarm=false;localResources.preparingPrewarm=false;return;}
     // Let a nearly finished same-focus job land (it is still a closer/nearer
@@ -3147,11 +3274,17 @@ function scheduleLocalPrewarm(){
   if(localJob||!displayResource||projectionState.blend<=0)return;
   if(localResources.requestedSignature!==displayResource.signature)return;
   const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,index=displayResource.levelIndex;
+  const motion=motionPrefetchCandidate(index);
+  if(motion&&!localResourceCache.has(motion.signature)&&motion.signature!==displayResource.signature){
+    localMotionPrefetchTargets.set(motion.signature,{cellId:motion.cellId,requestedAtMs:performance.now()});pruneLocalResidency();
+    localResources.prefetchRequests++;
+    startLocalJob(motion.index,motion.lat,motion.lon,motion.signature,true,"motion");return;
+  }
   for(const candidate of [index+lastZoomDirection,index-lastZoomDirection]){
     if(candidate<0||candidate>=LOCAL_DETAIL_LEVELS.length)continue;
     const signature=localSignatureFor(candidate,lat,lon);
     if(localResourceCache.has(signature))continue;
-    startLocalJob(candidate,lat,lon,signature,true);return;
+    startLocalJob(candidate,lat,lon,signature,true,"lod");return;
   }
 }
 // Double-buffered swap: only a fully prepared resource becomes visible.
@@ -3161,7 +3294,17 @@ function activateLocalDetailResource(signature,fromCache){
   const swapStarted=performance.now();
   localResourceCache.delete(signature);localResourceCache.set(signature,resource);
   if(fromCache){localResources.cacheHits++;if(resource.builtAsPrewarm)localResources.prewarmHits++;wilderness={...wilderness,cacheReuse:Boolean(resource.wildernessPlan)};}else wilderness={...wilderness,cacheReuse:false};
+  const previousDisplay=displayResource;
+  if(previousDisplay&&previousDisplay.signature!==signature){
+    setLocalResidencyState(previousDisplay.signature,"grace",{cellId:previousDisplay.spatialCell?.id||null,level:previousDisplay.dims?.levelId||null,regenerationSignature:previousDisplay.regenerationSignature||null,graceUntilMs:performance.now()+LOCAL_GRACE_RESIDENCY_MS,lastVisibleAtMs:performance.now()});
+  }
   displayResource=resource;
+  setLocalResidencyState(signature,"active",{cellId:resource.spatialCell?.id||null,level:resource.dims?.levelId||null,regenerationSignature:resource.regenerationSignature||null,activatedAtMs:performance.now()});
+  if(localResources.requestedSignature===signature&&localResources.lastHandoffRequestedAtMs){
+    const latency=Math.max(0,performance.now()-Number(localResources.lastHandoffRequestedAtMs||0));
+    localResources.lastHandoffLatencyMs=Number(latency.toFixed(3));localResources.longestHandoffLatencyMs=Math.max(Number(localResources.longestHandoffLatencyMs||0),localResources.lastHandoffLatencyMs);
+    localResources.lastHandoffCompletedAtMs=Number(performance.now().toFixed(3));
+  }
   localDetail={...resource.detail,rebuildCount:(localDetail.rebuildCount||0)+1};
   tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
@@ -4258,6 +4401,11 @@ function spatialLodDiagnostics(){
     requestedPatchMarginMeters:Object.freeze({east:Number(marginEast.toFixed(3)),north:Number(marginNorth.toFixed(3))}),
     canonicalAnchorCoveragePass,
     visibleContainsFocus,overscanCellIds:Object.freeze(overscanCells),overscanCellCount:overscanCells.length,
+    temporalResidency:localResidencyDiagnostics(),
+    semanticHiddenReasons:Object.freeze({
+      hemisphere:Number(mapPresentation.hiddenHemisphereCulledCount||0),behindCamera:Number(mapPresentation.behindCameraCulledCount||0),
+      offscreen:Number(mapPresentation.offscreenCulledCount||0),occluded:Number(mapPresentation.occludedCulledCount||0),overlap:Number(mapPresentation.overlapRejectedCount||0)
+    }),
     rootCellMeters:SPATIAL_LOD_ROOT_CELL_METERS,maxDepth:SPATIAL_LOD_MAX_DEPTH,cellMaxLevelHeightRatio:SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,
     hysteresis:true,viewportBounded:true,fullWorldScan:false,cameraAssignsIdentity:false,viewportAssignsIdentity:false
   };
@@ -4430,7 +4578,7 @@ function destroy(){
   inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
-  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
@@ -4438,7 +4586,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,SCALE_FOOTPRINT_PROGRESS_EXPONENT,SEMANTIC_SCALE_HYSTERESIS_RATIO,SEMANTIC_LAYER_SPECS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,SCALE_FOOTPRINT_PROGRESS_EXPONENT,SEMANTIC_SCALE_HYSTERESIS_RATIO,SEMANTIC_LAYER_SPECS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_GRACE_RESIDENCY_MS,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
   })
 });
 const boot=()=>start().catch(()=>{});
