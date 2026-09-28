@@ -33,7 +33,7 @@ const DEFINITIONS=Object.freeze({
     Object.freeze({id:"stock",label:"Retrieve shop stock",objectType:"storage",action:"retrieve",durationMinutes:8}),
     Object.freeze({id:"frontage",label:"Arrange the shop frontage",objectType:"exterior",action:"work",durationMinutes:10}),
     Object.freeze({id:"serve",label:"Serve the counter",objectType:"counter",action:"service",durationMinutes:14}),
-    Object.freeze({id:"organize",label:"Organize shop storage",objectType:"storage",action:"store",durationMinutes:8})
+    Object.freeze({id:"organize",label:"Organize the counter",objectType:"counter",action:"work",durationMinutes:8})
   ]),
   woodcutter:Object.freeze([
     Object.freeze({id:"select",label:"Select timber",objectType:"worksite",action:"work",durationMinutes:8}),
@@ -102,10 +102,12 @@ function exteriorTarget(seed,resident,step){
     let road=false;
     try{const local=window.StartingVillage?.local?.(seed,target.x,target.y);road=Boolean(local&&window.StartingVillage?.isRoadReserved?.(seed,local));}catch(_){}
     if(road)continue;
+    const route=window.RoutePlanner?.findRoute?.(seed,origin,target)||null;
+    if(!route?.found)continue;
     const score=Number(window.PRNG?.foundationUint32?.(seed,"work-cycle:frontage:"+resident.id+":"+target.x+":"+target.y)||0);
-    candidates.push({target,score});
+    candidates.push({target,score,routeSteps:Number(route.stepCount||0)});
   }
-  candidates.sort((a,b)=>b.score-a.score||pointKey(a.target).localeCompare(pointKey(b.target)));
+  candidates.sort((a,b)=>a.routeSteps-b.routeSteps||b.score-a.score||pointKey(a.target).localeCompare(pointKey(b.target)));
   const target=candidates[0]?.target||null;
   if(!target)return null;
   return Object.freeze({
