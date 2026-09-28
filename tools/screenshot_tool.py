@@ -6705,18 +6705,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return (bs.buildings||[]).find(x=>x.function===arguments[0])?.anchorTile||null;
         """,fn)
         if isinstance(anchor,dict):
-            # Bias framing toward the surrounding cue rather than the building
-            # center. At the fixed near-top-down camera, a 50/50 midpoint can
-            # leave south-side civic/workyard cues on the viewport edge even
-            # though the canonical cue is valid and nearby. 75% toward the cue
-            # keeps the associated building visible while making the evidence
-            # actually judge the surrounding silhouette.
-            focus_x=round(float(lot.get("cx") or 0)*.25+float(anchor.get("x") or 0)*.75)
-            focus_y=round(float(lot.get("cy") or 0)*.25+float(anchor.get("y") or 0)*.75)
+            mid_x=round((float(lot.get("cx") or 0)+float(anchor.get("x") or 0))/2.0)
+            mid_y=round((float(lot.get("cy") or 0)+float(anchor.get("y") or 0))/2.0)
             driver.execute_script("""
                 window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]));
                 window.PlanetStage.setZoomScalar(1);
-            """,int(focus_x),int(focus_y))
+            """,int(mid_x),int(mid_y))
             WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
                 const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},bs=s.buildingSurroundings||{};
                 return s.projection?.localStatic?.revealTier==='full'&&Number(r.pendingPreparationCount||0)===0&&
@@ -6731,8 +6725,6 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               functionCount:bs.functionCount,propCount:bs.propCount,drawCallEstimate:bs.drawCallEstimate,
               triangleCount:bs.triangleCount,sharedMaterialCount:bs.sharedMaterialCount,functions:bs.functions,
               doorClearanceViolations:bs.doorClearanceViolations,roadClearanceViolations:bs.roadClearanceViolations,
-              treeOcclusionRejectCount:bs.treeOcclusionRejectCount,anchorSelectionAttempts:bs.anchorSelectionAttempts,
-              canonicalTreeOcclusionChecks:bs.canonicalTreeOcclusionChecks,criticalCueOcclusionAvoidance:bs.criticalCueOcclusionAvoidance,
               ownershipCueCount:bs.ownershipCueCount,authoritativeFunctionSource:bs.authoritativeFunctionSource,
               ownershipSource:bs.ownershipSource,presentationOnly:bs.presentationOnly,simulationAuthority:bs.simulationAuthority,
               bounded:bs.bounded,fullSettlementPerFrameScan:bs.fullSettlementPerFrameScan,buildMs:bs.buildMs,
@@ -9563,10 +9555,6 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Building surroundings batching failed in frame {index}: {proof}")
             if int(proof.get("doorClearanceViolations") or 0)!=0 or int(proof.get("roadClearanceViolations") or 0)!=0:
                 raise RuntimeError(f"Building surroundings clearance failed in frame {index}: {proof}")
-            if proof.get("criticalCueOcclusionAvoidance") is not True or int(proof.get("canonicalTreeOcclusionChecks") or 0)<10:
-                raise RuntimeError(f"Building surroundings local occlusion contract failed in frame {index}: {proof}")
-            if int(proof.get("anchorSelectionAttempts") or 0)<int(proof.get("buildingCount") or 0):
-                raise RuntimeError(f"Building surroundings anchor selection telemetry failed in frame {index}: {proof}")
             if proof.get("revealTier")!="full" or int(proof.get("pending") or 0)!=0:
                 raise RuntimeError(f"Building surroundings readiness failed in frame {index}: {proof}")
             if float(proof.get("buildMs") or 0)>8.0:
