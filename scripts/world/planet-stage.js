@@ -3608,15 +3608,21 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     ...(reveal.specialLots||[])
   ];
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  const positions=[],normals=[],colors=[],indices=[],summaries=[];let propCount=0,doorViolations=0,roadViolations=0,treeOcclusionRejects=0,anchorSelectionAttempts=0;
+  const positions=[],normals=[],colors=[],indices=[],summaries=[],groundHeightCache=new Map();let propCount=0,doorViolations=0,roadViolations=0,treeOcclusionRejects=0,anchorSelectionAttempts=0,groundHeightSampleCount=0,groundHeightCacheHits=0;
   const C={
     wood:[.34,.18,.07],woodLight:[.52,.31,.13],fabric:[.69,.27,.10],metal:[.24,.26,.25],stone:[.38,.39,.36],
     hay:[.73,.56,.16],soil:[.34,.20,.08],green:[.20,.42,.12],civic:[.63,.49,.24],crate:[.45,.28,.12]
   };
   const addVertex=(x,y,z,c)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(c[0]*255),Math.round(c[1]*255),Math.round(c[2]*255),255);return positions.length/3-1;};
+  const cachedGroundHeight=(east,north)=>{
+    let row=groundHeightCache.get(east);
+    if(!row){row=new Map();groundHeightCache.set(east,row);}
+    if(row.has(north)){groundHeightCacheHits++;return row.get(north);}
+    const value=canonicalSemanticGroundHeightUnits(east,north,frame);row.set(north,value);groundHeightSampleCount++;return value;
+  };
   const box=(anchor,basis,u,v,along,depth,height,color,yOffset=0)=>{
     const ce=anchor.east+basis.tx*u+basis.ox*v,cn=anchor.north+basis.tn*u+basis.on*v;
-    const ground=canonicalSemanticGroundHeightUnits(ce,cn,frame)+lift+.014+yOffset*presentationScale/unit;
+    const ground=cachedGroundHeight(ce,cn)+lift+.014+yOffset*presentationScale/unit;
     const ha=along*.5,hd=depth*.5;
     const corners=[[-ha,-hd],[ha,-hd],[ha,hd],[-ha,hd]].map(([a,d])=>{
       const e=ce+basis.tx*a+basis.ox*d,n=cn+basis.tn*a+basis.on*d;return canonicalSemanticPosition(e,n,presentationScale,unit,frame);
@@ -3788,6 +3794,7 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     active:true,buildingCount:summaries.length,functionCount:functions.length,propCount,drawCallEstimate:1,triangleCount:indices.length/3,sharedMaterialCount:1,
     functions:Object.freeze(functions),buildings:Object.freeze(summaries),doorClearanceViolations:doorViolations,roadClearanceViolations:roadViolations,ownershipCueCount:0,
     treeOcclusionRejectCount:treeOcclusionRejects,anchorSelectionAttempts,canonicalTreeOcclusionChecks:canonicalTreeCrowns.length,
+    groundHeightSampleCount,groundHeightCacheHits,groundHeightCacheEntryCount:groundHeightSampleCount,
     criticalCueOcclusionAvoidance:true,authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
     presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:Number((performance.now()-started).toFixed(4))
   };
