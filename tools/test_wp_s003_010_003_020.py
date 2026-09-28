@@ -197,15 +197,13 @@ def rotation_benchmark(driver, steps=72):
 def paced_rotation_benchmark(driver, steps=36, delay_seconds=0.022):
     clear_samples(driver)
     before = snap(driver)
-    base_pitch = float(before["rotation"]["pitchDegrees"])
-    base_yaw = float(before["rotation"]["yawDegrees"])
     samples = []
     for i in range(int(steps)):
         result = driver.execute_script("""
           const t=performance.now();
-          window.PlanetStage.setRotation(Number(arguments[0]),Number(arguments[1]));
+          window.PlanetStage.rotateByScreenPixels(Number(arguments[0]),Number(arguments[1]));
           return performance.now()-t;
-        """, base_yaw + (i+1)*2.4, base_pitch + math.sin(i*.27)*6)
+        """, 5.0, math.sin(i*.27)*2.0)
         samples.append(float(result or 0))
         time.sleep(delay_seconds)
     time.sleep(.35)
