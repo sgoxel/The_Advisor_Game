@@ -8922,8 +8922,16 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"WP-016 residency authority/bounds invalid in frame {index}: {residency}")
             if int(residency.get("missingCoverageCount") or 0)!=0:
                 raise RuntimeError(f"WP-016 visible coverage hole detected in frame {index}: {residency}")
-            if proof.get("visibleContainsFocus") is not True or proof.get("canonicalAnchorCoveragePass") is not True:
-                raise RuntimeError(f"WP-016 fallback/active representation lost canonical focus in frame {index}: {proof}")
+            # The previous same-LOD cell may no longer contain the newly
+            # requested focus while its prepared 3x surround still provides
+            # continuous visual coverage. A strict cell-bounds test is valid
+            # for active/parent-cell coverage, but not for previous-ready
+            # boundary fallback.
+            handoff=(residency.get("handoff") or {})
+            if proof.get("canonicalAnchorCoveragePass") is not True:
+                raise RuntimeError(f"WP-016 requested canonical cell cannot cover its focus in frame {index}: {proof}")
+            if proof.get("visibleContainsFocus") is not True and handoff.get("fallbackActive") is not True:
+                raise RuntimeError(f"WP-016 active representation lost canonical focus without previous-ready fallback in frame {index}: {proof}")
             if proof.get("fullWorldScan") is not False or proof.get("bounded") is not True:
                 raise RuntimeError(f"WP-016 lost bounded/no-full-world contract in frame {index}: {proof}")
             if int(budget.get("requestsPerFrame") or 0)>1 or int(budget.get("buildJobs") or 0)>1 or int(budget.get("prefetchQueue") or 0)>1:
