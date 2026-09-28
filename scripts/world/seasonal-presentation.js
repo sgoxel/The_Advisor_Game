@@ -13,7 +13,7 @@ let overlay=null,ctx=null,groundWash=null,timer=null,resizeObserver=null,evidenc
 let lastWidth=0,lastHeight=0,lastDpr=1,hidden=false;
 let spatialKey="",spatialRegion=null,profileCache=new Map();
 let spatialHits=0,profileHits=0,updateCount=0,lastUpdateMs=0,maxUpdateMs=0,drawCount=0,lastDrawMs=0,maxDrawMs=0;
-let rootNode=null,centerMarker=null,coarsePointerQuery=null,reducedMotionQuery=null,pendingDraw=0,pendingPlan=null,lastGroundSignature="";
+let rootNode=null,centerMarker=null,coarsePointerQuery=null,reducedMotionQuery=null,pendingDraw=0,pendingPlan=null,lastGroundSignature="",contextObserver=null,cachedRootReady=false,cachedSeed="",cachedTile=null;
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function round(v,d=4){const f=10**d;return Math.round(Number(v)*f)/f}
@@ -33,13 +33,38 @@ function accentLimit(cls=deviceClass()){
   if(!reducedMotionQuery&&window.matchMedia)reducedMotionQuery=matchMedia("(prefers-reduced-motion: reduce)");
   return reducedMotionQuery?.matches?Math.min(16,base):base;
 }
+function cacheMarkerTile(marker){
+  const raw=String(marker?.dataset?.tile||""),parts=raw.split(",");
+  if(parts.length===2&&parts[0]!==""&&parts[1]!=="")cachedTile=Object.freeze({x:parts[0],y:parts[1]});
+}
+function bindContextObserver(root){
+  if(!root||contextObserver)return;
+  cachedRootReady=root.dataset.ready==="true";cachedSeed=String(root.dataset.seed||"");
+  centerMarker=root.querySelector(".planet-world-center");cacheMarkerTile(centerMarker);
+  if(!("MutationObserver" in window))return;
+  contextObserver=new MutationObserver(records=>{
+    for(const record of records){
+      const target=record.target;
+      if(target===root){
+        if(record.attributeName==="data-ready")cachedRootReady=root.dataset.ready==="true";
+        else if(record.attributeName==="data-seed")cachedSeed=String(root.dataset.seed||"");
+      }
+      if(record.attributeName==="data-tile"&&target?.classList?.contains("planet-world-center")){centerMarker=target;cacheMarkerTile(target)}
+      if(record.type==="childList"){
+        for(const node of record.addedNodes||[]){
+          if(node?.nodeType!==1)continue;
+          const marker=node.matches?.(".planet-world-center")?node:node.querySelector?.(".planet-world-center");
+          if(marker){centerMarker=marker;cacheMarkerTile(marker)}
+        }
+      }
+    }
+  });
+  contextObserver.observe(root,{attributes:true,attributeFilter:["data-ready","data-seed","data-tile"],childList:true,subtree:true});
+}
 function stageRoot(){
-  // planetStageRoot is page-lifetime stable. Avoid Element.isConnected on the
-  // post-resize steady path because Chrome may charge pending layout work to
-  // that DOM connectivity read.
   if(rootNode)return rootNode;
   rootNode=document.getElementById("planetStageRoot")||document.querySelector(".planet-stage-root");
-  centerMarker=null;return rootNode;
+  centerMarker=null;bindContextObserver(rootNode);return rootNode;
 }
 function foundationUnit(seed,key){
   if(!window.PRNG?.foundationUint32)return 0;
@@ -47,20 +72,11 @@ function foundationUnit(seed,key){
 }
 function rootContext(tileOverride=null,stampOverride=null){
   const root=stageRoot();
-  if(root?.dataset?.ready!=="true")return null;
-  const seed=String(root.dataset.seed||"");if(!seed)return null;
-  let tile=tileOverride;
-  if(!tile){
-    // The center marker node is persistent for the planet-first runtime. Keep
-    // the reference once resolved and read only its canonical data-tile value;
-    // do not re-query/connectivity-check it after every viewport resize.
-    if(!centerMarker)centerMarker=root.querySelector(".planet-world-center");
-    const raw=String(centerMarker?.dataset?.tile||""),parts=raw.split(",");
-    if(parts.length===2&&parts[0]!==""&&parts[1]!=="")tile={x:parts[0],y:parts[1]};
-  }
-  if(!tile)return null;
+  if(!cachedRootReady)return null;
+  const seed=cachedSeed;if(!seed)return null;
+  const tile=tileOverride||cachedTile;if(!tile)return null;
   const stamp=stampOverride||fantasyNow();if(!stamp)return null;
-  const normalized=Object.freeze({x:String(tile.x),y:String(tile.y)});
+  const normalized=tileOverride?Object.freeze({x:String(tile.x),y:String(tile.y)}):tile;
   const key=seed+"|"+normalized.x+"|"+normalized.y;
   let region=null;
   if(key===spatialKey&&spatialRegion){region=spatialRegion;spatialHits++;}
@@ -232,7 +248,7 @@ function setEvidenceStamp(stamp){
 }
 function clearEvidenceStamp(){evidenceStamp=null;return refresh()}
 function shutdown(){
-  if(timer){clearInterval(timer);timer=null}if(pendingDraw){cancelAnimationFrame(pendingDraw);pendingDraw=0}resizeObserver?.disconnect?.();resizeObserver=null;groundWash?.remove?.();groundWash=null;overlay?.remove?.();overlay=null;ctx=null;lastSnapshot=null;pendingPlan=null;lastGroundSignature="";profileCache.clear();spatialKey="";spatialRegion=null;rootNode=null;centerMarker=null;coarsePointerQuery=null;reducedMotionQuery=null;
+  if(timer){clearInterval(timer);timer=null}if(pendingDraw){cancelAnimationFrame(pendingDraw);pendingDraw=0}resizeObserver?.disconnect?.();resizeObserver=null;contextObserver?.disconnect?.();contextObserver=null;groundWash?.remove?.();groundWash=null;overlay?.remove?.();overlay=null;ctx=null;lastSnapshot=null;pendingPlan=null;lastGroundSignature="";profileCache.clear();spatialKey="";spatialRegion=null;rootNode=null;centerMarker=null;cachedRootReady=false;cachedSeed="";cachedTile=null;coarsePointerQuery=null;reducedMotionQuery=null;
 }
 function bootstrap(){
   refresh();timer=setInterval(()=>{if(!document.hidden)refresh()},UPDATE_INTERVAL_MS);
