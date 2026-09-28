@@ -6453,8 +6453,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("hare-idle","hare","wooded","idle",(1280,800)),
             ("hare-approach","hare","wooded","react",(1280,800)),
             ("waterbird-idle","waterbird","wet","idle",(1280,800)),
-            ("waterbird-approach","waterbird","wet","react",(1280,800)),
-            ("phone-waterbird-approach","waterbird","wet","mobile-react",(390,844)),
+            # Trigger the canonical waterbird while already in the narrow portrait
+            # viewport, then reuse that exact reaction in desktop framing. This
+            # avoids scoring ordinary flee/takeoff travel as an evidence crop.
+            ("phone-waterbird-approach","waterbird","wet","react",(390,844)),
+            ("waterbird-approach","waterbird","wet","mobile-react",(1280,800)),
         )
         label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
         target_w,target_h=int(viewport[0]),int(viewport[1])
@@ -6523,7 +6526,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                         """))
                         actor=driver.execute_script("""
                             const wr=window.PlanetStage.snapshot().wildlifeReaction||{},kind=arguments[0];
-                            const actors=(wr.actors||[]).filter(a=>a.kind===kind&&a.visible===true&&Number(a.distanceToPresenceMeters??1e9)<=14);
+                            // Require a canonical actor already close to the focus.
+                            // At the 36 m ground footprint this leaves real inset
+                            // margin for the 390x844 view even after valid reaction
+                            // displacement. We scan additional canonical cells
+                            // rather than moving or resizing the actor for proof.
+                            const actors=(wr.actors||[]).filter(a=>a.kind===kind&&a.visible===true&&Number(a.distanceToPresenceMeters??1e9)<=5.5);
                             actors.sort((a,b)=>Number(a.distanceToPresenceMeters??1e9)-Number(b.distanceToPresenceMeters??1e9)||String(a.id).localeCompare(String(b.id)));
                             return actors[0]||null;
                         """,kind)
