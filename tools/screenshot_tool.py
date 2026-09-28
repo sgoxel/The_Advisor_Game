@@ -6716,7 +6716,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             const s=window.PlanetStage.snapshot(),w=s.wilderness||{},ls=s.projection?.localStatic||{},r=s.projection?.resourceBudget||{};
             return {label:arguments[0],scalar:s.zoom?.scalar,focus:s.canonicalFocus?.worldTile,level:s.projection?.localDetail?.level,
               biome:w.localBiome,biomeCounts:w.localBiomeCounts,families:w.localFamilyCounts,accepted:w.localAcceptedStaticProps,
-              fauna:w.localAmbientFaunaActiveCount,candidates:w.localCandidateCount,rejectedWater:w.localRejectedWater,
+              fauna:w.localAmbientFaunaActiveCount,shoreAccents:w.localShoreAccentCount,candidates:w.localCandidateCount,rejectedWater:w.localRejectedWater,
               rejectedManaged:w.localRejectedManaged,rejectedRoad:w.localRejectedRoad,drawCalls:w.localDrawCalls,triangles:w.localTriangles,
               prepMs:w.localPreparationMs,updateMs:w.localFrameUpdateMs,maxUpdateMs:w.localMaxFrameUpdateMs,layout:w.localLayoutSignature,
               cacheReuse:w.cacheReuse,enabled:w.localEnabled,active:w.localActive,fullWorldScan:w.localFullWorldScan,
@@ -10630,6 +10630,14 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Local wilderness preparation exceeded bounded budget in frame {index}: {wild}")
             for key,value in (wild.get("localBiomeCounts") or {}).items():
                 if int(value or 0)>0: seen_biomes.add(str(key))
+            if "wet-local" in action and int(wild.get("localShoreAccentCount") or 0)<1:
+                raise RuntimeError(f"Wet wilderness evidence lacks canonical near-water bank accents in frame {index}: {wild}")
+            if "rocky-local" in action:
+                families=wild.get("localFamilyCounts") or {}
+                peaks=int(families.get("rock") or 0)+int(families.get("outcrop") or 0)
+                accepted=int(wild.get("localAcceptedStaticProps") or 0)
+                if accepted>0 and peaks>accepted*.55:
+                    raise RuntimeError(f"Rocky wilderness remains dominated by repetitive peak props in frame {index}: peaks={peaks} accepted={accepted} families={families}")
             if int(wild.get("localAmbientFaunaActiveCount") or 0)>0: fauna_frames+=1
             viewport=frame.get("runtime",{}).get("viewport",{})
             if int(viewport.get("width") or 0)<900: mobile_frames+=1
