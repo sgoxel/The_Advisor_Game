@@ -2933,30 +2933,32 @@ function sharedLocalPrimitive(type){
       box(.60,.67,-.575,.22,.18,.055,wood);
       box(.57,.80,-.575,.30,.045,.045,wood);
     }else if(type==="activity-forge-accessory"){
-      const soot=[43,39,35,255],iron=[126,132,132,255],ironDark=[73,78,79,255],stone=[132,119,101,255],wood=[92,61,36,255],ember=[232,83,24,255];
-      // One authored smithy silhouette: a broad roof-edge chimney/hood plus a
-      // large neutral anvil-and-hammer apron readable from the fixed near-top-
-      // down camera. Vertex colors carry the material identity through a neutral
-      // shared carrier; only the tiny fire slit is warm. No glow slab or smoke.
-      box(-.50,1.00,-.28,.22,.78,.22,stone);
-      box(-.50,1.415,-.28,.35,.10,.35,soot);
-      box(-.43,.79,-.35,.48,.16,.42,ironDark);
+      const soot=[38,36,34,255],iron=[176,181,176,255],ironMid=[125,130,128,255],ironDark=[67,72,72,255],stone=[132,119,101,255],wood=[92,61,36,255],ember=[232,83,24,255];
+      // Active smithy: a dark roof-exterior stack/hood plus an unmistakable
+      // neutral anvil silhouette on the eave apron. The stepped horn is broad
+      // in plan view so it survives the fixed near-top-down camera without a
+      // detached UI marker, glow slab, smoke primitive, light or emitter.
+      box(-.50,1.00,-.28,.24,.80,.24,stone);
+      box(-.50,1.435,-.28,.38,.11,.38,soot);
+      box(-.43,.79,-.35,.50,.17,.44,ironDark);
       box(-.38,.61,-.625,.48,.34,.16,stone);
-      box(-.38,.60,-.716,.22,.08,.035,ember);
+      box(-.38,.60,-.716,.20,.07,.030,ember);
 
-      // Oversized but physically plausible anvil profile on the work apron.
-      // The wide top, heel and horn read as an anvil in plan view while the
-      // pedestal keeps it grounded beside the active workshop.
-      box(.10,.13,-.735,.14,.26,.16,ironDark);
-      box(.10,.275,-.735,.28,.08,.20,ironDark);
-      box(.10,.35,-.735,.58,.13,.24,iron);
-      box(.42,.35,-.735,.22,.09,.13,iron);
-      box(-.24,.35,-.735,.14,.11,.20,ironDark);
+      // Grounded anvil pedestal + waist.
+      box(.12,.12,-.745,.16,.24,.18,ironDark);
+      box(.12,.255,-.745,.30,.10,.23,ironMid);
+      // Broad face and square heel.
+      box(.14,.365,-.745,.56,.14,.30,iron);
+      box(.48,.365,-.745,.18,.17,.29,ironMid);
+      // Three-step taper creates a clear horn silhouette from above.
+      box(-.22,.365,-.745,.24,.12,.23,iron);
+      box(-.405,.365,-.745,.15,.10,.15,ironMid);
+      box(-.515,.365,-.745,.085,.075,.085,ironDark);
 
-      // A grounded hammer next to the anvil strengthens the smithy read without
-      // adding another entity/draw call.
-      box(.38,.08,-.545,.09,.09,.48,wood);
-      box(.38,.16,-.775,.30,.15,.15,ironDark);
+      // Compact hammer beside, not across, the anvil so the main silhouette
+      // stays readable instead of becoming another rectangular workbench.
+      box(.38,.075,-.535,.08,.08,.38,wood);
+      box(.38,.155,-.735,.26,.14,.14,ironDark);
     }else{
       const warm=[255,196,68,255],hot=[255,236,166,255],frame=[64,43,28,255];
       // Roof-flush framed skylights are deliberately broad enough to survive the
