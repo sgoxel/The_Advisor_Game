@@ -388,6 +388,7 @@ let navigationPerformance={
   semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,
   rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,
   pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,
+  programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,
   longTask50Count:0,longTaskWorstMs:0,
   eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false
 };
@@ -747,10 +748,10 @@ function scaleStateForScalar(value=zoomState.scalar){
   return Object.freeze({index,label:SCALE_LADDER[index],scalar:Number(scalar.toFixed(6)),targetFootprintHeightMeters:Number(presentationTargetHeightMeters(scalar).toFixed(3))});
 }
 function setScaleIndex(index){return setZoomScalar(scalarForScaleIndex(index));}
-function stepScale(direction){const d=Math.sign(Number(direction)||0);return d===0?snapshot():setScaleIndex(scaleIndexForScalar()+d);}
+function stepScale(direction){const d=Math.sign(Number(direction)||0);return d===0?null:setScaleIndex(scaleIndexForScalar()+d);}
 function setAnimatedScaleIndex(index,source="api"){return setZoomTargetScalar(scalarForDisplayScaleIndex(index),source);}
 function stepAnimatedScale(direction,source="step"){
-  const d=Math.sign(Number(direction)||0);if(d===0)return snapshot();
+  const d=Math.sign(Number(direction)||0);if(d===0)return null;
   const base=displayScaleIndexForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar);
   return setAnimatedScaleIndex(clamp(base+d,0,ZOOM_DISPLAY_LADDER.length-1),source);
 }
@@ -772,7 +773,7 @@ function rotateByScreenPixels(dx,dy){
   const eastMeters=-Number(dx||0)*sensitivity.metersPerPixelX;
   const northMeters=Number(dy||0)*sensitivity.metersPerPixelY;
   const distanceMeters=Math.hypot(eastMeters,northMeters);
-  if(distanceMeters<1e-9)return snapshot();
+  if(distanceMeters<1e-9)return null;
   const angular=distanceMeters/WORLD_RADIUS_METERS,bearing=Math.atan2(eastMeters,northMeters);
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
   const sinLat0=Math.sin(lat0),cosLat0=Math.cos(lat0),sinAngular=Math.sin(angular),cosAngular=Math.cos(angular);
@@ -5435,7 +5436,7 @@ function requestZoomTargetPrefetch(){
 }
 function setZoomTargetScalar(value,source="input"){
   const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
-  if(Math.abs(next-(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar))<1e-7)return snapshot();
+  if(Math.abs(next-(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar))<1e-7)return null;
   const now=performance.now();
   if(zoomState.animating)zoomState.animationRetargetCount++;
   lastZoomDirection=next>zoomState.scalar?1:-1;
@@ -5444,7 +5445,8 @@ function setZoomTargetScalar(value,source="input"){
   zoomState.lastAnimationInputSource=String(source||"input");zoomState.zoomChanges++;
   zoomState.targetPrefetchState="idle";zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
   if(zoomState.animating)requestZoomTargetPrefetch();
-  return snapshot();
+  navigationPerformance.zoomCommandSnapshotAvoidedCount++;
+  return null;
 }
 function updateAnimatedZoom(dt){
   if(!zoomState.animating)return false;
@@ -5470,13 +5472,13 @@ function updateAnimatedZoom(dt){
 }
 function setZoomScalar(value){
   const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
-  if(Math.abs(next-zoomState.scalar)<1e-7&&Math.abs(next-(zoomState.targetScalar??next))<1e-7)return snapshot();
+  if(Math.abs(next-zoomState.scalar)<1e-7&&Math.abs(next-(zoomState.targetScalar??next))<1e-7)return null;
   lastZoomDirection=next>zoomState.scalar?1:-1;
   zoomState.scalar=next;zoomState.targetScalar=next;zoomState.animating=false;zoomState.zoomVelocity=0;zoomState.animationFrameCount=0;
   zoomState.lastDisplayScaleIndex=displayScaleIndexForScalar(next);zoomState.targetPrefetchState="idle";
-  zoomState.zoomChanges++;applyCameraZoom();return snapshot();
+  zoomState.zoomChanges++;applyCameraZoom();navigationPerformance.zoomCommandSnapshotAvoidedCount++;return null;
 }
-function zoomBy(delta){const d=Number(delta||0);return d===0?snapshot():stepAnimatedScale(d>0?1:-1,"zoomBy");}
+function zoomBy(delta){const d=Number(delta||0);return d===0?null:stepAnimatedScale(d>0?1:-1,"zoomBy");}
 function applyRotation(){
   if(!planet)return;
   planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
@@ -5493,7 +5495,7 @@ function setRotationInternal(yaw,pitch,{snapshotResult=true,semanticReason="rota
   recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   return snapshotResult?snapshot():null;
 }
-function setRotation(yaw,pitch){return setRotationInternal(yaw,pitch,{snapshotResult:true,semanticReason:"rotation"});}
+function setRotation(yaw,pitch){navigationPerformance.programmaticRotationSnapshotAvoidedCount++;return setRotationInternal(yaw,pitch,{snapshotResult:false,semanticReason:"rotation"});}
 function rotateBy(deltaYaw,deltaPitch){
   return setRotation(yawDegrees+Number(deltaYaw||0),pitchDegrees+Number(deltaPitch||0));
 }
@@ -6734,7 +6736,7 @@ function destroy(){
   wayfindingTextCanvas?.remove?.();wayfindingTextCanvas=null;wayfindingTextContext=null;wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
-  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};navigationPerformance={revision:"world-map-navigation-budget-v1",semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,longTask50Count:0,longTaskWorstMs:0,eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false};projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};navigationPerformance={revision:"world-map-navigation-budget-v1",semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,longTask50Count:0,longTaskWorstMs:0,eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false};projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
