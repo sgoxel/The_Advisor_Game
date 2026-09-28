@@ -3195,38 +3195,52 @@ function updateWayfindingTextOverlay(force=false){
   const signCandidates=[];
   for(const [signId,localPoint] of wayfindingSignAnchors){
     const p=projectWayfindingPoint(localPoint);
-    if(!p||p.x<-60||p.x>width+60||p.y<-60||p.y>height+60)continue;
+    if(!p||p.x<-100||p.x>width+100||p.y<-80||p.y>height+80)continue;
     signCandidates.push({signId,p,d2:(p.x-width*.5)**2+(p.y-height*.5)**2});
   }
   signCandidates.sort((a,b)=>a.d2-b.d2||a.signId.localeCompare(b.signId));
   const chosen=signCandidates[0]||null;
   const panels=chosen?wayfindingPanelAnchors.filter(panel=>panel.signId===chosen.signId):[];
-  const narrow=width<600,rowH=narrow?25:28,gap=2,edgePad=narrow?6:9,maxBoardW=Math.max(118,Math.min(narrow?184:224,width-edgePad*2));
-  ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";ctx.font=(narrow?"700 10px":"700 11px")+" system-ui, sans-serif";
+  const narrow=width<600,rowH=narrow?28:30,gap=4,maxBoardW=Math.max(132,Math.min(narrow?188:226,width-16));
+  ctx.textBaseline="middle";ctx.lineJoin="round";ctx.font=(narrow?"700 10px":"700 11px")+" system-ui, sans-serif";
   let visible=0;
   if(chosen&&panels.length){
-    const totalH=panels.length*rowH+Math.max(0,panels.length-1)*gap;
-    const startY=Math.max(edgePad,Math.min(height-totalH-edgePad,chosen.p.y-totalH*.42));
-    const plankFills=["rgba(124,79,39,.98)","rgba(103,62,31,.98)","rgba(145,91,43,.98)"];
-    for(let index=0;index<panels.length;index++){
-      const panel=panels[index];
+    const projected=panels.map(panel=>({panel,p:projectWayfindingPoint(panel.localPoint)})).filter(item=>item.p);
+    projected.sort((a,b)=>a.p.y-b.p.y||a.panel.destinationName.localeCompare(b.panel.destinationName));
+    const totalH=projected.length*rowH+Math.max(0,projected.length-1)*gap;
+    const startY=Math.max(8,Math.min(height-totalH-8,chosen.p.y-totalH*.5));
+    for(let index=0;index<projected.length;index++){
+      const {panel,p}=projected[index];
       const label=panel.directionLabel+" · "+panel.destinationName+" · "+panel.distanceLabel;
-      const boardW=Math.min(maxBoardW,Math.max(narrow?128:146,ctx.measureText(label).width+20));
-      const cx=Math.max(boardW*.5+edgePad,Math.min(width-boardW*.5-edgePad,chosen.p.x));
-      const cy=startY+index*(rowH+gap)+rowH*.5,left=cx-boardW*.5,right=cx+boardW*.5,top=cy-rowH*.5,bottom=cy+rowH*.5;
-      // Shared-canvas text is drawn as the visible face of the physical wood
-      // boards, directly centered on the post rather than as floating UI.
+      const measured=Math.min(maxBoardW,Math.max(narrow?136:154,ctx.measureText(label).width+32));
+      const half=measured*.5;
+      // Keep the plank over its real projected panel whenever possible. Only
+      // shift enough to remain fully inside the viewport; the route direction
+      // is still stated explicitly from canonical branch data.
+      const cx=Math.max(half+8,Math.min(width-half-8,p.x));
+      const cy=startY+index*(rowH+gap)+rowH*.5;
+      const left=cx-half,right=cx+half,top=cy-rowH*.5,bottom=cy+rowH*.5,cut=Math.min(9,rowH*.30);
       ctx.beginPath();
-      ctx.moveTo(left+4,top);ctx.lineTo(right-5,top+1);ctx.lineTo(right,cy);
-      ctx.lineTo(right-4,bottom-1);ctx.lineTo(left+3,bottom);ctx.lineTo(left,cy);ctx.closePath();
-      ctx.fillStyle=plankFills[index%plankFills.length];ctx.fill();
-      ctx.lineWidth=1.25;ctx.strokeStyle="rgba(225,176,96,.96)";ctx.stroke();
-      ctx.beginPath();ctx.moveTo(left+8,top+5);ctx.lineTo(right-9,top+5);
-      ctx.lineWidth=.75;ctx.strokeStyle="rgba(72,42,22,.72)";ctx.stroke();
-      ctx.beginPath();ctx.arc(left+8,cy,1.4,0,Math.PI*2);ctx.arc(right-8,cy,1.4,0,Math.PI*2);
-      ctx.fillStyle="rgba(222,178,102,.9)";ctx.fill();
-      ctx.lineWidth=2.4;ctx.strokeStyle="rgba(47,27,14,.88)";ctx.strokeText(label,cx,cy,boardW-14);
-      ctx.fillStyle="#fff0c0";ctx.fillText(label,cx,cy,boardW-14);
+      ctx.moveTo(left+cut,top);
+      ctx.lineTo(right-cut,top);
+      ctx.lineTo(right,cy);
+      ctx.lineTo(right-cut,bottom);
+      ctx.lineTo(left+cut,bottom);
+      ctx.lineTo(left,cy);
+      ctx.closePath();
+      ctx.fillStyle=index%2?"rgba(111,66,31,.97)":"rgba(132,80,36,.97)";
+      ctx.fill();
+      ctx.lineWidth=2;ctx.strokeStyle="rgba(67,38,18,.98)";ctx.stroke();
+      // Cheap deterministic wood grain keeps the text surface visually tied to
+      // the physical timber sign instead of reading as a rounded HUD card.
+      ctx.beginPath();
+      ctx.moveTo(left+14,top+7);ctx.lineTo(right-15,top+7);
+      ctx.moveTo(left+18,bottom-6);ctx.lineTo(right-20,bottom-6);
+      ctx.lineWidth=1;ctx.strokeStyle="rgba(226,164,83,.22)";ctx.stroke();
+      const nailX=Math.max(left+11,Math.min(right-11,p.x));
+      ctx.beginPath();ctx.arc(nailX,cy,2.2,0,Math.PI*2);ctx.fillStyle="rgba(48,34,25,.94)";ctx.fill();
+      ctx.textAlign="center";ctx.lineWidth=2.8;ctx.strokeStyle="rgba(44,26,13,.96)";ctx.strokeText(label,cx,cy,measured-28);
+      ctx.fillStyle="#fff0bd";ctx.fillText(label,cx,cy,measured-28);
       visible++;
     }
   }
