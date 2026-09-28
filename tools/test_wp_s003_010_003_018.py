@@ -53,15 +53,20 @@ def set_viewport(driver, width, height):
     last = None
     while time.time() < deadline:
         last = driver.execute_script("""
-          const c=document.querySelector('#planetCanvas')?.getBoundingClientRect?.();
-          return {iw:Number(innerWidth||0),ih:Number(innerHeight||0),
+          const node=document.querySelector('#planetCanvas');
+          const c=node?.getBoundingClientRect?.();
+          return {iw:Number(innerWidth||0),ih:Number(innerHeight||0),hasCanvas:Boolean(node),
                   cw:Number(c?.width||0),ch:Number(c?.height||0)};
         """)
         iw, ih = float(last.get("iw") or 0), float(last.get("ih") or 0)
         cw, ch = float(last.get("cw") or 0), float(last.get("ch") or 0)
-        if iw > 0 and ih > 0 and cw > 0 and ch > 0:
+        if iw > 0 and ih > 0:
             inner_ok = abs((iw / ih) - target_aspect) / target_aspect <= .04
-            canvas_ok = abs((cw / ch) - target_aspect) / target_aspect <= .04 and cw >= iw * .90 and ch >= ih * .90
+            canvas_ok = (not last.get("hasCanvas")) or (
+                cw > 0 and ch > 0 and
+                abs((cw / ch) - target_aspect) / target_aspect <= .04 and
+                cw >= iw * .90 and ch >= ih * .90
+            )
             if inner_ok and canvas_ok:
                 time.sleep(.5)
                 return
@@ -247,6 +252,7 @@ def main():
     try:
         driver.get(TARGET)
         wait_ready(driver)
+        set_viewport(driver, 1280, 800)
         target = deterministic_land_target(driver)
         base = snap(driver)
         focus0, pose0 = focus_tuple(base), camera_pose(base)
