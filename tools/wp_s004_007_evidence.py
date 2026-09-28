@@ -67,19 +67,16 @@ def prepare(profession):
 
 def visual_state(resident_id,building_id):
     return driver.execute_script("""
-      const residentId=arguments[0],buildingId=arguments[1],s=PlanetStage.snapshot(),targets=PlanetStage.inspectionTargets();
-      const npc=targets.find(x=>x.type==="npc"&&String(x.id)===String(residentId))||null;
-      const building=buildingId?targets.find(x=>x.type==="building"&&String(x.id)===String(buildingId))||null:null;
-      const rb=s.projection.resourceBudget||{},ls=s.projection.localStatic||{},np=s.npcPresentation||{};
-      const w=window.innerWidth,h=window.innerHeight;
-      const inView=b=>!!b&&b.right>4&&b.left<w-4&&b.bottom>4&&b.top<h-4;
+      const residentId=arguments[0],buildingId=arguments[1],s=PlanetStage.snapshot();
+      const exact=PlanetStage.workCycleEvidenceState(residentId),rb=s.projection.resourceBudget||{},ls=s.projection.localStatic||{},np=s.npcPresentation||{};
+      const workplaceKnown=Boolean(!buildingId||(s.buildingActivity?.buildings||[]).some(x=>String(x.id)===String(buildingId)));
       return {
-        settled:Boolean(!rb.preparing&&!rb.standInActive&&rb.requestedSignature&&rb.activeSignature===rb.requestedSignature),
-        requestedSignature:rb.requestedSignature,activeSignature:rb.activeSignature,preparing:Boolean(rb.preparing),
+        settled:Boolean(!rb.preparing&&!rb.standInActive),
+        requestedSignature:rb.requestedSignature,localStaticSignature:ls.signature,preparing:Boolean(rb.preparing),
         standInActive:Boolean(rb.standInActive),scaleIndex:s.zoom.scaleIndex,scaleLabel:s.zoom.scaleLabel,
         tier:ls.revealTier,localStaticActive:Boolean(ls.active),localBuildingCount:Number(ls.buildingCount||0),
-        npc,npcInView:inView(npc?.bounds),building,buildingInView:buildingId?inView(building?.bounds):true,
-        exactToolActive:(np.activeWorkCycleResidentIds||[]).includes(String(residentId)),
+        workplaceKnown,exact,
+        exactToolActive:Boolean(exact?.toolEnabled&&(np.activeWorkCycleResidentIds||[]).includes(String(residentId))),
         activeWorkCycleResidentIds:np.activeWorkCycleResidentIds||[],
         activeWorkCycleToolCount:Number(np.activeWorkCycleToolCount||0),
         sceneLoading:document.querySelector(".planet-stage-loading")?.getAttribute("data-state")||null
@@ -88,10 +85,13 @@ def visual_state(resident_id,building_id):
 
 def visual_ready(info):
     state=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
+    exact=state.get("exact") or {}
     return (
         state["settled"] and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
-        state["localStaticActive"] and state["localBuildingCount"]>0 and state["npcInView"] and
-        state["buildingInView"] and state["exactToolActive"]
+        state["localStaticActive"] and state["localBuildingCount"]>0 and state["workplaceKnown"] and
+        exact.get("visible") and exact.get("inViewport") and state["exactToolActive"] and
+        exact.get("movementStatus")=="arrived" and
+        (exact.get("workCycle") or {}).get("stepId")==info["sample"]["stepId"]
     )
 
 def add_overlay(info,bounds):
@@ -147,7 +147,7 @@ try:
         info["state"]=driver.execute_script("return ResidentMovement.get(arguments[0])",info["sample"]["residentId"])
         info["stage"]=driver.execute_script("return PlanetStage.snapshot()")
         info["work"]=driver.execute_script("return WorkCycles.snapshot(arguments[0])",info["seed"])
-        add_overlay(info,state["npc"]["bounds"])
+        add_overlay(info,{"left":state["exact"]["screen"]["x"],"right":state["exact"]["screen"]["x"],"top":state["exact"]["screen"]["y"],"bottom":state["exact"]["screen"]["y"]})
         time.sleep(0.15)
 
         path=OUT/f"{PROFILE}-{idx+1:02d}-{profession}.png"
@@ -169,7 +169,7 @@ try:
         raise RuntimeError("WorkCycles.verify failed during evidence")
     if not all(r["state"].get("status")=="arrived" for r in records):
         raise RuntimeError("selected worker did not reach its choreography target")
-    if not all(r["visualState"].get("settled") and r["visualState"].get("npcInView") and r["visualState"].get("buildingInView") and r["visualState"].get("exactToolActive") for r in records):
+    if not all(r["visualState"].get("settled") and (r["visualState"].get("exact") or {}).get("inViewport") and r["visualState"].get("workplaceKnown") and r["visualState"].get("exactToolActive") for r in records):
         raise RuntimeError("one or more screenshots lacked settled exact worker/workplace visibility")
     result={"pass":True,"profile":PROFILE,"viewport":SIZE,"records":records}
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2))
