@@ -3555,21 +3555,23 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-1.25,.15,2.1,.90,.70,C.wood);
       box(anchor,b,1.15,.05,1.6,1.15,.15,C.green);
     }else if(fn==="lodging"){
-      box(anchor,b,0,0,6.4,4.2,.07,[.44,.33,.18]);
-      // Stable gate + compact horse silhouette make lodging readable as an inn
-      // yard instead of a generic fence. The opposite side keeps two tables.
-      box(anchor,b,-2.30,.95,.24,.24,1.65,C.wood);
-      box(anchor,b,-.55,.95,.24,.24,1.65,C.wood);
-      box(anchor,b,-1.42,.95,3.70,.22,.24,C.wood,1.38);
-      box(anchor,b,-1.52,.10,1.75,.62,.72,[.33,.18,.08],.48);
-      box(anchor,b,-.82,.10,.38,.42,.62,[.36,.20,.09],.78);
-      box(anchor,b,-.58,.10,.48,.42,.38,[.36,.20,.09],1.05);
-      box(anchor,b,-2.02,.08,.16,.18,.82,[.25,.14,.07],.05);
-      box(anchor,b,-1.28,.08,.16,.18,.82,[.25,.14,.07],.05);
-      box(anchor,b,.85,.28,1.45,1.05,.16,C.woodLight,.70);
-      box(anchor,b,2.10,.28,1.45,1.05,.16,C.woodLight,.70);
-      box(anchor,b,1.47,1.45,.20,.20,1.75,C.wood);
-      box(anchor,b,1.47,1.45,1.05,.12,.62,[.71,.48,.20],1.42);
+      box(anchor,b,0,0,6.8,4.6,.07,[.44,.33,.18]);
+      // Compact the inn yard toward the building and exaggerate the stable/horse
+      // top-down silhouette so it reads as lodging before a tooltip is opened.
+      box(anchor,b,-2.45,-.28,.28,.28,1.78,C.wood);
+      box(anchor,b,-.25,-.28,.28,.28,1.78,C.wood);
+      box(anchor,b,-1.35,-.28,4.55,.25,.28,C.wood,1.50);
+      box(anchor,b,-1.42,.02,2.35,.92,.78,[.31,.16,.065],.48);
+      box(anchor,b,-.22,.02,.58,.68,.62,[.38,.20,.08],.78);
+      box(anchor,b,.04,.02,.48,.48,.40,[.38,.20,.08],1.05);
+      box(anchor,b,-2.10,-.12,.20,.24,.88,[.20,.11,.05],.02);
+      box(anchor,b,-1.36,-.12,.20,.24,.88,[.20,.11,.05],.02);
+      box(anchor,b,-.75,.44,.20,.24,.88,[.20,.11,.05],.02);
+      box(anchor,b,-1.55,.44,.20,.24,.88,[.20,.11,.05],.02);
+      box(anchor,b,1.00,.12,1.65,1.15,.18,C.woodLight,.74);
+      box(anchor,b,2.28,.12,1.65,1.15,.18,C.woodLight,.74);
+      box(anchor,b,1.68,-.42,.24,.24,1.88,C.wood);
+      box(anchor,b,1.68,-.42,1.34,.18,.78,[.76,.50,.18],1.48);
     }else if(fn==="market"){
       box(anchor,b,0,0,6.8,4.0,.07,[.47,.36,.18]);
       box(anchor,b,0,.15,5.4,1.15,.78,C.woodLight);
@@ -3582,20 +3584,21 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-2.45,.10,.20,.20,2.30,C.wood);
       box(anchor,b,2.45,.10,.20,.20,2.30,C.wood);
     }else if(fn==="craft"){
-      box(anchor,b,0,0,6.4,4.2,.07,[.27,.23,.18]);
-      // Raised T-profile anvil on a stump.
-      box(anchor,b,.35,.15,.55,.72,.92,C.wood,.05);
-      box(anchor,b,.35,.15,2.15,.62,.30,[.18,.20,.20],.92);
-      box(anchor,b,-.42,.15,.72,.86,.34,[.22,.24,.24],1.08);
-      // Forge hood/chimney rises well above the yard silhouette.
-      box(anchor,b,-1.80,.55,1.55,1.18,.78,[.18,.17,.15],.42);
-      box(anchor,b,-1.80,.55,.72,.72,2.55,C.stone,1.10);
-      box(anchor,b,-1.80,.55,1.02,1.02,.24,[.12,.12,.11],3.56);
-      box(anchor,b,-1.80,.02,.78,.42,.20,[.82,.23,.06],.62);
-      // Fuel/ore pile stays grounded and irregular.
-      box(anchor,b,1.82,.42,1.55,1.02,.62,C.wood,.02);
-      box(anchor,b,2.16,.18,.72,.76,.48,[.24,.25,.23],.10);
-      box(anchor,b,1.42,.10,.62,.68,.38,[.18,.19,.18],.08);
+      box(anchor,b,0,0,7.0,4.7,.07,[.27,.23,.18]);
+      // Large T-profile anvil with a bright iron top, kept close to the facade.
+      box(anchor,b,.55,-.12,.82,.92,1.02,C.wood,.04);
+      box(anchor,b,.55,-.12,3.05,.82,.36,[.28,.31,.31],1.02);
+      box(anchor,b,-.58,-.12,1.05,1.02,.40,[.19,.22,.22],1.22);
+      // Tall soot-capped forge stack and orange furnace mouth.
+      box(anchor,b,-1.95,-.18,1.85,1.45,.86,[.18,.17,.15],.38);
+      box(anchor,b,-1.95,-.18,1.05,1.05,3.10,C.stone,1.12);
+      box(anchor,b,-1.95,-.18,1.40,1.40,.30,[.09,.09,.08],4.18);
+      box(anchor,b,-1.95,-.62,1.18,.44,.28,[.92,.30,.06],.70);
+      box(anchor,b,-1.95,-.68,.66,.24,.16,[1.0,.62,.10],.78);
+      // Grounded fuel/ore pile.
+      box(anchor,b,2.05,.22,1.75,1.10,.68,C.wood,.02);
+      box(anchor,b,2.42,.02,.92,.86,.56,[.24,.25,.23],.12);
+      box(anchor,b,1.52,-.02,.82,.76,.48,[.15,.16,.15],.08);
     }else if(fn==="storage"){
       box(anchor,b,0,0,6.4,3.8,.07,[.42,.35,.24]);
       box(anchor,b,-1.75,.10,1.45,1.45,1.20,C.crate);
@@ -3611,44 +3614,37 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,2.45,0,.82,5.15,.16,[.55,.38,.10]);
       box(anchor,b,0,1.85,2.6,1.65,1.05,C.hay);
     }else if(fn==="civic"){
-      // Pale paved forecourt gives the public/meeting function a distinct base.
-      box(anchor,b,0,0,6.8,4.6,.08,[.56,.52,.42]);
-      // Broad raised notice dais with dark frame and three high-contrast notices.
-      box(anchor,b,0,.18,3.75,2.20,.24,[.29,.22,.14],.18);
-      box(anchor,b,0,.18,3.28,1.74,.12,[.76,.64,.38],.45);
-      box(anchor,b,-1.02,.18,.62,.84,.08,[.73,.29,.13],.60);
-      box(anchor,b,0,.18,.62,.84,.08,[.88,.76,.43],.61);
-      box(anchor,b,1.02,.18,.62,.84,.08,[.73,.29,.13],.60);
-      // Posts + lintel + bell remain vertically legible from the oblique view.
-      box(anchor,b,-1.48,.32,.30,.30,2.85,C.wood);
-      box(anchor,b,1.48,.32,.30,.30,2.85,C.wood);
-      box(anchor,b,0,.32,3.35,.26,.28,C.woodLight,2.62);
-      box(anchor,b,0,1.32,.72,.72,.86,[.78,.55,.13],2.16);
-      // Facing benches make the composition read as a public meeting place.
-      box(anchor,b,-1.78,1.48,2.70,.72,.48,C.woodLight,.24);
-      box(anchor,b,1.78,1.48,2.70,.72,.48,C.woodLight,.24);
+      box(anchor,b,0,0,7.0,4.8,.07,[.52,.48,.36]);
+      // Meeting-square composition stays close to the hall: broad notice board,
+      // two benches, and a central gold bell under a timber yoke.
+      box(anchor,b,-1.45,-.38,.28,.28,2.70,C.wood);
+      box(anchor,b,1.45,-.38,.28,.28,2.70,C.wood);
+      box(anchor,b,0,-.38,3.35,.30,1.52,C.civic,1.32);
+      box(anchor,b,0,-.38,3.85,.22,.28,C.woodLight,2.76);
+      box(anchor,b,0,.46,2.80,.24,.26,C.wood,1.72);
+      box(anchor,b,0,.46,.82,.82,.92,[.80,.57,.12],1.86);
+      box(anchor,b,-1.95,.62,2.80,.78,.46,C.woodLight,.20);
+      box(anchor,b,1.95,.62,2.80,.78,.46,C.woodLight,.20);
+      box(anchor,b,0,1.18,1.45,1.10,.16,[.64,.58,.42],.12);
     }else{
-      // Outdoor-work yard: high-contrast lumber and saw-table silhouette.
-      box(anchor,b,0,0,7.0,4.8,.08,[.34,.27,.17]);
-      // Three long parallel timbers are intentionally broader than the old
-      // single log so they survive the exact 844x390 ground-scale viewport.
-      box(anchor,b,-1.78,-.55,3.70,.48,.42,[.68,.43,.17],.22);
-      box(anchor,b,-1.78,.05,3.35,.48,.50,[.58,.34,.12],.28);
-      box(anchor,b,-1.78,.65,3.95,.48,.38,[.76,.51,.22],.20);
-      // Raised saw table with a steel cutting strip and two dark trestles.
-      box(anchor,b,1.05,.15,3.85,1.20,.28,C.woodLight,.72);
-      box(anchor,b,1.05,.15,.16,1.34,.12,[.70,.72,.69],1.02);
-      box(anchor,b,-.15,.15,.34,1.55,.82,[.25,.16,.08],.16);
-      box(anchor,b,2.25,.15,.34,1.55,.82,[.25,.16,.08],.16);
-      // Tall tool rack plus a compact cart/handle shape at the rear.
-      box(anchor,b,1.90,1.55,.30,.30,2.45,C.wood);
-      box(anchor,b,1.90,1.55,2.35,.24,.28,C.woodLight,2.02);
-      box(anchor,b,1.28,1.55,.18,.18,1.18,C.metal,1.02);
-      box(anchor,b,1.92,1.55,.18,.18,1.42,C.metal,.88);
-      box(anchor,b,2.52,1.55,.18,.18,1.06,C.metal,1.00);
-      box(anchor,b,-.20,1.55,1.65,.92,.48,C.crate,.14);
-      box(anchor,b,-1.15,1.55,1.45,.18,.20,C.woodLight,.54);
+      box(anchor,b,0,0,7.0,4.8,.07,[.40,.31,.18]);
+      // Outdoor-work yard: a large two-axle timber cart loaded with logs. The
+      // cart bed + four dark wheels + long tongue survives 844x390 phone scale.
+      box(anchor,b,-.55,-.10,3.65,1.75,.42,C.woodLight,.55);
+      box(anchor,b,-1.85,-.96,.68,.68,.60,[.18,.14,.10],.22);
+      box(anchor,b,.75,-.96,.68,.68,.60,[.18,.14,.10],.22);
+      box(anchor,b,-1.85,.76,.68,.68,.60,[.18,.14,.10],.22);
+      box(anchor,b,.75,.76,.68,.68,.60,[.18,.14,.10],.22);
+      box(anchor,b,1.65,-.10,2.85,.34,.32,C.wood,.54);
+      box(anchor,b,-.70,-.36,2.65,.34,.34,[.55,.34,.12],1.04);
+      box(anchor,b,-.35,.16,2.55,.34,.34,[.48,.28,.10],1.04);
+      box(anchor,b,2.45,.52,.30,.30,2.20,C.wood);
+      box(anchor,b,2.45,.52,2.30,.24,.28,C.woodLight,1.78);
+      box(anchor,b,2.00,.52,.18,.18,1.08,C.metal,.84);
+      box(anchor,b,2.50,.52,.18,.18,1.28,C.metal,.76);
+      box(anchor,b,2.94,.52,.18,.18,.92,C.metal,.92);
     }
+    return propCount-propsBefore;    }
     return propCount-propsBefore;
   };
   for(const record of records){
@@ -3657,7 +3653,7 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     if(access&&Math.hypot(anchor.tileX-Number(access.x),anchor.tileY-Number(access.y))<2.2)doorViolations++;
     if(roadAt(anchor.tileX,anchor.tileY))roadViolations++;
     const fn=String(record.function||"home");
-    const semanticSilhouette={home:"yard/woodpile",lodging:"stable/horse/tables",market:"striped-canopy/stall",craft:"anvil/forge/chimney",storage:"crate/loading-stack",farm:"furrows/hay",civic:"notice-board/bell/benches","outdoor-work":"sawhorse/log/tool-rack"}[fn]||"workyard";
+    const semanticSilhouette={home:"yard/woodpile",lodging:"stable/horse/sign/tables",market:"striped-canopy/stall",craft:"large-anvil/forge/chimney",storage:"crate/loading-stack",farm:"furrows/hay",civic:"meeting-plaza/notice-board/bell","outdoor-work":"loaded-cart/logs/tool-rack"}[fn]||"workyard";
     summaries.push(Object.freeze({id:String(record.id),label:String(record.label||record.kind||record.id),function:fn,semanticSilhouette,propCount:count,side:anchor.side,anchorTile:Object.freeze({x:Number(anchor.tileX.toFixed(2)),y:Number(anchor.tileY.toFixed(2))})}));
   }
   if(!positions.length)return 0;
