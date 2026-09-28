@@ -2548,21 +2548,21 @@ function createEnvironmentReactionGroup(kind,index){
   const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
-    const specs=[[-.34,.22,-.10,.72,.42,.58],[.06,.30,.08,.88,.52,.70],[.42,.18,-.16,.62,.36,.50]];
+    const specs=[[-.46,.34,-.12,.90,.64,.74],[.04,.48,.06,1.16,.86,.96],[.54,.30,-.16,.82,.56,.70]];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
       children.push(e);
     }
   }else if(kind==="grassBend"){
-    const specs=[[-.38,.30,-.12,-58],[-.12,.34,.12,-48],[.16,.32,-.08,52],[.40,.28,.14,60]];
+    const specs=[[-.50,.45,-.16,-60],[-.16,.50,.14,-48],[.18,.47,-.10,50],[.52,.42,.16,62]];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],.11,.68,.075,0,0,q[3]);
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],.14,.92,.095,0,0,q[3]);
       children.push(e);
     }
   }else{
-    const specs=[[-.20,.022,-.24,-18],[.20,.022,.24,18]];
+    const specs=[[-.24,.038,-.30,-18],[.24,.038,.30,18]];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"Footprint-"+index+"-"+i,"cylinder",environmentalReactionMaterials.footprint,q[0],q[1],q[2],.25,.028,.42,0,q[3],0);
+      const q=specs[i],e=addLocalPrimitive(group,"Footprint-"+index+"-"+i,"cylinder",environmentalReactionMaterials.footprint,q[0],q[1],q[2],.34,.05,.56,0,q[3],0);
       children.push(e);
     }
   }
@@ -2572,9 +2572,9 @@ function createEnvironmentReactionGroup(kind,index){
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.70,.53,.31,.58),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.24,.62,.14,.96),
-    footprint:environmentReactionMaterial("EnvironmentFootprint",.16,.085,.035,.78)
+    dust:environmentReactionMaterial("EnvironmentDust",.74,.58,.36,.76),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.28,.66,.15,.98),
+    footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
@@ -2608,7 +2608,7 @@ function triggerEnvironmentReaction(kind,surfaceType,latitudeRadians,longitudeRa
   }
   const now=performance.now();
   slot.active=true;slot.startedAtMs=now;slot.latitudeRadians=Number(latitudeRadians)||0;slot.longitudeRadians=Number(longitudeRadians)||0;
-  slot.directionDegrees=Number(directionDegrees)||0;slot.lifetimeMs=kind==="dust"?2800:kind==="grassBend"?3400:5200;slot.group.enabled=true;
+  slot.directionDegrees=Number(directionDegrees)||0;slot.lifetimeMs=kind==="dust"?3600:kind==="grassBend"?4200:5600;slot.group.enabled=true;
   const counts={...environmentalReactions.triggerByKind,[kind]:(environmentalReactions.triggerByKind[kind]||0)+1};
   environmentalReactions={...environmentalReactions,triggerCount:environmentalReactions.triggerCount+1,triggerByKind:counts,lastKind:kind,lastSurfaceType:String(surfaceType||""),lastMovementMeters:Number(Number(movementMeters||0).toFixed(3)),lastTriggerAtMs:now};
   return true;
@@ -2625,7 +2625,8 @@ function recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitud
   try{surfaceType=window.TerrainFoundation?.getType?.(activeSeed,tile.x,tile.y)||null;}catch(_){surfaceType=null;}
   const kind=environmentReactionSurfaceKind(surfaceType);if(!kind)return false;
   const directionDegrees=Math.atan2(east,north)*180/Math.PI;
-  return triggerEnvironmentReaction(kind,surfaceType,afterLatitudeRadians,afterLongitudeRadians,distance,directionDegrees);
+  const anchor=canonicalLatLonForLocalOffset(afterLatitudeRadians,afterLongitudeRadians,-east*.30,-north*.30);
+  return triggerEnvironmentReaction(kind,surfaceType,anchor.latitudeRadians,anchor.longitudeRadians,distance,directionDegrees);
 }
 function updateEnvironmentalReactions(){
   if(!environmentalReactionPool.length||!displayResource)return;
@@ -2643,9 +2644,9 @@ function updateEnvironmentalReactions(){
     visibleCount++;activeDrawCallEstimate+=slot.children.length;
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
-    if(slot.kind==="dust"){scale=.78+t*.72;liftMeters=.10+t*.48;}
-    else if(slot.kind==="grassBend"){scale=1-t*.18;liftMeters=.02;}
-    else{scale=1-t*.10;liftMeters=.015;}
+    if(slot.kind==="dust"){scale=.90+t*.48;liftMeters=.18+t*.50;}
+    else if(slot.kind==="grassBend"){scale=1-t*.12;liftMeters=.075;}
+    else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
     slot.group.setLocalEulerAngles(0,slot.directionDegrees,0);
