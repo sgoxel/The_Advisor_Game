@@ -1520,6 +1520,7 @@ def create_driver(width: int, height: int):
     options.add_argument("--enable-webgl")
     options.add_argument("--ignore-gpu-blocklist")
     options.add_argument("--use-angle=swiftshader")
+    options.add_argument("--enable-unsafe-swiftshader")
     options.add_argument("--hide-scrollbars")
     options.add_argument(f"--window-size={width},{height}")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
