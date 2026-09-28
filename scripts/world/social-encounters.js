@@ -295,7 +295,7 @@ function verify(seedValue){
   return Object.freeze({pass,deterministic,busySkipped,scheduleRecovered,noRoadBlocking:sites.slice(0,3).every(p=>!roadReserved(seed,p)),safePublicSites:sites.slice(0,3),conversation:conversationSnap,gathering:gatheringSnap,fullPopulationPairwiseScan:false,maxCandidateChecks:MAX_CANDIDATE_CHECKS,externalLlm:false});
 }
 function beginProof(seedValue,typeValue="gathering"){
-  const seed=String(seedValue||"");reset(seed);
+  const seed=String(seedValue||""),verification=verify(seed);reset(seed);
   const roster=window.DailyActivity?.build?.(seed)||[],sites=findProofSites(seed);
   const count=String(typeValue)==="gathering"?3:2;
   if(roster.length<count||sites.length<count)return null;
@@ -303,7 +303,7 @@ function beginProof(seedValue,typeValue="gathering"){
   const records=roster.slice(0,count).map((resident,index)=>proofRecord(resident,sites[index],activity));
   const encounter=createEncounter(seed,when,String(typeValue)==="greeting"?"greeting":String(typeValue)==="conversation"?"conversation":"gathering",records,"visual-proof-same-contract");
   proofState={type:encounter.type,positions:records.map(r=>({residentId:r.id,position:r.position}))};
-  return Object.freeze({encounter:encounterSnapshot(encounter),positions:Object.freeze(proofState.positions.map(x=>Object.freeze({residentId:x.residentId,position:point(x.position)}))),proof:snapshot(),verification:verify(seed)});
+  return Object.freeze({encounter:encounterSnapshot(encounter),positions:Object.freeze(proofState.positions.map(x=>Object.freeze({residentId:x.residentId,position:point(x.position)}))),proof:snapshot(),verification});
 }
 function endProof(){proofState=null;return reset(seedKey)}
 
