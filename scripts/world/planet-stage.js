@@ -5522,14 +5522,27 @@ function paletteForHour(hour){
   };
 }
 function gradeAtmosphereLocalMaterial(material,tint,emissiveStrength=0){
-  if(!material)return false;
-  const base=material.__atmosphereBaseDiffuse||[material.diffuse?.r??1,material.diffuse?.g??1,material.diffuse?.b??1];
-  material.__atmosphereBaseDiffuse=base;
+  // Material registries may contain nested frozen lookup tables (for example
+  // localNpcMaterials.professions). Only grade actual PlayCanvas materials.
+  if(!material?.diffuse?.set||!material?.emissive?.set||typeof material.update!=="function")return false;
+  const base=material.__atmosphereBaseDiffuse||[material.diffuse.r??1,material.diffuse.g??1,material.diffuse.b??1];
+  if(Object.isExtensible(material))material.__atmosphereBaseDiffuse=base;
   material.diffuse.set(base[0]*tint[0],base[1]*tint[1],base[2]*tint[2]);
   const effectiveEmissive=Math.max(Number(emissiveStrength)||0,Number(material.__activityEmissiveBoost)||0);
   material.emissive.set(base[0]*tint[0]*effectiveEmissive,base[1]*tint[1]*effectiveEmissive,base[2]*tint[2]*effectiveEmissive);
   material.emissiveIntensity=1;
   material.update();return true;
+}
+function gradeAtmosphereMaterialRegistry(registry,tint,emissiveStrength=0){
+  if(!registry)return 0;
+  let count=0;
+  for(const value of Object.values(registry)){
+    if(gradeAtmosphereLocalMaterial(value,tint,emissiveStrength)){count++;continue;}
+    if(value&&typeof value==="object"){
+      for(const nested of Object.values(value))if(gradeAtmosphereLocalMaterial(nested,tint,emissiveStrength))count++;
+    }
+  }
+  return count;
 }
 function applyAtmosphereMaterialPalette(p){
   if(!p)return 0;
@@ -5545,8 +5558,8 @@ function applyAtmosphereMaterialPalette(p){
   if(horizonSkirtMaterial){
     horizonSkirtMaterial.diffuse.set(...p.terrainTint);horizonSkirtMaterial.emissive.set(...p.terrainTint);horizonSkirtMaterial.emissiveIntensity=p.terrainI*.96;horizonSkirtMaterial.update();materialCount++;
   }
-  if(localStaticMaterials)for(const material of Object.values(localStaticMaterials)){if(gradeAtmosphereLocalMaterial(material,p.localTint,p.localE))materialCount++;}
-  if(localNpcMaterials)for(const material of Object.values(localNpcMaterials)){if(gradeAtmosphereLocalMaterial(material,p.localTint,p.localE*1.35))materialCount++;}
+  materialCount+=gradeAtmosphereMaterialRegistry(localStaticMaterials,p.localTint,p.localE);
+  materialCount+=gradeAtmosphereMaterialRegistry(localNpcMaterials,p.localTint,p.localE*1.35);
   const cloudMaterial=cloudLayer?.render?.meshInstances?.[0]?.material;
   if(cloudMaterial){cloudMaterial.emissive.set(...p.cloudTint);cloudMaterial.emissiveIntensity=p.cloudI;cloudMaterial.update();materialCount++;}
   return materialCount;
