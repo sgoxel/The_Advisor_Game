@@ -193,12 +193,16 @@ def run_production_seed(driver, tag, all_screenshots=True):
     if all_screenshots:
         set_viewport(driver, 844, 390)
         phone_land = settle_scale(driver, 2)
+        wait(driver, "return innerWidth===844 && innerHeight===390 && window.PlanetStage.snapshot().mapPresentation?.centerMarker?.visible===true", 20)
+        phone_land = snap(driver)
         phone_land_record = assert_marker_contract(phone_land, f"{tag} phone landscape 1/50", production=True)
         phone_land_record["viewport"] = driver.execute_script("return {width:innerWidth,height:innerHeight}")
         phone_land_record["screenshot"] = capture(driver, f"{tag}-phone-landscape-1_50")
 
         set_viewport(driver, 390, 844)
         phone_portrait = settle_scale(driver, 5)
+        wait(driver, "return innerWidth===390 && innerHeight===844 && window.PlanetStage.snapshot().mapPresentation?.centerMarker?.visible===true", 20)
+        phone_portrait = snap(driver)
         phone_portrait_record = assert_marker_contract(phone_portrait, f"{tag} phone portrait 1/500", production=True)
         phone_portrait_record["viewport"] = driver.execute_script("return {width:innerWidth,height:innerHeight}")
         phone_portrait_record["screenshot"] = capture(driver, f"{tag}-phone-portrait-1_500")
