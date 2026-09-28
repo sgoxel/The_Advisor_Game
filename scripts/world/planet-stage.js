@@ -4905,9 +4905,19 @@ function greatCircleDistanceKm(a,b){
 function currentViewTarget(){return {latitudeRadians:-pitchDegrees*Math.PI/180,longitudeRadians:-yawDegrees*Math.PI/180};}
 function buildDestinationDescriptors(){
   const started=performance.now(),continent=featureTargets?.continent,island=featureTargets?.island||continent,mountain=featureTargets?.mountain||continent;
+  let startingVillageTarget=continent,startingVillageName=null;
+  try{
+    const country=window.PoliticalGeography?.countryAt?.(activeSeed,"0","0");
+    const plan=(window.SettlementArchetypes?.settlementsForCountry?.(activeSeed,country,3)||[]).find(item=>item.role==="starting-village")||null;
+    if(plan){
+      const registered=worldLatLonForTile(plan.center.x,plan.center.y);
+      startingVillageTarget=descriptorAt(registered.latitudeRadians,registered.longitudeRadians);
+      startingVillageName=String(plan.name||"").trim()||null;
+    }
+  }catch(_){}
   const source=[
-    ["village","settlements",continent,"Starting-area village on seeded habitable land",3],
-    ["town","cities",boundedNearbySample(continent,true,"town"),"Regional market town",3],
+    ["village","settlements",startingVillageTarget,"Canonical starting village",3,startingVillageName],
+    ["town","cities",boundedNearbySample(continent,true,"town"),"Regional market town",3,null],
     ["city","cities",boundedNearbySample(continent,true,"city"),"Major seeded regional center",4],
     ["ruin","historical",boundedNearbySample(mountain,true,"ruin"),"Old hill ruin / historical site",2],
     ["hunting","hunting",boundedNearbySample(continent,true,"hunt"),"Woodland and upland hunting grounds",1],
@@ -4919,8 +4929,8 @@ function buildDestinationDescriptors(){
     ["water","water",featureTargets?.deepOcean,"Deep ocean basin",2]
   ];
   destinationNavigator.descriptors=source.filter(row=>row[2]).map((row,index)=>{
-    const [kind,category,target,description,importance]=row;
-    return Object.freeze({id:"planet-place-"+kind+"-"+index,name:stablePlaceName(kind,target,index),type:kind,category,description,importance,
+    const [kind,category,target,description,importance,nameHint]=row;
+    return Object.freeze({id:"planet-place-"+kind+"-"+index,name:nameHint||stablePlaceName(kind,target,index),type:kind,category,description,importance,
       latitudeRadians:Number(target.latitudeRadians)||0,longitudeRadians:Number(target.longitudeRadians)||0,
       latitudeDegrees:Number(target.latitudeDegrees)||0,longitudeDegrees:Number(target.longitudeDegrees)||0,
       elevationMeters:Number(target.elevationMeters)||0});
@@ -5755,7 +5765,7 @@ function snapshot(){
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
     campaignWearProjection:Object.freeze({...campaignWearProjection,stateCounts:Object.freeze({...campaignWearProjection.stateCounts}),buildings:Object.freeze((campaignWearProjection.buildings||[]).slice())}),
-    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
+    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),names:Object.freeze(destinationNavigator.descriptors.map(d=>d.name)),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     mapPresentation:Object.freeze({...mapPresentation}),
     politicalScale:politicalScaleEvidence(),
     startupError,
