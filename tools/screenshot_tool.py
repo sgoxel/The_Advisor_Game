@@ -140,7 +140,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
-    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013","wp-s003-010-003-014","wp-s003-010-003-015",
+    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016",
     "wp-s003-010-004",
     "wp-s003-010-005",
     "wp-s004-001",
@@ -265,6 +265,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-013": 16,
     "wp-s003-010-003-014": 16,
     "wp-s003-010-003-015": 12,
+    "wp-s003-010-003-016": 12,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -7494,6 +7495,142 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         proof.update(auxiliary)
         return label+"|"+json.dumps(proof,sort_keys=True)
 
+    if scenario == "wp-s003-010-003-016":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("origin-steady",6,(1280,800),"steady"),
+            ("east-boundary-preparing",6,(1280,800),"east-preparing"),
+            ("east-boundary-ready",6,(1280,800),"east-ready"),
+            ("origin-reverse-preparing",6,(1280,800),"origin-preparing"),
+            ("origin-grace-reuse",6,(1280,800),"origin-ready"),
+            ("zoom-child-preparing",7,(1280,800),"zoom-in-preparing"),
+            ("zoom-child-ready",7,(1280,800),"zoom-in-ready"),
+            ("zoom-parent-preparing",6,(1280,800),"zoom-out-preparing"),
+            ("zoom-parent-ready",6,(1280,800),"zoom-out-ready"),
+            ("evict-and-revisit",6,(1280,800),"evict-revisit"),
+            ("phone-origin-ready",6,(390,844),"phone"),
+            ("origin-repeat",6,(1280,800),"repeat"),
+        )
+        label,scale_index,viewport,mode=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(*viewport);time.sleep(.12)
+
+        if frame_index==0:
+            base=driver.current_url.split("?",1)[0]
+            driver.get(base+"?seed=WP_S003_010_003_016_A")
+            WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{},t=s?.projection?.spatialLod?.temporalResidency;
+                return Boolean(s?.ready===true&&t?.revision==='temporal-residency-v1'&&r?.doubleBufferedSwap===true);
+            """))
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+
+        def settle(index,timeout=120.0):
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",index)
+            WebDriverWait(driver,timeout).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),r=s?.projection?.resourceBudget||{};
+                return Number(s?.zoom?.scaleIndex??-1)===Number(arguments[0]) &&
+                  Boolean(r?.activeSignature)&&String(r.activeSignature)===String(r.requestedSignature) &&
+                  Number(r?.pendingPreparationCount||0)===0;
+            """,index))
+            time.sleep(.16)
+
+        def focus_registered_offset(dx_cells,dy_cells,index=6,wait_ready=False):
+            result=driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),lod=s.projection.spatialLod,cell=lod.requestedCell;
+                const fabric=window.SeedCoordinateFabric.create(s.activeSeed,{
+                  radiusMeters:s.worldRadiusMeters,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)
+                });
+                const size=Number(cell.cellSizeMeters||1);
+                const east=Number(cell.centerRegisteredMeters?.east||0)+Number(arguments[0])*size;
+                const north=Number(cell.centerRegisteredMeters?.north||0)+Number(arguments[1])*size;
+                const ll=fabric.latLonForRegisteredMeters(east,north);
+                stage.setViewTarget(ll);
+                return {east,north,size,targetLat:ll.latitudeRadians,targetLon:ll.longitudeRadians};
+            """,dx_cells,dy_cells)
+            if wait_ready:
+                settle(index)
+            else:
+                driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",index)
+                time.sleep(.025)
+            return result
+
+        auxiliary={"mode":mode}
+        if mode=="steady":
+            settle(scale_index)
+            auxiliary["originTile"]=driver.execute_script("return window.PlanetStage.snapshot().canonicalFocus.worldTile")
+        elif mode=="east-preparing":
+            auxiliary["move"]=focus_registered_offset(1,0,scale_index,False)
+        elif mode=="east-ready":
+            settle(scale_index)
+        elif mode=="origin-preparing":
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
+            time.sleep(.025)
+        elif mode=="origin-ready":
+            settle(scale_index)
+        elif mode=="zoom-in-preparing":
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
+            time.sleep(.025)
+        elif mode=="zoom-in-ready":
+            settle(scale_index)
+        elif mode=="zoom-out-preparing":
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
+            time.sleep(.025)
+        elif mode=="zoom-out-ready":
+            settle(scale_index)
+        elif mode=="evict-revisit":
+            settle(scale_index)
+            origin=driver.execute_script("return window.PlanetStage.snapshot().canonicalFocus.worldTile")
+            sweep=driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),lod=s.projection.spatialLod,cell=lod.requestedCell;
+                const fabric=window.SeedCoordinateFabric.create(s.activeSeed,{radiusMeters:s.worldRadiusMeters,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+                const size=Number(cell.cellSizeMeters||1),out=[];
+                for(let i=1;i<=10;i++){
+                  const ll=fabric.latLonForRegisteredMeters(Number(cell.centerRegisteredMeters.east)+size*i,Number(cell.centerRegisteredMeters.north));
+                  out.push({lat:ll.latitudeRadians,lon:ll.longitudeRadians});
+                }
+                return out;
+            """)
+            for target in sweep:
+                driver.execute_script("window.PlanetStage.setViewTarget({latitudeRadians:arguments[0],longitudeRadians:arguments[1]});window.PlanetStage.setScaleIndex(arguments[2]);",target["lat"],target["lon"],scale_index)
+                WebDriverWait(driver,90.0).until(lambda d:d.execute_script("""
+                    const r=window.PlanetStage.snapshot()?.projection?.resourceBudget||{};
+                    return Boolean(r.activeSignature)&&String(r.activeSignature)===String(r.requestedSignature)&&Number(r.pendingPreparationCount||0)===0;
+                """))
+            driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1])",origin["x"],origin["y"])
+            settle(scale_index)
+            auxiliary["sweepCount"]=len(sweep)
+        elif mode=="phone":
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index)
+        elif mode=="repeat":
+            driver.execute_script('window.PlanetStage.setWorldTileFocus("0","0")')
+            settle(scale_index)
+
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},lod=s.projection?.spatialLod||{},t=lod.temporalResidency||{},m=s.mapPresentation||{};
+            const focus=s.canonicalFocus?.worldTile||{x:"0",y:"0"};
+            let hierarchy=null;
+            try{hierarchy=window.SettlementArchetypes?.canonicalHierarchySnapshot?.(s.activeSeed,focus.x,focus.y,10000)||null;}catch(_){}
+            return {
+              seed:s.activeSeed,scaleIndex:s.zoom?.scaleIndex,scaleLabel:s.zoom?.scaleLabel,
+              focus:{x:String(focus.x),y:String(focus.y)},
+              requestedSignature:r.requestedSignature||null,activeSignature:r.activeSignature||null,
+              requestedCellId:lod.requestedCell?.id||null,visibleCellId:lod.visibleCell?.id||null,
+              parentFallbackActive:Boolean(lod.parentFallbackActive),readyChildHandoff:Boolean(lod.readyChildHandoff),
+              visibleContainsFocus:Boolean(lod.visibleContainsFocus),canonicalAnchorCoveragePass:Boolean(lod.canonicalAnchorCoveragePass),
+              residency:t,cacheSize:Number(r.cachedResourceCount||0),cacheLimit:Number(r.cacheLimit||0),
+              pending:Number(r.pendingPreparationCount||0),preparing:Boolean(r.preparing),
+              labelIds:(m.visibleLabels||[]).map(x=>x.canonicalEntityId).filter(Boolean).sort(),
+              landmarkIds:(m.visibleLandmarks||[]).map(x=>x.id||x.canonicalEntityId).filter(Boolean).sort(),
+              hierarchySignature:hierarchy?.signature||null,
+              semanticHiddenReasons:lod.semanticHiddenReasons||null,
+              fullWorldScan:Boolean(lod.fullWorldScan||m.fullWorldScan),bounded:Boolean(lod.viewportBounded!==false&&m.bounded!==false)
+            };
+        """)
+        proof.update(auxiliary)
+        return label+"|"+json.dumps(proof,sort_keys=True)
+
+
     if scenario == "wp-s003-010-003-013":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -8764,6 +8901,71 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if int(viewport.get("width") or 0)>430 or int(viewport.get("height") or 0)<700:
             raise RuntimeError(f"WP-015 phone portrait frame unexpected: {viewport}")
         return
+
+    if scenario == "wp-s003-010-003-016":
+        if len(frames)<12:
+            raise RuntimeError("wp-s003-010-003-016 requires twelve temporal-residency evidence frames")
+        proofs=[]
+        for index,frame in enumerate(frames[:12],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split("|",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-016 frame {index} lacks temporal-residency proof: {action}") from exc
+            proofs.append(proof)
+            residency=proof.get("residency") or {}
+            budget=residency.get("budget") or {}
+            if residency.get("revision")!="temporal-residency-v1" or residency.get("bounded") is not True or residency.get("fullWorldScan") is not False:
+                raise RuntimeError(f"WP-016 residency authority/bounds invalid in frame {index}: {residency}")
+            if int(residency.get("missingCoverageCount") or 0)!=0:
+                raise RuntimeError(f"WP-016 visible coverage hole detected in frame {index}: {residency}")
+            if proof.get("visibleContainsFocus") is not True or proof.get("canonicalAnchorCoveragePass") is not True:
+                raise RuntimeError(f"WP-016 fallback/active representation lost canonical focus in frame {index}: {proof}")
+            if proof.get("fullWorldScan") is not False or proof.get("bounded") is not True:
+                raise RuntimeError(f"WP-016 lost bounded/no-full-world contract in frame {index}: {proof}")
+            if int(budget.get("requestsPerFrame") or 0)>1 or int(budget.get("buildJobs") or 0)>1 or int(budget.get("prefetchQueue") or 0)>1:
+                raise RuntimeError(f"WP-016 per-frame/request budget exceeded in frame {index}: {budget}")
+            if int(proof.get("cacheSize") or 0)>int(proof.get("cacheLimit") or 0):
+                raise RuntimeError(f"WP-016 cache exceeded bounded limit in frame {index}: {proof}")
+            revisit=residency.get("revisit") or {}
+            if revisit.get("pass") is False:
+                raise RuntimeError(f"WP-016 regenerated content changed canonical signature in frame {index}: {revisit}")
+
+        for idx in (1,3,5,7):
+            p=proofs[idx]
+            if not p.get("activeSignature") or p.get("activeSignature")==p.get("requestedSignature"):
+                raise RuntimeError(f"WP-016 preparing frame {idx+1} did not preserve previous ready representation: {p}")
+            if p.get("parentFallbackActive") is not True:
+                raise RuntimeError(f"WP-016 preparing frame {idx+1} lacks parent/previous fallback: {p}")
+        for idx in (0,2,4,6,8,9,10,11):
+            p=proofs[idx]
+            if not p.get("activeSignature") or p.get("activeSignature")!=p.get("requestedSignature") or p.get("readyChildHandoff") is not True:
+                raise RuntimeError(f"WP-016 settled frame {idx+1} did not complete ready-child handoff: {p}")
+
+        if int((proofs[4].get("residency") or {}).get("graceReuseCount") or 0)<1:
+            raise RuntimeError(f"WP-016 short reverse did not reuse grace-resident detail: {proofs[4]}")
+        prefetch=proofs[9].get("residency",{}).get("prefetch") or {}
+        if int(prefetch.get("requests") or 0)<1:
+            raise RuntimeError(f"WP-016 motion-direction prefetch never issued a bounded request: {proofs[9]}")
+        revisit=proofs[9].get("residency",{}).get("revisit") or {}
+        if int(revisit.get("count") or 0)<1 or revisit.get("pass") is not True or not revisit.get("regenerationSignature"):
+            raise RuntimeError(f"WP-016 eviction/revisit did not prove deterministic regeneration: {proofs[9]}")
+        if int((proofs[9].get("residency") or {}).get("counts",{}).get("evicted") or 0)<1:
+            raise RuntimeError(f"WP-016 bounded sweep did not evict any presentation resource: {proofs[9]}")
+        if float((proofs[9].get("residency") or {}).get("handoff",{}).get("longestLatencyMs") or 0)<=0:
+            raise RuntimeError(f"WP-016 handoff latency was not recorded: {proofs[9]}")
+
+        origin_signature=proofs[0].get("hierarchySignature")
+        for idx in (4,8,10,11):
+            if proofs[idx].get("focus")!={"x":"0","y":"0"} or proofs[idx].get("hierarchySignature")!=origin_signature:
+                raise RuntimeError(f"WP-016 revisit/zoom/mobile changed canonical origin identity in frame {idx+1}: {proofs[idx]}")
+        if proofs[4].get("labelIds")!=proofs[11].get("labelIds"):
+            raise RuntimeError(f"WP-016 same-scale origin labels changed after streaming lifecycle: before={proofs[4].get('labelIds')} after={proofs[11].get('labelIds')}")
+        viewport=frames[10].get("runtime",{}).get("viewport",{})
+        if int(viewport.get("width") or 0)>430 or int(viewport.get("height") or 0)<700:
+            raise RuntimeError(f"WP-016 phone portrait frame unexpected: {viewport}")
+        return
+
 
     if scenario == "wp-s003-010-003-014":
         if len(frames) < 16:
