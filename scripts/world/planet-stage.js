@@ -2613,10 +2613,10 @@ function createEnvironmentReactionGroup(kind,index){
     }
   }else if(kind==="grassBend"){
     const specs=[
-      [-.50,.020,-.24,-41,1.82,1.62,1.94],
-      [-.13,.024,.11,-11,2.02,1.80,2.08],
-      [.26,.021,-.06,21,1.86,1.66,1.96],
-      [.53,.018,.23,57,1.64,1.48,1.76]
+      [-.58,.020,-.28,-41,2.10,1.86,2.22],
+      [-.15,.024,.13,-11,2.30,2.04,2.36],
+      [.30,.021,-.07,21,2.14,1.90,2.24],
+      [.61,.018,.27,57,1.90,1.70,2.02]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
