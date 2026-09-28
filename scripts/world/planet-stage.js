@@ -2600,20 +2600,20 @@ function createEnvironmentReactionGroup(kind,index){
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
     const specs=[
-      [-.18,.15,-.07,2.00,1.30,1.78],
-      [.00,.23,.00,2.46,1.58,2.18],
-      [.19,.12,.08,1.82,1.18,1.64]
+      [-.20,.10,-.08,1.86,.92,1.58],
+      [.00,.17,.00,2.32,1.08,1.96],
+      [.22,.08,.09,1.72,.84,1.50]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*17,0);
+      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*21,0);
       e.render.castShadows=false;e.render.receiveShadows=false;children.push(e);
     }
   }else if(kind==="grassBend"){
     const specs=[
-      [-.46,.020,-.22,-41,1.58,1.42,1.70],
-      [-.12,.024,.10,-11,1.76,1.58,1.82],
-      [.24,.021,-.05,21,1.62,1.46,1.72],
-      [.49,.018,.21,57,1.42,1.30,1.54]
+      [-.43,.020,-.22,-43,1.88,1.68,1.92],
+      [-.10,.024,.09,-12,2.06,1.84,2.02],
+      [.24,.021,-.04,24,1.90,1.70,1.92],
+      [.46,.018,.20,59,1.66,1.50,1.72]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
@@ -2636,13 +2636,13 @@ function ensureEnvironmentReactionPool(){
     grass:environmentReactionTexture("grass")
   };
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.88,.73,.50,.90),
+    dust:environmentReactionMaterial("EnvironmentDust",.88,.73,.50,.76),
     grass:environmentReactionMaterial("EnvironmentBentGrass",1,1,1,.94),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
   const dust=environmentalReactionMaterials.dust,grass=environmentalReactionMaterials.grass;
   dust.diffuseMap=environmentalReactionTextures.dust;dust.emissiveMap=environmentalReactionTextures.dust;dust.opacityMap=environmentalReactionTextures.dust;dust.opacityMapChannel="a";
-  dust.useLighting=false;dust.diffuse.set(.96,.82,.62);dust.emissive.set(.60,.45,.28);dust.emissiveIntensity=.24;dust.blendType=pc.BLEND_NORMAL;dust.depthWrite=false;dust.alphaTest=.015;dust.update();
+  dust.useLighting=false;dust.diffuse.set(.94,.80,.60);dust.emissive.set(.56,.42,.26);dust.emissiveIntensity=.18;dust.blendType=pc.BLEND_NORMAL;dust.depthWrite=false;dust.alphaTest=.015;dust.update();
   grass.diffuseMap=environmentalReactionTextures.grass;grass.opacityMap=environmentalReactionTextures.grass;grass.opacityMapChannel="a";
   grass.diffuse.set(1,1,1);grass.emissive.set(.03,.045,.015);grass.emissiveIntensity=.18;grass.useLighting=true;grass.blendType=pc.BLEND_NORMAL;grass.depthWrite=false;grass.alphaTest=.03;grass.update();
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
@@ -2755,24 +2755,22 @@ function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
   let mesh;
   if(type==="dust-puff"){
-    // Three softly textured quads inside one shared mesh give broad coverage
-    // from the fixed oblique gameplay camera without a faceted solid silhouette.
+    // A shallow three-layer cloud: all geometry is close to horizontal so the
+    // soft alpha mask reads as a spreading puff, never a vertical oval/blob.
     mesh=new pc.Mesh(device);
     const positions=[],normals=[],uvs=[],indices=[];
-    const addQuad=(verts,normal)=>{
+    const addLayer=(cx,cy,cz,hx,hz)=>{
       const base=positions.length/3;
-      for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(normal[0],normal[1],normal[2]);}
+      positions.push(cx-hx,cy,cz-hz, cx+hx,cy,cz-hz, cx-hx,cy,cz+hz, cx+hx,cy,cz+hz);
+      normals.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
       uvs.push(0,1, 1,1, 0,0, 1,0);
       indices.push(base,base+1,base+2, base+1,base+3,base+2);
     };
-    addQuad([[-.62,0,-.50],[.62,0,-.50],[-.62,0,.50],[.62,0,.50]],[0,1,0]);
-    addQuad([[-.58,-.16,0],[.58,-.16,0],[-.58,.68,0],[.58,.68,0]],[0,0,1]);
-    addQuad([[0,-.14,-.56],[0,-.14,.56],[0,.62,-.56],[0,.62,.56]],[1,0,0]);
+    addLayer(0,0,0,.72,.48);
+    addLayer(.10,.14,.06,.58,.40);
+    addLayer(-.08,.28,.10,.46,.33);
     mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
   }else if(type==="bent-grass-blade"){
-    // One horizontal UV plane per pooled drawable. The shared alpha texture
-    // carries many irregular pressed strands, so four rotated instances read as
-    // vegetation rather than a symmetric arrow/chevron marker.
     mesh=new pc.Mesh(device);
     mesh.setPositions([-.62,0,-.54, .62,0,-.54, -.62,0,.54, .62,0,.54]);
     mesh.setNormals([0,1,0, 0,1,0, 0,1,0, 0,1,0]);
@@ -2781,7 +2779,7 @@ function sharedLocalPrimitive(type){
   }else{
     mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
   }
-  mesh.incRefCount();// keep alive across static-world rebuilds
+  mesh.incRefCount();
   return localSharedPrimitives[type]=mesh;
 }
 function addLocalPrimitive(parent,name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
