@@ -86,6 +86,7 @@ let wildlifeReaction=freshWildlifeReaction();
 let localWildernessEnabled=true;
 let environmentalReactionRoot=null;
 let environmentalReactionMaterials=null;
+let environmentalReactionTextures=null;
 let environmentalReactionPool=[];
 const ENVIRONMENT_REACTION_MIN_MOVE_METERS=.65;
 const ENVIRONMENT_REACTION_MAX_MOVE_METERS=7.5;
@@ -2537,6 +2538,61 @@ function environmentReactionSurfaceKind(surfaceType){
   if(type==="farmland")return "footprint";
   return null;
 }
+function environmentReactionTexture(kind){
+  const size=128,canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext("2d",{alpha:true});
+  if(!ctx)throw new Error("Environmental reaction texture context unavailable");
+  ctx.clearRect(0,0,size,size);
+  if(kind==="dust"){
+    // Deterministic overlapping radial lobes make one soft-edged, irregular puff.
+    const lobes=[
+      [62,64,46,.72],[43,70,30,.48],[83,58,34,.54],[58,44,27,.38],[75,78,25,.34]
+    ];
+    for(const l of lobes){
+      const g=ctx.createRadialGradient(l[0],l[1],2,l[0],l[1],l[2]);
+      g.addColorStop(0,`rgba(255,255,255,${l[3]})`);
+      g.addColorStop(.36,`rgba(255,255,255,${l[3]*.78})`);
+      g.addColorStop(.72,`rgba(255,255,255,${l[3]*.28})`);
+      g.addColorStop(1,"rgba(255,255,255,0)");
+      ctx.fillStyle=g;ctx.fillRect(0,0,size,size);
+    }
+  }else{
+    // Irregular bent strands with varied direction/length break symmetry.
+    const strands=[
+      [24,81,43,67,64,56,86,55,5.2,.84],
+      [18,72,37,63,58,60,78,64,3.6,.72],
+      [34,91,48,75,67,66,95,62,4.2,.82],
+      [49,94,58,78,74,67,101,69,3.4,.68],
+      [29,64,45,57,62,53,89,48,3.0,.61],
+      [55,88,66,76,80,72,109,78,4.4,.77],
+      [63,95,72,83,83,80,111,91,2.8,.60],
+      [38,78,50,68,66,63,94,58,2.6,.58],
+      [46,70,57,62,72,59,105,55,2.2,.54],
+      [28,86,39,73,51,68,69,70,2.4,.56],
+      [57,76,69,66,79,62,98,60,2.5,.56],
+      [39,96,48,83,57,76,75,75,2.2,.52]
+    ];
+    ctx.lineCap="round";ctx.lineJoin="round";
+    for(let i=0;i<strands.length;i++){
+      const s=strands[i];
+      const tone=i%4===0?"184,205,92":i%3===0?"119,154,57":"145,181,68";
+      ctx.strokeStyle=`rgba(${tone},${s[9]})`;ctx.lineWidth=s[8];
+      ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.bezierCurveTo(s[2],s[3],s[4],s[5],s[6],s[7]);ctx.stroke();
+    }
+    // Sparse muted seed/flower flecks keep the patch organic without becoming
+    // a bright icon.
+    for(const p of [[45,69,2.1],[70,61,1.7],[84,72,1.8],[56,77,1.5],[95,61,1.4]]){
+      ctx.fillStyle="rgba(196,183,100,.46)";ctx.beginPath();ctx.arc(p[0],p[1],p[2],0,Math.PI*2);ctx.fill();
+    }
+  }
+  const texture=new pc.Texture(device,{
+    name:"environment-reaction-"+kind,width:size,height:size,
+    format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true,
+    minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,
+    addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE
+  });
+  texture.setSource(canvas);return texture;
+}
 function environmentReactionMaterial(name,r,g,b,opacity=1){
   const m=new pc.StandardMaterial();
   m.name=name;m.diffuse.set(r,g,b);m.emissive.set(r*.12,g*.12,b*.12);m.emissiveIntensity=1;
@@ -2549,26 +2605,24 @@ function createEnvironmentReactionGroup(kind,index){
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
     const specs=[
-      [-.18,.18,-.08,1.34,1.18,1.30],
-      [.00,.24,.00,1.92,1.60,1.78],
-      [.20,.14,.10,1.18,1.04,1.18]
+      [-.16,.15,-.06,1.20,.78,1.08],
+      [.00,.23,.00,1.50,.98,1.34],
+      [.18,.12,.08,1.08,.70,.98]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*23,0);
-      e.render.castShadows=false;e.render.receiveShadows=false;
-      children.push(e);
+      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*17,0);
+      e.render.castShadows=false;e.render.receiveShadows=false;children.push(e);
     }
   }else if(kind==="grassBend"){
     const specs=[
-      [-.62,.030,-.22,-31,.92,.92,1.46],
-      [-.16,.038,.13,-4,1.00,1.00,1.62],
-      [.27,.032,-.10,22,.96,.96,1.52],
-      [.64,.026,.25,49,.84,.84,1.34]
+      [-.58,.020,-.26,-37,1.02,.92,1.18],
+      [-.15,.024,.11,-8,1.10,1.00,1.24],
+      [.29,.021,-.06,24,.98,.90,1.16],
+      [.62,.018,.24,53,.88,.82,1.06]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
-      e.render.castShadows=false;e.render.receiveShadows=true;
-      children.push(e);
+      e.render.castShadows=false;e.render.receiveShadows=false;children.push(e);
     }
   }else{
     const specs=[[-.24,.038,-.30,-18],[.24,.038,.30,18]];
@@ -2582,15 +2636,20 @@ function createEnvironmentReactionGroup(kind,index){
 }
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
+  environmentalReactionTextures={
+    dust:environmentReactionTexture("dust"),
+    grass:environmentReactionTexture("grass")
+  };
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.86,.72,.50,.36),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.38,.58,.14,.91),
+    dust:environmentReactionMaterial("EnvironmentDust",.88,.73,.50,.78),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",1,1,1,.94),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
-  environmentalReactionMaterials.dust.useLighting=false;
-  environmentalReactionMaterials.dust.emissive.set(.68,.54,.34);
-  environmentalReactionMaterials.dust.emissiveIntensity=.30;
-  environmentalReactionMaterials.dust.update();
+  const dust=environmentalReactionMaterials.dust,grass=environmentalReactionMaterials.grass;
+  dust.diffuseMap=environmentalReactionTextures.dust;dust.emissiveMap=environmentalReactionTextures.dust;dust.opacityMap=environmentalReactionTextures.dust;dust.opacityMapChannel="a";
+  dust.useLighting=false;dust.diffuse.set(.96,.82,.62);dust.emissive.set(.60,.45,.28);dust.emissiveIntensity=.24;dust.blendType=pc.BLEND_NORMAL;dust.depthWrite=false;dust.alphaTest=.015;dust.update();
+  grass.diffuseMap=environmentalReactionTextures.grass;grass.opacityMap=environmentalReactionTextures.grass;grass.opacityMapChannel="a";
+  grass.diffuse.set(1,1,1);grass.emissive.set(.03,.045,.015);grass.emissiveIntensity=.18;grass.useLighting=true;grass.blendType=pc.BLEND_NORMAL;grass.depthWrite=false;grass.alphaTest=.03;grass.update();
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
   environmentalReactionPool=[];
@@ -2660,17 +2719,17 @@ function updateEnvironmentalReactions(){
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
     if(slot.kind==="dust"){
-      // Keep all three wisps overlapping into one cloud while it expands and
-      // lifts. Peripheral wisps drift only slightly so they never read as balls.
-      scale=.96+t*.30;liftMeters=.05+t*.12;
-      const spread=.07*t,rise=.34*t;
-      const bases=[[-.18,.18,-.08],[0,.24,0],[.20,.14,.10]];
+      scale=.92+t*.48;liftMeters=.045+t*.18;
+      const spread=.13*t,rise=.42*t;
+      const bases=[[-.16,.15,-.06],[0,.23,0],[.18,.12,.08]];
       for(let i=0;i<slot.children.length;i++){
         const b=bases[i],side=i-1;
-        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.72),b[2]+side*.04*t);
+        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.68),b[2]+side*.06*t);
       }
     }else if(slot.kind==="grassBend"){
-      scale=1-t*.07;liftMeters=.025;
+      // Keep width stable and settle only slightly so phone-landscape remains
+      // readable without growing into a marker-like symbol.
+      scale=1-t*.04;liftMeters=.020;
     }else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
@@ -2701,42 +2760,29 @@ function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
   let mesh;
   if(type==="dust-puff"){
-    // One irregular low-poly wisp volume. Three pooled instances overlap into
-    // a single readable cloud instead of appearing as separate balls/planes.
+    // Three softly textured quads inside one shared mesh give broad coverage
+    // from the fixed oblique gameplay camera without a faceted solid silhouette.
     mesh=new pc.Mesh(device);
-    const outline=[[-.56,-.30],[-.18,-.52],[.34,-.40],[.58,.02],[.30,.48],[-.24,.50],[-.58,.16]];
-    const positions=[],normals=[],indices=[],n=outline.length;
-    const addNormal=(x,y,z)=>{const l=Math.hypot(x,y,z)||1;normals.push(x/l,y/l,z/l);};
-    for(const p of outline){positions.push(p[0],-.12,p[1]);addNormal(p[0],.32,p[1]);}
-    for(const p of outline){positions.push(p[0]*.76,.24,p[1]*.76);addNormal(p[0],.58,p[1]);}
-    const apex=positions.length/3;positions.push(.05,.54,-.03);normals.push(0,1,0);
-    for(let i=0;i<n;i++){
-      const j=(i+1)%n;
-      indices.push(i,j,n+i, j,n+j,n+i);
-      indices.push(n+i,n+j,apex);
-    }
-    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
+    const positions=[],normals=[],uvs=[],indices=[];
+    const addQuad=(verts,normal)=>{
+      const base=positions.length/3;
+      for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(normal[0],normal[1],normal[2]);}
+      uvs.push(0,1, 1,1, 0,0, 1,0);
+      indices.push(base,base+1,base+2, base+1,base+3,base+2);
+    };
+    addQuad([[-.62,0,-.50],[.62,0,-.50],[-.62,0,.50],[.62,0,.50]],[0,1,0]);
+    addQuad([[-.58,-.16,0],[.58,-.16,0],[-.58,.68,0],[.58,.68,0]],[0,0,1]);
+    addQuad([[0,-.14,-.56],[0,-.14,.56],[0,.62,-.56],[0,.62,.56]],[1,0,0]);
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
   }else if(type==="bent-grass-blade"){
-    // Each drawable is a tiny three-strand pressed-grass clump. Four pooled
-    // clumps form an irregular disturbed patch while draw topology stays fixed.
+    // One horizontal UV plane per pooled drawable. The shared alpha texture
+    // carries many irregular pressed strands, so four rotated instances read as
+    // vegetation rather than a symmetric arrow/chevron marker.
     mesh=new pc.Mesh(device);
-    const positions=[],normals=[],indices=[];
-    const strands=[
-      {x:-.19,z:-.03,w:.065,len:.82,bx:-.15,bz:.08},
-      {x:.00,z:.04,w:.075,len:1.00,bx:.05,bz:-.06},
-      {x:.18,z:-.02,w:.058,len:.72,bx:.15,bz:.11}
-    ];
-    for(const s of strands){
-      const base=positions.length/3, mz=s.len*.46;
-      positions.push(
-        s.x-s.w,0,s.z, s.x+s.w,0,s.z,
-        s.x+s.bx-s.w*.70,.09,s.z+mz+s.bz, s.x+s.bx+s.w*.70,.09,s.z+mz+s.bz,
-        s.x+s.bx-s.w*.18,.035,s.z+s.len+s.bz*1.45, s.x+s.bx+s.w*.18,.035,s.z+s.len+s.bz*1.45
-      );
-      for(let i=0;i<6;i++)normals.push(0,1,0);
-      indices.push(base,base+1,base+2, base+1,base+3,base+2, base+2,base+3,base+4, base+3,base+5,base+4);
-    }
-    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
+    mesh.setPositions([-.62,0,-.54, .62,0,-.54, -.62,0,.54, .62,0,.54]);
+    mesh.setNormals([0,1,0, 0,1,0, 0,1,0, 0,1,0]);
+    mesh.setUvs(0,[0,1, 1,1, 0,0, 1,0]);
+    mesh.setIndices([0,1,2, 1,3,2]);mesh.update();
   }else{
     mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
   }
@@ -5083,7 +5129,7 @@ function destroy(){
   clearLocalFauna();
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
-  environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionPool=[];
+  environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
