@@ -634,14 +634,16 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     if(!offset)continue;
     const dx=BigInt(offset.x),dy=BigInt(offset.y);
     if(dx<-maxX||dx>maxX||dy<-maxY||dy>maxY)continue;
+    const socialEncounter=window.SocialEncounters?.stateFor?.(resident.id)||null;
     visibleCharacters.push(Object.freeze({
       id,
       role:"resident",
       residentId:resident.id,
-      residentName:resident.name,
+      residentName:resident.displayName||resident.name,
       profession:resident.profession,
-      activity:activity.action,
-      activityLabel:activity.label,
+      activity:socialEncounter?"social":activity.action,
+      activityLabel:socialEncounter?(socialEncounter.label+" · "+socialEncounter.emote):activity.label,
+      socialEncounter,
       actionExecution:window.ActionExecutor?.get?.("resident",resident.id)||null,
       buildingId:null,
       textureUrl:characterTextureUrlForProfession(resident.profession),
@@ -667,6 +669,16 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
 }
 
 function renderVisibleActionRibbon(characters){
+  const social=(characters||[]).find(character=>character.role==="resident"&&character.socialEncounter)||null;
+  if(social){
+    const state=social.socialEncounter;
+    e.residentActionRibbon.hidden=false;
+    e.residentActionRibbonActor.textContent="SOCIAL · "+state.participantNames.join(" + ");
+    e.residentActionRibbonState.textContent=String(state.label||"Social encounter")+" · "+String(state.emote||"");
+    e.residentActionRibbonProgress.textContent=
+      (state.holdsPosition?"PAUSED SAFELY":"PASSING / NON-BLOCKING")+" · "+state.remainingSeconds.toFixed(1)+"s";
+    return state;
+  }
   const visible=(characters||[]).filter(character=>character.role==="resident"&&character.actionExecution?.holdsPosition);
   const action=visible[0]||null;
   e.residentActionRibbon.hidden=!action;
