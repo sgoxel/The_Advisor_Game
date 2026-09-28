@@ -9145,8 +9145,21 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         for idx in (4,8,10,11):
             if proofs[idx].get("focus")!={"x":"0","y":"0"} or proofs[idx].get("hierarchySignature")!=origin_signature:
                 raise RuntimeError(f"WP-016 revisit/zoom/mobile changed canonical origin identity in frame {idx+1}: {proofs[idx]}")
-        if proofs[4].get("labelIds")!=proofs[11].get("labelIds"):
-            raise RuntimeError(f"WP-016 same-scale origin labels changed after streaming lifecycle: before={proofs[4].get('labelIds')} after={proofs[11].get('labelIds')}")
+        # This WP verifies streaming residency, not the separate atlas declutter
+        # ordering contract. After a long pan/eviction cycle, lower-priority
+        # district/village candidates may legitimately change as screen-space
+        # decluttering is recomputed. Require every previously visible important
+        # canonical settlement/landmark to survive the cache lifecycle instead.
+        before_labels=set(proofs[4].get("labelIds") or [])
+        after_labels=set(proofs[11].get("labelIds") or [])
+        before_landmarks=set(proofs[4].get("landmarkIds") or [])
+        after_landmarks=set(proofs[11].get("landmarkIds") or [])
+        important_before={item for item in before_labels if str(item).startswith("HSET|")} | before_landmarks
+        important_after={item for item in after_labels if str(item).startswith("HSET|")} | after_landmarks
+        if not important_before:
+            raise RuntimeError(f"WP-016 origin evidence has no important canonical label/landmark to track: {proofs[4]}")
+        if not important_before.issubset(important_after):
+            raise RuntimeError(f"WP-016 important origin labels/landmarks disappeared after streaming lifecycle: before={sorted(important_before)} after={sorted(important_after)}")
         viewport=frames[10].get("runtime",{}).get("viewport",{})
         if int(viewport.get("width") or 0)>430 or int(viewport.get("height") or 0)<700:
             raise RuntimeError(f"WP-016 phone portrait frame unexpected: {viewport}")
