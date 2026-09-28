@@ -9361,7 +9361,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if reload.get("reloadPersisted") is not True:
             raise RuntimeError(f"Reload did not reproduce the identical persisted overgrown revision/signature: {reload}")
         expected=reload.get("reloadExpected") or {}
-        if Number(expected.get("revision") or 0)!=int(reload.get("targetRevision") or 0) or expected.get("signature")!=reload.get("revisionSignature"):
+        if int(expected.get("revision") or 0)!=int(reload.get("targetRevision") or 0) or expected.get("signature")!=reload.get("revisionSignature"):
             raise RuntimeError(f"Reload persistent revision/signature mismatch: {reload}")
         if proofs[6].get("viewport")!={"width":844,"height":390} or proofs[7].get("viewport")!={"width":390,"height":844}:
             raise RuntimeError(f"Persistent projection mobile viewport evidence failed: {proofs[6].get('viewport')} / {proofs[7].get('viewport')}")

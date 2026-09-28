@@ -4466,7 +4466,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       semanticAnchorLocalZ=-Number(semanticDelta.northMeters||0)/dims.metersPerUnit;
     }
     const semanticAnchorCompensation=1-semanticHoldScale;
-    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot]){
+    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot,localCampaignWearMesh]){
       if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,1,semanticHoldScale);
       if(rootNode?.setLocalPosition)rootNode.setLocalPosition(semanticAnchorLocalX*semanticAnchorCompensation,0,semanticAnchorLocalZ*semanticAnchorCompensation);
     }
