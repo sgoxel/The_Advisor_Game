@@ -3165,13 +3165,20 @@ function updateWayfindingTextOverlay(force=false){
   let visible=0;
   if(chosen&&panels.length){
     const totalH=panels.length*rowH+Math.max(0,panels.length-1)*gap;
-    const startY=Math.max(edgePad,Math.min(height-totalH-edgePad,chosen.p.y-totalH*.42));
+    // A one-panel sign is aligned to the projected physical board instead of
+    // the post anchor. This keeps the post/base visibly connected beside and
+    // below the plank at village exits while multi-board signs retain their
+    // compact decluttered stack.
+    const singlePanelPoint=panels.length===1?projectWayfindingPoint(panels[0].localPoint):null;
+    const stackAnchor=singlePanelPoint||chosen.p;
+    const startY=Math.max(edgePad,Math.min(height-totalH-edgePad,stackAnchor.y-totalH*.5));
     const plankFills=["rgba(124,79,39,.98)","rgba(103,62,31,.98)","rgba(145,91,43,.98)"];
     for(let index=0;index<panels.length;index++){
       const panel=panels[index];
       const label=panel.directionLabel+" · "+panel.destinationName+" · "+panel.distanceLabel;
       const boardW=Math.min(maxBoardW,Math.max(narrow?128:146,ctx.measureText(label).width+20));
-      const cx=Math.max(boardW*.5+edgePad,Math.min(width-boardW*.5-edgePad,chosen.p.x));
+      const panelPoint=panels.length===1?(singlePanelPoint||chosen.p):chosen.p;
+      const cx=Math.max(boardW*.5+edgePad,Math.min(width-boardW*.5-edgePad,panelPoint.x));
       const cy=startY+index*(rowH+gap)+rowH*.5,left=cx-boardW*.5,right=cx+boardW*.5,top=cy-rowH*.5,bottom=cy+rowH*.5;
       // Shared-canvas text is drawn as the visible face of the physical wood
       // boards, directly centered on the post rather than as floating UI.
@@ -3218,10 +3225,12 @@ function buildCanonicalWayfindingSignposts(reveal,tier,frame,presentationScale,u
   const postColor=[74,45,24,255],baseColor=[82,71,56,255],boardColors=[[178,119,60,255],[151,94,45,255],[194,136,72,255]];
   for(const sign of model.signs||[]){
     const east=Number(sign.anchor.x)*tm,north=Number(sign.anchor.y)*tm,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
-    const postH=3.35*s;box(pos.x,ground+.09*s,pos.z,.95*s,.18*s,.95*s,baseColor,0);box(pos.x,ground+postH*.5,pos.z,.42*s,postH,.42*s,postColor,0);
-    const topPoint={x:pos.x,y:ground+2.65*s,z:pos.z};wayfindingSignAnchors.set(String(sign.id),topPoint);
+    const isVillageExit=String(sign.purpose)==="village-exit";
+    const postH=(isVillageExit?3.58:3.35)*s,baseSize=(isVillageExit?1.12:.95)*s,postSize=(isVillageExit?.52:.42)*s;
+    box(pos.x,ground+.09*s,pos.z,baseSize,.18*s,baseSize,baseColor,0);box(pos.x,ground+postH*.5,pos.z,postSize,postH,postSize,postColor,0);
+    const topPoint={x:pos.x,y:ground+(isVillageExit?2.82:2.65)*s,z:pos.z};wayfindingSignAnchors.set(String(sign.id),topPoint);
     (sign.branches||[]).forEach((branch,index)=>{
-      const dx=Number(branch.dx||0),dz=-Number(branch.dy||0),yaw=Math.atan2(dz,dx),centerX=pos.x+dx*.62*s,centerZ=pos.z+dz*.62*s,centerY=ground+(2.50-index*.56)*s;
+      const dx=Number(branch.dx||0),dz=-Number(branch.dy||0),yaw=Math.atan2(dz,dx),boardOffset=(isVillageExit?1.08:.62)*s,centerX=pos.x+dx*boardOffset,centerZ=pos.z+dz*boardOffset,centerY=ground+((isVillageExit?2.68:2.50)-index*.56)*s;
       box(centerX,centerY,centerZ,4.15*s,.58*s,.72*s,boardColors[index%boardColors.length],yaw);
       // Small pale end-cap makes branch direction physical without relying on a
       // screen-space arrow icon whose meaning would change under camera rotation.
