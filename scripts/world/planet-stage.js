@@ -3547,35 +3547,43 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
   };
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const byId=new Map([...(context.reveal.houses||[]),...(context.reveal.specialLots||[])].map(x=>[String(x.id),x]));
-  const C={wear:[112,79,43,255],wearDark:[76,56,38,255],char:[54,48,43,255],burn:[105,52,31,255],debris:[103,91,75,255],
-    newWood:[207,152,77,255],newWoodLight:[235,190,108,255],green:[64,116,50,255],greenLight:[92,145,64,255]};
+  const C={
+    wear:[128,91,48,255],wearDark:[73,52,34,255],weather:[157,117,70,255],
+    char:[39,36,33,255],burn:[112,50,28,255],ash:[151,132,101,255],debris:[103,91,75,255],
+    newWood:[210,151,72,255],newWoodLight:[242,202,121,255],repairDark:[151,98,49,255],
+    green:[34,88,40,255],greenLight:[73,139,54,255],moss:[132,164,66,255]
+  };
   for(const item of state.buildings){
     const record=byId.get(item.id),b=record?.bounds;if(!record||!b||item.visualState==="normal")continue;
     const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2,w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
     const east=cx*tileMeters,north=cy*tileMeters,physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
+    const roofY=physicalHeight+.16;
     if(item.visualState==="worn"){
       const front=north+d*.72;
-      box(east,front,.02,Math.max(3.8,w*.82),.05,Math.max(2.2,d*.34),C.wear);
-      for(const dx of [-1.2,0,1.2])box(east+dx,front+d*.22,.035,.34,.045,Math.max(3.8,d*.72),dx===0?C.wearDark:C.wear);
+      box(east,front,.02,Math.max(4.2,w*.90),.05,Math.max(2.5,d*.38),C.wear);
+      for(const dx of [-1.25,0,1.25])box(east+dx,front+d*.22,.035,.38,.045,Math.max(4.0,d*.75),dx===0?C.wearDark:C.wear);
+      box(east-w*.18,north,roofY,Math.max(.62,w*.14),.055,Math.max(3.2,d*.72),C.weather);
+      box(east+w*.18,north+d*.06,roofY+.012,Math.max(.50,w*.11),.05,Math.max(2.8,d*.62),C.wearDark);
     }else if(item.visualState==="damaged"){
-      const roofY=physicalHeight+.12;
-      box(east-w*.18,north,roofY,Math.max(1.5,w*.28),.08,Math.max(3.0,d*.72),C.char);
-      box(east+w*.12,north-d*.08,roofY+.025,Math.max(1.0,w*.18),.07,Math.max(2.2,d*.48),C.burn);
-      box(east+w*.62,north+d*.22,.04,1.35,.62,1.05,C.debris);
-      box(east+w*.72,north-d*.28,.04,1.05,.42,1.45,C.char);
-      box(east+w*.52,north+d*.52,.04,1.55,.30,.48,C.burn);
+      box(east-w*.20,north,roofY,Math.max(2.5,w*.44),.09,Math.max(3.6,d*.80),C.char);
+      box(east+w*.16,north-d*.08,roofY+.025,Math.max(1.7,w*.28),.075,Math.max(2.8,d*.60),C.burn);
+      box(east+w*.34,north+d*.24,roofY+.045,Math.max(.75,w*.13),.06,Math.max(1.5,d*.30),C.ash);
+      box(east+w*.62,north+d*.22,.04,1.55,.62,1.15,C.debris);
+      box(east+w*.72,north-d*.28,.04,1.15,.42,1.55,C.char);
+      box(east+w*.52,north+d*.52,.04,1.70,.30,.52,C.burn);
     }else if(item.visualState==="repaired"){
-      const roofY=physicalHeight+.14;
-      for(const dx of [-.24,0,.24])box(east+w*dx,north,roofY,Math.max(.36,w*.09),.06,Math.max(3.1,d*.78),dx===0?C.newWoodLight:C.newWood);
-      box(east+w*.62,north+.22*d,.04,.22,2.8,2.4,C.newWood);
-      box(east+w*.62,north+.22*d,2.50,2.0,.22,.22,C.newWoodLight);
+      box(east,north,roofY,Math.max(2.0,w*.34),.065,Math.max(3.8,d*.82),C.newWood);
+      for(const dx of [-.22,0,.22])box(east+w*dx,north,roofY+.025,Math.max(.34,w*.075),.055,Math.max(3.6,d*.78),dx===0?C.newWoodLight:C.repairDark);
+      box(east+w*.62,north+.22*d,.04,.24,2.9,2.5,C.newWood);
+      box(east+w*.62,north+.22*d,2.58,2.15,.24,.24,C.newWoodLight);
     }else if(item.visualState==="overgrown"){
-      box(east-w*.58,north+d*.28,.03,2.1,.12,3.8,C.green);
-      box(east+w*.58,north-d*.12,.03,2.5,.14,3.1,C.greenLight);
-      box(east,north+d*.70,.03,Math.max(3.8,w*.76),.10,1.6,C.green);
-      const roofY=physicalHeight+.13;
-      box(east-w*.24,north+d*.28,roofY,.52,.08,Math.max(2.8,d*.58),C.green);
-      box(east+w*.22,north+d*.12,roofY+.02,.42,.07,Math.max(2.0,d*.42),C.greenLight);
+      box(east-w*.58,north+d*.28,.03,2.35,.14,4.0,C.green);
+      box(east+w*.58,north-d*.12,.03,2.7,.16,3.4,C.greenLight);
+      box(east,north+d*.70,.03,Math.max(4.1,w*.82),.12,1.8,C.green);
+      box(east-w*.22,north+d*.18,roofY,Math.max(1.6,w*.28),.08,Math.max(3.5,d*.72),C.green);
+      box(east+w*.20,north-d*.06,roofY+.022,Math.max(1.25,w*.22),.075,Math.max(2.8,d*.56),C.greenLight);
+      box(east,north+d*.24,roofY+.045,Math.max(2.2,w*.42),.055,Math.max(1.35,d*.24),C.moss);
+      box(east-w*.42,north-d*.38,roofY+.03,Math.max(.68,w*.12),.06,Math.max(1.0,d*.18),C.moss);
     }
   }
   if(positions.length){
