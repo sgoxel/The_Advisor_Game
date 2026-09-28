@@ -132,10 +132,19 @@ def main():
     try:
         driver.get(evidence_url(TARGET))
         wait(driver, "return document.readyState==='complete'", 60)
-        driver.execute_script(
-            "const b=document.querySelector('#newCampaignButton'),s=document.querySelector('#campaignState')?.textContent?.trim();"
-            "if(s!=='ACTIVE'&&b)b.click();"
-        )
+        wait(driver, "return Boolean(window.AppUI?.startNewCampaignForEvidence&&window.SeedSystem?.getCampaign)", 120)
+        campaign = driver.execute_script("return window.SeedSystem.getCampaign()")
+        if not campaign:
+            campaign = driver.execute_async_script("""
+                const done=arguments[arguments.length-1];
+                (async()=>{
+                  await window.AppUI.startNewCampaignForEvidence();
+                  done(window.SeedSystem.getCampaign()||null);
+                })().catch(error=>done({error:String(error?.stack||error)}));
+            """)
+            if not isinstance(campaign, dict) or campaign.get("error"):
+                raise AssertionError(f"Authoritative campaign startup failed: {campaign}")
+        wait(driver, "return Boolean(window.SeedSystem?.getCampaign?.())", 180)
         wait(driver, "return window.PlanetStage?.snapshot?.()?.ready===true", 180)
         wait(driver, "return Boolean(window.RegionalWeather?.snapshot)", 30)
 
