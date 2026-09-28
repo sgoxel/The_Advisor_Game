@@ -2544,45 +2544,40 @@ function environmentReactionTexture(kind){
   if(!ctx)throw new Error("Environmental reaction texture context unavailable");
   ctx.clearRect(0,0,size,size);
   if(kind==="dust"){
-    // Deterministic overlapping radial lobes make one soft-edged, irregular puff.
     const lobes=[
-      [62,64,46,.72],[43,70,30,.48],[83,58,34,.54],[58,44,27,.38],[75,78,25,.34]
+      [62,64,47,.86],[43,70,31,.56],[83,58,35,.62],[58,44,28,.46],[75,78,26,.42]
     ];
     for(const l of lobes){
       const g=ctx.createRadialGradient(l[0],l[1],2,l[0],l[1],l[2]);
       g.addColorStop(0,`rgba(255,255,255,${l[3]})`);
-      g.addColorStop(.36,`rgba(255,255,255,${l[3]*.78})`);
-      g.addColorStop(.72,`rgba(255,255,255,${l[3]*.28})`);
+      g.addColorStop(.34,`rgba(255,255,255,${l[3]*.82})`);
+      g.addColorStop(.72,`rgba(255,255,255,${l[3]*.30})`);
       g.addColorStop(1,"rgba(255,255,255,0)");
       ctx.fillStyle=g;ctx.fillRect(0,0,size,size);
     }
   }else{
-    // Irregular bent strands with varied direction/length break symmetry.
     const strands=[
-      [24,81,43,67,64,56,86,55,5.2,.84],
-      [18,72,37,63,58,60,78,64,3.6,.72],
-      [34,91,48,75,67,66,95,62,4.2,.82],
-      [49,94,58,78,74,67,101,69,3.4,.68],
-      [29,64,45,57,62,53,89,48,3.0,.61],
-      [55,88,66,76,80,72,109,78,4.4,.77],
-      [63,95,72,83,83,80,111,91,2.8,.60],
-      [38,78,50,68,66,63,94,58,2.6,.58],
-      [46,70,57,62,72,59,105,55,2.2,.54],
-      [28,86,39,73,51,68,69,70,2.4,.56],
-      [57,76,69,66,79,62,98,60,2.5,.56],
-      [39,96,48,83,57,76,75,75,2.2,.52]
+      [24,81,43,67,64,56,86,55,5.2,.78],
+      [18,72,37,63,58,60,78,64,3.6,.66],
+      [34,91,48,75,67,66,95,62,4.2,.76],
+      [49,94,58,78,74,67,101,69,3.4,.64],
+      [29,64,45,57,62,53,89,48,3.0,.57],
+      [55,88,66,76,80,72,109,78,4.4,.71],
+      [63,95,72,83,83,80,111,91,2.8,.56],
+      [38,78,50,68,66,63,94,58,2.6,.54],
+      [46,70,57,62,72,59,105,55,2.2,.50],
+      [28,86,39,73,51,68,69,70,2.4,.52],
+      [57,76,69,66,79,62,98,60,2.5,.52],
+      [39,96,48,83,57,76,75,75,2.2,.48]
     ];
     ctx.lineCap="round";ctx.lineJoin="round";
     for(let i=0;i<strands.length;i++){
-      const s=strands[i];
-      const tone=i%4===0?"184,205,92":i%3===0?"119,154,57":"145,181,68";
+      const s=strands[i],tone=i%4===0?"174,194,82":i%3===0?"110,143,53":"134,165,62";
       ctx.strokeStyle=`rgba(${tone},${s[9]})`;ctx.lineWidth=s[8];
       ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.bezierCurveTo(s[2],s[3],s[4],s[5],s[6],s[7]);ctx.stroke();
     }
-    // Sparse muted seed/flower flecks keep the patch organic without becoming
-    // a bright icon.
     for(const p of [[45,69,2.1],[70,61,1.7],[84,72,1.8],[56,77,1.5],[95,61,1.4]]){
-      ctx.fillStyle="rgba(196,183,100,.46)";ctx.beginPath();ctx.arc(p[0],p[1],p[2],0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="rgba(185,171,92,.36)";ctx.beginPath();ctx.arc(p[0],p[1],p[2],0,Math.PI*2);ctx.fill();
     }
   }
   const texture=new pc.Texture(device,{
@@ -2605,9 +2600,9 @@ function createEnvironmentReactionGroup(kind,index){
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
     const specs=[
-      [-.16,.15,-.06,1.20,.78,1.08],
-      [.00,.23,.00,1.50,.98,1.34],
-      [.18,.12,.08,1.08,.70,.98]
+      [-.18,.15,-.07,2.00,1.30,1.78],
+      [.00,.23,.00,2.46,1.58,2.18],
+      [.19,.12,.08,1.82,1.18,1.64]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*17,0);
@@ -2615,10 +2610,10 @@ function createEnvironmentReactionGroup(kind,index){
     }
   }else if(kind==="grassBend"){
     const specs=[
-      [-.58,.020,-.26,-37,1.02,.92,1.18],
-      [-.15,.024,.11,-8,1.10,1.00,1.24],
-      [.29,.021,-.06,24,.98,.90,1.16],
-      [.62,.018,.24,53,.88,.82,1.06]
+      [-.46,.020,-.22,-41,1.58,1.42,1.70],
+      [-.12,.024,.10,-11,1.76,1.58,1.82],
+      [.24,.021,-.05,21,1.62,1.46,1.72],
+      [.49,.018,.21,57,1.42,1.30,1.54]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
@@ -2641,7 +2636,7 @@ function ensureEnvironmentReactionPool(){
     grass:environmentReactionTexture("grass")
   };
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.88,.73,.50,.78),
+    dust:environmentReactionMaterial("EnvironmentDust",.88,.73,.50,.90),
     grass:environmentReactionMaterial("EnvironmentBentGrass",1,1,1,.94),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
