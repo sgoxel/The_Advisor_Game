@@ -9980,8 +9980,9 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 if any(v is None for v in mpts) or not (float(mpts[0])<float(mpts[1])<float(mpts[2])):
                     raise RuntimeError(f"WP-019 center-first density order invalid frame {index}: {mpts}")
 
-        if int((proofs[2].get("localStatic") or {}).get("roads") or 0)<1 or int((proofs[2].get("localStatic") or {}).get("occupiedAreas") or 0)<1:
-            raise RuntimeError(f"WP-019 close focus lacks canonical settlement/roads: {proofs[2]}")
+        close_static=proofs[2].get("localStatic") or {}
+        if int(close_static.get("roads") or 0)<1 or int(close_static.get("buildings") or 0)<1:
+            raise RuntimeError(f"WP-019 close focus lacks canonical roads/buildings: {proofs[2]}")
         if int(proofs[4].get("cacheHits") or 0)<=int(proofs[3].get("cacheHits") or 0):
             raise RuntimeError(f"WP-019 pan-back did not reuse cached focus detail: away={proofs[3]} back={proofs[4]}")
         slow=(proofs[5].get("focusStreaming") or {}).get("handoff") or {}
