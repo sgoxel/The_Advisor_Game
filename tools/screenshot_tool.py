@@ -6598,8 +6598,19 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                    String(r.activeSignature||'')===String(r.requestedSignature||'')&&ls.revealTier==='full';
         """))
         pair=driver.execute_script("""
-            const wanted=new Set(arguments[0]||[]),seed=window.PlanetStage.snapshot().activeSeed;
+            const wanted=new Set(arguments[0]||[]),seed=window.PlanetStage.snapshot().activeSeed,expectedKind=String(arguments[1]||'');
             const typeAt=(x,y)=>String(window.TerrainFoundation?.getType?.(seed,String(x),String(y))||'');
+            // For dust, prefer a central-avenue pair that is both authoritative
+            // TerrainFoundation road and visibly represented by the canonical
+            // settlement road mesh. This evaluates the effect rather than an
+            // unrelated simplified-road presentation gap.
+            if(expectedKind==='dust'){
+              const canonicalPairs=[[[0,-9],[0,-8]],[[0,8],[0,9]],[[-9,0],[-8,0]],[[8,0],[9,0]]];
+              for(const pair of canonicalPairs){
+                const [a,b]=pair,t=typeAt(a[0],a[1]);
+                if(wanted.has(t)&&typeAt(b[0],b[1])===t)return {a:{x:String(a[0]),y:String(a[1])},b:{x:String(b[0]),y:String(b[1])},surface:t};
+              }
+            }
             const preferred=arguments[0]||[];
             for(const desired of preferred){
               for(let radius=8;radius<=36;radius++){
@@ -6612,7 +6623,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               }
             }
             return null;
-        """,list(surface_types))
+        """,list(surface_types),expected_kind)
         if not pair:
             raise RuntimeError(f"WP-S003-016 missing adjacent canonical surface pair for {label}: {surface_types}")
         driver.execute_script("""
