@@ -145,7 +145,7 @@ SCENARIOS = {
     "wp-s003-010-003-005-002",
     "wp-s003-010-003-006",
     "wp-s003-010-003-007",
-    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016",
+    "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-012","wp-s003-010-003-013","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016","wp-s003-010-003-019",
     "wp-s003-010-004",
     "wp-s003-010-005",
     "wp-s004-001",
@@ -276,6 +276,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-010-003-014": 16,
     "wp-s003-010-003-015": 12,
     "wp-s003-010-003-016": 12,
+    "wp-s003-010-003-019": 10,
     "wp-s003-010-004": 4,
     "wp-s003-010-005": 22,
     "wp-s004-001": 3,
@@ -8174,6 +8175,102 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         proof.update(auxiliary)
         return label+"|"+json.dumps(proof,sort_keys=True)
 
+    if scenario == "wp-s003-010-003-019":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("seed-a-far-1_10",0,(1280,800),"seed-a"),
+            ("seed-a-mid-1_500",5,(1280,800),"steady"),
+            ("seed-a-close-1_2500",7,(1280,800),"steady"),
+            ("pan-away",7,(1280,800),"pan-away"),
+            ("pan-back",7,(1280,800),"pan-back"),
+            ("slow-parent-fallback",8,(1280,800),"slow-fallback"),
+            ("slow-child-settled",8,(1280,800),"slow-settled"),
+            ("phone-landscape-1_500",5,(844,390),"phone"),
+            ("phone-portrait-1_2500",7,(390,844),"phone"),
+            ("seed-b-close-1_2500",7,(1280,800),"seed-b"),
+        )
+        label,scale_index,viewport,mode=plan[min(frame_index,len(plan)-1)]
+        driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width":int(viewport[0]),"height":int(viewport[1]),"deviceScaleFactor":1,"mobile":False,
+            "screenWidth":int(viewport[0]),"screenHeight":int(viewport[1])
+        })
+        time.sleep(.10)
+
+        def wait_stage():
+            WebDriverWait(driver,240.0).until(lambda d:d.execute_script("""
+                const root=document.getElementById('planetStageRoot');
+                return root?.dataset?.ready==='true' && window.PlanetStage?.snapshot?.()?.version==='planet-focus-streaming-v1';
+            """))
+
+        def focus_starting():
+            target=driver.execute_script("""
+                const s=window.PlanetStage.snapshot(),p=window.StartingVillage?.plan?.(s.activeSeed);
+                const c=p?.center||{x:"0",y:"0"};
+                window.PlanetStage.setWorldTileFocus(String(c.x),String(c.y));
+                return {x:String(c.x),y:String(c.y),name:String(p?.name||"Starting Village")};
+            """)
+            driver.execute_script("localStorage.setItem('__WP019_ORIGIN',JSON.stringify(arguments[0]))",target)
+            return target
+
+        def settle(index,timeout=180.0):
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",int(index))
+            WebDriverWait(driver,timeout).until(lambda d:d.execute_script("""
+                const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{};
+                if(Number(s.zoom?.scaleIndex??-1)!==Number(arguments[0]))return false;
+                if(Number(s.zoom?.scalar||0)<=Number(s.projection?.transitionStart||0))return true;
+                return Number(r.pendingPreparationCount||0)===0 &&
+                  (!r.requestedLevel || r.requestedLevel===r.visibleLevel);
+            """,int(index)))
+            time.sleep(.18)
+
+        if mode in ("seed-a","seed-b"):
+            seed="WP_S003_010_003_019_A" if mode=="seed-a" else "WP_S003_010_003_019_B"
+            base=driver.current_url.split("?",1)[0]
+            driver.get(base+"?seed="+seed+"&evidence_fast_start=1")
+            wait_stage(); focus_starting(); settle(scale_index)
+        elif mode=="steady":
+            settle(scale_index)
+        elif mode=="pan-away":
+            origin=driver.execute_script("return JSON.parse(localStorage.getItem('__WP019_ORIGIN')||'null')")
+            if not origin: raise RuntimeError("WP-019 origin missing before pan")
+            driver.execute_script("""
+                const s=window.PlanetStage.snapshot(),c=s.projection?.spatialLod?.requestedCell||{},tileM=Number(s.projection?.worldTileProjection?.tileMeters||2);
+                const dx=Math.max(16,Math.ceil(Number(c.cellSizeMeters||64)/tileM*1.15)),x=BigInt(String(arguments[0]));
+                window.PlanetStage.setWorldTileFocus((x+BigInt(dx)).toString(),String(arguments[1]));
+            """,origin["x"],origin["y"])
+            settle(scale_index)
+        elif mode=="pan-back":
+            origin=driver.execute_script("return JSON.parse(localStorage.getItem('__WP019_ORIGIN')||'null')")
+            driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1])",origin["x"],origin["y"])
+            settle(scale_index)
+        elif mode=="slow-fallback":
+            settle(6)
+            driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate",{"rate":6})
+            driver.execute_script("window.PlanetStage.setScaleIndex(8)")
+            WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
+                const r=window.PlanetStage.snapshot().projection?.resourceBudget||{};
+                return Number(r.pendingPreparationCount||0)>0 || r.standInActive===true;
+            """))
+        elif mode=="slow-settled":
+            driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate",{"rate":1})
+            settle(scale_index,240.0)
+        elif mode=="phone":
+            focus_starting(); settle(scale_index)
+
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},fs=s.projection?.spatialLod?.focusStreaming||{},ls=s.projection?.localStatic||{},f=s.canonicalFocus?.worldTile||{};
+            return {
+              label:arguments[0],seed:s.activeSeed,scaleIndex:s.zoom?.scaleIndex,scaleLabel:s.zoom?.scaleLabel,
+              focus:{x:String(f.x),y:String(f.y)},focusStreaming:fs,
+              requestedLevel:r.requestedLevel||null,visibleLevel:r.visibleLevel||null,
+              pending:Number(r.pendingPreparationCount||0),standInActive:Boolean(r.standInActive),
+              cacheHits:Number(r.cacheHits||0),graceReuseCount:Number(r.graceReuseCount||0),
+              localStatic:{tier:ls.revealTier||null,roads:Number(ls.roadCount||0),buildings:Number(ls.buildingCount||0),occupiedAreas:Number(ls.occupiedAreaCount||0)},
+              viewport:{width:innerWidth,height:innerHeight}
+            };
+        """,label)
+        return label+"|"+json.dumps(proof,sort_keys=True)
+
     if scenario == "wp-s003-010-003-016":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -9846,6 +9943,59 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         viewport=frames[8].get("runtime",{}).get("viewport",{})
         if int(viewport.get("width") or 0)>430 or int(viewport.get("height") or 0)<700:
             raise RuntimeError(f"WP-015 phone portrait frame unexpected: {viewport}")
+        return
+
+    if scenario == "wp-s003-010-003-019":
+        if len(frames)<10:
+            raise RuntimeError("wp-s003-010-003-019 requires ten focus-streaming evidence frames")
+        proofs=[]
+        for index,frame in enumerate(frames[:10],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split("|",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-019 frame {index} lacks focus-streaming proof: {action}") from exc
+            proofs.append(proof)
+            fs=proof.get("focusStreaming") or {}
+            if fs.get("revision")!="focus-streaming-v1" or fs.get("centerFirst") is not True:
+                raise RuntimeError(f"WP-019 center-first contract missing frame {index}: {fs}")
+            if fs.get("fullWorldScan") is not False or fs.get("globalHighDetailMaterialized") is not False:
+                raise RuntimeError(f"WP-019 global refinement/full-world scan detected frame {index}: {fs}")
+            rings=fs.get("rings") or []
+            if [x.get("id") for x in rings]!=["focus","medium","outer","global-root"]:
+                raise RuntimeError(f"WP-019 ring order invalid frame {index}: {rings}")
+            if [rings[i].get("spanFactor") for i in range(3)]!=[1,3,6]:
+                raise RuntimeError(f"WP-019 ring spans invalid frame {index}: {rings}")
+            cache=fs.get("cache") or {}
+            if int(cache.get("entries") or 0)>int(cache.get("limit") or 0) or int(cache.get("usedBytes") or 0)>int(cache.get("budgetBytes") or 0) or cache.get("budgetExceeded") is True:
+                raise RuntimeError(f"WP-019 cache budget exceeded frame {index}: {cache}")
+            handoff=fs.get("handoff") or {}
+            if int(handoff.get("missingCoverageCount") or 0)!=0 or handoff.get("atomicSwap") is not True:
+                raise RuntimeError(f"WP-019 coverage/atomic handoff invalid frame {index}: {handoff}")
+            budget=fs.get("budget") or {}
+            if int(budget.get("requestsPerFrame") or 0)>1 or int(budget.get("buildJobs") or 0)>1 or int(budget.get("prefetchQueue") or 0)>1:
+                raise RuntimeError(f"WP-019 bounded request/build budget exceeded frame {index}: {budget}")
+            if index>1:
+                mpts=[rings[i].get("metersPerTexel") for i in range(3)]
+                if any(v is None for v in mpts) or not (float(mpts[0])<float(mpts[1])<float(mpts[2])):
+                    raise RuntimeError(f"WP-019 center-first density order invalid frame {index}: {mpts}")
+
+        if int((proofs[2].get("localStatic") or {}).get("roads") or 0)<1 or int((proofs[2].get("localStatic") or {}).get("occupiedAreas") or 0)<1:
+            raise RuntimeError(f"WP-019 close focus lacks canonical settlement/roads: {proofs[2]}")
+        if int(proofs[4].get("cacheHits") or 0)<=int(proofs[3].get("cacheHits") or 0):
+            raise RuntimeError(f"WP-019 pan-back did not reuse cached focus detail: away={proofs[3]} back={proofs[4]}")
+        slow=(proofs[5].get("focusStreaming") or {}).get("handoff") or {}
+        if slow.get("fallbackActive") is not True:
+            raise RuntimeError(f"WP-019 slow preparation did not retain parent fallback: {proofs[5]}")
+        if int(proofs[6].get("pending") or 0)!=0 or proofs[6].get("requestedLevel")!=proofs[6].get("visibleLevel"):
+            raise RuntimeError(f"WP-019 slowed child did not settle cleanly: {proofs[6]}")
+        if proofs[0].get("seed")==proofs[9].get("seed"):
+            raise RuntimeError("WP-019 second authoritative SEED did not change")
+        land=proofs[7].get("viewport") or {}; port=proofs[8].get("viewport") or {}
+        if int(land.get("width") or 0)>900 or int(land.get("height") or 0)>450:
+            raise RuntimeError(f"WP-019 phone landscape viewport invalid: {land}")
+        if int(port.get("width") or 0)>430 or int(port.get("height") or 0)<700:
+            raise RuntimeError(f"WP-019 phone portrait viewport invalid: {port}")
         return
 
     if scenario == "wp-s003-010-003-016":
