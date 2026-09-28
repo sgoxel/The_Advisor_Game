@@ -2032,3 +2032,9 @@
 - All six Final Attempt 3 screenshots were directly inspected. VISUAL 7.0/10 FAIL: dust is readable but still looks like a compact faceted beige clump instead of a soft dispersing puff; grass remains a small chevron-like cue at normal/phone landscape framing. Footprints remain clear and grounded; decay is visually clean.
 - Three-attempt continuation cap exhausted. No further improvement/test loop started. Concurrent duplicate Final Attempt state was reconciled back to the earlier authoritative tested presentation; WP remains OPEN / NOT COMPLETED.
 
+2026-09-28 07:38 +03:00 | WP-S003-016 | MIXED | authoritative final evidence reconciliation
+- Later serialized Final Attempt 3 run 36378195566 / artifact 10951698469 completed SUCCESS on exact head d9854fecf20f01e3a1b84d8221ef4890b39fdbaf; all six fresh screenshots were directly inspected.
+- Functional acceptance remains green: canonical road/grass/farmland triggers, decay to activeCount=0, fixed 6-group/18-drawable pool, zero post-init allocations, active draw estimates 3/4/2, desktop/phone caps 6/4, max measured update 0.2 ms, terrainMutation=false, presentationOnly=true, simulationAuthority=false, fullWorldScan=false, perFrameWorldScan=false, and exact 844x390 / 390x844 phone captures.
+- VISUAL 7.1/10 FAIL: dust is readable but still forms a compact faceted beige clump rather than a soft dispersing puff; the broader multi-strand grass response still reads as a small bright chevron/marker, especially in phone landscape. Footprints remain clear/grounded and decay is clean.
+- This later exact-head evidence supersedes the earlier 43bc8b7 7.0/10 result as the best tested Final Attempt 3 state. Exact tested d9854fec content was restored to main in reconciliation commit 30e01fbf227b8797df8ce71b66544694a60360c7 without starting a fourth implementation/evidence loop. Three-attempt cap remains exhausted; WP stays OPEN / NOT COMPLETED.
+
