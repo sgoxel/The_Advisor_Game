@@ -6725,6 +6725,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               functionCount:bs.functionCount,propCount:bs.propCount,drawCallEstimate:bs.drawCallEstimate,
               triangleCount:bs.triangleCount,sharedMaterialCount:bs.sharedMaterialCount,functions:bs.functions,
               doorClearanceViolations:bs.doorClearanceViolations,roadClearanceViolations:bs.roadClearanceViolations,
+              treeOcclusionRejectCount:bs.treeOcclusionRejectCount,anchorSelectionAttempts:bs.anchorSelectionAttempts,
+              canonicalTreeOcclusionChecks:bs.canonicalTreeOcclusionChecks,criticalCueOcclusionAvoidance:bs.criticalCueOcclusionAvoidance,
               ownershipCueCount:bs.ownershipCueCount,authoritativeFunctionSource:bs.authoritativeFunctionSource,
               ownershipSource:bs.ownershipSource,presentationOnly:bs.presentationOnly,simulationAuthority:bs.simulationAuthority,
               bounded:bs.bounded,fullSettlementPerFrameScan:bs.fullSettlementPerFrameScan,buildMs:bs.buildMs,
@@ -9555,6 +9557,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Building surroundings batching failed in frame {index}: {proof}")
             if int(proof.get("doorClearanceViolations") or 0)!=0 or int(proof.get("roadClearanceViolations") or 0)!=0:
                 raise RuntimeError(f"Building surroundings clearance failed in frame {index}: {proof}")
+            if proof.get("criticalCueOcclusionAvoidance") is not True or int(proof.get("canonicalTreeOcclusionChecks") or 0)<10:
+                raise RuntimeError(f"Building surroundings local occlusion contract failed in frame {index}: {proof}")
+            if int(proof.get("anchorSelectionAttempts") or 0)<int(proof.get("buildingCount") or 0):
+                raise RuntimeError(f"Building surroundings anchor selection telemetry failed in frame {index}: {proof}")
             if proof.get("revealTier")!="full" or int(proof.get("pending") or 0)!=0:
                 raise RuntimeError(f"Building surroundings readiness failed in frame {index}: {proof}")
             if float(proof.get("buildMs") or 0)>8.0:
