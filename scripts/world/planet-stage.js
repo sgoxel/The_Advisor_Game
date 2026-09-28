@@ -4541,8 +4541,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // regional hillshade created giant concentric/diagonal shapes at 1/500 that
   // looked like broken LOD seams. Keep the same canonical elevation/color
   // samples, but use restrained scale-aware lighting instead.
-  const hillshadeStrength=contextRing?.22:(metersPerTexel<=8?.58:metersPerTexel<=30?.42:.26);
-  const contextDetailStrength=contextRing?.64:1;
+  const baseHillshadeStrength=metersPerTexel<=8?.58:metersPerTexel<=30?.42:.26;\n  const hillshadeStrength=contextRing?baseHillshadeStrength*.84:baseHillshadeStrength;
+  const contextDetailStrength=1;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
   const flatShade=light[2];
@@ -4602,7 +4602,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
         // Keep hillshade readable without clipping bright alpine surfaces.
-        shade=clamp(1+(lit-flatShade)*hillshadeStrength,contextRing?.90:.86,contextRing?1.08:1.10);
+        shade=clamp(1+(lit-flatShade)*hillshadeStrength,contextRing?.88:.86,contextRing?1.09:1.10);
         cover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
@@ -5056,14 +5056,14 @@ function activateLocalDetailResource(signature,fromCache){
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
   if(focusRingPatch?.render&&focusRingMaterial){
     focusRingPatch.render.meshInstances=[new pc.MeshInstance(resource.mediumMesh,focusRingMaterial,focusRingPatch)];
-    focusRingMaterial.diffuseMap=resource.mediumTexture;focusRingMaterial.emissiveMap=resource.mediumTexture;focusRingMaterial.opacityMap=resource.mediumTexture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.88;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+    focusRingMaterial.diffuseMap=resource.mediumTexture;focusRingMaterial.emissiveMap=resource.mediumTexture;focusRingMaterial.opacityMap=resource.mediumTexture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.82;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
     localResources.mediumRingSpanFactor=LOCAL_MEDIUM_RING_SPAN_FACTOR;localResources.mediumRingWidthMeters=Number((resource.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingHeightMeters=Number((resource.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingWorldMatched=true;
   }
   if(horizonSkirt?.render){
     horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
     localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
   }
-  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
+  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.82;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
   rebuildLocalStaticPresentation(resource);
   if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);
   trimLocalResourceCache();
@@ -5111,7 +5111,7 @@ function recordLocalFrame(dt){
 }
 function ensureTangentPatch(){
   if(tangentPatch)return;
-  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.72;tangentPatchMaterial.__atmosphereBaseDiffuse=[1,1,1];tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.82;tangentPatchMaterial.__atmosphereBaseDiffuse=[1,1,1];tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
   tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   // Empty until the first cooperatively prepared resource is swapped in.
   tangentPatch.render.meshInstances=[];
@@ -5120,7 +5120,7 @@ function ensureTangentPatch(){
 function ensureFocusRingPatch(){
   if(focusRingPatch||!device)return;
   focusRingMaterial=new pc.StandardMaterial();focusRingMaterial.name="SeededFocusMediumRing";
-  focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.88;focusRingMaterial.__atmosphereBaseDiffuse=[1,1,1];
+  focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.82;focusRingMaterial.__atmosphereBaseDiffuse=[1,1,1];
   focusRingMaterial.useLighting=false;focusRingMaterial.cull=pc.CULLFACE_NONE;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
   focusRingPatch=new pc.Entity("LocalFocusMediumRing");focusRingPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   focusRingPatch.render.meshInstances=[];focusRingPatch.enabled=false;app.root.addChild(focusRingPatch);
@@ -5128,7 +5128,7 @@ function ensureFocusRingPatch(){
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
   horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
-  horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=1.08;horizonSkirtMaterial.__atmosphereBaseDiffuse=[.2,.34,.17];
+  horizonSkirtMaterial.diffuse.set(.2,.34,.17);horizonSkirtMaterial.emissive.set(.18,.30,.15);horizonSkirtMaterial.emissiveIntensity=.82;horizonSkirtMaterial.__atmosphereBaseDiffuse=[.2,.34,.17];
   horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
   horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
   horizonSkirt.render.meshInstances=[];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
