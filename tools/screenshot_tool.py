@@ -6563,16 +6563,24 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if mode in {"react","mobile-react"}:
             tile=actor["worldTile"]
             if mode=="mobile-react":
-                # Mobile frames are the same just-triggered canonical desktop
-                # actor after a viewport resize. Do not manufacture a second
-                # approach or scan another fauna cell merely for phone evidence.
-                # This keeps the original cumulative <=12 anti-spam gate strict
-                # while proving the reaction remains visible on both phone shapes.
-                WebDriverWait(driver,4.0).until(lambda d:d.execute_script("""
+                # Mobile frames keep the same already-triggered canonical actor,
+                # but portrait width is much narrower than the desktop footprint.
+                # Recenter on the actor's canonical home tile after resize so the
+                # still-reacting actor is actually in-frame; do not scan for or
+                # substitute a different actor. Any nearby reaction caused by
+                # this real focus move remains counted by the unchanged <=12 gate.
+                driver.execute_script("""
+                    window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1]);
+                    window.PlanetStage.setZoomScalar(1);
+                """,str(tile["x"]),str(tile["y"]))
+                WebDriverWait(driver,6.0).until(lambda d:d.execute_script("""
                     const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],id=arguments[1];
-                    return Number((wr.triggerByKind||{})[kind]||0)>0 &&
-                           (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
+                    const actor=(wr.actors||[]).find(a=>a.id===id);
+                    return Number((wr.triggerByKind||{})[kind]||0)>0 && actor &&
+                           actor.visible===true && Number(actor.distanceToPresenceMeters??1e9)<=8 &&
+                           ["flee","takeoff","return"].includes(actor.state);
                 """,kind,str(actor["id"])))
+                time.sleep(.15)
             else:
                 before=int(driver.execute_script("return Number((window.PlanetStage.snapshot().wildlifeReaction?.triggerByKind||{})[arguments[0]]||0)",kind))
                 # Approach the exact canonical actor directly. Do not wait for a
