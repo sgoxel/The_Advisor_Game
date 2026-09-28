@@ -276,6 +276,10 @@ def main():
 
         evidence["primary"] = primary
         evidence["secondary"] = secondary
+    except Exception as exc:
+        evidence["error"] = repr(exc)
+        (OUT_DIR/"evidence.json").write_text(json.dumps(evidence, indent=2, sort_keys=True), encoding="utf-8")
+        raise
     finally:
         driver.quit()
 
