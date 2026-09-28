@@ -6586,13 +6586,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 # new terrain resource: the ready parent/stand-in remains on
                 # screen while the bounded focus request prepares.
                 driver.execute_script("""
-                    // Approach from one canonical tile away. This still exceeds
-                    // the production 0.6 m movement gate and remains far inside
-                    // every species trigger radius, while keeping the reacting
-                    // actor inside narrow portrait framing after the phone resize.
-                    const x=BigInt(arguments[0])+1n,y=BigInt(arguments[1]);
+                    // Approach from one canonical tile away. Keep the portrait
+                    // waterbird reaction on the tall screen axis: east/west flee
+                    // motion is correct but leaves a 390 px-wide viewport before
+                    // screenshot encoding finishes. This changes only evidence
+                    // approach direction, never trigger distance or production AI.
+                    const water=String(arguments[2])==='waterbird';
+                    const x=BigInt(arguments[0])+(water?0n:1n),y=BigInt(arguments[1])+(water?1n:0n);
                     window.PlanetStage.setWorldTileFocus(String(x),String(y));window.PlanetStage.setZoomScalar(1);
-                """,str(tile["x"]),str(tile["y"]))
+                """,str(tile["x"]),str(tile["y"]),kind)
                 WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
                     const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],before=Number(arguments[1]),id=arguments[2];
                     return Number((wr.triggerByKind||{})[kind]||0)>before &&
