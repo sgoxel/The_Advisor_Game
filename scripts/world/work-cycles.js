@@ -173,20 +173,32 @@ function buildPlanFresh(seedValue,resident){
       supportedActions:target.supportedActions
     }));
   }
-  const routeChecks=[];
-  for(let i=0;i<steps.length;i++){
-    const next=steps[(i+1)%steps.length];
-    routeChecks.push(Object.freeze({from:steps[i].id,to:next.id,found:routePass(seed,steps[i].target,next.target)}));
+  const checkRoutes=list=>{
+    const checks=[];
+    for(let i=0;i<list.length;i++){
+      const next=list[(i+1)%list.length];
+      checks.push(Object.freeze({from:list[i].id,to:next.id,found:routePass(seed,list[i].target,next.target)}));
+    }
+    return checks;
+  };
+  let finalSteps=steps.slice(),routeChecks=checkRoutes(finalSteps),frontageFallback=false;
+  // Frontage choreography is optional presentation. If a generated lot makes
+  // that exterior point unreachable, preserve the authoritative interior
+  // interaction cycle rather than invalidating or fabricating a route.
+  if(routeChecks.some(x=>!x.found)&&finalSteps.some(step=>step.targetSource==="work-choreography")){
+    finalSteps=finalSteps.filter(step=>step.targetSource!=="work-choreography");
+    routeChecks=checkRoutes(finalSteps);frontageFallback=true;
   }
-  const totalMinutes=steps.reduce((sum,step)=>sum+Math.max(1,Number(step.durationMinutes)||1),0);
-  const signature=steps.map(step=>[step.id,step.action,pointKey(step.target),step.interactionObjectId||"-"].join(":")).join("|");
+  const totalMinutes=finalSteps.reduce((sum,step)=>sum+Math.max(1,Number(step.durationMinutes)||1),0);
+  const signature=finalSteps.map(step=>[step.id,step.action,pointKey(step.target),step.interactionObjectId||"-"].join(":")).join("|");
   const elapsed=nowMs()-started;
   telemetry.planBuildCount++;telemetry.totalPlanBuildMs+=elapsed;telemetry.maxPlanBuildMs=Math.max(telemetry.maxPlanBuildMs,elapsed);
   return Object.freeze({
     residentId:String(resident.id),profession:String(resident.profession),workplaceId:String(resident.workplaceId||""),
-    steps:Object.freeze(steps),routeChecks:Object.freeze(routeChecks),totalMinutes,
-    valid:steps.length>=3&&routeChecks.every(x=>x.found),signature,
-    economyAuthority:false,resourceMutation:false,usesRealTargets:true
+    steps:Object.freeze(finalSteps),routeChecks:Object.freeze(routeChecks),totalMinutes,
+    valid:finalSteps.length>=3&&routeChecks.length===finalSteps.length&&routeChecks.every(x=>x.found),signature,
+    visibleFrontageStepCount:finalSteps.filter(step=>step.targetSource==="work-choreography").length,
+    frontageFallback,economyAuthority:false,resourceMutation:false,usesRealTargets:true
   });
 }
 function plan(seedValue,resident){
