@@ -121,7 +121,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette — COMPLETED
 - `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna — COMPLETED
 - `WP-S003-014` — Reactive Ambient Wildlife Behavior — IN PROGRESS (new continuation 3-attempt cap reached 2026-09-28; functional acceptance green; best complete fresh visual 6.6/10 on Attempt 2; failed Attempt 3 production/evidence deltas rolled back to tested Attempt 2 state; NOT COMPLETED)
-- `WP-S003-015` — Contextual Building Activity Indicators — IN PROGRESS (continuation 3-attempt cap reached 2026-09-28; functional acceptance green, final visual 6.2/10; failed Attempts 2–3 presentation rolled back to tested Attempt 1 state; evidence validator fixed; NOT COMPLETED)
+- `WP-S003-015` — Contextual Building Activity Indicators — IN PROGRESS (new continuation 3-attempt cap reached 2026-09-28; functional acceptance green; final fresh visual 5.9/10, best tested production remains prior 7.0/10 state; failed attached-geometry Attempts 1–3 rolled back; stricter final-settle evidence hardening retained; NOT COMPLETED)
 - `WP-S003-016` — Local Environmental Reaction Effects — COMPLETED
 - `WP-S003-017` — Positional Ambient Soundscape + Activity Audio — COMPLETED
 - `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks — COMPLETED
