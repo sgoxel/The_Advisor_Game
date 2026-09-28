@@ -3285,7 +3285,7 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.32,.20,.085),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.43,.33,.13,.32),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.39,.34,.18,.12),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -4701,6 +4701,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // as a differently tinted/contrasted patch.
   const focusTextureSize=Math.max(1,Number(LOCAL_DETAIL_LEVELS[job.levelIndex]?.textureSize||size));
   const sharedMetersPerTexel=Math.max(job.dims.patchWidth,job.dims.patchHeight)*LOCAL_SURROUND_SPAN_FACTOR/focusTextureSize;
+  // Medium-context sampling is physically denser than the outer 6x fallback.
+  // Admit only a bounded share of that resolvable bandwidth so the parent
+  // representation keeps terrain structure without becoming a differently
+  // tinted LOD surface. The outer ring stays on the common coarse basis.
+  const contextResolutionRatio=clamp(sharedMetersPerTexel/Math.max(1,metersPerTexel),1,2);
+  const contextRefineWeight=contextRing?smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1)):0;
   const useMicroDetail=metersPerTexel<=4&&!contextRing;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
@@ -4782,32 +4788,31 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // remains identical for focus, medium and outer representations.
       const focusRadius=Math.hypot((ux-.5)*2,(vz-.5)*2);
       const focusRefineWeight=contextRing?0:smoothstep01(clamp((1.35-focusRadius)/1.10,0,1));
-      const focusPhotometricMetersPerTexel=contextRing
-        ? sharedMetersPerTexel
-        : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.22),focusRefineWeight*.86);
+      const photometricMetersPerTexel=contextRing
+        ? lerp(sharedMetersPerTexel,metersPerTexel,contextRefineWeight*.36)
+        : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.14),focusRefineWeight*.94);
       const sharedMacro=worldSurfaceDetailValue(worldEast,worldNorth,sharedMetersPerTexel,phase)*contextDetailStrength;
       const nativeMacro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
-      const focusMacroDelta=contextRing?0:(nativeMacro-sharedMacro)*lerp(.28,.72,focusRefineWeight);
-      const macro=sharedMacro+focusMacroDelta;
+      const refinementGain=contextRing?contextRefineWeight*.22:lerp(.18,.90,focusRefineWeight);
+      const macro=sharedMacro+(nativeMacro-sharedMacro)*refinementGain;
       let shade=1,cover=[0,0,0];
       if(sample?.land){
         // Shared context remains restrained while focus progressively samples
         // a finer, still world-registered relief gradient. This restores
         // readable 1/500 landform structure without a rectangular LOD edge.
-        const step=focusPhotometricMetersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
+        const step=photometricMetersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
         const sx=mixSample(Math.min(1,ux+dux),vz),sy=mixSample(ux,Math.max(0,vz-dvz));
-        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,focusPhotometricMetersPerTexel,detailSalt);
-        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,focusPhotometricMetersPerTexel,detailSalt);
-        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,focusPhotometricMetersPerTexel,detailSalt);
+        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,photometricMetersPerTexel,detailSalt);
+        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
+        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.10,.24,.50);
+        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.18,.24,.60);
         shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.90:.84,contextRing?1.08:1.12);
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
-        const coverGain=lerp(.22,.75,focusRefineWeight);
-        const fineCover=contextRing?[0,0,0]:nativeCover.map((v,i)=>(v-sharedCover[i])*coverGain);
-        cover=sharedCover.map((v,i)=>v+fineCover[i]);
+        const coverGain=contextRing?contextRefineWeight*.20:lerp(.24,.84,focusRefineWeight);
+        cover=sharedCover.map((v,i)=>v+(nativeCover[i]-sharedCover[i])*coverGain);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
