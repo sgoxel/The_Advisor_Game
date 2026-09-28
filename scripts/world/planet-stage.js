@@ -3473,9 +3473,9 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.16:tier==="route"?.17:tier==="coarse"?.22:.22;
+  const targetFraction=tier==="footprint"?.18:tier==="route"?.28:tier==="coarse"?.24:.22;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
-  const cap=tier==="footprint"?400:tier==="route"?200:tier==="coarse"?90:18;
+  const cap=tier==="footprint"?400:tier==="route"?280:tier==="coarse"?90:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -4497,7 +4497,9 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=occupiedAreaCount?80:0;
   const roadWidth=Math.max(5,Number(window.WorldStandards?.TILE_METERS||2)*4);
-  const presentationRoadWidth=roadWidth*(tier==="route"?1.28:1);
+  // At overview tiers the canonical road centerlines are authoritative, but
+  // physical width must not turn the network into a solid cog at map scale.
+  const presentationRoadWidth=roadWidth*(tier==="route"?.42:tier==="coarse"?.60:tier==="refined"?.62:1);
   const squareHalf=Number(window.StartingVillage.PUBLIC_HALF_SIZE||3);
   const ring=Number(window.StartingVillage.RING_RADIUS_TILES||14);
   const roadDetail=tier==="footprint"?0:tier==="route"?12:16;
@@ -4664,24 +4666,30 @@ function terrainDetailHeight(east,north,metersPerTexel,salt){
   return h;
 }
 function landCoverTint(east,north,metersPerTexel,salt,elevation){
-  // Forest stands (~1-3 km), meadow/field parcels (~300-600 m) and copses
-  // (~80 m). Coarse tiers get the averaged colour, not aliased speckle.
-  const wForest=detailOctaveWeight(2400,metersPerTexel),wField=detailOctaveWeight(420,metersPerTexel),wCopse=detailOctaveWeight(90,metersPerTexel);
-  if(wForest<=0)return [0,0,0];
-  const alpine=smoothstep01((elevation-2200)/900);
-  const forestField=surfaceValueNoise(east,north,2400,salt+7)+surfaceValueNoise(east,north,900,salt+11)*.55*wField;
-  const forest=smoothstep01((forestField-.02)/.12)*wForest*(1-alpine);
-  const parcel=surfaceValueNoise(east,north,420,salt+19)*wField;
-  const copse=smoothstep01((surfaceValueNoise(east,north,90,salt+23)-.18)/.1)*wCopse*(1-forest)*(1-alpine);
-  const dryField=smoothstep01((parcel-.16)/.08)*(1-forest)*(1-alpine);
-  const meadow=smoothstep01((-parcel-.16)/.08)*(1-forest)*(1-alpine);
-  // Fine canopy/grass mottling (~150 m and ~50 m) so forest and meadow
-  // interiors keep readable texture at 1 km-200 m footprints.
-  const mottle=surfaceValueNoise(east,north,150,salt+29)*detailOctaveWeight(150,metersPerTexel)*(.09+.05*forest)+surfaceValueNoise(east,north,50,salt+31)*detailOctaveWeight(50,metersPerTexel)*(.06+.04*forest);
+  // Presentation-only cover is a continuous fractal field, never a thresholded
+  // collection of rounded parcels. Every frequency is anchored to registered
+  // world meters and fades in only when resolved by the current physical texel.
+  const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
+    wField=detailOctaveWeight(700,metersPerTexel),wFine=detailOctaveWeight(280,metersPerTexel),
+    wCopse=detailOctaveWeight(120,metersPerTexel);
+  if(wBroad<=0)return [0,0,0];
+  const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
+  const broad=surfaceValueNoise(east,north,3600,salt+7)*.48*wBroad+
+    surfaceValueNoise(east,north,1500,salt+11)*.32*wMid+
+    surfaceValueNoise(east,north,700,salt+13)*.20*wField;
+  const forestCover=clamp(.46+broad*.82,0,1)*lowland;
+  const forestDelta=(forestCover-.46*lowland)*wBroad;
+  const parcel=surfaceValueNoise(east,north,700,salt+19)*wField+
+    surfaceValueNoise(east,north,340,salt+23)*.45*wFine;
+  const dryField=Math.max(0,parcel)*lowland,meadow=Math.max(0,-parcel)*lowland;
+  const copse=surfaceValueNoise(east,north,120,salt+29)*wCopse*lowland;
+  const mottle=surfaceValueNoise(east,north,700,salt+31)*.035*wField+
+    surfaceValueNoise(east,north,280,salt+37)*.026*wFine+
+    surfaceValueNoise(east,north,120,salt+41)*.014*wCopse;
   return [
-    mottle*.8-.070*forest-.045*copse+.085*dryField+.030*meadow,
-    mottle-.050*forest-.030*copse+.055*dryField+.060*meadow,
-    mottle*.55-.050*forest-.030*copse+.005*dryField+.010*meadow
+    mottle*.82-forestDelta*.045-copse*.018+dryField*.050+meadow*.014,
+    mottle-forestDelta*.036-copse*.014+dryField*.026+meadow*.042,
+    mottle*.60-forestDelta*.030-copse*.016+dryField*.004+meadow*.010
   ];
 }
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
