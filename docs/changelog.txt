@@ -1,3 +1,10 @@
+2026-09-28 12:31 +03:00 | WP-S003-021 | MIXED | INCOMPLETE after 3 visual attempts
+- Added persistent local campaign-state environmental projection sourced only from authoritative WorldState structural building refs and persisted CampaignStateDelta revisions; no Simulation authority, history replay, full-world scan, per-frame delta scan, or terrain mutation was introduced.
+- Changed-state presentation remains bounded to the local starting-village set: 13 buildings, at most 14 local WorldState resolves, one merged vertex-colored mesh, one shared material and one draw call when active. Revision/signature telemetry is carried into local presentation and survives browser reload.
+- Final current-head functional evidence passed in workflow 36403315060 / artifact 10961835549 on 8907c07fd492543c8b58c4cdf6e9e0230d8714cf, including normal/worn/damaged/repaired/overgrown states, exact reload persistence, pendingPreparationCount=0 at capture, and exact 844x390 + 390x844 phone viewports.
+- All eight fresh final screenshots were directly inspected. VISUAL 6.6/10 FAIL: worn remains too close to normal; damage/repair are visible but read as abstract rectangular roof overlays; overgrowth remains blocky/weak and loses clarity on phone. Layout/focus/viewport coverage are stable.
+- Three-attempt cap exhausted. WP remains OPEN / NOT COMPLETED; no completion bookkeeping or Issue closure performed.
+
 2026-09-28 04:05 +03:00 | WP-S003-019 | MIXED | INCOMPLETE after 3 acceptance attempts
 - Added standalone deterministic seasonal presentation from active SEED + RegionProfile climate + fantasy calendar, with spring/summer/autumn/winter foliage profiles, climate-aware flowers/dry grass/autumn leaves/frost/snow, bounded camera-local pooled accents, lazy relevant-only refresh, and a hard 24-entry seasonal profile cache.
 - Added dedicated fixed-location evidence across four representative seasonal dates plus warm/cold climate plausibility and phone/mobile budgets. No climate/resource mutation, Simulation authority, full-world scan or per-frame world scan was introduced.
