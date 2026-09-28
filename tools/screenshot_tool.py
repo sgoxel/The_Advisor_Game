@@ -6560,6 +6560,12 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
         def find_actor():
             base=targets[biome]
+            # Canonical target discovery is evidence navigation, not gameplay
+            # approach. Suppress only trigger creation while scanning cells so
+            # the selected "idle" animal is genuinely idle. Re-enabling resets
+            # the movement baseline; the next explicit approach remains the
+            # unchanged production trigger path.
+            driver.execute_script("window.PlanetStage.setWildlifeReactionEnabled(false)")
             offsets=(0.0,.001,-.001,.002,-.002,.004,-.004)
             for dy in offsets:
                 for dx in offsets:
@@ -6584,7 +6590,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                             // margin for the 390x844 view even after valid reaction
                             // displacement. We scan additional canonical cells
                             // rather than moving or resizing the actor for proof.
-                            const actors=(wr.actors||[]).filter(a=>a.kind===kind&&a.visible===true&&Number(a.distanceToPresenceMeters??1e9)<=5.5);
+                            const actors=(wr.actors||[]).filter(a=>a.kind===kind&&a.visible===true&&a.state==="idle"&&Number(a.distanceToPresenceMeters??1e9)<=5.5);
                             actors.sort((a,b)=>Number(a.distanceToPresenceMeters??1e9)-Number(b.distanceToPresenceMeters??1e9)||String(a.id).localeCompare(String(b.id)));
                             return actors[0]||null;
                         """,kind)
@@ -6598,9 +6604,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                                   latitudeRadians:Number(arguments[3]),longitudeRadians:Number(arguments[4])
                                 };
                             """,kind,actor,focus,float(base["lat"]+dy),float(base["lon"]+dx))
+                            driver.execute_script("window.PlanetStage.setWildlifeReactionEnabled(true)")
                             return actor
                     except Exception:
                         pass
+            driver.execute_script("window.PlanetStage.setWildlifeReactionEnabled(true)")
             raise RuntimeError(f"No bounded {kind} fauna actor found near canonical {biome} target")
 
         active=driver.execute_script("return window.__WP_S003_014_ACTIVE||null")
@@ -6652,7 +6660,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                     return Number((wr.triggerByKind||{})[kind]||0)>before &&
                            (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
                 """,kind,before,str(actor["id"])))
-                time.sleep(.30)
+                time.sleep(.08)
 
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),wr=s.wildlifeReaction||{},r=s.projection?.resourceBudget||{},kind=arguments[1],targetId=arguments[2];
@@ -16132,7 +16140,7 @@ def take_screenshots(
                     time.sleep(interval)
                 elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-020", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
-                    time.sleep(interval)
+                    time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
                 elif index:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
