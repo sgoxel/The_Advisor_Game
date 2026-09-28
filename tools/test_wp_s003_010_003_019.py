@@ -26,6 +26,10 @@ def driver_for(width=1280, height=800):
     options.add_argument(f"--window-size={width},{height}")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     d = webdriver.Chrome(options=options)
+    # Startup can legitimately occupy software-WebGL for tens of seconds on a
+    # hosted runner. Let a cheap readiness probe wait through that work instead
+    # of failing at Selenium's shorter script timeout.
+    d.set_script_timeout(180)
     d.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
         "width": width, "height": height, "deviceScaleFactor": 1, "mobile": False,
         "screenWidth": width, "screenHeight": height,
@@ -68,9 +72,14 @@ def wait_ready(driver):
         "const b=document.querySelector('#newCampaignButton'),s=document.querySelector('#campaignState')?.textContent?.trim();"
         "if(s!=='ACTIVE'&&b)b.click();"
     )
-    wait(driver, "return window.PlanetStage?.snapshot?.()?.ready===true", 180)
-    wait(driver, "return window.PlanetStage?.snapshot?.()?.mapPresentation?.active===true", 60)
+    # Do not build the full telemetry snapshot repeatedly during startup.
+    # The stage itself publishes this cheap readiness flag only after the first
+    # playable frame is ready.
+    wait(driver, "return document.getElementById('planetStageRoot')?.dataset?.ready==='true'", 240)
     stage = snap(driver)
+    if stage.get("mapPresentation", {}).get("active") is not True:
+        wait(driver, "return window.PlanetStage?.snapshot?.()?.mapPresentation?.active===true", 60)
+        stage = snap(driver)
     if stage.get("version") != "planet-focus-streaming-v1":
         raise AssertionError(f"unexpected PlanetStage version: {stage.get('version')}")
 
