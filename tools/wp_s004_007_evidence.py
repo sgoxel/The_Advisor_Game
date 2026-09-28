@@ -10,7 +10,7 @@ PROFILE=os.environ.get("PROFILE","landscape")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s004-007"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
-PROFESSIONS=["smith","farmer","guard","woodcutter"]
+PROFESSIONS=["smith","shopkeeper","guard","woodcutter"]
 
 options=Options()
 options.add_argument("--headless=new")
@@ -41,8 +41,12 @@ def prepare(profession):
       const profession=arguments[0];
       const stage=PlanetStage.snapshot(),seed=stage.activeSeed;
       const samples=WorkCycles.evidenceSamples(seed,profession);
-      if(!samples.length)return {ok:false,reason:"no-samples",profession,seed};
-      let sample=samples.find(s=>s.targetSource==="work-choreography")||samples.find(s=>s.targetSource==="outdoor-worksite")||samples[0];
+      if(!samples.length){
+        const resident=(DailyActivity.build(seed)||[]).find(r=>r.profession===profession)||null;
+        return {ok:false,reason:"no-samples",profession,seed,plan:resident?WorkCycles.plan(seed,resident):null};
+      }
+      let sample=samples.find(s=>s.targetSource==="work-choreography")||samples.find(s=>s.targetSource==="outdoor-worksite")||null;
+      if(!sample)return {ok:false,reason:"no-visible-exterior-sample",profession,seed,samples};
       if(profession==="woodcutter"&&samples.length>1)sample=samples[1];
       PlanetStage.applyAuthoritativeFantasyTime(sample.when,"WP-S004-007 evidence");
       ResidentMovement.reset(seed);
