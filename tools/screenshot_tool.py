@@ -16448,13 +16448,13 @@ def take_screenshots(
         evidence_revision = os.environ.get("GITHUB_SHA", "").strip()
         if evidence_revision and browser_url.startswith(("https://", "http://")):
             browser_url += ("&" if "?" in browser_url else "?") + "evidence_revision=" + quote(evidence_revision[:16])
-        # WP-S003-020 validates ground/settlement presentation, not the startup
-        # globe tessellation. Chrome/SwiftShader 153 can stall during the
-        # production globe buffer upload before any local evidence code runs.
-        # Request a presentation-only reduced startup globe for this CI scenario;
-        # PlanetStage still builds the same canonical local settlement/world
-        # authority and exposes the mode in telemetry.
-        if scenario == "wp-s003-020" and browser_url.startswith(("http://127.0.0.1", "http://localhost")):
+        # These local-settlement evidence scenarios validate ground presentation,
+        # not startup globe tessellation. Chrome/SwiftShader 153 can stall during
+        # the production globe buffer upload before any local evidence code runs.
+        # Request PlanetStage's presentation-only reduced startup globe here;
+        # canonical local settlement/world authority, coordinates, camera truth
+        # and every scenario acceptance gate remain unchanged.
+        if scenario in {"wp-s003-015", "wp-s003-020"} and browser_url.startswith(("http://127.0.0.1", "http://localhost")):
             browser_url += ("&" if "?" in browser_url else "?") + "evidence_fast_start=1"
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
